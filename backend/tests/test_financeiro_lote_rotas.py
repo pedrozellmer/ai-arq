@@ -40,12 +40,33 @@ ITENS = [{"id": ITEM_A, "description": "Porcelanato 60x60", "quantity": 1062.0, 
           "discipline": "Pisos", "sort_order": 1}]
 
 
+DONO = "uid-dono"
+
+
+def _detector_de_admin(registro, veredito):
+    """Dublê de `_fin_eh_admin` que ANOTA o `owner` que recebeu.
+
+    🪤 O dublê antigo era `lambda request, owner: True` — ignorava `owner`. A trava
+    real (`_fin_eh_admin`) só considera admin quando `bool(owner)`; se a rota
+    passasse `None`, `""` ou o próprio `job_id`, o admin voltava a ESCREVER no
+    financeiro do arquiteto (LGPD nº6) e o teste continuava vendo 403, porque o
+    403 vinha do dublê e não do que a rota entregou.
+    """
+    def _duble(request, owner):
+        registro.append(owner)
+        return veredito
+    return _duble
+
+
 @pytest.fixture
 def casa(monkeypatch):
-    monkeypatch.setattr(main, "_require_project_owner", lambda request, job_id: "uid-dono")
-    monkeypatch.setattr(main, "_fin_eh_admin", lambda request, owner: False)
+    """Devolve a lista dos `owner` que as rotas entregaram ao detector de admin."""
+    owners_vistos = []
+    monkeypatch.setattr(main, "_require_project_owner", lambda request, job_id: DONO)
+    monkeypatch.setattr(main, "_fin_eh_admin", _detector_de_admin(owners_vistos, False))
     monkeypatch.setattr(main, "_log_error", lambda *a, **k: None)
     monkeypatch.setattr(main, "_fin_nome_do_projeto", lambda req, job_id: (200, "Casa Teste"))
+    return owners_vistos
 
 
 def _banco(monkeypatch, lanc=(200, []), itens=(200, None)):
@@ -59,11 +80,13 @@ def _banco(monkeypatch, lanc=(200, []), itens=(200, None)):
             return lanc
         escritas.append({"m": method, "path": path, "body": body})
         return (201, None) if method == "POST" else (204, None)
-    monkeypatch.setattr(main, "_supa_rest_as_user", fake)
 
     def fake_service(method, path, body=None, params=None, prefer=None, timeout=15):
+        # o caminho do ADMIN (service_role) — sem ele, um teste com `eh_admin`
+        # verdadeiro sairia pela rede de verdade
         return fake(None, method, path, body, params, prefer, timeout)
 
+    monkeypatch.setattr(main, "_supa_rest_as_user", fake)
     monkeypatch.setattr(main, "_supa_rest_service", fake_service)
     return escritas
 
@@ -80,40 +103,6 @@ def _planilha_bytes(linhas):
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()
-
-
-class _Upload:
-    """O que o FastAPI entrega pra rota: nome + bytes."""
-
-    def __init__(self, dados, filename="preenchida.xlsx"):
-        self.filename = filename
-        self._d = dados
-
-    async def read(self):
-        return self._d
-
-
-class _ReqComForm:
-    """Request com `form()` — o formulário que o CLIENTE mandou junto."""
-
-    def __init__(self, acoes_do_cliente):
-        self.headers = {"Authorization": "Bearer jwt"}
-        self.state = types.SimpleNamespace()
-        self._form = {"acoes": json.dumps(acoes_do_cliente)}
-
-    async def form(self):
-        return self._form
-
-
-_ACAO_ENVENENADA = [{
-    "acao": "cria", "n": 1, "item": "Reforma do vizinho",
-    "corpo": {"escopo": "obra", "origem": "livre", "descricao": "Reforma do vizinho",
-              "categoria": "Pisos", "valor": 999999.0, "status": "cotado",
-              "venc_tipo": "fase", "venc_fase": "Pisos", "venc_quando": "inicio"},
-}]
-
-_LINHA_DA_PLANILHA = [[1, "Pisos", "Porcelanato 60x60", 1062, "m2", "Cerâmica Boa",
-                       "48.000,00", "3x", "", "Contratado", "i:%s" % ITEM_A]]
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -247,8 +236,53 @@ def test_atualizar_normaliza_a_linha_MESCLADA(monkeypatch, casa):
 # ══════════════════════════════════════════════════════════════════════════
 #  forma: o que o fonte tem que garantir
 # ══════════════════════════════════════════════════════════════════════════
+class _Upload:
+    """O que o FastAPI entrega pra rota: nome + bytes."""
+
+    def __init__(self, dados, filename="preenchida.xlsx"):
+        self.filename = filename
+        self._d = dados
+
+    async def read(self):
+        return self._d
+
+
+class _ReqComForm:
+    """Request com `form()` — o formulário que o CLIENTE mandou junto.
+
+    🪤 O código correto NUNCA lê este formulário. Ele existe pra que a porta
+    exista de verdade no teste: no dia em que alguém passar a confiar na lista
+    de ações que veio de fora, é ESTA lista envenenada que vai parar no banco.
+    """
+
+    def __init__(self, acoes_do_cliente):
+        self.headers = {"Authorization": "Bearer jwt"}
+        self.state = types.SimpleNamespace()
+        self._form = {"acoes": json.dumps(acoes_do_cliente)}
+
+    async def form(self):
+        return self._form
+
+
+_ACAO_ENVENENADA = [{
+    "acao": "cria", "n": 1, "item": "Reforma do vizinho",
+    "corpo": {"escopo": "obra", "origem": "livre", "descricao": "Reforma do vizinho",
+              "categoria": "Pisos", "valor": 999999.0, "status": "cotado",
+              "venc_tipo": "fase", "venc_fase": "Pisos", "venc_quando": "inicio"},
+}]
+
+_LINHA_DA_PLANILHA = [[1, "Pisos", "Porcelanato 60x60", 1062, "m2", "Cerâmica Boa",
+                       "48.000,00", "3x", "", "Contratado", "i:%s" % ITEM_A]]
+
+
 def test_aplicar_RELE_a_planilha_e_nao_confia_em_lista_do_cliente(monkeypatch, casa):
-    """🚨 O servidor grava o que a PLANILHA diz, nunca o que o formulário manda."""
+    """🚨 O servidor grava o que a PLANILHA diz, nunca o que o formulário manda.
+
+    🪤 A versão antiga perguntava só se as duas chamadas (`_fin_lote_ler_upload`
+    e `_fin_lote_conferencia`) apareciam no texto da função — e não via o que era
+    feito com o resultado delas. Sobrescrever `conf` logo depois com a lista do
+    cliente deixava as duas strings no lugar e a porta escancarada.
+    """
     escritas = _banco(monkeypatch)
     monkeypatch.setattr(main, "_fin_retrato_da_origem",
                         lambda request, job_id, origem, ref, pos=None: {
@@ -268,7 +302,8 @@ def test_aplicar_RELE_a_planilha_e_nao_confia_em_lista_do_cliente(monkeypatch, c
 
 
 def test_aplicar_com_planilha_torta_devolve_a_MENSAGEM_e_nao_grava(monkeypatch, casa):
-    """🧪 Controle: a conferência mandou parar → nada entra no banco."""
+    """🧪 Controle: a conferência mandou parar → nada entra no banco. Se algo
+    entrar, só pode ter vindo da lista que o cliente mandou."""
     escritas = _banco(monkeypatch)
     saida = asyncio.run(main.financeiro_lote_aplicar(
         JOB, _ReqComForm(_ACAO_ENVENENADA), _Upload(b"isto nao e uma planilha")))
@@ -276,14 +311,95 @@ def test_aplicar_com_planilha_torta_devolve_a_MENSAGEM_e_nao_grava(monkeypatch, 
     assert [e for e in escritas if e["m"] in ("POST", "PATCH")] == []
 
 
-def test_as_duas_rotas_do_lote_recusam_o_admin_e_conferem_o_dono():
-    for rota in ("financeiro_lote_conferir", "financeiro_lote_aplicar"):
-        c = corpo_de(rota)
-        assert "_require_project_owner(request, job_id)" in c
-        assert "_fin_so_o_dono_escreve(request, owner)" in c, "LGPD nº6: admin lê, não escreve"
-    modelo = corpo_de("financeiro_modelo_lote")
-    assert "_require_project_owner(request, job_id)" in modelo
-    assert "_fin_so_o_dono_escreve" not in modelo, "baixar o modelo é leitura — o admin pode"
+def test_planilha_VALIDA_e_VAZIA_tambem_ignora_a_lista_do_cliente(monkeypatch, casa):
+    """🚨 A planilha abre, é válida — e não pede NADA. É por esse buraco que a
+    lista do cliente entra.
+
+    🪤 Os dois guardas irmãos não cobrem este caso: um usa planilha que PRODUZ
+    ação (a lista do cliente ficaria por baixo dela) e o outro sai antes, pelo
+    `conf["erro"]` da planilha ilegível. Aqui a conferência devolve `status: ok`
+    com ZERO ações — e um `if not conf["acoes"]: conf = lista_do_form` passaria
+    despercebido nos outros dois, gravando "Reforma do vizinho" por R$ 999.999.
+    """
+    escritas = _banco(monkeypatch)
+    monkeypatch.setattr(main, "_fin_retrato_da_origem",
+                        lambda request, job_id, origem, ref, pos=None: {"descricao": "x"})
+    # linha legítima do item medido, com TODAS as colunas de dinheiro em branco
+    em_branco = [[1, "Pisos", "Porcelanato 60x60", 1062, "m2", "", "", "", "", "", "i:%s" % ITEM_A]]
+    saida = asyncio.run(main.financeiro_lote_aplicar(
+        JOB, _ReqComForm(_ACAO_ENVENENADA), _Upload(_planilha_bytes(em_branco))))
+    assert saida.get("erro") is None, saida
+    assert saida["criados"] == 0 and saida["atualizados"] == 0, saida
+    assert [e for e in escritas if e["m"] in ("POST", "PATCH")] == [], (
+        "o servidor gravou o que veio no formulário quando a planilha não pediu nada: %s"
+        % [e for e in escritas if e["m"] in ("POST", "PATCH")])
+
+
+@pytest.mark.parametrize("rota", ["financeiro_lote_conferir", "financeiro_lote_aplicar"])
+def test_as_duas_rotas_do_lote_RECUSAM_o_admin(monkeypatch, casa, rota):
+    """LGPD nº6: o financeiro é do arquiteto — o admin consulta, não escreve.
+
+    🪤 A versão antiga lia o CORPO DAS ROTAS e via a chamada
+    `_fin_so_o_dono_escreve(request, owner)` escrita lá. Bastava neutralizar a
+    trava DENTRO dela (`if False and _fin_eh_admin(...)`) pro admin voltar a
+    escrever no financeiro do cliente com o teste verde.
+    """
+    escritas = _banco(monkeypatch)
+    vistos = []
+    monkeypatch.setattr(main, "_fin_eh_admin", _detector_de_admin(vistos, True))
+    monkeypatch.setattr(main, "_fin_retrato_da_origem",
+                        lambda request, job_id, origem, ref, pos=None: {"descricao": "x"})
+    with pytest.raises(main.HTTPException) as ex:
+        asyncio.run(getattr(main, rota)(
+            JOB, _ReqComForm(_ACAO_ENVENENADA),
+            _Upload(_planilha_bytes(_LINHA_DA_PLANILHA))))
+    assert ex.value.status_code == 403, ex.value.status_code
+    assert "admin" in ex.value.detail
+    assert escritas == [], "o admin escreveu no financeiro do cliente: %s" % escritas
+    assert vistos, "a rota nem consultou o detector de admin"
+    assert set(vistos) == {DONO}, (
+        "a rota entregou %r ao detector de admin em vez do dono do projeto — com "
+        "`owner` falsy o `bool(owner)` de `_fin_eh_admin` devolve False e o admin "
+        "volta a ESCREVER no financeiro do arquiteto (LGPD nº6)" % (vistos,))
+
+
+@pytest.mark.parametrize("rota", ["financeiro_lote_conferir", "financeiro_lote_aplicar",
+                                  "financeiro_modelo_lote"])
+def test_as_rotas_do_lote_conferem_o_DONO_antes_de_tudo(monkeypatch, casa, rota):
+    """🔒 nº2: quem não é dono do job não passa da primeira linha.
+
+    `casa` devolve o registro dos `owner` entregues ao detector de admin: aqui ele
+    tem que ficar VAZIO — "antes de tudo" quer dizer que nada roda depois do 401.
+    """
+    escritas = _banco(monkeypatch)
+
+    def _nega(request, job_id):
+        raise main.HTTPException(401, "sua sessão expirou")
+    monkeypatch.setattr(main, "_require_project_owner", _nega)
+    with pytest.raises(main.HTTPException) as ex:
+        if rota == "financeiro_modelo_lote":
+            main.financeiro_modelo_lote(JOB, _ReqComForm([]))
+        else:
+            asyncio.run(getattr(main, rota)(
+                JOB, _ReqComForm([]), _Upload(_planilha_bytes(_LINHA_DA_PLANILHA))))
+    assert ex.value.status_code == 401
+    assert escritas == []
+    assert casa == [], (
+        "a rota seguiu para o detector de admin com %r depois do 401 — quem não é "
+        "dono do job não pode fazer o servidor tocar em nada" % (casa,))
+
+
+def test_CONTROLE_baixar_o_modelo_e_LEITURA_e_o_admin_pode(monkeypatch, casa):
+    """🧪 Sem isto, "recusa o admin em tudo" passaria — e o admin perderia o
+    direito de LER, que a LGPD nº6 concede."""
+    _banco(monkeypatch)
+    vistos = []
+    monkeypatch.setattr(main, "_fin_eh_admin", _detector_de_admin(vistos, True))
+    r = main.financeiro_modelo_lote(JOB, REQ)
+    assert r.media_type == main._FIN_XLSX_MIME
+    assert set(vistos) == {DONO}, (
+        "o modelo perguntou %r ao detector de admin — é por esse `owner` que o "
+        "service_role decide ler pelo dono certo" % (vistos,))
 
 
 def test_o_trabalho_pesado_do_lote_roda_fora_do_laco():

@@ -124,6 +124,43 @@ _ERRADO = {"codigo": "88484", "descricao": "PISO EM BORRACHA NATURAL",
 _CERTO = {"codigo": "87263", "descricao": "REVESTIMENTO CERAMICO PARA PISO",
           "unidade": "M2", "familia_id": 1, "similarity": 0.71}
 
+# ══════════════════════════════════════════════════════════════════════════
+#  🪤 06/09/2026 (cético) — A REMONTAGEM RODAVA COM **UM** ITEM.
+#  Com um item só, o guarda não distinguia "todos os itens receberam a
+#  referência" de "o PRIMEIRO item recebeu": `_lote_rb[:1]`, um `break` no
+#  laço que grava `sinapi_matches`, ou um `if` que só vale pro primeiro
+#  deixavam a aba "Referências SINAPI" existir, com o 87263 dentro, e
+#  `visto["pick"] == 1` continuava batendo — enquanto na planilha real do
+#  caso (126 linhas) 125 saíam com a coluna REF VAZIA. E o log ainda dizia
+#  "N/N conferidos", o que apagaria a suspeita de quem investigasse.
+#  Agora são TRÊS linhas, de três disciplinas, cada uma com o seu par
+#  (similaridade alta ERRADA × escolha da IA CERTA), e a conferência é linha
+#  por linha.
+# ══════════════════════════════════════════════════════════════════════════
+_CENARIO = [
+    # descricao,                                  errado (sim. alta),  certo (IA)
+    ("Piso em porcelanato 60x60 cm", "Pisos", 48.0,
+     ("88484", "PISO EM BORRACHA NATURAL", 0.93),
+     ("87263", "REVESTIMENTO CERAMICO PARA PISO", 0.71)),
+    ("Pintura látex acrílica em parede interna", "Pintura", 210.0,
+     ("88497", "APLICACAO DE FUNDO SELADOR ACRILICO", 0.90),
+     ("88489", "APLICACAO DE PINTURA LATEX ACRILICA", 0.68)),
+    ("Forro em gesso acartonado", "Forros", 96.0,
+     ("96116", "FORRO EM REGUA DE PVC", 0.88),
+     ("96113", "FORRO EM PLACAS DE GESSO ACARTONADO", 0.70)),
+]
+
+
+def _cand(t):
+    return {"codigo": t[0], "descricao": t[1], "unidade": "M2",
+            "familia_id": 1, "similarity": t[2]}
+
+
+_CANDIDATOS = {d: [_cand(e), _cand(c)] for d, _di, _q, e, c in _CENARIO}
+_ESCOLHA_DA_IA = {d: c[0] for d, _di, _q, _e, c in _CENARIO}
+_CODIGOS_CERTOS = [c[0] for _d, _di, _q, _e, c in _CENARIO]
+_CODIGOS_ERRADOS = [e[0] for _d, _di, _q, e, _c in _CENARIO]
+
 
 class _RespRPC:
     """A rota lê os itens pela RPC `list_project_items` com `urlopen` DIRETO,
@@ -155,10 +192,11 @@ def _remontar(monkeypatch, tmp_path, candidatos=None, escolha_da_ia="87263",
     logs = []
     _VISTO.clear()
     _VISTO["pick"] = 0
-    linhas = [{"item_num": "1.1", "description": "Piso em porcelanato 60x60 cm",
-               "unit": "m²", "quantity": 48.0, "confidence": "estimado",
+    linhas = [{"item_num": "%d.1" % (i + 1), "description": _d,
+               "unit": "m²", "quantity": _q, "confidence": "estimado",
                "observations": "", "ref_sheet": "", "origem": "cad",
-               "discipline": "Pisos"}]
+               "discipline": _di}
+              for i, (_d, _di, _q, _e, _c) in enumerate(_CENARIO)]
     proj = {"job_id": JOB, "project_name": "Projeto cliente-NN",
             "typology": "office", "total_area": 120.0, "warnings": [],
             "layout_area": 0, "address": ""}
@@ -169,8 +207,11 @@ def _remontar(monkeypatch, tmp_path, candidatos=None, escolha_da_ia="87263",
                         lambda stage, msg, job=None, **k: logs.append((stage, msg)))
     monkeypatch.setattr(main, "_supa_rest_as_user", lambda *a, **k: (200, [dict(proj)]))
     monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **k: _RespRPC(linhas))
-    monkeypatch.setattr(sinapi_matcher, "candidates_for",
-                        lambda desc, limit=60: [dict(c) for c in cands])
+    # 🪤 candidatos POR DESCRIÇÃO: com a lista fixa de antes, item errado e
+    # item certo recebiam o mesmo par e o guarda não veria linha trocada.
+    def _cands_por_desc(desc, limit=60):
+        return [dict(c) for c in _CANDIDATOS.get(desc, cands)]
+    monkeypatch.setattr(sinapi_matcher, "candidates_for", _cands_por_desc)
     if explode is not None:
         # 🪤 O erro TEM que estourar em `apply_llm_pick`. `candidates_for` roda
         # dentro de um `try/except` interno (`_cands_rb`), que engoliria a
@@ -183,8 +224,12 @@ def _remontar(monkeypatch, tmp_path, candidatos=None, escolha_da_ia="87263",
         # `apply_llm_pick` é o REAL — só a chamada à IA é dublada. É ele quem
         # põe o código escolhido em 1º lugar, e é esse movimento que a mutação
         # (b) mata.
-        monkeypatch.setattr(sinapi_matcher, "pick_best_batch",
-                            lambda itens, **k: {0: escolha_da_ia})
+        def _escolhe(itens, **k):
+            # a IA responde por ITEM do lote — se a produção truncar o lote,
+            # a resposta encolhe junto e as linhas de baixo saem sem REF
+            return {i: _ESCOLHA_DA_IA.get(e.get("description"), escolha_da_ia)
+                    for i, e in enumerate(itens)}
+        monkeypatch.setattr(sinapi_matcher, "pick_best_batch", _escolhe)
         _pick_real = sinapi_matcher.apply_llm_pick
 
         def _pick_contado(*a, **k):
@@ -224,32 +269,53 @@ def _texto_das_abas(caminho, abas=None):
                       for c in row if c is not None)
 
 
-def test_a_remontagem_REFAZ_o_sinapi(monkeypatch, tmp_path):
-    """🩸 A planilha revisada tem que sair COM referência — e com a referência
-    CERTA, que só sai porque a escolha da IA roda."""
+def test_a_remontagem_REFAZ_o_sinapi(monkeypatch, tmp_path, capsys):
+    """🩸 A planilha revisada tem que sair COM referência — em TODAS as linhas,
+    e com a referência CERTA, que só sai porque a escolha da IA roda.
+
+    🪤 06/09 (cético): com UM item no cenário, `_lote_rb[:1]` e um `break` no
+    laço passavam verdes. Aqui são três linhas e a conferência é uma a uma.
+    """
     r, visto, wb = _remontar_v(monkeypatch, tmp_path)
-    assert r["items_count"] == 1, r
+    assert r["items_count"] == len(_CENARIO), r
 
     assert _ABA in wb.sheetnames, (
         "a planilha remontada saiu SEM a aba de referências SINAPI — é o que "
         "21 jobs de 17 clientes receberam antes de 01/09. Abas: %s"
         % wb.sheetnames)
     aba = _texto(wb, _ABA)
-    assert "87263" in aba, "a aba existe e não traz o código conferido: %s" % aba[:400]
+    orc = _texto(wb, "Orçamento")
+
+    faltando = [c for c in _CODIGOS_CERTOS if ("SINAPI %s" % c) not in orc]
+    assert not faltando, (
+        "%d de %d linhas saíram com a coluna REF VAZIA (faltaram %r) — é o "
+        "defeito das 126 linhas: a primeira recebe a referência e o resto do "
+        "cliente vai sem. Orçamento: %s"
+        % (len(faltando), len(_CODIGOS_CERTOS), faltando, orc[:600]))
+    for c in _CODIGOS_CERTOS:
+        assert c in aba, (
+            "o código %s ficou de fora da aba de referências: %s" % (c, aba[:600]))
 
     # A REF que vai na linha do orçamento é o PRIMEIRO match. Sem
     # `apply_llm_pick` ela seria a de similaridade maior — PISO DE BORRACHA.
-    orc = _texto(wb, "Orçamento")
-    assert "SINAPI 87263" in orc, (
-        "a coluna REF da linha não trouxe o código conferido pela IA: %s"
-        % orc[:600])
-    assert "SINAPI 98555" not in orc, (
-        "a REF da linha ficou com o candidato de similaridade maior — a busca "
-        "por texto sozinha chamou porcelanato de PISO DE BORRACHA (17/07); "
-        "`apply_llm_pick` deixou de rodar")
+    for c in _CODIGOS_ERRADOS:
+        assert ("SINAPI %s" % c) not in orc, (
+            "a REF de alguma linha ficou com o candidato de similaridade maior "
+            "(%s) — a busca por texto sozinha chamou porcelanato de PISO DE "
+            "BORRACHA (17/07); `apply_llm_pick` deixou de rodar em todas as "
+            "linhas. Orçamento: %s" % (c, orc[:600]))
     assert visto["pick"] == 1, (
         "a escolha da IA nunca foi chamada na remontagem (%d chamadas)"
         % visto["pick"])
+
+    # 🪤 O log é a única coisa que quem investiga vê. Com o lote truncado ele
+    # dizia "1/1 conferidos" — honesto na aparência e cego no fato.
+    saiu = capsys.readouterr().out
+    assert ("[sinapi-rebuild]" in saiu
+            and ("%d/%d" % (len(_CENARIO), len(_CENARIO))) in saiu), (
+        "o log da remontagem não contou as %d linhas do lote — com o lote "
+        "cortado ele diz '1/1 conferidos' e apaga a suspeita. Saída: %r"
+        % (len(_CENARIO), saiu[-400:]))
 
 
 def test_a_remontagem_usa_a_ESCOLHA_DA_IA_e_nao_a_similaridade(monkeypatch, tmp_path):

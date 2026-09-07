@@ -184,9 +184,17 @@ def test_item_com_so_a_cor_tambem_e_protegido():
     e o teste passava VERDE com o defeito aberto. Agora os dois discordam de
     propósito: o texto diz uma cor, o objeto diz outra, e só quem respeita o
     objeto acerta.
+
+    🩸 06/09/2026, 2ª rodada — e a descrição não tinha MARCA nem CÓDIGO, então
+    o `assert r["marca"] is None` (que a própria mensagem chama de "inventou
+    marca") não conseguia detectar invenção nenhuma: não havia o que inventar.
+    Trocar a guarda de `spec_origem` por `marca` — que é justamente o erro que
+    deixa de fora os 222 itens só-com-cor — passava VERDE. Agora a descrição
+    cita marca ("Suvinil") e código ("1234-A") que o OBJETO não tem: quem cair
+    no regex devolve os dois e reprova.
     """
-    it = _It("Pintura acrílica cor Azul Munsell", cor="Branco Neve",
-             spec_origem="lido")
+    it = _It("Pintura acrílica Suvinil cor Azul Munsell ref. 1234-A",
+             cor="Branco Neve", spec_origem="lido")
     r = _spec_do_item()(it)
     assert r["cor"] == "Branco Neve", (
         "o regex passou por cima da cor que a linha já carregava (devolveu "
@@ -194,7 +202,11 @@ def test_item_com_so_a_cor_tambem_e_protegido():
         % r["cor"])
     assert r["spec_origem"] == "lido"
     assert r["marca"] is None, (
-        "inventou marca num item que só tinha cor: %r" % r["marca"])
+        "inventou a marca que está escrita no TEXTO (%r) num item que só "
+        "tinha cor — a guarda voltou a ser o `marca` em vez do `spec_origem`, "
+        "e os 222 itens só-com-cor do acervo ficam desprotegidos" % r["marca"])
+    assert r["codigo_fabricante"] is None, (
+        "inventou o código que está escrito no TEXTO: %r" % r["codigo_fabricante"])
 
 
 def test_controle_positivo_item_SEM_procedencia_ainda_le_o_texto():
@@ -305,18 +317,63 @@ def test_o_insert_usa_a_funcao_que_respeita_o_objeto():
     assert '**_spec_campos(getattr(it, "description"' not in src
 
 
+#: 🩸 06/09/2026, 2ª rodada — a bancada trabalhava com UM item e UMA linha
+#: guardada, então nenhum defeito de CARDINALIDADE era visível: `rows[:1]`,
+#: `rows[:len(rows)//2]` ou um `break` no primeiro casamento passavam verdes e
+#: o cliente perdia a especificação de todas as linhas menos a primeira —
+#: calado, com e-mail de "planilha atualizada". Pelo mesmo motivo o guarda não
+#: via quebra em `_norm_desc`: os dois lados usavam a MESMA string exata, então
+#: transformar `_norm_desc` em identidade (que é o que faz o casamento por
+#: descrição existir) também ficava verde — e em produção a descrição muda de
+#: CAIXA e de ACENTO entre duas leituras.
+#: Agora são 3 linhas do cliente, cada uma com marca própria, e a leitura nova
+#: escreve cada descrição com caixa/acento DIFERENTES do que está guardado.
+_TRES_DO_CLIENTE = [
+    # (descrição GUARDADA no banco, descrição da LEITURA NOVA, marca)
+    ("Torneira de mesa bica móvel cromado",
+     "TORNEIRA DE MESA BICA MOVEL CROMADO", "Docol"),
+    ("Bacia sanitária com caixa acoplada",
+     "bacia sanitaria com caixa acoplada", "Deca"),
+    ("Cuba de embutir em aço inox",
+     "Cuba de embutir em ACO INOX", "Tramontina"),
+]
+
+
+def _banco_com_tres(monkeypatch):
+    guardadas = [
+        dict(_LINHA_DO_CLIENTE, item_num="1.%d" % (i + 1), description=guardada,
+             marca=marca, codigo_fabricante="00.%03d" % (i + 1), sort_order=i)
+        for i, (guardada, _nova, marca) in enumerate(_TRES_DO_CLIENTE)
+    ]
+    banco = _liga(monkeypatch, _Banco(guardadas))
+    novos = [_It(nova) for _g, nova, _m in _TRES_DO_CLIENTE]
+    novos.append(_It("Alvenaria em bloco cerâmico"))   # o cliente nunca tocou
+    return banco, novos
+
+
 def test_o_resgate_do_swap_e_de_fato_chamado(monkeypatch):
     """🪤 A versão antiga cobrava o prefixo `_devolver_spec_do_cliente(rows,`.
     Trocar o 2º argumento por `{}` mantinha a chamada escrita e o dicionário
     chegava VAZIO — o cliente perdia a especificação igual, com log "0 de 0"."""
-    banco = _liga(monkeypatch, _Banco([_LINHA_DO_CLIENTE]))
-    main._persist_items_to_supabase("job1", [_It(_DESC)])
-    linha = banco.inseridos[0]
-    assert linha["marca"] == "Docol", (
-        "a especificação do cliente NÃO atravessou o reprocesso (marca=%r)"
-        % linha["marca"])
-    assert linha["codigo_fabricante"] == "00.123"
-    assert linha["spec_origem"] == "cliente"
+    banco, novos = _banco_com_tres(monkeypatch)
+    main._persist_items_to_supabase("job1", novos)
+
+    assert len(banco.inseridos) == 4, (
+        "o insert não recebeu as 4 linhas da leitura nova: %d"
+        % len(banco.inseridos))
+    saiu = [(l["description"], l["marca"], l["codigo_fabricante"],
+             l["spec_origem"]) for l in banco.inseridos]
+    assert saiu == [
+        ("TORNEIRA DE MESA BICA MOVEL CROMADO", "Docol", "00.001", "cliente"),
+        ("bacia sanitaria com caixa acoplada", "Deca", "00.002", "cliente"),
+        ("Cuba de embutir em ACO INOX", "Tramontina", "00.003", "cliente"),
+        ("Alvenaria em bloco cerâmico", None, None, None),
+    ], (
+        "a especificação do cliente NÃO atravessou o reprocesso inteiro. Se só "
+        "a 1ª linha voltou, o resgate está truncando o laço (`rows[:1]`, um "
+        "`break`) e o cliente perde tudo menos a primeira; se NENHUMA voltou "
+        "com a caixa/acento trocados, o casamento por descrição parou de "
+        "normalizar (`_norm_desc`): %s" % (saiu,))
 
 
 def test_CONTROLE_o_que_o_MOTOR_leu_nao_e_resgatado(monkeypatch):
@@ -330,26 +387,46 @@ def test_CONTROLE_o_que_o_MOTOR_leu_nao_e_resgatado(monkeypatch):
         "valer e todo conserto do extrator morre no reprocesso")
 
 
-def test_o_resgate_le_ANTES_do_delete():
+def test_o_resgate_le_ANTES_do_delete(monkeypatch):
     """🪤 A ordem é o defeito silencioso: ler DEPOIS do DELETE devolve zero
     linhas, o resgate roda, não acha nada, e o log diz "0 de 0" — parecendo
-    que não havia nada a salvar."""
-    from _corpo import fonte
-    src = fonte("main.py")
-    i_le = src.index("_spec_do_cliente_antes_do_swap(job_id)")
-    i_del = src.index("rest/v1/project_items?job_id=eq.{job_id}\", method='DELETE'")
-    i_devolve = src.index("_devolver_spec_do_cliente(rows,")
-    assert i_le < i_del, "a leitura do resgate ficou DEPOIS do DELETE — lê zero"
-    assert i_del < i_devolve, "a devolução ficou antes do DELETE"
+    que não havia nada a salvar.
+
+    🩸 06/09/2026, 2ª rodada — este guarda comparava POSIÇÕES DE TEXTO no
+    `main.py`. Agora ele roda o persist de verdade e lê a ordem das operações
+    que o banco de mentira registrou; e o caso tem 3 linhas do cliente, não 1,
+    então "alcançou a primeira" não basta.
+    """
+    banco, novos = _banco_com_tres(monkeypatch)
+    main._persist_items_to_supabase("job1", novos)
+
+    i_le = next((n for n, o in enumerate(banco.ops)
+                 if o == "rest:GET:project_items"), None)
+    i_del = next((n for n, o in enumerate(banco.ops)
+                  if o == "http:DELETE:project_items"), None)
+    i_post = next((n for n, o in enumerate(banco.ops)
+                   if o == "http:POST:project_items"), None)
+    assert i_le is not None, (
+        "o resgate nem LEU a especificação do cliente antes do swap: %s"
+        % (banco.ops,))
+    assert i_del is not None and i_post is not None, banco.ops
+    assert i_le < i_del, (
+        "a leitura do resgate aconteceu DEPOIS do DELETE — lê zero linhas e o "
+        "log diz '0 de 0', parecendo que não havia nada a salvar: %s"
+        % (banco.ops,))
+    assert i_del < i_post, ("o insert veio antes do DELETE: %s" % (banco.ops,))
+    # e o efeito: as TRÊS voltaram (ler depois do DELETE devolveria zero)
+    assert [l["marca"] for l in banco.inseridos] == [
+        "Docol", "Deca", "Tramontina", None], [l["marca"] for l in banco.inseridos]
 
 
 # ══════════════════════════════════════════════════════════════════════════
 #  A fusão do filhote (o outro caminho de reprocesso)
 # ══════════════════════════════════════════════════════════════════════════
-def test_a_fusao_devolve_a_spec_do_CLIENTE_e_nao_a_do_motor():
-    """🔑 A assimetria é de propósito: o que o cliente escolheu volta por
-    cima; o que o MOTOR leu não, porque a leitura nova pode ser melhor — e
-    hoje é (o extrator mudou 5 vezes só neste dia)."""
+def test_a_fusao_TEM_o_ramo_da_regra7_escrito():
+    """Guarda de FORMA, e só. Ele diz que o ramo `startswith("cliente")` existe
+    e devolve os 4 campos — não diz que ele RODA (ver o teste executado logo
+    abaixo, que hoje reprova)."""
     corpo = so_o_que_roda("_fundir_revisoes_do_cliente")
     i = corpo.index('startswith("cliente")')
     trecho = corpo[max(0, i - 200):i + 400]
@@ -359,3 +436,87 @@ def test_a_fusao_devolve_a_spec_do_CLIENTE_e_nao_a_do_motor():
     assert "lido" not in trecho, (
         "a fusão passou a devolver também o que o MOTOR leu — a leitura nova "
         "deixa de valer e o conserto do extrator nunca alcança o filhote")
+
+
+def _fundir(monkeypatch, linha_do_pai, descricao_nova):
+    """Roda `_fundir_revisoes_do_cliente` de verdade contra um pai de mentira."""
+    from models import BudgetItem, Confidence
+    revs = [{"item_id": "i1", "reviewed_at": "2026-09-01",
+             "edits": {"_antes": {"unit": linha_do_pai.get("unit") or "un",
+                                  "quantity": linha_do_pai.get("quantity")}}}]
+    monkeypatch.setattr(main, "_supa_rest_service",
+                        lambda metodo, tabela, params=None, **k:
+                        (200, revs if tabela == "item_reviews" else []))
+    monkeypatch.setattr(main, "_supa_rest_tudo",
+                        lambda tabela, params=None, **k:
+                        (200, [linha_do_pai] if tabela == "project_items" else []))
+    monkeypatch.setattr(main, "_log_error", lambda *a, **k: None)
+    novo = BudgetItem(item_num="1", description=descricao_nova, unit="un",
+                      quantity=9.0, confidence=Confidence.ESTIMADO)
+    saida, resumo = main._fundir_revisoes_do_cliente([novo], "pai-do-filhote")
+    assert resumo["casadas"] == 1, (
+        "a correção do cliente nem casou com a leitura nova: %s" % (resumo,))
+    return saida[0]
+
+
+def _linha_do_pai(**kw):
+    base = {"id": "i1", "description": _DESC, "unit": "un", "quantity": 3.0,
+            "observations": "", "confidence": "confirmado",
+            "marca": None, "codigo_fabricante": None, "cor": None,
+            "spec_origem": None}
+    base.update(kw)
+    return base
+
+
+@pytest.mark.parametrize("caso,pai,esperado", [
+    # o item completo do caderno
+    ("spec_completa",
+     _linha_do_pai(marca="Docol", codigo_fabricante="00.123", cor="Cromado",
+                   spec_origem="cliente"),
+     ("Docol", "00.123", "Cromado")),
+    # 🔑 222 dos 556 itens do acervo têm especificação SÓ COM COR. Sem este
+    # caso, condicionar a regra a `c.get("marca")` passa despercebido — e é
+    # exatamente o erro que já foi cometido no `_spec_do_item`.
+    ("so_a_cor",
+     _linha_do_pai(cor="Azul Munsell", spec_origem="cliente"),
+     ("", "", "Azul Munsell")),
+])
+@pytest.mark.xfail(strict=True, reason=(
+    "🩸 ACHADO 06/09/2026 — A REGRA nº7 NÃO EXISTE NO CAMINHO DO FILHOTE. "
+    "`_aplicar` lê `c.get('marca'/'cor'/'spec_origem')`, mas os dicionários de "
+    "`corrigidos` (os DOIS ramos que os montam) não carregam nenhum desses 4 "
+    "campos — só description/unit/quantity/observations/confidence. Logo "
+    "`_orig` é sempre '' e o ramo `startswith(\"cliente\")` NUNCA roda. O "
+    "guarda que morava aqui lia o FONTE e via as 4 linhas escritas, então "
+    "passava verde com a regra dura nº7 quebrada. Conserto de produção "
+    "(4 linhas, fora do escopo deste commit de bancada): incluir marca, "
+    "codigo_fabricante, cor e spec_origem nos dois `corrigidos.append`."))
+def test_a_fusao_devolve_a_spec_do_CLIENTE_e_nao_a_do_motor(monkeypatch, caso,
+                                                            pai, esperado):
+    """🔑 A assimetria é de propósito: o que o cliente escolheu volta por
+    cima; o que o MOTOR leu não, porque a leitura nova pode ser melhor — e
+    hoje é (o extrator mudou 5 vezes só neste dia)."""
+    alvo = _fundir(monkeypatch, dict(pai), _DESC)
+    assert (alvo.marca, alvo.codigo_fabricante, alvo.cor) == esperado, (
+        "[%s] a fusão do filhote NÃO devolveu a especificação do cliente: "
+        "%r" % (caso, (alvo.marca, alvo.codigo_fabricante, alvo.cor)))
+    assert str(alvo.spec_origem) == "cliente", alvo.spec_origem
+
+
+def test_CONTROLE_a_fusao_NAO_devolve_o_que_o_MOTOR_leu(monkeypatch):
+    """🧪 A outra metade da assimetria: `spec_origem='lido'` é leitura do
+    motor, e a leitura NOVA vale mais.
+
+    🪤 Enquanto o achado acima estiver aberto este controle passa por acidente
+    (a fusão não devolve NADA). Ele vale como trava do dia em que o conserto
+    entrar: se o conserto devolver `lido` junto, aqui reprova.
+    """
+    alvo = _fundir(monkeypatch,
+                   _linha_do_pai(marca="Deca", codigo_fabricante="1167.C.LNK",
+                                 cor="Cromado", spec_origem="lido"),
+                   _DESC)
+    assert not (alvo.marca or ""), (
+        "a fusão trouxe de volta o que o MOTOR leu (marca=%r) — a leitura "
+        "nova deixa de valer e o conserto do extrator nunca alcança o filhote"
+        % alvo.marca)
+    assert str(alvo.spec_origem or "") != "lido", alvo.spec_origem

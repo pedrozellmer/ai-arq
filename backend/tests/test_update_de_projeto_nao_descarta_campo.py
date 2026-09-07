@@ -53,39 +53,53 @@ def _campos_que_a_rpc_aceita():
     return {k[2:] for k in re.findall(r'"(p_[a-z_]+)"\s*:', corpo)} - {"job_id"}
 
 
-def _pacotes_enviados():
+# 🪤 ASPAS SIMPLES ERAM O FURO REAL. A 1ª versão deste varredor lia só
+# `"campo":`; um dicionário escrito com `'campo':` era invisível pra ele —
+# mesmo defeito, roupa nova, e o guarda verde. As três expressões abaixo
+# aceitam as duas aspas de propósito.
+_CHAVE = r'["\']([a-z_]+)["\']\s*:'
+# 🪤 E o 3º argumento tem que ser um IDENTIFICADOR. Com `[^,]+` a expressão
+# atravessava linhas e casava até com a menção a `_supabase_update("projects",
+# "job_id",…)` dentro da DOCSTRING do `_projeto_patch` — um "chamador" de
+# conjunto de chaves VAZIO, que passa em qualquer conferência por ser vazio.
+_CHAMADA = (r'_supabase_update\(\s*"projects"\s*,\s*"job_id"\s*,'
+            r'\s*[A-Za-z_]\w*\s*,\s*')
+
+
+def _pacotes_enviados(src=None):
     """Todo `_supabase_update("projects","job_id",…)`: chaves do pacote.
 
-    Lê dicionário INLINE e pacote em VARIÁVEL (`x = {...}` e `x["k"] = ...`)."""
+    Lê dicionário INLINE e pacote em VARIÁVEL (`x = {...}` e `x["k"] = ...`),
+    com aspas simples ou duplas."""
+    src = _SRC if src is None else src
     achados = []
-    linhas = _SRC.splitlines()
-    for m in re.finditer(
-            r'_supabase_update\(\s*"projects"\s*,\s*"job_id"\s*,\s*[^,]+,\s*',
-            _SRC):
-        n = _SRC[:m.start()].count("\n")
-        resto = _SRC[m.end():m.end() + 900]
+    linhas = src.splitlines()
+    for m in re.finditer(_CHAMADA, src):
+        n = src[:m.start()].count("\n")
+        resto = src[m.end():m.end() + 900]
         var = re.match(r'([A-Za-z_]\w*)\s*\)', resto)
         if var:                                   # pacote em variável
             nome, chaves = var.group(1), set()
             for i in range(max(0, n - 40), n + 1):
                 for bloco in re.findall(r'%s\s*=\s*\{([^}]*)\}' % re.escape(nome), linhas[i]):
-                    chaves |= set(re.findall(r'"([a-z_]+)"\s*:', bloco))
-                chaves |= set(re.findall(r'%s\["([a-z_]+)"\]\s*=' % re.escape(nome), linhas[i]))
+                    chaves |= set(re.findall(_CHAVE, bloco))
+                chaves |= set(re.findall(
+                    r'%s\[["\']([a-z_]+)["\']\]\s*=' % re.escape(nome), linhas[i]))
             achados.append((n + 1, nome, chaves))
         else:                                     # dicionário inline
             prof, k = 0, m.end()
-            while k < len(_SRC):
-                if _SRC[k] == "{":
+            while k < len(src):
+                if src[k] == "{":
                     prof += 1
-                elif _SRC[k] == "}":
+                elif src[k] == "}":
                     prof -= 1
                     if prof == 0:
                         break
-                elif _SRC[k] == ")" and prof == 0:
+                elif src[k] == ")" and prof == 0:
                     break
                 k += 1
             achados.append((n + 1, "inline",
-                            set(re.findall(r'"([a-z_]+)"\s*:', _SRC[m.end():k + 1]))))
+                            set(re.findall(_CHAVE, src[m.end():k + 1]))))
     return achados
 
 
@@ -160,6 +174,78 @@ def test_NENHUM_update_de_projeto_manda_campo_que_a_RPC_descarta(monkeypatch):
     assert not [c for c in caminhos if "update_project_status" in c], (
         "os dados do projeto foram por `update_project_status`, que aceita 7 "
         "campos fixos, descarta o resto e AINDA devolve sucesso: %r" % caminhos)
+
+
+def test_NENHUM_pacote_de_update_de_projeto_leva_campo_que_a_RPC_DESCARTA():
+    """🩸 A REGRESSÃO DE COBERTURA QUE ISTO DESFAZ.
+
+    O teste acima virou a execução de UMA rota (`/meta`) — necessário, e não
+    suficiente. O invariante que fez este arquivo nascer vale pros **17**
+    `_supabase_update("projects","job_id",…)` do main.py, e o caso 2 (o
+    `/add-file`, com `files_count`/`file_types`) mora num deles. Trocar o
+    varredor pela rota deixava o defeito de 13/05 voltar por uma porta vizinha
+    com a bateria inteira verde: `address` não está entre os 7 campos da RPC,
+    a rota responde "ok" e o banco não muda.
+
+    🔑 Os dois, não um no lugar do outro: a rota prova o COMPORTAMENTO de um
+    chamador, a varredura prova que nenhum dos outros 16 reabre o buraco.
+    """
+    aceitos = _campos_que_a_rpc_aceita()
+    pacotes = _pacotes_enviados()
+    assert len(pacotes) >= 15, (
+        "a varredura encolheu de 17 pra %d chamadores — ou o main.py mudou "
+        "muito, ou a expressão parou de enxergar" % len(pacotes))
+
+    fora = [(ln, var, sorted(ch - aceitos)) for ln, var, ch in pacotes
+            if ch - aceitos]
+    assert not fora, (
+        "estes `_supabase_update(\"projects\", …)` mandam campo que a RPC "
+        "`update_project_status` DESCARTA em silêncio — e ela devolve sucesso, "
+        "então quem chamou acha que gravou: %r.\nA RPC só aceita: %r"
+        % (fora, sorted(aceitos)))
+
+    # 🪤 Pacote VAZIO não é aprovação, é ponto cego: um chamador cujo
+    # dicionário o varredor não conseguiu ler passaria por não ter chave
+    # nenhuma pra reprovar. Foi exatamente assim que o meu primeiro varredor
+    # disse "0 chamadores com problema" com dois defeitos reais no ar.
+    cegos = [(ln, var) for ln, var, ch in pacotes if not ch]
+    assert not cegos, (
+        "o varredor não conseguiu ler o pacote destes chamadores — eles passam "
+        "por serem ilegíveis, não por estarem certos: %r" % (cegos,))
+
+
+def test_CONTROLE_o_varredor_enxerga_ASPAS_SIMPLES():
+    """🧪 O furo real da 1ª versão. Sem este controle, alguém "conserta" o
+    varredor pra aspas duplas de novo e o guarda de cima passa a absolver todo
+    dicionário escrito com `'campo':`."""
+    falso = ("    _supabase_update(\"projects\", \"job_id\", job_id,\n"
+             "                     {'address': x, 'phase': y})\n")
+    (_, forma, chaves), = _pacotes_enviados(falso)
+    assert forma == "inline", forma
+    assert chaves == {"address", "phase"}, (
+        "o varredor voltou a ser cego pra aspas simples: %r" % (chaves,))
+
+    variavel = ("    _pac = {'address': x}\n"
+                "    _pac['phase'] = y\n"
+                "    _supabase_update(\"projects\", \"job_id\", job_id, _pac)\n")
+    (_, forma2, chaves2), = _pacotes_enviados(variavel)
+    assert forma2 == "_pac", forma2
+    assert chaves2 == {"address", "phase"}, (
+        "o varredor voltou a ser cego pra aspas simples no pacote em "
+        "variável: %r" % (chaves2,))
+
+
+def test_CONTROLE_o_varredor_REPROVA_um_chamador_com_campo_descartado():
+    """🧪 Controle positivo do guarda de cima: com um chamador plantado que
+    manda `address`, a varredura tem que acusar."""
+    falso = ('    _supabase_update("projects", "job_id", job_id,\n'
+             '                     {"status": "done", "address": _end})\n')
+    aceitos = _campos_que_a_rpc_aceita()
+    fora = [sorted(ch - aceitos) for _, _, ch in _pacotes_enviados(falso)
+            if ch - aceitos]
+    assert fora == [["address"]], (
+        "a varredura não reprovaria um chamador que manda campo fora da RPC: "
+        "%r" % (fora,))
 
 
 def test_CONTROLE_o_guarda_ACHA_os_dois_formatos_de_pacote():

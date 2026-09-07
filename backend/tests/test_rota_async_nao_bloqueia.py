@@ -49,6 +49,7 @@ import types                                                       # noqa: E402
 
 import main                                                        # noqa: E402
 import pricing                                                     # noqa: E402
+import pytest                                                     # noqa: E402
 
 
 class _RequestFake:
@@ -57,32 +58,59 @@ class _RequestFake:
         self.client = types.SimpleNamespace(host="127.0.0.1")
 
 
+class _UploadFake:
+    """UploadFile o suficiente pro caminho do estimate: nome e nada mais.
+
+    A gravação em disco é encenada (`_grava_encenado`), então o conteúdo não
+    importa — o que importa é QUANTOS arquivos chegam na função pesada.
+    """
+
+    def __init__(self, filename):
+        self.filename = filename
+        self.size = 4096
+
+
 def _rodar_estimativa(monkeypatch, tmp_path, estimativa=None, precheck=None,
-                      teto_s=None):
-    """Chama a rota /api/estimate-price DE VERDADE. Devolve (resposta, diário)."""
-    diario = {"threads": {}, "logs": []}
+                      teto_s=None, n_arquivos=0):
+    """Chama a rota /api/estimate-price DE VERDADE. Devolve (resposta, diário).
+
+    🪤 06/09: esta bancada só sabia chamar a rota com ZERO arquivo — justo o
+    caso em que não há trabalho pesado nenhum. Qualquer regressão presa à
+    QUANTIDADE de arquivos (a forma do incidente real: a cliente-18 selecionou
+    17) ficava invisível. Agora o número de arquivos é um parâmetro, e o
+    diário anota quantos caminhos chegaram em cada função pesada.
+    """
+    diario = {"threads": {}, "logs": [], "caminhos": {}}
 
     def _est(caminhos, known=0):
         diario["threads"]["estimate_for_files"] = threading.current_thread()
+        diario["caminhos"]["estimate_for_files"] = list(caminhos or [])
         return (estimativa or (lambda: {"pranchas": 1, "preco": 97}))()
 
     def _pre(caminhos):
         diario["threads"]["precheck_warnings"] = threading.current_thread()
+        diario["caminhos"]["precheck_warnings"] = list(caminhos or [])
         return (precheck or (lambda: ["aviso de precheck"]))()
+
+    async def _grava_encenado(upload_file, path):
+        io.open(path, "w", encoding="utf-8").write("cad de mentira")
+        return 14, b""
 
     monkeypatch.setattr(pricing, "estimate_for_files", _est)
     monkeypatch.setattr(pricing, "precheck_warnings", _pre)
     monkeypatch.setattr(main, "_rate_limit_ok", lambda *a, **k: True)
     monkeypatch.setattr(main, "WORK_DIR", str(tmp_path))
+    monkeypatch.setattr(main, "_stream_upload_to_disk", _grava_encenado)
     monkeypatch.setattr(main, "_log_error",
                         lambda stage, msg, job=None, **k: diario["logs"].append(
                             (stage, str(msg))))
     if teto_s is not None:
         monkeypatch.setattr(main, "_PRECHECK_ORCAMENTO_S", teto_s)
 
+    arquivos = [_UploadFake("PRANCHA_%02d.dwg" % i) for i in range(n_arquivos)]
     t0 = time.monotonic()
-    resp = asyncio.run(main.estimate_price(request=_RequestFake(), files=[],
-                                           known_pranchas=1))
+    resp = asyncio.run(main.estimate_price(request=_RequestFake(),
+                                           files=arquivos, known_pranchas=1))
     diario["segundos"] = time.monotonic() - t0
     diario["thread_do_laco"] = threading.current_thread()
     return resp, diario
@@ -103,10 +131,39 @@ def _fonte(caminho=None):
                    encoding="utf-8").read()
 
 
+def _nomes_chamados(no):
+    """[(nome, linha)] de tudo que é CHAMADO dentro de `no`.
+
+    🔑 Só nós `Call`. `run_in_threadpool(pesada, x)` passa `pesada` como NOME,
+    não como chamada — é assim que a forma certa deixa de ser acusada.
+    """
+    fora = []
+    for sub in ast.walk(no):
+        if isinstance(sub, ast.Call):
+            nome = getattr(sub.func, "id", None) or getattr(sub.func, "attr", None)
+            if nome:
+                fora.append((nome, sub.lineno))
+    return fora
+
+
 def _chamadas_pesadas_no_laco(src):
-    """Devolve [(rota, funcao, linha)] de chamada DIRETA (fora de thread)."""
+    """[(rota, funcao, linha)] de trabalho pesado rodando NO LAÇO.
+
+    Pega dois formatos:
+      1. a rota chama a pesada direto (o formato do incidente de 27/08);
+      2. a rota chama um HELPER de módulo, e o helper chama a pesada.
+
+    🪤 06/09: o detector só sabia o formato 1 — era por NOME e por ESCOPO DE
+    ROTA. Mover a chamada uma linha pra dentro de `def _monta_orcamento(...)`
+    devolvia o bloqueio inteiro ao laço de eventos com o guarda verde. O laço
+    não sabe em que função o trabalho está: ele só sabe que ninguém mais é
+    atendido enquanto roda.
+    """
+    arvore = ast.parse(src)
+    # helpers SÍNCRONOS de módulo: são eles que "escondem" a chamada pesada.
+    helpers = {n.name: n for n in arvore.body if isinstance(n, ast.FunctionDef)}
     achados = []
-    for no in ast.walk(ast.parse(src)):
+    for no in ast.walk(arvore):
         if not isinstance(no, ast.AsyncFunctionDef):
             continue
         eh_rota = any(
@@ -115,12 +172,13 @@ def _chamadas_pesadas_no_laco(src):
             for d in no.decorator_list)
         if not eh_rota:
             continue
-        for sub in ast.walk(no):
-            if not isinstance(sub, ast.Call):
-                continue
-            nome = getattr(sub.func, "id", None) or getattr(sub.func, "attr", None)
+        for nome, linha in _nomes_chamados(no):
             if nome in _PESADAS:
-                achados.append((no.name, nome, sub.lineno))
+                achados.append((no.name, nome, linha))
+            elif nome in helpers:
+                for n2, _l2 in _nomes_chamados(helpers[nome]):
+                    if n2 in _PESADAS:
+                        achados.append((no.name, "%s -> %s" % (nome, n2), linha))
     return achados
 
 
@@ -157,21 +215,67 @@ def test_CONTROLE_POSITIVO_o_detector_pega_de_verdade():
         "falso positivo: a versão em thread foi acusada")
 
 
-def test_a_estimativa_usa_thread(monkeypatch, tmp_path):
+def test_CONTROLE_POSITIVO_o_detector_atravessa_o_helper_de_modulo():
+    """🧪 O disfarce mais barato: mover a chamada pesada uma linha pra dentro de
+    um helper de módulo. O laço de eventos continua bloqueado igual."""
+    disfarcado = (
+        "def _monta_orcamento(caminhos):\n"
+        "    return estimate_for_files(caminhos)\n"
+        "\n"
+        "@app.post('/api/x')\n"
+        "async def rota_disfarcada(request):\n"
+        "    return _monta_orcamento(caminhos)\n"
+    )
+    achados = _chamadas_pesadas_no_laco(disfarcado)
+    assert achados, (
+        "o detector é cego a helper de módulo — basta mover a chamada uma "
+        "linha pra dentro pra o bloqueio voltar com o guarda verde")
+    assert achados[0][0] == "rota_disfarcada"
+    assert achados[0][1] == "_monta_orcamento -> estimate_for_files", achados
+
+    # …e o helper MANDADO PRA THREAD não pode ser acusado.
+    correto = (
+        "def _monta_orcamento(caminhos):\n"
+        "    return estimate_for_files(caminhos)\n"
+        "\n"
+        "@app.post('/api/x')\n"
+        "async def rota_correta(request):\n"
+        "    return await run_in_threadpool(_monta_orcamento, caminhos)\n"
+    )
+    assert not _chamadas_pesadas_no_laco(correto), (
+        "falso positivo: o helper mandado pra thread foi acusado")
+
+
+@pytest.mark.parametrize("n_arquivos", [0, 1, 6, 17],
+                         ids=["sem_arquivo", "um", "seis", "dezessete"])
+def test_a_estimativa_usa_thread(monkeypatch, tmp_path, n_arquivos):
     """🚨 O incidente da cliente-18: `estimate_for_files` e `precheck_warnings`
     rodando NO LAÇO DE EVENTOS travam o site inteiro pra todo mundo.
 
-    Guarda por EXECUÇÃO: as duas têm que rodar numa thread que não é a do laço.
+    Guarda por EXECUÇÃO: as duas têm que rodar numa thread que não é a do laço,
+    **em qualquer quantidade de arquivos**.
+
+    🪤 06/09: o cenário único era ZERO arquivo — o caso em que não há trabalho
+    pesado nenhum. Um "atalho pra seleção pequena/grande" (`if len(saved_paths)
+    > N: roda aqui mesmo`) passava verde, e é exatamente a forma do incidente:
+    a cliente-18 selecionou **17** arquivos, a CPU foi a 100%% e o site parou de
+    responder na mão dela. 6 é a medição de 3,81 s dos DWG; 17 é o caso real.
     """
-    resp, d = _rodar_estimativa(monkeypatch, tmp_path)
+    resp, d = _rodar_estimativa(monkeypatch, tmp_path, n_arquivos=n_arquivos)
     assert resp["status"] == "ok"
     assert set(d["threads"]) == {"estimate_for_files", "precheck_warnings"}, (
         "alguma das duas funções pesadas não chegou a rodar: %r" % (d["threads"],))
     for nome, th in d["threads"].items():
         assert th is not d["thread_do_laco"], (
-            "%s rodou NA THREAD DO LAÇO DE EVENTOS — isso não deixa o site "
-            "lento, deixa BLOQUEADO: nenhuma outra requisição é atendida "
-            "enquanto roda. É o congelamento que espantou a cliente-18." % nome)
+            "%s rodou NA THREAD DO LAÇO DE EVENTOS com %d arquivo(s) — isso "
+            "não deixa o site lento, deixa BLOQUEADO: nenhuma outra requisição "
+            "é atendida enquanto roda. É o congelamento que espantou a "
+            "cliente-18." % (nome, n_arquivos))
+    for nome, caminhos in d["caminhos"].items():
+        assert len(caminhos) == n_arquivos, (
+            "%s recebeu %d caminho(s) de %d — a rota está descartando arquivo "
+            "no meio do caminho, e a estimativa sai medindo menos do que o "
+            "cliente mandou" % (nome, len(caminhos), n_arquivos))
 
 
 def test_o_precheck_tem_TETO_de_espera():

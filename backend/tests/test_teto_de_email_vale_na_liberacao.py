@@ -45,6 +45,8 @@ import urllib.parse as _uparse
 import urllib.request as _ureq
 from datetime import datetime as _dtb, timedelta as _tdb, timezone as _tzb
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -91,18 +93,48 @@ def _corte_da_url(url):
     pessoa "recebeu recente" é a data que `_email_auto_recente` CALCULOU e
     escreveu na consulta — não um mock que devolve True de graça.
     """
-    q = _uparse.parse_qs(_uparse.urlparse(url).query)
+    q = _uparse.parse_qs(_uparse.urlparse(url).query, keep_blank_values=True)
     bruto = (q.get("sent_at") or [""])[0]
     assert bruto.startswith("gte."), (
         "a consulta do cooldown perdeu o filtro de data: %r" % url)
     return _dtb.fromisoformat(bruto[4:])
 
 
-def _urlopen_de_mentira(dias_desde_o_ultimo_auto=None):
-    """`email_auto_log` que RESPEITA a janela pedida na URL."""
+def _quem_da_url(url):
+    """O `email=eq.<quem>` que a consulta do cooldown perguntou.
+
+    🪤 06/09/2026 — O DUBLÊ SÓ LIA A DATA. Com isso os quatro guardas provavam
+    que a JANELA de 7 dias é obedecida, mas nunca que ela é consultada PARA A
+    PESSOA CERTA. Qualquer estrago no escopo por pessoa (filtro removido, quote
+    errado, refactor pra `user_id`, e-mail vazio) deixava a consulta perguntando
+    pelo ninguém: em produção o PostgREST não acha linha nenhuma,
+    `_email_auto_recente` devolve False e o e-mail sai pra TODO MUNDO — o caso
+    cliente-20 (3 e-mails num dia) de volta, com a bancada verde.
+
+    Devolve "" quando o filtro sumiu — e "" nunca casa com o endereço esperado.
+    """
+    q = _uparse.parse_qs(_uparse.urlparse(url).query, keep_blank_values=True)
+    bruto = (q.get("email") or [""])[0]
+    return bruto[3:] if bruto.startswith("eq.") else ""
+
+
+def _urlopen_de_mentira(dias_desde_o_ultimo_auto=None, email_esperado=None,
+                        perguntados=None):
+    """`email_auto_log` que RESPEITA a janela E o destinatário pedidos na URL.
+
+    Imita o PostgREST de verdade nos DOIS eixos: só devolve linha quando a
+    consulta pergunta pela janela certa E pela pessoa que de fato recebeu.
+    Perguntou por outro (ou por ninguém)? Volta vazio, como o banco voltaria.
+    """
     def _fake(req, timeout=None):
+        _esperado = _EMAIL if email_esperado is None else email_esperado
         url = getattr(req, "full_url", str(req))
         if "email_auto_log" in url:
+            quem = _quem_da_url(url)
+            if perguntados is not None:
+                perguntados.append(quem)
+            if quem != _esperado:
+                return _RespostaFalsa([])      # o banco não tem linha dessa pessoa
             if dias_desde_o_ultimo_auto is None:
                 return _RespostaFalsa([])
             corte = _corte_da_url(url)
@@ -166,7 +198,8 @@ class _RequisicaoFalsa:
     query_params = {}
 
 
-def _bancada_da_liberacao(monkeypatch, dias_desde_o_ultimo_auto, patches, enviados):
+def _bancada_da_liberacao(monkeypatch, dias_desde_o_ultimo_auto, patches, enviados,
+                          perguntados=None):
     """Botão MANUAL: `/api/admin/liberar-filhote/{job}` sem rede e sem banco."""
     monkeypatch.setattr(M, "_require_admin", lambda request: {"email": "admin@example.com"})
     monkeypatch.setattr(M, "_log_error", lambda *a, **k: None)
@@ -174,7 +207,8 @@ def _bancada_da_liberacao(monkeypatch, dias_desde_o_ultimo_auto, patches, enviad
     monkeypatch.setattr(M, "_supa_rest_service",
                         _rest_de_mentira(_PROJETOS, _ITENS, (), patches))
     monkeypatch.setattr(_ureq, "urlopen",
-                        _urlopen_de_mentira(dias_desde_o_ultimo_auto))
+                        _urlopen_de_mentira(dias_desde_o_ultimo_auto,
+                                            perguntados=perguntados))
 
     def _registra(pai, *a, **k):
         enviados.append(pai.get("user_email"))
@@ -183,7 +217,8 @@ def _bancada_da_liberacao(monkeypatch, dias_desde_o_ultimo_auto, patches, enviad
     monkeypatch.setattr(M, "_email_leitura_combinada", lambda pai, *a, **k: _registra(pai))
 
 
-def _bancada_do_automatico(monkeypatch, dias_desde_o_ultimo_auto, patches, enviados, logs):
+def _bancada_do_automatico(monkeypatch, dias_desde_o_ultimo_auto, patches, enviados, logs,
+                           perguntados=None):
     """Caminho AUTOMÁTICO: a juíza libera, o resto é o código de verdade."""
     import anthropic as _an
     import llm_retry as _lr
@@ -192,7 +227,8 @@ def _bancada_do_automatico(monkeypatch, dias_desde_o_ultimo_auto, patches, envia
     monkeypatch.setattr(M, "_supa_rest_service",
                         _rest_de_mentira(_PROJETOS, _ITENS, (), patches))
     monkeypatch.setattr(_ureq, "urlopen",
-                        _urlopen_de_mentira(dias_desde_o_ultimo_auto))
+                        _urlopen_de_mentira(dias_desde_o_ultimo_auto,
+                                            perguntados=perguntados))
     monkeypatch.setattr(M, "_notify_admin", lambda *a, **k: True)
     monkeypatch.setattr(M, "_log_error",
                         lambda stage, message, job_id=None, severity="error":
@@ -228,11 +264,16 @@ def test_o_botao_MANUAL_consulta_o_teto_antes_de_mandar(monkeypatch):
     (`dias=7` → `dias=0`) reprova aqui, e não passa mais só porque o nome da
     função continua escrito no arquivo.
     """
-    patches, enviados = [], []
-    _bancada_da_liberacao(monkeypatch, 3, patches, enviados)   # recebeu há 3 dias
+    patches, enviados, perguntados = [], [], []
+    _bancada_da_liberacao(monkeypatch, 3, patches, enviados, perguntados)   # há 3 dias
 
     resp = M.admin_liberar_filhote(_FILHOTE, _RequisicaoFalsa())
 
+    # 🔑 metade da pergunta é "a janela está certa?"; a outra é "É A PESSOA
+    # CERTA?". Sem esta linha, perguntar pelo ninguém passava verde.
+    assert perguntados == [_EMAIL], (
+        "o cooldown não foi consultado para o dono do projeto — perguntou %r"
+        % (perguntados,))
     assert resp["email_enviado"] is False, (
         "a liberação manual disparou e-mail pra quem já recebeu um automático "
         "há 3 dias — foi assim que a cliente-20 recebeu 3 num dia (%r)"
@@ -271,11 +312,15 @@ def test_e_o_caminho_AUTOMATICO_tambem(monkeypatch):
     liberando, e o cooldown REAL consultado contra um log que diz "recebeu há
     3 dias". Se a janela encolher, o e-mail sai e este guarda reprova.
     """
-    patches, enviados, logs = [], [], []
-    _bancada_do_automatico(monkeypatch, 3, patches, enviados, logs)
+    patches, enviados, logs, perguntados = [], [], [], []
+    _bancada_do_automatico(monkeypatch, 3, patches, enviados, logs, perguntados)
 
     M._auto_liberar_filhote_quando_pronto(_FILHOTE, _PAI, timeout_min=1)
 
+    assert perguntados == [_EMAIL], (
+        "o cooldown automático não perguntou pelo dono do projeto — perguntou "
+        "%r. Com a chave errada o banco não acha linha, a trava devolve False e "
+        "o e-mail sai pra todo mundo." % (perguntados,))
     assert enviados == [], (
         "o caminho automático mandou e-mail pra quem já recebeu um automático "
         "há 3 dias — e aqui não há ninguém pra ver o aviso e decidir")
@@ -284,21 +329,34 @@ def test_e_o_caminho_AUTOMATICO_tambem(monkeypatch):
         "viram a mesma coisa no escuro")
 
 
-def test_a_liberacao_acontece_mesmo_quando_o_email_e_segurado(monkeypatch):
+@pytest.mark.parametrize("dias_do_ultimo,email_sai", [(3, False), (30, True)])
+def test_a_liberacao_acontece_com_o_email_segurado_E_com_ele_saindo(
+        monkeypatch, dias_do_ultimo, email_sai):
     """🔒 O que NÃO pode: o teto de e-mail impedir a leitura nova de chegar ao
     painel. São duas coisas diferentes — uma é avisar, a outra é entregar.
 
     Confere a LINHA QUE SERIA GRAVADA. O guarda antigo media a ORDEM de duas
     strings no fonte e ficou verde quando o PATCH perdeu o `user_id`: o job era
     renomeado e nunca chegava ao painel do cliente.
+
+    🪤 06/09/2026 — E ELE SÓ EXERCITAVA O RAMO "E-MAIL SEGURADO". Bastava
+    pendurar o PATCH nesse mesmo teto (entregar só quando o aviso NÃO pode sair)
+    pra tudo ficar verde — e no caminho em que o cliente RECEBE o "refizemos a
+    leitura", o job jamais seria apontado pro dono: e-mail avisando de uma
+    planilha que não aparece no painel dele. Agora os DOIS ramos passam por aqui:
+    entregar não depende de avisar.
     """
     patches, enviados, logs = [], [], []
-    _bancada_do_automatico(monkeypatch, 3, patches, enviados, logs)
+    _bancada_do_automatico(monkeypatch, dias_do_ultimo, patches, enviados, logs)
 
     M._auto_liberar_filhote_quando_pronto(_FILHOTE, _PAI, timeout_min=1)
 
-    assert enviados == [], "cenário errado: o e-mail tinha que estar segurado aqui"
-    assert patches, "a liberação não gravou nada — o filhote não chegou ao painel"
+    assert enviados == ([_EMAIL] if email_sai else []), (
+        "cenário errado: com o último automático há %d dias o e-mail deveria "
+        "%s (saiu para %r)" % (dias_do_ultimo,
+                               "SAIR" if email_sai else "ficar segurado", enviados))
+    assert patches, ("a liberação não gravou nada — o filhote não chegou ao "
+                     "painel (último automático há %d dias)" % dias_do_ultimo)
     p = patches[-1]
     assert p["job_id"] == _FILHOTE, "gravou no job errado: %r" % p["job_id"]
     assert p["body"].get("user_id") == _PROJETOS[_PAI]["user_id"], (
@@ -306,6 +364,35 @@ def test_a_liberacao_acontece_mesmo_quando_o_email_e_segurado(monkeypatch):
         "ele nunca aparece no painel do cliente (%r)" % (p["body"],))
     assert "nova leitura" in str(p["body"].get("project_name", "")), (
         "o cliente não tem como saber qual das duas linhas é a nova")
+
+
+@pytest.mark.parametrize("dias_do_ultimo,email_segurado", [(3, True), (30, False)])
+def test_o_botao_MANUAL_tambem_aponta_o_filhote_pro_DONO(
+        monkeypatch, dias_do_ultimo, email_segurado):
+    """A porta MANUAL grava o MESMO patch — e nenhum guarda olhava o corpo dele.
+
+    🪤 06/09/2026: perder o `user_id` aqui é exatamente o defeito que já tinha
+    sido mutado no caminho automático, e passava verde nesta porta. Os dois
+    ramos do teto entram, porque o PATCH acontece ANTES da decisão do e-mail e
+    não pode depender dela.
+    """
+    patches, enviados = [], []
+    _bancada_da_liberacao(monkeypatch, dias_do_ultimo, patches, enviados)
+
+    resp = M.admin_liberar_filhote(_FILHOTE, _RequisicaoFalsa())
+
+    assert (resp["email_enviado"] is False) is email_segurado, (
+        "cenário errado (último automático há %d dias): %r"
+        % (dias_do_ultimo, resp.get("email_motivo")))
+    assert patches, "a liberação manual não gravou nada — o filhote não chegou ao painel"
+    p = patches[-1]
+    assert p["job_id"] == _FILHOTE, "gravou no job errado: %r" % p["job_id"]
+    assert p["body"].get("user_id") == _PROJETOS[_PAI]["user_id"], (
+        "o botão manual renomeou o filhote mas NÃO o apontou pro dono do "
+        "original — ele nunca aparece no painel do cliente (%r)" % (p["body"],))
+    assert "nova leitura" in str(p["body"].get("project_name", "")), (
+        "o cliente não tem como saber qual das duas linhas é a nova (%r)"
+        % (p["body"].get("project_name"),))
 
 
 def test_CONTROLE_o_teto_existe_e_e_de_7_dias(monkeypatch):
@@ -316,10 +403,24 @@ def test_CONTROLE_o_teto_existe_e_e_de_7_dias(monkeypatch):
     continuava verde. Aqui a janela é medida pelo COMPORTAMENTO.
     """
     # 6 dias atrás: DENTRO da semana → segura
-    monkeypatch.setattr(_ureq, "urlopen", _urlopen_de_mentira(6))
+    perguntados = []
+    monkeypatch.setattr(_ureq, "urlopen",
+                        _urlopen_de_mentira(6, perguntados=perguntados))
     assert M._email_auto_recente(_EMAIL) is True, (
         "quem recebeu automático há 6 dias não está mais protegido pelo teto "
         "de 1 por semana — a janela do cooldown encolheu")
+    assert perguntados == [_EMAIL], (
+        "a consulta perdeu o escopo POR PESSOA (`email=eq.<quem>`): perguntou "
+        "%r. Em produção isso não acha linha nenhuma, a trava devolve False e o "
+        "e-mail sai pra quem recebeu um há 3 dias." % (perguntados,))
+
+    # 🔑 A OUTRA METADE DA PERGUNTA: o teto é POR PESSOA. Quem NÃO recebeu nada
+    # não pode ser segurado só porque um vizinho recebeu — e uma consulta que
+    # ignora o endereço pedido (chave fixa, filtro removido) reprova aqui.
+    _OUTRO = "cliente-77@example.com"
+    assert M._email_auto_recente(_OUTRO) is False, (
+        "o cooldown segurou o e-mail de quem nunca recebeu nada — a consulta "
+        "não está perguntando pelo endereço que recebeu, e sim por outro")
 
     # 8 dias atrás: FORA da semana → deixa passar
     monkeypatch.setattr(_ureq, "urlopen", _urlopen_de_mentira(8))

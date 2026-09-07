@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Um PDF de 2,63 MB derrubou o servidor de TODOS os clientes.
 
-🩸 03/09/2026, caso EDVALDO (job `7ddbccc1`), o maior lead B2B, avaliando o
+🩸 03/09/2026, job `7ddbccc1`, o maior lead B2B, avaliando o
 produto no mesmo dia. Medido no Render (memory_usage, resolução 30 s):
 
     12:30:30 UTC ...... 94,6 MB
@@ -75,8 +75,14 @@ def _no_unico(pred, oque):
     return achados[0]
 
 
-def _argv_real_do_filho():
-    """Executa a atribuição `_cmd = [...]` de main.py e devolve o argv."""
+def _argv_real_do_filho(pdf_path="/tmp/prancha.pdf", page_index=0):
+    """Executa a atribuição `_cmd = [...]` de main.py e devolve o argv.
+
+    🪤 07/09 (cético): `pdf_path` e `page_index` ENTRAM no comando do filho e
+    a bancada os mantinha fixos em ("/tmp/prancha.pdf", 0). Condição amarrada
+    a qualquer um dos dois (`... if page_index == 0 else ""`) tirava o teto de
+    toda página que não fosse a primeira, com o guarda verde. Agora os dois são
+    parâmetros e os testes variam."""
     no = _no_unico(
         lambda n: isinstance(n, ast.Assign) and len(n.targets) == 1
         and isinstance(n.targets[0], ast.Name) and n.targets[0].id == "_cmd",
@@ -86,69 +92,92 @@ def _argv_real_do_filho():
         executable = sys.executable
 
     ns = {"os": os, "_sysv": _Sysv, "__file__": _MAIN,
-          "pdf_path": "/tmp/prancha.pdf", "page_index": 0}
+          "pdf_path": pdf_path, "page_index": page_index}
     exec(compile(ast.unparse(no), "<_cmd de main.py>", "exec"), ns)
     return ns["_cmd"]
 
 
-def _prefixo_real():
+def _prefixo_real(pdf_path="/tmp/prancha.pdf", page_index=0):
     """Só o pedaço do `-c` que vem ANTES da medição: é ele que põe o teto."""
-    codigo = _argv_real_do_filho()[2]
+    codigo = _argv_real_do_filho(pdf_path, page_index)[2]
     marco = "import sys, json"
     assert marco in codigo, (
         "o comando do filho mudou de forma — não achei onde a medição começa")
     return codigo[:codigo.index(marco)]
 
 
-# o prefixo que o filho executa — LEVANTADO DO CÓDIGO DE PRODUÇÃO, não copiado.
-# 🪤 A versão anterior era uma cópia colada aqui: os testes de comportamento
-# provavam que UM texto limita memória, nunca que era ESSE que o filho recebia.
-_PREFIXO = _prefixo_real()
+# As pranchas que a bancada manda pro filho. A 1ª é a que sempre existiu; a 2ª
+# existe porque teto que só vale na página 0 não protege prancha nenhuma de
+# projeto real — que tem 4 a 12 páginas.
+_PRANCHAS = [("/tmp/prancha.pdf", 0), ("/tmp/4366-EL-E.pdf", 3)]
 
 
 # ── O comportamento, no sistema que importa ────────────────────────────────
 @pytest.mark.skipif(not sys.platform.startswith("linux"),
                     reason="RLIMIT_AS só existe no Unix; produção é Linux")
-def test_o_filho_MORRE_em_vez_de_derrubar_o_servidor():
+@pytest.mark.parametrize("pdf,pagina", _PRANCHAS)
+def test_o_filho_MORRE_em_vez_de_derrubar_o_servidor(pdf, pagina):
     """🩸 O teste que vale. Alocar acima do teto tem que matar o FILHO."""
+    prefixo = _prefixo_real(pdf, pagina)
     r = subprocess.run(
-        [sys.executable, "-c", _PREFIXO + "x = bytearray(3_000_000_000)"],
+        [sys.executable, "-c", prefixo + "x = bytearray(3_000_000_000)"],
         capture_output=True, text=True, timeout=120)
     assert r.returncode != 0, (
-        "o filho alocou 3 GB sem morrer — o teto não está valendo, e o próximo "
-        "PDF denso derruba o servidor de todos os clientes de novo")
+        "o filho alocou 3 GB sem morrer (%s pág. %d) — o teto não está valendo, "
+        "e o próximo PDF denso derruba o servidor de todos os clientes de novo"
+        % (pdf, pagina))
     assert "MemoryError" in (r.stderr or ""), r.stderr[-300:]
 
 
 @pytest.mark.skipif(not sys.platform.startswith("linux"),
                     reason="RLIMIT_AS só existe no Unix")
-def test_CONTROLE_o_teto_NAO_atrapalha_medicao_normal():
+@pytest.mark.parametrize("pdf,pagina", _PRANCHAS)
+def test_CONTROLE_o_teto_NAO_atrapalha_medicao_normal(pdf, pagina):
     """🧪 Teto que mata trabalho legítimo é pior que teto nenhum. 50 MB é a
     ordem de grandeza de uma prancha comum e tem que passar."""
+    prefixo = _prefixo_real(pdf, pagina)
     r = subprocess.run(
-        [sys.executable, "-c", _PREFIXO + "x = bytearray(50_000_000); print(len(x))"],
+        [sys.executable, "-c", prefixo + "x = bytearray(50_000_000); print(len(x))"],
         capture_output=True, text=True, timeout=60)
     assert r.returncode == 0, r.stderr[-300:]
     assert "50000000" in r.stdout
 
 
-def test_CONTROLE_o_prefixo_NAO_estoura_em_sistema_sem_resource():
+@pytest.mark.parametrize("pdf,pagina", _PRANCHAS)
+def test_CONTROLE_o_prefixo_NAO_estoura_em_sistema_sem_resource(pdf, pagina):
     """🪤 No Windows `import resource` levanta ImportError. Se o try/except
     sumir, toda medição de PDF morre em desenvolvimento."""
-    r = subprocess.run([sys.executable, "-c", _PREFIXO + "print('vivo')"],
+    prefixo = _prefixo_real(pdf, pagina)
+    r = subprocess.run([sys.executable, "-c", prefixo + "print('vivo')"],
                        capture_output=True, text=True, timeout=60)
     assert r.returncode == 0 and "vivo" in r.stdout, r.stderr[-200:]
 
 
 # ── O código de produção ───────────────────────────────────────────────────
-def test_a_chamada_de_medicao_LEVA_o_teto(tmp_path):
+@pytest.mark.parametrize("pdf,pagina", _PRANCHAS)
+def test_a_chamada_de_medicao_LEVA_o_teto(tmp_path, pdf, pagina):
     """🩸 O teto tem que CHEGAR ao filho — não basta existir no arquivo.
 
     O filho de verdade é rodado aqui, com um `resource` de brinquedo na frente
     do da máquina (PYTHONPATH), que só conta o que recebeu. Assim o teste vale
     igual no Windows (onde `resource` não existe) e no Linux do CI, e mede o
-    que importa: o valor que o kernel receberia."""
-    prefixo = _prefixo_real()
+    que importa: o valor que o kernel receberia.
+
+    🪤 07/09 (cético): rodava com UM `page_index` (0) e UM caminho de PDF.
+    Basta condicionar o prefixo a qualquer um dos dois — `("try:...\\n" if
+    page_index == 0 else "")` — pra tirar o teto de toda página que não seja a
+    primeira, com este guarda verde. Agora ele roda com as duas pranchas e
+    confere que o filho está medindo A PÁGINA PEDIDA (senão o teto medido é o
+    de um comando que a produção não monta)."""
+    argv = _argv_real_do_filho(pdf, pagina)
+    codigo = argv[2]
+    assert "_measure_page(" in codigo, codigo[:200]
+    chamada = codigo[codigo.index("_measure_page("):]
+    assert pdf in chamada and str(pagina) in chamada, (
+        "o comando do filho não pede a prancha/página que a produção pediu "
+        "(%s, pág. %d): %r" % (pdf, pagina, chamada[:200]))
+
+    prefixo = _prefixo_real(pdf, pagina)
     espiao = tmp_path / "resource.py"
     espiao.write_text(
         "RLIMIT_AS = 9\n"
@@ -163,9 +192,9 @@ def test_a_chamada_de_medicao_LEVA_o_teto(tmp_path):
     assert "o filho rodou" in r.stdout, (
         "o prefixo do teto quebrou o filho: %s" % (r.stderr or "")[-400:])
     assert "SETRLIMIT 9 (2000000000, 2000000000)" in r.stderr, (
-        "o filho da medição de PDF NÃO recebeu o teto de 2 GB — é o caminho "
-        "que derrubou o site por 2 minutos em 03/09. stderr: %r"
-        % (r.stderr or "")[-400:])
+        "o filho da medição de PDF NÃO recebeu o teto de 2 GB pra %s pág. %d — "
+        "é o caminho que derrubou o site por 2 minutos em 03/09. stderr: %r"
+        % (pdf, pagina, (r.stderr or "")[-400:]))
 
 
 def test_o_teto_e_TOLERANTE_a_plataforma():
@@ -209,9 +238,16 @@ def test_o_ramo_que_AVISA_o_cliente_continua_de_pe():
     assert falhas, (
         "o filho morreu (rc=-6) e NADA entrou em `_pdfvec_falhas` — a prancha "
         "some da medição sem o cliente ficar sabendo")
-    assert falhas[0]["motivo"] == "processo" and falhas[0]["rc"] == -6, falhas[0]
-    assert falhas[0]["arquivo"] == "planta.pdf", (
-        "o aviso não diz QUAL prancha morreu")
+    # 🪤 07/09 (cético): o guarda conferia 3 das 6 chaves. As outras três não são
+    # enfeite: `pdf_path`+`pagina` são a chave que a sombra usa pra não repetir a
+    # página que matou o filho (main.py `_pular_sombra`), e `prancha` é o que
+    # aparece no log. Chave que ninguém confere é chave que some sem alarme.
+    assert falhas[0] == {
+        "prancha": "prancha_p0", "arquivo": "planta.pdf",
+        "motivo": "processo", "rc": -6,
+        "pdf_path": "/tmp/planta.pdf", "pagina": 0,
+    }, ("a carga útil da falha mudou — quem lê ela (aviso do cliente, "
+        "`_pular_sombra`, log) passa a ler outra coisa: %r" % (falhas[0],))
     assert logs and logs[0][0][0] == "pdfvec:filho-morreu", (
         "o filho morreu e não sobrou linha de log — o traceback foi pro lixo")
     assert "Cannot allocate memory" in logs[0][0][1], (
@@ -222,6 +258,70 @@ def test_o_ramo_que_AVISA_o_cliente_continua_de_pe():
     falhas_ok, logs_ok = _rodar(0)
     assert not falhas_ok and not logs_ok, (
         "prancha medida com sucesso virou aviso de falha pro cliente")
+
+
+# ── E a falha vira AVISO pro cliente (o outro lado do mesmo cano) ──────────
+def _bloco_do_aviso():
+    """O `try:` que transforma `_pdfvec_falhas` em `project_data.warnings`.
+
+    Só o CORPO é executado: o `except NameError: pass` de produção existe pro
+    job sem PDF, e engoli-lo aqui esconderia um erro de bancada."""
+    no = _no_unico(
+        lambda n: isinstance(n, ast.Try) and any(
+            isinstance(s, ast.Assign) and len(s.targets) == 1
+            and isinstance(s.targets[0], ast.Name) and s.targets[0].id == "_falhou"
+            for s in n.body),
+        "bloco que monta o aviso de prancha sem medição")
+    return ast.Module(body=no.body, type_ignores=[])
+
+
+class _PD:
+    warnings = None
+
+
+def _aviso_do_cliente(falhas):
+    """Roda o consumidor de verdade e devolve (avisos, logs)."""
+    pd, logs = _PD(), []
+    ns = {"_pdfvec_falhas": list(falhas), "project_data": pd, "job_id": "job-de-teste",
+          "_log_error": lambda *a, **k: logs.append((a, k))}
+    exec(compile(_bloco_do_aviso(), "<aviso>", "exec"), ns)
+    return list(pd.warnings or []), logs
+
+
+@pytest.mark.parametrize("motivo,trecho", [
+    ("processo", "não puderam ser medidas geometricamente"),
+    ("tempo", "não deram tempo de ser medidas"),
+    ("memoria", "densas demais"),
+])
+def test_a_falha_do_filho_VIRA_aviso_pro_cliente(motivo, trecho):
+    """🩸 O guarda irmão prova que a falha entra na lista. Este prova que a lista
+    vira FRASE na planilha do cliente — que é a única coisa que ele vê.
+
+    🪤 07/09 (cético): o filtro do consumidor (`motivo in ("tempo","processo",
+    "memoria")`) ficava fora do recorte. Tirar "processo" de lá devolve o
+    silêncio de 31/08 — a prancha cujo processo MORREU some do aviso, e a
+    bancada inteira do teto continua verde, porque ela só olha a lista."""
+    avisos, logs = _aviso_do_cliente([{
+        "prancha": "prancha_p0", "arquivo": "planta.pdf", "motivo": motivo,
+        "rc": -6, "pdf_path": "/tmp/planta.pdf", "pagina": 0}])
+    assert len(avisos) == 1, (
+        "prancha perdida por %r não virou aviso nenhum pro cliente: %r"
+        % (motivo, avisos))
+    assert trecho in avisos[0], (
+        "o aviso de %r não explica o que aconteceu (%r): %r"
+        % (motivo, trecho, avisos[0]))
+    assert "planta.pdf" in avisos[0], "o aviso não diz QUAL arquivo olhar"
+    assert "estimativa" in avisos[0], (
+        "o aviso não diz que os itens da prancha saem como estimativa — é a "
+        "regra dura nº1 no texto que o cliente lê")
+    assert logs and logs[0][0][0] == "pdfvec:sem-medicao", logs
+
+
+def test_CONTROLE_prancha_medida_nao_vira_aviso():
+    """🧪 O outro lado: alarme que sai sempre vira ruído ignorado."""
+    assert _aviso_do_cliente([])[0] == []
+    # motivo fora da lista (ex.: diagnóstico interno) não vira texto pro cliente
+    assert _aviso_do_cliente([{"arquivo": "planta.pdf", "motivo": "curiosidade"}])[0] == []
 
 
 def _teste_do_if(no):

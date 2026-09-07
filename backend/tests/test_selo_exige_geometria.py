@@ -260,6 +260,189 @@ def test_a_rede_so_REBAIXA_no_process_job_nunca_PROMOVE():
 
 
 # ══════════════════════════════════════════════════════════════════════════
+#  🔬 07/09/2026 — O QUE ACONTECE DEPOIS DO BLOCO
+#
+#  Lacuna do cético: o guarda acima roda a rede sozinha, num namespace só dela.
+#  O que o `process_job` faz com os selos DEPOIS é invisível — e logo abaixo
+#  vem o bloco da ESCALA, que também mexe em `confidence`. Um passo posterior
+#  que promova (ou que rebaixe o que não devia) desfaz a regra dura nº1 sem
+#  nenhum teste reclamar.
+#
+#  Duas metades, e as duas são necessárias:
+#   (a) RODAR a rede e a escala EM SEQUÊNCIA, sobre a MESMA lista de itens —
+#       é o único jeito de ver um bloco desfazer o outro;
+#   (b) um CENSO de todas as atribuições de `confidence` dentro do process_job,
+#       porque execução prova o que roda e censo prova que não há OUTRO lugar.
+#       (a) sozinho cobriria só a escala; (b) sozinho seria leitura de fonte.
+# ══════════════════════════════════════════════════════════════════════════
+_ANCORA_ESCALA = ("try:" + _NL_ + " " * 12
+                  + "from engine_rules import (escala_divergente as _esc_div,")
+
+#: Duas pranchas em escalas 1000× diferentes; só a A01 provou por cota.
+_ESCALAS_QUE_DIVERGEM = [
+    {"prancha": "A01", "fator": 1.0, "regua": "validada", "unidade": "m"},
+    {"prancha": "A02", "fator": 0.001, "regua": "estimada", "unidade": "mm"},
+]
+
+
+class _ItemComPrancha(_ItemFake):
+    def __init__(self, obs, prancha, conf="confirmado", desc="Item", unit="m²"):
+        _ItemFake.__init__(self, obs, conf=conf, desc=desc, unit=unit)
+        self.ref_sheet = prancha
+
+
+def _rodar_a_rede_e_DEPOIS_a_escala(itens, escalas=None):
+    """Executa os DOIS blocos reais do process_job, na ordem, sobre a mesma
+    lista — que é como eles rodam em produção."""
+    logs = []
+    pd = _ProjectDataFake()
+    ns = {
+        "all_items": itens,
+        "project_data": pd,
+        "job_id": "job-do-guarda",
+        "_escala_por_prancha": list(_ESCALAS_QUE_DIVERGEM if escalas is None
+                                    else escalas),
+        "_log_error": lambda etapa, msg, *a, **k: logs.append((etapa, msg)),
+        "print": lambda *a, **k: None,
+    }
+    exec(compile(bloco_desde(_ANCORA_REDE), "<rede-do-selo>", "exec"), ns, ns)
+    exec(compile(bloco_desde(_ANCORA_ESCALA), "<escala-divergente>", "exec"),
+         ns, ns)
+    return pd.warnings, logs
+
+
+def test_CONTROLE_o_bloco_da_ESCALA_realmente_RODOU():
+    """🧪 Sem este controle o teste seguinte passaria por vacuidade: o bloco da
+    escala vive num `try/except` que engole tudo — se o namespace estiver
+    faltando um nome, ele não roda, ninguém muda de selo e o guarda comemora."""
+    suspeito = _ItemComPrancha(_OBS_MEDIDA, "A02")
+    avisos, logs = _rodar_a_rede_e_DEPOIS_a_escala([suspeito])
+    assert _selo(suspeito) == "estimado", (
+        "o bloco da escala não rebaixou o item da prancha suspeita (%r) — ou "
+        "ele não rodou, ou parou de proteger contra o caso cliente-16"
+        % _selo(suspeito))
+    assert any(e == "motor:escala-divergente" for e, _ in logs), logs
+    assert any("ESCALA:" in a for a in avisos), (
+        "o cliente não foi avisado da divergência de escala: %r" % (avisos,))
+
+
+def test_o_bloco_da_ESCALA_nao_DESFAZ_o_rebaixamento_da_rede():
+    """🚨 A metade que faltava: rede e escala rodando NA SEQUÊNCIA.
+
+    Três itens, três destinos diferentes — é o que separa "a rede agiu" de
+    "a rede agiu e continuou valendo até o fim do process_job".
+    """
+    texto = _ItemComPrancha(_OBS_SO_TEXTO, "A01",
+                            desc="Piso — revestimento de piso interno")
+    medido_limpo = _ItemComPrancha(_OBS_MEDIDA, "A01", desc="Contrapiso")
+    medido_suspeito = _ItemComPrancha(_OBS_MEDIDA, "A02", desc="Contrapiso 2")
+    _rodar_a_rede_e_DEPOIS_a_escala([texto, medido_limpo, medido_suspeito])
+
+    assert _selo(texto) == "estimado", (
+        "o item que a REDE rebaixou voltou a %r depois do bloco da escala — um "
+        "número lido de texto saiu com '✓ MEDIDO do CAD'" % _selo(texto))
+    assert texto.observations.startswith("⚠ ESTIMADO — este número foi LIDO"), (
+        "um passo posterior escreveu por cima da explicação da rede; o cliente "
+        "lê o motivo errado: %r" % texto.observations[:100])
+    assert _selo(medido_limpo) == "confirmado", (
+        "a medição legítima da prancha que PROVOU a escala foi rebaixada (%r) — "
+        "rebaixar o que tem lastro joga fora medição de verdade"
+        % _selo(medido_limpo))
+    assert _selo(medido_suspeito) == "estimado", (
+        "o item da prancha em escala divergente ficou %r" % _selo(medido_suspeito))
+
+
+# ── (b) o censo: nenhum passo do process_job atribui selo de MEDIDO ────────
+def _promocoes_de_selo(no):
+    """Toda atribuição de `confidence` que NÃO é 'estimado', com a linha.
+
+    🔑 Execução prova o que roda; isto prova que não existe OUTRO lugar. Uma
+    coisa não substitui a outra — por isso as duas estão aqui.
+    """
+    import ast as _a
+
+    def _e_estimado(v):
+        if isinstance(v, _a.Attribute):
+            return v.attr == "ESTIMADO"
+        if isinstance(v, _a.Call):
+            args = [x for x in v.args if isinstance(x, _a.Constant)]
+            return bool(args) and str(args[0].value).strip().lower() == "estimado"
+        if isinstance(v, _a.Constant):
+            return str(v.value).strip().lower() == "estimado"
+        return False
+
+    achados = []
+    for n in _a.walk(no):
+        if isinstance(n, _a.Assign):
+            for t in n.targets:
+                if isinstance(t, _a.Attribute) and t.attr == "confidence" \
+                        and not _e_estimado(n.value):
+                    achados.append((n.lineno, _a.unparse(n)[:90]))
+        if isinstance(n, _a.Call) and isinstance(n.func, _a.Name) \
+                and n.func.id == "setattr" and len(n.args) == 3:
+            alvo = n.args[1]
+            if isinstance(alvo, _a.Constant) and alvo.value == "confidence" \
+                    and not _e_estimado(n.args[2]):
+                achados.append((n.lineno, _a.unparse(n)[:90]))
+    return achados
+
+
+def _process_job():
+    import ast as _a
+    import io as _io
+    src = _io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
+    for n in _a.walk(_a.parse(src)):
+        if isinstance(n, _a.FunctionDef) and n.name == "process_job":
+            return n
+    raise AssertionError("não achei process_job em main.py")
+
+
+def test_NENHUM_passo_do_process_job_ATRIBUI_selo_de_MEDIDO():
+    """🚨 REGRA DURA Nº1, no fluxo inteiro: o motor produz o selo lá atrás; do
+    começo ao fim do `process_job` os passos de conferência só REBAIXAM.
+
+    Um passo novo que atribua `confirmado` desfaz a rede sem que nenhum guarda
+    de bloco perceba — cada um só olha o seu pedaço.
+    """
+    pj = _process_job()
+    ruins = _promocoes_de_selo(pj)
+    assert not ruins, (
+        "passo(s) do process_job atribuindo selo que não é 'estimado':\n  "
+        + "\n  ".join("linha %d: %s" % r for r in ruins))
+
+
+def test_CONTROLE_o_censo_de_selo_SABE_reprovar():
+    """🧪 Controle positivo da régua: as três formas de promover."""
+    import ast as _a
+    promove = _a.parse(
+        "def f():\n"
+        "    it.confidence = Confidence('confirmado')\n"
+        "    _it.confidence = _Cf.CONFIRMADO\n"
+        "    setattr(_x, 'confidence', 'confirmado')\n")
+    assert len(_promocoes_de_selo(promove)) == 3, _promocoes_de_selo(promove)
+    rebaixa = _a.parse(
+        "def f():\n"
+        "    it.confidence = Confidence('estimado')\n"
+        "    _it.confidence = _Cf.ESTIMADO\n"
+        "    setattr(_x, 'confidence', 'estimado')\n")
+    assert _promocoes_de_selo(rebaixa) == []
+
+
+def test_CONTROLE_o_censo_encontra_os_rebaixamentos_que_existem():
+    """🪤 Censo que não acha NADA passa verde por engano. Aqui a gente prova
+    que ele está olhando pro lugar certo: os rebaixamentos reais estão lá."""
+    import ast as _a
+    pj = _process_job()
+    todas = [n.lineno for n in _a.walk(pj) if isinstance(n, _a.Assign)
+             for t in n.targets
+             if isinstance(t, _a.Attribute) and t.attr == "confidence"]
+    assert len(todas) >= 8, (
+        "achei só %d atribuições de `confidence` no process_job — o censo "
+        "perdeu o alvo (a rede, a escala, a parede e as unidades estão lá)"
+        % len(todas))
+
+
+# ══════════════════════════════════════════════════════════════════════════
 #  📏 O numero dos itens ANTIGOS tem que reproduzir
 # ══════════════════════════════════════════════════════════════════════════
 #
@@ -297,7 +480,6 @@ def test_a_rota_de_contagem_NAO_altera_nada():
 
 
 def test_a_rota_e_so_de_admin():
-    import io as _io
     assert "_require_admin(request)" in corpo_de("admin_selo_historico")
 
 

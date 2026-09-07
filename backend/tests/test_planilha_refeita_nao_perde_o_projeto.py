@@ -13,8 +13,8 @@ escreve na capa "Área construída — perímetro externo da laje" — uma afirm
 de que NÓS medimos. Dois clientes receberam isso em cima de um número que eles
 mesmos digitaram (conferido no banco em 03/09):
 
-    29e2cfc4  luizchirigatti478@  total_area 290,00 = user_total_area 290,00
-    f271473f  flaviohermolin@     total_area 400,00 = user_total_area 400,00
+    29e2cfc4  total_area 290,00 = user_total_area 290,00
+    f271473f  total_area 400,00 = user_total_area 400,00
 
 Os dois tinham 3 avisos no banco. Regra dura nº1 violada no arquivo que já está
 na mão do cliente, e a versão honesta apagada por cima.
@@ -25,6 +25,8 @@ próxima pessoa consertando a errada (a lição de 02/09 com o portão do admin)
 """
 import os
 import sys
+
+import pytest
 
 _AQUI = os.path.dirname(os.path.abspath(__file__))
 _BACKEND = os.path.dirname(_AQUI)
@@ -96,7 +98,29 @@ def test_o_chamador_pode_FORCAR_a_procedencia():
     assert pd.total_area_source == "informado"
 
 
-def _capa_gerada(**kw):
+def _itens(n):
+    """`n` linhas de quantitativo como as que a planilha real carrega.
+
+    🪤 07/09 (cético): a bancada gerava a planilha com `items=[]` — uma planilha
+    que NÃO existe em produção (0 itens é erro, armadilha nº10 do CLAUDE.md).
+    Qualquer condição acoplada a `items` separava o caso testado do caso real."""
+    from models import BudgetItem, Confidence
+    modelo = [
+        ("1.1", "Piso cerâmico 60x60 assentado", "m²", 290.0, Confidence.CONFIRMADO),
+        ("1.2", "Pintura látex PVA em parede interna", "m²", 812.5, Confidence.ESTIMADO),
+        ("2.1", "Porta de madeira 0,80 x 2,10 m", "un", 12, Confidence.CONFIRMADO),
+    ]
+    fora = []
+    for i in range(n):
+        num, desc, un, qtd, conf = modelo[i % len(modelo)]
+        fora.append(BudgetItem(item_num=num, description=desc, unit=un,
+                               quantity=qtd, ref_sheet="ARQ-0%d" % (i % 3 + 1),
+                               confidence=conf,
+                               origem="dxf_geom" if conf == Confidence.CONFIRMADO else ""))
+    return fora
+
+
+def _capa_gerada(n_itens=0, tipologia="office", **kw):
     """Gera o .xlsx DE VERDADE e devolve o texto das células.
 
     🚨 06/09/2026 — a versão anterior deste guarda procurava duas strings no
@@ -106,6 +130,11 @@ def _capa_gerada(**kw):
     "Área construída — perímetro externo da laje" em cima do número que o
     cliente digitou. Regra dura nº1, verde. Agora a planilha é GERADA e o
     guarda lê o que está escrito nela.
+
+    🪤 07/09 (cético): `items` e `typology` eram fixos ([] e 'office'). Os dois
+    entram em `generate_spreadsheet` e a premissa 0.1 é montada com eles na
+    mesma função — `... == 'informado' and not items` deixava a capa mentir em
+    TODA planilha de verdade, com o guarda verde.
     """
     import os as _os
     import tempfile
@@ -115,7 +144,7 @@ def _capa_gerada(**kw):
     pd = m._project_data_do_banco(_linha(**kw))
     assert isinstance(pd, ProjectData)
     saida = _os.path.join(tempfile.mkdtemp(prefix="capa_"), "t.xlsx")
-    generate_spreadsheet(pd, [], saida)
+    generate_spreadsheet(pd, _itens(n_itens), saida, typology=tipologia)
     wb = openpyxl.load_workbook(saida)
     texto = []
     for ws in wb.worksheets:
@@ -124,24 +153,41 @@ def _capa_gerada(**kw):
     return chr(10).join(texto)
 
 
-def test_a_PLANILHA_de_fato_muda_de_texto_com_isso():
+# A planilha vazia é o caso de bancada; as duas de baixo são as que o cliente
+# recebe. Tipologia entra junto porque ela também decide texto nesta mesma
+# função (`label_noint`, sugestões) e também ficava no default.
+_CENARIOS = [
+    ("planilha vazia (só a capa)", 0, "office"),
+    ("3 itens, escritório", 3, "office"),
+    ("3 itens, residencial", 3, "residential"),
+]
+
+
+@pytest.mark.parametrize("rotulo,n_itens,tipologia", _CENARIOS)
+def test_a_PLANILHA_de_fato_muda_de_texto_com_isso(rotulo, n_itens, tipologia):
     """🪤 Guarda de ponta a ponta: não basta o campo existir, `spreadsheet.py`
     tem que ler ELE — e a capa tem que MUDAR de texto por causa dele."""
-    informada = _capa_gerada(total_area=290.0, user_total_area=290.0)
+    informada = _capa_gerada(n_itens, tipologia,
+                             total_area=290.0, user_total_area=290.0)
     assert "INFORMADA POR VOCÊ (não medida pela planta)" in informada, (
-        "a capa parou de dizer que a área veio do cliente — ela volta a afirmar "
-        "uma medição que não existiu (regra dura nº1)")
+        "[%s] a capa parou de dizer que a área veio do cliente — ela volta a "
+        "afirmar uma medição que não existiu (regra dura nº1)" % rotulo)
     assert "perímetro externo da laje" not in informada, (
-        "a capa afirma medição EM CIMA do número que o cliente digitou")
+        "[%s] a capa afirma medição EM CIMA do número que o cliente digitou"
+        % rotulo)
 
 
-def test_CONTROLE_a_capa_da_area_MEDIDA_continua_dizendo_medida():
+@pytest.mark.parametrize("rotulo,n_itens,tipologia", _CENARIOS)
+def test_CONTROLE_a_capa_da_area_MEDIDA_continua_dizendo_medida(rotulo, n_itens,
+                                                                tipologia):
     """🧪 O outro lado, no arquivo gerado: sem ele o teste acima passaria com a
     condição invertida (que também 'muda o texto')."""
-    medida = _capa_gerada(total_area=290.0, user_total_area=None)
-    assert "perímetro externo da laje" in medida, medida[:400]
+    medida = _capa_gerada(n_itens, tipologia,
+                          total_area=290.0, user_total_area=None)
+    assert "perímetro externo da laje" in medida, (
+        "[%s] %s" % (rotulo, medida[:400]))
     assert "INFORMADA POR VOCÊ" not in medida, (
-        "rebaixou uma medição de verdade a 'informada por você'")
+        "[%s] rebaixou uma medição de verdade a 'informada por você'" % rotulo)
 
 # ── Um lugar só, e os dois chamadores ──────────────────────────────────────
 def test_os_DOIS_caminhos_usam_o_MESMO_reconstrutor():

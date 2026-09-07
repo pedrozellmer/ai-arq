@@ -136,6 +136,29 @@ def _pdf(nome="prancha.pdf", conteudo=b"%PDF-1.4 conteudo de prancha"):
     return _ArquivoFalso(nome, conteudo)
 
 
+# As três portas que moram DENTRO do laço `for upload_file in valid_pairs`.
+# 🪤 06/09/2026 — as parametrizações mandavam UM arquivo cada (ou 51 PDFs bons,
+# que nem chegam nessas portas). O laço nunca era exercitado do 2º item em
+# diante: qualquer regressão que só afetasse os arquivos 2..n passava verde, e
+# quem sobe 6 pranchas com a 4ª truncada voltava a ser "nunca tentou".
+_PORTAS_POR_ARQUIVO = [
+    ("envio-incompleto", "prancha-que-caiu.pdf"),
+    ("dwg-pequeno-demais", "planta-truncada.dwg"),
+    ("dwg-sem-assinatura", "planta-corrompida.dwg"),
+]
+
+
+def _arquivo_ruim(motivo, nome):
+    if motivo == "envio-incompleto":
+        # a conexão caiu: chegaram 10 bytes de 999.999 prometidos
+        return _ArquivoFalso(nome, b"1234567890", size=999999)
+    if motivo == "dwg-pequeno-demais":
+        return _ArquivoFalso(nome, b"AC1032")
+    if motivo == "dwg-sem-assinatura":
+        return _ArquivoFalso(nome, b"PK" + b"z" * 300)
+    pytest.fail("porta por arquivo desconhecida: %s" % motivo)
+
+
 # As DEZ portas, cada uma com a entrada que a abre de verdade.
 # 🪤 A entrada é entrada; o julgamento é o que sai (status + linha gravada).
 def _abre_a_porta(motivo, monkeypatch):
@@ -249,6 +272,51 @@ def test_nenhuma_recusa_do_upload_e_muda(bancada, monkeypatch, motivo, status):
     assert EMAIL in linha["message"], (
         "a linha não diz QUEM tentou — sem isso não dá pra ligar a recusa à "
         "conta que sumiu do funil")
+
+
+@pytest.mark.parametrize("motivo,nome_ruim", _PORTAS_POR_ARQUIVO)
+@pytest.mark.parametrize("bons_antes", [0, 1, 3])
+def test_a_recusa_por_arquivo_vale_do_2o_ARQUIVO_em_diante(
+        bancada, motivo, nome_ruim, bons_antes):
+    """🩸 06/09/2026 — O LAÇO SÓ ERA EXERCITADO NO 1º ARQUIVO.
+
+    As três portas de integridade moram dentro do `for upload_file in
+    valid_pairs`. Toda parametrização mandava UM arquivo só, então um
+    `valid_pairs[:1]`, um `break` no fim da primeira volta, ou uma validação que
+    só olhasse `files[0]` passavam verdes — e o envio real, que é de 6 a 126
+    pranchas, voltava a aceitar calado o arquivo truncado do meio.
+
+    O guarda ESTRUTURAL irmão também não veria: a porta continua escrita e
+    continua chamando `_recusa_no_upload`.
+
+    Aqui o arquivo ruim entra DEPOIS de `bons_antes` pranchas boas, com mais uma
+    boa atrás dele — e o rastro tem que apontar o arquivo RUIM, não o primeiro.
+    """
+    arquivos = [_pdf("boa-%02d.pdf" % i) for i in range(bons_antes)]
+    arquivos.append(_arquivo_ruim(motivo, nome_ruim))
+    arquivos.append(_pdf("boa-depois.pdf"))
+
+    with pytest.raises(HTTPException) as erro:
+        _sobe(arquivos)
+    assert erro.value.status_code == 400
+
+    gravadas = bancada.recusas()
+    assert len(gravadas) == 1, (
+        "o arquivo ruim na posição %d de %d não deixou rastro (%d linhas) — a "
+        "validação parou de andar pelo laço inteiro"
+        % (bons_antes + 1, len(arquivos), len(gravadas)))
+    msg = gravadas[0]["message"]
+    assert ("motivo=%s" % motivo) in msg, msg
+    assert nome_ruim in msg, (
+        "o rastro aponta o arquivo errado — quem for investigar vai abrir a "
+        "prancha boa: %r" % msg)
+    if bons_antes:
+        assert "boa-00.pdf" not in msg, (
+            "a recusa culpou o PRIMEIRO arquivo em vez do que veio quebrado: %r"
+            % msg)
+    assert nome_ruim in str(erro.value.detail), (
+        "o cliente não foi avisado de QUAL das %d pranchas está quebrada: %r"
+        % (len(arquivos), erro.value.detail))
 
 
 def test_a_rota_nao_tem_porta_de_recusa_muda_alem_das_dez():

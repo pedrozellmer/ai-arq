@@ -59,24 +59,158 @@ def test_a_sonda_existe():
     assert r.json() == {"ok": True}, r.text
 
 
-def test_a_sonda_NAO_toca_em_banco_nem_rede():
+def _minar_todas_as_saidas(monkeypatch):
+    """Mina TODA porta que sai do processo — e devolve a lista de pisadas.
+
+    🪤 07/09/2026 — a versão anterior deste campo minado era uma LISTA FIXA de
+    11 portas (urlopen, socket.create_connection, subprocess.Popen,
+    psutil.virtual_memory e 7 helpers `_supa_*` escritos à mão). `requests` e
+    `httpx` estão instalados no projeto e passavam batido; um helper `_supa_*`
+    novo nasceria fora da lista. Agora:
+
+      · a rede é minada EMBAIXO de todas as bibliotecas (`socket.socket.connect`
+        e o DNS), além de cada biblioteca por cima;
+      · os helpers de banco são varridos por PREFIXO no módulo, não listados;
+      · disco (`open`), relógio (`sleep`) e leitura de processo (`psutil`)
+        entram, porque custo também derruba sonda.
+    """
+    import builtins
+    import http.client
+    import io as _io
+    import socket
+    import subprocess
+    import time
+    import urllib.request
+
+    pisadas = []
+
+    def _mina(nome):
+        def _explode(*a, **k):
+            pisadas.append(nome)
+            raise AssertionError("a sonda de vida tocou em %s" % nome)
+        return _explode
+
+    def _armar(obj, attr, nome):
+        if obj is not None and hasattr(obj, attr):
+            monkeypatch.setattr(obj, attr, _mina(nome), raising=False)
+
+    # ── rede: a camada de baixo (pega requests, httpx, urllib, supabase-py…)
+    #    🪤 `socket.socket.connect` NÃO pode explodir sem olhar o destino: no
+    #    Windows o próprio laço de eventos do asyncio abre um par de sockets em
+    #    127.0.0.1 pra acordar a si mesmo. A mina deixa a volta local passar e
+    #    só denuncia quem sai da máquina — que é o caso perigoso.
+    _LOCAIS = ("127.0.0.1", "::1", "localhost", "0.0.0.0", "")
+
+    def _mina_de_saida(orig, nome):
+        def _talvez(self, endereco, *a, **k):
+            destino = endereco[0] if isinstance(endereco, tuple) else endereco
+            if str(destino) not in _LOCAIS:
+                pisadas.append("%s -> %s" % (nome, destino))
+                raise AssertionError("a sonda de vida abriu socket pra %s"
+                                     % (destino,))
+            return orig(self, endereco, *a, **k)
+        return _talvez
+
+    for _met in ("connect", "connect_ex"):
+        monkeypatch.setattr(
+            socket.socket, _met,
+            _mina_de_saida(getattr(socket.socket, _met),
+                           "socket.socket.%s" % _met))
+    _armar(socket, "create_connection", "socket.create_connection")
+    _armar(socket, "getaddrinfo", "DNS (socket.getaddrinfo)")
+    _armar(socket, "gethostbyname", "DNS (socket.gethostbyname)")
+    # ── rede: e cada biblioteca por cima, pra a mensagem dizer QUEM tentou
+    _armar(urllib.request, "urlopen", "urllib.request.urlopen")
+    _armar(http.client.HTTPConnection, "request", "http.client.HTTPConnection")
+    # 🪤 `httpx.Client.send` NÃO pode ser minado: o TestClient do Starlette É um
+    #    `httpx.Client` (com transporte ASGI em memória) — minar ali explode o
+    #    próprio guarda, não a sonda. A porta certa é o transporte de REDE do
+    #    httpx, que o TestClient nunca usa.
+    for _mod, _cls, _met in (("requests", "Session", "request"),
+                             ("requests", "api", "request"),
+                             ("httpx", "HTTPTransport", "handle_request"),
+                             ("httpx", "AsyncHTTPTransport", "handle_async_request")):
+        try:
+            _lib = __import__(_mod)
+            _armar(getattr(_lib, _cls, None), _met, "%s.%s.%s" % (_mod, _cls, _met))
+        except ImportError:
+            pass
+    # ── banco: TODO helper do main que fala com o Supabase, por prefixo
+    for _nome in dir(M):
+        if _nome.startswith("_supa"):
+            _armar(M, _nome, "main.%s()" % _nome)
+    # ── subprocesso, disco, relógio e leitura de processo: CUSTO
+    _armar(subprocess, "Popen", "subprocess.Popen")
+    _armar(subprocess, "run", "subprocess.run")
+    _armar(os, "system", "os.system")
+    _armar(builtins, "open", "open() em disco")
+    _armar(_io, "open", "io.open() em disco")
+    _armar(time, "sleep", "time.sleep")
+    _armar(os, "statvfs", "os.statvfs")
+    try:
+        import psutil
+        for _at in ("virtual_memory", "Process", "cpu_percent", "disk_usage"):
+            _armar(psutil, _at, "psutil.%s" % _at)
+    except ImportError:
+        pass
+    return pisadas
+
+
+def test_a_sonda_NAO_toca_em_banco_nem_rede(monkeypatch):
     """🚨 O guarda que importa. Uma consulta aqui transforma oscilação do
-    Supabase em laço de restart."""
-    corpo = _corpo_da_sonda()
-    # 🪤 A 1ª lista tinha "urlopen" mas não "urllib": sabotei a sonda com um
-    # `import urllib.request` e a bateria passou VERDE. Guarda que não reprova
-    # não é guarda.
-    proibido = ("SUPABASE", "urllib", "urlopen", "requests", "httpx", "psutil",
-                "socket", "_supa_rest", "execute_sql", "open(", "subprocess",
-                "import ")
-    for termo in proibido:
-        assert termo not in corpo, (
-            "a sonda de vida passou a usar %r — se isso falhar, o Render "
-            "reinicia o serviço em laço e derruba job de cliente no meio"
-            % termo)
+    Supabase em laço de restart.
+
+    🪤 A 1ª versão lia o FONTE e proibia substrings ("urllib", "requests"…).
+    Um helper com outro nome, ou uma chamada indireta, passava verde. Agora a
+    sonda roda com o campo minado ARMADO — se ela sair do processo por
+    qualquer caminho, a mina registra QUEM foi.
+    """
+    cliente = _cliente()          # constrói ANTES de armar as minas
+    pisadas = _minar_todas_as_saidas(monkeypatch)
+    r = cliente.get("/health")
+    assert pisadas == [], (
+        "a sonda de vida saiu do processo por %s — se isso falhar, o Render "
+        "reinicia o serviço em laço e derruba job de cliente no meio"
+        % ", ".join(pisadas))
+    assert r.status_code == 200, r.text
+    assert r.json() == {"ok": True}, r.text
 
 
-def test_a_sonda_e_TRIVIAL():
+def test_a_sonda_e_TRIVIAL(monkeypatch):
+    """A sonda tem que ser BARATA, não só limpa: ela responde a cada 30 s e é
+    ela que decide se o Render mata a instância.
+
+    🪤 07/09/2026 — a versão anterior dizia medir CUSTO e media uma lista de
+    nomes proibidos. Custo por qualquer outra porta (`psutil.Process`, `open()`,
+    `time.sleep`, DNS) passava batido contanto que a resposta continuasse
+    `{"ok": True}` — e sonda que se auto-derruba sob pressão é a doença
+    inteira de volta (o restart de 26/08 10:19 matou os dois jobs da
+    cliente-16). Agora o guarda cobra TEMPO, medido.
+    """
+    import time as _t
+    cliente = _cliente()
+    cliente.get("/health")        # aquece import/rota, fora da medição
+    pisadas = _minar_todas_as_saidas(monkeypatch)
+
+    tempos = []
+    for _ in range(10):
+        _t0 = _t.perf_counter()
+        r = cliente.get("/health")
+        tempos.append((_t.perf_counter() - _t0) * 1000.0)
+        assert r.status_code == 200 and r.json() == {"ok": True}, r.text
+    assert pisadas == [], "a sonda pagou por %s" % ", ".join(pisadas)
+
+    melhor = min(tempos)
+    # 🪤 Teto FROUXO de propósito: máquina de bancada tem ruído, e o guarda não
+    # pode ficar vermelho por isso. Qualquer coisa que consulte banco, leia
+    # /proc ou durma passa MUITO disso — é esse o defeito que ele pega.
+    assert melhor < 50.0, (
+        "a sonda mais rápida de 10 levou %.1f ms — ela responde a cada 30 s e "
+        "decide se o Render mata a instância; alguém pôs trabalho dentro dela"
+        % melhor)
+
+
+def test_a_sonda_e_UMA_INSTRUCAO():
     """Poucas INSTRUÇÕES de verdade. Se crescer, alguém pôs lógica nela.
 
     🪤 A 1ª versão deste teste contava LINHAS de texto e reprovava por causa da

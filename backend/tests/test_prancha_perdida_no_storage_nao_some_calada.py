@@ -108,6 +108,72 @@ def _descarta_a_prancha(laco):
     return False
 
 
+def _lista_entregue_ao_alerta(fn):
+    """Os NOMES de lista que esta função entrega ao alerta."""
+    nomes = set()
+    for c in ast.walk(fn):
+        if isinstance(c, ast.Call) and isinstance(c.func, ast.Name) \
+                and c.func.id == "_alerta_pranchas_perdidas":
+            for a in list(c.args) + [k.value for k in c.keywords]:
+                if isinstance(a, ast.Name):
+                    nomes.add(a.id)
+    return nomes
+
+
+def _nomes_appendados(no):
+    """`x.append(...)` em qualquer lugar deste nó → {'x'}."""
+    nomes = set()
+    for c in ast.walk(no):
+        if isinstance(c, ast.Call) and isinstance(c.func, ast.Attribute) \
+                and c.func.attr == "append" \
+                and isinstance(c.func.value, ast.Name):
+            nomes.add(c.func.value.id)
+    return nomes
+
+
+def _perdas_na_lista_errada(codigo):
+    """Laços que anotam a perda numa lista que o alerta NUNCA vê.
+
+    🩸 06/09/2026 — O BURACO QUE SOBROU DO CENSO. Ele se contentava com a
+    EXISTÊNCIA de um `.append` qualquer no ramo do `continue`. Trocar
+    `_perdidas.append(fname)` por `_ignorados.append(fname)` — com o
+    `_alerta_pranchas_perdidas(job_id, _perdidas, ...)` intacto logo abaixo —
+    satisfazia o censo, entregava lista VAZIA ao alerta e não acusava nada: a
+    prancha some e o cliente recebe `done` numa leitura incompleta.
+
+    🔑 Aqui a pergunta é outra: a lista que recebe o nome é a MESMA que chega
+    ao alerta?
+    """
+    arv = ast.parse(codigo)
+    ruins = []
+    for fn in ast.walk(arv):
+        if not isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        if fn.name in ("_alerta_pranchas_perdidas", _BAIXA):
+            continue
+        entregues = _lista_entregue_ao_alerta(fn)
+        if not entregues:
+            continue        # função que não avisa é assunto de `_alertas_ausentes`
+        for laco in ast.walk(fn):
+            if not isinstance(laco, (ast.For, ast.AsyncFor)):
+                continue
+            if not any(isinstance(x, ast.Name) and x.id == _BAIXA
+                       for st in laco.body for x in ast.walk(st)):
+                continue
+            for st in laco.body:
+                if not isinstance(st, ast.If):
+                    continue
+                if not any(isinstance(x, ast.Continue) for x in st.body):
+                    continue
+                registrados = _nomes_appendados(st)
+                if registrados and not (registrados & entregues):
+                    ruins.append(
+                        "%s (linha %d) anota a perda em %s e entrega %s ao alerta"
+                        % (fn.name, laco.lineno, sorted(registrados),
+                           sorted(entregues)))
+    return sorted(set(ruins))
+
+
 def _alertas_ausentes(codigo):
     """Funções que DESCARTAM prancha num laço e nunca chamam o alerta."""
     arv = ast.parse(codigo)
@@ -136,8 +202,14 @@ def _alertas_ausentes(codigo):
 # ══════════════════════════════════════════════════════════════════════════
 #  O julgamento sobre o código REAL
 # ══════════════════════════════════════════════════════════════════════════
-class _Parou(Exception):
-    """Sentinela: para o caminho logo depois do ponto que a gente mede."""
+class _Parou(BaseException):
+    """Sentinela: para o caminho logo depois do ponto que a gente mede.
+
+    🪤 06/09/2026 — HERDA DE BaseException DE PROPÓSITO. `_retomar_job_do_storage`
+    embrulha tudo num `except Exception`, então o freio comum era ENGOLIDO: o
+    teste via "não parou" e, pior, um freio engolido daria a mesma cara de um
+    caminho que nunca chamou o alerta. Mesma régua do guarda do resgate por PDF.
+    """
 
 
 def _storage_de_mentira(monkeypatch, presentes, sumidas, respostas=None):
@@ -182,10 +254,104 @@ def _storage_de_mentira(monkeypatch, presentes, sumidas, respostas=None):
     return diario
 
 
-def test_nenhum_laco_descarta_prancha_sem_registrar(monkeypatch):
-    """O filhote de avaliação perde 1 de 3 pranchas — e o alerta recebe o NOME.
+_PRESENTES = ["planta-a.pdf", "planta-c.pdf"]
+_SUMIDA = "planta-b.pdf"
 
-    Não basta a lista existir: ela tem que chegar cheia no alerta.
+
+class _ReqFalso(object):
+    """O mínimo que as rotas leem de um Request."""
+    headers = {}
+    client = None
+
+
+class _ArquivoFalso(object):
+    """O mínimo que `add_file_and_reprocess` lê de um UploadFile."""
+
+    def __init__(self, filename):
+        self.filename = filename
+
+
+def _linha_do_projeto():
+    return json.dumps([{
+        "job_id": "job-orig", "is_eval": False, "typology": "office",
+        "project_type": "arquitetura", "status": "done",
+        "reprocess_count": 0, "auto_resume_count": 0,
+        "user_total_area": 0, "user_pe_direito": 0,
+        "user_email": "cliente-NN@example.com", "project_name": "Obra cliente-NN",
+    }]).encode()
+
+
+def _rodar(saida):
+    """Aceita `def` e `async def` — o mesmo julgamento vale pros dois."""
+    import asyncio
+    import inspect
+    if inspect.isawaitable(saida):
+        return asyncio.run(saida)
+    return saida
+
+
+# ── os CINCO caminhos de cliente, cada um armado do seu jeito ──────────────
+def _driver_filhote(monkeypatch):
+    monkeypatch.setattr(main, "_require_admin", lambda *a, **k: {"email": "x"})
+    return lambda: main.admin_eval_reprocess("job-orig", request=None)
+
+
+def _driver_retomada(monkeypatch):
+    return lambda: main._retomar_job_do_storage("job-orig")
+
+
+def _driver_reprocesso(monkeypatch):
+    monkeypatch.setattr(main, "_require_project_owner",
+                        lambda *a, **k: {"email": "dono@example.com"})
+    monkeypatch.setattr(main, "_get_user_from_request",
+                        lambda *a, **k: {"email": "dono@example.com"})
+    return lambda: _rodar(main.reprocess_project("job-orig", request=_ReqFalso()))
+
+
+def _driver_add_file(monkeypatch):
+    """🚨 O PIOR DOS CINCO: é o caminho em que o cliente manda o CAD que A
+    GENTE PEDIU. Ele fez exatamente o que pedimos e receberia menos."""
+    async def _grava(arquivo, destino):
+        io.open(destino, "wb").write(b"CAD-de-mentira")
+        return len(b"CAD-de-mentira"), None
+
+    monkeypatch.setattr(main, "_require_project_owner",
+                        lambda *a, **k: {"email": "dono@example.com"})
+    monkeypatch.setattr(main, "_rate_limit_ok", lambda *a, **k: True)
+    monkeypatch.setattr(main, "_stream_upload_to_disk", _grava)
+    monkeypatch.setattr(main, "_supabase_storage_upload_prancha",
+                        lambda *a, **k: True)
+    return lambda: _rodar(main.add_file_and_reprocess(
+        "job-orig", request=_ReqFalso(), files=[_ArquivoFalso("planta-a.pdf")]))
+
+
+def _driver_combinar(monkeypatch):
+    monkeypatch.setattr(main, "_require_admin", lambda *a, **k: {"email": "x"})
+    return lambda: _rodar(main.admin_eval_combine("job-orig", request=None))
+
+
+#: 🪤 06/09/2026 — A CONVERSÃO SÓ RODAVA UM DOS CINCO. Os outros quatro —
+#: inclusive a retomada automática depois de queda e o add-file — ficavam só
+#: com o censo AST, que se contentava com a EXISTÊNCIA de um `.append` no ramo
+#: do `continue`. Appendar na lista ERRADA satisfazia o censo e escapava do
+#: guarda executado: a prancha some e o cliente recebe `done` numa leitura
+#: incompleta, que é literalmente o caso de 18/08.
+_CAMINHOS = [
+    ("admin_eval_reprocess", _driver_filhote),
+    ("_retomar_job_do_storage", _driver_retomada),
+    ("reprocess_project", _driver_reprocesso),
+    ("add_file_and_reprocess", _driver_add_file),
+    ("admin_eval_combine", _driver_combinar),
+]
+
+
+@pytest.mark.parametrize("nome,armar", _CAMINHOS, ids=[n for n, _ in _CAMINHOS])
+def test_nenhum_laco_descarta_prancha_sem_registrar(
+        nome, armar, monkeypatch, tmp_path):
+    """Cada caminho perde 1 de 3 pranchas — e o alerta recebe o NOME dela.
+
+    Não basta a lista existir: ela tem que chegar CHEIA no alerta. Appendar num
+    `_ignorados` que ninguém entrega passa no censo e some aqui.
     """
     avisos = []
 
@@ -195,29 +361,40 @@ def test_nenhum_laco_descarta_prancha_sem_registrar(monkeypatch):
         raise _Parou()          # o que vem depois é o job inteiro; já medimos
 
     _storage_de_mentira(
-        monkeypatch, presentes=["planta-a.pdf", "planta-c.pdf"],
-        sumidas=["planta-b.pdf"],
-        respostas={"rest/v1/projects": json.dumps(
-            [{"job_id": "job-orig", "is_eval": False, "typology": "office"}]).encode()})
-    monkeypatch.setattr(main, "_require_admin", lambda *a, **k: {"email": "x"})
+        monkeypatch, presentes=_PRESENTES, sumidas=[_SUMIDA],
+        respostas={"rest/v1/projects": _linha_do_projeto()})
+    monkeypatch.setattr(main, "WORK_DIR", str(tmp_path))
     monkeypatch.setattr(main, "_alerta_pranchas_perdidas", _alerta)
+    chamar = armar(monkeypatch)
 
     with pytest.raises(_Parou):
-        main.admin_eval_reprocess("job-orig", request=None)
+        chamar()
 
-    assert avisos, "baixou 2 de 3 pranchas e o alerta nunca foi chamado"
-    assert avisos[0]["perdidos"] == ["planta-b.pdf"], (
-        "o laço descartou a prancha e a lista de perdas chegou %r — o arquivo "
-        "some e o cliente recebe `done` numa leitura incompleta"
-        % avisos[0]["perdidos"])
+    assert avisos, (
+        "%s baixou 2 de 3 pranchas e o alerta nunca foi chamado — o arquivo "
+        "some e o cliente recebe `done` numa leitura incompleta" % nome)
+    assert avisos[0]["perdidos"] == [_SUMIDA], (
+        "%s descartou a prancha e a lista de perdas chegou %r — ou o laço "
+        "appenda numa lista que ninguém entrega, ou o nome se perde no caminho"
+        % (nome, avisos[0]["perdidos"]))
     assert avisos[0]["total"] == 3, (
-        "o alerta não sabe de QUANTAS: %r" % avisos[0]["total"])
+        "%s não diz de QUANTAS: %r — '1 perdida' num envio de 2 e num de 40 "
+        "são coisas muito diferentes" % (nome, avisos[0]["total"]))
 
 def test_toda_funcao_que_baixa_em_laco_avisa_da_perda():
     ausentes = _alertas_ausentes(_FONTE)
     assert not ausentes, (
         "estas funções baixam do Storage num laço e nunca chamam "
         "`_alerta_pranchas_perdidas`: %s" % ", ".join(ausentes))
+
+
+def test_a_perda_e_anotada_na_MESMA_lista_que_chega_ao_alerta():
+    """🪤 O censo aceitava um `.append` qualquer. Appendar na lista ERRADA
+    passava por ele, entregava lista vazia ao alerta e a prancha sumia."""
+    erradas = _perdas_na_lista_errada(_FONTE)
+    assert not erradas, (
+        "a perda é anotada numa lista que o alerta nunca vê: %s"
+        % "; ".join(erradas))
 
 
 def _funcoes_que_descartam(codigo):
@@ -252,6 +429,13 @@ def test_os_cinco_caminhos_de_cliente_estao_cobertos():
     assert not faltando, (
         "o guarda não enxerga mais estes caminhos de cliente: %s — os testes "
         "acima passam sem olhar pra eles" % ", ".join(sorted(faltando)))
+    # 🪤 06/09/2026 — E CENSO NÃO É EXECUÇÃO. Enquanto só um dos cinco rodava,
+    # os outros quatro estavam cobertos por uma pergunta sobre a FORMA do
+    # código. Caminho novo entra aqui e no `_CAMINHOS`, ou este teste reclama.
+    rodados = {n for n, _ in _CAMINHOS}
+    assert esperadas == rodados, (
+        "estes caminhos de cliente são julgados só pelo censo AST, ninguém os "
+        "EXECUTA: %s" % ", ".join(sorted(esperadas - rodados)))
 
 
 def test_o_alerta_e_CRITICO_e_diz_quantas_de_quantas():
@@ -355,6 +539,39 @@ def test_CONTROLE_o_laco_de_ANTES_REPROVA_no_mesmo_julgamento():
     assert _alertas_ausentes(_LACO_ANTIGO) == ["reprocess_project"], (
         "o julgamento não vê a função sem alerta: %s"
         % _alertas_ausentes(_LACO_ANTIGO))
+
+
+#: O laço que o censo ANTIGO aprovava: tem `.append` no ramo do `continue`, tem
+#: alerta chamado — só que a lista anotada não é a lista entregue.
+_LACO_LISTA_ERRADA = '''
+async def reprocess_project():
+    file_paths = []
+    _perdidas = []
+    _ignorados = []
+    for fname in original_filenames:
+        data = _supabase_storage_download_prancha(job_id, fname)
+        if not data:
+            _ignorados.append(fname)
+            continue
+        file_paths.append(fname)
+    _alerta_pranchas_perdidas(job_id, _perdidas, len(original_filenames), "x")
+'''
+
+_LACO_CERTO = _LACO_LISTA_ERRADA.replace("_ignorados.append", "_perdidas.append")
+
+
+def test_CONTROLE_o_julgamento_da_LISTA_separa_o_certo_do_errado():
+    """🧪 Sem os dois lados, um julgamento que devolvesse sempre vazio (ou
+    sempre cheio) passaria pelo teste do código real."""
+    assert not _perdas_caladas(_LACO_LISTA_ERRADA), (
+        "o censo ANTIGO já pegava este caso — então ele não prova nada de novo")
+    erradas = _perdas_na_lista_errada(_LACO_LISTA_ERRADA)
+    assert len(erradas) == 1 and "_ignorados" in erradas[0], (
+        "o julgamento aprovou um laço que anota a perda em `_ignorados` e "
+        "entrega `_perdidas` (vazia) ao alerta: %s" % erradas)
+    assert not _perdas_na_lista_errada(_LACO_CERTO), (
+        "o julgamento acusa o laço CERTO — guarda que reprova código bom vira "
+        "obstáculo: %s" % _perdas_na_lista_errada(_LACO_CERTO))
 
 
 _UPDATES_ANTIGOS = '''

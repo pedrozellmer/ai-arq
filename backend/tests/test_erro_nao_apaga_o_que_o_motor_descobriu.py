@@ -24,6 +24,8 @@ import os
 import re
 import sys
 
+import pytest
+
 _AQUI = os.path.dirname(os.path.abspath(__file__))
 _BACKEND = os.path.dirname(_AQUI)
 sys.path.insert(0, _BACKEND)
@@ -73,9 +75,20 @@ class _JobsFalso:
         self.campos.update(kw)
 
 
+#: O job usado em todo este arquivo — a linha que o pacote TEM que endereçar.
+_JOB = "job-de-teste"
+
+
 def _rodar_o_except(project_data=..., log_error=None, erro=None,
                     avisos_no_banco=("aviso que JA estava no banco",)):
-    """Executa o tratamento de erro de verdade e devolve (pacotes, logs)."""
+    """Executa o tratamento de erro de verdade e devolve (pacotes, logs).
+
+    🔬 07/09/2026 — o `_avisos_com` aqui é o DE PRODUÇÃO, não um dublê. A versão
+    anterior injetava uma cópia que fundia as duas listas, e a asserção sobre o
+    clobber de 04/09 media o dublê, não o motor: apagar a fusão real no main.py
+    deixava este arquivo verde. Agora só o acesso ao banco é dublado
+    (`_supa_rest_service`), e a fusão que roda é a que vai pro ar.
+    """
     import re
     pacotes, logs = [], []
 
@@ -86,21 +99,31 @@ def _rodar_o_except(project_data=..., log_error=None, erro=None,
 
     escopo = {
         "e": erro or RuntimeError("a IA devolveu 0 itens"),
-        "job_id": "job-de-teste",
+        "job_id": _JOB,
         "jobs": _JobsFalso(),
         "_log_error": _log,
         "_supabase_update": lambda tab, campo, valor, dados:
             pacotes.append({"tabela": tab, "campo": campo,
                             "valor": valor, "dados": dados}),
-        "_avisos_com": lambda jid, novos: list(avisos_no_banco) + [
-            a for a in novos if a not in avisos_no_banco],
+        "_avisos_com": m._avisos_com,          # 🔑 o de produção
         "_TRANSIENT_ERR_RX": re.compile("sobrecarregad|timeout", re.I),
         "_email_falha_cliente": lambda *a, **k: None,
         "print": lambda *a, **k: None,
     }
     if project_data is not ...:
         escopo["project_data"] = project_data
-    exec(_codigo_do_except_do_process_job(), escopo)
+
+    _orig = m._supa_rest_service
+
+    def _rest(metodo, caminho, **kw):
+        if metodo == "GET" and str(caminho).startswith("projects"):
+            return 200, [{"warnings": list(avisos_no_banco)}]
+        return 200, []
+    m._supa_rest_service = _rest
+    try:
+        exec(_codigo_do_except_do_process_job(), escopo)
+    finally:
+        m._supa_rest_service = _orig
     return pacotes, logs
 
 
@@ -122,6 +145,63 @@ def test_o_erro_SALVA_os_avisos_acumulados():
             "o aviso %r não chegou ao banco: %r" % (_a, dados["warnings"]))
     assert "aviso que JA estava no banco" in dados["warnings"], (
         "o pacote passou por cima do que já estava lá (o clobber de 04/09)")
+
+
+@pytest.mark.parametrize("no_banco,do_motor,esperado", [
+    # o caso normal: o que já estava lá VEM PRIMEIRO e o do motor entra atrás
+    (["prancha perdida no storage"],
+     ["prancha 03 cortada", "plano B acionado"],
+     ["prancha perdida no storage", "prancha 03 cortada", "plano B acionado"]),
+    # banco vazio: só o do motor, sem inventar linha
+    ([], ["plano B acionado"], ["plano B acionado"]),
+    # repetido não duplica (o cliente lia o mesmo aviso duas vezes)
+    (["plano B acionado"], ["plano B acionado", "escala não validada"],
+     ["plano B acionado", "escala não validada"]),
+])
+def test_a_fusao_do_ramo_de_erro_e_a_DE_PRODUCAO(no_banco, do_motor, esperado):
+    """🚨 07/09/2026 — a asserção do clobber media o DUBLÊ.
+
+    Aqui a lista sai igualzinha, em ordem e sem repetição, com o `_avisos_com`
+    de produção no caminho. Apagar a fusão real (voltar a gravar só o array de
+    memória) reprova nos três casos.
+    """
+    class _PD:
+        warnings = list(do_motor)
+
+    pacotes, _ = _rodar_o_except(project_data=_PD(), avisos_no_banco=no_banco)
+    assert pacotes[0]["dados"].get("warnings") == esperado, (
+        "com %r no banco e %r do motor, o pacote gravaria %r"
+        % (no_banco, do_motor, pacotes[0]["dados"].get("warnings")))
+
+
+def test_o_pacote_de_erro_ENDERECA_a_linha_certa():
+    """🪤 07/09/2026 — lacuna do cético: `tabela`, `campo` e `valor` eram
+    capturados pelo dublê e IGNORADOS pela asserção. Um pacote perfeito
+    endereçado a `projects.id` (em vez de `job_id`) não acha linha nenhuma:
+    o UPDATE não estoura, não grava, e o guarda seguia verde — a escrita que
+    falha calada de novo, agora no próprio conserto contra escrita calada.
+    """
+    class _PD:
+        warnings = ["prancha 03 cortada por tamanho"]
+
+    pacotes, _ = _rodar_o_except(project_data=_PD())
+    p = pacotes[0]
+    assert (p["tabela"], p["campo"], p["valor"]) == ("projects", "job_id", _JOB), (
+        "o pacote de erro foi endereçado a %r/%r=%r — fora de "
+        "`projects.job_id` ele não casa com linha nenhuma e o UPDATE não grava"
+        % (p["tabela"], p["campo"], p["valor"]))
+
+
+def test_a_mensagem_do_cliente_vai_INTEIRA_no_pacote():
+    """🚨 O corte era [:500] e decapitava a instrução ("1. Abra o arqui").
+    Conteúdo, não presença: o guarda confere a ÚLTIMA frase, que é a que
+    diz ao cliente o que fazer."""
+    passos = ("Não consegui ler este arquivo. 1. Abra o arquivo no seu CAD. "
+              "2. Exporte como DXF. 3. Suba o arquivo novo aqui no site.")
+    pacotes, _ = _rodar_o_except(erro=RuntimeError(passos))
+    assert pacotes[0]["dados"].get("error_message") == passos, (
+        "a mensagem chegou ao banco como %r — o cliente fica sabendo que deu "
+        "errado e não o que fazer" % (pacotes[0]["dados"].get("error_message"),))
 
 
 def test_o_aviso_so_vai_QUANDO_EXISTE():

@@ -77,19 +77,51 @@ def criar(monkeypatch):
     return {"roda": _roda, "gravado": gravado}
 
 
-def test_a_linha_do_merge_carrega_a_leitura_de_origem(criar):
+_CARIMBO = "Veio da leitura de "
+
+# A procedencia que o motor JA escreve em quase toda linha de producao. A
+# fixture nascia com `observations` vazia — forma que praticamente nao ocorre no
+# banco — entao o ramo `(_obs + " | " if _obs else "")` nunca era exercitado.
+_OBS_DE_PRODUCAO = ("Contagem de blocos ELET-LUM na prancha; confira antes de "
+                    "orcar.")
+
+
+@pytest.mark.parametrize("obs_de_origem", ["", _OBS_DE_PRODUCAO])
+def test_a_linha_do_merge_carrega_a_leitura_de_origem(criar, obs_de_origem):
     """Pedro, 24/08: "sempre coloca a fonte na planilha". Numa planilha
-    COMBINADA a fonte tem uma camada a mais: de QUAL leitura a linha veio."""
-    pai = [_it("Luminaria LM1", "4366-EL-E", n=1),
-           _it("Luminaria LM2", "4366-EL-E", n=2)]
-    filho = [_it("Tomada 2P+T", "3073-AQ-E", n=1)]
+    COMBINADA a fonte tem uma camada a mais: de QUAL leitura a linha veio.
+
+    🪤 06/09/2026 — O CENARIO ERA UM SO, E ERA O QUE NAO EXISTE. Com
+    `observations` vazia em toda a fixture, o guarda so via o ramo do `else`:
+    uma condicao que dependesse do texto ja gravado (ou que o SOBRESCREVESSE em
+    vez de concatenar) derrubava o carimbo — ou a procedencia do motor — em 100%
+    das linhas reais, com a bancada verde. Agora os DOIS ramos entram, e a
+    afirmacao e sobre a ORDEM: a anotacao que ja existia fica, o carimbo entra
+    DEPOIS dela, separados por " | ".
+    """
+    pai = [_it("Luminaria LM1", "4366-EL-E", n=1, obs=obs_de_origem),
+           _it("Luminaria LM2", "4366-EL-E", n=2, obs=obs_de_origem)]
+    filho = [_it("Tomada 2P+T", "3073-AQ-E", n=1, obs=obs_de_origem)]
     g = criar["roda"](pai, filho)
 
     obs = [str(l.get("observations") or "") for l in g["itens"]]
     assert len(g["itens"]) == 3, "nao gravou as 3 linhas: %d" % len(g["itens"])
-    assert all("Veio da leitura de " in o for o in obs), (
+    assert all(_CARIMBO in o for o in obs), (
         "linha combinada gravada SEM o carimbo de procedencia: %s" % obs)
     do_pai = [l for l in g["itens"] if l["ref_sheet"] == "4366-EL-E"]
     do_filho = [l for l in g["itens"] if l["ref_sheet"] == "3073-AQ-E"]
-    assert "20/08 16h37" in do_pai[0]["observations"], do_pai[0]["observations"]
-    assert "24/08 19h31" in do_filho[0]["observations"], do_filho[0]["observations"]
+    for linha, data in ((do_pai[0], "20/08 16h37"), (do_filho[0], "24/08 19h31")):
+        o = str(linha["observations"])
+        assert o.endswith(_CARIMBO + data), (
+            "o carimbo da leitura de origem nao fecha a observacao: %r" % o)
+        if obs_de_origem:
+            # 🔒 o que o motor ja tinha escrito NAO pode ser apagado (regra n7)
+            assert obs_de_origem in o, (
+                "o carimbo comeu a procedencia que o motor tinha escrito: %r" % o)
+            assert (obs_de_origem + " | " + _CARIMBO + data) in o, (
+                "carimbo e procedencia deixaram de ficar na ordem certa, ou o "
+                "separador ' | ' sumiu: %r" % o)
+        else:
+            assert o == _CARIMBO + data, (
+                "linha sem anotacao anterior saiu com separador orfao ou lixo "
+                "grudado: %r" % o)

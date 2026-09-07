@@ -19,6 +19,8 @@ import io
 import os
 import sys
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 # 🪤 Janela de tamanho fixo mede o vizinho (ou um pedaço) e passa verde por
 # engano — a auditoria de 25/08 achou 17 assim, e a mutação de 06/09 provou
@@ -147,25 +149,19 @@ def _linhas_que_o_persist_manda(monkeypatch, itens, job_id="job-teste"):
     return postados[0]
 
 
-def test_a_origem_e_gravada_e_relida(monkeypatch, tmp_path):
-    """Sem isto, a reidratação volta a decidir no escuro.
+def _itens_que_a_planilha_recebe(monkeypatch, tmp_path, linhas, rota):
+    """Executa UM dos DOIS caminhos que remontam a planilha a partir do banco e
+    devolve os `BudgetItem` que chegaram ao `generate_spreadsheet`.
 
-    Duas metades, as duas EXECUTADAS: o persist manda a origem pro banco, e o
-    caminho que remonta a planilha a partir do banco devolve ela no objeto.
+    🪤 06/09/2026 — SÃO DOIS, e o guarda executava um só. O guarda cego que ele
+    substituiu contava `src.count('origem=r.get("origem") or ""') == 2`; a
+    conversão pra execução exercitou só `/api/items/{job}/finalize` e largou a
+    contagem. `/api/project/{job}/inform-area` — a rota em que o cliente informa
+    a metragem e a planilha é REFEITA em cima dos itens do banco — podia voltar
+    a perder a origem sem ninguém ver. E é justo ela que chama
+    `_apply_area_honesty`, cuja trava de "não zerar o que tem procedência"
+    depende dessa origem: perdê-la ali apaga pintura e massa corrida do cliente.
     """
-    from models import BudgetItem, Confidence
-    itens = [BudgetItem(item_num="1.1", description="Piso porcelanato", unit="m²",
-                        quantity=118.5, confidence=Confidence.CONFIRMADO,
-                        origem="dxf_geom", discipline="Acabamentos"),
-             BudgetItem(item_num="1.2", description="Pintura látex", unit="m²",
-                        quantity=540.0, confidence=Confidence.ESTIMADO,
-                        origem="deriv_pd", discipline="Acabamentos")]
-    linhas = _linhas_que_o_persist_manda(monkeypatch, itens)
-    assert [l.get("origem") for l in linhas] == ["dxf_geom", "deriv_pd"], (
-        "_persist_items_to_supabase parou de mandar a origem pro banco: %r"
-        % [sorted(l) for l in linhas])
-
-    # ── e a volta: o que o banco guardou tem que virar objeto de novo ──
     import json as _json
     import urllib.request as _ur
     import spreadsheet as _sp
@@ -174,7 +170,7 @@ def test_a_origem_e_gravada_e_relida(monkeypatch, tmp_path):
     capturado = {}
 
     def _fake_generate(pd, items, output_path, **kw):
-        capturado["items"] = items
+        capturado["items"] = list(items)
         open(output_path, "wb").write(b"x")
 
     class _R2:
@@ -188,7 +184,9 @@ def test_a_origem_e_gravada_e_relida(monkeypatch, tmp_path):
     monkeypatch.setattr(m, "_require_project_owner", lambda *a, **k: None)
     monkeypatch.setattr(m, "_supa_rest_as_user",
                         lambda *a, **k: (200, [{"job_id": "job-teste",
-                                                "project_name": "Casa"}]))
+                                                "project_name": "Casa",
+                                                "total_area": 0,
+                                                "warnings": []}]))
     monkeypatch.setattr(_ur, "urlopen",
                         lambda *a, **k: _R2(_json.dumps(linhas).encode("utf-8")))
     monkeypatch.setattr(m, "_supabase_storage_upload", lambda *a, **k: True)
@@ -197,12 +195,56 @@ def test_a_origem_e_gravada_e_relida(monkeypatch, tmp_path):
     monkeypatch.setattr(_sm, "candidates_for", lambda *a, **k: [])
     monkeypatch.setattr(_sm, "apply_llm_pick", lambda *a, **k: 0)
     monkeypatch.setattr(_tm, "match_item", lambda *a, **k: [])
-    import asyncio
-    asyncio.run(m.rebuild_planilha_from_review("job-teste", object()))
-    assert [i.origem for i in capturado["items"]] == ["dxf_geom", "deriv_pd"], (
-        "a reidratação perdeu a origem — a honestidade de área volta a decidir "
-        "com menos informação do que o motor tinha: %r"
-        % [i.origem for i in capturado["items"]])
+    if rota == "finalize":
+        import asyncio
+        asyncio.run(m.rebuild_planilha_from_review("job-teste", object()))
+    else:
+        monkeypatch.setattr(m, "_log_error", lambda *a, **k: None)
+        monkeypatch.setattr(m, "_supabase_update", lambda *a, **k: True)
+        monkeypatch.setattr(m, "_projeto_patch", lambda *a, **k: True)
+        monkeypatch.setattr(m, "_persist_items_to_supabase", lambda *a, **k: 0)
+        m.inform_project_area("job-teste", m.InformAreaPayload(area=100.0),
+                              object())
+    assert capturado.get("items") is not None, (
+        "a rota %r nem chegou a montar a planilha" % rota)
+    return capturado["items"]
+
+
+@pytest.mark.parametrize("rota", ["finalize", "inform-area"])
+def test_a_origem_e_gravada_e_relida(monkeypatch, tmp_path, rota):
+    """Sem isto, a reidratação volta a decidir no escuro.
+
+    Duas metades, as duas EXECUTADAS: o persist manda a origem pro banco, e
+    CADA UM dos dois caminhos que remontam a planilha devolve ela no objeto.
+
+    🪤 As três origens que atravessam o banco aqui são de famílias diferentes de
+    propósito: uma linha MEDIDA do CAD (`dxf_geom`, com número), uma DERIVADA
+    pela nossa conta (`deriv_pd`) e uma que veio da mão do cliente
+    (`revisao_cliente`, zerada — "já existe, não comprar"). Gravar a origem só
+    de uma das famílias deixaria as outras duas passarem batido.
+    """
+    from models import BudgetItem, Confidence
+    itens = [BudgetItem(item_num="1.1", description="Piso porcelanato", unit="m²",
+                        quantity=118.5, confidence=Confidence.CONFIRMADO,
+                        origem="dxf_geom", discipline="Acabamentos"),
+             BudgetItem(item_num="1.2", description="Pintura látex", unit="m²",
+                        quantity=540.0, confidence=Confidence.ESTIMADO,
+                        origem="deriv_pd", discipline="Acabamentos"),
+             BudgetItem(item_num="1.3", description="Luminária de emergência",
+                        unit="un", quantity=0.0, confidence=Confidence.ESTIMADO,
+                        origem="revisao_cliente", discipline="Elétrica")]
+    _ESPERADO = ["dxf_geom", "deriv_pd", "revisao_cliente"]
+    linhas = _linhas_que_o_persist_manda(monkeypatch, itens)
+    assert [l.get("origem") for l in linhas] == _ESPERADO, (
+        "_persist_items_to_supabase parou de mandar a origem pro banco: %r"
+        % [sorted(l) for l in linhas])
+
+    # ── e a volta: o que o banco guardou tem que virar objeto de novo ──
+    relidos = _itens_que_a_planilha_recebe(monkeypatch, tmp_path, linhas, rota)
+    assert [i.origem for i in relidos] == _ESPERADO, (
+        "a reidratação de %s perdeu a origem — a honestidade de área volta a "
+        "decidir com menos informação do que o motor tinha: %r"
+        % (rota, [i.origem for i in relidos]))
 
 
 def test_CONTROLE_o_persist_manda_mesmo_as_linhas(monkeypatch):
@@ -343,24 +385,55 @@ def test_a_fusao_le_os_valores_do_project_items_do_pai(monkeypatch):
     O cenário abaixo é o real de 24/08: 7 linhas de armadura CA-50 em que o
     dropdown apagou a unidade no payload, e a quantidade foi corrigida DUAS
     vezes (o `edits` guarda a primeira, o pai guarda a última).
+
+    🪤 06/09/2026 — ELE SÓ PROVAVA `unit` E `quantity`. O assert de `confidence`
+    era satisfeito pela regra nº1 (quem digitou vira 'estimado'), não por LER o
+    selo do pai; e `observations`/`description` não eram olhados de jeito nenhum
+    — `observations` podia voltar a sair do `edits` (a foto do navegador na 1ª
+    edição) e a anotação ATUAL do cliente, guardada no pai, seria sobrescrita
+    calada. Perda de trabalho humano, regra nº7, com a bancada verde.
+    Agora entram DUAS revisões: uma em que o cliente digitou outro número, e
+    outra em que ele NÃO mexeu na quantidade — nesta o selo só pode vir do pai.
     """
     from models import BudgetItem, Confidence
+    # a anotação que o cliente tem HOJE, guardada no pai...
+    _OBS_DO_PAI = "conferido em obra: bitola 12,5 mm conforme prancha EST-02"
+    # ...e a foto velha do navegador, que o `edits` congelou na 1ª edição
+    _OBS_DO_NAVEGADOR = "rascunho ANTIGO da primeira edicao, ja substituido"
+    # o cliente também arrumou o TEXTO da linha; o pai tem a versão dele
+    _DESC_PAI = ("Pilares — armadura CA-50 conforme prancha EST-02 do bloco A "
+                 "(bitola conferida por mim)")
+    _DESC_LEITURA_NOVA = "Pilares — armadura CA-50 conforme prancha EST-02 do bloco A"
     f = _fusao_de_verdade(
         monkeypatch,
         revs=[{"item_id": "id-9", "reviewed_at": "2026-08-23T10:00:00Z",
-               "edits": {"description": "Pilares — armadura CA-50",
+               "edits": {"description": "Pilares — armadura CA-60 (grafia da 1ª edição)",
                          "unit": "",              # o dropdown apagou
                          "quantity": 100.0,       # a PRIMEIRA edição
-                         "_antes": {"unit": "kg", "quantity": 18168.0}}}],
-        linhas_do_pai=[{"id": "id-9", "description": "Pilares — armadura CA-50",
+                         "observations": _OBS_DO_NAVEGADOR,
+                         "_antes": {"unit": "kg", "quantity": 18168.0}}},
+              # 2ª revisão: o cliente só arrumou a GRAFIA — a quantidade é a
+              # mesma de antes, então quem responde pelo selo é o pai.
+              {"item_id": "id-12", "reviewed_at": "2026-08-23T10:05:00Z",
+               "edits": {"description": "Piso porcelanato 60x60 - hall",
+                         "unit": "m²", "quantity": 88.0,
+                         "_antes": {"unit": "m²", "quantity": 88.0}}}],
+        linhas_do_pai=[{"id": "id-9", "description": _DESC_PAI,
                         "unit": "kg",             # o endpoint já consertou
                         "quantity": 1500.0,       # a ÚLTIMA correção
-                        "confidence": "estimado", "observations": ""}])
+                        "confidence": "estimado",
+                        "observations": _OBS_DO_PAI},
+                       {"id": "id-12", "description": "Piso porcelanato 60x60 - hall",
+                        "unit": "m²", "quantity": 88.0,
+                        "confidence": "confirmado", "observations": ""}])
     # a leitura nova trouxe a unidade que o persist inventa quando falta
-    alvo = BudgetItem(item_num="3.1", description="Pilares — armadura CA-50",
+    alvo = BudgetItem(item_num="3.1", description=_DESC_LEITURA_NOVA,
                       unit="vb", quantity=18168.0,
                       confidence=Confidence.CONFIRMADO, origem="dxf_geom")
-    f([alvo], "pai123")
+    piso = BudgetItem(item_num="4.1", description="Piso porcelanato 60x60 - hall",
+                      unit="m²", quantity=88.0,
+                      confidence=Confidence.CONFIRMADO, origem="dxf_geom")
+    f([alvo, piso], "pai123")
     assert alvo.unit == "kg", (
         "a fusão voltou a tirar a unidade do payload cru do navegador — "
         "1.850 kg viram '1850 verbas'. Veio: %r" % alvo.unit)
@@ -369,6 +442,24 @@ def test_a_fusao_le_os_valores_do_project_items_do_pai(monkeypatch):
         "cliente (1500)" % alvo.quantity)
     assert str(getattr(alvo.confidence, "value", alvo.confidence)) == "estimado", (
         "número digitado à mão saiu carimbado como medição do CAD")
+    # 🔑 observations: a anotação do cliente mora no PAI, não no `edits`
+    assert _OBS_DO_PAI in alvo.observations, (
+        "a fusão perdeu a anotação ATUAL do cliente (regra nº7) — veio %r"
+        % alvo.observations)
+    assert "ANTIGO" not in alvo.observations, (
+        "a fusão voltou a copiar a observação CONGELADA na 1ª edição do "
+        "navegador por cima da anotação de hoje: %r" % alvo.observations)
+    # 🔑 description: idem — o texto que vale é o que o cliente vê na tela
+    assert "bitola conferida por mim" in alvo.description, (
+        "a descrição não veio da linha do pai: %r" % alvo.description)
+    assert "CA-60" not in alvo.description, (
+        "a fusão ressuscitou a grafia errada da 1ª edição: %r" % alvo.description)
+    # 🔑 confidence: aqui o cliente NÃO digitou número nenhum, então a regra nº1
+    # não decide — o selo só pode ter vindo da linha do pai.
+    assert str(getattr(piso.confidence, "value", piso.confidence)) == "confirmado", (
+        "o selo do pai não foi lido: a linha que o CAD mediu e o cliente só "
+        "corrigiu na grafia foi rebaixada sem motivo (%r)" % piso.confidence)
+    assert piso.quantity == 88.0, "mexeu no número que o cliente não tocou"
 
 
 def test_CONTROLE_a_fusao_reprova_quando_o_pai_nao_responde(monkeypatch):

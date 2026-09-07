@@ -104,12 +104,14 @@ def _bloco_da_aplicacao(src):
     return src[i:src.index("# 🚨 AQUI é o fim da fila de quem rebaixa selo", i)]
 
 
-_INI_PARCIAL = "            from engine_rules import numero_declarado_parcial as _e_parcial"
-_FIM_PARCIAL = "                _n_par += 1"
-
-_OBS_PARCIAL = ("Fonte: comprimento total do layer SAN = 1,42 m. Valor provavelmente "
-                "parcial (representacao em escala). Confirmar com projeto complementar.")
+_OBS_PARCIAL = _DEVE_DISPARAR["tubulacao SAN (aed78b12)"]
+_OBS_PARCIAL_RIPAS = _DEVE_DISPARAR["ripas (aed78b12)"]
+_OBS_PARCIAL_DUTO = _DEVE_DISPARAR["duto exaustao (b5693ca6)"]
+_OBS_ACO = _NAO_PODE_DISPARAR["quadro de aco (66ebe2d9)"]
 _OBS_SA = "Fonte: area hachurada do layer PISO = 120 m2"
+_AVISO = ("⚠ O número mede só PARTE deste item — o próprio levantamento diz "
+          "isso na observação abaixo. Não leve como quantidade fechada: cobre "
+          "só parte do que existe. ")
 
 
 class _Item:
@@ -122,32 +124,176 @@ class _Item:
         self.quantity = qtd
 
 
-def _trecho(inicio, fim, arquivo="main.py"):
-    src = fonte(arquivo)
-    assert src.count(inicio) == 1, "âncora de início não é única: %r" % inicio[:70]
-    a = src.index(inicio)
-    assert src.count(fim, a) >= 1, "âncora de fim não achada: %r" % fim[:70]
-    return textwrap.dedent(src[a:src.index(fim, a) + len(fim)])
+# ══════════════════════════════════════════════════════════════════════════
+#  A FATIA QUE RODA — os DOIS rebaixamentos finais, inteiros
+# ══════════════════════════════════════════════════════════════════════════
+# 🪤 06/09/2026 — O RECORTE ANTERIOR PARAVA NO `_n_par += 1`, a última linha do
+# corpo do laço. Tudo o que viesse depois — mais uma linha dentro do mesmo laço,
+# o `if _n_par:` do aviso interno, o `except` — ficava FORA do que o guarda
+# rodava. Uma promoção de volta a CONFIRMADO uma linha abaixo desfazia o
+# rebaixamento inteiro em produção com o teste verde.
+# 🔑 Agora a fatia vai do `try` do rebaixamento anterior (selo-sem-medida) até o
+# fim do `except` do parcial. Com isso:
+#   · promoção depois do `_n_par += 1` é vista (o item volta a CONFIRMADO);
+#   · matar o `if _n_par:` é visto (o log interno some);
+#   · `if False:` no `try` do parcial, ou um `return` entre os dois blocos, é
+#     visto (o bloco não roda / a fatia nem compila).
+# 🪤 O `try/except` de produção entra na fatia — mas o `_log_error` é espionado
+# e o teste REPROVA se aparecer "FALHOU", que é como o bloco vira silêncio.
+_INI_FATIA = ("        try:\n"
+              "            from models import Confidence as _Conf3\n"
+              "            _sem_medida = _selos_sem_medida(all_items)")
+_FIM_FATIA = "        # 🚨 AQUI é o fim da fila de quem rebaixa selo"
 
 
-def _rodar_selo_parcial(itens):
-    """RODA o bloco de produção que rebaixa o selo parcial.
+def _fatia_dos_rebaixamentos():
+    src = fonte("main.py")
+    assert src.count(_INI_FATIA) == 1, "âncora de início não é única"
+    a = src.index(_INI_FATIA)
+    assert src.count(_FIM_FATIA, a) >= 1, "âncora de fim não achada"
+    fatia = textwrap.dedent(src[a:src.index(_FIM_FATIA, a)])
+    # 🪤 SÓ os marcos de ALCANCE da fatia (onde começa, onde termina). O que o
+    # bloco FAZ é julgado pelos testes que o rodam — pôr `_n_par += 1` ou
+    # `if _n_par:` aqui faria o guarda reprovar dizendo "o recorte mudou" em vez
+    # de "o motor parou de rebaixar", que é mensagem errada pro defeito certo.
+    for marca in ("_selos_sem_medida(all_items)", "_e_parcial(_ob)",
+                  "except Exception as _epar:"):
+        assert marca in fatia, (
+            "a fatia não contém %r — o recorte parou de pegar do rebaixamento "
+            "anterior até o fim do parcial, e voltaria a ser cego" % marca)
+    return fatia
 
-    🪤 O recorte é SEM o `try/except` de produção de propósito: com ele, um erro
-    dentro do bloco viraria silêncio e o teste passaria verde.
-    """
-    ns = {"all_items": itens}
-    exec(compile(_trecho(_INI_PARCIAL, _FIM_PARCIAL), "selo-parcial", "exec"), ns)
-    return ns["_n_par"]
+
+def _rodar_os_rebaixamentos(itens, job_id="job-teste"):
+    """RODA os dois blocos finais de produção. Devolve (_n_par, logs)."""
+    from engine_rules import selos_sem_medida as _ssm
+    logs = []
+    ns = {"all_items": itens, "_selos_sem_medida": _ssm, "job_id": job_id,
+          "_log_error": lambda *a, **k: logs.append(
+              " ".join(str(x) for x in a))}
+    exec(compile(_fatia_dos_rebaixamentos(), "rebaixa-selo", "exec"), ns)
+    assert not [l for l in logs if "FALHOU" in l], (
+        "o bloco estourou e o `except` engoliu — o rebaixamento não aconteceu "
+        "em job nenhum: %r" % logs)
+    return ns.get("_n_par"), logs
+
+
+def _bancada():
+    """SETE itens, não um. 🪤 Com um item só, `all_items[:1]`, um `break` depois
+    do primeiro casamento e um laço que só olha o primeiro ficavam VERDES — e a
+    planilha real tem dezenas de linhas."""
+    return [
+        _Item("Tubulação SAN", Confidence.CONFIRMADO, _OBS_PARCIAL, 1.42),
+        _Item("Piso cerâmico", Confidence.CONFIRMADO, _OBS_SA, 120.0),
+        _Item("Ripas do forro", Confidence.CONFIRMADO, _OBS_PARCIAL_RIPAS, 1.18),
+        _Item("Duto de exaustão", Confidence.CONFIRMADO, _OBS_PARCIAL_DUTO, 3.93),
+        _Item("Quadro de aço", Confidence.CONFIRMADO, _OBS_ACO, 91.7),
+        _Item("Alvenaria", Confidence.ESTIMADO, _OBS_PARCIAL, 45.0),
+        # já veio com o aviso: a planilha é refeita (regra nº7)
+        _Item("Duto reprocessado", Confidence.CONFIRMADO,
+              _AVISO + _OBS_PARCIAL_DUTO, 3.93),
+    ]
+
+
+_PARCIAIS = ("Tubulação SAN", "Ripas do forro", "Duto de exaustão",
+             "Duto reprocessado")
 
 
 def test_o_motor_REBAIXA_o_branco_cujo_numero_e_parcial():
     """🚨 EXECUTA o bloco. O guarda antigo procurava, na árvore sintática, uma
     chamada chamada `_e_parcial` — trocar o laço por `for _it in []:` mantinha a
     chamada no fonte e a regra deixava de rodar em job nenhum."""
-    it = _Item("Tubulação SAN", Confidence.CONFIRMADO, _OBS_PARCIAL)
-    assert _rodar_selo_parcial([it]) == 1, "o motor não rebaixou nada"
-    assert it.confidence == Confidence.ESTIMADO
+    itens = _bancada()
+    n, _logs = _rodar_os_rebaixamentos(itens)
+    assert n == 4, (
+        "o motor rebaixou %r item(ns); os parciais desta bancada são 4 — se "
+        "rebaixou menos, o laço para no meio e o resto da planilha fica com "
+        "selo branco mentindo" % n)
+    por_desc = {i.description: i for i in itens}
+    for d in _PARCIAIS:
+        assert por_desc[d].confidence == Confidence.ESTIMADO, (
+            "%r continuou com selo MEDIDO depois do rebaixamento" % d)
+
+
+def test_NADA_e_promovido_nem_depois_do_contador():
+    """🚨 A regra dura nº1, EXECUTADA. Uma promoção de volta a CONFIRMADO uma
+    linha abaixo do `_n_par += 1` desfazia o rebaixamento inteiro — e o recorte
+    antigo terminava justamente naquela linha, então não via nada."""
+    itens = _bancada()
+    _rodar_os_rebaixamentos(itens)
+    por_desc = {i.description: i for i in itens}
+    assert por_desc["Alvenaria"].confidence == Confidence.ESTIMADO, (
+        "o bloco PROMOVEU um item que já estava laranja — regra dura nº1")
+    for d in _PARCIAIS:
+        assert por_desc[d].confidence != Confidence.CONFIRMADO, (
+            "%r voltou a CONFIRMADO depois de ser rebaixado" % d)
+
+
+def test_NAO_toca_em_medicao_legitima():
+    """🧪 Controle positivo dentro da execução: o quadro de aço (66ebe2d9) e o
+    piso hachurado são medições boas e têm que sair CONFIRMADO."""
+    itens = _bancada()
+    _rodar_os_rebaixamentos(itens)
+    por_desc = {i.description: i for i in itens}
+    for d in ("Piso cerâmico", "Quadro de aço"):
+        assert por_desc[d].confidence == Confidence.CONFIRMADO, (
+            "%r perdeu o selo MEDIDO sem motivo — alarme que acusa medição "
+            "legítima perde crédito e acaba desligado" % d)
+        assert "cobre só parte" not in (por_desc[d].observations or ""), (
+            "%r recebeu o aviso de parcial sem ser parcial" % d)
+
+
+def test_o_numero_NAO_muda_em_item_nenhum():
+    """Regra nº3, EXECUTADA: corrigir seria inventar o resto que ninguém mediu."""
+    itens = _bancada()
+    antes = [i.quantity for i in itens]
+    _rodar_os_rebaixamentos(itens)
+    assert [i.quantity for i in itens] == antes, (
+        "o bloco mexeu na quantidade de algum item — ele só rebaixa selo")
+
+
+def test_o_aviso_chega_ao_cliente_UMA_vez_so():
+    """Regra nº7: a planilha é refeita, e o item que já traz o aviso não pode
+    recebê-lo de novo. 🪤 O guarda antigo só procurava o `if ... not in _ob:` no
+    fonte; aqui o item reprocessado passa pelo bloco de verdade."""
+    itens = _bancada()
+    _rodar_os_rebaixamentos(itens)
+    por_desc = {i.description: i for i in itens}
+    novo = por_desc["Tubulação SAN"].observations
+    assert novo.count("cobre só parte") == 1, (
+        "o aviso não saiu ou saiu repetido: %r" % novo[:200])
+    assert _OBS_PARCIAL in novo, "o aviso comeu a observação original do motor"
+    refeito = por_desc["Duto reprocessado"].observations
+    assert refeito.count("cobre só parte") == 1, (
+        "a planilha refeita empilhou o aviso de novo: %r" % refeito[:250])
+
+
+def test_o_aviso_INTERNO_conta_os_rebaixados():
+    """O `if _n_par:` ficava fora do recorte antigo — dava pra apagar o log e
+    ninguém aqui saberia que o motor parou de registrar o que rebaixou."""
+    _n, logs = _rodar_os_rebaixamentos(_bancada())
+    parciais = [l for l in logs if "selo-parcial-rebaixado" in l]
+    assert len(parciais) == 1, (
+        "o motor registrou %d aviso(s) de selo-parcial; esperado exatamente 1 "
+        "com a contagem: %r" % (len(parciais), logs))
+    assert "4 item(ns)" in parciais[0], (
+        "o aviso interno não diz quantos foram rebaixados: %r" % parciais[0])
+
+
+def test_o_bloco_DE_CIMA_continua_rodando_na_mesma_fatia():
+    """🔑 A fatia começa no rebaixamento anterior de propósito: assim um `return`
+    ou um `if False:` colocado ENTRE os dois blocos deixa de ser invisível.
+    Este item (branco com quantidade ZERO) é rebaixado lá em cima e, por isso,
+    NÃO pode ser contado de novo pelo parcial."""
+    zero = _Item("Forro sem quantidade", Confidence.CONFIRMADO, _OBS_PARCIAL, 0.0)
+    itens = [zero, _Item("Tubulação SAN", Confidence.CONFIRMADO, _OBS_PARCIAL, 1.42)]
+    n, _logs = _rodar_os_rebaixamentos(itens)
+    assert zero.confidence == Confidence.ESTIMADO, (
+        "o rebaixamento de quem saiu SEM QUANTIDADE parou de rodar")
+    assert "NÃO MEDIDO" in (zero.observations or ""), zero.observations[:120]
+    assert n == 1, (
+        "o parcial contou %d; o item já rebaixado lá em cima não é mais branco "
+        "e não pode entrar na conta de novo" % n)
 
 def test_so_mexe_em_quem_esta_BRANCO():
     """Se tocasse em laranja, seria trabalho à toa; se promovesse, seria nº1."""

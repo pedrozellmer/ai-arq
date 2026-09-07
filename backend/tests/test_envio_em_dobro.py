@@ -205,20 +205,31 @@ def test_a_rota_USA_a_trava_antes_de_criar_o_job(rota_de_upload):
     em vez de abrir outro processamento.
     """
     import main as M
-    # 1º envio: a trava deixa passar; o job nasce e fica registrado.
-    # (A criação de verdade é o `_stream_upload_to_disk`, que aqui levanta —
-    # então o que interessa registrar é feito à mão, como a rota faz.)
-    assinatura = M._assinatura_do_envio(
-        "u-cliente-41", "Harmonia - 9º Pavimentos",
-        [(_FakeUpload("ARQ_HARMONIA_R02.dwg", 41_000_000), "", "")])
-    M._registrar_envio(assinatura, "b249f3e4")
 
-    # 2º envio, 1 segundo depois: MESMO usuário, MESMO projeto, MESMO arquivo.
+    # 1º POST — pela ROTA, não à mão. Não há envio anterior, então ela tem que
+    # seguir pro caminho de criar o job; o `_stream_upload_to_disk` encenado
+    # levanta logo depois de o registro já ter acontecido.
+    _limpar()
+    with pytest.raises(AssertionError, match="CRIAR UM JOB NOVO"):
+        rota_de_upload()
+
+    with M._ENVIOS_LOCK:
+        registrados = dict(M._ENVIOS_RECENTES)
+    assert len(registrados) == 1, (
+        "o 1º POST não deixou rastro do envio (%r). Sem registro, o 2º POST "
+        "não tem com o que comparar: os dois jobs entram em processamento e a "
+        "memória dobra — o caso de 26/08 inteiro, de novo." % (registrados,))
+    job_do_primeiro = list(registrados.values())[0][0]
+    assert job_do_primeiro, "registrou o envio com job_id vazio: %r" % (
+        registrados,)
+
+    # 2º POST, 1 segundo depois: MESMO usuário, MESMO projeto, MESMO arquivo.
     r = rota_de_upload()
     assert r.get("duplicado") is True, (
         "a rota não reconheceu o envio repetido: %r" % r)
-    assert r.get("job_id") == "b249f3e4", (
-        "a rota devolveu %r em vez do job que já estava processando" % r.get("job_id"))
+    assert r.get("job_id") == job_do_primeiro, (
+        "a rota devolveu %r em vez do job %r que o PRIMEIRO POST abriu"
+        % (r.get("job_id"), job_do_primeiro))
 
 
 def test_CONTROLE_envio_NOVO_nao_e_barrado_pela_trava(rota_de_upload):

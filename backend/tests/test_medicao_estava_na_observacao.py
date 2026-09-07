@@ -128,6 +128,72 @@ def test_extracao_vazia_nao_quebra_nem_preenche():
     assert q("área hachurada do layer -TEFOR = 26.54 m²", "m²", None, None) is None
 
 
+class _ExtracaoSemRessalva:
+    """A prancha do cliente-19 sem ressalva de escala — o caso normal."""
+    metadata = {}
+
+
+def _laco_de_itens_de_producao(items, areas=None, compr=None):
+    """Roda o LAÇO INTEIRO `for item_data in result.get("items", [])` de
+    `process_job` — código de produção recortado por AST — e devolve
+    `(dxf_items, escopo, logs)`.
+
+    🚨 06/09/2026, 2ª rodada. A fatia anterior parava no fim do `if qty == 0:`
+    e afirmava sobre a variável solta `qty`. Nada provava que aquele `qty` era o
+    que ia parar no `BudgetItem(...)`: qualquer coisa entre os dois (o `qty = 1`
+    defensivo do `confirmado`, uma normalização que reescrevesse o número)
+    devolvia planilha zerada com o guarda VERDE. Agora o recorte vai até o
+    `dxf_items.append(item)` e o que se afirma é `item.quantity` — o número que
+    o cliente vê.
+
+    🔑 E roda com MAIS DE UM item: a prancha real do cliente-19 tinha 307
+    linhas. Com um item só, `items[:1]` ou um `break` passavam verdes.
+
+    🪤 Os auxiliares (`sf`, `_XCHECK_ON`, os imports) também são recortados do
+    `main.py` — nenhum deles é cópia escrita aqui.
+    """
+    _aqui = os.path.dirname(os.path.abspath(__file__))
+    if _aqui not in sys.path:
+        sys.path.insert(0, _aqui)
+    import _executa
+    import main
+
+    logs = []
+    escopo = dict(vars(main))          # os colaboradores de módulo, de verdade
+    escopo.update({
+        "result": {"items": list(items)},
+        "extraction": _ExtracaoSemRessalva(),
+        "_areas_ly": dict(AREAS if areas is None else areas),
+        "_compr_ly": dict(COMPR if compr is None else compr),
+        "_n_resgate_proc": 0,
+        "_n_item_perdido": 0,
+        "dxf_items": [],
+        "_dxf_nome": "PRANCHA-01",
+        "_dxf_sem_procedencia": False,
+        "_hard_area_by_cat": {}, "_hard_len_by_cat": {},
+        "_multi_hatch_sums": set(),
+        "_log_error": lambda stage, msg, *a, **k: logs.append((stage, msg)),
+        "os": os,
+        "dxf_path": "/work/j/prancha.dxf",
+        "job_id": "job-teste",
+    })
+    _executa.roda("process_job",
+                  "from analyzer import _normalize_br_number as _norm_br", escopo)
+    _executa.roda("process_job",
+                  "from models import SheetInfo, SheetType, ProjectData, "
+                  "BudgetItem, Confidence", escopo)
+    _executa.roda("process_job", "def sf(v):", escopo)
+    _executa.roda("process_job", "_XCHECK_ON = os.environ.get(", escopo)
+    # tamanho=3 é o `for item_data ...` inteiro (0=a chamada, 1=o `if qty == 0:`,
+    # 2=o `try:` — que sozinho nem compila, tem `continue` dentro).
+    _executa.roda("process_job", "_q_proc = _quantidade_da_procedencia(",
+                  escopo, tamanho=3)
+    assert escopo["_n_item_perdido"] == 0, (
+        "item morreu dentro do laço de produção — o guarda não mediu nada: %s"
+        % (logs,))
+    return escopo["dxf_items"], escopo, logs
+
+
 def test_o_call_site_usa_isso_e_NAO_mexe_no_selo():
     """🪤 Guarda de CALL SITE + regra nº1 no mesmo teste.
 
@@ -141,67 +207,68 @@ def test_o_call_site_usa_isso_e_NAO_mexe_no_selo():
     jogado fora e a quantidade fica ZERO — e ele passou VERDE. Ou seja: passava
     com o defeito de 26/08 reaberto, exatamente o que ele existe pra impedir.
 
-    🔑 Agora ele EXECUTA. O bloco `if qty == 0:` mora no meio de `process_job`
-    (3.900 linhas, lê CAD e chama a IA), então a gente recorta o statement do
-    próprio `main.py` pela árvore sintática e roda com um escopo montado à mão
-    — ver `_executa.py`. O que roda é o código de produção; o que se afirma é o
-    `qty` que sai dele.
+    🔑 Agora ele EXECUTA o laço de itens inteiro de `process_job` e afirma sobre
+    o `BudgetItem` que SAI — três linhas de uma vez: a de m², a de metro linear
+    e uma honestamente zerada.
     """
-    _aqui = os.path.dirname(os.path.abspath(__file__))
-    sys.path.insert(0, _aqui)
-    import _executa
-    import main
+    itens, escopo, _ = _laco_de_itens_de_producao([
+        {"item_num": "1", "description": "Revestimento de parede",
+         "unit": "m²", "quantity": 0, "confidence": "estimado",
+         "observations": ("Fonte: área hachurada do layer '-TEPAR' = 268.39 "
+                          "m² (soma de 8 hachuras). Pode ser acabamento misto.")},
+        {"item_num": "2", "description": "Execução de parede nova",
+         "unit": "ml", "quantity": 0, "confidence": "estimado",
+         "observations": "Fonte: comprimento do layer '-TEPAR' = 302.14 m."},
+        {"item_num": "3", "description": "Pintura látex sobre reboco",
+         "unit": "m²", "quantity": 0, "confidence": "estimado",
+         "observations": "Extração geométrica vazia — verificar em campo."},
+    ])
 
-    escopo = {
-        "qty": 0,
-        "conf": "estimado",                      # o selo que a IA deu
-        "item_data": {
-            "observations": ("Fonte: área hachurada do layer '-TEPAR' = 268.39 "
-                             "m² (soma de 8 hachuras). Pode ser acabamento misto."),
-            "unit": "m²",
-        },
-        "_areas_ly": dict(AREAS),
-        "_compr_ly": dict(COMPR),
-        "_n_resgate_proc": 0,
-        "_quantidade_da_procedencia": main._quantidade_da_procedencia,
-    }
-    _executa.roda("process_job", "_q_proc = _quantidade_da_procedencia(",
-                  escopo, tamanho=1)
-
-    assert escopo["qty"] == 268.39, (
-        "a linha mais cara do cliente-19 voltou a sair ZERADA com a medição "
-        "escrita nela mesma — o resgate roda e o resultado não chega no qty "
-        "(qty=%r)" % escopo["qty"])
-    assert escopo["_n_resgate_proc"] == 1, (
-        "o resgate aconteceu e não foi contado — sem o contador o conserto é "
-        "invisível no log")
-    assert escopo["conf"] == "estimado", (
-        "o resgate mexeu no selo (%r) — preencher quantidade e carimbar "
-        "'medido' são passos diferentes (regra dura nº1)" % escopo["conf"])
+    assert len(itens) == 3, (
+        "o laço de produção perdeu linha pelo caminho (%d de 3) — na prancha "
+        "real do cliente-19 eram 307" % len(itens))
+    saida = [(i.description, i.unit, i.quantity, i.confidence.value)
+             for i in itens]
+    assert saida == [
+        ("Revestimento de parede", "m²", 268.39, "estimado"),
+        ("Execução de parede nova", "ml", 302.14, "estimado"),
+        ("Pintura látex sobre reboco", "m²", 0.0, "estimado"),
+    ], (
+        "as linhas mais caras do cliente-19 voltaram a sair ZERADAS com a "
+        "medição escrita nelas mesmas — ou o resgate não roda, ou o número não "
+        "chega no BudgetItem que vira planilha: %s" % (saida,))
+    assert escopo["_n_resgate_proc"] == 2, (
+        "o contador do resgate diz %r e foram 2 linhas resgatadas — sem o "
+        "contador certo o conserto é invisível no log"
+        % escopo["_n_resgate_proc"])
+    # regra dura nº1: preencher quantidade ≠ carimbar 'medido'
+    assert [i.confidence.value for i in itens] == ["estimado"] * 3, (
+        "o resgate promoveu o selo — preencher quantidade e carimbar 'medido' "
+        "são passos diferentes (regra dura nº1): %s"
+        % [i.confidence.value for i in itens])
 
 
 def test_o_call_site_NAO_inventa_quando_a_extracao_nao_confirma():
-    """🧪 Controle positivo do mesmo bloco: com o layer inventado, o statement
-    real tem que deixar a linha zerada. Sem isto, o teste acima passaria com um
-    `qty = 268.39` fixo no lugar do resgate."""
-    _aqui = os.path.dirname(os.path.abspath(__file__))
-    sys.path.insert(0, _aqui)
-    import _executa
-    import main
-
-    escopo = {
-        "qty": 0, "conf": "estimado",
-        "item_data": {"observations": "área hachurada do layer -INVENTADO = 99.90 m²",
-                      "unit": "m²"},
-        "_areas_ly": dict(AREAS), "_compr_ly": dict(COMPR),
-        "_n_resgate_proc": 0,
-        "_quantidade_da_procedencia": main._quantidade_da_procedencia,
-    }
-    _executa.roda("process_job", "_q_proc = _quantidade_da_procedencia(",
-                  escopo, tamanho=1)
-    assert escopo["qty"] == 0 and escopo["_n_resgate_proc"] == 0, (
+    """🧪 Controle positivo do mesmo laço: com o layer inventado E com o número
+    que não confere, o código real tem que deixar as duas linhas zeradas. Sem
+    isto, o teste acima passaria com um `qty = 268.39` fixo no lugar do
+    resgate."""
+    itens, escopo, _ = _laco_de_itens_de_producao([
+        {"item_num": "1", "description": "Revestimento de parede",
+         "unit": "m²", "quantity": 0, "confidence": "estimado",
+         "observations": "área hachurada do layer -INVENTADO = 99.90 m²"},
+        {"item_num": "2", "description": "Forro de gesso acartonado",
+         "unit": "m²", "quantity": 0, "confidence": "estimado",
+         "observations": "área hachurada do layer -TEFOR = 500.00 m²"},
+    ])
+    assert [(i.description, i.quantity) for i in itens] == [
+        ("Revestimento de parede", 0.0),
+        ("Forro de gesso acartonado", 0.0),
+    ], (
         "colou um número da IA numa linha honestamente zerada — é o "
-        "experimento REPROVADO de 25/08 voltando pela porta dos fundos")
+        "experimento REPROVADO de 25/08 voltando pela porta dos fundos: %s"
+        % [(i.description, i.quantity) for i in itens])
+    assert escopo["_n_resgate_proc"] == 0, escopo["_n_resgate_proc"]
 
 
 def test_o_resgate_VIRA_linha_de_log():

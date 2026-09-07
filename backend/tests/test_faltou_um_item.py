@@ -287,17 +287,71 @@ def test_o_painel_MOSTRA_os_recados():
         "o bloco existe mas não entra no que é exibido")
 
 
-def test_o_texto_do_CLIENTE_e_escapado_no_painel():
+def _render_revision_feedback(dados):
+    """RODA `renderRevisionFeedback` do admin.html num motor JS de verdade.
+
+    🪤 06/09 (cético): o guarda daqui conferia que a chamada se CHAMA
+    `esc` — nunca o que `esc` FAZ. Trocar a implementação (ou sombrear o
+    nome com um `esc = s => s`) desligava o escape inteiro sem mover uma
+    vírgula na árvore de texto que ele inspecionava.
+
+    `window.fmtBR` entra como IDENTIDADE de propósito: assim o que ela devolve
+    também passa pelo escape sob teste (`esc(window.fmtBR(...))`).
+    """
+    import json as _json
+    import _jsbancada as _jb
+    js = _jb.motor("var window = this; window.window = window; "
+                   "window.fmtBR = function(s){ return String(s); }; null;")
+    js.evaljs(_jb.funcao_js("renderRevisionFeedback", "admin.html") + chr(10) + "null;")
+    return js.evaljs("renderRevisionFeedback(dukpy[%s])" % _json.dumps("d"), d=dados)
+
+
+# a carga tem os quatro caracteres que o `esc` do painel promete tratar
+_XSS = '<img src=x onerror="alert(1)">&fim'
+_XSS_ESCAPADO = "&lt;img src=x onerror=&quot;alert(1)&quot;&gt;&amp;fim"
+
+
+@pytest.mark.parametrize("campo", ["texto", "job_id", "quando"])
+def test_o_texto_do_CLIENTE_e_escapado_no_painel(campo):
     """🚨 O recado é texto livre escrito pelo cliente e vai pro painel por
     innerHTML. Sem escape, um cliente (ou alguém que use a conta dele) injeta
-    HTML/JS na tela do admin."""
-    html = _admin_html()
-    i = html.index("faltouHtml")
-    bloco = html[i:i + 900]
-    assert "esc(f.texto" in bloco, (
-        "o texto do cliente entra no painel SEM escapar — porta de injeção "
-        "na tela do admin")
-    assert "esc(f.job_id)" in bloco
+    HTML/JS na tela do admin.
+
+    Agora o guarda EXECUTA a função da tela e olha o HTML que ela devolve,
+    nos TRÊS campos que o cliente influencia.
+    """
+    recado = {"job_id": "job-limpo", "quando": "2026-09-01T12:00:00Z",
+              "texto": "faltou o forro de gesso"}
+    recado[campo] = _XSS
+    html = _render_revision_feedback(
+        {"revisao_inline": {"faltou": 1, "faltou_recados": [recado]}})
+
+    assert "faltou um item" in html, (
+        "o bloco do 'faltou' nem foi renderizado — o guarda passaria a vácuo")
+    assert _XSS_ESCAPADO in html, (
+        "o campo %r saiu do escape sem os quatro caracteres tratados. HTML: %r"
+        % (campo, html[:400]))
+    assert "<img src=x" not in html, (
+        "TAG CRUA do cliente no innerHTML do admin pelo campo %r — porta de "
+        "injeção na tela do admin" % campo)
+    assert 'onerror="alert(1)"' not in html, (
+        "as aspas do cliente sobreviveram pelo campo %r: dá pra fechar um "
+        "atributo e abrir outro" % campo)
+
+
+def test_o_escape_do_painel_TRATA_os_quatro_caracteres():
+    """🧪 Controle positivo do `esc`: cada caractere, um a um.
+
+    Sem isto, um `esc` que trocasse só o `<` (deixando `>` e `"`) passaria no
+    guarda de cima pela carga inteira e falharia numa carga diferente.
+    """
+    esperado = {"<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;"}
+    for bruto, saida in esperado.items():
+        html = _render_revision_feedback(
+            {"revisao_inline": {"faltou": 1, "faltou_recados": [
+                {"job_id": "j", "quando": "q", "texto": "A" + bruto + "B"}]}})
+        assert "A" + saida + "B" in html, (
+            "o caractere %r não virou %r no painel" % (bruto, saida))
 
 
 # ══════════════════════════════════════════════════════════════════════════

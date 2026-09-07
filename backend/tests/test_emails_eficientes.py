@@ -27,6 +27,7 @@ tirar conteúdo nenhum:
 "Como lemos o seu projeto" — os avisos que passaram a chegar ao cliente em
 24/08. Encurtar aquilo desfaria o conserto.
 """
+import html as _hl
 import io
 import os
 import re
@@ -230,10 +231,43 @@ _EMAILS = {
 }
 
 
+# 🪤 06/09 — UM jogo de argumentos por montador NÃO é um e-mail por montador.
+# `_build_falha_email` carrega DOIS e-mails diferentes dentro dele
+# (`reprocessavel` True/False) e o False ainda se abre em TRÊS diagnósticos.
+# Com só o True na bancada, o e-mail de "precisamos de outro arquivo" — um dos
+# mais enviados — podia perder o rodapé LGPD inteiro (regra dura nº6) com o
+# guarda verde. Cada ramo aqui é um e-mail que chega na caixa de alguém.
+_RAMOS = {
+    "_build_falha_email": {
+        "reprocessavel": (_NOME, _PROJ, True, "dxf ilegivel"),
+        "dwg_nao_abre": (_NOME, _PROJ, False, "nao foi possivel abrir o DWG (convert)"),
+        "arquivo_grande": (_NOME, _PROJ, False, "arquivo grande demais pro limite"),
+        "sem_cotas": (_NOME, _PROJ, False, "sem cotas no desenho"),
+    },
+}
+
+
+def _casos_de_email():
+    """(id, nome, args) de TODO e-mail que o produto envia — um por RAMO, não
+    um por função."""
+    fora = []
+    for nome in sorted(_EMAILS):
+        for rotulo, args in sorted(_RAMOS.get(nome, {"": _EMAILS[nome]}).items()):
+            fora.append(("%s[%s]" % (nome, rotulo) if rotulo else nome, nome, args))
+    return fora
+
+
+_CASOS = _casos_de_email()
+
+
+def _html_de(nome, args):
+    r = getattr(main, nome)(*args)
+    return str(r[1] if isinstance(r, tuple) else r)
+
+
 def _html_do_email(nome):
     """Monta o e-mail de verdade e devolve o HTML que sairia pro cliente."""
-    r = getattr(main, nome)(*_EMAILS[nome])
-    return str(r[1] if isinstance(r, tuple) else r)
+    return _html_de(nome, _EMAILS[nome])
 
 
 def test_a_lista_de_emails_cobre_TODOS_os_montadores():
@@ -247,21 +281,48 @@ def test_a_lista_de_emails_cobre_TODOS_os_montadores():
         "montador de e-mail fora da bancada do rodapé LGPD: %s" % (sorted(faltando),))
 
 
-@pytest.mark.parametrize("nome", sorted(_EMAILS))
-def test_o_rodape_de_privacidade_continua_em_todos(nome):
+@pytest.mark.parametrize("rotulo,nome,args", _CASOS,
+                         ids=[c[0] for c in _CASOS])
+def test_o_rodape_de_privacidade_continua_em_todos(rotulo, nome, args):
     """Regra dura nº6, no HTML QUE SAI — não no fonte que o monta.
 
     🪤 "sai do _email_wrap, então basta ele estar em uso" era a justificativa
     do guarda antigo. Só que basta o rodapé virar string vazia dentro do
     próprio `_email_wrap` pra ele sumir de todos os 13 e-mails de uma vez, com
-    o texto ainda escrito no arquivo."""
-    html = _html_do_email(nome)
+    o texto ainda escrito no arquivo.
+
+    🪤 06/09 — e um montador não é um e-mail: os quatro ramos do
+    `_build_falha_email` entram aqui um por um."""
+    html = _html_de(nome, args)
     assert "Política de Privacidade" in html, (
         "%s foi montado SEM o link da Política de Privacidade — regra dura "
-        "nº6" % (nome,))
+        "nº6" % (rotulo,))
     assert "Para remover seus dados" in html, (
         "%s foi montado SEM a saída de dados (LGPD): o cliente não tem como "
-        "pedir remoção" % (nome,))
+        "pedir remoção" % (rotulo,))
+
+
+def test_CONTROLE_os_ramos_da_falha_sao_QUATRO_emails_diferentes():
+    """🧪 Sem isto a parametrização acima seria enfeite: quatro linhas verdes
+    montando o MESMO e-mail quatro vezes não cobrem ramo nenhum.
+
+    O que separa os ramos é justamente o que o cliente lê primeiro — o assunto
+    e o preheader (a linha da caixa de entrada)."""
+    ramos = _RAMOS["_build_falha_email"]
+    assinaturas = {}
+    for rotulo, args in ramos.items():
+        assunto, html = main._build_falha_email(*args)
+        pre = re.search(r'mso-hide:all;">(.*?)(?:&zwnj;|</div>)', html, re.S)
+        assert pre, "%s saiu sem preheader" % rotulo
+        assinaturas[rotulo] = (assunto, pre.group(1).strip())
+    assert len(set(assinaturas.values())) == len(ramos), (
+        "ramos do e-mail de falha que chegam IGUAIS na caixa de entrada: %s"
+        % (assinaturas,))
+    # E o ramo que não tem reprocessamento não pode oferecer reprocessar.
+    for rotulo in ("dwg_nao_abre", "arquivo_grande", "sem_cotas"):
+        assert "não resolve" in assinaturas[rotulo][1], (
+            "%s: o preheader promete o caminho errado — %r"
+            % (rotulo, assinaturas[rotulo][1]))
 
 
 def test_o_rodape_sai_do_proprio_email_wrap():
@@ -376,6 +437,70 @@ def test_o_planilha_pronta_NAO_foi_encurtado():
         assert acao in passos, "sumiu um caminho do 'o que fazer agora': %s" % acao
 
 
+# ── O que o cliente LÊ, não o que está escrito no HTML ────────────────────
+# 🪤 06/09 — este guarda conferia `"medido" in html and "estimativa" in html`
+# no e-mail INTEIRO. As duas palavras existem em outros dois pontos do mesmo
+# e-mail (a prosa "cada item dizendo se foi medido ou estimado" e o alt da
+# imagem "itens medidos e estimativas rotuladas"), então dava pra apagar a
+# REGRA de dentro da linha de honestidade — deixando só o slogan "cada número
+# diz de onde veio" — e o guarda seguia verde. E qualquer truque que mantenha
+# a string no HTML mas a esconda do leitor (comentário, display:none) também
+# passava. Agora o que se lê é o BLOCO, e só o que fica visível nele.
+_ESTILO_OCULTO = re.compile(
+    r"display\s*:\s*none|visibility\s*:\s*hidden|mso-hide\s*:\s*all"
+    r"|font-size\s*:\s*0(?![.\d])", re.I)
+_TAGS_DE_BLOCO = r"div|span|p|td|tr|table|section|a"
+
+
+def _fim_do_elemento(h, pos, tag):
+    """Índice logo depois do fechamento que casa com a abertura terminada em
+    `pos` (aninhamento contado)."""
+    padrao = re.compile(r"</?%s\b" % tag, re.I)
+    profundidade = 1
+    while profundidade:
+        m = padrao.search(h, pos)
+        if not m:
+            return len(h)
+        profundidade += -1 if h[m.start():m.start() + 2] == "</" else 1
+        pos = m.end()
+    j = h.find(">", pos)
+    return len(h) if j < 0 else j + 1
+
+
+def _sem_ocultos(h):
+    """Tira o que o leitor não enxerga: bloco com display:none e companhia."""
+    while True:
+        for m in re.finditer(r"<(%s)\b[^>]*>" % _TAGS_DE_BLOCO, h, re.I):
+            estilo = re.search(r'style\s*=\s*"([^"]*)"', m.group(0), re.I)
+            if estilo and _ESTILO_OCULTO.search(estilo.group(1)):
+                h = h[:m.start()] + " " + h[_fim_do_elemento(h, m.end(), m.group(1)):]
+                break
+        else:
+            return h
+
+
+def _texto_visivel(h):
+    """O e-mail como chega nos olhos: sem comentário HTML, sem bloco
+    escondido, sem tag, com as entidades resolvidas."""
+    h = re.sub(r"<!--.*?-->", " ", h, flags=re.S)
+    h = _sem_ocultos(h)
+    h = re.sub(r"<[^>]+>", " ", h)
+    return re.sub(r"\s+", " ", _hl.unescape(h)).strip()
+
+
+def _bloco_com(h, marca):
+    """O <div> que contém `marca` — vazio se a marca só existe dentro de um
+    comentário HTML (ou seja: se ela não está mais no e-mail)."""
+    h = re.sub(r"<!--.*?-->", " ", h, flags=re.S)
+    k = h.find(marca)
+    if k < 0:
+        return ""
+    i = h.rfind("<div", 0, k)
+    if i < 0:
+        return ""
+    return h[i:_fim_do_elemento(h, h.find(">", i) + 1, "div")]
+
+
 def test_a_linha_de_honestidade_continua_no_primeiro_email():
     """A marca do produto é dizer de onde veio cada número. Isso vai no PRIMEIRO
     e-mail de propósito e não entra em corte nenhum.
@@ -383,17 +508,44 @@ def test_a_linha_de_honestidade_continua_no_primeiro_email():
     🪤 A versão antiga lia o CORPO da função no fonte. Embrulhar o div em
     `("" if True else ...)` tira a frase do e-mail e deixa o texto no arquivo:
     a assinatura da regra dura nº1 sumia do primeiro contato com o cliente e o
-    guarda não acusava. Aqui o e-mail é montado."""
+    guarda não acusava. Aqui o e-mail é montado — e lido."""
     html = _html_do_email("_build_welcome_email")
-    assert "de onde veio" in html, (
-        "o e-mail de boas-vindas saiu SEM a linha de honestidade — a promessa "
-        "da regra dura nº1 sumiu do primeiro contato com o cliente")
-    assert "Nosso compromisso" in html, (
-        "a frase perdeu o rótulo que a destaca no e-mail")
-    # A linha só vale se disser a REGRA: medido × estimativa.
-    assert "medido" in html and "estimativa" in html, (
-        "a linha ficou sem a distinção medido × estimativa, que é o conteúdo "
-        "dela — sem isso é slogan, não compromisso")
+    lido = _texto_visivel(html)
+    assert "Nosso compromisso" in lido, (
+        "o e-mail de boas-vindas chegou SEM a linha de honestidade visível — a "
+        "promessa da regra dura nº1 sumiu do primeiro contato com o cliente")
+
+    linha = _texto_visivel(_bloco_com(html, "Nosso compromisso"))
+    assert linha and linha in lido, (
+        "o bloco da linha de honestidade está no HTML mas não chega ao leitor "
+        "(escondido ou dentro de um bloco escondido): %r" % (linha[:120],))
+    assert "de onde veio" in linha, (
+        "a linha perdeu a promessa — sobrou o rótulo sem o compromisso")
+    # A linha só vale se disser a REGRA, e a regra tem que estar NELA.
+    # 🪤 "medido" e "estimativa" existem em outros pontos do mesmo e-mail: se a
+    # conferência for no HTML inteiro, ela absolve a linha vazia de conteúdo.
+    for palavra in ("medido", "estimativa"):
+        assert palavra in linha, (
+            "a linha de honestidade ficou sem %r — a distinção medido × "
+            "estimativa É o conteúdo dela; sem isso é slogan, não "
+            "compromisso. Linha lida: %r" % (palavra, linha))
+
+
+def test_CONTROLE_o_leitor_de_texto_visivel_sabe_esconder():
+    """🧪 Controle positivo do leitor: se `_texto_visivel` não enxergasse a
+    diferença entre "está no HTML" e "o cliente lê", o guarda de cima voltaria
+    a ser cego dos dois jeitos que ele existe pra pegar."""
+    aberto = '<div style="color:#333">Nosso compromisso: medido e estimativa</div>'
+    assert "compromisso" in _texto_visivel(aberto)
+    assert "compromisso" not in _texto_visivel(
+        '<div style="display:none;">%s</div>' % aberto), "display:none passou"
+    assert "compromisso" not in _texto_visivel(
+        "<!-- %s -->" % aberto), "comentário HTML passou"
+    assert _bloco_com("<!-- %s -->" % aberto, "Nosso compromisso") == "", (
+        "o recorte do bloco achou a frase dentro de um comentário")
+    # E não pode comer o que é visível: o irmão de um bloco oculto continua.
+    dois = '<div style="display:none;">some</div><div>fica aqui</div>'
+    assert "fica aqui" in _texto_visivel(dois) and "some" not in _texto_visivel(dois)
 
 
 def test_CONTROLE_a_linha_de_honestidade_sabe_sumir(monkeypatch):

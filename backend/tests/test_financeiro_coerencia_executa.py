@@ -13,12 +13,26 @@ import main  # noqa: E402
 JOB = "job-coer-1"
 ITEM = {"id": "11111111-1111-4111-8111-111111111111",
         "description": "Porcelanato 60x60", "quantity": 1062.0, "unit": "m2"}
+# 🧪 o item EM DIA que fica ao lado do que mudou — sem ele, um veredito fixo
+# ("mudou" pra todo mundo) satisfaria o controle positivo.
+ITEM_EM_DIA = {"id": "22222222-2222-4222-8222-222222222222",
+               "description": "Porta de madeira 80x210", "quantity": 12.0, "unit": "un"}
 
 
 def _linha(**k):
     base = {"id": "l1", "origem": "quantitativo", "origem_ref_id": ITEM["id"],
             "origem_ref_pos": None, "origem_quantidade": 1062.0,
             "origem_unidade": "m2", "descricao": "Porcelanato 60x60"}
+    base.update(k)
+    return base
+
+
+def _linha_em_dia(**k):
+    """Lançamento do quantitativo cujo item NÃO mudou — o retrato bate."""
+    base = {"id": "l9", "origem": "quantitativo", "origem_ref_id": ITEM_EM_DIA["id"],
+            "origem_ref_pos": None, "origem_quantidade": ITEM_EM_DIA["quantity"],
+            "origem_unidade": ITEM_EM_DIA["unit"],
+            "descricao": ITEM_EM_DIA["description"]}
     base.update(k)
     return base
 
@@ -36,6 +50,20 @@ def _servico(monkeypatch, lanc, itens):
         return (200, [])
     monkeypatch.setattr(main, "_supa_rest_service", fake)
     return lidos
+
+
+def _so_deste_job(lidos):
+    """🔒 nº2: toda consulta da coerência filtra ESTE job na URL.
+
+    🪤 O guarda montava o aparato de "quem foi consultado também é fato" e só
+    perguntava se `project_items` aparecia. Sem o filtro, a coerência de um
+    projeto passa a contar lançamento (e item) de TODOS — isolamento caindo
+    calado, com a leitura ficando mais errada quanto mais clientes a gente tem.
+    """
+    assert lidos, "a função não consultou nada"
+    for p in lidos:
+        assert ("job_id=eq.%s" % JOB) in p, (
+            "consulta sem o filtro do projeto: %r — ela varre a base inteira" % p)
 
 
 def test_so_linhas_livres_ou_de_cotacao_nao_desatualizam(monkeypatch):
@@ -61,13 +89,26 @@ def test_so_linhas_livres_ou_de_cotacao_nao_desatualizam(monkeypatch):
     assert c["mudados"] == 0 and c["frase"] == ""
     assert not [p for p in lidos if "project_items" in p], (
         "foi ler o quantitativo pra conferir linha que não nasceu dele: %s" % lidos)
+    _so_deste_job(lidos)
 
     # 🧪 Controle positivo: a MESMA base, com linha DO QUANTITATIVO, lê e acusa.
-    lidos2 = _servico(monkeypatch, (200, [_linha()]),
-                      (200, [{**ITEM, "quantity": 990.0}]))
+    # 🪤 São DUAS linhas do quantitativo de propósito: uma cujo item foi de 1062
+    # pra 990 e outra cujo item está EM DIA. Com uma linha só, um veredito FIXO
+    # (`est = "mudou"`) satisfazia `desatualizado is True and mudados == 1` sem
+    # a régua ter olhado nada — o controle não controlava.
+    lidos2 = _servico(monkeypatch, (200, [_linha(), _linha_em_dia()]),
+                      (200, [{**ITEM, "quantity": 990.0}, dict(ITEM_EM_DIA)]))
     c2 = main._coerencia_do_financeiro(JOB)
     assert [p for p in lidos2 if "project_items" in p], (
         "nem a linha do quantitativo faz a função ler o quantitativo")
-    assert c2["desatualizado"] is True and c2["mudados"] == 1, (
+    _so_deste_job(lidos2)
+    assert c2["n"] == 2, c2
+    assert c2["desatualizado"] is True, (
         "controle: o item mudou de 1062 para 990 e a régua não viu — o teste "
         "acima não prova nada")
+    assert c2["mudados"] == 1, (
+        "a régua acusou %r de 2 lançamentos: ou ela não distingue o item que "
+        "mudou do que está em dia, ou está devolvendo veredito fixo — o "
+        "arquiteto veria alarme sobre uma linha correta: %s" % (c2["mudados"], c2))
+    assert c2["removidos"] == 0 and c2["ambiguos"] == 0 and c2["n_velhos"] == 1, c2
+    assert c2["frase"] == "1 com item que mudou de quantidade", c2["frase"]

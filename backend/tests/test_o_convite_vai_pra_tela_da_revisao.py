@@ -36,6 +36,8 @@ import json
 import os
 import sys
 
+import pytest
+
 _AQUI = os.path.dirname(os.path.abspath(__file__))
 _BACKEND = os.path.dirname(_AQUI)
 sys.path.insert(0, _BACKEND)
@@ -87,9 +89,13 @@ var authFetch = null;
 """ % _LINHA_UNIDADES
 
 
-def _tela(passos, expressao, ids=None, com_utils=False):
-    """Monta a tela da revisão a partir do HTML REAL e roda os passos."""
-    els = nav.elementos(_RV, ids if ids is not None else _IDS)
+def _tela(passos, expressao, ids=None, com_utils=False, html_dom=None):
+    """Monta a tela da revisão a partir do HTML REAL e roda os passos.
+
+    `html_dom` troca SÓ as TAGS (pra encenar uma forma de sumir); o JavaScript
+    continua vindo do arquivo de produção.
+    """
+    els = nav.elementos(html_dom or _RV, ids if ids is not None else _IDS)
     pedacos = [nav.montar(els), _preambulo(),
                nav.sem_await(corpo_js("maybeShowConviteArea", "revisao.html", _RV)),
                nav.sem_await(corpo_js("submitConviteArea", "revisao.html", _RV)),
@@ -138,6 +144,56 @@ def test_a_caixa_existe_na_TELA_DA_REVISAO():
         "com uma linha de área em branco o convite NÃO ficou visível — "
         "provavelmente um estilo inline ou uma classe que `remove('hidden')` "
         "não desfaz")
+
+
+def _esconde(html, elem_id, classe=None, estilo=None):
+    """Devolve o HTML com a tag daquele id escondida de UM jeito específico."""
+    m = re.search(r'<(\w+)([^>]*\sid="%s"[^>]*)>' % re.escape(elem_id), html)
+    assert m, "nao achei a tag de id=%r" % elem_id
+    tag, resto = m.group(1), m.group(2)
+    if classe:
+        assert 'class="' in resto, resto
+        resto = resto.replace('class="', 'class="%s ' % classe, 1)
+    if estilo:
+        resto += ' style="%s"' % estilo
+    return html[:m.start()] + "<%s%s>" % (tag, resto) + html[m.end():]
+
+
+# rotulo, alvo, classe, estilo, ainda visivel?
+_FORMAS_DE_SUMIR = [
+    ("opacity-0 na caixa",        "convite-area", "opacity-0", None,                False),
+    ("sr-only na caixa",          "convite-area", "sr-only",   None,                False),
+    ("display inline na caixa",   "convite-area", None,        "display:none",      False),
+    ("visibility inline",         "convite-area", None,        "visibility:hidden", False),
+    ("opacity inline",            "convite-area", None,        "opacity:0",         False),
+    ("PAI escondido (<main>)",    "main",         "hidden",    None,                False),
+    ("PAI com display inline",    "main",         None,        "display:none",      False),
+    # 🪤 CONTROLE NEGATIVO: `invisible` NÃO está no tailwind.min.css
+    # compilado (o build é ESTÁTICO). Escrever essa classe na tag não esconde
+    # nada em produção — e o instrumento não pode gritar por causa dela.
+    ("classe INERTE (invisible)", "convite-area", "invisible", None,                True),
+]
+
+
+@pytest.mark.parametrize("rotulo,alvo,classe,estilo,ainda_ve", _FORMAS_DE_SUMIR)
+def test_CONTROLE_o_navegador_ENXERGA_as_formas_de_sumir(
+        rotulo, alvo, classe, estilo, ainda_ve):
+    """🧪 O instrumento, antes do guarda.
+
+    🪤 06/09 (cético): `_visivel` modelava DUAS formas de sumir de umas
+    seis. `opacity-0`, `sr-only`, `visibility:hidden` e PAI escondido deixavam
+    a caixa invisível pro cliente com o guarda VERDE. Aqui cada forma é
+    encenada na TAG (o JS continua o de produção) e o instrumento tem que
+    responder certo — inclusive NÃO acusar a classe que o build não tem.
+    """
+    html = _esconde(_RV, alvo, classe=classe, estilo=estilo)
+    r = json.loads(_tela([_UMA_LINHA_VAZIA, "maybeShowConviteArea();"],
+                         "JSON.stringify({vis: _visivel('convite-area')})",
+                         html_dom=html))
+    assert r["vis"] is ainda_ve, (
+        "com %s o navegador da bancada disse vis=%r (esperado %r) — o guarda "
+        "de visibilidade está cego pra essa forma de sumir"
+        % (rotulo, r["vis"], ainda_ve))
 
 
 def test_a_caixa_fica_ANTES_da_lista_de_itens():

@@ -109,7 +109,27 @@ def _linhas_da_recontagem(fn):
 # ══════════════════════════════════════════════════════════════════════════
 #  O julgamento sobre o código REAL
 # ══════════════════════════════════════════════════════════════════════════
-def test_a_recontagem_vem_DEPOIS_do_ultimo_rebaixamento():
+# 🪤 06/09 — os dois guardas de baixo rodavam UM cenário só: `project_type=''`,
+# `partial_failure=False`, `is_complement=False`, `n_pdf=0`, `n_cad=1`,
+# `dwg_failed=[]`. Rebaixamento de selo que dependesse de qualquer uma dessas
+# condições — e é justamente onde vivem os de unidade, escala e parede —
+# acontecia depois da recontagem sem que nenhum dos dois enxergasse. Cada linha
+# aqui é um job que o produto processa de verdade.
+_JOBS = [
+    ("so_cad", {}),
+    ("cad_e_pdf", {"n_pdf": 2, "n_cad": 1}),
+    ("so_pdf", {"n_pdf": 2, "n_cad": 0}),
+    ("estrutural", {"project_type": "estrutural"}),
+    ("complemento", {"is_complement": True}),
+    ("falha_parcial", {"partial_failure": True,
+                       "partial_errors": ["a prancha 3 não abriu"]}),
+    ("dwg_que_nao_abriu", {"dwg_failed": ["planta.dwg"]}),
+]
+_IDS = [j[0] for j in _JOBS]
+
+
+@pytest.mark.parametrize("rotulo,cenario", _JOBS, ids=_IDS)
+def test_a_recontagem_vem_DEPOIS_do_ultimo_rebaixamento(rotulo, cenario):
     """O MESMO e-mail não pode dizer dois números de medidos.
 
     Reproduz o job `b5693ca6`: o aviso do plano B nasce com a contagem da hora
@@ -117,21 +137,25 @@ def test_a_recontagem_vem_DEPOIS_do_ultimo_rebaixamento():
     6 que sobraram. Se alguém rebaixar selo DEPOIS dela — ou se a recontagem
     deixar de acontecer — o cabeçalho diz um número e o parágrafo diz outro.
     Foi exatamente o que o cliente `cliente-03` leu.
+
+    🔑 E em TODO tipo de job: com PDF, estrutural, complemento, falha parcial.
+    O e-mail de complemento é outro e-mail, montado por outro ramo — e carrega
+    o mesmo diagnóstico e o mesmo aviso.
     """
     from _fim_do_job import roda_ate_o_email, medidos_no_placar, medidos_no_aviso
     d = roda_ate_o_email(_itens(medidos=6, total=20), cab_planob=_CAB_PLANOB,
-                         medidos_antes=8)
+                         medidos_antes=8, **cenario)
     html = d["emails"][-1]["html"]
     no_placar = medidos_no_placar(html)
     no_aviso = medidos_no_aviso(html)
-    assert no_placar is not None, "sumiu o placar de medidos do e-mail"
+    assert no_placar is not None, "sumiu o placar de medidos do e-mail (%s)" % rotulo
     assert no_aviso is not None, (
-        "o aviso do plano B não chegou ao e-mail — sem ele este guarda não "
-        "mede nada")
+        "o aviso do plano B não chegou ao e-mail (%s) — sem ele este guarda "
+        "não mede nada" % rotulo)
     assert no_placar == no_aviso, (
-        "o mesmo e-mail diz %d medido(s) no cabeçalho e %d no aviso do plano B "
-        "— alguém rebaixa selo DEPOIS da recontagem final"
-        % (no_placar, no_aviso))
+        "%s: o mesmo e-mail diz %d medido(s) no cabeçalho e %d no aviso do "
+        "plano B — alguém rebaixa selo DEPOIS da recontagem final"
+        % (rotulo, no_placar, no_aviso))
 
 
 def test_existem_os_dois_pontos_de_recontagem():
@@ -156,19 +180,36 @@ def test_a_recontagem_e_idempotente_por_INDICE():
     assert "_aviso_lw_idx" in corpo
 
 
-def test_o_rebaixamento_do_SINAPI_e_mesmo_o_ultimo():
-    """Depois da recontagem final, NADA mexe mais no selo.
+@pytest.mark.parametrize("rotulo,cenario", _JOBS, ids=_IDS)
+def test_o_rebaixamento_do_SINAPI_e_mesmo_o_ultimo(rotulo, cenario):
+    """Depois da recontagem final, NADA mexe mais no selo — nem na contagem.
 
     🪤 O outro lado do mesmo fato, e o que pega a forma que enganou o juiz
     antigo: os itens são espiões, então `setattr` e atribuição direta contam
-    igual."""
-    from _fim_do_job import roda_ate_o_email
+    igual.
+
+    🪤 06/09 — e o espião tem um ponto cego próprio: quem quisesse mudar o
+    número do e-mail não precisa tocar em `.confidence`. Basta FILTRAR
+    `all_items` depois da recontagem — nenhum `__setattr__` acontece e o
+    espião fica mudo. Por isso a contagem também é cobrada aqui."""
+    from _fim_do_job import roda_ate_o_email, medidos_no_placar, medidos_no_aviso
     itens = _itens(medidos=6, total=20, espioes=True)
-    roda_ate_o_email(itens, cab_planob=_CAB_PLANOB)
+    d = roda_ate_o_email(itens, cab_planob=_CAB_PLANOB, **cenario)
     assert not _ESCRITAS_DE_SELO, (
-        "%d item(ns) tiveram o selo mexido DEPOIS da última recontagem: %r — "
-        "o e-mail volta a dizer dois números"
-        % (len(_ESCRITAS_DE_SELO), _ESCRITAS_DE_SELO[:4]))
+        "%s: %d item(ns) tiveram o selo mexido DEPOIS da última recontagem: "
+        "%r — o e-mail volta a dizer dois números"
+        % (rotulo, len(_ESCRITAS_DE_SELO), _ESCRITAS_DE_SELO[:4]))
+
+    # 🔑 O segundo caminho: mexer na CONTAGEM em vez do selo.
+    assert len(d["ns"]["all_items"]) == 20, (
+        "%s: a lista de itens mudou de tamanho depois da recontagem (%d de 20) "
+        "— o e-mail passa a contar em cima de outra lista"
+        % (rotulo, len(d["ns"]["all_items"])))
+    html = d["emails"][-1]["html"]
+    assert medidos_no_placar(html) == medidos_no_aviso(html) == 6, (
+        "%s: o e-mail saiu com placar=%r e aviso=%r, e os itens entregues "
+        "tinham 6 medidos — alguém mexeu na contagem depois da recontagem"
+        % (rotulo, medidos_no_placar(html), medidos_no_aviso(html)))
 
 
 # ══════════════════════════════════════════════════════════════════════════

@@ -32,6 +32,7 @@ guarda "todo arquivo de teste realmente EXECUTA" derrubou a bancada -- com
 razao. Teste que so roda na minha maquina nao guarda nada. Agora o PDF sai de
 bytes puros (stdlib), entao roda em qualquer lugar.
 """
+import base64
 import os
 import sys
 
@@ -149,18 +150,116 @@ def test_controle_positivo_SEM_o_encolhimento_estouraria(prancha_densa, tmp_path
         "coisa." % (os.path.getsize(velho) // 1024))
 
 
-def test_o_teto_e_o_MESMO_numero_que_o_analyzer_usa():
-    """Amarra os dois: se alguem trocar o 500_000 solto, isto acusa.
+def _imagens_que_a_IA_recebeu(monkeypatch, crops, tipo=SheetType.LAYOUT_NOVO):
+    """RODA `analyzer.analyze_sheet` e devolve os blocos de imagem que ele
+    montou pra chamada da IA.
 
-    🪤 Guarda que so olha a constante nao veria o CALL SITE -- e o call site e
-    onde o crop e descartado. Por isso olha o corpo da funcao, com os
-    comentarios removidos (comentario ja me enganou 3 vezes num dia so).
+    🚨 06/09/2026 — o guarda que morava aqui lia `inspect.getsource` e conferia
+    se a string "MAX_CROP_BYTES" aparecia no corpo. Isso prova redacao, nao
+    comportamento: qualquer `continue` a mais, um `[:0]`, ou uma comparacao
+    invertida deixavam o texto intacto e a IA recebia a prancha SEM desenho --
+    calada, que e exatamente o modo de falha que este arquivo existe pra pegar.
+    Agora a chamada da IA e espionada e o que se afirma sao os BYTES que
+    chegaram.
     """
-    import inspect
-    linhas = [l for l in inspect.getsource(analyzer.analyze_sheet).split(_NL)
-              if not l.strip().startswith("#")]
-    corpo = _NL.join(linhas)
-    assert "MAX_CROP_BYTES" in corpo, (
-        "o analyzer voltou a comparar com um numero solto em vez da constante")
-    assert "500_000" not in corpo and "500000" not in corpo, (
-        "sobrou numero magico no lugar da constante")
+    from models import SheetInfo
+
+    capturado = {}
+
+    class _Bloco:
+        text = '{"items": []}'
+
+    class _Resp:
+        content = [_Bloco()]
+        stop_reason = "end_turn"
+
+    def _espiao(client, **kw):
+        capturado["content"] = kw["messages"][0]["content"]
+        return _Resp()
+
+    monkeypatch.setattr(analyzer, "call_with_retry_stream", _espiao)
+    analyzer.analyze_sheet(None, SheetInfo(filename="prancha.pdf",
+                                           sheet_type=tipo,
+                                           text_content="",
+                                           crops=list(crops)))
+    assert "content" in capturado, (
+        "analyze_sheet nem chegou a chamar a IA -- o guarda nao mediu nada")
+    return [c for c in capturado["content"] if c.get("type") == "image"]
+
+
+def _arquivo_de(caminho, tamanho):
+    with open(caminho, "wb") as f:
+        f.write(b"\xff\xd8" + b"J" * (tamanho - 2))
+    assert os.path.getsize(caminho) == tamanho
+    return caminho
+
+
+def test_o_teto_e_o_MESMO_numero_que_o_analyzer_usa(prancha_densa, tmp_path,
+                                                    monkeypatch):
+    """Amarra os dois pela BORDA: um recorte com exatamente
+    `MAX_CROP_BYTES` bytes tem que chegar na IA, e um com UM byte a mais tem
+    que ser descartado. Trocar o teto por qualquer outro numero move a borda e
+    reprova -- sem ler uma linha de fonte.
+
+    🔑 E confere o CONTEUDO, nao a presenca: `len(imgs)` sozinho so provava que
+    "um bloco de imagem foi anexado". O que interessa e se a imagem CHEGOU --
+    `media_type` certo e os bytes do recorte, byte a byte.
+    """
+    teto = analyzer.MAX_CROP_BYTES
+
+    saida = tmp_path / "crops"
+    saida.mkdir()
+    crops = render_crops(prancha_densa, SheetType.LAYOUT_NOVO, str(saida))
+    assert crops, "nao renderizou nada"
+    real = min(crops, key=os.path.getsize)          # recorte de VERDADE
+    assert os.path.getsize(real) < teto
+
+    no_limite = _arquivo_de(str(tmp_path / "no_limite.jpg"), teto)
+    passou = _arquivo_de(str(tmp_path / "passou_um_byte.jpg"), teto + 1)
+
+    imgs = _imagens_que_a_IA_recebeu(monkeypatch, [real, no_limite, passou])
+
+    chegou = {}
+    for b in imgs:
+        assert b["source"]["type"] == "base64", b["source"].get("type")
+        chegou[len(base64.b64decode(b["source"]["data"]))] = (
+            b["source"]["media_type"], base64.b64decode(b["source"]["data"]))
+
+    assert len(imgs) == 2, (
+        "esperava 2 imagens (o recorte real e o que tem exatamente %d bytes) e "
+        "vieram %d. Se veio 3, o teto parou de descartar e a memoria estoura; "
+        "se veio menos, o analyzer esta jogando fora recorte que CABE e a IA "
+        "recebe a prancha sem desenho." % (teto, len(imgs)))
+    assert teto + 1 not in chegou, (
+        "o recorte de %d bytes (UM acima do teto) passou -- o call site nao "
+        "esta mais comparando com MAX_CROP_BYTES" % (teto + 1))
+
+    # o de borda chegou INTEIRO e como JPEG
+    assert teto in chegou, (
+        "o recorte com exatamente %d bytes foi descartado: a comparacao virou "
+        ">= em vez de >, ou o teto mudou de numero" % teto)
+    media_borda, bytes_borda = chegou[teto]
+    assert media_borda == "image/jpeg", media_borda
+    assert bytes_borda == open(no_limite, "rb").read(), (
+        "o recorte de borda chegou CORROMPIDO na chamada da IA")
+
+    # e o recorte de verdade tambem, byte a byte
+    n_real = os.path.getsize(real)
+    assert n_real in chegou, (n_real, sorted(chegou))
+    media_real, bytes_real = chegou[n_real]
+    assert media_real == "image/jpeg", media_real
+    assert bytes_real == open(real, "rb").read(), (
+        "os bytes do recorte renderizado nao sao os que a IA recebeu -- "
+        "'anexou um bloco de imagem' nao e o mesmo que 'a imagem chegou'")
+
+
+def test_o_media_type_acompanha_a_extensao(tmp_path, monkeypatch):
+    """🧪 Controle da OUTRA metade do ternario: `.png` nao pode ir carimbado
+    como jpeg. Media_type errado faz a API recusar a imagem inteira -- e o
+    fixture antigo so tinha `.jpg`."""
+    png = _arquivo_de(str(tmp_path / "recorte.png"), 4096)
+    imgs = _imagens_que_a_IA_recebeu(monkeypatch, [png])
+    assert len(imgs) == 1, len(imgs)
+    assert imgs[0]["source"]["media_type"] == "image/png", (
+        "recorte .png foi anexado como %r" % imgs[0]["source"]["media_type"])
+    assert base64.b64decode(imgs[0]["source"]["data"]) == open(png, "rb").read()

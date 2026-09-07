@@ -64,6 +64,23 @@ _LINHA_APROVACAO = {"job_id": "job-01", "item_id": "it-2", "action": "approve",
 _LINHA_EDICAO = {"job_id": "job-02", "item_id": "it-3", "action": "edit",
                  "edits": {"quantity": 9.0}, "comment": "",
                  "reviewed_at": "2026-09-05T12:02:00+00:00"}
+# 🪤 06/09/2026 — EXCLUSÃO SEM RETRATO. O `_antes` só passou a ser gravado em
+# 31/08 ([[project_exclusao_se_autodestruia_20260831]]); as rejeições de antes
+# disso — e qualquer uma que venha com `edits` vazio ou nulo — chegam SEM ele.
+# O fixture só tinha a linha completa, então trocar `_antes_do_item` por um
+# `r["edits"]["_antes"]` direto estouraria KeyError, o `except` engoliria e o
+# painel INTEIRO viraria `{"erro": ...}` — as 48 exclusões some junto com as
+# aprovações e edições. Verde, porque ninguém mandava a linha sem retrato.
+_LINHA_EXCLUSAO_SEM_ANTES = {"job_id": "job-03", "item_id": None,
+                             "action": "reject", "edits": None, "comment": "",
+                             "reviewed_at": "2026-09-05T12:03:00+00:00"}
+_LINHA_EXCLUSAO_2 = {"job_id": "job-02", "item_id": None, "action": "reject",
+                     "edits": {"_item_id": "it-9",
+                               "_antes": {"description": "Porta de correr 2,10 m",
+                                          "unit": "un", "quantity": 1.0,
+                                          "discipline": "Esquadrias",
+                                          "confidence": "estimado"}},
+                     "comment": "", "reviewed_at": "2026-09-05T12:04:00+00:00"}
 
 
 class _RespT:
@@ -80,17 +97,45 @@ class _RespT:
         return False
 
 
+def _como_o_postgrest(linhas, url):
+    """Responde como o PostgREST responderia: só as colunas do `select=`, na
+    `order=` pedida, cortado no `limit=`.
+
+    🪤 06/09/2026 — O FAKE DE ANTES IGNORAVA OS TRÊS. Devolvia a linha inteira,
+    na ordem de entrada, sem limite. Com isso a rota podia parar de pedir
+    `action` no `select` (todo `r.get("action")` viraria None e as exclusões
+    voltariam a ser zero), ou pedir `limit=1`, e o guarda seguia verde — porque
+    o banco de mentira era generoso onde o de verdade é literal.
+    """
+    from urllib.parse import parse_qs, urlparse
+    q = parse_qs(urlparse(url).query)
+    saida = [dict(r) for r in linhas]
+    ordem = (q.get("order") or [""])[0]
+    if ordem:
+        col, _, direcao = ordem.partition(".")
+        saida.sort(key=lambda r: str(r.get(col) or ""), reverse=(direcao == "desc"))
+    sel = (q.get("select") or ["*"])[0]
+    if sel and sel.strip() != "*":
+        cols = [c.strip() for c in sel.split(",") if c.strip()]
+        saida = [{c: r.get(c) for c in cols} for r in saida]
+    lim = (q.get("limit") or [""])[0]
+    if lim.isdigit():
+        saida = saida[:int(lim)]
+    return saida
+
+
 @pytest.fixture
 def painel(monkeypatch):
     """Chama `admin_revision_feedback` DE VERDADE, com o banco de mentira."""
-    ctl = {"urls": [], "linhas": []}
+    ctl = {"urls": [], "linhas": [], "url_item_reviews": None}
     monkeypatch.setattr(_m, "_require_admin", lambda r: {"email": "admin@example.com"})
 
     def _fake(req, timeout=None):
         url = getattr(req, "full_url", str(req))
         ctl["urls"].append(url)
         if "item_reviews" in url:
-            return _RespT(list(ctl["linhas"]))
+            ctl["url_item_reviews"] = url
+            return _RespT(_como_o_postgrest(ctl["linhas"], url))
         return _RespT([])
 
     monkeypatch.setattr(_ureq_t, "urlopen", _fake)
@@ -108,14 +153,76 @@ def painel(monkeypatch):
 #  1. O RESUMO CONTA E DESCREVE
 # ══════════════════════════════════════════════════════════════════════════
 def test_o_resumo_separa_as_exclusoes(painel):
-    """O guarda antigo so exigia a palavra `"exclusoes"` num recorte do fonte."""
-    ri = painel["chamar"]([_LINHA_EXCLUSAO, _LINHA_APROVACAO,
+    """O guarda antigo so exigia a palavra `"exclusoes"` num recorte do fonte.
+
+    🪤 DUAS exclusoes, nao uma: com uma so, `rejeicoes[:1]` e um `break` no
+    primeiro casamento ficavam verdes - e na base sao 48, de 6 projetos.
+    """
+    ri = painel["chamar"]([_LINHA_EXCLUSAO, _LINHA_EXCLUSAO_2, _LINHA_APROVACAO,
                            _LINHA_EDICAO])["revisao_inline"]
-    assert ri["exclusoes"] == 1, (
-        "o resumo do admin nao contou a exclusao (contou %r) - os sinais de "
-        "item inventado seguem invisiveis" % ri["exclusoes"])
+    assert ri["exclusoes"] == 2, (
+        "o resumo do admin nao contou as duas exclusoes (contou %r) - os sinais "
+        "de item inventado seguem invisiveis" % ri["exclusoes"])
+    assert len(ri["exclusoes_itens"]) == 2, (
+        "o painel recebeu %d retrato(s) para 2 exclusoes - o admin ve o numero "
+        "e nao ve O QUE o motor inventou" % len(ri["exclusoes_itens"]))
     assert ri["aprovacoes"] == 1 and ri["edicoes"] == 1, (
         "a separacao por acao se embaralhou: %r" % ri)
+
+
+def test_o_retrato_que_chega_ao_painel_e_o_do_ITEM_APAGADO(painel):
+    """🪤 Presenca do campo nao basta: `"descricao": None` em toda linha passaria
+    num teste de chave. O que o admin precisa e o CONTEUDO do `_antes`."""
+    ri = painel["chamar"]([_LINHA_EXCLUSAO])["revisao_inline"]
+    x = ri["exclusoes_itens"][0]
+    assert x["descricao"] == _RETRATO["description"], (
+        "a descricao do item apagado chegou como %r" % (x["descricao"],))
+    assert x["unidade"] == _RETRATO["unit"], x
+    assert x["quantidade"] == _RETRATO["quantity"], x
+    assert x["disciplina"] == _RETRATO["discipline"], x
+    assert x["selo"] == _RETRATO["confidence"], x
+    assert x["job_id"] == "job-01" and x["quando"] == _LINHA_EXCLUSAO["reviewed_at"], x
+
+
+def test_a_exclusao_SEM_retrato_nao_derruba_o_painel_inteiro(painel):
+    """🩸 O `_antes` só é gravado desde 31/08. Rejeição anterior a isso (ou com
+    `edits` nulo) chega sem retrato — e é a MAIORIA das 48. Se a leitura do
+    retrato explodir, o `except` da rota engole e `revisao_inline` inteiro vira
+    `{"erro": ...}`: some a exclusão, somem as aprovações, some tudo."""
+    ri = painel["chamar"]([_LINHA_EXCLUSAO_SEM_ANTES, _LINHA_EXCLUSAO,
+                           _LINHA_APROVACAO])["revisao_inline"]
+    assert "erro" not in ri, (
+        "a exclusao sem `_antes` derrubou o bloco inteiro: %r" % ri)
+    assert ri["exclusoes"] == 2 and ri["aprovacoes"] == 1, ri
+    sem = [x for x in ri["exclusoes_itens"] if x["job_id"] == "job-03"]
+    assert len(sem) == 1, (
+        "a exclusao sem retrato sumiu da lista - o admin nao fica sabendo que "
+        "ela existiu: %r" % ri["exclusoes_itens"])
+    assert sem[0]["descricao"] is None, (
+        "sem `_antes` nao ha de onde tirar descricao; veio %r" % sem[0]["descricao"])
+
+
+def test_a_consulta_PEDE_o_que_o_resumo_usa(painel):
+    """🪤 O fake de antes ignorava `select`, `order` e `limit`, e a fixture
+    guardava as URLs sem que ninguem afirmasse nada. Agora o banco de mentira
+    responde SO o que foi pedido — entao esta afirmacao e sobre a requisicao que
+    a rota fez de verdade, nao sobre o texto do fonte."""
+    painel["chamar"]([_LINHA_EXCLUSAO, _LINHA_APROVACAO])
+    url = painel["url_item_reviews"]
+    assert url, "a rota nem consultou item_reviews"
+    from urllib.parse import parse_qs, urlparse
+    q = parse_qs(urlparse(url).query)
+    cols = [c.strip() for c in q["select"][0].split(",")]
+    for col in ("job_id", "action", "edits", "comment", "reviewed_at"):
+        assert col in cols, (
+            "a consulta parou de pedir a coluna `%s` — sem ela o resumo lê None "
+            "e o sinal desaparece calado (select=%r)" % (col, q["select"][0]))
+    assert q["order"][0] == "reviewed_at.desc", (
+        "a ordem saiu de `reviewed_at.desc`: o corte em 500/20 passaria a "
+        "descartar as revisoes MAIS NOVAS (order=%r)" % q.get("order"))
+    assert int(q["limit"][0]) >= 500, (
+        "o teto da consulta caiu para %r — as exclusoes antigas somem do "
+        "painel sem ninguem avisar" % q.get("limit"))
 
 
 def test_CONTROLE_a_rota_responde_e_o_bloco_da_revisao_inline_existe(painel):

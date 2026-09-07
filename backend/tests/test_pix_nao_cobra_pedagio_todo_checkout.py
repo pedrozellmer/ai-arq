@@ -21,6 +21,8 @@ import sys
 import time
 import types
 
+import pytest
+
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _BACKEND)
 
@@ -122,27 +124,142 @@ def test_o_checkout_monta_os_metodos_a_partir_da_lembranca():
         "a recusa do Stripe não está mais sendo lembrada — o pedágio volta")
 
 
-def test_o_fallback_para_cartao_continua_existindo(monkeypatch):
-    """🚨 O conserto é de custo, não de comportamento. Se o PIX for pedido e o
-    Stripe recusar, o cliente TEM que continuar conseguindo pagar com cartão."""
+def _checkout_montado(monkeypatch, user_id="", credito_cents=0, recusa_pix=True,
+                      num_pranchas=3):
+    """Roda a ROTA de verdade e devolve (resposta, tentativas ao Stripe).
+
+    🩸 A LACUNA QUE ISTO FECHA: até 06/09 o guarda do fallback só rodava o
+    caminho ANÔNIMO (`user_id=""`). Tudo que é condicionado ao usuário logado —
+    a validação de JWT, o `_total_available_credit`, o desconto na descrição —
+    ficava fora, e qualquer regressão ali atravessava verde. Quem paga é
+    justamente quem está logado.
+    """
     _zerar()
+    mod, chamadas = _stripe_que_recusa_pix()
+    if not recusa_pix:
+        mod.checkout.Session.create = staticmethod(
+            lambda **p: (chamadas.append(list(p.get("payment_method_types") or [])),
+                         _SessaoFalsa())[1])
+    monkeypatch.setitem(sys.modules, "stripe", mod)
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_do_guarda")
+    monkeypatch.setattr(main, "_log_error", lambda *a, **k: None)
+    if user_id:
+        # o dono do token é o próprio `user_id` — o caminho feliz do logado
+        monkeypatch.setattr(main, "_get_user_from_request",
+                            lambda req: {"id": user_id,
+                                         "email": "arquiteto@example.com"})
+        monkeypatch.setattr(main, "_total_available_credit",
+                            lambda uid: credito_cents)
+    r = asyncio.run(main.create_checkout(request=None, num_pranchas=num_pranchas,
+                                         user_id=user_id))
+    return r, chamadas
+
+
+@pytest.mark.parametrize("rotulo,user_id,credito", [
+    ("anonimo", "", 0),
+    ("logado_sem_credito", "user-01", 0),
+    ("logado_com_credito_parcial", "user-02", 1000),
+])
+def test_o_fallback_para_cartao_continua_existindo(monkeypatch, rotulo, user_id,
+                                                   credito):
+    """🚨 O conserto é de custo, não de comportamento. Se o PIX for pedido e o
+    Stripe recusar, o cliente TEM que continuar conseguindo pagar com cartão —
+    anônimo, logado, e logado com crédito parcial aplicado."""
+    r, chamadas = _checkout_montado(monkeypatch, user_id=user_id,
+                                    credito_cents=credito)
+
+    assert chamadas == [["card", "pix"], ["card"]], (
+        "[%s] o checkout não tentou PIX e depois cartão — tentativas: %r"
+        % (rotulo, chamadas))
+    assert r["checkout_url"] == _SessaoFalsa.url, (
+        "[%s] a recusa de PIX derrubou o pagamento: o cliente ficou sem "
+        "checkout" % rotulo)
+    assert r["payment_methods"] == ["card"], (rotulo, r["payment_methods"])
+    assert r["credit_applied_cents"] == credito, (
+        "[%s] o crédito do cliente sumiu do checkout: %r"
+        % (rotulo, r["credit_applied_cents"]))
+    assert r["final_cents"] == r["price_cents"] - credito, (
+        "[%s] o desconto não bateu: preço %r, crédito %r, final %r"
+        % (rotulo, r["price_cents"], credito, r["final_cents"]))
+    assert main._pix_vale_tentar() is False, (
+        "[%s] a recusa não foi registrada — a segunda chamada ao Stripe volta "
+        "a acontecer em todo checkout" % rotulo)
+
+
+@pytest.mark.parametrize("rotulo,user_id", [
+    ("anonimo", ""),
+    ("logado", "user-03"),
+])
+def test_depois_da_recusa_o_checkout_faz_UMA_chamada_SO(monkeypatch, rotulo,
+                                                        user_id):
+    """🚨 O INVARIANTE CENTRAL DESTE ARQUIVO, agora medido na ROTA.
+
+    "Não peça duas vezes o que já se sabe que vai falhar." Até aqui isso só era
+    conferido em `_pix_vale_tentar()` — a função. Com a lembrança já marcada,
+    ninguém rodava a rota pra ver se ela obedece: trocar a montagem por
+    `["card", "pix"] if (_tentar_pix or True) else ["card"]` deixava os 10
+    testes verdes e ressuscitava o pedágio das duas chamadas por checkout.
+    """
+    _zerar()
+    main._pix_marcar_indisponivel()
     mod, chamadas = _stripe_que_recusa_pix()
     monkeypatch.setitem(sys.modules, "stripe", mod)
     monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_do_guarda")
     monkeypatch.setattr(main, "_log_error", lambda *a, **k: None)
+    if user_id:
+        monkeypatch.setattr(main, "_get_user_from_request",
+                            lambda req: {"id": user_id,
+                                         "email": "arquiteto@example.com"})
+        monkeypatch.setattr(main, "_total_available_credit", lambda uid: 0)
 
-    r = asyncio.run(main.create_checkout(request=None, num_pranchas=3))
+    r = asyncio.run(main.create_checkout(request=None, num_pranchas=3,
+                                         user_id=user_id))
 
-    assert chamadas == [["card", "pix"], ["card"]], (
-        "o checkout não tentou PIX e depois cartão — tentativas: %r" % chamadas)
-    assert r["checkout_url"] == _SessaoFalsa.url, (
-        "a recusa de PIX derrubou o pagamento: o cliente ficou sem checkout")
-    assert r["payment_methods"] == ["card"], r["payment_methods"]
-    assert main._pix_vale_tentar() is False, (
-        "a recusa não foi registrada — a segunda chamada ao Stripe volta a "
-        "acontecer em todo checkout")
+    assert chamadas == [["card"]], (
+        "[%s] com o PIX já sabidamente indisponível o checkout ainda pagou o "
+        "pedágio: %r chamadas ao Stripe (%r)" % (rotulo, len(chamadas), chamadas))
+    assert r["payment_methods"] == ["card"], (rotulo, r["payment_methods"])
+    assert r["checkout_url"] == _SessaoFalsa.url, rotulo
 
 
+def test_o_JWT_de_OUTRO_usuario_nao_cria_checkout(monkeypatch):
+    """🔒 O caminho do logado tem uma trava que o anônimo não tem: sem ela um
+    atacante consome o crédito da vítima. Rodar só `user_id=""` nunca a tocava.
+    """
+    from fastapi import HTTPException
+    _zerar()
+    mod, chamadas = _stripe_que_recusa_pix()
+    monkeypatch.setitem(sys.modules, "stripe", mod)
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_do_guarda")
+    monkeypatch.setattr(main, "_get_user_from_request",
+                        lambda req: {"id": "outro-usuario",
+                                     "email": "invasor@example.com"})
+    monkeypatch.setattr(main, "_total_available_credit", lambda uid: 500000)
+    try:
+        asyncio.run(main.create_checkout(request=None, num_pranchas=3,
+                                         user_id="user-vitima"))
+    except HTTPException as e:
+        assert e.status_code == 403, e.status_code
+    else:
+        raise AssertionError(
+            "o checkout aceitou um token de OUTRO usuário e gastaria o crédito "
+            "da vítima")
+    assert chamadas == [], (
+        "chegou a falar com o Stripe antes de conferir o dono do token: %r"
+        % (chamadas,))
+
+
+def test_credito_que_cobre_TUDO_nao_fala_com_o_stripe(monkeypatch):
+    """🧪 CONTROLE de que a parametrização acima muda mesmo o caminho: com
+    crédito cobrindo 100% a rota nem chega ao Stripe. Se este teste passasse
+    junto com os de cima sem nenhuma diferença, o `user_id` seria decorativo."""
+    r, chamadas = _checkout_montado(monkeypatch, user_id="user-04",
+                                    credito_cents=10_000_000)
+    assert r["is_free"] is True, r
+    assert r["checkout_url"] is None, r
+    assert chamadas == [], (
+        "pagou pedágio no Stripe pra um checkout que o crédito já cobria: %r"
+        % (chamadas,))
 def test_CONTROLE_com_o_pix_liberado_o_fallback_nao_roda(monkeypatch):
     """🧪 O teste de cima só vale se souber distinguir."""
     _zerar()

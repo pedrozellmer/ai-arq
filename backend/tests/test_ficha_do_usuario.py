@@ -13,8 +13,12 @@ que dizia `succeeded` com o erro no corpo: HTTP 200 nao prova nada.
 
 Por isso a rota carrega `_falhas` e estes testes cobram esse contrato.
 """
+import json
 import os
 import sys
+import urllib.parse as _up
+
+import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -32,15 +36,33 @@ PROJETO = {"job_id": "j1", "project_name": "Casa", "status": "done",
            "items_count": 40, "is_eval": False}
 
 
+def _colunas_pedidas(consulta, kw):
+    """As colunas do `select=` — vazio quando e `*` ou quando nao ha select."""
+    q = dict(_up.parse_qsl(consulta or "", keep_blank_values=True))
+    sel = (kw.get("params") or {}).get("select") or q.get("select") or ""
+    if not sel or sel.strip() == "*":
+        return set()
+    return {c.strip() for c in sel.split(",") if c.strip()}
+
+
 def _falso_banco(mapa, quebra=()):
     """Dubla o Supabase: devolve o que o mapa disser, por prefixo de tabela.
 
+    🔑 06/09 — e HONRA o `select=`, como o PostgREST de verdade. Sem isso o
+    dublê devolvia a linha INTEIRA e a ficha "vazava" ou "nao vazava" por
+    conta do dublê, nunca por conta da rota: qualquer coluna nova no `select`
+    ficava invisivel pro guarda de privacidade.
+
     `quebra` = tabelas que devem ESTOURAR, pra simular indisponibilidade real."""
     def _f(method, path, *a, **kw):
-        tabela = path.split("?")[0]
+        tabela, _sep, consulta = path.partition("?")
         if tabela in quebra:
             raise OSError("connection reset")
-        return 200, list(mapa.get(tabela, []))
+        linhas = [dict(r) for r in mapa.get(tabela, [])]
+        colunas = _colunas_pedidas(consulta, kw)
+        if colunas:
+            linhas = [{k: v for k, v in r.items() if k in colunas} for r in linhas]
+        return 200, linhas
     return _f
 
 
@@ -132,14 +154,72 @@ def test_projeto_de_avaliacao_nao_conta_como_do_cliente(monkeypatch):
     assert d["resumo"]["projetos"] == 1, "projeto de avaliacao entrou na conta"
 
 
-def test_nao_devolve_documento_nem_telefone_de_terceiro(monkeypatch):
+# ── Privacidade: o que a rota DEVOLVE, e pelos DOIS caminhos de busca ─────
+# 🪤 06/09 — o guarda antigo procurava tres nomes de coluna e so exercitava a
+# busca por E-MAIL. Dois buracos: (a) a tela do admin navega por `?id=<user_id>`
+# — o caminho mais usado — e vazamento por ele passava verde; (b) a lista de
+# proibidos era fechada, entao qualquer coluna nova (`endereco`, `whatsapp` do
+# cliente final, documento com outro nome) saia sem ninguem ver.
+# 🔑 Agora o dublê guarda um VALOR-ISCA em cada coluna que nao pode sair, e o
+# guarda cobra que nenhuma isca apareca na resposta — seja qual for o nome da
+# coluna.
+_ISCA = "ISCA-NAO-PODE-SAIR-"
+_PROIBIDAS = {
+    "profiles": ("cpf_cnpj", "endereco", "documento", "senha_hash"),
+    "project_clients": ("client_phone", "client_email", "client_cpf",
+                        "client_address"),
+    "nps_responses": ("ip",),
+}
+
+
+def _mapa_com_iscas():
+    """O banco de mentira com as colunas proibidas PRESENTES — se a rota
+    pedir alguma, a isca aparece na resposta."""
+    def _com(base, tabela):
+        return dict(base, **{c: _ISCA + c for c in _PROIBIDAS.get(tabela, ())})
+    return {
+        "profiles": [_com(PERFIL, "profiles")],
+        "projects": [PROJETO],
+        "nps_responses": [_com({"score": 9, "comment": "Gostei"}, "nps_responses")],
+        "project_clients": [_com({"job_id": "j1", "client_name": "ISCA-PERMITIDA-nome",
+                                  "client_company": "MA Arq"}, "project_clients")],
+        "agent_conversations": [{"job_id": "j1", "question": "quanto de piso?"}],
+    }
+
+
+@pytest.mark.parametrize("chave", ["marcelo@exemplo.com", "u-9"],
+                         ids=["por_email", "por_user_id"])
+def test_nao_devolve_documento_nem_telefone_de_terceiro(monkeypatch, chave):
     """Privacidade: a ficha existe pra entender USO. CPF/CNPJ nao ajuda nisso,
-    e telefone/e-mail do cliente final do usuario e dado de terceiro."""
-    import inspect
-    src = inspect.getsource(main.admin_ficha_usuario)
-    assert "cpf_cnpj" not in src, "CPF/CNPJ nao deve entrar na ficha"
-    assert "client_phone" not in src and "client_email" not in src, (
-        "dado de contato do cliente final do usuario e de terceiro")
+    e telefone/e-mail do cliente final do usuario e dado de terceiro.
+
+    🔑 Os DOIS caminhos: a interface do admin busca por `user_id`, o Pedro
+    busca por e-mail. Vazar por um so ja e vazar."""
+    d = _chamar(monkeypatch, _mapa_com_iscas(), chave=chave)
+    inteiro = json.dumps(d, default=str, ensure_ascii=False)
+    vazou = sorted({p for tab in _PROIBIDAS.values() for p in tab
+                    if (_ISCA + p) in inteiro})
+    assert not vazou, (
+        "a ficha (busca por %r) devolveu coluna que nao pode sair: %s"
+        % (chave, vazou))
+
+    # 🧪 CONTROLE POSITIVO no mesmo teste: se o dublê nao entregasse NADA, o
+    # assert de cima passaria por vacuidade. O que e permitido tem que chegar.
+    assert "ISCA-PERMITIDA-nome" in inteiro, (
+        "nem o dado PERMITIDO chegou — o guarda acima estaria absolvendo por "
+        "resposta vazia, nao por privacidade")
+    assert d["resumo"]["cadastrou_cliente_final"] is True
+
+
+def test_CONTROLE_o_duble_do_banco_ENTREGA_a_coluna_que_a_rota_pede():
+    """🧪 O guarda de privacidade so vale se o dublê devolver de verdade o que
+    o `select=` pede. Se ele filtrasse tudo, nenhuma isca apareceria nunca e o
+    teste acima seria decoracao."""
+    banco = _falso_banco({"profiles": [{"user_id": "u-9", "cpf_cnpj": "X-9"}]})
+    _st, linhas = banco("GET", "profiles?user_id=eq.u-9&select=user_id,cpf_cnpj")
+    assert linhas == [{"user_id": "u-9", "cpf_cnpj": "X-9"}], linhas
+    _st, linhas = banco("GET", "profiles?user_id=eq.u-9&select=user_id")
+    assert linhas == [{"user_id": "u-9"}], "o dublê ignorou o select="
 
 
 def test_a_rota_exige_admin(monkeypatch):

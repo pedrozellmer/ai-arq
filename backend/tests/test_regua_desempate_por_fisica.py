@@ -47,6 +47,8 @@ import os
 import sys
 import tempfile
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import ezdxf  # noqa: E402
@@ -178,14 +180,14 @@ def test_controle_positivo_o_guarda_de_fisica_REPROVA_mesmo():
         "controle negativo furado: cotas de 60-80 cm são normais")
 
 
-def _prancha_sem_cota():
+def _prancha_sem_cota(insunits=_INSUNITS_CM, maior=500):
     doc = ezdxf.new("R2010")
-    doc.header["$INSUNITS"] = _INSUNITS_CM
+    doc.header["$INSUNITS"] = insunits
     msp = doc.modelspace()
     if "PAREDES" not in doc.layers:
         doc.layers.add("PAREDES")
-    msp.add_line((0, 0), (500, 0), dxfattribs={"layer": "PAREDES"})
-    msp.add_line((500, 0), (500, 400), dxfattribs={"layer": "PAREDES"})
+    msp.add_line((0, 0), (maior, 0), dxfattribs={"layer": "PAREDES"})
+    msp.add_line((maior, 0), (maior, maior * 0.8), dxfattribs={"layer": "PAREDES"})
     return doc
 
 
@@ -203,7 +205,8 @@ def _extrair(doc):
             pass
 
 
-def _cascata_com(status, *, lfac_decide=True, monkeypatch=None):
+def _cascata_com(status, *, lfac_decide=True, monkeypatch=None, doc=None,
+                 lfac_fator=0.001, lfac_unidade="milímetro"):
     import dwg_extractor as _dx
     chamou = {"lfac": 0, "plausibilidade": 0}
 
@@ -219,9 +222,9 @@ def _cascata_com(status, *, lfac_decide=True, monkeypatch=None):
         chamou["lfac"] += 1
         if not lfac_decide:
             return {"status": "nada"}
-        return {"status": "corrigida_lfac", "fator_corrigido": 0.001,
-                "mensagem": "DIMLFAC=1000 prova milímetro",
-                "unidade_nome": "milímetro"}
+        return {"status": "corrigida_lfac", "fator_corrigido": lfac_fator,
+                "mensagem": "DIMLFAC prova %s" % lfac_unidade,
+                "unidade_nome": lfac_unidade}
 
     def _plaus(doc, uf):
         chamou["plausibilidade"] += 1
@@ -231,7 +234,7 @@ def _cascata_com(status, *, lfac_decide=True, monkeypatch=None):
     monkeypatch.setattr(_dx, "_validate_unit_by_dimensions", _dim)
     monkeypatch.setattr(_dx, "_unidade_por_dimlfac", _lfac)
     monkeypatch.setattr(_dx, "_unidade_por_plausibilidade", _plaus)
-    ex = _extrair(_prancha_sem_cota())
+    ex = _extrair(_prancha_sem_cota() if doc is None else doc)
     return chamou, ex.metadata
 
 
@@ -254,8 +257,63 @@ def test_ambigua_deixou_de_ser_beco_sem_saida(monkeypatch):
         "a cascata parou no DIMLFAC — a 4a regua (plausibilidade) nao roda "
         "mais pra prancha ambigua")
     assert md2.get("fator_para_metros") == "0.01", md2.get("fator_para_metros")
-    assert md2.get("alerta_unidade"), (
-        "correcao por plausibilidade NAO e prova: tem que virar ressalva")
+    assert md2.get("alerta_unidade") == (
+        "o desenho em metro seria fisicamente impossível"), (
+        "correcao por plausibilidade NAO e prova: tem que virar a ressalva "
+        "EXATA da 4a regua, e veio %r" % md2.get("alerta_unidade"))
+
+
+# 🩸 07/09/2026 — A LACUNA DO GUARDA ACIMA. Ele media tres coisas do chamador
+# (se a regua de reserva foi CHAMADA, o fator, e o `regua_cotas_status`) e, no
+# ramo da PLAUSIBILIDADE, ainda exigia a ressalva. No ramo do DIMLFAC nao
+# exigia ressalva NENHUMA — entao dava pra tirar a revalidacao dos avisos
+#
+#     _, unit_warnings = _validate_unit_factor(doc, unit_factor)
+#
+# de dentro do ramo do DIMLFAC com a bancada inteira verde. O custo: os alertas
+# de extensao ficam calculados sobre o fator ANTIGO. Nos dois sentidos:
+#   · o fator novo torna o desenho IMPOSSIVEL e a prancha sai SEM ressalva —
+#     os itens vao pro cliente com cara de medidos (regra dura nº1, calada);
+#   · o fator novo CONSERTA um desenho que era impossivel e a ressalva velha
+#     sobrevive — tudo rebaixado pra estimado por um alarme que ja morreu.
+_REVALIDACAO_LFAC = [
+    # (nome, insunits declarado, maior linha em unidades de desenho,
+    #  fator que o DIMLFAC prova, unidade, ha ressalva no fim?)
+    ("ganha_ressalva", _INSUNITS_CM, 40000, 1.0, "metro", True),
+    ("perde_a_ressalva_velha", _INSUNITS_M, 40000, 0.001, "milímetro", False),
+]
+
+
+@pytest.mark.parametrize(
+    "caso,insunits,maior,fator,unidade,espera_ressalva", _REVALIDACAO_LFAC,
+    ids=[c[0] for c in _REVALIDACAO_LFAC])
+def test_o_DIMLFAC_revalida_os_avisos_sobre_o_fator_NOVO(
+        caso, insunits, maior, fator, unidade, espera_ressalva, monkeypatch):
+    """A ressalva de extensao tem que ser recalculada sobre o fator que a 3a
+    regua acabou de provar — nao sobre o que foi descartado."""
+    _chamou, md = _cascata_com(
+        "ambigua", monkeypatch=monkeypatch,
+        doc=_prancha_sem_cota(insunits=insunits, maior=maior),
+        lfac_fator=fator, lfac_unidade=unidade)
+    assert _chamou["lfac"] == 1, _chamou
+    assert md.get("fator_para_metros") == repr(fator), (
+        "o DIMLFAC decidiu e o fator nao mudou: %r" % md.get("fator_para_metros"))
+    ressalva = md.get("alerta_unidade")
+    if espera_ressalva:
+        assert ressalva, (
+            "o fator provado pelo DIMLFAC faz o maior elemento medir %.0f m — "
+            "fisicamente impossivel — e a prancha saiu SEM ressalva: os itens "
+            "vao pro cliente com cara de medidos (regra dura nº1)"
+            % (maior * fator))
+        assert "%.0f" % (maior * fator) in ressalva, (
+            "a ressalva foi calculada sobre o fator ANTIGO — ela fala de outro "
+            "tamanho que nao o do desenho corrigido: %r" % ressalva)
+    else:
+        assert not ressalva, (
+            "o DIMLFAC consertou a escala (o maior elemento passou a medir "
+            "%.0f m) e a ressalva VELHA sobreviveu: %r — a prancha inteira "
+            "fica rebaixada pra estimado por um alarme que ja morreu"
+            % (maior * fator, ressalva))
 
 
 def test_CONTROLE_a_prancha_JA_PROVADA_nao_entra_na_cascata(monkeypatch):

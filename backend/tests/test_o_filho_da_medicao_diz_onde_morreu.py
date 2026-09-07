@@ -95,19 +95,100 @@ def _chamada_do_filho():
     return achados[0]
 
 
-def _kwarg(no, nome):
-    for k in no.keywords:
-        if k.arg == nome:
-            return _ast.unparse(k.value)
-    raise AssertionError("a chamada do filho perdeu o argumento `%s=`" % nome)
+# -- o que o `_sp.run` REALMENTE recebe -------------------------------------
+# 🚨 06/09/2026, 2a rodada dos ceticos. Os dois guardas abaixo eram frouxos
+# pelo MESMO motivo: falavam do `_cmd` que a arvore de `main.py` mostra, nunca
+# do argumento que chega no `_sp.run`.
+#   · o do env avaliava o dict `env=` e depois rodava um filho DELE
+#     (`[sys.executable, '-c', 'os.abort()']`). Botar `-E` ou `-I` no `_cmd`
+#     (o jeito classico de "isolar" um subprocesso) faz o Python IGNORAR as
+#     variaveis PYTHON*: o env continua perfeito e o filho volta a morrer MUDO,
+#     que e o `rc=-6 (sem stderr)` que este arquivo nasceu pra acabar.
+#   · o do teto conferia as strings do `setrlimit` no FONTE. Qualquer coisa
+#     entre a montagem do `_cmd` e a chamada (uma valvula de debug, um "sem
+#     teto" temporario, o teto mudando pro env numa etapa futura do plano)
+#     deixava o filho medir SEM RLIMIT_AS com o guarda verde — e foi um filho
+#     sem teto que derrubou o servidor por 2 minutos em 03/09.
+# 🔑 Agora o bloco de producao que monta o `_cmd` E chama o filho e EXECUTADO
+# (recorte por AST, ver `_executa.py`) com o `subprocess.run` espionado. O que
+# se afirma e o argv e o env que chegaram na chamada — e um filho de verdade
+# sobe com ELES.
+_FIM_DO_PREFIXO = "except Exception:" + chr(10) + "    pass" + chr(10)
+
+
+def _o_que_chegou_no_sp_run(rc=-6, stdout="", stderr=""):
+    """Roda o bloco real do filho de pdfvec e devolve `(argv, kwargs, logs)`."""
+    import subprocess
+
+    import _executa
+    import main
+
+    visto = {}
+
+    class _Filho:
+        returncode = rc
+
+    _Filho.stdout = stdout
+    _Filho.stderr = stderr
+
+    def _espiao(cmd, **kw):
+        visto["cmd"] = list(cmd)
+        visto["kw"] = dict(kw)
+        return _Filho()
+
+    logs = []
+    escopo = dict(vars(main))
+    escopo.update({
+        "os": os,
+        "pdf_path": "/work/j/prancha.pdf",
+        "page_index": 0,
+        "_stem": "PRANCHA-01",
+        "filename": "prancha.pdf",
+        "_pdfvec_falhas": [],
+        "_log_error": lambda stage, msg, *a, **k: logs.append((stage, msg)),
+        "job_id": "job-teste",
+        "_pdfvec_area_m2": 0.0,
+        "_pdfvec_compr_m": 0.0,
+        "_pdfvec_por_prancha": {},
+        "_vet_secao": "",
+    })
+    _real = subprocess.run
+    subprocess.run = _espiao
+    try:
+        # tamanho=1 = o `try:` que monta o `_cmd` E chama o filho
+        _executa.roda("process_job", "_pr = _sp.run(_cmd", escopo, tamanho=1)
+    finally:
+        subprocess.run = _real
+    assert "cmd" in visto, (
+        "o bloco de producao rodou e NAO chamou o filho — as falhas foram %s"
+        % (logs,))
+    return visto["cmd"], visto["kw"], logs
+
+
+def _filho_com_o_argv_da_producao(sufixo, timeout=60):
+    """Sobe um filho DE VERDADE com o argv e o env que chegaram no `_sp.run`,
+    trocando so o miolo do `-c` (o prefixo do teto de memoria fica)."""
+    import subprocess
+    argv, kw, _ = _o_que_chegou_no_sp_run()
+    codigo = argv[-1]
+    i = codigo.find(_FIM_DO_PREFIXO)
+    assert i > 0, (
+        "o ultimo argumento do `-c` que chegou no `_sp.run` nao tem mais o "
+        "prefixo do teto: %r" % codigo[:200])
+    prefixo = codigo[:i + len(_FIM_DO_PREFIXO)]
+    return subprocess.run(list(argv[:-1]) + [prefixo + sufixo],
+                          capture_output=True, text=True, timeout=timeout,
+                          env=kw.get("env"))
 
 
 def test_a_chamada_do_filho_LIGA_o_faulthandler_pelo_env():
-    """O dict do env e AVALIADO (e o env EFETIVO) e um filho de verdade aborta
-    com ele pra provar que a pilha sai."""
-    import os, subprocess, sys
-    env = eval(_kwarg(_chamada_do_filho(), "env"), {"os": os})
-    assert isinstance(env, dict)
+    """O env que CHEGA no `_sp.run` e o efetivo, e um filho de verdade — com o
+    argv da producao, flags inclusas — aborta com ele pra provar que a pilha
+    sai."""
+    _, kw, _ = _o_que_chegou_no_sp_run()
+    env = kw.get("env")
+    assert isinstance(env, dict), (
+        "a chamada do filho perdeu o argumento `env=`: %s" % sorted(kw))
     assert env.get("PATH") == os.environ.get("PATH"), (
         "o env do filho parou de HERDAR o do servidor — sem PATH/chaves a "
         "Vision e o import quebram")
@@ -116,23 +197,65 @@ def test_a_chamada_do_filho_LIGA_o_faulthandler_pelo_env():
         "nao liga e a proxima morte por memoria volta como 'rc=-6 (sem stderr)'"
         % env.get("PYTHONFAULTHANDLER"))
 
-    r = subprocess.run([sys.executable, "-c", "import os; os.abort()"],
-                       capture_output=True, text=True, timeout=60, env=env)
+    # 🔑 com o ARGV da producao: se alguem puser `-E`/`-I` no `_cmd`, o Python
+    # ignora as variaveis PYTHON* e o abort volta a ser mudo.
+    r = _filho_com_o_argv_da_producao("import os; os.abort()")
     assert r.returncode != 0
     assert "Fatal Python error" in (r.stderr or ""), (
-        "com o env DA PRODUCAO o filho abortou MUDO: %r" % (r.stderr or "")[:200])
-    assert 'File "<string>", line 1' in (r.stderr or ""), (
+        "com o ARGV e o ENV DA PRODUCAO o filho abortou MUDO: %r — procure "
+        "por `-E`/`-I` nas flags do `_cmd`" % (r.stderr or "")[:200])
+    # a LINHA muda (o prefixo do teto empurra o codigo pra baixo); o que tem
+    # que vir e a pilha, nao o numero
+    assert 'File "<string>", line' in (r.stderr or ""), (
         "veio o cabecalho e nao veio a pilha — e a pilha que diz onde morreu")
 
 
-def test_o_texto_do_menos_c_NAO_mudou():
-    """🪤 O teste do teto congela o prefixo do `-c`. O passo 1 não podia tocar nele."""
-    i = _SRC.find("_cmd = [_sysv.executable")
-    assert i > 0
-    trecho = _SRC[i:i + 600]
-    assert "import resource; resource.setrlimit(" in trecho
-    assert "resource.RLIMIT_AS, (2_000_000_000, 2_000_000_000)" in trecho
-    assert "except Exception" in trecho
+def test_o_teto_de_2GB_CHEGA_no_argumento_do_run():
+    """🪤 O teste do teto congela o prefixo do `-c`. O passo 1 não podia tocar
+    nele — e agora quem responde é o argumento que o `_sp.run` recebeu, não o
+    texto do `main.py`."""
+    # o bloco que este guarda executa tem que ser O UNICO que sobe o filho:
+    # um segundo call site ficaria fora da espionagem, e portanto sem teto.
+    _chamada_do_filho()
+    argv, _, _ = _o_que_chegou_no_sp_run()
+    assert argv[-2] == "-c", (
+        "o `-c` deixou de ser o penultimo argumento: %r" % (argv[:-1],))
+    codigo = argv[-1]
+    assert "import resource; resource.setrlimit(" in codigo, (
+        "o filho que CHEGOU no `_sp.run` nao seta mais o teto de memoria — "
+        "foi um filho sem teto que derrubou o servidor em 03/09: %r"
+        % codigo[:200])
+    assert "resource.RLIMIT_AS, (2_000_000_000, 2_000_000_000)" in codigo, (
+        "o teto que chega no filho nao e mais 2 GB: %r" % codigo[:300])
+    assert "except Exception" in codigo, (
+        "sumiu o try/except do `resource` — em Windows TODA medicao de PDF "
+        "morreria de ImportError")
+    assert codigo.index("import resource") < codigo.index("from pdf_vector"), (
+        "o teto e setado DEPOIS de importar o medidor — a alocacao grande "
+        "acontece no import e escapa do limite")
+
+
+def test_o_prefixo_do_teto_RODA_ate_onde_nao_existe_o_modulo_resource():
+    """🧪 O prefixo que chega no filho tem que EXECUTAR limpo — inclusive onde
+    `resource` não existe (Windows, desenvolvimento). E onde ele existe, o teto
+    tem que valer de verdade dentro do processo."""
+    import json
+    sonda = ("import json" + chr(10)
+             + "try:" + chr(10)
+             + "    import resource; _l = list(resource.getrlimit(resource.RLIMIT_AS))" + chr(10)
+             + "except Exception:" + chr(10)
+             + "    _l = None" + chr(10)
+             + "print(json.dumps({'lim': _l}))" + chr(10))
+    r = _filho_com_o_argv_da_producao(sonda)
+    assert r.returncode == 0, (
+        "o prefixo do `-c` que chega no filho QUEBRA o processo (rc=%r): %r"
+        % (r.returncode, (r.stderr or "")[-400:]))
+    lim = json.loads((r.stdout or "").strip().splitlines()[-1])["lim"]
+    if lim is None:
+        # sem o módulo `resource` (Windows): o que se prova aqui é a tolerância
+        pytest.skip("sem o modulo `resource` neste sistema — teto so vale em Linux")
+    assert lim == [2_000_000_000, 2_000_000_000], (
+        "o filho comecou a medir com RLIMIT_AS=%r — nao e o teto de 2 GB" % (lim,))
 
 
 def test_o_stderr_guardado_cabe_um_traceback():

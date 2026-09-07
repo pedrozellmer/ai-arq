@@ -89,7 +89,11 @@ jobs:
           # envelhece é piso que não guarda nada.
           # 07/09, 2a subida do dia: 1900 -> 2000. A bancada colhe 2565 depois
           # de trazer as lacunas fechadas. O guarda exige piso >= 75% do colhido.
-          PISO: 2000
+          # 07/09, 3a subida: 2000 -> 2200. Fechar lacuna quase sempre e VARIAR
+          # uma dimensao que o fixture nao variava (um item vira dois, um ramo
+          # vira dois), entao cada lacuna fechada traz casos novos: a bancada
+          # foi de 2482 pra 2728 nos quatro lotes.
+          PISO: 2200
         run: |
           N=$(python -m pytest tests/ -q --collect-only 2>/dev/null | tail -1 | grep -oE '^[0-9]+' || echo 0)
           echo "testes colhidos: $N (piso: $PISO)"

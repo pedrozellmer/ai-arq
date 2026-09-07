@@ -23,8 +23,7 @@ import io
 import os
 import sys
 
-import pytest  # noqa: F401
-from datetime import date
+import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -250,29 +249,103 @@ def _armar_rota_do_ip(mp, admin_ok=True):
     return gravados
 
 
-def test_o_IP_real_vem_do_cabecalho_do_cloudflare(monkeypatch):
+#: O caminho é contrato com a tela: o admin.html chama por STRING.
+ROTA_DO_IP = "/api/admin/marcar-meu-ip"
+
+
+@pytest.mark.parametrize("cabecalhos,borda,esperado,porque", [
+    ({"cf-connecting-ip": "203.0.113.9", "x-forwarded-for": "198.51.100.7"},
+     "172.71.0.1", "203.0.113.9",
+     "o cabeçalho do Cloudflare tem que ganhar do x-forwarded-for e da borda"),
+    ({"x-forwarded-for": "198.51.100.7, 172.71.0.1"},
+     "172.71.0.1", "198.51.100.7",
+     "sem o cabeçalho do Cloudflare, vale o PRIMEIRO da cadeia do "
+     "x-forwarded-for — pegar o último grava o proxy"),
+    ({}, "203.0.113.42", "203.0.113.42",
+     "sem cabeçalho nenhum (chamada direta, sem CDN) sobra o IP da conexão"),
+])
+def test_o_IP_real_vem_do_cabecalho_do_cloudflare(
+        cabecalhos, borda, esperado, porque, monkeypatch):
     """🪤 Atrás do Cloudflare, `request.client.host` é o IP da BORDA, igual pra
     todo mundo. Registrar ele excluiria o Cloudflare inteiro da estatística —
-    ou seja, zeraria a contagem."""
+    ou seja, zeraria a contagem.
+
+    🪤 06/09/2026 — o guarda tinha UM caso só (os dois cabeçalhos presentes),
+    então a ordem de precedência entre `x-forwarded-for` e a borda, e o corte
+    da cadeia na vírgula, não eram exercitados por ninguém. E o MÉTODO da
+    gravação era capturado e nunca conferido: um PATCH em cima de `ips_da_casa`
+    passava verde.
+    """
     import main as _m
     gravados = _armar_rota_do_ip(monkeypatch)
-    r = _m.admin_marcar_meu_ip(_RequisicaoFalsa(
-        {"cf-connecting-ip": "203.0.113.9", "x-forwarded-for": "198.51.100.7"},
-        "172.71.0.1"))
+    r = _m.admin_marcar_meu_ip(_RequisicaoFalsa(cabecalhos, borda))
     assert r.get("ok") is True, r
     assert len(gravados) == 1, "esperava UMA gravação, veio %r" % (gravados,)
+    assert gravados[0][0] == "POST", (
+        "a lista da casa foi gravada com %r — só o POST com "
+        "`resolution=merge-duplicates` insere IP novo; outro verbo não cria "
+        "linha e o IP nunca entra na lista" % (gravados[0][0],))
     assert gravados[0][1] == "ips_da_casa"
-    assert gravados[0][2].get("ip") == "203.0.113.9", (
-        "gravou %r — o IP da BORDA do Cloudflare (ou o do proxy) entrou na "
-        "lista da casa: excluiria o Cloudflare inteiro e zeraria a contagem"
-        % (gravados[0][2].get("ip"),))
-    assert r.get("ip") == "203.0.113.9"
+    assert gravados[0][2].get("ip") == esperado, (
+        "gravou %r em vez de %r — %s"
+        % (gravados[0][2].get("ip"), esperado, porque))
+    assert r.get("ip") == esperado
+
+
+def _cliente_http():
+    """Fala com o app pelo MESMO caminho do navegador: uma requisição HTTP.
+
+    SEM `with`: o context manager dispara os eventos de startup, que tocam
+    banco — e ninguém precisa deles pra bater numa rota fechada.
+    """
+    import main as _m
+    from fastapi.testclient import TestClient
+    return TestClient(_m.app, raise_server_exceptions=False)
 
 
 def test_a_rota_de_marcar_IP_exige_admin():
-    """🔒 Sem isso, qualquer visitante poderia se auto-excluir da contagem."""
-    i = _MAIN.find("def admin_marcar_meu_ip")
-    assert "_require_admin(request)" in _MAIN[i:i + 700]
+    """🔒 Sem isso, qualquer visitante poderia se auto-excluir da contagem.
+
+    🪤 06/09/2026 — o guarda anterior lia o FONTE (`_require_admin(request)`
+    perto do `def`) e o irmão dele chamava o OBJETO FUNÇÃO. Os dois ignoram
+    tudo o que desvia o caminho ANTES da função: rota duplicada, ordem de
+    registro, middleware. "Duas funções com o MESMO nome" já é modo de falha
+    registrado aqui (incidente do smoke, 20/08). Agora quem responde é o app.
+    """
+    r = _cliente_http().post(ROTA_DO_IP)
+    assert r.status_code in (401, 403), (
+        "POST %s sem credencial nenhuma respondeu %s — qualquer visitante se "
+        "auto-excluiria da contagem e a estatística ficaria cega para ele"
+        % (ROTA_DO_IP, r.status_code))
+
+
+def test_a_rota_do_IP_esta_registrada_UMA_vez_e_so_no_POST():
+    """🪤 Rota declarada duas vezes: a segunda vence e a primeira vira código
+    morto com teste verde. Foi assim no smoke de 20/08."""
+    import main as _m
+    achadas = [r for r in _m.app.routes
+               if getattr(r, "path", None) == ROTA_DO_IP]
+    assert len(achadas) == 1, (
+        "%s está registrada %d vezes — a última vence e o guarda de cima pode "
+        "estar medindo a que não responde" % (ROTA_DO_IP, len(achadas)))
+    metodos = set(getattr(achadas[0], "methods", ()) or ())
+    assert metodos == {"POST"}, (
+        "a rota aceita %r — um GET grava a lista da casa por navegação "
+        "simples (link, prefetch do navegador)" % (sorted(metodos),))
+
+
+def test_a_TELA_do_admin_chama_EXATAMENTE_esse_caminho():
+    """🪤 O caminho é contrato: renomear a rota mata o recurso e a bancada
+    inteira segue verde, porque o admin.html chama por string."""
+    raiz = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    html = io.open(os.path.join(raiz, "admin.html"), encoding="utf-8").read()
+    i = html.find(ROTA_DO_IP)
+    assert i > 0, (
+        "o admin.html não chama mais %s — o IP da casa parou de se atualizar "
+        "sozinho e a lista envelhece calada" % ROTA_DO_IP)
+    assert "POST" in html[i:i + 200], (
+        "a tela chama %s sem method POST — a rota só aceita POST e a chamada "
+        "volta 405 sem ninguém ver" % ROTA_DO_IP)
 
 
 def test_o_coletor_aceita_a_lista_e_nao_so_a_constante():

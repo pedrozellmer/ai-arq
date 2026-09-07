@@ -25,11 +25,14 @@ se acha procurando função síncrona chamada de rota assíncrona.
 """
 import asyncio
 import io
+import json as _json
 import os
 import re
 import sys
 import threading
 import time as _timeb
+
+import pytest
 
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _BACKEND)
@@ -97,31 +100,80 @@ def _corpo_da_rota_do_chat():
     return _FONTE[i:j]
 
 
-def test_a_rota_do_chat_NAO_chama_o_agente_no_laco_de_eventos(monkeypatch):
+# 🪤 06/09/2026 — O FIXTURE SÓ MANDAVA CORPO VAZIO, E ESSE CORPO A PRODUÇÃO
+# NUNCA MANDA. `dashboard.html` envia SEMPRE
+# `body: JSON.stringify({ history: agentConversation })`. Na 1ª pergunta
+# `agentConversation` é `[]` (falsy, `history` fica `[]`); da 2ª em diante tem
+# 2+ turnos e `history` fica CHEIO — que é a maioria do tráfego do chat. Com o
+# guarda testando só o corpo vazio, dava pra devolver o agente ao laço de
+# eventos justamente no ramo que a produção mais usa (um `if history: ask(...)`)
+# e ficar verde. Os três corpos abaixo cobrem os três estados reais.
+_CORPO_SEM_BODY = b""
+_CORPO_1A_PERGUNTA = _json.dumps({"history": []}).encode("utf-8")
+_CORPO_CONVERSA = _json.dumps({"history": [
+    {"role": "user", "content": "quantos m2 de piso?"},
+    {"role": "assistant", "content": "120 m2 no layer PISO"},
+    {"role": "user", "content": "e de rodape?"},
+    {"role": "assistant", "content": "48 m"},
+]}).encode("utf-8")
+
+
+@pytest.mark.parametrize("rotulo,corpo,history_esperado", [
+    ("sem corpo nenhum", _CORPO_SEM_BODY, None),
+    ("1a pergunta (history=[])", _CORPO_1A_PERGUNTA, []),
+    ("conversa em andamento (history com 4 turnos)", _CORPO_CONVERSA,
+     _json.loads(_CORPO_CONVERSA.decode("utf-8"))["history"]),
+])
+def test_a_rota_do_chat_NAO_chama_o_agente_no_laco_de_eventos(
+        monkeypatch, rotulo, corpo, history_esperado):
     """O agente tem que rodar em OUTRA thread, e o laco tem que continuar vivo.
 
     O agente falso aqui bloqueia 0,3 s - 6% do health check de 5 s do Render.
     Se ele rodar no laco, o relogio paralelo para de bater durante esse tempo,
     que e exatamente o que matou a instancia.
+
+    Roda com os TRES corpos que a producao realmente manda - inclusive o de
+    conversa em andamento, que e a maioria do trafego do chat.
     """
     visto = {}
 
     def _falso_ask(job_id, question, max_iterations=8, history=None):
         visto["thread"] = threading.get_ident()
+        visto["history"] = history
         time.sleep(0.30)                    # o agente "pensando"
         return {"answer": "resposta do agente", "tool_calls": [], "iterations": 1}
 
-    m = _rodar_a_rota(monkeypatch, _falso_ask)
+    m = _rodar_a_rota(monkeypatch, _falso_ask, corpo=corpo)
 
-    assert visto.get("thread") is not None, "o agente nem foi chamado"
+    assert visto.get("thread") is not None, "o agente nem foi chamado (%s)" % rotulo
     assert visto["thread"] != m["thread_do_laco"], (
-        "o agente rodou NA THREAD DO LACO DE EVENTOS - com --workers 1 isso "
-        "congela o site inteiro enquanto ele pensa, e o health check de 5 s do "
-        "Render mata a instancia (episodio de 03/09, instance_count=0 por 90 s)")
+        "com o corpo '%s' o agente rodou NA THREAD DO LACO DE EVENTOS - com "
+        "--workers 1 isso congela o site inteiro enquanto ele pensa, e o health "
+        "check de 5 s do Render mata a instancia (episodio de 03/09, "
+        "instance_count=0 por 90 s)" % rotulo)
     assert m["tiques_durante"] >= 5, (
-        "o laco de eventos bateu so %d vez(es) durante os 0,30 s do agente - "
-        "ele estava CONGELADO; com o threadpool batem ~30 tiques de 10 ms"
-        % m["tiques_durante"])
+        "com o corpo '%s' o laco de eventos bateu so %d vez(es) durante os "
+        "0,30 s do agente - ele estava CONGELADO; com o threadpool batem ~30 "
+        "tiques de 10 ms" % (rotulo, m["tiques_durante"]))
+    assert visto["history"] == history_esperado, (
+        "o historico que chegou ao agente com o corpo '%s' foi %r, esperado %r "
+        "- tirar do laco nao pode custar o contexto da conversa"
+        % (rotulo, visto["history"], history_esperado))
+    assert m["resposta"]["answer"] == "resposta do agente", (
+        "a rota nao devolveu a resposta do agente com o corpo '%s': %r"
+        % (rotulo, m["resposta"]))
+
+
+def test_o_corpo_que_a_producao_MANDA_e_o_que_a_bancada_testa():
+    """🪤 Ancora o fixture na tela real: se `dashboard.html` parar de mandar
+    `{history: ...}`, o parametrize acima vira ficcao e ninguem percebe."""
+    _RAIZ = os.path.dirname(_BACKEND)
+    dash = io.open(os.path.join(_RAIZ, "dashboard.html"), encoding="utf-8").read()
+    i = dash.index("/api/agent/ask")
+    trecho = dash[i:i + 900]
+    assert "JSON.stringify({ history: agentConversation })" in trecho, (
+        "a tela mudou o corpo que manda pro chat - o parametrize desta bancada "
+        "precisa acompanhar, senao volta a testar um formato que nao existe")
 
 
 def test_CONTROLE_o_agente_continua_SENDO_chamado():

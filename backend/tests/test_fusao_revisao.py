@@ -25,6 +25,8 @@ import io
 import os
 import sys
 
+import pytest
+
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _BACKEND)
 
@@ -301,8 +303,23 @@ class _ProjFake(object):
         self.layout_area = None
 
 
+def _sem_nenhum_medido():
+    """A leitura em que o motor NÃO confirmou nada — 29,6% das linhas saem com
+    quantidade zero e 53% dos projetos não têm uma linha medida sequer. É o
+    caso extremo em que qualquer condição do tipo `if _n_med_versao > 0` fica
+    falsa, e por isso é justamente o que o fixture de um item CONFIRMADO nunca
+    exercita."""
+    from models import BudgetItem, Confidence
+    return [
+        BudgetItem(item_num="1.1", description="Laje maciça h=12cm", unit="m²",
+                   quantity=0.0, confidence=Confidence.ESTIMADO),
+        BudgetItem(item_num="1.2", description="Piso porcelanato", unit="m²",
+                   quantity=0.0, confidence=Confidence.ESTIMADO),
+    ]
+
+
 def _executa_o_fim(fusao=None, frase_versao="", acrescenta_linha=False,
-                   pai="pai-xyz"):
+                   pai="pai-xyz", itens=None):
     """Roda a fatia real com rede/banco/planilha injetados e devolve o diário.
 
     A planilha "gerada" é um arquivo de texto com os avisos e as descrições do
@@ -315,7 +332,7 @@ def _executa_o_fim(fusao=None, frase_versao="", acrescenta_linha=False,
     diario = {"gerou": [], "eventos": [], "logs": [], "subiu": None,
               "conteudo_subido": None, "cmp_args": None, "avisos_gravados": None}
     proj = _ProjFake()
-    itens = _itens_da_leitura()
+    itens = _itens_da_leitura() if itens is None else list(itens)
     work_dir = tempfile.mkdtemp(prefix="fim_process_job_")
 
     def _gen(project_data, all_items, path, typology=None):
@@ -383,27 +400,48 @@ def _executa_o_fim(fusao=None, frase_versao="", acrescenta_linha=False,
 # ══════════════════════════════════════════════════════════════════════════
 #  ORDEM no process_job: a planilha entregue é a de DEPOIS da fusão
 # ══════════════════════════════════════════════════════════════════════════
-def test_a_planilha_entregue_e_a_ULTIMA_versao():
+_ZERO_FUSAO = {"revisoes": 0, "casadas": 0, "acrescentadas": 0}
+_FRASE_MENOS = "esta releitura mediu MENOS que a versão anterior"
+
+# Cada linha é UM motivo SOZINHO de refazer a planilha, e o pedaço do aviso que
+# só existe por causa dele. Juntos os dois se cobrem: com os dois ligados, um
+# `if` que só olha o outro passa verde.
+_MOTIVOS_ISOLADOS = [
+    ("so_a_fusao_casou",
+     {"revisoes": 1, "casadas": 1, "acrescentadas": 0}, "", "MANTEVE"),
+    ("so_a_fusao_acrescentou",
+     {"revisoes": 1, "casadas": 0, "acrescentadas": 1}, "", "LINHA NOVA"),
+    ("so_mediu_menos", dict(_ZERO_FUSAO), _FRASE_MENOS, "MENOS"),
+]
+
+
+@pytest.mark.parametrize("_nome,fusao,frase,pedaco", _MOTIVOS_ISOLADOS,
+                         ids=[m[0] for m in _MOTIVOS_ISOLADOS])
+def test_a_planilha_entregue_e_a_ULTIMA_versao(_nome, fusao, frase, pedaco):
     """O arquivo que sobe pro Storage é o de DEPOIS da fusão e do aviso.
 
     🚨 Achado 22 de 23/08: a planilha nascia ANTES da fusão. Na TELA o cliente
     via as correções dele preservadas; no ARQUIVO que ele baixa, não — e o
     `_carimbar_planilha` calcula a assinatura sobre os itens JÁ fundidos do
     banco, então o detector de coerência jurava que o .xlsx estava em dia.
+
+    🪤 06/09: este guarda só rodava o cenário em que os DOIS motivos de refazer
+    existiam ao mesmo tempo — então cada um cobria o buraco do outro. O job sem
+    correção do cliente e com releitura que mediu MENOS (caso cliente-16, 10/08:
+    47 medidos viraram 28) voltava a baixar .xlsx sem a ressalva, com a ressalva
+    viva na tela, sem ninguém reprovar. Agora cada motivo é cobrado SOZINHO.
     """
-    d, proj, _ = _executa_o_fim(
-        fusao={"revisoes": 1, "casadas": 1, "acrescentadas": 0},
-        frase_versao="esta releitura mediu MENOS que a versão anterior")
+    d, proj, _ = _executa_o_fim(fusao=fusao, frase_versao=frase)
     assert len(d["gerou"]) == 2, (
-        "a planilha não foi refeita depois da fusão (gerou=%r)" % d["gerou"])
+        "com o motivo %r sozinho a planilha NÃO foi refeita (gerou=%r) — o "
+        "cliente baixa o arquivo de antes" % (_nome, d["gerou"]))
     assert d["subiu"] == d["gerou"][-1], (
         "subiu pro Storage %r, mas a última planilha escrita foi %r — o cliente "
         "baixa a versão pré-fusão" % (d["subiu"], d["gerou"][-1]))
     conteudo = d["conteudo_subido"] or ""
-    assert "MANTEVE" in conteudo, (
-        "o .xlsx entregue não tem o aviso da fusão:\n" + conteudo[:400])
-    assert "MENOS" in conteudo, (
-        "o .xlsx entregue não tem o aviso de que mediu menos:\n" + conteudo[:400])
+    assert pedaco in conteudo, (
+        "o .xlsx entregue não tem o aviso do motivo %r (esperava %r):\n%s"
+        % (_nome, pedaco, conteudo[:400]))
     ordem = d["eventos"]
     ultimo_gerou = len(ordem) - 1 - ordem[::-1].index("gerou")
     assert ultimo_gerou < ordem.index("carimbou") < ordem.index("subiu"), (
@@ -411,17 +449,45 @@ def test_a_planilha_entregue_e_a_ULTIMA_versao():
         "do upload" % ordem)
 
 
-def test_o_aviso_de_mediu_menos_entra_no_arquivo():
+def test_sem_motivo_nenhum_a_planilha_nao_e_refeita():
+    """Controle negativo do parametrize acima: sem fusão e sem 'mediu menos' a
+    refação NÃO roda. Sem isto, um `if` sempre-verdadeiro passaria nos três
+    cenários de cima e a gente estaria pagando uma planilha a mais por job."""
+    d, _, _ = _executa_o_fim(fusao=dict(_ZERO_FUSAO), frase_versao="")
+    assert len(d["gerou"]) == 1, (
+        "a refação virou incondicional (gerou=%r)" % d["gerou"])
+
+
+@pytest.mark.parametrize("quantos_medidos", [1, 0], ids=["um_medido",
+                                                        "nenhum_medido"])
+def test_o_aviso_de_mediu_menos_entra_no_arquivo(quantos_medidos):
     """🚨 24/08: o aviso ia pra tela e nunca pro .xlsx — o cliente encaminhava o
     arquivo pro orçamentista sem a ressalva, justo no caso em que a ressalva É o
     produto (caso cliente-16, 10/08: 47 medidos viraram 28 e o e-mail dizia
-    'planilha atualizada')."""
-    src = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
-    i = src.index("_cmp_v = _comparar_com_versao_anterior(")
-    trecho = src[i:i + 1200]
-    assert "_refazer_planilha.append" in trecho, (
-        "o aviso de 'mediu menos' não marca a planilha pra ser refeita — ele "
-        "nasce depois do arquivo e morre na tela")
+    'planilha atualizada').
+
+    Roda SEM nenhum motivo de fusão: o aviso tem que segurar a refação sozinho.
+
+    🪤 06/09: o fixture tinha sempre 1 item CONFIRMADO, então o caso de ZERO
+    medido — 53% dos projetos — nunca era exercitado, e qualquer condição presa
+    a `_n_med_versao > 0` passava verde. Agora os dois lados rodam, e o guarda
+    confere o número EXATO que chegou ao comparador.
+    """
+    itens = _itens_da_leitura() if quantos_medidos else _sem_nenhum_medido()
+    d, proj, _ = _executa_o_fim(fusao=dict(_ZERO_FUSAO), frase_versao=_FRASE_MENOS,
+                                itens=itens)
+    assert d["cmp_args"] == ("job-teste", quantos_medidos, len(itens)), (
+        "a comparação de versão recebeu %r — esperava (job, %d medidos, %d "
+        "itens)" % (d["cmp_args"], quantos_medidos, len(itens)))
+    assert len(d["gerou"]) == 2, (
+        "o aviso de 'mediu menos' não marcou a planilha pra ser refeita com "
+        "%d item(ns) medido(s) — ele nasce depois do arquivo e morre na tela "
+        "(gerou=%r)" % (quantos_medidos, d["gerou"]))
+    conteudo = d["conteudo_subido"] or ""
+    assert _FRASE_MENOS in conteudo, (
+        "o .xlsx que subiu pro Storage não tem a ressalva:\n" + conteudo[:400])
+    assert any(_FRASE_MENOS in _a for _a in (d["avisos_gravados"] or [])), (
+        "a ressalva não chegou nem ao banco: %r" % (d["avisos_gravados"],))
 
 
 def test_o_regen_nao_roda_a_toa():
@@ -434,12 +500,43 @@ def test_o_regen_nao_roda_a_toa():
         "a refação virou incondicional — passa a rodar em todo job sem motivo")
 
 
-def test_a_fusao_ainda_marca_a_planilha_pra_refazer():
-    src = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
-    i = src.index("all_items, _fusao = _fundir_revisoes_do_cliente(")
-    trecho = src[i:src.index("_persist_items_to_supabase(job_id, all_items)", i)]
-    assert 'if (_fusao.get("casadas") or 0) or (_fusao.get("acrescentadas") or 0):' in trecho
-    assert "_refazer_planilha.append" in trecho
+@pytest.mark.parametrize("casadas,acrescentadas,pedaco", [
+    (1, 0, "entraram por cima da linha"),
+    (0, 1, "LINHA NOVA"),
+    (0, 3, "LINHA NOVA"),
+    (2, 1, "LINHA NOVA"),
+], ids=["so_casadas", "so_uma_acrescentada", "so_acrescentadas", "as_duas"])
+def test_a_fusao_ainda_marca_a_planilha_pra_refazer(casadas, acrescentadas,
+                                                    pedaco):
+    """Cada ramo do `or` que decide refazer a planilha, LIGADO SOZINHO.
+
+    🪤 06/09: o cenário único era casadas=1 E acrescentadas=1 — qualquer um dos
+    dois ramos podia ser apagado sem o guarda ver. Apagar o de `acrescentadas`
+    é o pior caso: a correção do cliente que virou LINHA NOVA (REV.) convivendo
+    com a linha do motor volta a sair só no banco, e o cliente baixa o .xlsx
+    pré-fusão — sem a linha dele e sem o alerta de soma em dobro — com o carimbo
+    de coerência jurando que o arquivo está em dia.
+    """
+    d, proj, _ = _executa_o_fim(
+        fusao={"revisoes": casadas + acrescentadas, "casadas": casadas,
+               "acrescentadas": acrescentadas},
+        frase_versao="")
+    assert len(d["gerou"]) == 2, (
+        "casadas=%d acrescentadas=%d NÃO marcou a planilha pra refazer "
+        "(gerou=%r)" % (casadas, acrescentadas, d["gerou"]))
+    assert d["subiu"] == d["gerou"][-1], (
+        "subiu %r e a última escrita foi %r" % (d["subiu"], d["gerou"][-1]))
+    conteudo = d["conteudo_subido"] or ""
+    assert pedaco in conteudo, (
+        "o .xlsx entregue não explica o que aconteceu com as correções "
+        "(esperava %r):\n%s" % (pedaco, conteudo[:400]))
+    if acrescentadas:
+        assert "antes de somar a coluna" in conteudo, (
+            "linha acrescentada sem o alerta de soma em dobro:\n"
+            + conteudo[:400])
+        assert "%d entraram como LINHA NOVA" % acrescentadas in conteudo, (
+            "o aviso não conta as %d linhas novas:\n%s"
+            % (acrescentadas, conteudo[:400]))
 
 
 def test_o_aviso_ao_cliente_conta_as_linhas_NOVAS():

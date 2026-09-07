@@ -37,6 +37,8 @@ import os
 import sys
 import textwrap
 
+import pytest
+
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _BACKEND)
 
@@ -59,12 +61,29 @@ _FATOR_PESSIMISTA = 35
 # ══════════════════════════════════════════════════════════════════════════
 #  A PORTA DE VERDADE — a fatia real do process_job, executada
 # ══════════════════════════════════════════════════════════════════════════
-# 🪤 Recorte por ÂNCORA (`if _tam_dwg > _TETO_DWG:`), nunca por janela de
-# tamanho fixo, e a fatia vai do `try:` do import da constante até a linha da
-# conversão — é ali que a decisão acontece.
+# 🪤 Recorte por ÂNCORA (a condição de tamanho), nunca por janela de tamanho
+# fixo, e a fatia vai do `try:` do import da constante até a linha da conversão
+# — é ali que a decisão acontece.
+_CACHE_DA_FATIA = {}
+
+
 def _fatia_da_trava_do_dwg():
+    # 🪤 A bisseção abaixo chama a porta ~30 vezes; sem cache cada chamada
+    # releria o main.py inteiro. O recorte é o mesmo em todas.
+    if "fatia" not in _CACHE_DA_FATIA:
+        _CACHE_DA_FATIA["fatia"] = _recorta_a_fatia()
+    return _CACHE_DA_FATIA["fatia"]
+
+
+def _recorta_a_fatia():
     src = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
-    ancora = "                        if _tam_dwg > _TETO_DWG:\n"
+    # 🪤 06/09 — a âncora era a linha INTEIRA (`if _tam_dwg > _TETO_DWG:`).
+    # Quem mexesse na comparação (`> _TETO_DWG * 2`) quebrava o recorte, e o
+    # guarda reprovava dizendo "a âncora sumiu" em vez de "a porta recusa no
+    # tamanho errado" — mensagem errada pro defeito certo, que é meio caminho
+    # pra alguém "consertar" o teste. Ancorada só na condição, a mudança de
+    # limiar é MEDIDA lá embaixo, não denunciada aqui.
+    ancora = "                        if _tam_dwg >"
     assert src.count(ancora) == 1, (
         "a âncora da trava do DWG deixou de ser única — reveja o recorte "
         "antes de confiar neste guarda")
@@ -85,9 +104,14 @@ def _fatia_da_trava_do_dwg():
 
 def _dwg_de(tmp_path, nome, mb):
     """Cria um arquivo com o TAMANHO do caso real (esparso: não escreve 44 MB)."""
+    return _dwg_com_bytes(tmp_path, nome, int(mb * MB))
+
+
+def _dwg_com_bytes(tmp_path, nome, n_bytes):
+    """O mesmo, com o tamanho em BYTES — a fronteira mora entre dois bytes."""
     p = os.path.join(str(tmp_path), nome)
     with io.open(p, "wb") as f:
-        f.truncate(int(mb * MB))
+        f.truncate(int(n_bytes))
     return p
 
 
@@ -131,14 +155,86 @@ def test_o_arquivo_de_44MB_do_job_75dab573_passa(tmp_path):
     assert not r["aviso_pro_cliente"], r["aviso_pro_cliente"]
 
 
+# ══════════════════════════════════════════════════════════════════════════
+#  A FRONTEIRA MEDIDA NA PORTA — não a constante lida do namespace
+# ══════════════════════════════════════════════════════════════════════════
+# 🪤 06/09 — este guarda prometia "a constante certa não vale nada se o
+# `process_job` não a enxergar" e então LIA `_TETO_DWG` do namespace da fatia,
+# com um arquivo de 1 MB na mão. Com 1 MB é impossível observar fronteira
+# nenhuma: `if _tam_dwg > _TETO_DWG * 2` deixava o teto DECLARADO em 60 MB, o
+# EFETIVO em 120, e o guarda verde. Um DWG de 100 MB (≈2,9 GB de pico no fator
+# pessimista de 35×) entraria na conversão e derrubaria o container de 4 GiB —
+# exatamente a queda que esta trava existe pra impedir.
+# 🔑 Agora a fronteira é PROCURADA: sobe-se o tamanho até a porta recusar.
+_TETO_DA_BUSCA = 512 * MB
+
+
+def _porta_recusa(tmp_path, n_bytes):
+    return _porta_do_dwg(_dwg_com_bytes(tmp_path, "sonda.dwg", n_bytes))["recusou"]
+
+
+def _fronteira_da_porta(tmp_path):
+    """O MAIOR arquivo que a porta ainda deixa passar — medido nela.
+
+    Bisseção com precisão de 1 byte: a decisão é `_tam_dwg > _TETO_DWG`, então
+    o maior tamanho aceito é o próprio teto em vigor.
+    """
+    baixo, alto = 1, _TETO_DA_BUSCA
+    assert not _porta_recusa(tmp_path, baixo), (
+        "a porta recusa um DWG de 1 byte — não há fronteira pra medir")
+    assert _porta_recusa(tmp_path, alto), (
+        "a porta não recusa nem um DWG de %d MB: a trava anti-OOM sumiu ou o "
+        "teto está acima do que qualquer container aguenta"
+        % (_TETO_DA_BUSCA // MB))
+    while alto - baixo > 1:
+        meio = (baixo + alto) // 2
+        if _porta_recusa(tmp_path, meio):
+            alto = meio
+        else:
+            baixo = meio
+    return baixo
+
+
 def test_o_teto_que_a_porta_USA_e_o_da_medicao(tmp_path):
     """🪤 A constante certa não vale nada se o `process_job` não a enxergar:
-    o `except` dele fixa 40 MB, o número velho, e a queda é silenciosa."""
-    r = _porta_do_dwg(_dwg_de(tmp_path, "qualquer.dwg", 1))
-    assert r["teto_mb"] * MB == _MAX_DWG_BYTES, (
-        "o process_job está julgando por %.0f MB e a medição fixou %.0f MB — "
-        "o import da constante quebrou e o except assumiu calado"
-        % (r["teto_mb"], _MAX_DWG_BYTES / MB))
+    o `except` dele fixa 40 MB, o número velho, e a queda é silenciosa.
+
+    🔑 E não vale nada tampouco se a porta a ENXERGAR e julgar por outro
+    número. Por isso o teto aqui é o que a porta APLICA, achado subindo o
+    tamanho até ela recusar."""
+    efetivo = _fronteira_da_porta(tmp_path)
+    assert efetivo == _MAX_DWG_BYTES, (
+        "o process_job recusa a partir de %.1f MB e a medição fixou %.0f MB — "
+        "teto declarado e teto efetivo não são o mesmo número (a constante "
+        "que a fatia carrega diz %.0f MB)"
+        % (efetivo / MB, _MAX_DWG_BYTES / MB,
+           _porta_do_dwg(_dwg_de(tmp_path, "qualquer.dwg", 1))["teto_mb"]))
+
+
+# 🪤 Os casos do arquivo amostravam 1 MB, 44,5 MB e 150 MB — nada entre 60 e
+# 150, que é onde a fronteira mora. Estes quatro cercam o teto por byte, e o
+# de 100 MB é o caso concreto que a extrapolação deixava entrar.
+@pytest.mark.parametrize("n_bytes,deve_recusar,rotulo", [
+    (_MAX_DWG_BYTES - MB, False, "1 MB abaixo do teto"),
+    (_MAX_DWG_BYTES - 1, False, "1 byte abaixo do teto"),
+    (_MAX_DWG_BYTES, False, "exatamente o teto"),
+    (_MAX_DWG_BYTES + 1, True, "1 byte acima do teto"),
+    (_MAX_DWG_BYTES + MB, True, "1 MB acima do teto"),
+    (100 * MB, True, "100 MB — ~2,9 GB de pico no fator pessimista"),
+], ids=["teto-1MB", "teto-1B", "teto", "teto+1B", "teto+1MB", "100MB"])
+def test_a_porta_decide_no_byte_certo(tmp_path, n_bytes, deve_recusar, rotulo):
+    """Logo abaixo passa, logo acima recusa — e o `>` é `>`, não `>=`."""
+    r = _porta_do_dwg(_dwg_com_bytes(tmp_path, "borda.dwg", n_bytes))
+    assert r["recusou"] is deve_recusar, (
+        "%s (%d bytes = %.3f MB): a porta %s, e devia %s. Teto da medição: "
+        "%.0f MB. Aviso que iria pro cliente: %r"
+        % (rotulo, n_bytes, n_bytes / MB,
+           "recusou" if r["recusou"] else "deixou passar",
+           "recusar" if deve_recusar else "deixar passar",
+           _MAX_DWG_BYTES / MB, r["aviso_pro_cliente"]))
+    assert r["converteu"] is not deve_recusar, (
+        "%s: recusar e converter não podem discordar (recusou=%s converteu=%s)"
+        % (rotulo, r["recusou"], r["converteu"]))
 
 
 def test_CONTROLE_uma_prancha_ENORME_continua_sendo_recusada(tmp_path):

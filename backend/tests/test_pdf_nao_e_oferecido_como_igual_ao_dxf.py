@@ -12,6 +12,8 @@ import os
 import re
 import sys
 
+import pytest
+
 _AQUI = os.path.dirname(os.path.abspath(__file__))
 _BACKEND = os.path.dirname(_AQUI)
 for _p in (_BACKEND, _AQUI):
@@ -39,6 +41,14 @@ def _copy(src=None):
     return _COLA.sub("", chr(10).join(linhas))
 
 
+# A peneira ÚNICA de "isto é uma RECOMENDAÇÃO do que mandar". Um lugar só: os
+# dois guardas deste arquivo perguntam a mesma coisa, e duas cópias da mesma
+# régua divergem sozinhas (foi o que aconteceu — a absolvição da "lista dos
+# três" não fazia esta pergunta e por isso absolvia recomendação).
+_RECOMENDA = re.compile(
+    r"(?:ideal|reenvi|reexport|manda|mande|suba|sobe|exporte|replote)", re.I)
+
+
 def _pdf_vem_primeiro(src=None):
     """Recomendação que nomeia PDF ANTES de DXF/DWG.
 
@@ -57,8 +67,7 @@ def _pdf_vem_primeiro(src=None):
     """
     txt = _copy(src)
     ruins = []
-    recomenda = r"(?:ideal|reenvi|reexport|manda|mande|suba|sobe|exporte|replote)"
-    for m in re.finditer(recomenda + "[^" + _NL + "]{0,200}", txt, re.I):
+    for m in re.finditer(_RECOMENDA.pattern + "[^" + _NL + "]{0,200}", txt, re.I):
         t = m.group(0)
         pos_pdf = t.upper().find("PDF")
         pos_cad = min([p for p in (t.upper().find("DXF"), t.upper().find("DWG"))
@@ -103,10 +112,24 @@ _LISTA_DOS_TRES = re.compile(
 
 
 def _frase_poe_pdf_no_mesmo_nivel(frase):
-    """A frase cita PDF e CAD lado a lado sem dizer que o PDF entrega menos."""
+    """A frase cita PDF e CAD lado a lado sem dizer que o PDF entrega menos.
+
+    🩸 06/09, 3ª revisão: a absolvição da "lista dos três" (`DWG, DXF ou PDF`)
+    não perguntava se a frase RECOMENDA. Bastava escrever a recomendação no
+    formato de lista — *"mande em DXF, DWG ou PDF vetorial"* — pra oferecer PDF
+    como equivalente logo depois de uma falha e sair absolvido, sem nenhuma
+    ressalva de que de PDF só sai estimativa. É a frase de 03/09 com outra
+    pontuação; e o guarda irmão de ORDEM também não pega, porque nessa forma o
+    PDF vem por último.
+
+    🔑 Listar formatos ACEITOS continua legítimo. Listar formatos RECOMENDADOS
+    não é lista: é recomendação, e aí o PDF precisa vir com a ressalva.
+    """
     if not (_PDF.search(frase) and _CAD.search(frase)):
         return False
-    if _RESSALVA.search(frase) or _LISTA_DOS_TRES.search(frase):
+    if _RESSALVA.search(frase):
+        return False
+    if _LISTA_DOS_TRES.search(frase) and not _RECOMENDA.search(frase):
         return False
     return True
 
@@ -150,6 +173,27 @@ def test_CONTROLE_o_julgamento_por_frase_ACEITA_a_copy_HONESTA():
     assert not _frase_poe_pdf_no_mesmo_nivel(lista), (
         "o guarda acusaria a lista de formatos ACEITOS — viraria ruído e "
         "pararia de ser lido")
+
+
+@pytest.mark.parametrize("frase", [
+    "O ideal é mandar em DXF, DWG ou PDF vetorial.",
+    "Reenvie o arquivo em DXF, DWG ou PDF vetorial que a gente processa de novo.",
+    "Exporte de novo: DXF, DWG ou PDF.",
+    "Suba de novo em DWG, DXF ou PDF vetorial.",
+])
+def test_CONTROLE_recomendacao_em_FORMA_DE_LISTA_continua_sendo_acusada(frase):
+    """🩸 O buraco que o cético achou: a recomendação disfarçada de lista.
+
+    Estas quatro frases citam os três formatos adjacentes (então a absolvição
+    da "lista dos três" as inocentava) e põem o PDF por ÚLTIMO (então o guarda
+    de ORDEM também não pega). Mesmo assim são a frase de 03/09: o cliente lê,
+    sobe o PDF, e cai no caminho que entrega item medido em 5,4% dos projetos.
+    """
+    assert _frase_poe_pdf_no_mesmo_nivel(frase), (
+        "recomendação escrita em forma de lista escapou das duas peneiras: %r" % frase)
+    assert not _pdf_vem_primeiro(frase + chr(10)), (
+        "controle do controle: o guarda de ORDEM não deveria pegar esta — é "
+        "justamente por isso que a absolvição da lista precisava apertar")
 
 
 def test_CONTROLE_o_e_mail_de_falha_e_montado_de_verdade():

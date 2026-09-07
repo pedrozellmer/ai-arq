@@ -22,16 +22,102 @@ semanas eram descartados com `200 {"status":"ignored"}`.
 chega ao painel admin. O que este teste cobra é que ela seja mantida em dia com
 o que o front realmente manda.
 """
+import asyncio
 import io
 import os
 import re
 import sys
+
+import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _RAIZ = os.path.dirname(_BACKEND)
 
 _MAIN = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
+
+import main  # noqa: E402
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  🚨 06/09/2026 — POR QUE ESTES GUARDAS PASSARAM A CHAMAR A ROTA
+# ══════════════════════════════════════════════════════════════════════════
+# Cinco guardas deste arquivo liam o FONTE (pela árvore `ast` ou por janela de
+# caracteres) e a mutação passou por cima dos cinco:
+#
+#   • `if _campo:` -> `if False and _campo:` — a atribuição continua no fonte,
+#     o `ast` continua vendo a chave, e o dado para de ser gravado;
+#   • uma linha de saneamento a MAIS depois da boa (`_campo = str(...)[:200]`),
+#     com o regex e o `[:40]` ainda dentro da janela de 260 caracteres;
+#   • `_meta.update({"valor": ...})` no fim do bloco — o detector de chaves só
+#     olhava `_meta[...] = ...`, então a chave proibida entrava invisível;
+#   • `_s = ""` / `_rot = ""` depois do saneamento — a chave continua na lista,
+#     o valor sai vazio e some.
+#
+# 🔑 É a mesma lição das 29 HORAS de 29/08, escrita no comentário da própria
+# rota: guarda que lê o fonte não pega argumento faltando, nem ramo morto, nem
+# reatribuição. Agora a rota é CHAMADA e o julgamento é sobre a linha que ela
+# manda pro banco.
+class _Req:
+    """Request de mentira. A rota só toca nele quando o corpo AFIRMA identidade."""
+    headers = {"Authorization": "Bearer jwt-de-teste"}
+    client = None
+
+
+# 🚨 06/09/2026, 2ª revisão — OS GUARDAS SÓ ANDAVAM POR METADE DA ROTA.
+# `track_event` bifurca perto do fim:
+#
+#     if (payload.user_id or payload.user_email):
+#         _u_track = _get_user_from_request(request, tolerante=True)
+#
+# e o corpo anônimo nunca entra nesse `if`. Ou seja: poda, troca ou perda de
+# `meta` no ramo COM identidade — que é por onde passa o evento de quem já está
+# logado, inclusive o `signup_saiu_da_tela` de quem voltou pela sessão — era
+# invisível pra todo mundo aqui. Agora cada guarda de `meta` roda nos DOIS.
+IDENTIDADES = ["anonimo", "identificado"]
+_DO_TOKEN = {"id": "uid-do-token", "email": "arquiteta@example.com"}
+
+
+def gravar(meta, event="signup_saiu_da_tela", monkeypatch=None, quem="anonimo"):
+    """Chama a rota /api/track de VERDADE e devolve a linha que ela gravaria.
+
+    `quem="identificado"` faz o corpo AFIRMAR identidade — é o único jeito de
+    a rota entrar no ramo do `_get_user_from_request`.
+    """
+    linhas = []
+    alvo = monkeypatch
+    antes = main._supabase_insert
+    alvo.setattr(main, "_supabase_insert",
+                 lambda tabela, row: linhas.append((tabela, row)))
+    corpo = {"event": event, "meta": meta}
+    if quem == "identificado":
+        # 🪤 o que o CLIENTE afirma ser — de propósito diferente do token
+        corpo["user_id"] = "uid-que-o-cliente-inventou"
+        corpo["user_email"] = "outra.pessoa@example.com"
+        alvo.setattr(main, "_get_user_from_request",
+                     lambda request, tolerante=False: dict(_DO_TOKEN))
+    try:
+        resp = asyncio.run(main.track_event(main.TrackPayload(**corpo), _Req()))
+    finally:
+        alvo.setattr(main, "_supabase_insert", antes)
+    assert resp == {"status": "ok"}, resp
+    assert len(linhas) == 1 and linhas[0][0] == "usage_events", linhas
+    row = linhas[0][1]
+    if quem == "identificado":
+        # o conserto de 09/08 no mesmo caminho: identidade vem do TOKEN
+        assert row["user_id"] == _DO_TOKEN["id"], (
+            "o /api/track gravou a identidade que o CORPO afirmou (%r) em vez "
+            "da que o token provou — dá pra encher a atividade de qualquer "
+            "cliente com evento inventado" % row["user_id"])
+        assert row["user_email"] == _DO_TOKEN["email"], row["user_email"]
+    else:
+        assert row["user_id"] == "" and row["user_email"] == "", (
+            "evento anônimo saiu com identidade: %r" % row)
+    return row
+
+
+def meta_gravado(meta, monkeypatch, event="signup_saiu_da_tela", quem="anonimo"):
+    return gravar(meta, event=event, monkeypatch=monkeypatch, quem=quem)["meta"]
 
 
 def _rota_track():
@@ -298,34 +384,75 @@ def test_toda_chave_que_o_front_manda_o_backend_ACEITA():
         "chave no bloco `_meta` (saneada!), ou pare de mandar." % perdidas)
 
 
-def test_o_campo_do_cadastro_sobrevive():
-    """O caso concreto que motivou este arquivo."""
-    assert "campo" in _chaves_aceitas_no_backend(), (
+@pytest.mark.parametrize("quem", IDENTIDADES)
+def test_o_campo_do_cadastro_sobrevive(monkeypatch, quem):
+    """O caso concreto que motivou este arquivo.
+
+    🚨 06/09/2026 — a versão antiga perguntava ao `ast` se a rota ATRIBUI
+    `_meta["campo"]`. Embrulhar em `if False and _campo:` deixa a atribuição no
+    fonte e mata a gravação: o guarda ficava verde e o instrumento voltava a
+    nascer morto, que é exatamente o defeito que este arquivo documenta.
+    Agora a rota é chamada e o guarda olha a linha que vai pro banco.
+    """
+    meta = meta_gravado({"cid": "cmrmo1hoqp3q7xegu", "src": "direto",
+                         "campo": "whatsapp"}, monkeypatch, quem=quem)
+    assert meta.get("campo") == "whatsapp", (
         "o `campo` voltou a ser descartado — o `signup_saiu_da_tela` deixa de "
-        "responder ONDE a pessoa parou, que é a única coisa que ele faz")
+        "responder ONDE a pessoa parou, que é a única coisa que ele faz. "
+        "Gravado: %r" % meta)
+    assert meta.get("cid") and meta.get("src"), meta
 
 
-def test_o_campo_e_SANEADO_e_nao_entra_cru():
+@pytest.mark.parametrize("quem", IDENTIDADES)
+def test_o_campo_e_SANEADO_e_nao_entra_cru(monkeypatch, quem):
     """🔒 A lista fechada existe por segurança. Chave nova não pode virar porta
-    de HTML/JS pro painel admin."""
-    trecho = _trecho_da_rota()
-    j = trecho.find('_campo = ')
-    assert j > 0, "não achei o saneamento do campo"
-    linha = trecho[j:j + 260]
-    assert "a-z0-9_-" in linha, (
-        "o `campo` entra sem lista branca de caracteres: %r" % linha)
-    assert "[:40]" in linha, "o `campo` entra sem teto de tamanho"
+    de HTML/JS pro painel admin.
+
+    🚨 06/09/2026 — a versão antiga lia 260 caracteres depois de `_campo = ` e
+    conferia se o regex e o `[:40]` estavam ali. Uma linha a MAIS logo depois
+    (`_campo = str(payload.meta.get("campo") or "")[:200]`) desfazia o
+    saneamento sem sair da janela: o guarda ficava verde com HTML cru entrando.
+    Agora o guarda manda o payload malicioso pela rota e olha o que sobrou.
+    """
+    sujo = '<img src=x onerror="alert(1)">CAMPO/Whats App;drop' + ("z" * 200)
+    meta = meta_gravado({"campo": sujo}, monkeypatch, quem=quem)
+    gravado = meta.get("campo", "")
+    assert gravado, "o campo sumiu por inteiro — o saneamento virou descarte"
+    assert re.fullmatch(r"[a-z0-9_-]*", gravado), (
+        "o `campo` entrou sem lista branca de caracteres: %r" % gravado)
+    assert len(gravado) <= 40, "o `campo` entrou sem teto de tamanho: %d" % len(gravado)
+    for perigoso in ("<", ">", '"', "'", "&", "/", ";", " "):
+        assert perigoso not in gravado, (
+            "o caractere %r atravessou o saneamento: %r" % (perigoso, gravado))
 
 
-def test_o_backend_NAO_grava_o_valor_digitado():
+@pytest.mark.parametrize("quem", IDENTIDADES)
+def test_o_backend_NAO_grava_o_valor_digitado(monkeypatch, quem):
     """🔒 A tela de cadastro tem WhatsApp e nome. Se algum dia alguém mandar
-    `valor` junto, o backend não pode aceitar."""
-    backend = _chaves_aceitas_no_backend()
-    for proibida in ("valor", "value", "conteudo", "texto", "telefone",
-                     "whatsapp", "email_digitado"):
-        assert proibida not in backend, (
-            "o /api/track passou a aceitar a chave %r — isso é conteúdo "
-            "digitado pelo cliente" % proibida)
+    `valor` junto, o backend não pode aceitar.
+
+    🚨 06/09/2026 — a versão antiga perguntava ao `ast` quais chaves a rota
+    escreve, e ele só entendia `_meta[...] = ...`. Um
+    `_meta.update({"valor": ...})` no fim do bloco gravava o conteúdo digitado
+    pelo cliente sem aparecer pro detector. Agora o guarda MANDA o valor e
+    confere que ele não chega ao banco.
+    """
+    proibidas = {"valor": "(11) 90000-0000", "value": "Fulana de Tal",
+                 "conteudo": "rua tal, 100", "texto": "meu telefone",
+                 "telefone": "11900000000", "whatsapp": "11900000000",
+                 "email_digitado": "alguem@example.com"}
+    meta = meta_gravado(dict(proibidas, cid="abc123", campo="whatsapp"),
+                        monkeypatch, quem=quem)
+    vazou = sorted(k for k in proibidas if k in meta)
+    assert not vazou, (
+        "o /api/track passou a gravar %s — isso é conteúdo digitado pelo "
+        "cliente. Linha: %r" % (vazou, meta))
+    achados = [v for v in proibidas.values() if v in str(meta)]
+    assert not achados, (
+        "o valor digitado pelo cliente chegou ao banco por outra chave: %r" % meta)
+    assert meta.get("campo") == "whatsapp", (
+        "controle: o que É pra passar tem que passar — senão este teste é "
+        "verde por a rota não gravar nada. Linha: %r" % meta)
 
 
 def test_CONTROLE_POSITIVO_o_detector_pega_chave_orfa():
@@ -360,31 +487,61 @@ def test_nenhum_call_site_fica_SEM_CLASSIFICAR():
         "Achate o objeto: o backend só grava chave rasa mesmo." % aninhados)
 
 
-def test_as_TRES_chaves_achadas_em_28_08_sobrevivem():
+@pytest.mark.parametrize("quem", IDENTIDADES)
+def test_as_TRES_chaves_achadas_em_28_08_sobrevivem(monkeypatch, quem):
     """📌 Os casos concretos, um por ponto cego do detector velho.
-    Cada um morreu por um motivo de sintaxe DIFERENTE."""
-    backend = _chaves_aceitas_no_backend()
-    for chave, onde in (("rotulo", "aiarq-utils.js — meta passado como variável"),
-                        ("motivo", "dashboard.html — chamado com trackEvent?.()"),
-                        ("formato", "memorial.html — atalho ES6 {job_id, formato}")):
-        assert chave in backend, (
-            "o `%s` voltou a ser descartado calado (%s)" % (chave, onde))
+    Cada um morreu por um motivo de sintaxe DIFERENTE.
+
+    🚨 06/09/2026 — a versão antiga perguntava ao `ast` se a chave está na
+    lista. Um `_s = ""` dentro do laço (ou `_rot = ""` depois do saneamento)
+    mantém as três na lista e faz as três chegarem VAZIAS ao banco — que é
+    idêntico, pro painel, a nunca terem chegado. Agora o guarda manda um valor
+    real e cobra o valor real de volta.
+    """
+    meta = meta_gravado({"rotulo": "Baixar XLSX", "motivo": "sem-arquivo",
+                         "formato": "docx", "tela": "revisao",
+                         "origem": "quantitativo"},
+                        monkeypatch, event="clique:baixar-xlsx", quem=quem)
+    for chave, esperado, onde in (
+            ("rotulo", "Baixar XLSX", "aiarq-utils.js — meta como variável"),
+            ("motivo", "sem-arquivo", "dashboard.html — trackEvent?.()"),
+            ("formato", "docx", "memorial.html — atalho ES6 {job_id, formato}")):
+        assert meta.get(chave) == esperado, (
+            "o `%s` voltou a ser descartado calado (%s) — gravado: %r"
+            % (chave, onde, meta))
+    # os dois que nasceram depois, pelo mesmo caminho
+    assert meta.get("tela") == "revisao" and meta.get("origem") == "quantitativo", meta
 
 
-def test_o_rotulo_e_TEXTO_e_por_isso_o_saneamento_e_mais_duro():
+@pytest.mark.parametrize("quem", IDENTIDADES)
+def test_o_rotulo_e_TEXTO_e_por_isso_o_saneamento_e_mais_duro(monkeypatch, quem):
     """🔒 `rotulo` é o único que carrega texto livre da página. A rota /api/track
     é ABERTA — qualquer um posta nela — então isto não pode virar porta pro
-    painel admin."""
-    trecho = _trecho_da_rota()
-    j = trecho.find("_rot = ")
-    assert j > 0, "sumiu o saneamento do rotulo"
-    bloco = trecho[j:j + 400]
-    assert "[^0-9A-Za-z" in bloco, (
-        "o `rotulo` deixou de usar lista BRANCA de caracteres: %r" % bloco[:120])
-    assert "[:60]" in bloco, "o `rotulo` entra sem teto de tamanho"
-    for perigoso in ("<", ">", "&"):
-        assert perigoso not in bloco.split("[^")[1].split("]")[0], (
-            "o caractere %r entrou na lista branca do rotulo" % perigoso)
+    painel admin.
+
+    🚨 06/09/2026 — a versão antiga lia 400 caracteres depois de `_rot = ` e
+    conferia a lista branca e o `[:60]`. Uma linha inserida logo ANTES do
+    `if _rot:` (`_rot = str(payload.meta.get("rotulo") or "")[:300]`) desfazia
+    tudo sem sair da janela — texto cru do visitante ia direto pro painel e o
+    guarda ficava verde. Agora o guarda POSTA o ataque e olha o que sobrou.
+    """
+    ataque = ('<img src=x onerror="alert(document.cookie)"> Baixar & '
+              "compartilhar / relatório " + "A" * 120)
+    meta = meta_gravado({"rotulo": ataque}, monkeypatch,
+                        event="clique:baixar-xlsx", quem=quem)
+    rot = meta.get("rotulo", "")
+    assert rot, "o rótulo sumiu por inteiro — o saneamento virou descarte"
+    assert len(rot) <= 60, "o `rotulo` entra sem teto de tamanho: %d" % len(rot)
+    for perigoso in ("<", ">", "&", '"', "'", "/", "="):
+        assert perigoso not in rot, (
+            "o caractere %r atravessou a lista branca do rótulo: %r" % (perigoso, rot))
+    assert re.fullmatch(r"[0-9A-Za-zÀ-ÿ ._-]*", rot), (
+        "o `rotulo` deixou de usar lista BRANCA de caracteres: %r" % rot)
+    # 🧪 controle: o rótulo LEGÍTIMO tem que atravessar inteiro, com acento e
+    # espaço — senão o saneamento certo seria "apagar tudo".
+    bom = meta_gravado({"rotulo": "Baixar relatório em PDF"}, monkeypatch,
+                       event="clique:baixar-xlsx", quem=quem)
+    assert bom.get("rotulo") == "Baixar relatório em PDF", bom
 
 
 def test_CONTROLE_POSITIVO_os_tres_pontos_cegos_do_detector_velho():

@@ -234,6 +234,180 @@ def test_o_call_site_recortado_e_o_do_main_de_verdade():
     compile(fatia, "main_laco_slice", "exec")
 
 
+# ── e o trecho tem que estar num caminho VIVO ────────────────────────────────
+#
+# 🚨 06/09/2026, 2ª volta. Executar o trecho recortado prova que ELE funciona —
+# não prova que o `process_job` chega nele. Tornar o bloco MORTO (embrulhar o
+# `try:` num `if False:`, ou pôr um `continue` antes dele) não mexe na âncora,
+# não muda uma vírgula do que o recorte executa, e o laço volta a ser
+# INVISÍVEL — que é o único propósito declarado deste arquivo — com os dois
+# testes de cima verdes.
+#
+# 🚫 Isto não substitui a execução, soma a ela: a execução prova o COMPORTAMENTO
+#    do trecho, esta parte prova que o trecho é ALCANÇÁVEL.
+
+def _no_falso_de_verdade(no):
+    """A condição é comprovadamente falsa em tempo de compilação?"""
+    import ast
+    if isinstance(no, ast.Constant):
+        return not bool(no.value)
+    if isinstance(no, ast.BoolOp) and isinstance(no.op, ast.And):
+        return any(_no_falso_de_verdade(v) for v in no.values)
+    if isinstance(no, ast.BoolOp) and isinstance(no.op, ast.Or):
+        return all(_no_falso_de_verdade(v) for v in no.values)
+    if isinstance(no, ast.UnaryOp) and isinstance(no.op, ast.Not):
+        return _no_verdade_de_verdade(no.operand)
+    if isinstance(no, (ast.List, ast.Tuple, ast.Set)) and not no.elts:
+        return True
+    if isinstance(no, ast.Dict) and not no.keys:
+        return True
+    return False
+
+
+def _no_verdade_de_verdade(no):
+    """A condição é comprovadamente verdadeira em tempo de compilação?"""
+    import ast
+    if isinstance(no, ast.Constant):
+        return bool(no.value)
+    if isinstance(no, ast.BoolOp) and isinstance(no.op, ast.And):
+        return all(_no_verdade_de_verdade(v) for v in no.values)
+    if isinstance(no, ast.BoolOp) and isinstance(no.op, ast.Or):
+        return any(_no_verdade_de_verdade(v) for v in no.values)
+    if isinstance(no, ast.UnaryOp) and isinstance(no.op, ast.Not):
+        return _no_falso_de_verdade(no.operand)
+    if isinstance(no, (ast.List, ast.Tuple, ast.Set)) and no.elts:
+        return True
+    return False
+
+
+def _arvore_do_process_job():
+    import ast
+    import io as _io
+    src = _io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
+    fn = [n for n in ast.walk(ast.parse(src))
+          if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+          and n.name == "process_job"]
+    assert len(fn) == 1, "process_job sumiu ou virou duas definições"
+    pais = {}
+    for n in ast.walk(fn[0]):
+        for f in ast.iter_child_nodes(n):
+            pais[f] = n
+    return fn[0], pais
+
+
+def _cadeia(no, pais, ate):
+    """Do nó até a função, de dentro pra fora."""
+    saida = []
+    while no is not ate:
+        saida.append(no)
+        no = pais[no]
+    return saida
+
+
+def _suite_de(no, pais):
+    """(lista de statements, índice) da suíte que contém `no`."""
+    import ast
+    p = pais[no]
+    for _campo, valor in ast.iter_fields(p):
+        if isinstance(valor, list) and any(x is no for x in valor):
+            return valor, [i for i, x in enumerate(valor) if x is no][0]
+    raise AssertionError("nó fora de qualquer suíte")
+
+
+def test_o_registro_do_laco_esta_num_caminho_VIVO_do_process_job():
+    """🩸 A LACUNA QUE ISTO FECHA: bloco MORTO passava verde.
+
+    Prova três coisas sobre o caminho até o `_log_error("motor:laco-repeticao")`:
+
+      1. ele é IRMÃO (mesma suíte, e DEPOIS) da chamada de IA que produziu a
+         resposta — não mora num ramo paralelo nem num helper esquecido;
+      2. nenhum `if`/`while` entre a suíte comum e ele é falso em tempo de
+         compilação (`if False:`, `if ... and False:`, `while 0:`);
+      3. nenhum `return`/`raise`/`continue`/`break` INCONDICIONAL vem antes
+         dele nas suítes desse caminho.
+    """
+    import ast
+    fn, pais = _arvore_do_process_job()
+
+    log = [n for n in ast.walk(fn) if isinstance(n, ast.Call)
+           and isinstance(n.func, ast.Name) and n.func.id == "_log_error"
+           and n.args and isinstance(n.args[0], ast.Constant)
+           and n.args[0].value == "motor:laco-repeticao"]
+    assert len(log) == 1, (
+        "esperava UM registro de `motor:laco-repeticao` no process_job, achei "
+        "%d — se ele sumiu, o laço voltou a ser invisível" % len(log))
+
+    ia = [n for n in ast.walk(fn) if isinstance(n, ast.Call)
+          and isinstance(n.func, ast.Name) and n.func.id == "_llm_retry"]
+    assert len(ia) == 1, (
+        "esperava UMA chamada de IA (`_llm_retry`) no process_job, achei %d — "
+        "o guarda de alcance precisa saber de qual resposta o laço veio" % len(ia))
+
+    c_log = _cadeia(log[0], pais, fn)
+    c_ia = _cadeia(ia[0], pais, fn)
+
+    # 1) a suíte comum mais funda: o ancestral-statement do log que é IRMÃO do
+    #    ancestral-statement da chamada de IA
+    suites_ia = {}
+    for n in c_ia:
+        if isinstance(n, ast.stmt):
+            lista, idx = _suite_de(n, pais)
+            suites_ia.setdefault(id(lista), (lista, idx))
+    irmao_log = irmao_ia = None
+    for n in c_log:
+        if not isinstance(n, ast.stmt):
+            continue
+        lista, idx = _suite_de(n, pais)
+        if id(lista) in suites_ia:
+            irmao_log, irmao_ia = (n, idx), suites_ia[id(lista)]
+            break
+    assert irmao_log is not None, (
+        "o registro do laço não compartilha suíte nenhuma com a chamada de IA "
+        "— ele saiu do caminho da leitura da prancha")
+    assert irmao_log[1] > irmao_ia[1], (
+        "o registro do laço passou a vir ANTES da chamada de IA na mesma "
+        "suíte (posições %d e %d) — ele nunca veria a resposta"
+        % (irmao_log[1], irmao_ia[1]))
+
+    # 2) nenhum ramo morto entre a suíte comum e o registro
+    for filho in c_log:
+        pai = pais[filho]
+        if isinstance(pai, ast.If):
+            if any(x is filho for x in pai.body):
+                assert not _no_falso_de_verdade(pai.test), (
+                    "o registro do laço ficou dentro de um `if` FALSO em "
+                    "tempo de compilação (linha %d: `%s`) — o bloco está "
+                    "morto e o laço volta a ser invisível, com os testes de "
+                    "execução deste arquivo verdes"
+                    % (pai.lineno, ast.unparse(pai.test)))
+            elif any(x is filho for x in pai.orelse):
+                assert not _no_verdade_de_verdade(pai.test), (
+                    "o registro do laço ficou no `else` de um `if` sempre "
+                    "VERDADEIRO (linha %d) — bloco morto" % pai.lineno)
+        if isinstance(pai, ast.While) and any(x is filho for x in pai.body):
+            assert not _no_falso_de_verdade(pai.test), (
+                "o registro do laço ficou num `while` que nunca roda "
+                "(linha %d)" % pai.lineno)
+        if isinstance(pai, ast.For) and any(x is filho for x in pai.body):
+            assert not _no_falso_de_verdade(pai.iter), (
+                "o registro do laço ficou num `for` sobre coleção vazia "
+                "(linha %d)" % pai.lineno)
+
+    # 3) nada corta o caminho antes dele
+    _cortes = (ast.Return, ast.Raise, ast.Continue, ast.Break)
+    for n in c_log:
+        if not isinstance(n, ast.stmt):
+            continue
+        lista, idx = _suite_de(n, pais)
+        for anterior in lista[:idx]:
+            assert not isinstance(anterior, _cortes), (
+                "um `%s` incondicional na linha %d vem antes do registro do "
+                "laço na mesma suíte — o bloco virou código morto"
+                % (type(anterior).__name__.lower(), anterior.lineno))
+        if n is irmao_log[0]:
+            break
+
+
 def test_controle_positivo_o_detector_ANTIGO_nao_via_nada():
     """Prova que o guarda reprova mesmo: antes, o único sinal era o stop_reason,
     e ele não distingue 'cortou no fim' de 'queimou tudo em laço'."""

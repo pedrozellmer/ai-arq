@@ -27,6 +27,8 @@ import os
 import re
 import sys
 
+import pytest
+
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _BACKEND)
 
@@ -80,11 +82,16 @@ class _Linhas(list):
 
 
 def _rest_falso(por_tabela, chamadas=None):
-    """Um `_supa_rest_service` que devolve (status, linhas) envenenados."""
+    """Um `_supa_rest_service` que devolve (status, linhas) envenenados.
+
+    🪤 06/09: o espião guardava só `(method, path)` e cegava o repasse dos
+    `**kw` — que é onde mora o `params={"job_id": "eq...."}` de 15 das 18
+    chamadas reais de `_supa_rows`. Agora guarda os kwargs também.
+    """
     def _f(method, path, **kw):
         if chamadas is not None:
-            chamadas.append((method, path))
-        tabela = str(path).split("?")[0]
+            chamadas.append((method, str(path), dict(kw)))
+        tabela = str(path).split("?")[0].lstrip("/")
         st, linhas = por_tabela.get(tabela, (200, []))
         return _Status(st), _Linhas(linhas or [])
     return _f
@@ -94,20 +101,37 @@ def _rest_falso(por_tabela, chamadas=None):
 #  Consumidor 1 — `_supa_rows`, o helper que existe por causa do bug
 # ══════════════════════════════════════════════════════════════════════════
 def test_supa_rows_existe_e_devolve_lista(monkeypatch):
-    """CHAMA `_supa_rows` de verdade e olha o que sai."""
+    """CHAMA `_supa_rows` de verdade e olha o que sai — e o que ENTRA.
+
+    🚨 06/09: o filtro do projeto viaja nos `**kw`. Se `_supa_rows` parar de
+    repassá-los, 15 das 18 chamadas reais do main.py passam a ler a TABELA
+    INTEIRA sem `job_id`, e o `[0]` que vem depois é de um projeto qualquer —
+    isolamento entre projetos (regra dura nº2) caindo em silêncio, ainda por
+    cima com o teto de 1000 linhas do PostgREST cortando o resto. O guarda
+    antigo só olhava a lista de saída e ficava verde nessa mutação.
+    """
     import main
 
     linhas_do_banco = [{"id": "i-1", "description": "Piso porcelanato"},
                        {"id": "i-2", "description": "Laje maciça"}]
+    vistos = []
     monkeypatch.setattr(main, "_supa_rest_service",
-                        _rest_falso({"project_items": (200, linhas_do_banco)}))
+                        _rest_falso({"project_items": (200, linhas_do_banco)},
+                                    vistos))
 
-    r = main._supa_rows("GET", "project_items", params={"job_id": "eq.x"})
+    filtro = {"job_id": "eq.job-01", "select": "id,description",
+              "limit": "500"}
+    r = main._supa_rows("GET", "project_items", params=filtro, timeout=7)
 
     assert isinstance(r, list), (
         "`_supa_rows` devolveu %r (%s) no lugar das linhas — é o STATUS "
         "vazando pelo desempacotamento invertido" % (r, type(r).__name__))
     assert [d["id"] for d in r] == ["i-1", "i-2"], r
+    assert vistos == [("GET", "project_items",
+                       {"params": filtro, "timeout": 7})], (
+        "o que chegou ao banco foi %r — o filtro do projeto (e o select, e o "
+        "limit) ficou pelo caminho: a consulta vira 'a tabela inteira'"
+        % (vistos,))
 
 
 def test_supa_rows_devolve_LISTA_VAZIA_quando_a_rede_falha(monkeypatch):
@@ -198,6 +222,90 @@ def test_falha_de_verdade_na_leitura_das_revisoes_DEIXA_rastro(monkeypatch):
     _, resumo = main._fundir_revisoes_do_cliente([], "pai123")
     assert resumo.get("erro_leitura") == "HTTP 500", resumo
     assert gritos and gritos[0][1].get("severity") == "critical", gritos
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  Consumidores 3 a 7 — a inversão de nomes em QUALQUER um deles tem que doer
+# ══════════════════════════════════════════════════════════════════════════
+#  🪤 06/09: os dois guardas de execução acima cobriam UM consumidor cada.
+#  Inverter o desempacotamento em qualquer um dos ~60 outros
+#  `x, y = _supa_rest_service(...)` do main.py passava neste arquivo inteiro —
+#  a mesma doença de 23/08, no ponto vizinho. Cada linha abaixo é um consumidor
+#  REAL rodando com o serviço envenenado: o status sabe gritar quando é
+#  percorrido/indexado e as linhas sabem gritar quando são comparadas com um
+#  código HTTP. O que se cobra é o RESULTADO, porque três destes engolem
+#  exceção e devolvem o valor de "falhou" caladinhos.
+def _c_avisos_com(main):
+    return main._avisos_com("job-01", "o complemento não deu certo")
+
+
+def _c_entregavel_liberado(main):
+    return main._entregavel_liberado("job-01")
+
+
+def _c_memorial_salvo(main):
+    return main._memorial_carregar_salvo("job-01")
+
+
+def _c_revisoes_depois_de(main):
+    return main._revisoes_depois_de("job-01", "2026-09-01T00:00:00Z")
+
+
+def _c_paginador(main):
+    return main._supa_rest_tudo("project_items", params={"job_id": "eq.job-01"})
+
+
+_CONSUMIDORES = [
+    # (apelido, banco por tabela, o que chamar, o que TEM que sair)
+    ("_avisos_com",
+     {"projects": (200, [{"warnings": ["área estimada por escala"]}])},
+     _c_avisos_com,
+     ["área estimada por escala", "o complemento não deu certo"]),
+    ("_entregavel_liberado",
+     {"projects": (200, [{"pagamento": "", "cobravel": True}])},
+     _c_entregavel_liberado,
+     (False, "aguardando_pagamento")),
+    ("_memorial_carregar_salvo",
+     {"project_memorial": (200, [{"conteudo": {"blocos": 3}}])},
+     _c_memorial_salvo,
+     {"blocos": 3}),
+    ("_revisoes_depois_de",
+     {"item_reviews": (200, [{"action": "edit", "item_id": "a"},
+                             {"action": "edit", "item_id": "a"},
+                             {"action": "reject", "item_id": "b"}])},
+     _c_revisoes_depois_de,
+     {"editados": 1, "excluidos": 1}),
+    ("_supa_rest_tudo",
+     {"project_items": (200, [{"id": "i-1"}, {"id": "i-2"}])},
+     _c_paginador,
+     (200, [{"id": "i-1"}, {"id": "i-2"}])),
+]
+
+
+@pytest.mark.parametrize("apelido,banco,chamar,esperado", _CONSUMIDORES,
+                         ids=[c[0] for c in _CONSUMIDORES])
+def test_outros_consumidores_leem_a_tupla_na_ORDEM_certa(
+        monkeypatch, apelido, banco, chamar, esperado):
+    """Inverter `st, rows` em qualquer um destes tem que REPROVAR aqui."""
+    import main
+
+    monkeypatch.setenv("COBRANCA_LIGADA", "1")
+    monkeypatch.setattr(main, "_supa_rest_service", _rest_falso(banco))
+    monkeypatch.setattr(main, "_log_error", lambda *a, **k: None)
+
+    saida = chamar(main)
+    assert saida == esperado, (
+        "%s devolveu %r em vez de %r — o status e as linhas trocaram de lugar "
+        "(ou o erro foi engolido e virou o valor de 'falhou')"
+        % (apelido, saida, esperado))
+
+
+def test_a_varredura_de_consumidores_nao_encolheu():
+    """Controle: alguém 'consertando' um teste chato apagando a linha dele do
+    parametrize deixaria o buraco de volta sem deixar rastro."""
+    assert len(_CONSUMIDORES) >= 5, (
+        "a varredura de consumidores tem só %d — ela existe justamente porque "
+        "UM consumidor não cobre os outros" % len(_CONSUMIDORES))
 
 
 # ══════════════════════════════════════════════════════════════════════════

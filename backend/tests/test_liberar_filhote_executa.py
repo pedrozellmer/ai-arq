@@ -33,8 +33,10 @@ import pytest
 _AQUI = os.path.dirname(os.path.abspath(__file__))
 _BACKEND = os.path.dirname(_AQUI)
 sys.path.insert(0, _BACKEND)
+sys.path.insert(0, _AQUI)
 
 import main  # noqa: E402
+import _merge_bancada as _mb  # noqa: E402
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -191,7 +193,11 @@ def bancada(monkeypatch):
 def test_o_liberar_reconhece_o_merge_pelo_prefixo(bancada):
     """O prefixo 'mg' é a ÚNICA coisa que separa os dois caminhos. Se ele deixa
     de ser lido, o merge segue por toda a rota do filhote — nome, e-mail e
-    sufixo de revogação."""
+    sufixo de revogação.
+
+    🪤 07/09 (cético): este guarda FABRICA os job_id, então prova que o prefixo
+    é LIDO e nunca que ele é ESCRITO. Quem fecha a outra metade é o irmão
+    `test_o_prefixo_mg_vem_do_GERADOR_do_merge_criar`, logo abaixo."""
     bancada["monta"]("mg634d18")
     main.admin_liberar_filhote("mg634d18", _Req())
     nome_merge = bancada["banco"].patches[-1]["body"]["project_name"]
@@ -234,6 +240,59 @@ def test_o_liberar_escolhe_o_email_certo(bancada):
     main.admin_liberar_filhote("ev597afa", _Req())
     assert bancada["emails"][0]["kind"] == "leitura_nova", (
         "a releitura passou a mandar o e-mail da combinada — o espelho do bug")
+
+
+def _banco_do_merge():
+    """Um par original+releitura pronto pro `/merge-criar`, com prancha ganha
+    de cada lado (senão o merge não mede mais que a melhor leitura sozinha e a
+    rota recusa criar, com razão)."""
+    projetos = {
+        PAI_ID: dict(PAI, status="done", typology="office",
+                     project_type="arquitetura", warnings=[]),
+        "ev597afa": {"job_id": "ev597afa", "parent_job_id": PAI_ID, "is_eval": True,
+                     "status": "done", "user_id": "eval", "warnings": [],
+                     "project_name": "[TESTE] Residência Alto da Serra — avaliação",
+                     "created_at": "2026-08-24T19:37:48+00"},
+    }
+    itens_por_job = {
+        PAI_ID: _mb.itens("ARQ-01", 10, 6) + _mb.itens("EL-02", 8, 2),
+        "ev597afa": _mb.itens("ARQ-01", 10, 3) + _mb.itens("EL-02", 8, 5),
+    }
+    return _mb.Banco(projetos, itens_por_job)
+
+
+def test_o_prefixo_mg_vem_do_GERADOR_do_merge_criar(monkeypatch):
+    """🩸 07/09 — a metade que faltava: o 'mg' é ESCRITO por `/merge-criar`.
+
+    Toda a bancada do merge fabricava os job_id ('mg634d18'), então provava
+    só que `startswith('mg')` é lido. Trocando duas letras no gerador
+    (`novo_id = "mg" + uuid…`), TODO merge de verdade deixa de casar com o
+    prefixo e desce a rota da releitura inteira: nome "nova leitura (motor
+    atualizado)" no painel do cliente, e-mail "refizemos a leitura" (que num
+    merge é mentira), sufixo errado no revogar — e no admin.html o selo roxo e
+    o aviso "libere a combinada", que também são `startsWith('mg')`.
+
+    Aqui o merge é CRIADO de verdade e o id que ELE gerou é o que vai pro
+    Liberar. Não há string de merge escrita à mão neste teste."""
+    b = _banco_do_merge()
+    _mb.instalar(monkeypatch, b)
+
+    criado = main.admin_merge_criar("ev597afa", _mb.Req())
+    novo = criado["job_id"]
+    assert novo.startswith("mg"), (
+        "o gerador do merge parou de escrever o prefixo 'mg' (saiu %r) — a "
+        "rota do Liberar, o e-mail e o admin.html todos reconhecem o merge "
+        "por ele" % novo)
+
+    b.emails.clear()
+    main.admin_liberar_filhote(novo, _mb.Req())
+    nome = b.patches[-1]["body"]["project_name"]
+    assert nome.endswith(" — versão combinada (o melhor das duas leituras)"), (
+        "o merge que o /merge-criar acabou de gerar (%s) chegou ao painel do "
+        "cliente como %r" % (novo, nome))
+    assert len(b.emails) == 1 and b.emails[0]["tipo"] == "leitura_combinada", (
+        "o merge gerado pelo /merge-criar recebeu o e-mail %r"
+        % [e["tipo"] for e in b.emails])
 
 
 def test_revogar_devolve_o_nome_de_teste_certo(bancada):

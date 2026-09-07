@@ -28,6 +28,8 @@ sha256 idêntico. Sem isso o cache nasceria com 0% de acerto.
 import os
 import sys
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import llm_cache  # noqa: E402
@@ -178,19 +180,42 @@ def test_o_default_e_SOMBRA(monkeypatch):
     assert llm_cache._modo() == "sombra"
 
 
-def test_o_kill_switch_funciona(monkeypatch):
+@pytest.mark.parametrize("valor", ["off", "OFF", " Off ", "\toFF\n", "Off"])
+def test_o_kill_switch_funciona(monkeypatch, valor):
     """`LLM_CACHE=off` desliga sem deploy — rede de segurança pro caminho que
-    gera a planilha."""
-    monkeypatch.setenv("LLM_CACHE", "off")
-    assert llm_cache._modo() == "off"
+    gera a planilha.
+
+    🪤 PARAMETRIZADO DE PROPÓSITO. A versão anterior só escrevia `off` em
+    minúsculo, então a normalização (`.strip().lower()`) nunca era exercitada:
+    ela podia cair e o kill switch deixaria de existir pra quem digitasse
+    `OFF` ou ` Off ` no painel do Render — sem erro, sem log, servindo resposta
+    velha e escrevendo no banco enquanto o operador acha que desligou. Quem
+    aperta o botão de emergência às 3h da manhã não digita com cuidado.
+    """
+    monkeypatch.setenv("LLM_CACHE", valor)
+    assert llm_cache._modo() == "off", (
+        "LLM_CACHE=%r não foi entendido como desligado: a trava virou enfeite "
+        "e o kill switch não desliga nada" % valor)
     assert llm_cache.ler("qualquer") is None
     assert llm_cache.gravar("qualquer", _Resp("x"), {}) is False
 
 
-def test_valor_invalido_na_env_cai_pra_SOMBRA(monkeypatch):
-    """Errar o valor da env não pode LIGAR o cache por acidente."""
-    monkeypatch.setenv("LLM_CACHE", "sim")
-    assert llm_cache._modo() == "sombra"
+@pytest.mark.parametrize("valor,esperado", [
+    # 🧪 CONTROLE POSITIVO da normalização: sem estes casos, um `_modo()` que
+    # devolvesse "off" pra tudo passaria no teste de cima.
+    ("on", "on"), ("ON", "on"), (" On ", "on"),
+    ("sombra", "sombra"), ("SOMBRA", "sombra"), (" Sombra\n", "sombra"),
+    # e errar o valor não pode LIGAR o cache por acidente
+    ("sim", "sombra"), ("SIM", "sombra"), ("ligado", "sombra"),
+    ("", "sombra"), ("   ", "sombra"), ("of", "sombra"),
+])
+def test_a_env_do_cache_e_normalizada_nos_DOIS_sentidos(monkeypatch, valor,
+                                                        esperado):
+    """Errar o valor da env cai pra SOMBRA; acertar em QUALQUER caixa vale."""
+    monkeypatch.setenv("LLM_CACHE", valor)
+    assert llm_cache._modo() == esperado, (
+        "LLM_CACHE=%r virou %r, esperava %r"
+        % (valor, llm_cache._modo(), esperado))
 
 
 # ────────────────────────── a lista negra é decisão de gente ─────────────────
@@ -208,55 +233,149 @@ def test_a_LISTA_NEGRA_nao_cresce_sozinha():
          % sorted(llm_cache._NAO_SEMANTICO))
 
 
-def _decisoes_de_cache_do_process_job():
-    """A EXPRESSÃO que decide `cache=` em cada chamada de IA do process_job.
+# ─────────── a ponte: do banco até o `cache=` que a chamada de IA recebe ─────
 
-    Devolve funções `f(reprocess_count) -> bool` que AVALIAM a expressão real
-    do call site. 🔑 Avaliar, e não procurar a string: `_reproc_atual == 0`
-    continua no fonte dentro de `(_reproc_atual == 0 or True)`, que serve o
-    cache sempre — foi assim que este guarda passou cego em 06/09/2026.
-    """
-    import ast
+def _main_src():
     import io
-    src = io.open(os.path.join(os.path.dirname(os.path.dirname(
+    return io.open(os.path.join(os.path.dirname(os.path.dirname(
         os.path.abspath(__file__))), "main.py"), encoding="utf-8").read()
+
+
+def _process_job_ast(src):
+    import ast
     fn = [n for n in ast.walk(ast.parse(src))
           if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
           and n.name == "process_job"]
     assert len(fn) == 1, "process_job sumiu ou virou duas definições"
-    decisoes = []
-    for n in ast.walk(fn[0]):
-        if not isinstance(n, ast.Call):
-            continue
-        for kw in n.keywords:
-            if kw.arg != "cache":
-                continue
-            fonte = ast.unparse(kw.value)
-            decisoes.append((fonte, compile(ast.Expression(kw.value),
-                                            "cache_kw", "eval")))
-    assert decisoes, (
-        "nenhuma chamada de IA no process_job passa `cache=` — o cache por "
-        "conteúdo saiu do caminho do cliente sem ninguém notar")
-    return decisoes
+    return fn[0]
 
 
-def _reproc_atual_lido_do_banco(reprocess_count):
-    """Roda o pedaço REAL que lê `reprocess_count` e devolve `_reproc_atual`.
+class _Qualquer(object):
+    """Preenchimento pros nomes do call site que não interessam a este guarda.
+
+    🪤 De propósito NÃO responde `== 0` como verdadeiro: se alguém trocar
+    `_reproc_atual` por outra variável no `cache=`, ela cai aqui e o CONTROLE
+    (`cache` tem que ser True na 1ª leitura) reprova.
+    """
+    def __getattr__(self, _n):
+        return _Qualquer()
+
+    def __call__(self, *a, **k):
+        return _Qualquer()
+
+    def __contains__(self, _o):
+        return False
+
+    def __iter__(self):
+        return iter(())
+
+
+def _kwargs_que_chegam_na_IA(ns):
+    """Executa os statements REAIS que montam e entregam os kwargs da chamada
+    de IA, dentro do namespace `ns` que a fatia de produção produziu.
+
+    🔑 É AQUI QUE ESTÁ A PONTE. A versão anterior deste guarda tinha duas
+    metades soltas: uma rodava o bloco que lê o `reprocess_count` do banco, a
+    outra avaliava a expressão do `cache=` com um valor injetado NA MÃO. Entre
+    as duas não havia nada — e o que decide a vida do cliente é justamente o
+    encontro delas.
+
+    Também não basta olhar o `dict(...)`: `_dxf_kwargs["cache"] = True` uma
+    linha abaixo reabriria o defeito com a expressão original intacta. Por isso
+    o que se captura é o que o **call site da IA** recebe, depois de todos os
+    statements que mexem nesse dicionário.
+    """
+    import ast
+
+    src = _main_src()
+    fn = _process_job_ast(src)
+
+    pais = {}
+    for n in ast.walk(fn):
+        for f in ast.iter_child_nodes(n):
+            pais[f] = n
+
+    def _stmt_de(no):
+        while no is not None and not isinstance(no, ast.stmt):
+            no = pais.get(no)
+        return no
+
+    montagem = [n for n in ast.walk(fn) if isinstance(n, ast.Call)
+                and any(kw.arg == "cache" for kw in n.keywords)]
+    assert len(montagem) == 1, (
+        "esperava UMA chamada de IA passando `cache=` no process_job, achei %d "
+        "— o cache por conteúdo saiu (ou se multiplicou) no caminho do cliente "
+        "sem ninguém notar" % len(montagem))
+    st_montagem = _stmt_de(montagem[0])
+    assert isinstance(st_montagem, ast.Assign) and len(st_montagem.targets) == 1 \
+        and isinstance(st_montagem.targets[0], ast.Name), (
+        "o `cache=` deixou de ser montado num dicionário nomeado; este guarda "
+        "precisa ser reescrito, não afrouxado")
+    alvo = st_montagem.targets[0].id
+
+    # todo statement do process_job que MEXE nesse dicionário, em ordem
+    passos = {}
+    for n in ast.walk(fn):
+        if isinstance(n, ast.Name) and n.id == alvo:
+            st = _stmt_de(n)
+            if st is not None and st.lineno >= st_montagem.lineno:
+                passos[(st.lineno, st.col_offset)] = st
+    passos = [passos[k] for k in sorted(passos)]
+    assert passos and passos[0] is st_montagem
+
+    # o último é a entrega: `..._llm_retry(cliente, **_dxf_kwargs)`. Trocamos só
+    # a função por uma captura — os argumentos continuam sendo os de produção.
+    entrega = [n for st in passos for n in ast.walk(st)
+               if isinstance(n, ast.Call)
+               and any(kw.arg is None and isinstance(kw.value, ast.Name)
+                       and kw.value.id == alvo for kw in n.keywords)]
+    assert len(entrega) == 1, (
+        "não achei UMA chamada que repasse `**%s` pra IA (achei %d) — os "
+        "kwargs montados podem não ser os que a IA recebe" % (alvo, len(entrega)))
+    entrega[0].func = ast.Name(id="_CAPTURA_IA", ctx=ast.Load())
+
+    capturado = {}
+
+    def _captura(*a, **k):
+        capturado.update(k)
+        return _Qualquer()
+
+    assert "_reproc_atual" in ns, (
+        "a fatia real do process_job não produziu `_reproc_atual` — a ponte "
+        "entre o que o banco diz e o que a IA recebe está rompida")
+
+    g = dict(ns)
+    g["_CAPTURA_IA"] = _captura
+    g.setdefault("os", os)
+    g.setdefault("dxf_path", "/tmp/prancha-de-teste.dxf")
+    fonte = ""
+    for st in passos:
+        fonte += ast.unparse(ast.fix_missing_locations(st)) + "\n"
+    import builtins
+    for n in ast.walk(ast.parse(fonte)):
+        if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load) \
+                and n.id not in g and not hasattr(builtins, n.id):
+            assert n.id != "_reproc_atual", (
+                "o `cache=` olha um `_reproc_atual` que a fatia do banco não "
+                "produziu")
+            g[n.id] = _Qualquer()
+    exec(compile(fonte, "call_site_da_ia", "exec"), g)
+    assert capturado, "a chamada de IA não recebeu kwargs nenhum"
+    return alvo, capturado
+
+
+def _ns_do_bloco_de_reprocesso(reprocess_count):
+    """Roda o pedaço REAL que lê `reprocess_count` e devolve o NAMESPACE dele.
 
     🪤 Este bloco fala com o banco por `urllib.request.urlopen` DIRETO, sem o
     helper — quem patchar `_supa_rest_service` não intercepta nada e vê zero
     parecendo zero de verdade."""
-    import ast
-    import io
     import json as _j
     import textwrap
     import urllib.request
-    base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    src = io.open(os.path.join(base, "main.py"), encoding="utf-8").read()
+    src = _main_src()
     linhas = src.splitlines(True)
-    fn = [n for n in ast.walk(ast.parse(src))
-          if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
-          and n.name == "process_job"][0]
+    fn = _process_job_ast(src)
     corpo = "".join(linhas[fn.lineno - 1:fn.end_lineno])
     a = "_reproc_atual = 0\n"
     z = 'print(f"[ckpt] cache indisponível (segue do zero): {_cke}")'
@@ -282,39 +401,52 @@ def _reproc_atual_lido_do_banco(reprocess_count):
         exec(compile(fatia, "reproc_atual", "exec"), ns)
     finally:
         urllib.request.urlopen = real
-    return ns["_reproc_atual"]
+    return ns
 
 
-def test_o_reprocesso_do_cliente_NAO_le_do_cache():
+def _reproc_atual_lido_do_banco(reprocess_count):
+    return _ns_do_bloco_de_reprocesso(reprocess_count)["_reproc_atual"]
+
+
+@pytest.mark.parametrize("reproc", [1, 2, 7, 126])
+def test_o_reprocesso_do_cliente_NAO_le_do_cache(reproc):
     """🪤 Quem clica "reprocessar" quer leitura NOVA. Com temperatura 0,7 uma
     rodada nova é justamente a chance de consertar a prancha — servir o cache
     ali mataria a saída de emergência dele.
 
-    Guarda do CALL SITE, e AVALIADO: já passei verde duas vezes testando a
-    função e não quem chama, e uma terceira procurando a string
-    `_reproc_atual == 0` numa expressão que sempre dava True.
+    Guarda do CALL SITE, e ligado ao banco de ponta a ponta: já passei verde
+    duas vezes testando a função e não quem chama, uma terceira procurando a
+    string `_reproc_atual == 0` numa expressão que sempre dava True, e uma
+    quarta avaliando essa expressão com um número que eu mesmo tinha inventado.
     """
-    for reproc in (1, 2, 7):
-        assert _reproc_atual_lido_do_banco(reproc) == reproc, (
-            "o motor deixou de ler o reprocess_count do projeto — a decisão de "
-            "cache passa a ser tomada sobre zero")
-        for fonte, expr in _decisoes_de_cache_do_process_job():
-            ligado = bool(eval(expr, {"_reproc_atual": reproc}))
-            assert not ligado, (
-                "com reprocess_count=%d a chamada de IA ainda serve cache: "
-                "`cache=%s` avaliou True — a saída de emergência do cliente "
-                "devolve a leitura anterior" % (reproc, fonte))
+    ns = _ns_do_bloco_de_reprocesso(reproc)
+    assert ns["_reproc_atual"] == reproc, (
+        "o motor deixou de ler o reprocess_count do projeto — a decisão de "
+        "cache passa a ser tomada sobre zero")
+    alvo, kwargs = _kwargs_que_chegam_na_IA(ns)
+    assert "cache" in kwargs, (
+        "a chamada de IA não recebe mais `cache=` — o cache por conteúdo saiu "
+        "do caminho do cliente")
+    assert kwargs["cache"] is False, (
+        "com reprocess_count=%d a chamada de IA ainda serve cache "
+        "(%s['cache'] = %r) — a saída de emergência do cliente devolve a "
+        "leitura anterior" % (reproc, alvo, kwargs["cache"]))
 
 
 def test_CONTROLE_a_PRIMEIRA_leitura_continua_podendo_usar_o_cache():
     """O outro lado: desligar o cache sempre custaria uma chamada de IA em todo
     job, e o guarda de cima passaria igual. Sem este controle ele exigiria só
-    'nunca cacheie'."""
-    assert _reproc_atual_lido_do_banco(0) == 0
-    for fonte, expr in _decisoes_de_cache_do_process_job():
-        assert bool(eval(expr, {"_reproc_atual": 0})), (
-            "a 1ª leitura do projeto deixou de poder usar o cache: `cache=%s`"
-            % fonte)
+    'nunca cacheie'.
+
+    🧪 E é este controle que amarra a ponte na variável CERTA: se o `cache=`
+    passar a olhar outra coisa que não o `_reproc_atual` lido do banco, ela
+    chega aqui como preenchimento e o valor deixa de ser True."""
+    ns = _ns_do_bloco_de_reprocesso(0)
+    assert ns["_reproc_atual"] == 0
+    alvo, kwargs = _kwargs_que_chegam_na_IA(ns)
+    assert kwargs.get("cache") is True, (
+        "a 1ª leitura do projeto deixou de poder usar o cache: %s['cache'] = %r"
+        % (alvo, kwargs.get("cache")))
 
 
 def test_o_cache_DA_SINAL_DE_VIDA_no_boot():

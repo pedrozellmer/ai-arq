@@ -13,16 +13,20 @@ A pergunta que um orçamentista faz no segundo em que ouve "juntamos duas
 planilhas" é *"então está contado em dobro?"*. O e-mail responde isso antes de
 ele perguntar.
 """
+import html as _hu
 import io
 import os
 import re
 import sys
+
+import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _BACKEND)
 
 from _corpo import corpo_de, ENVIO_E_BUILDER  # noqa: E402
+import _merge_bancada as _mb  # noqa: E402
 import main as _m  # noqa: E402
 
 
@@ -152,30 +156,94 @@ class _ThreadNaHora:
         pass
 
 
-def _intercepta_o_smtp(monkeypatch):
-    """`_send_email_smtp` é a ÚNICA porta de saída de e-mail da casa. Devolve a
-    lista de (destino, assunto, html) que sairia por ela."""
-    saiu = []
-
-    def _smtp(to_email, subject, html_body, text_body="", log_kind="email"):
-        saiu.append({"para": to_email, "assunto": subject, "html": html_body,
-                     "tipo": log_kind})
-        return True
-
-    monkeypatch.setattr(_m, "_send_email_smtp", _smtp)
-    monkeypatch.setattr(_m, "_email_auto_registrar", lambda *a, **k: None)
-    return saiu
+# 🪤 07/09 (cético): aqui moravam `_intercepta_o_smtp` e `_monta_o_email`, que
+# chamavam o BUILDER direto. Os dois foram apagados junto com os guardas que os
+# usavam: builder certo com envio que ignora o builder é exatamente o defeito
+# que esta bancada existe pra pegar, e helper que atalha o envio convida o
+# próximo guarda a nascer cego. Quem quer o e-mail agora usa `_email_que_saiu`,
+# que passa pela ROTA e lê o que saiu pelo `_send_email_smtp`.
 
 
-def _monta_o_email(qual, job="mg634d18"):
-    """Chama o builder REAL e devolve (assunto, html). `qual` é 'combinada' ou
-    'releitura' — os dois têm assinatura diferente, e o mapa mora aqui."""
-    if qual == "combinada":
-        return _m._build_leitura_combinada_email(
-            "Cliente", "Obra do cliente-01", job, _ANTES, _DEPOIS,
-            list(_AVISOS_DO_COMBINADO))
-    return _m._build_leitura_nova_email(
-        "Cliente", "Obra do cliente-01", job, _ANTES, _DEPOIS)
+# ══════════════════════════════════════════════════════════════════════════
+#  O e-mail como o CLIENTE lê — e saindo pela porta do SMTP
+# ══════════════════════════════════════════════════════════════════════════
+def _texto_do_email(html):
+    """O HTML virando o texto que o cliente lê: sem tag, sem entidade.
+
+    🪤 07/09 (cético): a peneira era substring literal no HTML. 'refizemos a
+    leitura' com uma tag ou uma entidade no meio passava batido — e o corpo
+    destes e-mails é feito exatamente disso (`<b>`, `&ecirc;`, `&atilde;`).
+    Procurar no HTML é procurar na marcação; o cliente lê o texto."""
+    t = re.sub(r"<[^>]+>", " ", html or "")
+    t = _hu.unescape(t).replace(chr(0x200C), " ").replace(chr(0xA0), " ")
+    return " ".join(t.split()).lower()
+
+
+def _preheader_do(html):
+    """O TEXTO do preheader — não a presença da `<div>` que o carrega.
+
+    🪤 Preheader vazio-mas-presente passa em qualquer guarda de presença, e é
+    justamente ele que some quando alguém mexe no builder."""
+    i = (html or "").find(_PREHEADER)
+    if i < 0:
+        return None
+    j = html.index("</div>", i)
+    return _texto_do_email(html[i + len(_PREHEADER):j])
+
+
+def _badge_do(html):
+    """O TEXTO do selo colorido do topo (🧩 Combinada / ✓ Atualizado)."""
+    marca = 'padding:4px 10px;border-radius:20px;">'
+    i = (html or "").find(marca)
+    if i < 0:
+        return None
+    j = html.index("</span>", i)
+    return _texto_do_email(html[i + len(marca):j])
+
+
+_PAI_ID = "aa11bb22"
+_PAI_EMAIL = "cliente-01@example.com"
+
+
+def _banco_de_liberacao(job_filho):
+    """Original + filhote prontos pro Liberar, com o placar do caso cliente-19:
+    +87 medidos no total e a prancha de elétrica CAINDO de 30 pra 12 (é o que
+    faz o corpo do e-mail passar por todos os blocos)."""
+    projetos = {
+        _PAI_ID: {"job_id": _PAI_ID, "user_id": "u-cliente-01",
+                  "user_email": _PAI_EMAIL, "user_name": "Cliente Um",
+                  "project_name": "Obra do cliente-01", "status": "done",
+                  "typology": "office", "project_type": "arquitetura",
+                  "created_at": "2026-08-20T19:37:48+00", "warnings": []},
+        job_filho: {"job_id": job_filho, "parent_job_id": _PAI_ID, "is_eval": True,
+                    "status": "done", "user_id": "eval",
+                    "project_name": "[TESTE] Obra do cliente-01 — avaliação",
+                    "created_at": "2026-08-24T19:37:48+00",
+                    "warnings": list(_AVISOS_DO_COMBINADO)},
+    }
+    itens = {
+        _PAI_ID: (_mb.itens("4366-EL-E", 40, 30, rotulo="orig")
+                  + _mb.itens("ARQ-01", 107, 62, rotulo="orig")),
+        job_filho: (_mb.itens("4366-EL-E", 38, 12, rotulo="rel")
+                    + _mb.itens("ARQ-01", 225, 167, rotulo="rel")),
+    }
+    return _mb.Banco(projetos, itens)
+
+
+def _email_que_saiu(monkeypatch, job_filho):
+    """Roda `admin_liberar_filhote` DE VERDADE e devolve o e-mail que passou
+    pela ÚNICA porta de saída da casa (`_send_email_smtp`).
+
+    🔑 É a diferença entre "o builder monta certo" e "o cliente recebe certo".
+    Trocar o builder no envio deixa o fonte do builder certo intacto — e foi
+    assim que nove guardas deste arquivo ficaram verdes com a mentira no ar."""
+    b = _banco_de_liberacao(job_filho)
+    _mb.instalar(monkeypatch, b)
+    _m.admin_liberar_filhote(job_filho, _mb.Req())
+    assert len(b.emails) == 1, (
+        "o Liberar de %s não mandou exatamente um e-mail: %r"
+        % (job_filho, [e["tipo"] for e in b.emails]))
+    return b.emails[0]
 
 
 def _liberar_de_verdade(monkeypatch, job_filho, medidos_depois=3):
@@ -192,7 +260,7 @@ def _liberar_de_verdade(monkeypatch, job_filho, medidos_depois=3):
     """
     import threading as _thr
 
-    PAI = "aa11bb22"
+    PAI = _PAI_ID
     projetos = {
         PAI: {"job_id": PAI, "user_id": "u-cliente-01",
               "user_email": "cliente-01@example.com", "user_name": "Cliente Um",
@@ -257,26 +325,43 @@ def test_o_email_do_merge_NAO_diz_que_refizemos_a_leitura(monkeypatch):
     `_email_leitura_combinada`. Trocando, no envio, o builder da combinada pelo
     da releitura, o cliente do merge recebia literalmente "Refizemos a leitura
     do seu projeto" e o guarda continuava verde — o fonte que ele lia estava
-    intacto e nunca era chamado. Agora o e-mail é MONTADO e lido no HTML que
-    sairia."""
-    saiu = _intercepta_o_smtp(monkeypatch)
-    ok = _m._email_leitura_combinada(
-        {"user_email": "cliente-01@example.com", "user_name": "Cliente Um",
-         "project_name": "Obra do cliente-01"},
-        {"warnings": list(_AVISOS_DO_COMBINADO)},
-        "mg634d18", _ANTES, _DEPOIS)
+    intacto e nunca era chamado.
 
-    assert ok is True and len(saiu) == 1, "o e-mail nem chegou no SMTP: %r" % saiu
-    html, assunto = saiu[0]["html"], saiu[0]["assunto"]
-    assert "refizemos a leitura" not in html.lower(), (
+    🪤 07/09 (cético): a versão seguinte chamava `_email_leitura_combinada`
+    DIRETO. Nunca passava pela ROTA que ESCOLHE entre os dois e-mails (o
+    ternário do `_e_merge`, em `admin_liberar_filhote`) — que é onde a mentira
+    de 24/08 nasce. O arquivo inteiro ficava verde com a rota mandando o
+    e-mail da releitura pro merge. E a peneira era substring no HTML: qualquer
+    tag no meio da frase escapava. Agora a ROTA é chamada e a busca é no texto
+    que o cliente lê."""
+    saiu = _email_que_saiu(monkeypatch, "mg634d18")
+    texto = _texto_do_email(saiu["html"])
+    assert "refizemos a leitura" not in texto, (
         "o cliente do MERGE recebeu o texto da releitura — a gente não releu "
         "nada, juntou duas leituras que já existiam")
-    assert "refizemos a leitura" not in assunto.lower()
-    assert "Melhoramos o motor" not in html
+    assert "refizemos a leitura" not in saiu["assunto"].lower()
+    assert "melhoramos o motor" not in texto
     # 🧪 controle positivo: é o e-mail da COMBINADA que saiu, não um vazio
-    assert "vers&atilde;o combinada" in html
-    assert "Nenhuma prancha entrou duas vezes" in html
-    assert saiu[0]["tipo"] == "leitura_combinada"
+    assert "versão combinada" in texto
+    assert "nenhuma prancha entrou duas vezes" in texto
+    assert saiu["tipo"] == "leitura_combinada"
+    assert saiu["para"] == _PAI_EMAIL, (
+        "o e-mail do merge foi pra %r — o dono vem do PAI, nunca do filhote"
+        % saiu["para"])
+
+
+def test_CONTROLE_a_peneira_ACHA_a_frase_quando_ela_esta_la(monkeypatch):
+    """🧪 O outro lado do guarda acima, e sem ele aquele é vácuo: a mesma ROTA,
+    com um job de RELEITURA, tem que entregar a frase — se a peneira parasse de
+    achar 'refizemos a leitura' em lugar nenhum, o guarda do merge passaria
+    para sempre, inclusive com a mentira no ar."""
+    saiu = _email_que_saiu(monkeypatch, "ev597afa")
+    texto = _texto_do_email(saiu["html"])
+    assert "refizemos a leitura do seu projeto" in texto, (
+        "a peneira não acha a frase nem no e-mail que a diz — o guarda do "
+        "merge virou vácuo. Saiu: %r" % texto[:300])
+    assert saiu["tipo"] == "leitura_nova"
+
 
 def test_o_email_do_merge_explica_o_que_e():
     corpo = _corpo("_email_leitura_combinada")
@@ -352,10 +437,53 @@ def test_o_merge_ganha_nome_proprio_no_painel_do_cliente():
     assert "versão combinada (o melhor das duas leituras)" in corpo
 
 
-def test_o_liberar_escolhe_o_email_certo():
-    corpo = _corpo("admin_liberar_filhote", tam=12000)
-    assert "_email_leitura_combinada(pai, filho, eval_job_id" in corpo
-    assert "if _e_merge" in corpo
+# 🪤 07/09 (cético): a versão anterior deste guarda usava UM job_id fixo
+# ('mg634d18') e só registrava QUAL builder foi chamado. Dois furos com a mesma
+# causa: nada amarrava o prefixo a mais de um id (bastava `startswith("mg6")`
+# pra ele continuar verde e todo merge de verdade descer a rota errada), e nada
+# olhava os ARGUMENTOS além do job. Trocar `pai` por `filho` na chamada manda o
+# e-mail pro endereço errado — que num filhote é vazio, ou seja, ninguém recebe.
+_IDS_DE_LIBERACAO = [
+    # formato real do gerador: "mg" + 6 hex de uuid4
+    ("mg74fa5d", "combinada"),
+    ("mg0a1b2c", "combinada"),
+    ("mgff00aa", "combinada"),
+    ("ev597afa", "releitura"),
+    ("ev1c03c1", "releitura"),
+]
+
+
+@pytest.mark.parametrize("job,qual", _IDS_DE_LIBERACAO)
+def test_o_liberar_escolhe_o_email_certo(monkeypatch, job, qual):
+    """O e-mail do filhote diz "refizemos a leitura". Num merge isso é falso —
+    e quem escolhe entre os dois é o `_e_merge` desta rota."""
+    _resp, patches, emails = _liberar_de_verdade(monkeypatch, job)
+    assert len(emails) == 1, "o Liberar de %s não avisou o cliente: %r" % (job, emails)
+    assert emails[0]["qual"] == qual, (
+        "o job %s desceu pela rota da %s" % (job, emails[0]["qual"]))
+
+    args = emails[0]["args"]
+    assert args[0]["job_id"] == _PAI_ID, (
+        "quem recebe o e-mail tem que vir do PAI (o filhote não tem e-mail); "
+        "chegou %r" % (args[0].get("job_id"),))
+    if qual == "combinada":
+        assert args[1]["job_id"] == job, (
+            "os avisos da planilha combinada vêm do FILHO; chegou %r"
+            % (args[1].get("job_id"),))
+        assert args[2] == job, "o CTA apontaria pro projeto %r" % (args[2],)
+        antes, depois = args[3], args[4]
+    else:
+        assert args[1] == job, "o CTA apontaria pro projeto %r" % (args[1],)
+        antes, depois = args[2], args[3]
+    assert (antes["medidos"], depois["medidos"]) == (1, 3), (
+        "o placar que vai no e-mail não é o dos dois lados: %r → %r"
+        % (antes, depois))
+
+    nome = patches[-1]["body"]["project_name"]
+    esperado = (" — versão combinada (o melhor das duas leituras)"
+                if qual == "combinada" else " — nova leitura (motor atualizado)")
+    assert nome.endswith(esperado), (
+        "o job %s chegou ao painel do cliente como %r" % (job, nome))
 
 
 def test_revogar_devolve_o_nome_de_teste_certo():
@@ -420,12 +548,100 @@ def test_as_juizas_rodam_em_paralelo():
     assert "_ex.map(" in montar
 
 
-def test_o_paralelo_preserva_a_ordem_das_pranchas():
+# As quatro pranchas da disputa. 🪤 07/09 (cético): a bancada anterior tinha 4
+# pranchas com EXATAMENTE 1 item confirmado cada — empatadas em `medidos` e em
+# `itens`. Como o sort do Python é estável, qualquer reordenação por métrica era
+# um no-op naquele fixture. Aqui cada prancha tem contagem própria, e os nomes
+# estão fora da ordem alfabética de propósito.
+_DISPUTA = {                    # (itens_pai, medidos_pai, itens_filho, medidos_filho)
+    "ZZ-COBERTURA": (3, 1, 9, 7),
+    "AA-TERREO": (20, 15, 5, 2),
+    "MM-ELETRICA": (12, 8, 12, 9),
+    "BB-HIDRAULICA": (7, 3, 8, 3),
+}
+# O veredito da juíza, um DIFERENTE por prancha — é o que permite dizer se ele
+# chegou na prancha certa. Em três delas ela CONTRARIA a contagem (que daria
+# filho, pai, filho, filho); na MM-ELETRICA ela concorda.
+_VEREDITO = {"ZZ-COBERTURA": "pai", "AA-TERREO": "filho",
+             "MM-ELETRICA": "filho", "BB-HIDRAULICA": "pai"}
+_CONTAGEM = {"ZZ-COBERTURA": "filho", "AA-TERREO": "pai",
+             "MM-ELETRICA": "filho", "BB-HIDRAULICA": "filho"}
+
+
+def _banco_da_disputa():
+    projetos = {
+        _PAI_ID: {"job_id": _PAI_ID, "user_id": "u-cliente-01",
+                  "user_email": _PAI_EMAIL, "user_name": "Cliente Um",
+                  "project_name": "Obra do cliente-01", "status": "done",
+                  "typology": "office", "project_type": "arquitetura",
+                  "created_at": "2026-08-20T19:37:48+00", "warnings": []},
+        "ev597afa": {"job_id": "ev597afa", "parent_job_id": _PAI_ID, "is_eval": True,
+                     "status": "done", "user_id": "eval", "warnings": [],
+                     "project_name": "[TESTE] Obra do cliente-01 — avaliação",
+                     "created_at": "2026-08-24T19:37:48+00"},
+    }
+    ip, if_ = [], []
+    for prancha, (ia, ma, if_n, mf) in _DISPUTA.items():
+        ip += _mb.itens(prancha, ia, ma, rotulo="orig")
+        if_ += _mb.itens(prancha, if_n, mf, rotulo="rel")
+    return _mb.Banco(projetos, {_PAI_ID: ip, "ev597afa": if_})
+
+
+def test_o_paralelo_preserva_a_ordem_das_pranchas(monkeypatch):
     """🪤 `executor.map` devolve na ordem da entrada; um `as_completed` embaralharia
     e o veredito iria pra a prancha errada — o pior tipo de bug, porque a tela
-    continuaria bonita."""
-    montar = corpo_de("_merge_montar")
-    assert "zip(_disputadas, _vs)" in montar
+    continuaria bonita.
+
+    🪤 07/09 (cético): o guarda anterior lia `zip(_disputadas, _vs)` no fonte, e
+    a bancada de antes empatava as quatro pranchas em tudo — reordenar não
+    mudava nada. Aqui cada prancha tem número próprio, a juíza carimba o NOME
+    da prancha que leu, e o guarda cobra o veredito de cada uma no lugar dela.
+    """
+    b = _banco_da_disputa()
+
+    def _juiza(prancha, ip, if_):
+        return {"lado": _VEREDITO[prancha], "motivo": "juíza leu %s" % prancha}
+    chamadas = _mb.instalar(monkeypatch, b, juiza=_juiza)
+
+    _pai, _filho, ip, if_, plano, _rev = _m._merge_montar("ev597afa", com_juiza=True)
+
+    # 1. a juíza leu as QUATRO, cada uma uma vez
+    assert sorted(c["prancha"] for c in chamadas) == sorted(_DISPUTA), (
+        "a juíza não leu as quatro pranchas disputadas: %r"
+        % [c["prancha"] for c in chamadas])
+
+    # 2. e recebeu as DUAS listas certas — mandar a do pai duas vezes daria um
+    #    veredito plausível e sempre a favor de um lado só.
+    for c in chamadas:
+        assert len(c["pai"]) == len(ip) and len(c["filho"]) == len(if_), (
+            "a juíza de %s recebeu %d/%d linhas, não %d/%d"
+            % (c["prancha"], len(c["pai"]), len(c["filho"]), len(ip), len(if_)))
+        assert all("orig" in str(x.get("description")) for x in c["pai"]), (
+            "a juíza de %s recebeu a leitura errada como 'pai'" % c["prancha"])
+        assert all("rel" in str(x.get("description")) for x in c["filho"]), (
+            "a juíza de %s recebeu a leitura errada como 'filho'" % c["prancha"])
+
+    # 3. o veredito de cada prancha ficou NA prancha dela
+    for p in plano["pranchas"]:
+        nome = p["prancha"]
+        assert p["motivo"] == "juíza leu %s" % nome, (
+            "a prancha %s ficou com o veredito de OUTRA: %r — a planilha do "
+            "cliente sai montada com o lado errado" % (nome, p["motivo"]))
+        assert p["lado"] == _VEREDITO[nome], (
+            "%s ficou com o lado %r, a juíza escolheu %r"
+            % (nome, p["lado"], _VEREDITO[nome]))
+        assert p["discordam"] is (_VEREDITO[nome] != _CONTAGEM[nome]), (
+            "%s: 'a juíza discordou da contagem?' saiu %r" % (nome, p["discordam"]))
+
+    # 4. e o placar do plano é a soma dos lados ESCOLHIDOS (28 itens, 15 medidos)
+    esperado_itens = sum(_DISPUTA[n][0] if _VEREDITO[n] == "pai" else _DISPUTA[n][2]
+                         for n in _DISPUTA)
+    esperado_med = sum(_DISPUTA[n][1] if _VEREDITO[n] == "pai" else _DISPUTA[n][3]
+                       for n in _DISPUTA)
+    assert (plano["total_itens"], plano["total_medidos"]) == (esperado_itens,
+                                                              esperado_med), (
+        "o placar do plano (%s/%s) não bate com os lados escolhidos (%s/%s)"
+        % (plano["total_itens"], plano["total_medidos"], esperado_itens, esperado_med))
 
 
 def test_o_teto_de_tempo_da_tela_e_explicito():
@@ -491,12 +707,66 @@ def test_a_linha_da_combinada_tem_selo_proprio():
     assert "String(f.job_id).startsWith('mg')" in src
 
 
+def _filhote_da_tela(job_id, medidos, liberado=False, itens=200):
+    """Uma linha da aba Filhotes como a rota /api/admin/filhotes devolve."""
+    return {"job_id": job_id, "parent_job_id": _PAI_ID,
+            "projeto": "Obra do cliente-01", "cliente": _PAI_EMAIL,
+            "status": "done", "melhorou": True, "liberado": liberado,
+            "antes": {"medidos": 92, "itens": 147},
+            "depois": {"medidos": medidos, "itens": itens}}
+
+
+def _linha_renderizada(pagina, todas, alvo):
+    """O HTML da linha `alvo`, com a aba inteira carregada em `_filhotes` —
+    porque é de lá que `temMergeMelhor` procura a combinada."""
+    import json as _j
+    pagina.eval("_filhotes = %s; 1;" % _j.dumps(todas))
+    return pagina.eval("renderFilhotes(%s)" % _j.dumps([alvo]))
+
+
 def test_a_releitura_avisa_quando_existe_combinada_melhor():
     """O aviso vai na linha PERIGOSA, nao na certa — quem esta prestes a errar
-    e quem precisa ler."""
-    src = _admin()
-    assert "function temMergeMelhor" in src
-    assert "Libere a combinada, n" in src
+    e quem precisa ler.
+
+    🪤 07/09 (cético): o guarda anterior lia o fonte de `admin.html` — contava
+    a declaração da função e procurava a frase em QUALQUER lugar do arquivo,
+    comentário incluído. Ele não via o CALL SITE (que é quem faz o aviso
+    existir) nem redefinição por atribuição (`temMergeMelhor = function(){...}`
+    depois da declaração — em JS vale o último). Aqui a tela é DESENHADA num
+    motor JS e o guarda lê o HTML que o Pedro veria."""
+    from _bancada_js import Pagina
+    p = Pagina(("aiarq-utils.js", "admin.html"))
+    releitura = _filhote_da_tela("ev597afa", 151)
+    combinada = _filhote_da_tela("mg634d18", 179)
+
+    html = _linha_renderizada(p, [releitura, combinada], releitura)
+    assert "Libere a combinada" in html, (
+        "a linha da RELEITURA saiu sem o aviso de que existe uma combinada "
+        "melhor — o clique errado entrega a versão pior e manda e-mail, e "
+        "e-mail lido não se desfaz. Saiu: %s" % html[:400])
+    assert "179 medidos" in html and "contra 151" in html, (
+        "o aviso não diz os DOIS números (o da combinada e o desta) — sem "
+        "eles não dá pra decidir: %s" % html[:400])
+
+    # o aviso vai na linha perigosa, NÃO na certa
+    html_mg = _linha_renderizada(p, [releitura, combinada], combinada)
+    assert "Libere a combinada" not in html_mg, (
+        "a combinada está avisando de si mesma")
+    assert "COMBINADA &mdash; a melhor prancha de cada leitura" in html_mg, (
+        "a linha da combinada perdeu o selo que a distingue da releitura")
+
+    # 🧪 controles negativos — alarme que sai sempre vira ruído ignorado
+    liberada = _filhote_da_tela("mg634d18", 179, liberado=True)
+    assert "Libere a combinada" not in _linha_renderizada(
+        p, [releitura, liberada], releitura), (
+        "avisou pra liberar uma combinada que JÁ está com o cliente")
+    pior = _filhote_da_tela("mg634d18", 90)
+    assert "Libere a combinada" not in _linha_renderizada(
+        p, [releitura, pior], releitura), (
+        "avisou pra liberar a combinada que mediu MENOS que esta releitura")
+    assert "Libere a combinada" not in _linha_renderizada(
+        p, [releitura], releitura), (
+        "avisou de uma combinada que não existe")
 
 
 def test_o_aviso_so_aparece_se_a_combinada_for_melhor_E_nao_liberada():
@@ -554,11 +824,18 @@ def test_o_resultado_do_merge_rola_ate_onde_a_pessoa_esta_olhando():
 # sem CTA padrao e — o que importa de verdade — SEM O RODAPE, que e onde moram o
 # link de privacidade e o "responda pra remover seus dados". Ele notou pelo
 # visual; o custo real era de LGPD (regra dura nº6).
-def test_o_email_do_merge_usa_a_moldura_da_marca():
-    corpo = _corpo("_email_leitura_combinada")
-    assert "_email_wrap(" in corpo, (
-        "voltou a montar HTML cru — sem logo, sem CTA e SEM o rodape de "
-        "privacidade (LGPD)")
+def test_o_email_do_merge_usa_a_moldura_da_marca(monkeypatch):
+    """🪤 07/09 (cético): a versão anterior provava que o builder CHAMA
+    `_email_wrap` — não que a moldura CHEGA no cliente. Tudo entre o builder e
+    o SMTP era cego. Agora o guarda procura as marcas no HTML que passou pela
+    porta de saída, e o custo real de 24/08 (TRÊS clientes sem o rodapé de
+    LGPD, regra dura nº6) é conferido marca por marca."""
+    html = _email_que_saiu(monkeypatch, "mg634d18")["html"]
+    for marca in _MARCAS_DA_MOLDURA:
+        assert marca in html, (
+            "o e-mail do merge saiu SEM %r — voltou a ser <div> cru: sem logo, "
+            "sem CTA e sem o rodapé de privacidade (LGPD, regra dura nº6)"
+            % marca)
 
 
 def test_tem_imagem_com_alt_que_se_sustenta_sozinho():
@@ -595,27 +872,69 @@ def test_o_CTA_aponta_pro_projeto_COMBINADO():
     assert "job_id=%s" in corpo and "merge_job" in corpo
 
 
-def test_o_email_da_RELEITURA_tambem_usa_a_moldura():
+def test_o_email_da_RELEITURA_tambem_usa_a_moldura(monkeypatch):
     """🚨 A auditoria dos 17 e-mails (24/08) achou que eu tinha consertado o do
     merge e deixado o IRMAO pra tras. `_email_leitura_nova` ainda saia como
     <div> cru — sem logo, sem CTA e SEM o rodape de privacidade (regra dura
-    nº6). TRES clientes ja tinham recebido assim."""
-    corpo = _corpo("_email_leitura_nova")
-    assert "_email_wrap(" in corpo
-    assert "preheader=" in corpo
+    nº6). TRES clientes ja tinham recebido assim.
+
+    🪤 07/09 (cético): este guarda chamava o BUILDER (ou lia o fonte dele) e
+    nunca perguntava o que sai pela única porta de e-mail da casa. Builder
+    certo + envio que ignora o builder = cliente sem rodapé de LGPD, bancada
+    verde. Agora ele passa pela ROTA, igual ao irmão do merge."""
+    saiu = _email_que_saiu(monkeypatch, "ev597afa")
+    for marca in _MARCAS_DA_MOLDURA:
+        assert marca in saiu["html"], (
+            "o e-mail da RELEITURA saiu SEM %r — foi exatamente assim que TRÊS "
+            "clientes receberam em 24/08" % marca)
+    pre = _preheader_do(saiu["html"])
+    assert pre and len(pre) >= 20, (
+        "preheader vazio-mas-presente: %r — é a linha que aparece na caixa de "
+        "entrada antes de abrir" % pre)
 
 
-def test_os_DOIS_emails_de_versao_nova_tem_o_mesmo_padrao():
+def test_os_DOIS_emails_de_versao_nova_tem_o_mesmo_padrao(monkeypatch):
     """Guarda de simetria: e facil consertar um e esquecer o outro — foi
-    exatamente o que aconteceu. Se um ganhar moldura/preheader e o outro nao,
-    isto reprova."""
-    for nome in ("_email_leitura_nova", "_email_leitura_combinada"):
-        c = _corpo(nome)
-        assert "_email_wrap(" in c, "%s sem moldura da marca" % nome
-        assert "preheader=" in c, "%s sem preheader" % nome
-        assert "continua no painel" in c, "%s nao diz que a versao dele fica" % nome
-        i = c.index("subject = ")
-        assert "&" not in c[i:c.index(chr(10), i)], "%s: entidade HTML no assunto" % nome
+    exatamente o que aconteceu, DUAS vezes no mesmo par.
+
+    🪤 07/09 (cético): a versão anterior media PRESENÇA de marcador no fonte
+    (`"preheader=" in c`). Preheader vazio-mas-presente, signoff ausente e
+    badge trocado são assimetrias reais que passavam — e, como ela chamava o
+    builder, o envio podia estar mandando o e-mail errado sem este guarda
+    tocar no caminho. Agora os dois saem pela ROTA e o que se compara é
+    CONTEÚDO: o texto do preheader, o texto do selo, a assinatura, o rodapé."""
+    saiu = {}
+    for job, tipo in (("mg634d18", "leitura_combinada"), ("ev597afa", "leitura_nova")):
+        e = _email_que_saiu(monkeypatch, job)
+        assert e["tipo"] == tipo, (
+            "o Liberar de %s mandou o e-mail %r" % (job, e["tipo"]))
+        saiu[tipo] = e
+
+    for tipo, e in saiu.items():
+        html, texto = e["html"], _texto_do_email(e["html"])
+        for marca in _MARCAS_DA_MOLDURA:
+            assert marca in html, "%s sem %r na moldura" % (tipo, marca)
+        pre = _preheader_do(html)
+        assert pre and len(pre) >= 20, "%s: preheader vazio ou ausente: %r" % (tipo, pre)
+        assert "92" in pre and "179" in pre, (
+            "%s: o preheader não leva o placar (92 → 179 medidos) — é o espaço "
+            "grátis da caixa de entrada indo pro lixo: %r" % (tipo, pre))
+        assert "um abraço, pedro" in texto, (
+            "%s perdeu a assinatura — o rodapé solto vira '•••' no Gmail" % tipo)
+        assert "sua versão original continua no painel" in texto, (
+            "%s não diz que a versão dele fica (regra dura nº7)" % tipo)
+        assert "&" not in e["assunto"], (
+            "%s: entidade HTML vazando pro assunto (%r) — cabeçalho de e-mail "
+            "não decodifica entidade, o cliente lê o código" % (tipo, e["assunto"]))
+        assert _badge_do(html), "%s ficou sem selo no topo" % tipo
+
+    # e o selo tem que DISTINGUIR os dois: badge igual nos dois é a assimetria
+    # ao contrário — o cliente não sabe qual versão chegou.
+    assert _badge_do(saiu["leitura_combinada"]["html"]) \
+        != _badge_do(saiu["leitura_nova"]["html"]), (
+        "os dois e-mails saíram com o MESMO selo (%r) — 'combinada' e "
+        "'refizemos a leitura' viram a mesma coisa na caixa de entrada"
+        % _badge_do(saiu["leitura_nova"]["html"]))
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -635,16 +954,91 @@ def test_os_DOIS_emails_contam_o_que_PIOROU():
         assert "if _piores:" in c, "%s mostra o alarme sem condicao" % nome
 
 
-def test_o_merge_roda_a_rede_do_selo_e_o_extrator():
+# Duas linhas MEDIDAS cuja procedência é só um texto lido da prancha — o caso
+# de 24/08 ("AREA TOTAL CLINICA = 264,54 m²" colado na linha do piso). A rede da
+# regra dura nº1 tem que rebaixar AS DUAS.
+_PROCEDENCIA_DE_TEXTO = ("Fonte: texto do carimbo da prancha: "
+                         "'AREA TOTAL = 264,54 m2'")
+_SO_TEXTO = [
+    ("Piso — revestimento de piso interno", 264.54),
+    ("Forro — placa mineral removivel", 198.30),
+]
+_COM_MARCA = "Piso vinilico Tarkett ref. 24003 cor Carvalho Natural"
+
+
+def _banco_com_selo_de_texto():
+    """ARQ-01 fica com o PAI (6 medidos × 3) e é lá que moram as duas linhas de
+    procedência só-de-texto; EL-02 fica com o filho (5 × 2)."""
+    projetos = {
+        _PAI_ID: {"job_id": _PAI_ID, "user_id": "u-cliente-01",
+                  "user_email": _PAI_EMAIL, "user_name": "Cliente Um",
+                  "project_name": "Obra do cliente-01", "status": "done",
+                  "typology": "office", "project_type": "arquitetura",
+                  "created_at": "2026-08-20T19:37:48+00", "warnings": []},
+        "ev597afa": {"job_id": "ev597afa", "parent_job_id": _PAI_ID, "is_eval": True,
+                     "status": "done", "user_id": "eval", "warnings": [],
+                     "project_name": "[TESTE] Obra do cliente-01 — avaliação",
+                     "created_at": "2026-08-24T19:37:48+00"},
+    }
+    pai = _mb.itens("ARQ-01", 8, 4, rotulo="orig") + _mb.itens("EL-02", 8, 2, rotulo="orig")
+    for desc, qtd in _SO_TEXTO:
+        pai.append(_mb.item("ARQ-01", descricao=desc, confidence="confirmado",
+                            unit="m²", quantity=qtd,
+                            observations=_PROCEDENCIA_DE_TEXTO))
+    pai.append(_mb.item("ARQ-01", descricao=_COM_MARCA, unit="m²", quantity=40))
+    filho = (_mb.itens("ARQ-01", 10, 3, rotulo="rel")
+             + _mb.itens("EL-02", 8, 5, rotulo="rel"))
+    return _mb.Banco(projetos, {_PAI_ID: pai, "ev597afa": filho})
+
+
+def test_o_merge_roda_a_rede_do_selo_e_o_extrator(monkeypatch):
     """🚨 O merge grava project_items POR FORA do motor, entao pulava as duas
     passadas que todo item normal atravessa: a rede da REGRA DURA Nº1 e o
     extrator de especificacao. "Os itens ja passaram" nao vale — a rede nasceu
-    em 24/08 e os jobs de origem podem ser anteriores."""
-    c = corpo_de("admin_merge_criar")
-    assert "selos_sem_geometria as _ssg_m" in c, "o merge nao roda a rede do selo"
-    assert "_spec_campos(" in c, "o merge nao extrai marca/codigo/cor"
-    assert '"marca", "codigo_fabricante", "cor"' in c, (
-        "as colunas de especificacao nao entram no insert do merge")
+    em 24/08 e os jobs de origem podem ser anteriores.
+
+    🪤 07/09 (cético): a versão anterior lia o fonte, e a que veio depois tinha
+    UMA linha de procedência só-de-texto — a rede só precisava acertar o
+    primeiro achado. `_rebaixados[:1]`, um `break`, `_ssg_m(...)[:1]`: tudo
+    passava verde, e num merge real (várias linhas seladas '✓ MEDIDO do CAD'
+    sobre texto de prancha) todas menos uma continuavam saindo MEDIDAS. Aqui
+    são DUAS, e as DUAS são cobradas."""
+    b = _banco_com_selo_de_texto()
+    _mb.instalar(monkeypatch, b)
+    r = _m.admin_merge_criar("ev597afa", _mb.Req())
+    gravadas = b.itens_do(r["job_id"])
+    assert gravadas, "o merge não gravou item nenhum"
+
+    por_desc = {str(x.get("description")): x for x in gravadas}
+    for desc, _q in _SO_TEXTO:
+        assert desc in por_desc, "a linha %r não foi gravada no merge" % desc
+        linha = por_desc[desc]
+        assert linha["confidence"] == "estimado", (
+            "%r saiu do merge com selo '✓ MEDIDO do CAD' tendo como fonte só "
+            "um texto da prancha — regra dura nº1" % desc)
+        obs = str(linha["observations"])
+        assert "LIDO de um texto da prancha, não medido da geometria" in obs, (
+            "%r foi rebaixada sem dizer POR QUE: %r" % (desc, obs))
+        assert _PROCEDENCIA_DE_TEXTO in obs, (
+            "%r perdeu a procedência que já tinha ao ser rebaixada: %r"
+            % (desc, obs))
+
+    # 🧪 controle: o rebaixamento não pode ser geral — medição de verdade fica
+    confirmados = [x for x in gravadas if x["confidence"] == "confirmado"]
+    assert len(confirmados) == 9, (
+        "esperava 9 medidos depois do rebaixamento (4 da ARQ-01 do pai + 5 da "
+        "EL-02 do filho), vieram %d" % len(confirmados))
+    assert r["medidos"] == 9, (
+        "o placar que vai no e-mail não foi recalculado depois do "
+        "rebaixamento: %r" % r["medidos"])
+
+    # e o extrator de especificação rodou nas linhas do merge
+    spec = por_desc[_COM_MARCA]
+    assert (spec.get("marca"), spec.get("codigo_fabricante"), spec.get("cor")) \
+        == ("Tarkett", "24003", "Carvalho Natural"), (
+        "o merge gravou o item sem marca/código/cor — o caderno de acabamentos "
+        "sai vazio pra planilha combinada: %r"
+        % {k: spec.get(k) for k in ("marca", "codigo_fabricante", "cor")})
 
 
 def test_o_rebaixamento_do_merge_corrige_o_PLACAR():
