@@ -12,7 +12,7 @@ itens com ZERO medido** e preencheu 17 linhas na mão:
     Lajes    concreto 0 → 40 m³   fôrma 0 → 155 m²   armadura 0 → 1000 kg
 
 Quase todos números REDONDOS — é frustração, não medição (mesmo padrão do
-Giovani em [[project_caso_giovani_20260815]]).
+cliente-53 em [[project_caso_giovani_20260815]]).
 
 📊 E não é só ele. Em todos os projetos com `project_type='estrutura'`:
 
@@ -38,10 +38,13 @@ contar o descarte, e aí respondeu de primeira.
 🚨 Este commit NÃO muda o filtro. Medir antes de mexer: em 10/08, 5 de 5 ideias
 minhas morreram no teste ([[feedback_motor_sempre_pode_melhorar]]).
 """
+import functools
 import io
 import os
 import sys
 import tempfile
+
+import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -51,13 +54,29 @@ def _fonte(nome):
     return io.open(os.path.join(_BACKEND, nome), encoding="utf-8").read()
 
 
-def _prancha_de_forma(caminho):
+# 🪤 06/09/2026 — `_consider_pilar_poly` tem DOIS chamadores: o laço de
+# LWPOLYLINE e o de POLYLINE ("heavy", o formato do AutoCAD antigo). A prancha
+# sintética só desenhava LWPOLYLINE, então apagar o laço de POLYLINE deixava o
+# arquivo verde e devolvia a cegueira original — `pilares=0` sem nenhum motivo
+# contado — justamente em arquivo de projeto velho. O parâmetro `formato`
+# monta a MESMA prancha nos dois tipos de entidade.
+_FORMATOS = ("LWPOLYLINE", "POLYLINE")
+
+
+def _prancha_de_forma(caminho, formato="LWPOLYLINE"):
     import ezdxf
     doc = ezdxf.new("R2010"); doc.header["$INSUNITS"] = 6   # metros
     msp = doc.modelspace()
     for lay in ("PILAR", "PIL", "COLUNA", "EIXOS"):
         if lay not in doc.layers: doc.layers.add(lay)
-    def _fecha(layer, pts): msp.add_lwpolyline(pts, close=True, dxfattribs={"layer": layer})
+    if formato == "LWPOLYLINE":
+        def _fecha(layer, pts):
+            msp.add_lwpolyline(pts, close=True, dxfattribs={"layer": layer})
+    elif formato == "POLYLINE":
+        def _fecha(layer, pts):
+            msp.add_polyline2d(pts, close=True, dxfattribs={"layer": layer})
+    else:
+        raise AssertionError("formato de contorno desconhecido: %r" % (formato,))
     _fecha("PILAR", [(0,0),(0.20,0),(0.20,0.40),(0,0.40)])                       # ACEITO
     _fecha("PILAR", [(2,0),(2.2,0),(2.2,.2),(2.4,.2),(2.4,.4),(2,.4)])           # nao_e_4_lados
     _fecha("PILAR", [(4,0),(5.0,0),(4.5,0.4),(4,0.4)])                           # nao_e_retangulo
@@ -65,6 +84,12 @@ def _prancha_de_forma(caminho):
     _fecha("PIL",    [(0,5),(0.2,5),(0.2,5.4),(0,5.4)])                          # nome_do_layer
     _fecha("COLUNA", [(1,5),(1.2,5),(1.2,5.4),(1,5.4)])
     _fecha("EIXOS",  [(2,5),(2.2,5),(2.2,5.4),(2,5.4)])
+    # 🔑 Pilar REDONDO (Ø 30 cm): entra por um TERCEIRO laço, o de CIRCLE, que
+    # nem passa por `_consider_pilar_poly`. Sem ele na prancha, apagar o laço
+    # de CIRCLE não quebrava nada.
+    msp.add_circle((6, 0), 0.15, dxfattribs={"layer": "PILAR"})
+    # e um círculo em layer que NÃO é de pilar não pode virar pilar
+    msp.add_circle((8, 0), 0.15, dxfattribs={"layer": "EIXOS"})
     doc.saveas(caminho); return caminho
 
 
@@ -79,41 +104,67 @@ def _extrair(montar):
 
 
 
-def test_cada_filtro_do_pilar_conta_separado():
+@pytest.mark.parametrize("formato", _FORMATOS)
+def test_cada_filtro_do_pilar_conta_separado(formato):
     """Cinco motivos diferentes, cinco ações diferentes. Um total só não serve.
 
     🪤 O guarda antigo procurava as quatro strings `_desc_pil["..."] += 1` no
     fonte. Um `return` antes delas deixava o texto intacto e o contador morto —
     e a prancha de fôrma voltava a dizer `pilares=0` sem motivo.
+
+    🪤 06/09/2026 — e depois disso a prancha sintética só existia em
+    LWPOLYLINE, então apagar o laço de POLYLINE (o formato pesado, comum em
+    arquivo de AutoCAD antigo) também ficava verde. Agora a MESMA prancha roda
+    nos dois formatos.
     """
-    ex = _extrair(_prancha_de_forma)
+    ex = _extrair(functools.partial(_prancha_de_forma, formato=formato))
     d = dict(ex.pilares_descartados or {})
 
     assert d.get("nome_do_layer", 0) == 3, (
-        "o filtro de NOME recusou %r contornos de 4 lados — esperava 3" % d.get("nome_do_layer"))
+        "[%s] o filtro de NOME recusou %r contornos de 4 lados — esperava 3"
+        % (formato, d.get("nome_do_layer")))
     assert d.get("nao_e_4_lados", 0) == 1, (
-        "polilinha de 6 vértices no layer PILAR foi recusada SEM CONTAR "
+        "[%s] polilinha de 6 vértices no layer PILAR foi recusada SEM CONTAR "
         "(nao_e_4_lados=%r): o filtro está mudo e `pilares=0` volta a não "
-        "dizer nada" % d.get("nao_e_4_lados"))
+        "dizer nada" % (formato, d.get("nao_e_4_lados")))
     assert d.get("nao_e_retangulo", 0) == 1, (
-        "trapézio no layer PILAR não foi contado: %r" % d.get("nao_e_retangulo"))
+        "[%s] trapézio no layer PILAR não foi contado: %r"
+        % (formato, d.get("nao_e_retangulo")))
     assert d.get("fora_de_escala", 0) == 1, (
-        "retângulo de 10 × 10 m não foi contado como fora de escala: %r"
-        % d.get("fora_de_escala"))
-    assert "ilegivel" in d, "o 5º contador sumiu do dicionário: %s" % (d,)
+        "[%s] retângulo de 10 × 10 m não foi contado como fora de escala: %r"
+        % (formato, d.get("fora_de_escala")))
+    # 🩸 ACHADO 06/09/2026: o 5º contador (`ilegivel`) NUNCA é incrementado —
+    # o `except Exception: return` de `_consider_pilar_poly` engole o erro sem
+    # contar. `assert "ilegivel" in d` não provava nada (a chave nasce no
+    # dicionário inicial). Enquanto o contador estiver morto, o guarda honesto
+    # é este: a chave existe E vale zero. Se alguém ligar o contador de
+    # verdade, este assert avisa — e aí a nota sai daqui.
+    assert d.get("ilegivel", None) == 0, (
+        "[%s] o 5º contador saiu do dicionário ou passou a contar: %s"
+        % (formato, d))
 
 
-def test_CONTROLE_o_pilar_BOM_continua_passando():
+@pytest.mark.parametrize("formato", _FORMATOS)
+def test_CONTROLE_o_pilar_BOM_continua_passando(formato):
     """Contar descarte não pode virar descartar tudo.
 
     Sem este controle, um detector que recusasse todo mundo (e contasse
     direitinho) passaria pelo teste acima.
+
+    🔑 O pilar REDONDO entra por outro laço (CIRCLE) — e o círculo no layer
+    `EIXOS` tem que continuar de fora.
     """
-    ex = _extrair(_prancha_de_forma)
-    aceitos = [(r.layer, round(r.w_m, 3), round(r.h_m, 3))
+    ex = _extrair(functools.partial(_prancha_de_forma, formato=formato))
+    aceitos = [(r.layer, round(r.w_m, 3), round(r.h_m, 3),
+                bool(getattr(r, "circular", False)))
                for r in (ex.struct_rects or [])]
-    assert aceitos == [("PILAR", 0.2, 0.4)], (
-        "o pilar de 20 × 40 cm no layer PILAR não passou: %s" % (aceitos,))
+    assert sorted(aceitos) == sorted([
+        ("PILAR", 0.2, 0.4, False),   # retângulo 20 × 40 cm
+        ("PILAR", 0.3, 0.3, True),    # pilar redondo Ø 30 cm
+    ]), (
+        "[%s] a lista de pilares ACEITOS mudou: %s. Esperado o retângulo de "
+        "20 × 40 cm (pelo laço de %s) E o pilar redondo de Ø 30 cm (pelo laço "
+        "de CIRCLE), e NADA do layer EIXOS." % (formato, aceitos, formato))
 
 def test_guarda_os_NOMES_dos_layers_recusados():
     """🔑 É o nome que decide entre "não tem pilar" e "o layer se chama PIL"."""
@@ -220,7 +271,7 @@ def test_o_filtro_so_muda_DEPOIS_de_medir():
         cliente-23 (RACIONAL) não tem nenhuma — 2.158 LINE, 448 HATCH, 0
         LWPOLYLINE. Os 54 pilares dele são HACHURA, no layer `S-COLS`.
     "COLS" entrou porque é o padrão AIA (Structural Columns) e apareceu num
-    arquivo real. 🪤 "COLUNA" foi testado e RECUSADO: o Tiago (METAL-AR) tem o
+    arquivo real. 🪤 "COLUNA" foi testado e RECUSADO: o cliente-54 (METAL-AR) tem o
     layer `AC-Indicação coluna Frigorígenas`, que é coluna de ar-condicionado.
 
     A regra continua valendo pro PRÓXIMO que quiser alargar: meça primeiro.

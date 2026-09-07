@@ -26,7 +26,6 @@ medição; `null` diz "não consegui contar".
 """
 import os
 import sys
-import types
 import urllib.error
 import urllib.request
 
@@ -47,16 +46,26 @@ CHAVE = {"projects": "id", "profiles": "user_id"}
 #        {"code":"42703","message":"column profiles.id does not exist"}
 #     GET /rest/v1/profiles?select=user_id -> HTTP 200
 # A bancada abaixo e um PostgREST que se comporta assim. A rota roda contra ele.
-NAO_EXISTE = {"profiles": {"id"}, "projects": set()}
-QUANTOS = {"projects": 229, "profiles": 77}
+#
+# 🪤 06/09/2026 — A BANCADA SÓ SABIA UM JEITO DE RECUSAR. Ela devolvia o total
+# no `content-range` acontecesse o que acontecesse e ignorava CABEÇALHO por
+# completo. Com isso o guarda provava que a palavra `user_id` chega na URL, não
+# que a contagem funciona: tirar o `Prefer: count=exact` da produção — que é o
+# que faz o PostgREST contar — passava VERDE, e o painel voltava a dizer
+# "0 usuários" (o PostgREST de verdade responde `content-range: 0-0/*`, o
+# `int('*')` estoura e o número morre). Agora o falso sabe recusar de TRÊS
+# jeitos: coluna que a tabela não tem (400), servidor fora do ar (500) e
+# pedido sem `count=exact` (não conta, devolve `*`).
+NO_BANCO = {"projects": 229, "profiles": 77}
 
 
 class _RespostaFalsa:
-    def __init__(self, total):
-        self.headers = {"content-range": "0-0/%d" % total}
+    def __init__(self, content_range, corpo=b"[{}]"):
+        self.headers = {"content-range": content_range}
+        self._corpo = corpo
 
     def read(self):
-        return b"[]"
+        return self._corpo
 
     def getcode(self):
         return 200
@@ -68,43 +77,16 @@ class _RespostaFalsa:
         return False
 
 
-def _postgrest_de_verdade(pedidos):
-    """Devolve 400 quando a consulta pede uma coluna que a tabela nao tem."""
+def _postgrest_falso(pedidos, quebradas=()):
+    """O PostgREST do dia 25/08, com as três recusas que ele sabe dar.
+
+    `pedidos` recebe (url, cabeçalhos) de cada consulta — é por ele que os
+    guardas conferem QUAL consulta saiu, não só qual número voltou.
+    """
     def _urlopen(req, timeout=None):
         url = req.full_url if hasattr(req, "full_url") else str(req)
-        pedidos.append(url)
-        caminho = url.split("/rest/v1/", 1)[-1]
-        tabela = caminho.split("?", 1)[0]
-        colunas = []
-        for parte in caminho.split("?", 1)[-1].split("&"):
-            if parte.startswith("select="):
-                colunas = parte[len("select="):].split(",")
-        faltando = NAO_EXISTE.get(tabela, set()) & set(colunas)
-        if faltando:
-            raise urllib.error.HTTPError(
-                url, 400,
-                "column %s.%s does not exist" % (tabela, sorted(faltando)[0]),
-                {}, None)
-        return _RespostaFalsa(QUANTOS.get(tabela, 0))
-    return _urlopen
-
-
-# ── a bancada que o guarda convertido pede ────────────────────────────────
-NO_BANCO = {"projects": 229, "profiles": 77}
-
-
-class _FakeReq:
-    headers = {}
-    client = None
-
-
-def _postgrest(monkeypatch, quebradas=(), pedidos=None):
-    """PostgREST do dia 25/08: 400 na coluna que a tabela nao tem."""
-    pedidos = [] if pedidos is None else pedidos
-
-    def _urlopen(req, timeout=None):
-        url = req.full_url if hasattr(req, "full_url") else str(req)
-        pedidos.append(url)
+        cabecalhos = dict(getattr(req, "headers", None) or {})
+        pedidos.append((url, cabecalhos))
         caminho = url.split("/rest/v1/", 1)[-1]
         tabela = caminho.split("?", 1)[0]
         colunas = []
@@ -117,9 +99,29 @@ def _postgrest(monkeypatch, quebradas=(), pedidos=None):
             if c != CHAVE.get(tabela):
                 raise urllib.error.HTTPError(
                     url, 400, "column %s.%s does not exist" % (tabela, c), {}, None)
-        return _RespostaFalsa(NO_BANCO.get(tabela, 0))
+        # 🔑 Sem `Prefer: count=exact` o PostgREST NÃO conta: devolve `*` no
+        # lugar do total e a página pedida (limit=1) no corpo.
+        prefer = ""
+        for k, v in cabecalhos.items():
+            if str(k).lower() == "prefer":
+                prefer = str(v).lower()
+        if "count=exact" not in prefer:
+            return _RespostaFalsa("0-0/*")
+        return _RespostaFalsa("0-0/%d" % NO_BANCO.get(tabela, 0))
 
-    monkeypatch.setattr(urllib.request, "urlopen", _urlopen)
+    return _urlopen
+
+
+class _FakeReq:
+    headers = {}
+    client = None
+
+
+def _postgrest(monkeypatch, quebradas=(), pedidos=None):
+    """Planta o PostgREST falso e o porteiro de admin. Devolve o Request."""
+    pedidos = [] if pedidos is None else pedidos
+    monkeypatch.setattr(urllib.request, "urlopen",
+                        _postgrest_falso(pedidos, quebradas))
     monkeypatch.setattr(main, "_get_user_from_request",
                         lambda request, tolerante=False: {
                             "id": "uid-admin", "email": main.ADMIN_EMAIL})
@@ -136,49 +138,101 @@ def _chamar(fn, *a):
     return r
 
 
-def _health_de_admin(monkeypatch):
-    """Chama `/api/health` DE VERDADE como admin. Devolve (saida, urls pedidas)."""
-    pedidos = []
-    monkeypatch.setattr(urllib.request, "urlopen", _postgrest_de_verdade(pedidos))
-    monkeypatch.setattr(main, "_get_user_from_request",
-                        lambda request, tolerante=False: {
-                            "id": "uid-admin", "email": main.ADMIN_EMAIL})
-    pedido = types.SimpleNamespace(headers={"Authorization": "Bearer jwt-admin"})
-    return main.health(pedido), pedidos
-
+def _url_da_contagem(tabela, coluna):
+    return "%s?select=%s&limit=1" % (tabela, coluna)
 
 
 def test_cada_tabela_e_contada_pela_coluna_que_ELA_tem(monkeypatch):
     """🚨 O bug, medido na SAÍDA: `profiles?select=id` devolve 400 e o painel
-    dizia "0 usuários" com 77 perfis no banco."""
-    req = _postgrest(monkeypatch)
+    dizia "0 usuários" com 77 perfis no banco.
+
+    🪤 E medido também na CONSULTA que saiu: a versão anterior deste guarda
+    tinha largado as assertivas de URL por tabela, ficando mais fraca do que a
+    que ela substituiu. As duas coisas cabem no mesmo teste.
+    """
+    pedidos = []
+    req = _postgrest(monkeypatch, pedidos=pedidos)
     stats = _chamar(main.health, req)["stats"]
     assert stats["total_users"] == 77, (
         "a contagem de profiles voltou a pedir uma coluna que a tabela não tem "
         "— o PostgREST devolve 400 e o número morre (veio %r)"
         % stats["total_users"])
     assert stats["total_projects"] == 229, stats
+    urls = [u for u, _c in pedidos]
+    for tabela, coluna in sorted(CHAVE.items()):
+        assert any(_url_da_contagem(tabela, coluna) in u for u in urls), (
+            "a consulta de %s não saiu como `%s` — saíram: %r"
+            % (tabela, _url_da_contagem(tabela, coluna), urls))
 
-def test_CONTROLE_a_bancada_REPROVA_a_coluna_errada(monkeypatch):
-    """🧪 Se o PostgREST falso aceitasse qualquer coluna, o teste de cima seria
-    verde vazio. Aqui ele tem que dar 400 no `profiles?select=id` — e 200 no
-    `projects?select=id`, que existe."""
+
+@pytest.mark.parametrize("tabela,coluna", sorted(CHAVE.items()))
+def test_a_consulta_PEDE_a_contagem_ao_servidor(tabela, coluna, monkeypatch):
+    """🚨 `Prefer: count=exact` é o que faz o PostgREST contar. Sem ele o
+    `content-range` volta `0-0/*`, o `int('*')` estoura e a contagem morre —
+    exatamente o mesmo estrago do 400 de 25/08, por outra porta."""
     pedidos = []
-    urlopen = _postgrest_de_verdade(pedidos)
+    _chamar(main.health, _postgrest(monkeypatch, pedidos=pedidos))
+    minhas = [c for u, c in pedidos if _url_da_contagem(tabela, coluna) in u]
+    assert minhas, "a consulta de %s nem saiu" % tabela
+    prefer = " ".join(str(v) for k, v in minhas[0].items()
+                      if str(k).lower() == "prefer").lower()
+    assert "count=exact" in prefer, (
+        "a contagem de %s saiu sem `Prefer: count=exact` (cabeçalhos: %r) — o "
+        "servidor devolve `*` no lugar do total e o número vira nulo"
+        % (tabela, minhas[0]))
 
-    class _Req:
-        def __init__(self, url):
-            self.full_url = url
 
+@pytest.mark.parametrize("quebrada,morto,vivo", [
+    ("profiles", "total_users", "total_projects"),
+    ("projects", "total_projects", "total_users"),
+])
+def test_servidor_fora_do_ar_vira_NULO_e_nao_derruba_a_outra(
+        quebrada, morto, vivo, monkeypatch):
+    """🚨 Zero é um número e se lê como medição. E a falha de UMA tabela não
+    pode apagar a outra — foi um número certo ao lado de um número morto que
+    fez o payload parecer saudável por 3 meses."""
+    req = _postgrest(monkeypatch, quebradas=(quebrada,))
+    stats = _chamar(main.health, req)["stats"]
+    assert stats[morto] is None, (
+        "a contagem de %s falhou e virou %r — zero se lê como 'nenhum'"
+        % (quebrada, stats[morto]))
+    outra = "projects" if quebrada == "profiles" else "profiles"
+    assert stats[vivo] == NO_BANCO[outra], (
+        "a falha de %s derrubou junto a contagem de %s (veio %r)"
+        % (quebrada, outra, stats[vivo]))
+
+
+def test_CONTROLE_a_bancada_REPROVA_a_coluna_errada():
+    """🧪 Se o PostgREST falso aceitasse qualquer coisa, os testes de cima
+    seriam verde vazio. Ele tem que dar 400 no `profiles?select=id`, 200 no
+    `projects?select=id`, 500 quando o servidor cai — e `*` (não contei) para
+    quem não pediu `Prefer: count=exact`."""
+    pedidos = []
+    urlopen = _postgrest_falso(pedidos)
     base = main.SUPABASE_URL + "/rest/v1/"
+
+    def _req(caminho, contar=True):
+        r = urllib.request.Request(base + caminho)
+        if contar:
+            r.add_header("Prefer", "count=exact")
+        return r
+
     with pytest.raises(urllib.error.HTTPError) as e:
-        urlopen(_Req(base + "profiles?select=id&limit=1"))
+        urlopen(_req("profiles?select=id&limit=1"))
     assert e.value.code == 400
     assert "profiles.id does not exist" in str(e.value.reason)
-    assert urlopen(_Req(base + "profiles?select=user_id&limit=1")).headers[
+    assert urlopen(_req("profiles?select=user_id&limit=1")).headers[
         "content-range"].endswith("/77")
-    assert urlopen(_Req(base + "projects?select=id&limit=1")).headers[
+    assert urlopen(_req("projects?select=id&limit=1")).headers[
         "content-range"].endswith("/229")
+    assert urlopen(_req("profiles?select=user_id&limit=1", contar=False)
+                   ).headers["content-range"] == "0-0/*", (
+        "a bancada conta mesmo sem `Prefer: count=exact` — ela absolveria a "
+        "produção que parou de pedir a contagem")
+    with pytest.raises(urllib.error.HTTPError) as e500:
+        _postgrest_falso([], quebradas=("profiles",))(
+            _req("profiles?select=user_id&limit=1"))
+    assert e500.value.code == 500
 
 
 def test_falha_de_contagem_nao_vira_zero():

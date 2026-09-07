@@ -39,6 +39,8 @@ import io
 import os
 import sys
 
+import pytest
+
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _RAIZ = os.path.dirname(_BACKEND)
 sys.path.insert(0, _BACKEND)
@@ -57,6 +59,9 @@ def _sem_comentarios(txt):
 
 # ── (1) o aviso da área informada ──────────
 _ANCORA_UPLOAD = '        if _uta > 0 and not (project_data.total_area or 0):'
+# O bloco que roda DEPOIS, quando `_apply_area_honesty` já devolveu `_n_fill`.
+_ANCORA_DESTINO = ('        if str(getattr(project_data, "total_area_source", "")) '
+                   '== "informado":')
 
 
 class _ProjectDataFake:
@@ -90,10 +95,45 @@ def _aviso_do_upload(area_informada=150.0):
     return avisos[0], pd
 
 
-# Palavras que só cabem em quem já SABE o destino. No momento do upload a
-# decisão ainda não foi tomada — `_apply_area_honesty` roda ~600 linhas depois.
-_PROMESSAS = ("iten", "item", "entra", "vira", "será", "sera", "serve",
-              "usada", "usar", "base")
+def _aviso_do_destino(n_fill, source="informado", pd=None):
+    """EXECUTA o bloco que roda DEPOIS de `_apply_area_honesty` decidir.
+
+    `n_fill` é o que a função devolveu: 0 = não usou a área informada (o caso da
+    cliente-31, geometria medida), >0 = usou em N itens.
+    """
+    pd = pd if pd is not None else _ProjectDataFake(total_area=150.0, total_area_source=source)
+    antes = len(list(pd.warnings or []))
+    avisos, _ = _rodar(_ANCORA_DESTINO, pd, _n_fill=int(n_fill))
+    return avisos[antes:]
+
+
+# 🔑 ALLOWLIST, não lista negra. O que o upload SABE é um punhado de fatos: a
+# pessoa informou um número, e a planta não trazia cota nem quadro de áreas.
+# Tudo o mais é destino, e destino só existe ~600 linhas depois.
+#
+# 🩸 Por que invertemos (06/09): a versão anterior bania 10 substrings
+# ("iten", "entra", "vira", "usada", "base"…). Português tem verbo demais pra
+# isso — "aplicar", "alimentar", "contar como", "levar pro", "preencher com"
+# passavam todas, e o próprio autor registrou o limite. Lista negra perde pra
+# paráfrase por construção; allowlist não: quem quiser prometer precisa de uma
+# palavra que não está aqui.
+_FATOS_DO_UPLOAD = {
+    # o que a pessoa fez e o que a planta trouxe — já é fato quando o aviso sai
+    "área", "áreas", "total", "informada", "informado", "informou", "você",
+    "upload", "planta", "pranchas", "cota", "cotas", "quadro", "medir",
+    "medição", "metros", "m", "m²",
+    # gramática: ligação, negação, tempo passado/presente. Nada aqui afirma destino.
+    "a", "o", "as", "os", "um", "uma", "de", "do", "da", "dos", "das", "em",
+    "no", "na", "nos", "nas", "por", "pra", "para", "pelo", "pela", "ao", "à",
+    "e", "ou", "que", "com", "sem", "não", "nem", "mas", "ainda", "só",
+    "este", "esta", "isso", "seu", "sua", "trazia", "tinha", "havia", "há",
+    "é", "era", "está", "estava", "foi",
+}
+
+
+def _palavras(texto):
+    import re
+    return [p for p in re.findall(r"[a-zà-öø-ÿ²]+", texto.lower()) if p]
 
 
 def test_o_aviso_do_upload_NAO_promete_que_vai_usar():
@@ -104,36 +144,82 @@ def test_o_aviso_do_upload_NAO_promete_que_vai_usar():
     acrescentar ao mesmo aviso "Ela entra como base dos itens de area." — a
     promessa volta parafraseada e a string banida continua ausente.
 
-    Agora o teste lê o aviso RENDERIZADO e cobra a regra, não a frase: no
-    upload a gente só pode CONSTATAR. Qualquer palavra que fale de destino
-    (itens, entra, vira, usada, base…) é promessa feita antes da decisão.
+    A 2ª versão trocou a string por 10 substrings proibidas, e o cético mostrou
+    que a paráfrase continua entrando: "a área que você aplicou", "ela alimenta
+    o cálculo", "vamos contar como 150 m²" — nenhuma casa. Agora a régua é
+    ALLOWLIST: o aviso do upload só pode usar as palavras dos fatos que já
+    aconteceram. Palavra nova = ou é constatação (declare aqui, de propósito)
+    ou é promessa feita antes da decisão.
     """
     aviso, _ = _aviso_do_upload()
-    baixo = aviso.lower()
-    achadas = [p for p in _PROMESSAS if p in baixo]
-    assert not achadas, (
-        "o aviso do upload voltou a falar do DESTINO da área (%s) — ele é "
-        "escrito antes de `_apply_area_honesty` decidir, e no job da "
-        "cliente-31 a decisão foi NÃO usar:\n  %s" % (achadas, aviso))
+    intrusas = sorted({p for p in _palavras(aviso) if p not in _FATOS_DO_UPLOAD})
+    assert not intrusas, (
+        "o aviso do upload usa palavra(s) que não descrevem fato do upload: %s\n"
+        "  aviso: %s\n"
+        "Ele é escrito ANTES de `_apply_area_honesty` decidir, e no job da "
+        "cliente-31 a decisão foi NÃO usar. Se a palavra é mesmo constatação, "
+        "acrescente em `_FATOS_DO_UPLOAD` de propósito; se fala do destino da "
+        "área, o lugar dela é o aviso de DEPOIS." % (intrusas, aviso))
 
 
-def test_o_aviso_do_upload_ainda_CONSTATA_o_fato():
-    """🧪 CONTROLE: tirar a promessa não pode virar silêncio. O cliente
-    informou um número e tem que ver que a gente recebeu."""
-    limpo = _sem_comentarios(_main())
-    assert "informada por você no upload" in limpo, (
-        "sumiu o aviso de que a área foi informada — o cliente digita e não "
-        "vê sinal nenhum")
+@pytest.mark.parametrize("area", [150.0, 87.0])
+def test_o_aviso_do_upload_ainda_CONSTATA_o_fato(area):
+    """🧪 CONTROLE POSITIVO da allowlist: aviso vazio passaria nela sem esforço.
+
+    Tirar a promessa não pode virar silêncio — o cliente digitou um número e
+    tem que ver o número DELE de volta (por isso duas áreas: uma frase fixa que
+    ignorasse o `_uta` também seria silêncio, disfarçado).
+    """
+    aviso, pd = _aviso_do_upload(area)
+    assert "%.0f m²" % area in aviso, (
+        "o aviso não devolve a área que a pessoa informou: %r" % aviso)
+    assert "informada por você no upload" in aviso, aviso
+    assert pd.total_area == round(area, 2) and pd.total_area_source == "informado"
 
 
 def test_o_destino_da_area_informada_vira_aviso_DEPOIS():
-    """🔑 O resultado real (usou ou não) tem que chegar ao cliente."""
-    limpo = _sem_comentarios(_main())
-    assert "preencheu %d item(ns) de piso, forro ou laje" in limpo, (
-        "não avisa quando a área informada FOI usada")
-    assert "NÃO foi usada nos itens" in limpo, (
-        "não avisa quando a área informada NÃO foi usada — que é o caso da "
-        "cliente-31 e o que gerou a contradição")
+    """🔑 O resultado real (usou ou não) tem que chegar ao cliente — nos DOIS
+    ramos. O da cliente-31 é o `_n_fill == 0`; era ele que faltava."""
+    usou = _aviso_do_destino(4)
+    assert len(usou) == 1, "o ramo 'usou' não avisou nada: %r" % (usou,)
+    assert "preencheu 4 item(ns) de piso, forro ou laje" in usou[0], usou[0]
+
+    nao_usou = _aviso_do_destino(0)
+    assert len(nao_usou) == 1, (
+        "o ramo 'NÃO usou' ficou mudo — é exatamente o caso da cliente-31: %r"
+        % (nao_usou,))
+    assert "NÃO foi usada nos itens" in nao_usou[0], nao_usou[0]
+
+    assert usou[0] != nao_usou[0], (
+        "os dois desfechos mandam a MESMA frase — o cliente não fica sabendo "
+        "qual aconteceu")
+
+
+@pytest.mark.parametrize("n_fill", [0, 4])
+def test_o_aviso_do_upload_nao_e_DESMENTIDO_pelo_aviso_do_destino(n_fill):
+    """🔑 Os dois blocos, no MESMO cenário e no mesmo `project_data`.
+
+    O aviso do upload é escrito antes da decisão e é IDÊNTICO nos dois desfechos
+    — logo, qualquer coisa que ele afirme sobre o destino está errada em um dos
+    dois. Aqui a gente roda os dois e cobra isso: o aviso de cima só constata,
+    e é o de baixo que conta o que aconteceu.
+    """
+    pd = _ProjectDataFake(total_area=0)
+    _rodar(_ANCORA_UPLOAD, pd, _uta=150.0)
+    de_cima = list(pd.warnings)
+    assert len(de_cima) == 1, de_cima
+    pd.total_area_source = "informado"
+    de_baixo = _aviso_do_destino(n_fill, pd=pd)
+
+    assert len(de_baixo) == 1, (
+        "no desfecho _n_fill=%r o cliente ficou sem o aviso do destino, e o "
+        "único que sobrou é o do upload — o mesmo silêncio de 02/09" % (n_fill,))
+    assert list(pd.warnings) == de_cima + de_baixo
+    # o de cima não pode afirmar nada que o de baixo desminta: ele nem fala de destino
+    intrusas = sorted({p for p in _palavras(de_cima[0]) if p not in _FATOS_DO_UPLOAD})
+    assert not intrusas, (
+        "o aviso de cima fala de %s antes da decisão; embaixo, no mesmo job, o "
+        "servidor diz: %r" % (intrusas, de_baixo[0]))
 
 
 def test_o_aviso_do_destino_LE_o_resultado_real():
@@ -146,13 +232,14 @@ def test_o_aviso_do_destino_LE_o_resultado_real():
         "o aviso do destino não olha o resultado de `_apply_area_honesty`")
 
 
-def test_CONTROLE_o_aviso_do_destino_so_sai_pra_quem_INFORMOU():
-    """Quem não informou área nenhuma não pode receber aviso sobre isso."""
-    limpo = _sem_comentarios(_main())
-    i = limpo.index("preencheu %d item(ns) de piso, forro ou laje")
-    trecho = limpo[max(0, i - 900):i]
-    assert 'total_area_source", "")) == "informado"' in trecho, (
-        "o aviso do destino sai pra todo mundo, inclusive quem não informou nada")
+@pytest.mark.parametrize("n_fill", [0, 4])
+def test_CONTROLE_o_aviso_do_destino_so_sai_pra_quem_INFORMOU(n_fill):
+    """Quem não informou área nenhuma não pode receber aviso sobre isso —
+    e nos DOIS desfechos, que é onde a versão anterior não olhava."""
+    saiu = _aviso_do_destino(n_fill, source="")
+    assert saiu == [], (
+        "quem mediu a própria planta e não informou nada recebeu aviso sobre "
+        "área informada: %r" % (saiu,))
 
 
 # ── (2) o aviso de fila ────────────────────────────────────────────────────

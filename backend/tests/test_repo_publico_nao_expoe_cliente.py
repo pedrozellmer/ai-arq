@@ -328,7 +328,13 @@ _FORA_DA_CHECAGEM_DE_NOME = ("blog/posts",)
 #: ocorrências de 10 nomes que a checagem palavra-a-palavra não pegava porque
 #: o token isolado era genérico ("construtora", "prof.", "eng.", "ana") ou
 #: curto demais. Ver `_HASH_DE_NOME_COMPLETO`.
-_TETO_DE_NOMES = 344
+#: 07/09, 2ª queda: 344 -> 328. Ao trazer as lacunas fechadas pelos agentes, o
+#: portão de LGPD acusou 6 arquivos — e a checagem mostrou que NENHUM nome era
+#: novo: eram os já existentes, dívida herdada. 🪤 O portão estava certo em
+#: detectar e ERRADO em bloquear: ele media presença absoluta quando a pergunta
+#: é "o agente piorou?". Bloquear trabalho bom por dívida velha é a mesma
+#: doença de acusar código certo. Trouxe os 6 e limpei os 7 nomes de quebra.
+_TETO_DE_NOMES = 328
 
 _EXT_TEXTO = (".py", ".html", ".js", ".md", ".yml", ".yaml", ".css",
               ".json", ".txt", ".sql", ".toml", ".sh")

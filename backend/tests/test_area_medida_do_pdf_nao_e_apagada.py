@@ -39,6 +39,8 @@ import io
 import os
 import sys
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -123,6 +125,77 @@ def _fatia_do_call_site():
     assert "_pv_m2 = float(_pdfvec_area_m2)" in fatia, fatia[:200]
     assert "pdfvec_m2=_pv_m2" in fatia, "a fatia nao chega na chamada"
     return fatia
+
+
+def _fatia_da_soma():
+    """As DUAS cópias do bloco que ACUMULA a medição, página a página.
+
+    🪤 06/09 (cético): o guarda do call site injetava `_pdfvec_area_m2`
+    PRONTO, então o título prometia "ACUMULA e PASSA" e só a metade "PASSA"
+    era executada. A soma mora no laço por página, em duas cópias: a do ramo
+    "escala validada por cota" e a do ramo "escala SEM prova de cota" — que é
+    justamente o ramo do caso cliente-41. O ramo sem prova não tinha guarda
+    nenhum.
+
+    ANCORA no `_vet_secao = ...` de cada ramo (a linha que identifica o ramo) e
+    no `except (TypeError, ValueError):` que fecha o bloco. Nunca por tamanho.
+    """
+    import textwrap
+    src = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
+    linhas = src.splitlines(True)
+    marcas = {"com_prova_de_cota": '_vet_secao = "\\n".join(_linhas)',
+              "sem_prova_de_cota": '_vet_secao = "\\n".join(_l2)'}
+    fatias = {}
+    for rotulo, marca in marcas.items():
+        achados = [i for i, l in enumerate(linhas) if l.strip() == marca]
+        assert len(achados) == 1, (
+            "a ancora do ramo %s deixou de ser unica (%d)" % (rotulo, len(achados)))
+        i = achados[0] + 1
+        while linhas[i].strip() != "try:":
+            i += 1
+            assert i - achados[0] < 6, "nao achei o `try:` da soma do ramo " + rotulo
+        j = i
+        while linhas[j].strip() != "except (TypeError, ValueError):":
+            j += 1
+            assert j - i < 80, "nao achei o `except` que fecha a soma do ramo " + rotulo
+        assert linhas[j + 1].strip() == "pass", "o except da soma mudou de corpo"
+        fatia = textwrap.dedent("".join(linhas[i:j + 2]))
+        # sanidade: fatia truncada nao pode 'passar' sem exercitar nada.
+        # 🪤 confere PRESENCA, nunca o operador: ancorar em "+=" faria a
+        # propria ancora reprovar a mutacao `+= -> =` e esconder a assercao de
+        # COMPORTAMENTO que e o guarda de verdade.
+        assert "_pdfvec_area_m2" in fatia, fatia[:200]
+        assert "_pdfvec_por_prancha[_stem]" in fatia, fatia[:200]
+        fatias[rotulo] = fatia
+    assert fatias["com_prova_de_cota"] != "" and fatias["sem_prova_de_cota"] != ""
+    return fatias
+
+
+def _pagina_medida(stem, rooms_m2, walls_m, page_index):
+    """O que o filho da medição devolve pra UMA prancha."""
+    return {"_stem": stem, "filename": stem + ".pdf", "page_index": page_index,
+            "_vm": {"rooms_m2": rooms_m2, "n_rooms": 3, "walls_m": walls_m,
+                    "n_walls": 12, "grupo_maior_m2": rooms_m2,
+                    "scale": 50, "scale_src": "carimbo", "escala_validada": False,
+                    "cotas_batem": 0, "secs": 4.0, "mem_kb": {"VmPeak": 800000},
+                    "mem_kb_inicio": {"VmSize": 200000}, "etapas": {},
+                    "mem_etapas": {}}}
+
+
+def _acumula(rotulo, paginas):
+    """EXECUTA o bloco real da soma uma vez por prancha (o laço por página) e
+    devolve (soma_m2, soma_compr, por_prancha)."""
+    codigo = compile(_fatia_da_soma()[rotulo], "soma_" + rotulo, "exec")
+    ns = {"__name__": "soma_ns", "_pdfvec_area_m2": 0.0, "_pdfvec_compr_m": 0.0,
+          "_pdfvec_por_prancha": {}}
+    for _p in paginas:
+        ns["_vm"] = _p["_vm"]
+        ns["_stem"] = _p["_stem"]
+        ns["filename"] = _p["filename"]
+        ns["page_index"] = _p["page_index"]
+        exec(codigo, ns)
+    return (ns["_pdfvec_area_m2"], ns["_pdfvec_compr_m"],
+            ns["_pdfvec_por_prancha"])
 
 
 def _entrega_do_call_site(**mundo):
@@ -270,6 +343,88 @@ def test_o_call_site_acumula_e_PASSA_a_medicao():
     # E o que o cliente recebe por causa disso:
     assert _valor(piso) == 13.6 and _valor(forro) == 13.6, (
         "o call site entregou o número e a planilha saiu zerada assim mesmo")
+
+
+@pytest.mark.parametrize("rotulo", ["com_prova_de_cota", "sem_prova_de_cota"])
+def test_o_call_site_ACUMULA_a_medicao_pagina_a_pagina(rotulo):
+    """A metade "ACUMULA" do título, executada nos DOIS ramos.
+
+    Um caderno de 3 pranchas do mesmo imóvel: a soma é das TRÊS, e o mapa por
+    prancha tem TRÊS entradas. Trocar o `+=` por `=`, ou gravar só a primeira
+    prancha, deixa a honestidade recebendo um número de UMA prancha — e o
+    ramo "sem prova de cota" é o do caso cliente-41.
+    """
+    paginas = [_pagina_medida("4366-AR-A", 129.1, 88.0, 0),
+               _pagina_medida("4366-EL-E", 116.4, 61.5, 1),
+               _pagina_medida("4366-HI-H", 40.5, 12.0, 2)]
+    m2, compr, pp = _acumula(rotulo, paginas)
+
+    assert round(m2, 2) == 286.0, (
+        "a soma das 3 pranchas saiu %r (esperado 286.0) — o laço parou de "
+        "acumular e a honestidade recebe a medição de UMA prancha só" % m2)
+    assert round(compr, 2) == 161.5, (
+        "o comprimento de parede parou de acumular: %r" % compr)
+    assert sorted(pp) == ["4366-AR-A", "4366-EL-E", "4366-HI-H"], (
+        "o mapa por prancha ficou com %r — prancha que não entra no mapa some "
+        "do teto por prancha e do aviso" % sorted(pp))
+    assert pp["4366-EL-E"]["rooms_m2"] == 116.4, pp["4366-EL-E"]
+    assert pp["4366-HI-H"]["pagina"] == 2, pp["4366-HI-H"]
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  🚨 Os OUTROS dois argumentos do mesmo call site
+# ══════════════════════════════════════════════════════════════════════════
+_TETO_PP = [
+    # rotulo,                falhas,                                 sobrevive
+    ("medicao_completa",     [],                                     False),
+    ("prancha_nao_medida",   [{"arquivo": "p3.pdf", "pagina": 2,
+                               "motivo": "tempo"}],                  True),
+]
+
+
+@pytest.mark.parametrize("rotulo,falhas,sobrevive", _TETO_PP)
+def test_o_call_site_PASSA_o_teto_por_prancha_e_a_medicao_incompleta(
+        rotulo, falhas, sobrevive):
+    """🪤 06/09 (cético): o guarda do call site passava SEMPRE
+    `_pdfvec_por_prancha={}` e `_pdfvec_falhas=[]`, então os outros dois
+    argumentos entregues na MESMA chamada eram invisíveis. Desligar o teto por
+    prancha (`_pp_map = {}`) reabre a porta do m² inventado, e desligar o
+    `medicao_incompleta` traz de volta a mordida do mezanino da cliente-45.
+
+    Cenário: duas pranchas medidas, 129,1 e 116,4 m² (soma 245,5). A IA
+    escreveu 200 m² de piso.
+      · medição COMPLETA  → teto = 1,3 × 129,1 = 167,8 → os 200 m² MORREM;
+      · prancha não medida → a gente SABE que não sabe: teto volta pra soma
+        (1,3 × 245,5 = 319,2) e os 200 m² VIVEM — é o mezanino de 255,66 m².
+    """
+    _pp = {"p1": {"arquivo": "p1.pdf", "pagina": 0, "rooms_m2": 129.1,
+                  "n_rooms": 4, "walls_m": 88.0, "n_walls": 20},
+           "p2": {"arquivo": "p2.pdf", "pagina": 1, "rooms_m2": 116.4,
+                  "n_rooms": 3, "walls_m": 61.5, "n_walls": 14}}
+    piso = _piso(200.0)
+    r = _entrega_do_call_site(_pdfvec_area_m2=245.5,
+                              _pdfvec_por_prancha=_pp,
+                              _pdfvec_falhas=list(falhas),
+                              all_items=[piso])
+
+    # 1) os três argumentos chegaram — e chegaram com CONTEÚDO, não vazios
+    assert r["pdfvec_m2"] == 245.5, r
+    assert sorted(r["por_prancha"] or {}) == ["p1", "p2"], (
+        "o mapa por prancha chegou como %r — sem ele o teto vira a SOMA e a "
+        "trava 3 (regra dura nº1) fica ~2× mais frouxa" % (r["por_prancha"],))
+    assert (r["por_prancha"] or {})["p1"]["rooms_m2"] == 129.1, r["por_prancha"]
+    assert r["medicao_incompleta"] is bool(falhas), (
+        "medicao_incompleta chegou %r com falhas=%r" % (r["medicao_incompleta"], falhas))
+
+    # 2) e o que o cliente recebe por causa deles
+    if sobrevive:
+        assert _valor(piso) == 200.0, (
+            "prancha que NÃO deu pra medir e mesmo assim o teto apertado mordeu "
+            "os 200 m² — é a mordida do mezanino (cliente-45, 02/09) de volta")
+    else:
+        assert _valor(piso) == 0, (
+            "200 m² sobreviveram com a maior prancha medindo 129,1 m² — o teto "
+            "por prancha está desligado e a porta do m² inventado reabriu")
 
 
 def test_CONTROLE_job_SEM_PDF_chega_com_ZERO_e_o_chute_morre():

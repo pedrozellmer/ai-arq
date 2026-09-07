@@ -1143,7 +1143,15 @@
           <p class="text-sm text-gray-700 mb-4">Os bot&otilde;es abaixo disparam o envio &mdash; cada email leva link de descadastro 1-clique.</p>
           <div class="flex flex-col gap-3">
             <button onclick="sendNewsletter(true)" class="w-full py-3 rounded-xl border border-indigo-300 text-indigo-700 font-semibold text-sm hover:bg-indigo-50 transition">&#128231; Enviar teste s&oacute; pra mim</button>
-            <button onclick="sendNewsletter(false)" class="w-full py-3 rounded-xl gradient-main text-white font-semibold text-sm shadow-btn hover:opacity-90 transition">&#128640; Enviar pra lista (todos)</button>
+            <!-- 07/09/2026 — DOIS BOTOES, porque sao duas coisas diferentes.
+                 O botao unico "enviar pra lista (todos)" mandava promocao pra
+                 quem tinha recusado marketing no cadastro: 49 de 102 perfis.
+                 Agora a escolha e explicita no gesto, e o numero de cada uma
+                 aparece na confirmacao, antes de sair qualquer coisa. -->
+            <button onclick="sendNewsletter(false, 'servico')" class="w-full py-3 rounded-xl gradient-main text-white font-semibold text-sm shadow-btn hover:opacity-90 transition">&#128640; Comunicado de servi&ccedil;o &mdash; base toda</button>
+            <p class="text-xs text-gray-500 -mt-1">Fun&ccedil;&atilde;o nova, manuten&ccedil;&atilde;o, mudan&ccedil;a de comportamento. Fala do que a pessoa <b>j&aacute; usa</b> &mdash; n&atilde;o depende do aceite de marketing.</p>
+            <button onclick="sendNewsletter(false, 'campanha')" class="w-full py-3 rounded-xl border border-amber-300 bg-amber-50 text-amber-900 font-semibold text-sm hover:bg-amber-100 transition">&#128226; Campanha &mdash; s&oacute; quem aceitou</button>
+            <p class="text-xs text-gray-500 -mt-1">Promo&ccedil;&atilde;o, oferta, newsletter. Vai <b>s&oacute;</b> para quem marcou o aceite no cadastro.</p>
           </div>
           <div id="newsletter-result" class="mt-4 text-sm hidden"></div>
         </div>
@@ -3644,9 +3652,39 @@ startActivityAutoRefresh();
 // ══════════════════════════════════════════════
 // NEWSLETTER — dispara a edição atual (admin)
 // ══════════════════════════════════════════════
-async function sendNewsletter(testOnly) {
+// 07/09/2026 — o TIPO virou escolha explicita, e o numero aparece ANTES.
+// "servico"  = funcao nova na ferramenta que a pessoa ja usa -> base toda
+// "campanha" = promocao/newsletter -> so quem marcou o aceite no cadastro
+// Medido em 07/09: 49 de 102 perfis marcaram que NAO queriam marketing, e a
+// newsletter mandava pra eles assim mesmo (achado 52 da auditoria, CRITICO).
+async function sendNewsletter(testOnly, tipo) {
   const out = document.getElementById('newsletter-result');
-  if (!testOnly && !confirm('Enviar a newsletter pra TODOS os usuários cadastrados?\n\nJá testou em você antes? Essa ação manda email de verdade.')) return;
+  tipo = (tipo === 'servico') ? 'servico' : 'campanha';
+  if (!testOnly) {
+    // A conferencia e o passo do meio: quantos vao receber, dito antes.
+    let quantos = null, recusaram = 0;
+    try {
+      const p = await authFetch(`${API_BASE}/api/admin/newsletter/publico`);
+      const d = await p.json();
+      quantos = (tipo === 'servico') ? d.servico : d.campanha;
+      recusaram = d.recusaram_marketing || 0;
+    } catch (_e) { /* sem o numero, o texto abaixo avisa que nao consegui */ }
+    const rotulo = (tipo === 'servico')
+      ? 'COMUNICADO DE SERVICO — funcao nova, manutencao, mudanca de comportamento'
+      : 'CAMPANHA — promocao ou newsletter';
+    const quem = (quantos == null)
+      ? 'Nao consegui contar os destinatarios agora.'
+      : `Vai para ${quantos} pessoa(s).` +
+        (tipo === 'campanha' && recusaram
+          ? `\n${recusaram} pessoa(s) recusaram marketing no cadastro e NAO recebem esta.`
+          : (tipo === 'servico' && recusaram
+             ? `\nInclui ${recusaram} que recusaram MARKETING — servico nao depende desse aceite.`
+             : ''));
+    // 🪤 `_confirmaOuAvisa`, não `confirm` cru: a casa tem esse invólucro porque
+    // clique sem consequência visível fica igual a botão quebrado. O guarda
+    // `test_recusa_no_admin_nao_some_calada` me pegou usando confirm direto.
+    if (!_confirmaOuAvisa(`${rotulo}\n\n${quem}\n\nJa testou em voce antes? Isso manda e-mail de verdade.`)) return;
+  }
   out.classList.remove('hidden');
   out.className = 'mt-4 text-sm text-gray-500';
   out.textContent = 'Enviando…';
@@ -3654,12 +3692,12 @@ async function sendNewsletter(testOnly) {
     const res = await authFetch(`${API_BASE}/api/admin/newsletter/send`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ test_only: !!testOnly })
+      body: JSON.stringify({ test_only: !!testOnly, tipo: tipo })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || 'erro no envio');
     out.className = 'mt-4 text-sm text-green-700 font-medium';
-    out.textContent = `✓ ${testOnly ? 'Teste enviado pra você' : 'Enviado pra lista'}: ${data.sent}/${data.recipients} ok` + (data.fail ? ` · ${data.fail} falharam` : '');
+    out.textContent = `✓ ${testOnly ? 'Teste enviado pra você' : ('Enviado (' + (data.tipo || tipo) + ')')}: ${data.sent}/${data.recipients} ok` + (data.fail ? ` · ${data.fail} falharam` : '');
   } catch (e) {
     out.className = 'mt-4 text-sm text-red-600 font-medium';
     out.textContent = '✗ Erro: ' + (e.message || e);

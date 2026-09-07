@@ -135,7 +135,18 @@
   .rd.on { border-color:#4F46E5; background:#EEF2FF; color:#3730A3; font-weight:600; }
   .rd[disabled] { opacity:.45; cursor:not-allowed; }
   label.lbl { display:block; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:#64748B; margin-bottom:6px; }
-  #modal-novo:not([hidden]) { display:flex; }
+  /* 🩸 07/09/2026 — o modal de LOTE nasceu sem esta linha e abria ENCOSTADO NA
+     ESQUERDA. Ele já tinha `items-center justify-center` no HTML, mas sem
+     `display:flex` as duas não fazem nada: o filho volta a ser bloco e sobe
+     pro canto. O `#modal-novo` tinha a regra desde o começo; o irmão dele não.
+     🪤 E NÃO dá pra resolver pondo a classe `flex` no elemento: no build do
+     Tailwind, `[hidden]:where(…)` está na posição 4699 e `.flex{display:flex}`
+     na 7203. O `:where()` tem especificidade ZERO, então os dois empatam — e o
+     último vence. A classe deixaria os dois modais ABERTOS PARA SEMPRE.
+     Por isso a regra é `:not([hidden])`: ela só liga o flex quando o modal
+     está aberto, e o `hidden` continua mandando quando está fechado. */
+  #modal-novo:not([hidden]),
+  #modal-lote:not([hidden]) { display:flex; }
   /* toast próprio desta tela (o toast.js da casa não tem botão de ação; e o nome `toast` é dele) */
   .fin-toast { position:fixed; left:50%; bottom:22px; transform:translateX(-50%) translateY(10px); background:#1E293B; color:#fff; font-size:13px; font-weight:500; padding:10px 16px; border-radius:10px; box-shadow:0 10px 30px -10px rgba(15,23,42,.5); opacity:0; transition:all .25s; z-index:80; pointer-events:none; max-width:min(92vw, 560px); }
   .fin-toast.on { opacity:1; transform:translateX(-50%) translateY(0); }

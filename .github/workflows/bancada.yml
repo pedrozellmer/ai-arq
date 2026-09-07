@@ -87,7 +87,9 @@ jobs:
           # guardas cegos para testes que EXECUTAM traz mais casos por arquivo
           # (cada mutação vira um teste). Mesmo guarda, terceira vez: piso que
           # envelhece é piso que não guarda nada.
-          PISO: 1900
+          # 07/09, 2a subida do dia: 1900 -> 2000. A bancada colhe 2565 depois
+          # de trazer as lacunas fechadas. O guarda exige piso >= 75% do colhido.
+          PISO: 2000
         run: |
           N=$(python -m pytest tests/ -q --collect-only 2>/dev/null | tail -1 | grep -oE '^[0-9]+' || echo 0)
           echo "testes colhidos: $N (piso: $PISO)"

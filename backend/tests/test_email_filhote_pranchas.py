@@ -18,6 +18,8 @@ import os
 import re
 import sys
 
+import pytest
+
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _BACKEND)
 
@@ -47,14 +49,39 @@ def _mesmas_pranchas():
 
 def _caso_cliente_19():
     """24/08, job e1c48ed7: 3 das 7 pranchas tinham morrido (as duas de
-    arquitetura entre elas) e o saldo global é +59 medidos — MAS a prancha de
-    elétrica caiu de 77 pra 49 medidos (103 → 60 itens)."""
-    antes = {"itens": 147, "medidos": 92, "pranchas": 4,
+    arquitetura entre elas) e o saldo global é +59 medidos — MAS pranchas
+    antigas PERDERAM medição.
+
+    🪤 06/09 (cético): até aqui as duas pranchas do fixture moviam `itens` e
+    `medidos` na MESMA direção, então trocar a comparação do `_piores` de
+    `medidos` por `itens` deixava o guarda verde. Agora a ELÉTRICA é o caso
+    clássico da releitura — **GANHA item (103 → 140) e PERDE medição
+    (77 → 49)** — e só quem compara `medidos` a enxerga. A HIDRÁULICA perde nos
+    dois, pra que o quadro tenha DUAS linhas: assim `_piores[:1]` (além de
+    `[:0]` e `[3:]`) também reprova."""
+    antes = {"itens": 177, "medidos": 112, "pranchas": 4,
              "por_prancha": {"4366-AR-A_libredwg.dxf": {"itens": 44, "medidos": 15},
-                             "4366-EL-E_libredwg.dxf": {"itens": 103, "medidos": 77}}}
-    depois = {"itens": 263, "medidos": 151, "pranchas": 7,
+                             "4366-EL-E_libredwg.dxf": {"itens": 103, "medidos": 77},
+                             "4366-HI-H_libredwg.dxf": {"itens": 30, "medidos": 20}}}
+    depois = {"itens": 325, "medidos": 165, "pranchas": 7,
               "por_prancha": {"4366-AR-A_libredwg.dxf": {"itens": 160, "medidos": 102},
-                              "4366-EL-E_libredwg.dxf": {"itens": 60, "medidos": 49}}}
+                              "4366-EL-E_libredwg.dxf": {"itens": 140, "medidos": 49},
+                              "4366-HI-H_libredwg.dxf": {"itens": 25, "medidos": 14}}}
+    return antes, depois
+
+
+def _ganhou_prancha_sem_piorar():
+    """O caso NORMAL do filhote — e o motivo de o e-mail existir: pranchas que
+    não tinham entrado entraram, e NENHUMA das antigas perdeu medição.
+
+    `planta-a` fica com os MESMOS 15 medidos de propósito: empate não é piora,
+    então trocar o `<` do `_piores` por `<=` também tem que reprovar."""
+    antes = {"itens": 44, "medidos": 15, "pranchas": 1,
+             "por_prancha": {"planta-a.dxf": {"itens": 44, "medidos": 15}}}
+    depois = {"itens": 263, "medidos": 151, "pranchas": 4,
+              "por_prancha": {"planta-a.dxf": {"itens": 46, "medidos": 15},
+                              "planta-b.dxf": {"itens": 117, "medidos": 66},
+                              "planta-c.dxf": {"itens": 100, "medidos": 70}}}
     return antes, depois
 
 
@@ -96,7 +123,7 @@ def test_o_texto_diz_que_a_prancha_NAO_TINHA_ENTRADO():
 
 
 def test_sem_ganho_de_prancha_o_email_nao_inventa_uma():
-    """Controle negativo: no caso do Giovani (15/08) o filhote bom tinha as
+    """Controle negativo: no caso do cliente-53 (15/08) o filhote bom tinha as
     MESMAS pranchas e números menores. Se o texto de prancha aparecesse sempre,
     seria afirmação falsa — e copy pública sem fonte é regra dura."""
     corpo = _corpo("_email_leitura_nova")
@@ -136,18 +163,61 @@ def test_o_aviso_do_que_piorou_aparece_no_corpo_do_email():
     assert i_alarme > 0, (
         "o quadro do que piorou foi calculado e NÃO entrou no corpo do e-mail")
     # o quadro amarelo é o quadro amarelo — e vem antes do rodapé das 2 versões
-    assert "background:#FFFBEB" in html, "o alarme perdeu o destaque visual"
+    i_box = html.rfind("background:#FFFBEB", 0, i_alarme)
+    assert i_box > 0, "o alarme perdeu o destaque visual"
+    quadro = html[i_box:html.index("</div>", i_alarme)]
+
+    # 🪤 06/09: alarme ACESO com quadro VAZIO é pior que alarme nenhum —
+    # `_piores[:0]`, `[3:]` ou `[:1]` mantinham "E o que piorou" e o
+    # background amarelo, e o cliente via o susto sem saber QUAL prancha.
+    # Por isso a conferência é do CONTEÚDO, prancha por prancha.
+    assert "<b>4366-EL-E</b> (77 &rarr; 49 medidos)" in quadro, (
+        "a prancha que GANHOU item (103 → 140) e PERDEU medição (77 → 49) "
+        "não foi avisada — é o caso clássico da releitura, e quem compara "
+        "`itens` em vez de `medidos` não a enxerga: " + quadro)
+    assert "<b>4366-HI-H</b> (20 &rarr; 14 medidos)" in quadro, (
+        "a segunda prancha que piorou sumiu do quadro — o corte do `_piores` "
+        "está mostrando menos do que calculou: " + quadro)
+    assert "4366-AR-A" not in quadro, (
+        "a prancha que MELHOROU (15 → 102 medidos) foi acusada de piorar")
+
     assert i_alarme < html.index("A sua vers&atilde;o original continua no painel"), (
         "o aviso do que piorou caiu depois do rodapé — o cliente lê 'ficou "
         "melhor' e para de ler")
 
 
-def test_sem_piora_o_email_nao_inventa_alarme():
-    """Controle negativo: projeto em que tudo melhorou nao pode receber um
-    quadro amarelo vazio."""
-    corpo = _corpo("_email_leitura_nova")
-    assert "if _piores:" in corpo, (
-        "o alarme do que piorou saiu de baixo da condicao: passaria a sair sempre, ate onde nada piorou")
+@pytest.mark.parametrize("cenario,ganhou_prancha", [
+    ("mesmas_pranchas", False),
+    ("ganhou_prancha", True),
+])
+def test_sem_piora_o_email_nao_inventa_alarme(cenario, ganhou_prancha):
+    """Controle negativo: projeto em que nada piorou nao pode receber um
+    quadro amarelo.
+
+    🪤 06/09 (cetico): o guarda lia o fonte (`"if _piores:" in corpo`) e o
+    UNICO cenario que ele conhecia tinha ganho_pr == 0. Quem acendesse o alarme
+    so no ramo "ganhou prancha" — que e o caso NORMAL do filhote e o motivo de
+    o e-mail existir — passava batido. Agora ele EXECUTA o builder nos dois
+    ramos.
+    """
+    antes, depois = (_ganhou_prancha_sem_piorar() if ganhou_prancha
+                     else _mesmas_pranchas())
+    html = _email(antes, depois)
+
+    # o e-mail tem que ter saido de verdade (senao o controle negativo passa a vacuo)
+    assert "Refizemos a leitura" in html
+    _entrou = "prancha(s) que n&atilde;o tinham entrado agora entraram"
+    if ganhou_prancha:
+        assert _entrou in html, (
+            "o ramo 'ganhou prancha' nem foi exercitado — o cenario nao vale como controle")
+    else:
+        assert _entrou not in html
+
+    assert "E o que <b>piorou</b>" not in html, (
+        "quadro do que piorou apareceu num projeto em que NENHUMA prancha "
+        "perdeu medicao (%s)" % cenario)
+    assert "#FFFBEB" not in html, (
+        "o destaque amarelo do alarme saiu sem alarme nenhum (%s)" % cenario)
 
 
 def test_a_prancha_que_piorou_sai_com_nome_de_gente():

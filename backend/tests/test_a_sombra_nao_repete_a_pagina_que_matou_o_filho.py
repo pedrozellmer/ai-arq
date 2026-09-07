@@ -180,6 +180,120 @@ def test_toda_falha_do_filho_carrega_pdf_path_e_pagina():
         "os 3 appends de _pdfvec_falhas (processo, memoria, tempo/exceção) têm que dizer QUAL página")
 
 
+# ══════════════════════════════════════════════════════════════════════════
+#  O CONTRATO ENTRE OS DOIS LADOS
+#
+#  🔬 07/09/2026. Lacuna do cético: o conjunto de motivos é um contrato entre
+#  pontos DISTANTES de main.py — três `append` lá em cima (~10513/10527/10710)
+#  escrevem o motivo, e o filtro da sombra (~13037) decide por ele. Os testes
+#  acima só rodavam o lado do CONSUMO, com os motivos digitados no próprio
+#  teste. Renomear "memoria" pra "oom" no `append` deixava tudo verde e a
+#  página que acabou de estourar 2 GB voltava a rodar dentro do servidor.
+#  Agora os DOIS lados executam: o produtor grava, o consumidor filtra.
+# ══════════════════════════════════════════════════════════════════════════
+import subprocess  # noqa: E402
+
+import main  # noqa: E402
+
+#: (âncora inicial, âncora final) de cada `append` real de `_pdfvec_falhas`.
+_PRODUTORES = {
+    "processo": ('                    if _pr.returncode != 0:',
+                 '                    _vm = _jv.loads('),
+    "memoria": ('                    if _tipo_saida == "memoria":',
+                '                    elif _tipo_saida == "sem_escala":'),
+    "excecao": ('                    _eh_tempo = isinstance(_ve, _sp.TimeoutExpired)',
+                '                    print(f"[pdfvec-promo] '),
+}
+
+
+def _produz(qual, **extra):
+    """RODA o `append` de produção e devolve a linha que ele grava."""
+    src = fonte("main.py")
+    ini, fim = _PRODUTORES[qual]
+    assert src.count(ini) == 1, (
+        "a âncora inicial do produtor %r não é única — o bloco mudou de forma "
+        "e este guarda passou a auditar outra coisa" % qual)
+    a = src.index(ini)
+    codigo = textwrap.dedent(src[a:src.index(fim, a)])
+    falhas = []
+    ns = {"_pdfvec_falhas": falhas, "_log_error": lambda *a, **k: None,
+          "_stem": "A08", "filename": "A08.pdf", "job_id": "job-teste"}
+    ns.update(extra)
+    exec(compile(codigo, "produtor-%s" % qual, "exec"), ns)
+    assert len(falhas) == 1, (
+        "o bloco %r não gravou UMA falha (gravou %d) — sem isso o contrato "
+        "com a sombra não pode ser medido" % (qual, len(falhas)))
+    return falhas[0]
+
+
+class _Filho:
+    def __init__(self, rc):
+        self.returncode = rc
+        self.stderr = "MemoryError\n  File pdfvec_x.py, line 1"
+        self.stdout = ""
+
+
+def _as_quatro_falhas_reais():
+    """As quatro falhas como o PAI as grava — nada digitado à mão aqui."""
+    # 🔗 O tipo vem do classificador REAL: classificador → append → filtro.
+    tipo, det = main._saida_do_filho_pdfvec(0, {"err_rooms": "MemoryError: ..."})
+    assert tipo == "memoria", (
+        "`_saida_do_filho_pdfvec` parou de classificar MemoryError engolido "
+        "como 'memoria' (devolveu %r) — o append nem chega a rodar" % (tipo,))
+    return [
+        _produz("processo", _pr=_Filho(-9),
+                pdf_path="/tmp/A08.pdf", page_index=7),
+        _produz("memoria", _tipo_saida=tipo, _det_saida=det,
+                pdf_path="/tmp/A09.pdf", page_index=2),
+        _produz("excecao", _sp=subprocess,
+                _ve=subprocess.TimeoutExpired(["python"], 75),
+                pdf_path="/tmp/A10.pdf", page_index=3),
+        _produz("excecao", _sp=subprocess, _ve=ValueError("JSON quebrado"),
+                pdf_path="/tmp/A11.pdf", page_index=0),
+    ]
+
+
+def test_o_motivo_que_o_PAI_GRAVA_e_o_que_a_SOMBRA_RECONHECE(monkeypatch):
+    """🚨 O contrato inteiro, executado ponta a ponta.
+
+    Renomear o motivo em QUALQUER um dos três `append` (ou apertar a tupla do
+    filtro) quebra aqui — e só aqui, porque os outros testes escrevem os
+    motivos eles mesmos.
+    """
+    falhas = _as_quatro_falhas_reais()
+    motivos = [f.get("motivo") for f in falhas]
+    _, pular = _chamar_a_sombra(monkeypatch, falhas)
+    assert pular == {("/tmp/A08.pdf", 7), ("/tmp/A09.pdf", 2)}, (
+        "o pai grava os motivos %r e a sombra montou o skip %r. As duas mortes "
+        "por MEMÓRIA (filho com rc≠0 e MemoryError engolido) TÊM que ser "
+        "puladas — a sombra roda no processo do servidor, sem teto. E a perda "
+        "por TEMPO tem que continuar indo: é a única que mede além dos 75 s."
+        % (motivos, pular))
+
+
+def test_o_lado_da_MEMORIA_grava_a_pagina_que_o_filtro_procura():
+    """🪤 O de 'processo' já estava coberto no arquivo do teto; o de 'memoria'
+    não estava em lugar nenhum. Sem `pdf_path`/`pagina` o filtro descarta a
+    linha (`and f.get("pdf_path")`) e a página volta pra sombra calada."""
+    tipo, det = main._saida_do_filho_pdfvec(0, {"err_views": "MemoryError"})
+    linha = _produz("memoria", _tipo_saida=tipo, _det_saida=det,
+                    pdf_path="/tmp/A09.pdf", page_index=2)
+    assert linha.get("pdf_path") == "/tmp/A09.pdf" and linha.get("pagina") == 2, linha
+
+
+def test_CONTROLE_a_excecao_que_NAO_e_timeout_vira_o_nome_do_erro():
+    """Controle do produtor: os dois ramos do `if _eh_tempo` são exercitados —
+    sem isso o teste acima poderia estar medindo só metade do bloco."""
+    t = _produz("excecao", _sp=subprocess,
+                _ve=subprocess.TimeoutExpired(["python"], 75),
+                pdf_path="/tmp/A10.pdf", page_index=3)
+    x = _produz("excecao", _sp=subprocess, _ve=ValueError("JSON quebrado"),
+                pdf_path="/tmp/A11.pdf", page_index=0)
+    assert t["motivo"] != x["motivo"], (
+        "timeout e exceção comum saíram com o MESMO motivo (%r) — o diagnóstico "
+        "de 31/08 (caso cliente-14) volta a ficar indistinguível" % (t["motivo"],))
+
+
 def test_CONTROLE_guarda_reprova_a_chamada_antiga():
     antiga = "shadow_measure_async(page_units, job_id, api_key, _log_error)"
     assert "pular=" not in antiga

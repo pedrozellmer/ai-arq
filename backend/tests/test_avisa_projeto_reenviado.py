@@ -66,7 +66,7 @@ def _cenario(monkeypatch, refs_antigos, tinha_pd=None, tinha_area=None):
 
 # ── O que dispara ──────────────────────────────────────────────────────────
 def test_mesmo_caderno_reenviado_DISPARA_o_aviso(monkeypatch):
-    """🩸 O caso do flavio."""
+    """🩸 O caso do cliente-14."""
     _cenario(monkeypatch, CADERNO)
     r = main._projeto_ja_enviado("u1", set(CADERNO), 0, 0)
     assert r is not None, "reenvio do mesmo caderno passou batido"
@@ -179,14 +179,22 @@ def _site(p):
                    encoding="utf-8").read()
 
 
+_MIOLO = {".dxf": b"0\nSECTION\n2\nENTITIES\n0\nENDSEC\n0\nEOF\n",
+          ".dwg": b"AC1027 desenho de mentira\n"}
+
+
 class _Upload:
     """Um arquivo de upload como o Starlette entrega — nome, tamanho e leitura
     em pedaços."""
 
-    def __init__(self, filename, conteudo=b"%PDF-1.4 planta de mentira\n"):
+    def __init__(self, filename, conteudo=None):
         self.filename = filename
-        self._c = conteudo
-        self.size = len(conteudo)
+        # 🪤 O conteúdo segue a EXTENSÃO: um ".dxf" com miolo de PDF faria a
+        # rota classificar errado e o cenário "ele mandou o CAD junto" mediria
+        # outra coisa.
+        self._c = conteudo or _MIOLO.get(
+            os.path.splitext(filename)[1].lower(), b"%PDF-1.4 planta de mentira\n")
+        self.size = len(self._c)
         self._i = 0
 
     async def seek(self, n):
@@ -237,20 +245,128 @@ def _chamar_upload(monkeypatch, nomes, pe_direito=0, area=0, tmp_path=None):
     return resp, logs
 
 
-def test_o_upload_devolve_o_aviso_e_o_site_mostra(monkeypatch, tmp_path):
-    """🩸 O caso do cliente-NN, de ponta a ponta: reenviou o mesmo caderno e a
-    RESPOSTA do upload tem que trazer o aviso — é ela que o site lê."""
-    _cenario(monkeypatch, CADERNO)
-    resp, logs = _chamar_upload(monkeypatch, CADERNO, tmp_path=tmp_path)
+# ── A tela: o aviso RENDERIZADO, não a string no dashboard.html ───────────
+# 🪤 06/09 — a metade "o site mostra" deste guarda era
+# `"data.aviso_repetido" in site`: substring do dashboard.html inteiro. Ler a
+# chave e não renderizar nada passava verde, e o cliente ficava sem o aviso.
+# Aqui o JS de verdade RODA: o despacho (`if (data.aviso_repetido) ...`) e o
+# `mostrarAvisoAec` que monta o HTML, com a resposta que o backend acabou de
+# devolver na mão.
+from _navegador import atributos, bloco_a_partir_de, montar, rodar  # noqa: E402
+
+
+def _tela_do_envio(resp_do_backend):
+    """Roda o dashboard de verdade com a resposta do upload e devolve o que a
+    caixa de aviso ficou mostrando."""
+    import json as _json
+    site = _site("dashboard.html")
+    k = site.index("currentJobId = data.job_id;")
+    i = site.rindex("const data = await res.json();", 0, k)
+    fim = site.index("\n", site.index("if (data.aviso_area)", k))
+    despacho = site[i:fim]
+    # 🧪 controle do recorte: janela errada mediria outra coisa em silêncio.
+    assert "aviso_repetido" in despacho and len(despacho) < 3000, despacho[:200]
+    caixa = atributos(site, "aviso-aec")
+    assert caixa, "o id 'aviso-aec' sumiu do dashboard — o JS escreve nele"
+    from _navegador import sem_await
+    js = [montar([{"id": "aviso-aec", "tag": caixa["tag"],
+                   "attrs": caixa["attrs"], "html": ""}]),
+          "_ligarTelemetria();",
+          "var currentJobId = null, userCreditsCents = 0;",
+          "var DADOS = %s;" % _json.dumps(resp_do_backend, ensure_ascii=False),
+          "var res = { json: function () { return DADOS; } };",
+          bloco_a_partir_de(site, "function mostrarAvisoAec(", "dashboard.html",
+                            fecho=""),
+          "(function () { %s })();" % sem_await(despacho)]
+    return rodar(js, "({html: document.getElementById('aviso-aec').innerHTML,"
+                     " visivel: _visivel('aviso-aec')})")
+
+
+# 🔑 As três alavancas que o aviso existe pra oferecer. O pé-direito é a maior:
+# medido em 26/08, informar derruba a fatia de linha em branco de 59,5% pra
+# 27,3% — e era exatamente o que faltava no caso de 01/09.
+_ALAVANCAS = ("PÉ-DIREITO", "ÁREA TOTAL", "DXF")
+
+# 🪤 06/09 — o guarda antigo conferia `av["titulo"] and av["texto"]`: pura
+# truthiness. O texto tem um FALLBACK ("abra a revisão do projeto e preencha as
+# linhas que faltam") que mantém a chave preenchida mesmo com `_saidas` vazia,
+# então as três alavancas podiam sumir inteiras e o aviso continuava
+# "existindo". Cada linha aqui varia uma dimensão que o fixture não variava:
+# o que ele JÁ informou, e se ele mandou o CAD junto.
+_CENARIOS = [
+    # rótulo, pd_antes, area_antes, pd_agora, area_agora, extras, alavancas
+    ("nada_informado_so_pdf", None, None, 0, 0, [],
+     ("PÉ-DIREITO", "ÁREA TOTAL", "DXF")),
+    ("ja_tinha_pe_direito", 2.7, None, 2.7, 0, [],
+     ("ÁREA TOTAL", "DXF")),
+    ("ja_tinha_area", None, 190.0, 0, 190.0, [],
+     ("PÉ-DIREITO", "DXF")),
+    ("mandou_o_dxf_junto", None, None, 0, 0, ["planta geral.dxf"],
+     ("PÉ-DIREITO", "ÁREA TOTAL")),
+    ("nada_a_oferecer", 2.7, 190.0, 2.7, 190.0, ["planta geral.dxf"], ()),
+]
+
+
+@pytest.mark.parametrize("rotulo,pd_antes,area_antes,pd_agora,area_agora,"
+                         "extras,alavancas", _CENARIOS,
+                         ids=[c[0] for c in _CENARIOS])
+def test_o_upload_devolve_o_aviso_e_o_site_mostra(
+        monkeypatch, tmp_path, rotulo, pd_antes, area_antes, pd_agora,
+        area_agora, extras, alavancas):
+    """🩸 O caso do cliente-42, de ponta a ponta: reenviou o mesmo caderno, a
+    RESPOSTA do upload traz o aviso — e o aviso diz O QUE MUDA.
+
+    🪤 "existe" não basta. Aviso que só diz "você repetiu" é reclamação; o
+    valor está na saída que ele oferece, e a saída depende do que ESTE cliente
+    já informou. Cada cenário cobra as alavancas que cabem nele e proíbe as
+    que não cabem — oferecer 'informe o pé-direito' pra quem acabou de
+    informar é o mesmo tipo de mentira que o aviso existe pra evitar."""
+    _cenario(monkeypatch, CADERNO, tinha_pd=pd_antes, tinha_area=area_antes)
+    nomes = CADERNO + list(extras)
+    resp, logs = _chamar_upload(monkeypatch, nomes, pe_direito=pd_agora,
+                                area=area_agora, tmp_path=tmp_path)
     av = resp.get("aviso_repetido")
     assert av, "o aviso não sai do backend — a resposta foi %r" % sorted(resp)
     assert av["job_anterior"] == "144c1f04"
-    assert av["arquivos_iguais"] == 6 and av["arquivos_enviados"] == 6
-    assert av["titulo"] and av["texto"], av
+    assert av["arquivos_iguais"] == 6 and av["arquivos_enviados"] == len(nomes)
     assert any(s == "upload:projeto-repetido" for s, _m, _sev in logs), (
         "não vira linha em error_log: %r" % [s for s, _m, _sev in logs])
-    site = _site("dashboard.html")
-    assert "data.aviso_repetido" in site, "o site não lê o aviso"
+
+    texto = av["texto"]
+    # Conteúdo, não presença: o aviso conta o que aconteceu com ESTE envio.
+    assert "%d dos %d arquivos" % (6, len(nomes)) in texto, texto
+    for alavanca in _ALAVANCAS:
+        if alavanca in alavancas:
+            assert alavanca in texto, (
+                "%s: o aviso não oferece a alavanca %s — sem ela ele só diz "
+                "'você repetiu'. Texto: %r" % (rotulo, alavanca, texto))
+        else:
+            assert alavanca not in texto, (
+                "%s: o aviso manda informar %s, que este cliente JÁ informou "
+                "(ou já mandou) — conselho falso. Texto: %r"
+                % (rotulo, alavanca, texto))
+    if not alavancas:
+        # 🔑 O fallback é legítimo AQUI e só aqui: quando não sobrou alavanca.
+        assert "abra a revisão do projeto" in texto, texto
+
+    # E a tela mostra: o JS do dashboard roda com esta resposta na mão.
+    tela = _tela_do_envio(resp)
+    assert tela["visivel"], (
+        "%s: a caixa de aviso continuou escondida — o backend avisou e o "
+        "cliente não viu" % rotulo)
+    assert av["titulo"] in tela["html"], (
+        "%s: o título do aviso não chegou à tela" % rotulo)
+    for alavanca in alavancas:
+        assert alavanca in tela["html"], (
+            "%s: a alavanca %s morreu entre o JSON e a tela" % (rotulo, alavanca))
+
+
+def test_CONTROLE_a_tela_do_envio_sabe_ficar_MUDA():
+    """🧪 Controle positivo do renderizador: sem `aviso_repetido` na resposta
+    a caixa fica escondida e vazia. Sem isto, o guarda de cima poderia estar
+    lendo uma caixa que aparece sempre."""
+    tela = _tela_do_envio({"job_id": "j1", "status": "queued"})
+    assert not tela["visivel"] and tela["html"].strip() == "", tela
 
 
 def test_CONTROLE_projeto_novo_nao_leva_aviso_na_resposta(monkeypatch, tmp_path):

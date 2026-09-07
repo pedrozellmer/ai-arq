@@ -117,7 +117,9 @@ def roda_ate_o_email(itens, cab_planob=None, medidos_antes=None, avisos=None,
                      project_type="", n_pdf=0, n_cad=1,
                      email="cliente-nn@example.com",
                      nome_projeto="projeto de teste", job_id="job-teste",
-                     antes_do_email=None):
+                     antes_do_email=None, is_complement=False,
+                     partial_failure=False, partial_errors=None,
+                     dwg_failed=None):
     """Executa a fatia real e devolve o diário do que o cliente receberia.
 
     `cab_planob` — planta o aviso do plano B como o motor o escreve, lá em cima
@@ -127,6 +129,12 @@ def roda_ate_o_email(itens, cab_planob=None, medidos_antes=None, avisos=None,
     real): assim a recontagem final tem trabalho a fazer, e sumir com ela — ou
     pô-la sob um `if False:` — deixa os dois números do e-mail em desacordo.
     `antes_do_email` — ganchos extras no namespace (pra espionar itens).
+
+    🔑 06/09 — `is_complement`, `partial_failure`, `partial_errors` e
+    `dwg_failed` deixaram de ser constantes escondidas aqui dentro. Enquanto
+    eram, TODO guarda que usa este harness media um cenário só (só CAD,
+    arquitetura, sem falha parcial) — e um rebaixamento de selo que só
+    acontecesse em job com PDF, complemento ou falha parcial ficava invisível.
     """
     import main
 
@@ -168,9 +176,11 @@ def roda_ate_o_email(itens, cab_planob=None, medidos_antes=None, avisos=None,
         "cad_paths": [], "project_data": proj, "all_items": itens,
         "file_paths": caminhos,
         "dxf_paths": [p for p in caminhos if p.endswith(".dxf")],
-        "project_type": project_type, "is_complement": False,
-        "partial_failure": False, "partial_errors": [], "_saida": "",
-        "dwg_failed": [], "_aec_failed": False, "_dwg_sem_irmao": [],
+        "project_type": project_type, "is_complement": is_complement,
+        "partial_failure": partial_failure,
+        "partial_errors": list(partial_errors or []), "_saida": "",
+        "dwg_failed": list(dwg_failed or []),
+        "_aec_failed": False, "_dwg_sem_irmao": [],
         "_aviso_lw_idx": aviso_idx, "_aviso_lw_cab": cab_planob or "",
         "jobs": _Jobs(),
         # ── credenciais de mentira (a rede está patchada) ────────────────

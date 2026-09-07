@@ -125,18 +125,84 @@ def test_CONTROLE_a_saude_da_coleta_AINDA_alarma_quando_parou_de_verdade(monkeyp
     assert r["aviso"] and "PAROU" in r["aviso"], "o tick de hoje faltou e nenhum aviso"
 
 
-def test_o_quando_da_revisao_inline_chega_INTEIRO_e_nao_cortado_em_UTC():
-    """🪤 Lê fonte (fraco, admitido): o servidor cortava `reviewed_at[:10]`, que
-    é a DATA em UTC — às 22h de Brasília já era amanhã. Agora manda o timestamp
-    inteiro e a tela formata em Brasília. Um guarda de comportamento exigiria
-    montar a rota inteira; este pelo menos reprova se o `[:10]` voltar."""
-    src = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
-    i = src.find("def admin_revision_feedback")
-    assert i > 0, "sumiu a rota admin_revision_feedback"
-    corpo = src[i:src.find("\n@app.", i + 10)]
-    assert '(r.get("reviewed_at") or "")[:10]' not in corpo, (
-        "o `quando` da revisão voltou a ser cortado em 10 chars — data de UTC")
-    assert 'r.get("reviewed_at")' in corpo, "o `quando` da revisão sumiu da resposta"
+# ── o `quando` da revisão inline: a rota RODA, com as QUATRO listas ────────
+# 🩸 07/09/2026 — a versão anterior deste guarda lia o fonte e proibia a
+# substring `(r.get("reviewed_at") or "")[:10]`. Duas cegueiras: qualquer outra
+# forma de cortar (`[:-6]`, `.split("T")[0]`, `str(...)[0:10]`) passava, e a
+# proibição valia pro CORPO INTEIRO da rota — não dizia em QUAL das quatro
+# listas o `quando` tem que chegar inteiro.
+# 🪤 E o cético achou a lista esquecida: `recados_itens`. É a que o produto
+# trata como mais valiosa (o único recado digitado por uma pessoa em toda a
+# história), e era justo a que ninguém conferia. As quatro estão aqui.
+_Q_EDIT = "2026-09-02T01:30:00+00:00"      # 01/09, 22:30 em Brasília
+_Q_REJECT = "2026-09-02T02:10:00+00:00"    # 01/09, 23:10
+_Q_FALTOU = "2026-09-03T00:05:00+00:00"    # 02/09, 21:05
+_Q_RECADO = "2026-09-04T01:59:00+00:00"    # 03/09, 22:59
+# 🔑 Os quatro caem DEPOIS das 21h de Brasília: cortar em 10 chars devolve o dia
+# SEGUINTE nos quatro — que é exatamente o defeito que a tela mostrava.
+
+_LINHAS_DA_REVISAO = [
+    {"job_id": "job-01", "item_id": "it-1", "action": "edit",
+     "edits": {"quantity": 9.0}, "comment": "", "reviewed_at": _Q_EDIT},
+    {"job_id": "job-01", "item_id": None, "action": "reject",
+     "edits": {"_item_id": "it-2",
+               "_antes": {"description": "Bancada de granito 3,20 m", "unit": "m",
+                          "quantity": 3.2, "discipline": "Marcenaria",
+                          "confidence": "confirmado"}},
+     "comment": "", "reviewed_at": _Q_REJECT},
+    # 🔑 o "faltou" tem comment de gente: entra em `faltou_recados` E em
+    # `recados_itens` — as duas listas com o mesmo timestamp.
+    {"job_id": "job-02", "item_id": None, "action": "faltou", "edits": {},
+     "comment": "faltou a bancada da cozinha", "reviewed_at": _Q_FALTOU},
+    # o modal "Comentar" grava action=approve: é assim que o recado nasce
+    {"job_id": "job-02", "item_id": "it-3", "action": "approve", "edits": {},
+     "comment": "faca a separacao dos tipos, um item pra cada",
+     "reviewed_at": _Q_RECADO},
+]
+
+_QUANDOS_POR_LISTA = {
+    "ultimos_edits": [_Q_EDIT],
+    "exclusoes_itens": [_Q_REJECT],
+    "faltou_recados": [_Q_FALTOU],
+    "recados_itens": [_Q_FALTOU, _Q_RECADO],
+}
+
+
+def _revisao_inline(monkeypatch, linhas):
+    """Chama `admin_revision_feedback` DE VERDADE, com o banco de mentira."""
+    import urllib.request as _ureq
+    monkeypatch.setattr(_m, "_require_admin",
+                        lambda r: {"email": "admin@example.com"})
+
+    def _fake(req, timeout=None):
+        url = getattr(req, "full_url", str(req))
+        return _Resp(list(linhas) if "item_reviews" in url else [])
+    monkeypatch.setattr(_ureq, "urlopen", _fake)
+    return _m.admin_revision_feedback(request=None)["revisao_inline"]
+
+
+@pytest.mark.parametrize("lista", sorted(_QUANDOS_POR_LISTA))
+def test_o_quando_da_revisao_inline_chega_INTEIRO_e_nao_cortado_em_UTC(
+        monkeypatch, lista):
+    """🚨 EXECUTA a rota. O servidor cortava `reviewed_at[:10]`, que é a DATA em
+    UTC — às 22h de Brasília já era amanhã. Agora manda o timestamp inteiro e
+    quem formata é a tela. As QUATRO listas da revisão inline carregam `quando`,
+    e cada uma é julgada por si."""
+    ri = _revisao_inline(monkeypatch, _LINHAS_DA_REVISAO)
+    assert "erro" not in ri, ri
+    itens = ri.get(lista)
+    assert itens, (
+        "a lista `%s` chegou vazia — o fixture deixou de exercitá-la e o guarda "
+        "voltaria a não julgar nada: %r" % (lista, ri))
+    vistos = sorted(x.get("quando") for x in itens)
+    assert vistos == sorted(_QUANDOS_POR_LISTA[lista]), (
+        "`%s` entregou %r; esperado %r — cortado em 10 chars vira a DATA EM UTC, "
+        "e revisão feita às 22h de Brasília aparece na tela como se fosse do dia "
+        "seguinte" % (lista, vistos, sorted(_QUANDOS_POR_LISTA[lista])))
+    for q in vistos:
+        assert isinstance(q, str) and len(q) > 10 and "T" in q, (
+            "`%s` mandou %r — sem hora, a tela não tem como aplicar o fuso"
+            % (lista, q))
 
 
 # ═══════════════════ MOVIMENTO DO SITE ══════════════════════════════════════

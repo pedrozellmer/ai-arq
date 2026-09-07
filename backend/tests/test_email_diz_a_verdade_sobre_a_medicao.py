@@ -26,6 +26,8 @@ import os
 import re
 import sys
 
+import pytest
+
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _BACKEND)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -89,7 +91,35 @@ def test_o_email_NAO_promete_o_que_nao_temos():
 #  Está LIGADO no motor, e na ordem certa
 # ─────────────────────────────────────────────────────────────────────────────
 
-def test_o_motor_escolhe_o_terceiro_email_quando_nao_mediu_nada():
+def _itens_sem_medicao(n_total, n_zerado):
+    """`n_total` itens, ZERO medidos do CAD, `n_zerado` linhas em branco.
+
+    🪤 `n_zerado` tem que ficar ABAIXO de 80% do total: acima disso quem pega é
+    a irmã de má notícia (`_build_sem_medida_email`), que é outro e-mail.
+    """
+    from models import BudgetItem, Confidence
+    assert n_zerado < 0.8 * n_total, "essa proporção cai na irmã de má notícia"
+    return [BudgetItem(item_num="1.%d" % k, description="Servico %d" % k,
+                       unit="m²", quantity=(0.0 if k < n_zerado else 12.5 + k),
+                       confidence=Confidence.ESTIMADO, origem="vision_pdf")
+            for k in range(n_total)]
+
+
+# 🪤 07/09/2026 — a fixture era de PONTO ÚNICO: só o caso real, de 124 itens.
+# Qualquer teto de tamanho (ou qualquer condição extra que 124 satisfaz e um
+# projeto normal não) reabria a comemoração falsa pra TODO projeto pequeno sem
+# o guarda perceber. O tamanho agora é a dimensão que varia.
+_PROJETOS_SEM_MEDICAO = [
+    (1, 0),        # a planilha de uma linha só
+    (5, 2),        # 40% em branco — longe do limite de 80% da irmã
+    (12, 5),
+    (124, 53),     # 🩸 a aritmética exata do job 40550d3e (caso cliente-15)
+]
+
+
+@pytest.mark.parametrize("n_total,n_zerado", _PROJETOS_SEM_MEDICAO,
+                         ids=["%ditens" % n for n, _ in _PROJETOS_SEM_MEDICAO])
+def test_o_motor_escolhe_o_terceiro_email_quando_nao_mediu_nada(n_total, n_zerado):
     """Guarda de FATO, EXECUTADO: com ZERO medidos, o e-mail que SAI é o do
     meio — nem comemoração, nem "não consegui ler seu arquivo".
 
@@ -101,42 +131,57 @@ def test_o_motor_escolhe_o_terceiro_email_quando_nao_mediu_nada():
     que é o caso visto ao vivo em 06/09.
     """
     from _fim_do_job import roda_ate_o_email
-    d = roda_ate_o_email(_itens_do_caso_real(), nome_projeto="guarita")
+    d = roda_ate_o_email(_itens_sem_medicao(n_total, n_zerado),
+                         nome_projeto="guarita")
     enviado = d["emails"][-1]
     assert enviado["kind"] == "leu_sem_medir", (
-        "com ZERO medidos o motor mandou o e-mail %r — o do meio virou código "
-        "morto:\n%s" % (enviado["kind"], enviado["assunto"]))
+        "projeto de %d itens com ZERO medidos recebeu o e-mail %r — o do meio "
+        "virou código morto:\n%s"
+        % (n_total, enviado["kind"], enviado["assunto"]))
     assert "pronta" not in enviado["assunto"].lower(), (
         "o assunto comemora uma entrega que não mediu nada: " + enviado["assunto"])
     assert "planilha está pronta" not in enviado["html"].lower(), (
         "o corpo comemora uma entrega que não mediu nada")
     assert any("motor:leu-sem-medir" in l for l in d["logs"]), (
         "a troca de e-mail aconteceu sem rastro: %r" % (d["logs"][-4:],))
+    # e o e-mail conta o tamanho REAL do problema, não um número decorado
+    assert str(n_total) in enviado["html"], (
+        "o e-mail não diz quantos itens saíram (%d)" % n_total)
 
 
 def _itens_do_caso_real():
     """A aritmetica exata do job 40550d3e: 124 itens, ZERO medidos, 53 zerados."""
-    from models import BudgetItem, Confidence
-    return [BudgetItem(item_num="1.%d" % k, description="Servico %d" % k,
-                       unit="m²", quantity=(0.0 if k < 53 else 12.5 + k),
-                       confidence=Confidence.ESTIMADO, origem="vision_pdf")
-            for k in range(124)]
+    return _itens_sem_medicao(124, 53)
 
 
-def test_CONTROLE_quem_MEDIU_continua_recebendo_a_planilha_pronta():
+# O outro lado, no MESMO caminho executado — e também em projeto PEQUENO: o
+# controle antigo só olhava 108 itens, então "quem mediu" e "quem não mediu"
+# eram os dois projetos grandes, e nenhum dos dois via planilha de 1 linha.
+_PROJETOS_MEDIDOS = [
+    (1, 0, 1),       # UMA linha, medida do CAD
+    (5, 1, 2),
+    (108, 12, 88),   # o melhor projeto de setembro
+]
+
+
+@pytest.mark.parametrize("n_total,n_zerado,n_med", _PROJETOS_MEDIDOS,
+                         ids=["%ditens" % n for n, _, _ in _PROJETOS_MEDIDOS])
+def test_CONTROLE_quem_MEDIU_continua_recebendo_a_planilha_pronta(
+        n_total, n_zerado, n_med):
     """O outro lado, no MESMO caminho executado."""
     from _fim_do_job import roda_ate_o_email
     from models import BudgetItem, Confidence
     itens = [BudgetItem(item_num="1.%d" % k, description="Servico %d" % k,
-                        unit="m²", quantity=(0.0 if k < 12 else 12.5 + k),
-                        confidence=(Confidence.CONFIRMADO if k < 88
+                        unit="m²", quantity=(0.0 if n_med <= k < n_med + n_zerado
+                                             else 12.5 + k),
+                        confidence=(Confidence.CONFIRMADO if k < n_med
                                     else Confidence.ESTIMADO),
                         origem="dxf_geom")
-             for k in range(108)]
+             for k in range(n_total)]
     d = roda_ate_o_email(itens, nome_projeto="projeto medido")
     assert d["emails"][-1]["kind"] == "planilha_pronta", (
-        "um projeto com 88 linhas medidas recebeu %r"
-        % d["emails"][-1]["kind"])
+        "um projeto de %d itens com %d linhas medidas recebeu %r"
+        % (n_total, n_med, d["emails"][-1]["kind"]))
 
 
 def test_a_irmã_de_ma_noticia_continua_INTOCADA():

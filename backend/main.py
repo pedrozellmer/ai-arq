@@ -15818,8 +15818,25 @@ def _newsletter_token(email: str) -> str:
     return _hmac_nl.new(key, (email or "").strip().lower().encode(), _hashlib_nl.sha256).hexdigest()[:24]
 
 
-def _newsletter_recipients() -> list:
-    """(email, nome) distintos de projects, menos optout e contas de teste/admin."""
+def _newsletter_recipients(tipo: str = "campanha") -> list:
+    """(email, nome) distintos de projects, menos optout e contas de teste/admin.
+
+    `tipo` decide QUEM recebe, e a escolha é explícita de propósito:
+
+      · "servico"  — comunicação sobre o que a pessoa JÁ USA (função nova,
+                     mudança de comportamento, manutenção). Vai pra base toda.
+      · "campanha" — promoção, oferta, newsletter. SÓ pra quem marcou
+                     `accept_marketing` no cadastro.
+
+    🔑 07/09/2026, Pedro: *"e não vale tirar isso no termo, esse aceite de
+    mkt?"*. Não vale — apagar o campo apaga o REGISTRO, não a manifestação: as
+    49 pessoas que marcaram "não" continuam tendo marcado. E hoje há
+    consentimento documentado de 53; sem o campo, o envio passaria a não ter
+    base nenhuma. Troca cobertura parcial por cobertura zero.
+
+    🪤 O DEFAULT É "campanha" — o mais restrito. Quem escrever código novo e
+    esquecer o argumento manda pra menos gente, não pra mais.
+    """
     import urllib.request as _ur
     by_email = {}
     try:
@@ -15852,11 +15869,55 @@ def _newsletter_recipients() -> list:
     def _blocked(e):
         return _hl_block.sha256(e.strip().lower().encode()).hexdigest() in _block_hashes
 
-    return [
+    base = [
         (e, by_email[e])
         for e in sorted(by_email)
         if e not in opt and e != ADMIN_EMAIL and not _blocked(e) and "+smoke" not in e
     ]
+    if tipo == "servico":
+        # 🔑 COMUNICAÇÃO DE SERVIÇO fala do que a pessoa JÁ TEM: função nova na
+        # ferramenta que ela usa, mudança de comportamento, aviso de manutenção.
+        # É a mesma categoria de "sua planilha está pronta", que sempre saiu
+        # para todos. Não depende de aceite de marketing — depende da relação
+        # que já existe. O descadastro de 1 clique (`newsletter_optout`) e a
+        # lista de supressão continuam valendo, sempre.
+        return base
+    return _so_quem_aceitou_marketing(base)
+
+
+def _so_quem_aceitou_marketing(destinatarios):
+    """Filtra pela caixinha `accept_marketing` que a pessoa marcou no cadastro.
+
+    🩸 07/09/2026 — ESTE FILTRO NÃO EXISTIA. A newsletter descontava só o
+    `newsletter_optout` (o descadastro de 1 clique) e NUNCA olhava o
+    `accept_marketing` do cadastro. Medido na base: de 102 perfis, **49
+    marcaram que NÃO queriam receber** — 48% — e recebiam assim mesmo.
+    Achado nº52 da auditoria de 06/09, classificado como CRÍTICO.
+
+    🔑 São dois consentimentos diferentes e os dois valem: a caixinha do
+    cadastro (o "não" original) e o link de descadastro (o "não" posterior).
+    Respeitar um e ignorar o outro é respeitar nenhum.
+
+    🪤 FALHA FECHADA, ao contrário da lista de supressão. Se não der pra ler os
+    perfis, ninguém recebe campanha. Mandar promoção pra quem recusou é dano
+    que não se desfaz; deixar de mandar é adiamento.
+    """
+    import urllib.request as _ur_am
+    try:
+        r = _ur_am.Request(
+            f"{SUPABASE_URL}/rest/v1/profiles?select=email,accept_marketing",
+            method="GET")
+        r.add_header("apikey", SUPABASE_KEY)
+        r.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        linhas = _json.loads(_ur_am.urlopen(r, timeout=20).read().decode("utf-8"))
+    except Exception as _e:
+        _log_error("newsletter:aceite-ilegivel",
+                   "nao consegui ler accept_marketing — campanha NAO sai "
+                   "(falha fechada): %s" % _e, None, severity="error")
+        return []
+    aceitaram = {(l.get("email") or "").strip().lower()
+                 for l in linhas if l.get("accept_marketing") is True}
+    return [(e, n) for e, n in destinatarios if e in aceitaram]
 
 
 def _newsletter_blast(subject, html_template, recipients):
@@ -15898,9 +15959,23 @@ async def admin_newsletter_send(request: Request):
     except Exception:
         data = {}
     test_only = bool((data or {}).get("test_only"))
-    recipients = [(ADMIN_EMAIL, "Pedro")] if test_only else _newsletter_recipients()
+    # 🔑 07/09/2026 — O TIPO PASSA A SER ESCOLHA EXPLÍCITA, no botão.
+    # "servico" = função nova na ferramenta que a pessoa usa (base toda).
+    # "campanha" = promoção/newsletter (só quem aceitou marketing no cadastro).
+    # 🪤 Default "campanha", o mais restrito: quem esquecer o campo manda pra
+    # MENOS gente, não pra mais. Erro de omissão não pode virar envio indevido.
+    tipo = str((data or {}).get("tipo") or "campanha").strip().lower()
+    if tipo not in ("servico", "campanha"):
+        raise HTTPException(400, "tipo tem que ser 'servico' ou 'campanha'")
+    recipients = [(ADMIN_EMAIL, "Pedro")] if test_only else _newsletter_recipients(tipo)
     sent, fail = _newsletter_blast(_NEWSLETTER_SUBJECT, _NEWSLETTER_HTML, recipients)
-    print(f"[newsletter] test_only={test_only} recipients={len(recipients)} sent={sent} fail={fail}")
+    print(f"[newsletter] tipo={tipo} test_only={test_only} "
+          f"recipients={len(recipients)} sent={sent} fail={fail}")
+    if not test_only:
+        _log_error("newsletter:disparo",
+                   "tipo=%s destinatarios=%d enviados=%d falhas=%d assunto=%r"
+                   % (tipo, len(recipients), sent, fail, _NEWSLETTER_SUBJECT[:80]),
+                   None, severity="warning")
     if not test_only and sent:
         # registra o envio manual no histórico (mesma tabela dos agendamentos)
         try:
@@ -15913,8 +15988,33 @@ async def admin_newsletter_send(request: Request):
             })
         except Exception as _e:
             print(f"[newsletter] log histórico falhou: {_e}")
-    return {"status": "ok", "test_only": test_only,
+    return {"status": "ok", "test_only": test_only, "tipo": tipo,
             "recipients": len(recipients), "sent": sent, "fail": fail}
+
+
+@app.get("/api/admin/newsletter/publico")
+def admin_newsletter_publico(request: Request):
+    """Quantas pessoas cada botão alcança — ANTES de apertar.
+
+    🔑 A conferência é o passo do meio, não um detalhe: o mesmo desenho do
+    preencher-em-lote do Financeiro. Apertar um botão que manda e-mail pra
+    dezenas de pessoas sem ver o número antes é como o produto costumava
+    errar — fazer, e contar depois.
+    """
+    _require_admin(request)
+    servico = _newsletter_recipients("servico")
+    campanha = _newsletter_recipients("campanha")
+    so_servico = len(servico) - len(campanha)
+    return {
+        "servico": len(servico),
+        "campanha": len(campanha),
+        "recusaram_marketing": so_servico,
+        "explicacao": (
+            "Serviço fala do que a pessoa JÁ usa (função nova, manutenção) e vai "
+            "pra base toda. Campanha é promoção e só vai pra quem marcou o "
+            "aceite no cadastro. %d pessoa(s) recusaram marketing e só recebem "
+            "comunicação de serviço." % so_servico),
+    }
 
 
 @app.get("/api/admin/newsletter/preview")

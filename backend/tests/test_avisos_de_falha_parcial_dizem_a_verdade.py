@@ -12,7 +12,7 @@ ficava vazio e o cliente caía no `else`:
     "Reprocessar é grátis e pode completar."
 
 Para uma prancha recusada por tamanho isso é **falso** — reprocessar dá
-exatamente o mesmo. É o erro do caso Thalison (29/07, reenviou 2× e desistiu),
+exatamente o mesmo. É o erro do caso cliente-52 (29/07, reenviou 2× e desistiu),
 entrando pela outra porta.
 
 🔑 O conselho agora é montado por MOTIVO: tamanho pede PURGE, DWG que não abre
@@ -32,6 +32,8 @@ import os
 import sys
 import textwrap
 import types
+
+import pytest
 
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _BACKEND)
@@ -88,24 +90,122 @@ def _conselho(sheet_errors=(), dxf_errors=(), dwg_failed=(), pdf_paths=()):
     return pd.warnings
 
 
-_GRANDE = ("PRANCHA_A0.dxf: esse desenho é grande demais pro nosso limite de "
-           "memória (412 MB)")
+def _valor_plausivel(nome):
+    """Um valor de mentira, com o TIPO que o produtor espera.
+
+    Só existe pra deixar a f-string do produtor renderizar — nenhum teste aqui
+    olha o número, e sim a REDAÇÃO que sai."""
+    if nome.startswith("_bn") or "nome" in nome or "path" in nome:
+        return "PRANCHA_A0.dxf"
+    if "tam" in nome or "bytes" in nome:
+        return 412 * 1048576
+    return 412.0
+
+
+def _mensagens_REAIS_de_prancha_grande():
+    """As frases que o main.py de verdade produz ao recusar prancha por TAMANHO.
+
+    🩸 A LACUNA QUE ISTO FECHA. A versão anterior alimentava o consumidor com um
+    literal escrito à mão dentro do próprio teste. São **três** produtores dessa
+    frase no `process_job`, e o acoplamento entre eles e o filtro do aviso
+    (`"grande demais pro nosso limite de memória" in str(e)`) estava protegido
+    só por um comentário "não mudar". Mexer na redação de qualquer um dos três —
+    o tipo de mexida que se faz sem medo em copy — reabria o defeito pra todo
+    cliente com prancha recusada por tamanho, com o guarda VERDE.
+
+    🔑 Por isso os produtores são achados por um marcador DIFERENTE do que o
+    filtro usa: aqui basta a frase dizer "grande demais". Se alguém reescrever o
+    resto ("...pro nosso limite de memória"), o produtor continua sendo achado
+    por este guarda e o consumidor deixa de reconhecê-lo — que é exatamente a
+    regressão a pegar.
+    """
+    import ast
+    fn = [n for n in ast.walk(ast.parse(_FONTE))
+          if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+          and n.name == "process_job"]
+    assert len(fn) == 1, "process_job sumiu ou virou duas definições"
+    achadas = []
+    for n in ast.walk(fn[0]):
+        if not (isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                and n.func.attr == "append" and len(n.args) == 1):
+            continue
+        alvo = n.func.value
+        if not (isinstance(alvo, ast.Name)
+                and alvo.id in ("_dxf_grandes_msgs", "dxf_errors")):
+            continue
+        if not isinstance(n.args[0], (ast.JoinedStr, ast.Constant)):
+            continue
+        expr = ast.Expression(n.args[0])
+        ast.fix_missing_locations(expr)
+        ns = {"int": int, "os": os, "len": len, "abs": abs, "round": round}
+        for m in ast.walk(n.args[0]):
+            if isinstance(m, ast.Name) and m.id not in ns:
+                ns[m.id] = _valor_plausivel(m.id)
+        texto = eval(compile(expr, "produtor-main.py", "eval"), ns)
+        if "grande demais" in texto:
+            achadas.append((n.lineno, texto))
+    assert len(achadas) >= 3, (
+        "esperava os TRÊS produtores da recusa por tamanho no process_job "
+        "(DWG grande antes de converter, DXF grande depois de converter, DXF "
+        "grande na leitura), achei %d: %s. Se um sumiu, o guarda passou a "
+        "cobrir menos do que diz." % (achadas, [l for l, _ in achadas]))
+    return achadas
+
+
+_PRODUTORES = _mensagens_REAIS_de_prancha_grande()
+
 _SOLUCO = "PRANCHA_B.pdf: a IA não respondeu essa prancha"
 
 
-def test_prancha_grande_demais_NAO_recebe_conselho_de_reprocessar():
-    """🩸 Caso Thalison pela outra porta: reprocessar prancha recusada por
+@pytest.mark.parametrize("linha,msg", _PRODUTORES,
+                         ids=[str(l) for l, _ in _PRODUTORES])
+def test_prancha_grande_demais_NAO_recebe_conselho_de_reprocessar(linha, msg):
+    """🩸 Caso cliente-52 pela outra porta: reprocessar prancha recusada por
     TAMANHO dá exatamente o mesmo. O guarda antigo procurava a palavra no fonte
     do bloco — apagar o filtro (`if False and "grande demais…" in str(e)`)
     deixava a palavra lá (ela mora na própria linha do filtro) e o cliente
-    voltava a ler 'Reprocessar é grátis e pode completar'."""
-    (aviso,) = _conselho(dxf_errors=[_GRANDE])
-    assert "PURGE" in aviso, "sumiu o conselho que de fato resolve prancha grande: %r" % aviso
-    assert "Reprocessar não resolve" in aviso
+    voltava a ler 'Reprocessar é grátis e pode completar'.
+
+    🔑 E a entrada não é mais uma cópia da frase escrita aqui: é a frase que o
+    produtor do main.py monta, avaliada dele mesmo. O id do caso é a linha.
+    """
+    (aviso,) = _conselho(dxf_errors=[msg])
+    assert "PURGE" in aviso, (
+        "a prancha recusada por tamanho em main.py:%d não recebeu o conselho "
+        "que de fato resolve. Produtor: %r → aviso: %r" % (linha, msg, aviso))
+    assert "Reprocessar não resolve" in aviso, (
+        "main.py:%d → %r" % (linha, aviso))
     assert "Reprocessar é grátis" not in aviso, (
-        "o cliente de prancha grande demais recebeu o conselho FALSO: %r" % aviso)
+        "o cliente de prancha grande demais (main.py:%d) recebeu o conselho "
+        "FALSO: %r" % (linha, aviso))
 
 
+@pytest.mark.parametrize("linha,msg", _PRODUTORES,
+                         ids=[str(l) for l, _ in _PRODUTORES])
+def test_prancha_grande_JUNTO_com_soluco_recebe_os_DOIS_conselhos(linha, msg):
+    """A prancha grande quase nunca vem sozinha: no mesmo envio tem a que a IA
+    não respondeu, e essa SIM se resolve reprocessando. Um motivo não pode
+    apagar o outro."""
+    (aviso,) = _conselho(dxf_errors=[msg, _SOLUCO])
+    assert "PURGE" in aviso, (
+        "com uma prancha grande (main.py:%d) e uma de soluço juntas, sumiu o "
+        "conselho de PURGE: %r" % (linha, aviso))
+    assert "reprocessar (grátis) pode completar" in aviso, (
+        "sumiu o conselho de reprocessar, que é o certo pra prancha de soluço: "
+        "%r" % aviso)
+    assert "2 prancha(s)" in aviso, (
+        "a conta de pranchas que não entraram saiu errada: %r" % aviso)
+
+
+def test_CONTROLE_prancha_de_SOLUCO_sozinha_manda_reprocessar():
+    """🧪 O outro lado. Sem este controle, um consumidor que gritasse PURGE pra
+    tudo passaria nos dois testes acima — e o cliente cuja prancha só teve
+    soluço da IA deixaria de saber que reprocessar resolve, de graça."""
+    (aviso,) = _conselho(dxf_errors=[_SOLUCO])
+    assert "Reprocessar é grátis e pode completar" in aviso, (
+        "prancha de soluço perdeu o conselho certo: %r" % aviso)
+    assert "PURGE" not in aviso, (
+        "prancha de soluço recebeu conselho de prancha grande: %r" % aviso)
 def test_CONTROLE_o_conselho_de_reprocessar_continua_existindo():
     """Tirar o falso não pode virar 'nunca sugere reprocessar'.
 
@@ -119,7 +219,7 @@ def test_CONTROLE_o_conselho_de_reprocessar_continua_existindo():
 
 
 def test_o_conselho_de_DWG_que_nao_abre_continua_de_pe():
-    """Caso Thalison (29/07): reprocessar DWG que não converte falha igual."""
+    """Caso cliente-52 (29/07): reprocessar DWG que não converte falha igual."""
     bloco = _bloco_do_aviso()
     assert "salve como DXF" in bloco, (
         "sumiu o conselho pro DWG que não abre — aqui DXF é a saída certa")

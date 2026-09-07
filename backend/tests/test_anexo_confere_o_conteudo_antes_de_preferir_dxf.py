@@ -240,6 +240,36 @@ def test_o_DXF_de_verdade_continua_vencendo_pela_rota(anexar):
     r = anexar([("y.dxf", DXF), ("y.dwg", DWG)])
     assert r.vai_processar == ["y.dxf"], r.vai_processar
 
+
+def test_UM_arquivo_SO_pela_rota_confere_o_conteudo_E_avisa_o_cliente(anexar):
+    """🪤 06/09/2026 — O CASO MAIS COMUM DO ANEXO NUNCA ATRAVESSAVA A ROTA.
+
+    Os dois testes de rota acima mandam sempre DOIS arquivos; o caso solitário
+    (`z.dxf` que é DWG, sem irmão) só era exercitado chamando
+    `_escolher_cads_do_anexo` DIRETO. Com isso dava pra pular a checagem de
+    conteúdo quando há um CAD só e ficar verde: o .dxf mentiroso iria pro ezdxf
+    com a extensão errada (zero item, sem erro) e o cliente não seria avisado.
+
+    E o guarda cego que este arquivo substituiu cobrava `_avisos_com(job_id,
+    _avisos_ext)` no corpo da rota; nenhum dos testes novos olhava `r.avisos`,
+    então o bloco que leva o aviso à tela podia ser neutralizado em silêncio.
+    Aqui a rota RODA e as duas coisas são afirmadas.
+    """
+    r = anexar([("z.dxf", DWG)])
+    assert r.vai_processar == ["z.dwg"], (
+        "o anexo mandou %r pro motor; o conteúdo é DWG e, com a extensão .dxf, "
+        "o ezdxf não abre — zero item em segundos, sem erro na tela"
+        % r.vai_processar)
+    assert r.resposta["files_count"] == 1, r.resposta
+    assert len(r.avisos) == 1, (
+        "o cliente recebeu %d aviso(s) de extensão em vez de 1 — sem esse "
+        "recado ele repete o mesmo export errado na próxima: %r"
+        % (len(r.avisos), r.avisos))
+    aviso = r.avisos[0]
+    assert "z.dxf" in aviso, "o aviso não nomeia o arquivo que ele mandou: %r" % aviso
+    assert ".dxf" in aviso and "DWG" in aviso, (
+        "o aviso não diz o que veio nem o que a gente entendeu: %r" % aviso)
+
 def test_o_alerta_diz_o_que_a_pessoa_anexou_E_o_que_vai_rodar():
     c = corpo_de("add_file_and_reprocess")
     assert "_enviados.append(safe_local)" in c

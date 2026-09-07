@@ -27,10 +27,102 @@ precisam ver — classe, `style.display`, texto, valor, ordem no documento,
 comandos e os valores continuam os mesmos, só sem o adiamento. Quem depende
 disso passa dublês SÍNCRONOS (ver `submitConviteArea` nos guardas).
 """
+import io
 import json
+import os
 import re
 
 import dukpy   # noqa: F401  — falta dele é ERRO, nunca skip: verde vazio mente
+
+_AQUI_NAV = os.path.dirname(os.path.abspath(__file__))
+_RAIZ_NAV = os.path.dirname(os.path.dirname(_AQUI_NAV))
+
+# ── O CSS COMPILADO, que é quem decide se a classe esconde ───────────────
+# 🪤 06/09 (cético): `_visivel` modelava DUAS formas de sumir — a classe
+# `hidden` e o `display:none` inline — de uma boa meia dúzia. `opacity-0`,
+# `sr-only`, `h-0 overflow-hidden` e PAI escondido passavam batido.
+# 🔑 A lista de classes que escondem NÃO é escrita à mão aqui: ela sai do
+# `tailwind.min.css` que a produção serve. É a única fonte que sabe a verdade,
+# porque o build do Tailwind é ESTÁTICO: `invisible`, por exemplo, NÃO está no
+# CSS compilado — quem escrevesse `class="invisible"` na tag não esconderia
+# nada, e um guarda com lista fixa acusaria um defeito que não existe.
+_REGRA_CSS = re.compile(r"([^{}@]+)\{([^{}]*)\}")
+_CLASSE_SIMPLES = re.compile(r"^\.([A-Za-z0-9_-]+)$")
+_CSS_CACHE = {}
+
+
+def css_declaracoes():
+    """{classe: {propriedade: valor}} do CSS COMPILADO que o site serve.
+
+    Só seletor de UMA classe simples: variantes responsivas e de estado
+    (as que o Tailwind escreve com dois-pontos escapado) valem sob condição e
+    não servem pra decidir "o cliente vê?".
+    """
+    if not _CSS_CACHE:
+        css = io.open(os.path.join(_RAIZ_NAV, "tailwind.min.css"),
+                      encoding="utf-8").read()
+        fora = {}
+        for sel, corpo in _REGRA_CSS.findall(css):
+            decl = {}
+            for par in corpo.split(";"):
+                if ":" in par:
+                    k, v = par.split(":", 1)
+                    decl[k.strip().lower()] = v.strip().lower()
+            if not decl:
+                continue
+            for parte in sel.split(","):
+                m = _CLASSE_SIMPLES.match(parte.strip())
+                if m:
+                    fora.setdefault(m.group(1), {}).update(decl)
+        # 🧪 controle do próprio instrumento: se o build deixar de trazer
+        # `.hidden{display:none}`, TUDO aqui passaria a dizer "visível".
+        assert fora.get("hidden", {}).get("display") == "none", (
+            "o tailwind.min.css compilado não define .hidden{display:none} — "
+            "o navegador da bancada perdeu a régua de visibilidade")
+        _CSS_CACHE.update(fora)
+    return _CSS_CACHE
+
+
+# ── A ÁRVORE: pai escondido esconde o filho ───────────────────────────
+_VAZIAS = {"AREA", "BASE", "BR", "COL", "EMBED", "HR", "IMG", "INPUT", "LINK",
+           "META", "PARAM", "SOURCE", "TRACK", "WBR", "PATH", "CIRCLE", "RECT",
+           "LINE", "POLYGON", "POLYLINE", "ELLIPSE", "USE", "STOP"}
+_TAG_QUALQUER = re.compile(
+    r"<(/?)([a-zA-Z][\w:-]*)((?:[^>\"']|\"[^\"]*\"|'[^']*')*?)(/?)>")
+
+
+def _sem_ruido(html):
+    """Comentário, <script> e <style> viram espaço (as POSIÇÕES não mudam).
+
+    🪤 O JS da tela escreve `'<div ...>'` dentro de string; sem apagar o
+    script, a pilha de tags sairia torta.
+    """
+    for padrao in (r"<!--.*?-->",
+                   r"<script\b[^>]*>.*?</script>",
+                   r"<style\b[^>]*>.*?</style>"):
+        html = re.sub(padrao, lambda m: " " * len(m.group(0)), html,
+                      flags=re.S | re.I)
+    return html
+
+
+def ancestrais(html, pos):
+    """As tags ABERTAS naquela posição, da mais externa pra mais interna."""
+    pilha = []
+    for m in _TAG_QUALQUER.finditer(_sem_ruido(html)):
+        if m.start() >= pos:
+            break
+        fecha, nome = m.group(1), m.group(2).upper()
+        if fecha:
+            for k in range(len(pilha) - 1, -1, -1):
+                if pilha[k][0] == nome:
+                    del pilha[k:]
+                    break
+            continue
+        if m.group(4) or nome in _VAZIAS:
+            continue
+        pilha.append((nome, dict(re.findall(r'([\w:-]+)="([^"]*)"', m.group(3))),
+                      m.start()))
+    return pilha
 
 
 def atributos(html, elem_id):
@@ -46,7 +138,11 @@ def atributos(html, elem_id):
 
 
 def elementos(html, ids):
-    """Os elementos pedidos, JÁ na ordem em que aparecem no documento."""
+    """Os elementos pedidos + os ANCESTRAIS deles, na ordem do documento.
+
+    🪤 06/09 (cético): sem a árvore, `<main class="hidden">` em volta da
+    caixa deixava todo guarda de visibilidade verde. Cada spec ganha `pai`.
+    """
     achados = []
     for i in ids:
         a = atributos(html, i)
@@ -55,7 +151,25 @@ def elementos(html, ids):
             "catch (getElementById devolve null)" % i)
         a["id"] = i
         achados.append(a)
-    return sorted(achados, key=lambda a: a["pos"])
+    achados = sorted(achados, key=lambda a: a["pos"])
+    return _com_ancestrais(html, achados)
+
+
+def _com_ancestrais(html, achados):
+    por_pos = {a["pos"]: a for a in achados}
+    extras = {}
+    for a in achados:
+        pai = None
+        for nome, attrs, pos in ancestrais(html, a["pos"]):
+            spec = por_pos.get(pos) or extras.get(pos)
+            if spec is None:
+                spec = {"tag": nome, "attrs": attrs, "pos": pos, "html": "",
+                        "id": attrs.get("id") or ("__anc%d" % pos)}
+                extras[pos] = spec
+            spec["pai"] = pai
+            pai = spec["id"]
+        a["pai"] = pai
+    return sorted(list(extras.values()) + achados, key=lambda x: x["pos"])
 
 
 _TAG = re.compile(r"<(\w+)((?:[^>\"]|\"[^\"]*\")*)>")
@@ -95,10 +209,16 @@ function _El(spec) {
   this.textContent = String(spec.html || '').replace(/<[^>]*>/g, '');
   this.value = this._attrs['value'] || '';
   this.disabled = false;
-  this.style = { display: '' };
+  this.style = { display: '', visibility: '', opacity: '' };
   var _st = this._attrs['style'] || '';
-  var _m = /display\s*:\s*([^;]+)/.exec(_st);
-  if (_m) this.style.display = _m[1].replace(/\s+$/, '');
+  /* nao so `display`: `visibility:hidden` e `opacity:0` somem igual */
+  var _RXST = [['display', /(?:^|;)\s*display\s*:\s*([^;]+)/],
+               ['visibility', /(?:^|;)\s*visibility\s*:\s*([^;]+)/],
+               ['opacity', /(?:^|;)\s*opacity\s*:\s*([^;]+)/]];
+  for (var _p = 0; _p < _RXST.length; _p++) {
+    var _m = _RXST[_p][1].exec(_st);
+    if (_m) this.style[_RXST[_p][0]] = _m[1].replace(/\s+$/, '');
+  }
   this.classList = {
     contains: function (c) { return (' ' + self.className + ' ').indexOf(' ' + c + ' ') >= 0; },
     add: function (c) { if (!this.contains(c)) self.className = (self.className + ' ' + c).replace(/^\s+/, ''); },
@@ -136,11 +256,18 @@ function _El(spec) {
 
 function _montar(specs) {
   __els = {}; __ordem = [];
+  var criados = [];
   for (var i = 0; i < specs.length; i++) {
     var el = new _El(specs[i]);
     if (!el.id) el.id = '__auto' + i;      // tag sem id ainda ocupa o documento
     __els[el.id] = el;
     __ordem.push(el);
+    criados.push(el);
+  }
+  /* a ARVORE: pai escondido esconde o filho */
+  for (var j = 0; j < specs.length; j++) {
+    var pai = specs[j].pai;
+    if (pai && __els[pai]) criados[j].parentNode = __els[pai];
   }
 }
 
@@ -205,10 +332,41 @@ function URLSearchParams(s) {
 }
 
 /* o que os guardas perguntam ao DOM */
+/* O que o cliente VE. Junta, pra cada tag, as declaracoes das CLASSES (vindas
+   do tailwind.min.css compilado, em __CSS) com o style inline, e responde. */
+function _decl(el) {
+  var fora = {}, cs = String(el.className || '').split(/\s+/), i, k;
+  for (i = 0; i < cs.length; i++) {
+    var d = cs[i] && __CSS[cs[i]];
+    if (d) { for (k in d) fora[k] = d[k]; }
+  }
+  if (el.style.display) fora['display'] = String(el.style.display).toLowerCase();
+  if (el.style.visibility) fora['visibility'] = String(el.style.visibility).toLowerCase();
+  if (el.style.opacity !== '') fora['opacity'] = String(el.style.opacity).toLowerCase();
+  return fora;
+}
+function _oculta(el) {
+  if (!el) return false;
+  var d = _decl(el);
+  if (d['display'] === 'none') return true;                       /* .hidden */
+  if (d['visibility'] === 'hidden' || d['visibility'] === 'collapse') return true;
+  if (d['opacity'] === '0') return true;                          /* .opacity-0 */
+  if (String(d['clip'] || '').replace(/\s+/g, '') === 'rect(0,0,0,0)') return true; /* .sr-only */
+  var zero = function (v) { return v === '0' || v === '0px'; };
+  if (String(d['overflow'] || '') === 'hidden'
+      && (zero(d['height']) || zero(d['max-height'])
+          || zero(d['width']) || zero(d['max-width']))) return true;
+  return false;
+}
 function _visivel(id) {
   var el = __els[id];
   if (!el) return false;
-  return !el.classList.contains('hidden') && el.style.display !== 'none';
+  var no = el;
+  while (no) {                        /* pai escondido esconde o filho */
+    if (_oculta(no)) return false;
+    no = no.parentNode;
+  }
+  return true;
 }
 function _posicao(id) {
   for (var i = 0; i < __ordem.length; i++) if (__ordem[i].id === id) return i;
@@ -265,5 +423,11 @@ def rodar(pedacos, expressao):
 
 
 def montar(elementos_):
-    """O JS que constrói o documento a partir do que o HTML REAL declara."""
-    return "_montar(%s);" % json.dumps(elementos_, ensure_ascii=False)
+    """O JS que constrói o documento a partir do que o HTML REAL declara.
+
+    Vai junto o `__CSS`: as declarações do tailwind.min.css COMPILADO, que é
+    quem sabe se uma classe esconde de verdade.
+    """
+    return (("var __CSS = %s;" + chr(10) + "_montar(%s);")
+            % (json.dumps(css_declaracoes(), ensure_ascii=False),
+               json.dumps(elementos_, ensure_ascii=False)))
