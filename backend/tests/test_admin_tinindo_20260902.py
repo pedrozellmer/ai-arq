@@ -509,7 +509,17 @@ def _js_lidos(no):
     return saida
 
 
-def _js_acha(prog, nome):
+def _js_acha_todas(prog, nome):
+    """TODAS as declarações com esse nome, não só a primeira.
+
+    🩸 07/09/2026 — a versão anterior devolvia `achado[0]`. Um cético derrubou
+    o guarda acrescentando uma SEGUNDA `function renderOps(){...}` logo abaixo,
+    sem trava nenhuma: em JavaScript a última declaração é a que vale, então a
+    função analisada não era a que executa. É o incidente de 20/08 ("duas
+    funções com o MESMO nome"), que esta casa já pagou uma vez — e que voltou
+    hoje numa terceira forma, dentro da própria bancada
+    (test_teto_do_pdf_e_por_prancha tinha dois testes homônimos).
+    """
     achado = []
 
     def anda(x):
@@ -520,7 +530,63 @@ def _js_acha(prog, nome):
             anda(f)
 
     anda(prog)
+    return achado
+
+
+def _js_acha(prog, nome):
+    achado = _js_acha_todas(prog, nome)
     return achado[0] if achado else None
+
+
+def _js_retorna_algo(fn):
+    """A função devolve conteúdo, ou devolve vazio?
+
+    🩸 07/09/2026 — o guarda do `renderOps` conferia `"return html;" in
+    arquivo_inteiro`. Há 4 ocorrências dessa string em admin.html, então o
+    `return` DESTA função podia virar `return '';` e a substring continuava
+    verdadeira. A aba Motor ficaria em branco, sem ReferenceError e sem nada
+    no console — o mesmo estrago, calado.
+
+    🔑 Aqui o julgamento é o FATO, na árvore da própria função: existe um
+    `return` que devolve algo que não é vazio/nulo constante. Um `return` de
+    identificador, chamada, template ou concatenação conta; `return ''`,
+    `return null` e `return` pelado, não.
+    🪤 Não desce em funções aninhadas — o `return` de um callback interno não é
+    o retorno desta função.
+    """
+    VAZIO_CONST = ("", None)
+
+    def _tem_valor(arg):
+        if arg is None:
+            return False
+        t = getattr(arg, "type", None)
+        if t == "Literal":
+            v = getattr(arg, "value", None)
+            return v not in VAZIO_CONST and v is not False
+        if t == "TemplateLiteral":
+            quase = getattr(arg, "quasis", []) or []
+            exprs = getattr(arg, "expressions", []) or []
+            if exprs:
+                return True
+            return any((getattr(getattr(q, "value", None), "raw", "") or "").strip()
+                       for q in quase)
+        return True          # identificador, chamada, +, ternário: conta
+
+    achou = []
+
+    def anda(x, dentro_de_outra=False):
+        t = getattr(x, "type", None)
+        if t in ("FunctionDeclaration", "FunctionExpression", "ArrowFunctionExpression"):
+            if dentro_de_outra:
+                return                      # 🪤 callback aninhado não é o retorno daqui
+            dentro_de_outra = True
+        if t == "ReturnStatement":
+            achou.append(_tem_valor(getattr(x, "argument", None)))
+        for _k, f in _js_filhos(x):
+            anda(f, dentro_de_outra)
+
+    anda(fn)
+    return any(achou)
 
 
 def _js_livres(prog, nome, topos=None):
@@ -553,16 +619,39 @@ def test_renderOps_NAO_usa_variavel_de_outra_funcao():
     06/09: `const _pre = revisaoHtml;` da o mesmo ReferenceError e o mesmo
     estrago, e ele passava. Agora o julgamento e o FATO — qualquer identificador
     que a funcao leia e que nao exista em escopo nenhum reprova.
+
+    🩸 07/09/2026 — E O GUARDA AINDA ERA CEGO, de tres jeitos, todos achados
+    por um cetico:
+
+      1. `_js_acha` parava na PRIMEIRA declaracao com o nome. Uma SEGUNDA
+         `function renderOps(){...}` logo abaixo — que em JS e a que vale —
+         nunca era analisada. Incidente de 20/08, terceira encarnacao.
+      2. `assert "return html;" in _js_do_admin()` procurava a substring no
+         ARQUIVO INTEIRO. Ha 4 ocorrencias em admin.html, entao o `return` da
+         propria renderOps podia virar `return '';` sem ninguem notar.
+      3. So enxergava ReferenceError. renderOps devolvendo VAZIO — mesmo
+         estrago pro Pedro, aba Motor em branco — passava.
+
+    Agora: TODAS as declaracoes sao analisadas (e mais de uma ja reprova, que
+    e o defeito em si), e o `return` conferido e o DA FUNCAO, na arvore.
     """
     progs, topos = _js_admin_programas()
-    fn = next((p for p in progs if _js_acha(p, "renderOps")), None)
-    assert fn is not None, "sumiu renderOps"
-    livres = _js_livres(fn, "renderOps", topos)
-    assert not livres, (
-        "renderOps le %s, que nao existe em escopo nenhum — ReferenceError, e "
-        "a aba Motor mostra 'Nao consegui carregar' no lugar de falhas, avisos "
-        "e PDFs" % ", ".join("`%s`" % n for n in sorted(livres)))
-    assert "return html;" in _js_do_admin()
+    achadas = [f for p in progs for f in _js_acha_todas(p, "renderOps")]
+    assert achadas, "sumiu renderOps"
+    assert len(achadas) == 1, (
+        "ha %d declaracoes de `renderOps` em admin.html — em JavaScript a "
+        "ultima apaga as outras em silencio, e o que roda nao e o que a gente "
+        "le. Foi assim em 20/08 (duas funcoes com o MESMO nome) e e por isso "
+        "que este guarda analisa TODAS." % len(achadas))
+    for fn in achadas:
+        livres = _js_livres(fn, "renderOps", topos)
+        assert not livres, (
+            "renderOps le %s, que nao existe em escopo nenhum — ReferenceError, e "
+            "a aba Motor mostra 'Nao consegui carregar' no lugar de falhas, avisos "
+            "e PDFs" % ", ".join("`%s`" % n for n in sorted(livres)))
+        assert _js_retorna_algo(fn), (
+            "renderOps nao devolve conteudo nenhum — a aba Motor fica EM BRANCO. "
+            "Sem ReferenceError e sem erro no console: o mesmo estrago, calado.")
 
 
 def test_CONTROLE_a_analise_PEGA_o_bug_que_estava_no_ar():
