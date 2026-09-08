@@ -7315,6 +7315,8 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
     _mediu_linear = _tem_comprimento_medido(items)
     filled = blanked = preservados = criados_prancha = apertou_teto = 0
     lineares_zerados = 0
+    #: linhas que receberam de volta a medição que já estava escrita nelas
+    resgatados = 0
     # 🩸 31/08 (caso cliente-14): quantas vezes a área informada já foi
     # atribuída, por família de superfície. A soma das superfícies
     # horizontais não pode passar do total declarado — 6 itens com 400 m²
@@ -7541,6 +7543,75 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
         # Regra dura nº7: o que veio da revisão do cliente não se toca, nunca.
         if str(getattr(it, "origem", "") or "") == "revisao_cliente":
             continue
+        # 🎯 07/09/2026 — O RESGATE DA MEDIÇÃO CHEGAVA TARDE DEMAIS.
+        # `resgate_pdf=0` em 28 de 28 jobs desde 26/08: nunca disparou uma vez.
+        # A régua (`quantidade_medida_pelo_pdf`) está CERTA — o que estava
+        # errado é a ORDEM. Ela mora no laço de páginas, dentro de `if qty == 0`,
+        # e só olha item que a IA já devolveu ZERADO. Quem zera de verdade é
+        # esta função, que roda depois. Medido no job ev3e2880 (05/09), pelo
+        # relógio do error_log:
+        #   18:47:55  medimos a prancha: 9,0 m² e 49,9 m
+        #             a IA escreve "9,0 m²" na observação e devolve qtd ≠ 0
+        #             → o resgate é PULADO pelo próprio guarda
+        #   18:49:33  esta função ZERA o item
+        #   sai `zerados=6 resgate_pdf=0`, com a NOSSA medição no texto da linha
+        # O cliente recebe uma linha vazia cujo texto diz que a gente mediu.
+        #
+        # 🔑 NÃO afrouxa nada: só preenche quando o número ESCRITO na observação
+        # bate ±1% com o que NÓS medimos NAQUELA prancha, e com a família de
+        # unidade certa. É a mesma régua do passo 6, perguntada na hora certa.
+        # Segue ESTIMADO (laranja) — escala de PDF vem de carimbo/viewport, e
+        # carimbo é declaração, não prova.
+        #
+        # 🪤 A prancha tem que ser INEQUÍVOCA. Passar todas como alvo foi o erro
+        # de 31/08 (cliente-14): a cobertura do espaço de números plausíveis vai
+        # de 0,38% pra 2,64% e a régua deixa de perguntar "é a medição DESTA
+        # prancha?" pra perguntar "parece alguma medição de alguma prancha?".
+        # Job de UMA prancha medida não tem ambiguidade; nos outros, só quando o
+        # `ref_sheet` resolve. Sem resolver, a linha continua vazia.
+        #
+        # 🪤 `_pp` direto no caso de uma prancha só, e não `_por_arquivo`: aquele
+        # índice exige `rooms_m2 > 0` e deixaria de fora a prancha que mediu só
+        # PAREDE — justamente o alvo do resgate linear.
+        _alvo_a, _alvo_c = [], []
+        if len(_pp) == 1:
+            _r_unica = next(iter(_pp.values()))
+            _alvo_a = [float(_r_unica.get("rooms_m2") or 0)]
+            _alvo_c = [float(_r_unica.get("walls_m") or 0)]
+        elif _pp:
+            _r_item = None
+            _rs_r = (getattr(it, "ref_sheet", "") or "").strip().lower()
+            if _rs_r:
+                _pg_r = _pagina_do_ref_sheet(_rs_r)
+                if _pg_r is not None:
+                    _c_r = [_r for (_a_r, _p_r), _r in _por_arquivo_pagina.items()
+                            if _p_r == _pg_r
+                            and (_rs_r.startswith(_a_r.rsplit(".", 1)[0])
+                                 or _a_r.rsplit(".", 1)[0] in _rs_r)]
+                    if len(_c_r) == 1:
+                        _r_item = _c_r[0]
+                if _r_item is None:
+                    _c_r = [(_r, len(_a_r.rsplit(".", 1)[0]))
+                            for _a_r, _r in _por_arquivo.items()
+                            if _a_r.rsplit(".", 1)[0]
+                            and (_rs_r.startswith(_a_r.rsplit(".", 1)[0])
+                                 or _a_r.rsplit(".", 1)[0] in _rs_r)]
+                    _c_r.sort(key=lambda c: c[1], reverse=True)
+                    # empate de comprimento = dois arquivos igualmente plausíveis
+                    if len(_c_r) == 1 or (_c_r and _c_r[0][1] > _c_r[1][1]):
+                        _r_item = _c_r[0][0]
+            if _r_item is not None:
+                _alvo_a = [float(_r_item.get("rooms_m2") or 0)]
+                _alvo_c = [float(_r_item.get("walls_m") or 0)]
+        _resgate = None
+        if _alvo_a or _alvo_c:
+            # 🪤 import DENTRO do ramo, não global novo: três testes dão `exec`
+            # numa FATIA desta função com namespace montado à mão, e nome que
+            # nasce fora da fatia vira NameError neles (o aviso está lá embaixo,
+            # no ramo que zera). Aqui o nome nasce onde é usado.
+            from engine_rules import quantidade_medida_pelo_pdf as _q_medida_pdf
+            _resgate = _q_medida_pdf(getattr(it, "observations", "") or "", u,
+                                     area_pdf=_alvo_a, comprimento_pdf=_alvo_c)
         # 🩸 31/08/2026 — CASO FLAVIO (job f271473f). Este ramo não olhava
         # NENHUM valor: bastava ser superfície e o cliente ter informado a área.
         # Resultado em 16 PDFs: 6 itens saíram com 400 m² — a área que ELE
@@ -7697,6 +7768,24 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
                       "não é medição da área; confira antes de orçar.").strip(" |")
             it.observations = _o
             preservados += 1
+        elif _resgate is not None:
+            # 🎯 A NOSSA MEDIÇÃO ESTAVA ESCRITA NA LINHA. Em vez de zerar (ou de
+            # deixar zerada), a linha recebe o número que NÓS medimos naquela
+            # prancha — o mesmo que a IA citou e não usou.
+            # 🚨 Segue ESTIMADO, sempre. Isto não promove nada: só para de jogar
+            # fora medição própria que já estava no texto.
+            it.quantity = _resgate
+            try:
+                it.confidence = Confidence("estimado")
+            except Exception:
+                pass
+            _obs_r = it.observations or ""
+            if "medição desta prancha" not in _obs_r.lower():
+                it.observations = (
+                    _obs_r + " | Quantidade preenchida com a medição desta prancha "
+                    "(o número já estava citado nesta linha) — estimativa, confira."
+                ).strip(" |")
+            resgatados += 1
         elif q > 0:
             # 📏 Esta linha só chegou aqui por causa do teto novo? Conta.
             # Sem este número o conserto é invisível: "apertei o teto" não se
@@ -7792,6 +7881,7 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
     _apply_area_honesty.ultimo_apertou_teto = apertou_teto
     _apply_area_honesty.ultimo_teto_m2 = float(_teto_m2)
     _apply_area_honesty.ultimo_lineares_zerados = lineares_zerados
+    _apply_area_honesty.ultimo_resgatados = resgatados
     _apply_area_honesty.ultimo_ambiguos = list(_ambiguos)
     return filled, blanked
 
@@ -12363,7 +12453,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 _n_resgate_pdf_log = int(_n_resgate_pdf)
             except NameError:
                 _n_resgate_pdf_log = 0      # job sem PDF: o laço nem existiu
-            if _pres or _n_fill or _blanked:
+            _resg_log = int(getattr(_apply_area_honesty, "ultimo_resgatados", 0) or 0)
+            if _pres or _n_fill or _blanked or _resg_log:
                 # 🪤 `preservados_por_pe_direito` virou nome errado quando a
                 # preservação por medição do PDF entrou no mesmo contador
                 # (26/08). Na avaliação `eve9afae` ele imprimiu
@@ -12373,7 +12464,12 @@ bloco — só cite os que estão no inventário deste arquivo."""
                            f"preenchidos={_n_fill} zerados={_blanked} "
                            f"preservados={_pres} "
                            f"criados_prancha={getattr(_apply_area_honesty, 'ultimo_criados_prancha', 0)} "
-                           f"resgate_pdf={_n_resgate_pdf_log}", job_id)
+                           f"resgate_pdf={_n_resgate_pdf_log} "
+                           # 07/09: o resgate perguntado NA HORA DE ZERAR. O
+                           # `resgate_pdf` acima é o do laço de páginas, que só
+                           # vê item que a IA já devolveu zerado — deu 0 em 28
+                           # de 28 jobs. Dois números, dois momentos.
+                           f"resgate_tardio={_resg_log}", job_id)
         except Exception:
             pass
         # Pintura derivada do pé-direito informado (01/08/2026) — só quando a
