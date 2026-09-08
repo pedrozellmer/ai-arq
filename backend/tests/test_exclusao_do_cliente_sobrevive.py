@@ -104,7 +104,7 @@ def test_o_antes_e_lido_TAMBEM_no_reject(monkeypatch):
     monkeypatch.setattr(main, "_supabase_insert",
                         lambda tabela, linha: gravadas.append((tabela, linha)) or True)
 
-    _ITEM = {"id": "it-1", "description": "Parede de alvenaria (sobreposicao)",
+    _ITEM = {"id": "11111111-1111-4111-8111-111111111111", "description": "Parede de alvenaria (sobreposicao)",
              "quantity": 49.9, "unit": "m", "confidence": "estimado",
              "observations": "possivel sobreposicao com a prancha vizinha"}
 
@@ -123,7 +123,7 @@ def test_o_antes_e_lido_TAMBEM_no_reject(monkeypatch):
         reviewed_by = ""
     _erro = None
     try:
-        main.submit_item_review("job-1", "it-1", _P(), None)
+        main.submit_item_review("job-1", "11111111-1111-4111-8111-111111111111", _P(), None)
     except Exception as _e:
         _erro = _e    # o resto da rota (apagar o item, e-mail) nao e o objeto aqui
     # 🪤 sem isto, um AttributeError meu no dublê passava por "a rota nao gravou"

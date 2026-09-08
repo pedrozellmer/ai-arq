@@ -139,7 +139,7 @@ def rota(monkeypatch):
 
 def test_a_campainha_TOCA_quando_o_cliente_digita(rota, campainha, monkeypatch):
     """O invariante central: texto de gente → alerta, na hora."""
-    main.submit_item_review("17d6e1f2", "item-1", _payload(RECADO_REAL), rota)
+    main.submit_item_review("17d6e1f2", "22222222-2222-4222-8222-222222222222", _payload(RECADO_REAL), rota)
     assert len(campainha) == 1, "o recado do cliente não tocou campainha nenhuma"
     _job, _item, _texto, _quem = campainha[0]
     assert _texto == RECADO_REAL
@@ -148,14 +148,14 @@ def test_a_campainha_TOCA_quando_o_cliente_digita(rota, campainha, monkeypatch):
 
 def test_CONTROLE_a_campainha_NAO_toca_no_texto_automatico(rota, campainha):
     """O outro lado: a frase da nossa tela não pode acordar ninguém."""
-    main.submit_item_review("j1", "item-1", _payload(AUTOMATICO, action="edit"), rota)
+    main.submit_item_review("j1", "22222222-2222-4222-8222-222222222222", _payload(AUTOMATICO, action="edit"), rota)
     assert not campainha, (
         "a campainha tocou na frase que a NOSSA tela escreve — em 2 dias o dono "
         "desliga o alerta e o próximo recado de gente se perde")
 
 
 def test_CONTROLE_a_campainha_NAO_toca_sem_comentario(rota, campainha):
-    main.submit_item_review("j1", "item-1", _payload(""), rota)
+    main.submit_item_review("j1", "22222222-2222-4222-8222-222222222222", _payload(""), rota)
     assert not campainha
 
 
@@ -166,7 +166,7 @@ def test_a_campainha_NAO_toca_se_a_escrita_falhou(monkeypatch, campainha):
     # A rota devolve 502 nesse caso (comportamento de 24/08: "a escrita PEGOU?").
     # O que este guarda cobra é que a campainha NÃO toque no caminho do erro.
     with pytest.raises(main.HTTPException) as ex:
-        main.submit_item_review("j1", "item-1", _payload(RECADO_REAL), req)
+        main.submit_item_review("j1", "22222222-2222-4222-8222-222222222222", _payload(RECADO_REAL), req)
     assert ex.value.status_code == 502
     assert not campainha, "avisou sobre um recado que o banco recusou"
 
@@ -180,7 +180,7 @@ def test_a_campainha_toca_TAMBEM_no_caminho_do_append(monkeypatch, campainha):
             return (200, [{"id": "rev-1", "comment": ""}])   # já existe
         return (204, None)
     req = _sem_banco(monkeypatch, svc=_svc)
-    main.submit_item_review("j1", "item-1", _payload(RECADO_REAL), req)
+    main.submit_item_review("j1", "22222222-2222-4222-8222-222222222222", _payload(RECADO_REAL), req)
     assert len(campainha) == 1, "o caminho do append não toca campainha"
 
 
@@ -198,7 +198,7 @@ def test_o_alerta_ESCAPA_o_texto_do_cliente(monkeypatch):
     monkeypatch.setattr(main, "_log_error", lambda *a, **k: None)
     import threading
     monkeypatch.setattr(threading, "Thread", _ThreadImediata)
-    main._alerta_recado("j1", "i1", '<img src=x onerror="alert(1)">', "a@b.com")
+    main._alerta_recado("j1", "33333333-3333-4333-8333-333333333333", '<img src=x onerror="alert(1)">', "a@b.com")
     assert corpos, "o alerta não chegou a montar e-mail"
     _assunto, corpo = corpos[0]
     assert "<img src=x" not in corpo, "marcação do cliente entrou CRUA no e-mail do dono"
@@ -216,7 +216,7 @@ def test_o_log_do_alerta_NAO_leva_email_de_cliente(monkeypatch):
                         lambda stage, msg, job=None, **k: logs.append((stage, msg)))
     import threading
     monkeypatch.setattr(threading, "Thread", _ThreadImediata)
-    main._alerta_recado("j1", "i1", "texto qualquer", "cliente-nn@example.com")
+    main._alerta_recado("j1", "33333333-3333-4333-8333-333333333333", "texto qualquer", "cliente-nn@example.com")
     assert logs, "o alerta não deixou rastro nenhum"
     _stage, msg = logs[0]
     assert "cliente-nn@example.com" not in msg, (
@@ -230,12 +230,12 @@ def test_o_log_do_alerta_NAO_leva_email_de_cliente(monkeypatch):
 def test_a_voz_do_cliente_tem_secao_de_RECADO(monkeypatch):
     """Guarda de comportamento: a rota tem que DEVOLVER o recado — e o caso que
     ela precisa enxergar é o real, com action='approve'."""
-    linha = {"item_id": "i1", "job_id": "17d6e1f2", "action": "approve",
+    linha = {"item_id": "33333333-3333-4333-8333-333333333333", "job_id": "17d6e1f2", "action": "approve",
              "comment": RECADO_REAL, "reviewed_at": "2026-09-02T19:30:00Z"}
 
     def _svc(m, p, b=None, **k):
         if "item_reviews" in p and "comment=not.is.null" in p:
-            return (200, [linha, {"item_id": "i2", "job_id": "j2",
+            return (200, [linha, {"item_id": "44444444-4444-4444-8444-444444444444", "job_id": "j2",
                                   "action": "edit", "comment": AUTOMATICO,
                                   "reviewed_at": "2026-08-30T14:14:00Z"}])
         return (200, [])

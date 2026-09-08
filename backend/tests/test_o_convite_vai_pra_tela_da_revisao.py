@@ -453,10 +453,18 @@ def test_a_telemetria_NAO_manda_texto_livre_do_cliente():
 
 
 def test_o_sucesso_registra_QUANTAS_linhas_foram_preenchidas():
-    """Sem o número, não dá pra saber se o convite resolve alguma coisa."""
+    """Sem o número, não dá pra saber se o convite resolve alguma coisa.
+
+    🔑 08/09/2026 — a área do rastro passou a vir de `area_usada`, o campo que
+    o SERVIDOR devolve dizendo o que ele de fato usou. Antes a tela reconvertia
+    o texto digitado, e reconverter no JavaScript é a régua INGLESA:
+    `parseFloat("1.200")` = 1,2. A resposta simulada aqui traz o campo porque a
+    produção passou a trazer.
+    """
     r = json.loads(_tela([
         "authFetch = function(){ return {ok: true, json: function(){"
-        " return {filled_count: 7, catch: function(){ return this; }}; }}; };",
+        " return {filled_count: 7, area_usada: 120,"
+        " catch: function(){ return this; }}; }}; };",
         "__els['convite-area-input'].value = '120';",
         "submitConviteArea();",
     ], "JSON.stringify(__eventos)"))
@@ -465,6 +473,23 @@ def test_o_sucesso_registra_QUANTAS_linhas_foram_preenchidas():
                  "efeito dele fica invisível de novo: %r" % r)
     assert oks[0][1]["preenchidos"] == 7, oks[0][1]
     assert oks[0][1]["area"] == 120, oks[0][1]
+
+
+def test_o_rastro_OMITE_a_area_quando_o_servidor_nao_diz():
+    """🪤 Mandar `area: null` se lê no painel como "informou zero", que é
+    diferente de "não sei" — e é a família de instrumento mentiroso que esta
+    casa persegue. Ausência é ausência: a chave não vai."""
+    r = json.loads(_tela([
+        "authFetch = function(){ return {ok: true, json: function(){"
+        " return {filled_count: 3, catch: function(){ return this; }}; }}; };",
+        "__els['convite-area-input'].value = '120';",
+        "submitConviteArea();",
+    ], "JSON.stringify(__eventos)"))
+    oks = [e for e in r if e[0] == "convite-area:submit-ok"]
+    assert oks, r
+    assert "area" not in oks[0][1], (
+        "mandou a chave `area` sem o servidor ter dito qual foi: %r" % oks[0][1])
+    assert oks[0][1]["preenchidos"] == 3, oks[0][1]
 
 
 def test_a_mensagem_diz_o_que_ACONTECEU_nao_o_que_era_esperado():

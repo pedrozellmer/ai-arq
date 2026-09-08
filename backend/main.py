@@ -395,6 +395,97 @@ def _avisos_com(job_id, novo_aviso):
 # errada, não recusa projeto grande de verdade.
 _AREA_PLAUSIVEL_MAX = 100_000
 
+# 🩸 08/09/2026 (auditoria de segurança) — UM `#` DERRUBAVA O FILTRO DE DONO.
+# A revisão montava `project_items?id=eq.{item_id}&job_id=eq.{job_id}` com o
+# `item_id` CRU, vindo do caminho da URL. O uvicorn faz `unquote`, então `%23`
+# chega como `#` literal — e o `urllib.request` **corta a URL no `#`**, porque
+# pra ele é fragmento. O que saía na rede era:
+#
+#     project_items?id=eq.<uuid>          ← sem `&job_id=`
+#
+# Ou seja: o guarda que o próprio comentário do código descreve como o conserto
+# do IDOR era contornável com um caractere. Um cliente autenticado, dono de
+# QUALQUER projeto, editava (`action=edit`) ou apagava (`action=reject`) linha
+# de outro cliente — e a escrita sai com a service_role, que passa por cima de
+# toda a RLS.
+# 📏 Medido, não suposto: `Request('...?id=eq.AAA#&job_id=eq.MEU').selector`
+# devolve `/rest/v1/project_items?id=eq.AAA`.
+# 🪤 O que mostra que foi esquecimento e não escolha: 20 linhas acima, na
+# consulta de dedupe, o MESMO `item_id` já passava por `quote()`.
+# 🔑 Régua ÚNICA e no TOPO de propósito: o financeiro já validava uuid assim
+# (`_FIN_UUID_RX`), 4.600 linhas abaixo e com nome de outro assunto. Duas
+# cópias da mesma régua é como as coisas se separam.
+# 🪤 `import re as _re_uuid` e não `re.compile`: `re` NÃO está importado no topo
+# deste módulo (só aliases), e foi exatamente assim que o deploy 8d597a6 morreu
+# na partida em 21/08. O pyflakes pega — mas só depois de eu escrever.
+import re as _re_uuid
+_UUID_RX = _re_uuid.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+
+# 🩸 08/09/2026 (auditoria) — O CAMPO DE ÁREA ACEITAVA NÚMERO ERRADO CALADO.
+# As três portas faziam `float(...)` no que chegava, e `float` é uma régua
+# INGLESA: em pt-BR "1.200" vale MIL e vira 1,2 — erro de 1000×, sem uma palavra.
+# Medido no navegador, na réplica exata do campo do convite:
+#     "120"    -> 120      ok
+#     "120 m2" -> 1202     10× errado, ACEITO
+#     "1.200"  -> 1,2      1000× errado, ACEITO
+# E o teto de 100.000 m² não pega nenhum dos dois: 1202 e 1,2 passam.
+# O destino desse número é `_apply_area_honesty`, que preenche piso/forro/laje
+# e carimba "estimado — informado por você". Ou seja: o erro de digitação do
+# cliente sairia na planilha dele com a NOSSA assinatura de procedência. É a
+# regra dura nº1 quebrada pela via mais silenciosa que existe.
+#
+# 🍀 Não chegou a morder: `motor:informou-depois` tem ZERO linhas — ninguém
+# nunca completou o envio pelo convite. Isso é sorte, não guarda.
+#
+# 🔑 NÃO ESCREVI PARSER NOVO. A régua de "1.234 é mil" já existe, nasceu do
+# mesmo erro no financeiro e está testada: `financeiro_lote.valor_do_texto`.
+# Aqui só se acrescenta o que é de ÁREA e não de dinheiro: a unidade colada
+# ("120m²", "120 m2") e a banda de plausibilidade.
+_RX_UNIDADE_AREA = None
+
+
+def _area_do_texto(v):
+    """(area, erro) a partir do que o cliente digitou. Régua ÚNICA das 3 portas.
+
+    Devolve (None, None) pra ausência — campo vazio é opcional, não é zero.
+    Devolve (None, "motivo") pro que não dá pra ler com segurança: recusar com
+    mensagem é sempre melhor que adivinhar, porque o número vira procedência.
+
+    🪤 A ordem importa: tira a unidade ANTES de chamar o parser. Sem isso
+    "120 m2" cai no `fullmatch` de dígitos do parser e é recusado — o que é
+    seguro, mas rude com quem digitou o certo.
+    """
+    global _RX_UNIDADE_AREA
+    if _RX_UNIDADE_AREA is None:
+        import re as _re_area
+        # unidade colada no fim: m2, m², mts, metros, m — com ou sem espaço.
+        _RX_UNIDADE_AREA = _re_area.compile(
+            r"(?i)\s*(?:m(?:2|²)?|mts?|metros?(?:\s+quadrados?)?)\s*$")
+    if v is None:
+        return None, None
+    if isinstance(v, bool):
+        return None, "não parece uma área"
+    s = str(v).strip()
+    if not s:
+        return None, None
+    s = _RX_UNIDADE_AREA.sub("", s).strip()
+    if not s:
+        return None, "faltou o número da área"
+    from financeiro_lote import valor_do_texto
+    val, err = valor_do_texto(s)
+    if err:
+        return None, err
+    if val is None:
+        return None, None
+    if val <= 0:
+        return None, "a área precisa ser maior que zero"
+    if val > _AREA_PLAUSIVEL_MAX:
+        # Mesma banda de sempre — 30× a maior área real já informada.
+        return None, ("área acima de %s m² — confira se não sobrou um dígito"
+                      % f"{_AREA_PLAUSIVEL_MAX:,}".replace(",", "."))
+    return round(val, 2), None
+
 
 def _dxf_grande_pode_seguir(tam_bytes, teto_antigo, livre_bytes):
     """O DXF passou do teto antigo — dá pra mandar pro emagrecedor mesmo assim?
@@ -1821,6 +1912,63 @@ def _contar_itens_no_banco(job_id: str):
         return None
 
 
+def _itens_do_projeto_completos(job_id: str, timeout: int = 15):
+    """TODOS os itens de um projeto, de mil em mil. Devolve (linhas, ok).
+
+    🩸 08/09/2026 — O PRIMEIRO PROJETO DE MAIS DE MIL ITENS CHEGOU, E DUAS
+    LEITURAS ESTAVAM SEM PAGINAÇÃO. Um executivo de acessibilidade com 30+
+    pranchas produziu **1.044 itens**; o 2º maior do acervo tem 307.
+
+    O conserto de 25/08 paginou as leituras de TABELA (`_supa_rest_tudo`) e
+    abriu uma exceção explícita pra leitura de UM projeto, com a justificativa
+    escrita: *"limitada pelo maior projeto do acervo (307 itens)"*. A exceção
+    não estava errada — estava **datada**, e venceu às 11:50 de hoje.
+
+    O que quebrava, com o corte de 1000 chegando como HTTP 200:
+      · `/api/items/{job}` → a tela de revisão mostrava 1.000 de 1.044, calada;
+      · `_assinatura_atual` → assinava 1.000 contra uma planilha feita com
+        1.044, então a regra dura nº7 diria "planilha desatualizada" PARA
+        SEMPRE, num projeto perfeitamente em dia.
+    🪤 O `.xlsx` sempre esteve certo: a geração usa os itens em memória.
+
+    🔑 CONFERE O TOTAL, não confia na paginação. A RPC ordena por
+    `(sort_order, item_num)`, e medi que o par é único nos 225 projetos do
+    acervo — mas foi exatamente uma premissa medida que acabou de vencer. Por
+    isso o retorno traz `ok`: quando o que veio não bate com a contagem do
+    banco, quem chama SABE que está com pedaço. Falha FECHADA, como o
+    paginador de tabela.
+    """
+    import urllib.request as _ur, json as _js
+    linhas, deslocamento = [], 0
+    while True:
+        try:
+            url = (f"{SUPABASE_URL}/rest/v1/rpc/list_project_items"
+                   f"?limit={_SUPA_TETO_POR_PAGINA}&offset={deslocamento}")
+            req = _ur.Request(url, data=_js.dumps({"p_job_id": job_id}).encode("utf-8"),
+                              method="POST")
+            req.add_header("apikey", SUPABASE_KEY)
+            req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+            req.add_header("Content-Type", "application/json")
+            lote = _js.loads(_ur.urlopen(req, timeout=timeout).read().decode("utf-8")) or []
+        except Exception as _e:
+            print(f"[itens-paginados] {job_id} página {deslocamento}: {_e}")
+            return linhas, False
+        linhas.extend(lote)
+        if len(lote) < _SUPA_TETO_POR_PAGINA:
+            break
+        deslocamento += len(lote)
+        if deslocamento > 100000:      # guarda-corpo contra laço infinito
+            break
+    _total = _contar_itens_no_banco(job_id)
+    if _total is not None and _total != len(linhas):
+        _log_error("motor:itens-incompletos",
+                   f"li {len(linhas)} de {_total} itens — a leitura voltou "
+                   f"com pedaço e quem chama precisa saber", job_id,
+                   severity="warning")
+        return linhas, False
+    return linhas, True
+
+
 def _aplicar_admin_local(all_items) -> int:
     """Tira o PRAZO CHUTADO de "Administração local de obra". Devolve quantos.
 
@@ -2352,7 +2500,7 @@ def _supabase_storage_download_prancha(job_id: str, filename: str,
     cliente.
 
     🪤 HONESTIDADE SOBRE A ORIGEM DESTE CONSERTO: eu cheguei aqui investigando
-    o caso FÁBIO SHIRAISHI (job 75dab573), cujo ODA dizia "Unexpected end of
+    o caso do job 75dab573), cujo ODA dizia "Unexpected end of
     file", e afirmei que a causa dele era esta. **Estava errado.** Com a
     conferência ligada, o arquivo dele baixa INTEIRO (nenhum
     `storage:download-truncado` no log) e o ODA do servidor falha do mesmo
@@ -8019,6 +8167,58 @@ def _dedupe_revisoes(file_paths: list) -> tuple:
 _PREVIEW_MOVE_MAX_MB = float(os.getenv("PREVIEW_MOVE_MAX_MB", "50"))
 
 
+#: Como CONTAR ao cliente de onde veio a escala quando ela NÃO foi confirmada
+#: por medida. A chave é o `scale_src` que o pdfvec devolve.
+#:
+#: 🩸 08/09/2026 — a frase saía quebrada e, num dos casos, contraditória. O
+#: texto antigo era `f"lida do {_fonte}"`, com `_fonte` sendo um substantivo que
+#: varia: dava "lida do carimbo" (certo), "lida do viewport" (passa) e
+#: **"lida do cotas"** (errado). E quando a fonte era `cotas`, a frase seguinte
+#: dizia *"a escala veio de cotas e não foi provada por cota"* — negando a
+#: própria fonte, na mesma linha.
+#:
+#: 🚨 Não é texto de log: isto entra no PROMPT como instrução pra IA escrever a
+#: procedência na observação que o CLIENTE lê.
+#:
+#: 🔑 A confusão que gerou o texto: são dois mecanismos de nome parecido.
+#:   · DERIVAR — votar cotas × vãos pra DESCOBRIR a escala (`scale_src="cotas"`;
+#:     exige 4 votos E o dobro do 2º colocado);
+#:   · VALIDAR — cruzar uma escala já conhecida com elemento medido na view
+#:     principal (`escala_validada`; exige 2 pares a ±2%).
+#: Passar no primeiro e não no segundo é NORMAL — a validação só olha a view
+#: principal. A frase tem que dizer isso em vez de desmentir a fonte.
+#:
+#: 📏 Medido na base em 08/09: 66 pranchas vieram de carimbo (22 jobs), 14 de
+#: viewport (4 jobs) e 5 de cotas (3 jobs), desde 14/08.
+_FONTE_DA_ESCALA = {
+    "carimbo": ("do carimbo da prancha",
+                "o carimbo DECLARA a escala — declaração não é medida"),
+    "viewport": ("da caixa de recorte do PDF",
+                 "o recorte do PDF sugere a escala — não é medida"),
+    "cotas": ("das cotas escritas na prancha (por votação)",
+              "a votação encontrou a escala nas cotas, mas nenhum par "
+              "cota×elemento medido a confirmou na view principal"),
+}
+
+
+def _frase_da_escala_sem_prova(scale_src) -> tuple:
+    """(como dizer a FONTE, RESSALVA) pra escala não confirmada por medida.
+
+    Fica fora do `process_job` de propósito: a decisão precisa ser CHAMÁVEL por
+    um teste. Enquanto era um `f"lida do {fonte}"` solto lá dentro, nenhum
+    guarda conseguia ler a frase que o cliente recebe.
+
+    🚫 NÃO decide nada sobre o número: sem confirmação continua estimado (regra
+    dura nº1). Só muda o que a gente CONTA.
+    """
+    _f = str(scale_src or "").strip().lower()
+    if _f in _FONTE_DA_ESCALA:
+        return _FONTE_DA_ESCALA[_f]
+    # Fonte nova ou vazia: dizer que não sabe é melhor que montar frase torta.
+    return ("de origem não identificada",
+            "não foi possível confirmar de onde veio a escala")
+
+
 import re as _re_escala   # 🪤 `re` NÃO está importado no topo deste módulo (só aliases); sem isto o deploy 8d597a6 morreu na partida
 _RX_N_COTAS_ESCALA = _re_escala.compile(r"(\d+)\s+(?:de\s+\d+\s+)?cotas", _re_escala.I)
 
@@ -10850,11 +11050,38 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         # quando não dá pra medir — e é infinitamente melhor que
                         # a linha em branco que o cliente recebeu hoje.
                         _fonte = _vm.get("scale_src") or "?"
+                        # 🩸 08/09/2026 — A FRASE QUE CHEGA NO CLIENTE SE
+                        # CONTRADIZIA. `_fonte` é um substantivo que varia
+                        # ("carimbo", "viewport", "cotas") e o template cravava
+                        # "do": dava "lida do carimbo" (certo) e "lida do
+                        # cotas" (errado). Pior que a gramática: quando a fonte
+                        # ERA cotas, a frase seguinte dizia "veio de cotas e não
+                        # foi provada por cota" — contradição na mesma linha. E
+                        # ela não fica no log: entra no PROMPT como instrução
+                        # pra IA escrever a procedência na observação que o
+                        # cliente lê.
+                        # 📏 Medido na base: 66 pranchas vieram de carimbo, 14
+                        # de viewport e 5 de cotas (3 jobs) desde 14/08. As 5
+                        # recebiam a frase quebrada.
+                        # 🔑 São DOIS mecanismos de nome parecido, e confundi-los
+                        # foi a origem do texto errado:
+                        #   · DERIVAR  — votar cotas × vãos pra descobrir a
+                        #     escala (exige 4 votos E o dobro do 2º colocado);
+                        #   · VALIDAR  — cruzar uma escala já conhecida com
+                        #     elemento medido na view principal (2 pares a ±2%).
+                        # Passar no primeiro e não no segundo é NORMAL: a
+                        # validação só olha a view principal. O texto tem que
+                        # dizer isso, não negar a própria fonte.
+                        # 🚫 Nada aqui muda a DECISÃO: sem confirmação continua
+                        # estimado (regra dura nº1). Muda só o que a gente conta.
+                        # 🔑 A decisão mora em `_frase_da_escala_sem_prova`, fora
+                        # daqui, pra um teste conseguir CHAMAR ela — dentro do
+                        # process_job nenhum guarda alcançava esta frase.
+                        _fonte_txt, _ressalva = _frase_da_escala_sem_prova(_fonte)
                         _l2 = [
                             "",
-                            "=== MEDIÇÕES VETORIAIS DA PRANCHA (escala NÃO validada por cota) ===",
-                            f"Escala 1:{_vm.get('scale')} lida de: {_fonte}. "
-                            f"NÃO foi confirmada por cota da prancha.",
+                            "=== MEDIÇÕES VETORIAIS DA PRANCHA (escala NÃO confirmada por medida) ===",
+                            f"Escala 1:{_vm.get('scale')} lida {_fonte_txt}. {_ressalva}.",
                         ]
                         if _vm.get("n_rooms"):
                             _l2.append(f"Ambientes medidos geometricamente: {_vm['n_rooms']} "
@@ -10864,10 +11091,10 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                        f"({_vm.get('n_walls')} segmentos).")
                         _l2.append(
                             "REGRA: use estes valores como base para itens de ÁREA e COMPRIMENTO, "
-                            "SEMPRE com confidence 'estimado' — NUNCA 'confirmado', porque a escala "
-                            f"veio de {_fonte} e não foi provada por cota. Na observação, escreva a "
-                            f"procedência: 'medido do desenho com escala 1:{_vm.get('scale')} lida "
-                            f"do {_fonte} — confira a escala do seu PDF'.")
+                            "SEMPRE com confidence 'estimado' — NUNCA 'confirmado', porque "
+                            f"{_ressalva}. Na observação, escreva a procedência: "
+                            f"'medido do desenho com escala 1:{_vm.get('scale')} lida "
+                            f"{_fonte_txt} — confira a escala do seu PDF'.")
                         _vet_secao = "\n".join(_l2)
                         try:
                             _pdfvec_area_m2 += float(_vm.get("rooms_m2") or 0)
@@ -10905,14 +11132,16 @@ bloco — só cite os que estão no inventário deste arquivo."""
                             }
                         except (TypeError, ValueError):
                             pass
-                        print(f"[pdfvec-promo] {_stem}: escala de {_fonte} sem prova — seção ESTIMADA injetada")
+                        print(f"[pdfvec-promo] {_stem}: escala {_fonte_txt}, sem confirmação por medida "
+                              f"— seção ESTIMADA injetada")
                         # 🔍 26/08: o log gravava só ambientes e m², e a PAREDE
                         # ficava de fora — que é justamente o que destrava
                         # pintura e rodapé. No caso cliente-41 eu não
                         # consegui responder "mediu parede?" olhando o log, e a
                         # resposta decide se vale pedir o pé-direito pra ele.
                         _log_error("pdfvec:promo",
-                                   f"{_stem}: escala 1:{_vm.get('scale')} de {_fonte} SEM prova de cota "
+                                   f"{_stem}: escala 1:{_vm.get('scale')} lida {_fonte_txt}, "
+                                   f"SEM confirmação por medida "
                                    f"— injetado como estimado (ambientes={_vm.get('n_rooms')} "
                                    f"m2={_vm.get('rooms_m2')} "
                                    f"paredes_m={_vm.get('walls_m') or 0} "
@@ -11764,7 +11993,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
             # Ele dizia "Ela entra como BASE pros itens de área", e é escrito
             # AQUI, antes de `_apply_area_honesty` decidir. Só que aquele ramo
             # exige `pdfvec_m2 <= 0`: se a geometria mediu, a área informada NÃO
-            # é usada. Caso cliente-31 Oliveira (job bf72d192, hoje): informou 150 m²,
+            # é usada. Caso cliente-31 (job bf72d192, hoje): informou 150 m²,
             # as 10 pranchas mediram, `preenchidos=0` — e ela recebeu o aviso
             # dizendo que os 150 viraram base. Zero itens com 150, zero itens
             # dizendo "informado por você". Ela ia procurar e não ia achar.
@@ -13996,7 +14225,12 @@ async def process_files(
     user_email: str = "",
     user_name: str = "",
     credits_to_consume_cents: int = 0,
-    user_total_area: float = 0,
+    # 🩸 08/09/2026 — ERA `float`, E O FASTAPI CONVERTIA ANTES DO NOSSO CÓDIGO.
+    # Com isso "1.200" (mil e duzentos, em pt-BR) chegava aqui já como 1.2 e
+    # não havia conserto possível do lado de dentro: o texto original tinha
+    # morrido na fronteira. Recebendo como `str`, a régua `_area_do_texto`
+    # decide — e quem manda número continua funcionando ("120" lê 120).
+    user_total_area: str = "",
     user_pe_direito: float = 0,
 ):
     """Recebe PDF, DWG ou DXF e inicia processamento em background.
@@ -14076,13 +14310,12 @@ async def process_files(
         user_pe_direito = 0
     if not (1.8 <= user_pe_direito <= 8.0):   # fora disso não é pé-direito plausível
         user_pe_direito = 0
-    try:
-        user_total_area = float(user_total_area or 0)
-    except (TypeError, ValueError):
-        user_total_area = 0
-    # 🩸 03/09/2026, caso FÁBIO SHIRAISHI (job 3eb748e3): ele digitou
-    # **880.000** no campo de área e passou, porque o teto era 1 km². O número
-    # foi pra planilha dele, carimbado como "informada por você".
+    _area_digitada = str(user_total_area or "").strip()
+    _area_val, _area_err = _area_do_texto(user_total_area)
+    user_total_area = float(_area_val or 0)
+    # 🩸 03/09/2026 (job 3eb748e3): o cliente digitou **880.000** no campo de
+    # área e passou, porque o teto era 1 km². O número foi pra planilha dele,
+    # carimbado como "informada por você".
     # 🔑 Teto não é conferência de plausibilidade. Medido: TODAS as áreas já
     # informadas por cliente, do maior pro menor, são
     #     880.000 (a do Fábio) · 3.274 · 400 · 378 · 335 · 290 · 192 · 190 ·
@@ -14091,10 +14324,12 @@ async def process_files(
     # de área construída) é 30× a maior real — generoso e ainda pega o caso.
     # 🪤 E zerar CALADO é a doença do dia: o cliente digitou e a gente ignorou
     # sem contar. Agora registra, e a resposta do upload devolve o aviso.
-    aviso_area_implausivel = None
-    if user_total_area < 0 or user_total_area > _AREA_PLAUSIVEL_MAX:
-        aviso_area_implausivel = user_total_area
-        user_total_area = 0
+    # 🔑 08/09: agora o aviso carrega o que a pessoa DIGITOU, não um número
+    # reformatado. Antes só existia o caso "grande demais" — porque só ele era
+    # detectável: qualquer outra coisa virava float torto e passava calada.
+    # Com a régua nova, "1.200" é lido certo (1200) e "abc" é recusado com
+    # motivo; os dois casos avisam, em vez de zerar em silêncio.
+    aviso_area_implausivel = _area_digitada if _area_err else None
     if not files:
         _recusa_no_upload(400, "Nenhum arquivo enviado", "sem-arquivo",
                           quem=jwt_user.get("email") or user_email)
@@ -14415,21 +14650,22 @@ async def process_files(
             # `.format(...).replace(",", ".")` na frase inteira e comeu a
             # vírgula do texto: "…3.274 m²). então NÃO usamos". Trocar
             # separador no texto todo estraga a pontuação.
-            "texto": ("Você informou {} m² de área total. Isso é muito "
-                      "acima do que a gente vê em projeto (a maior já informada "
-                      "aqui tem 3.274 m²), então NÃO usamos esse número — "
-                      "provavelmente foi um dígito a mais, ou a unidade errada.\n\n"
+            # 🪤 O texto ecoa o que a pessoa DIGITOU, sem reformatar. A versão
+            # antiga formatava o número (`{:,.0f}` + troca de separador) e já
+            # tinha comido a vírgula da frase uma vez. E agora há um motivo
+            # melhor: quando a recusa é "não consegui ler", não existe número
+            # nenhum pra formatar — existe o texto dela.
+            "texto": ("Você informou “{}” no campo de área total, e a gente "
+                      "não usou esse número: {}.\n\n"
                       "O projeto segue normalmente e a área sai medida da "
                       "prancha, se ela tiver cota ou quadro de áreas. Se o "
                       "número estiver certo mesmo, é só reenviar e a gente "
-                      "olha o caso.").format(
-                          ("{:,.0f}".format(aviso_area_implausivel)
-                           .replace(",", "."))),
+                      "olha o caso.").format(aviso_area_implausivel, _area_err),
         }
         try:
             _log_error("upload:area-implausivel",
-                       f"cliente informou {aviso_area_implausivel} m² "
-                       f"(teto de plausibilidade {_AREA_PLAUSIVEL_MAX}) — "
+                       f"cliente digitou '{aviso_area_implausivel}' no campo de área "
+                       f"— {_area_err} (teto {_AREA_PLAUSIVEL_MAX}) — "
                        f"IGNORADA e cliente avisado no envio", job_id)
         except Exception:
             pass
@@ -14907,7 +15143,14 @@ async def respostas_processamento(job_id: str, request: Request):
 
     patch = {}
     _pd = _num("pe_direito", 1.8, 8.0)       # mesma faixa do upload
-    _ar = _num("area_total", 5.0, _AREA_PLAUSIVEL_MAX)
+    # 🩸 08/09: era `_num("area_total", ...)`, e o `_num` faz
+    # `float(str(v).replace(",", "."))` — régua INGLESA. "1.200" (mil e
+    # duzentos) virava 1,2 e caía fora da faixa (mínimo 5), então sumia calado;
+    # e "1,200" virava 1.200 → 1,2 também. A régua de área é UMA SÓ e mora em
+    # `_area_do_texto`. 🪤 O piso de 5 m² continua aqui: é desta porta, não da
+    # régua — abaixo disso não é área de projeto, é digitação.
+    _ar_v, _ar_err = _area_do_texto(body.get("area_total"))
+    _ar = _ar_v if (_ar_v is not None and _ar_v >= 5.0) else None
     _pz = _num("prazo_meses", 1, 120)
     if _pd is not None:
         patch["user_pe_direito"] = round(_pd, 2)
@@ -21097,14 +21340,18 @@ def get_project_items(job_id: str, request: Request):
     _require_project_owner(request, job_id)
     import urllib.request, urllib.error, json
     try:
-        url = f"{SUPABASE_URL}/rest/v1/rpc/list_project_items"
-        body = json.dumps({"p_job_id": job_id}).encode('utf-8')
-        req = urllib.request.Request(url, data=body, method='POST')
-        req.add_header('apikey', SUPABASE_KEY)
-        req.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
-        req.add_header('Content-Type', 'application/json')
-        resp = urllib.request.urlopen(req, timeout=15)
-        items = json.loads(resp.read().decode('utf-8'))
+        # 🩸 08/09/2026: era uma chamada só, sem paginar — e o PostgREST corta
+        # em 1000 devolvendo HTTP 200. O primeiro projeto de 1.044 itens
+        # chegou hoje e esta tela passou a mostrar 1.000 deles, calada.
+        items, _completo = _itens_do_projeto_completos(job_id)
+        if not _completo:
+            # Falha FECHADA: meia lista com cara de lista inteira é o defeito
+            # que o paginador existe pra matar. Melhor a tela dizer que não
+            # conseguiu do que o cliente revisar 1.000 de 1.044 sem saber.
+            raise HTTPException(
+                503, "Não consegui carregar todos os itens deste projeto agora. "
+                     "Tente de novo em instantes — não vou te mostrar uma lista "
+                     "pela metade sem avisar.")
         # Meta do projeto (datas, status) — pra páginas que NÃO acham o projeto no
         # by-user usarem como fallback (caso avaliação/eval: user_id != dono logado,
         # então a linha não vem na lista e o tempo/datas ficavam "--"). Best-effort.
@@ -21220,13 +21467,18 @@ def _assinatura_atual(job_id: str) -> str:
     if _hit and (_time.time() - _hit[0]) < _ASSINATURA_TTL:
         return _hit[1]
     try:
-        _u = f"{SUPABASE_URL}/rest/v1/rpc/list_project_items"
-        _b = json.dumps({"p_job_id": job_id}).encode("utf-8")
-        _r = _url_req.Request(_u, data=_b, method="POST")
-        _r.add_header("apikey", SUPABASE_KEY)
-        _r.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
-        _r.add_header("Content-Type", "application/json")
-        items = json.loads(_url_req.urlopen(_r, timeout=15).read().decode("utf-8")) or []
+        # 🩸 08/09/2026 — ESTA ERA A PIOR DAS DUAS. Sem paginar, a assinatura
+        # de um projeto de 1.044 itens era calculada sobre 1.000, contra uma
+        # planilha gerada com os 1.044 em memória. As duas NUNCA bateriam, e a
+        # regra dura nº7 diria "planilha desatualizada" pra sempre num projeto
+        # em dia — o aviso que treina o cliente a ignorar aviso.
+        items, _completo = _itens_do_projeto_completos(job_id)
+        if not _completo:
+            # 🚨 Assinatura de pedaço é PIOR que assinatura nenhuma: ela mente
+            # com confiança e ainda entra no cache. Devolve vazio, que os
+            # chamadores já tratam como "não consegui conferir".
+            print(f"[coerencia] itens incompletos em {job_id} — não assino pedaço")
+            return ""
         _sig = _assinatura_quantitativo(items)
         _ASSINATURA_CACHE[job_id] = (_time.time(), _sig)
         return _sig
@@ -21361,18 +21613,23 @@ def _carimbar_comparativo(job_id: str) -> None:
 def _memorial_dados_frescos(job_id: str):
     """(projeto, items) pros geradores do memorial — mesma RPC do /api/items."""
     import json
-    import urllib.request as _url_req
-    _u = f"{SUPABASE_URL}/rest/v1/rpc/list_project_items"
-    _b = json.dumps({"p_job_id": job_id}).encode("utf-8")
-    _r = _url_req.Request(_u, data=_b, method="POST")
-    _r.add_header("apikey", SUPABASE_KEY)
-    _r.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
-    _r.add_header("Content-Type", "application/json")
-    items = json.loads(_url_req.urlopen(_r, timeout=15).read().decode("utf-8")) or []
+    # 🩸 08/09/2026 — sem paginar, o PostgREST corta em 1000 e devolve HTTP
+    # 200. O memorial de um projeto de 1.044 itens sairia descrevendo 1.000
+    # deles, sem uma palavra. O 2o maior do acervo tem 307: o corte nunca
+    # tinha sido alcancado.
+    items, _completo = _itens_do_projeto_completos(job_id)
+    if not _completo:
+        raise HTTPException(503, "Nao consegui carregar todos os itens deste "
+                                 "projeto agora. Tente de novo em instantes.")
     if not items:
         raise HTTPException(404, "Projeto sem itens — gere o quantitativo primeiro")
     projeto = {}
     try:
+        # 🪤 08/09: o `import urllib.request as _url_req` morava no bloco que
+        # virou o paginador e saiu junto. Pyflakes pegou ANTES do push — é
+        # exatamente o "nome indefinido não aparece no py_compile" que o CI
+        # confere desde o deploy 8d597a6.
+        import urllib.request as _url_req
         _mu = (f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}"
                f"&select=project_name,typology,total_area,user_total_area&limit=1")
         _mr = _url_req.Request(_mu, method="GET")
@@ -21868,14 +22125,12 @@ def cronograma_sugestao(job_id: str, request: Request):
 
     # Busca disciplinas ativas via items
     try:
-        url2 = f"{SUPABASE_URL}/rest/v1/rpc/list_project_items"
-        body = _json.dumps({"p_job_id": job_id}).encode('utf-8')
-        req2 = urllib.request.Request(url2, data=body, method='POST')
-        req2.add_header('apikey', SUPABASE_KEY)
-        req2.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
-        req2.add_header('Content-Type', 'application/json')
-        resp2 = urllib.request.urlopen(req2, timeout=15)
-        items = _json.loads(resp2.read().decode('utf-8'))
+        # 🩸 08/09/2026 — sem paginar, o PostgREST corta em 1000 e devolve
+        # HTTP 200. O 1o projeto de 1.044 itens chegou hoje; antes disso o
+        # maior do acervo tinha 307 e ninguem via o corte.
+        items, _completo = _itens_do_projeto_completos(job_id)
+        if not _completo:
+            raise RuntimeError('itens do projeto vieram pela metade')
     except Exception:
         items = []
 
@@ -21966,14 +22221,12 @@ def generate_cronograma(job_id: str, payload: CronogramaPayload, request: Reques
     # 1. Busca os items do projeto via mesma RPC do get_project_items
     import urllib.request, json as _json
     try:
-        url = f"{SUPABASE_URL}/rest/v1/rpc/list_project_items"
-        body = _json.dumps({"p_job_id": job_id}).encode('utf-8')
-        req = urllib.request.Request(url, data=body, method='POST')
-        req.add_header('apikey', SUPABASE_KEY)
-        req.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
-        req.add_header('Content-Type', 'application/json')
-        resp = urllib.request.urlopen(req, timeout=15)
-        items = _json.loads(resp.read().decode('utf-8'))
+        # 🩸 08/09/2026 — sem paginar, o PostgREST corta em 1000 e devolve
+        # HTTP 200. O 1o projeto de 1.044 itens chegou hoje; antes disso o
+        # maior do acervo tinha 307 e ninguem via o corte.
+        items, _completo = _itens_do_projeto_completos(job_id)
+        if not _completo:
+            raise RuntimeError('itens do projeto vieram pela metade')
     except Exception as e:
         raise HTTPException(500, f"Erro ao buscar itens do projeto: {e}")
 
@@ -22317,14 +22570,12 @@ def _build_cronograma_for_export(job_id: str, request=None) -> tuple:
     else:
         # Gera automaticamente a partir dos items
         try:
-            url = f"{SUPABASE_URL}/rest/v1/rpc/list_project_items"
-            body = _json.dumps({"p_job_id": job_id}).encode('utf-8')
-            req = urllib.request.Request(url, data=body, method='POST')
-            req.add_header('apikey', SUPABASE_KEY)
-            req.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
-            req.add_header('Content-Type', 'application/json')
-            resp = urllib.request.urlopen(req, timeout=15)
-            items = _json.loads(resp.read().decode('utf-8'))
+            # 🩸 08/09/2026 — sem paginar, o PostgREST corta em 1000 e devolve
+            # HTTP 200. O 1o projeto de 1.044 itens chegou hoje; antes disso o
+            # maior do acervo tinha 307 e ninguem via o corte.
+            items, _completo = _itens_do_projeto_completos(job_id)
+            if not _completo:
+                raise RuntimeError('itens do projeto vieram pela metade')
         except Exception as e:
             raise HTTPException(500, f"Erro ao buscar items: {e}")
 
@@ -22656,6 +22907,14 @@ def submit_item_review(job_id: str, item_id: str, payload: ReviewPayload, reques
     Se action='edit', também aplica os edits à row em project_items.
     Insere sempre uma linha em item_reviews pra histórico/aprendizado."""
     import urllib.request, urllib.error, json
+    # 🚨 08/09/2026 (auditoria de segurança) — SEM ISTO, UM `#` NO item_id
+    # apagava o `&job_id=` das URLs abaixo (o urllib trata `#` como fragmento e
+    # corta), e o dono de QUALQUER projeto editava ou apagava linha de OUTRO
+    # cliente, com a service_role passando por cima da RLS.
+    # 🔑 Validar a FORMA na entrada é o que fecha a classe toda: escapar só as
+    # URLs que eu me lembrasse de escapar deixaria a próxima montagem aberta.
+    if not _UUID_RX.fullmatch(item_id or ""):
+        raise HTTPException(400, "item inválido")
 
     action = (payload.action or "").strip().lower()
     if action not in ("approve", "reject", "edit"):
@@ -23039,14 +23298,12 @@ async def rebuild_planilha_from_review(job_id: str, request: Request):
 
         # 2) Buscar items atuais (já revisados) — RPC SECURITY DEFINER, anon ok
         try:
-            url = f"{SUPABASE_URL}/rest/v1/rpc/list_project_items"
-            body = json.dumps({"p_job_id": job_id}).encode('utf-8')
-            req = urllib.request.Request(url, data=body, method='POST')
-            req.add_header('apikey', SUPABASE_KEY)
-            req.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
-            req.add_header('Content-Type', 'application/json')
-            resp = urllib.request.urlopen(req, timeout=15)
-            rows = json.loads(resp.read().decode('utf-8'))
+            # 🩸 08/09/2026 — sem paginar, o PostgREST corta em 1000 e devolve
+            # HTTP 200. O 1o projeto de 1.044 itens chegou hoje; antes disso o
+            # maior do acervo tinha 307 e ninguem via o corte.
+            rows, _completo = _itens_do_projeto_completos(job_id)
+            if not _completo:
+                raise RuntimeError('itens do projeto vieram pela metade')
         except Exception as e:
             raise HTTPException(500, f"Erro ao buscar itens: {e}")
 
@@ -23174,7 +23431,17 @@ async def rebuild_planilha_from_review(job_id: str, request: Request):
 
 
 class InformAreaPayload(BaseModel):
-    area: float = 0
+    # 🩸 08/09/2026 — era `float`, e o Pydantic convertia ANTES de chegar na
+    # rota: "1.200" (mil e duzentos em pt-BR) virava 1.2 na fronteira e não
+    # havia como consertar do lado de dentro. Agora o texto sobrevive e
+    # `_area_do_texto` decide.
+    # 🪤 E TEM QUE ACEITAR NÚMERO TAMBÉM. Na 1ª tentativa eu tipei só `str` e a
+    # bancada reprovou em 7 testes: o Pydantic passou a RECUSAR número, e isso
+    # não é detalhe de teste — é quebra de contrato. Durante o deploy, uma
+    # página já aberta no navegador de alguém continua mandando `parseFloat`,
+    # e ela tomaria 422 em vez de completar a planilha. Aceitar os dois é o
+    # único jeito de trocar a régua sem derrubar quem está no meio do caminho.
+    area: "float | int | str | None" = None
     # 🎯 26/08/2026 — O PÉ-DIREITO É O CAMPO QUE MAIS MUDA A PLANILHA, e esta
     # rota (que existe desde o caso cliente-21) só aceitava a ÁREA — justamente a
     # que NÃO ajuda. Medido em 45 dias, % de linhas de área/comprimento que saem
@@ -23224,9 +23491,10 @@ def inform_project_area(job_id: str, payload: InformAreaPayload, request: Reques
 
     # 1) Validar o que veio — área, pé-direito, ou os dois
     try:
-        area = round(float(payload.area or 0), 2)
+        _area_val, _area_err = _area_do_texto(payload.area)
+        area = float(_area_val or 0)
     except (TypeError, ValueError):
-        area = 0
+        area, _area_err = 0, "não parece uma área"
     try:
         pe_dir = round(float(payload.pe_direito or 0), 2)
     except (TypeError, ValueError):
@@ -23241,8 +23509,19 @@ def inform_project_area(job_id: str, payload: InformAreaPayload, request: Reques
             pass
         raise HTTPException(400, msg)
 
-    if area and (area <= 0 or area > _AREA_PLAUSIVEL_MAX):
-        _recusa("area-fora-da-faixa", "Informe uma área válida em m² (maior que 0).")
+    # 🔑 08/09: a recusa agora DIZ O MOTIVO que a régua deu, em vez do genérico
+    # "informe uma área válida". Quem digitou "1.200" nem chega aqui — passou a
+    # ser lido como 1200. Quem digitou algo ilegível ouve o quê.
+    # 🪤 DOIS motivos, não um. A 1ª versão juntou tudo em `area-nao-lida` e a
+    # bancada reprovou — com razão: `area-fora-da-faixa` já era contado na
+    # telemetria, e fundir os dois apagaria a série histórica de "digitou um
+    # número absurdo", que é um caso de produto (o dígito a mais), diferente de
+    # "escreveu algo que não é número".
+    if _area_err and str(payload.area or "").strip():
+        _motivo = ("area-fora-da-faixa" if "acima de" in _area_err
+                   else "area-nao-lida")
+        _recusa(_motivo, "Não consegui usar essa área: %s. Escreva só o "
+                         "número, por exemplo 120 ou 120,5." % _area_err)
     # 🪤 Mesma faixa do campo do upload (1,8 a 8 m): fora disso não é pé-direito
     # de edificação, é erro de digitação — e um pé-direito errado multiplica a
     # pintura inteira.
@@ -23265,14 +23544,12 @@ def inform_project_area(job_id: str, payload: InformAreaPayload, request: Reques
         raise HTTPException(500, f"Erro Supabase: {e}")
 
     try:
-        url = f"{SUPABASE_URL}/rest/v1/rpc/list_project_items"
-        body = json.dumps({"p_job_id": job_id}).encode('utf-8')
-        req = urllib.request.Request(url, data=body, method='POST')
-        req.add_header('apikey', SUPABASE_KEY)
-        req.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
-        req.add_header('Content-Type', 'application/json')
-        resp = urllib.request.urlopen(req, timeout=15)
-        rows = json.loads(resp.read().decode('utf-8'))
+        # 🩸 08/09/2026 — sem paginar, o PostgREST corta em 1000 e devolve
+        # HTTP 200. O 1o projeto de 1.044 itens chegou hoje; antes disso o
+        # maior do acervo tinha 307 e ninguem via o corte.
+        rows, _completo = _itens_do_projeto_completos(job_id)
+        if not _completo:
+            raise RuntimeError('itens do projeto vieram pela metade')
     except Exception as e:
         raise HTTPException(500, f"Erro ao buscar itens: {e}")
 
@@ -23466,6 +23743,11 @@ def inform_project_area(job_id: str, payload: InformAreaPayload, request: Reques
         "pe_direito": pe_dir,
         "filled_count": filled + _pintou,
         "pintura_derivada": _pintou,
+        # 🔑 08/09: devolve a área que o SERVIDOR entendeu, não a que a tela
+        # achou. A tela mandou texto de propósito (a régua é do servidor); sem
+        # este campo ela teria que reconverter pra contar no rastro — que é
+        # exatamente o segundo parser que este conserto matou.
+        "area_usada": area or None,
         "items_count": len(items),
         "download_url": f"/api/download/{job_id}",
     }
@@ -25142,7 +25424,7 @@ def admin_eval_reprocess(job_id: str, request: Request,
 
     # 4) Row de avaliação ISOLADA
     typology = orig.get("typology") or "office"
-    # 🩸 03/09/2026, caso FÁBIO SHIRAISHI (job 3eb748e3). Ele mandou uma prancha
+    # 🩸 03/09/2026, caso do job 3eb748e3). Ele mandou uma prancha
     # de REDE Wi-Fi marcando "Estrutura" no tipo. O motor DETECTOU o engano —
     # gravou o aviso "este arquivo parece ser de ARQUITETURA, não de estrutura"
     # — e mesmo assim mediu como estrutura, entregou 19 de 19 linhas ZERADAS e

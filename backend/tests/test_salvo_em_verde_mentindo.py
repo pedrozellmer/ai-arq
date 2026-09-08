@@ -537,7 +537,7 @@ class _Payload:
         self.reviewed_by = reviewed_by
 
 
-_ITEM_NO_BANCO = {"id": "it-1", "description": "Parede de alvenaria",
+_ITEM_NO_BANCO = {"id": "11111111-1111-4111-8111-111111111111", "description": "Parede de alvenaria",
                   "unit": "m2", "quantity": 10.0, "confidence": "estimado",
                   "observations": "Fonte: layer 00_PAREDE"}
 
@@ -574,7 +574,7 @@ def _rota(monkeypatch, action, *, insert_ok=True, ja_revisado=False,
 
     try:
         return main.submit_item_review(
-            "job-de-teste", "it-1",
+            "job-de-teste", "11111111-1111-4111-8111-111111111111",
             _Payload(action, edits=edits), None), None
     except Exception as e:
         return None, e
