@@ -46,9 +46,25 @@ _PISO = {
     "python-multipart": ((0, 0, 31),
                          "3 falhas ALTAS na mesma rota pública; a última "
                          "(GHSA-v9pg-7xvm-68hf) só cai em 0.0.31"),
-    "pdfplumber": ((0, 11, 10),
-                   "ele PINA o pdfminer.six com `==`; abaixo de 0.11.10 prende a "
-                   "20231228, que tem 2 ALTAS de execução de código via pickle"),
+    # 🩸 ESTE PISO JÁ ESTEVE ERRADO, e o erro custou o CI e o build do Render.
+    # Eu tinha escrito 0.11.10 — que era a versão que EU ESCOLHI, não a mínima
+    # que fecha a falha. E o 0.11.10 exige `pypdfium2>=5.9.0`, colidindo com o
+    # nosso `pypdfium2==4.30.0`: ResolutionImpossible no passo de INSTALAR.
+    #
+    # 🔑 Piso é a MENOR versão que resolve o problema, nunca a que a pessoa
+    # escolheu. Confundir as duas transforma um guarda de segurança numa trava
+    # que impede o próprio conserto — foi exatamente o que aconteceu: com o
+    # piso em 0.11.10, este teste REPROVAVA o pin que consertava o CI.
+    #
+    # 📏 Remedido no OSV em 08/09, com controle: 0.11.9 já pina
+    # `pdfminer.six==20251230`, que devolve ZERO vulnerabilidade; a 20231228
+    # (que o 0.11.0 prendia) tem 4, sendo 2 ALTAS. O objetivo do piso está
+    # inteiro no 0.11.9.
+    "pdfplumber": ((0, 11, 9),
+                   "ele PINA o pdfminer.six com `==`; abaixo de 0.11.9 prende a "
+                   "20231228, que tem 2 ALTAS de execução de código via pickle. "
+                   "🚫 NÃO suba pro 0.11.10 sem subir o pypdfium2 junto: o "
+                   "0.11.10 exige pypdfium2>=5.9.0 e quebra o install"),
     "Pillow": ((12, 3, 0),
                "13 falhas ALTAS no 10.4.0. 📏 alcance baixo aqui (recebe bitmap "
                "já decodificado, não parseia formato exótico), mas subir é barato"),
@@ -119,6 +135,105 @@ def test_quem_fica_atras_tem_o_motivo_ESCRITO_no_requirements(pacote):
     assert "url_fetcher" in antes or "alcanc" in antes.lower(), (
         "a explicação não diz por que a falha não alcança a gente: %r"
         % antes[-160:])
+
+
+#: 🩸 PARES ACOPLADOS — o buraco que este arquivo NÃO via até 08/09.
+#:
+#: O guarda acima só vigia PISO. O que derrubou o CI e o build do Render foi um
+#: TETO: `pdfplumber 0.11.10` exige `pypdfium2>=5.9.0`, e o nosso pin é
+#: `pypdfium2==4.30.0` — ResolutionImpossible, no passo de INSTALAR, com a
+#: bancada tendo fechado 3166 verdes minutos antes.
+#:
+#: 🔑 A regra: `dono >= gatilho` OBRIGA `preso >= exigido`. Subir um sem o
+#: outro quebra o install. A varredura de 08/09 (27 agentes, 24 achados, 11
+#: sobreviveram aos céticos) achou que a MESMA forma está armada no weasyprint.
+#:
+#: 🚫 Isto NÃO substitui `scripts/guard_requirements.py`, que roda o pip de
+#: verdade no pre-push e pega QUALQUER conflito, inclusive os que ninguém
+#: mapeou. Aqui ficam só os pares já medidos — offline, e com o motivo do lado.
+_PARES_ACOPLADOS = {
+    "pdfplumber": ((0, 11, 10), "pypdfium2", (5, 9, 0),
+                   "medido em 08/09: foi este par que quebrou o CI e o Render"),
+    "weasyprint": ((63, 0), "pydyf", (0, 11, 0),
+                   "todas as 12 versões acima da 62.3 exigem pydyf>=0.11.0 — "
+                   "a armadilha espera a reavaliação que o requirements agenda"),
+}
+
+
+def violacao_de_par(dono, pinos):
+    """A DECISÃO, isolada: devolve a explicação se o par sobe pela metade.
+
+    🔑 Ela mora fora do teste de propósito. A 1ª versão deste guarda tinha o
+    `if`/`assert` inline e um "controle" que REIMPLEMENTAVA a comparação — e a
+    mutação provou que aquilo era enfeite: dois mutantes ("o par nunca reprova"
+    e "pula o acoplamento sempre") ESCAPARAM, porque com os pins de hoje os
+    dois donos estão abaixo do gatilho e o corpo nunca executava.
+
+    🪤 Controle que reimplementa a régua não controla nada — ele passa mesmo
+    quando a régua de verdade está quebrada. Ver
+    [[feedback_nao_reimplemente_a_regua_pergunte_ao_guarda]].
+    """
+    if dono not in _PARES_ACOPLADOS:
+        return None
+    gatilho, preso, exigido, porque = _PARES_ACOPLADOS[dono]
+    if dono not in pinos or preso not in pinos:
+        return None
+    if pinos[dono] < gatilho:
+        return None                # abaixo do gatilho, o acoplamento não vale
+    if pinos[preso] >= exigido:
+        return None
+    return ("%s está em %s (>= %s), então o %s precisa ser >= %s — está em %s.\n"
+            "O `pip install` vai dar ResolutionImpossible e o CI e o Render "
+            "quebram no passo de INSTALAR, antes de qualquer teste.\n%s"
+            % (dono, ".".join(map(str, pinos[dono])),
+               ".".join(map(str, gatilho)), preso,
+               ".".join(map(str, exigido)),
+               ".".join(map(str, pinos[preso])), porque))
+
+
+@pytest.mark.parametrize("dono", sorted(_PARES_ACOPLADOS))
+def test_par_acoplado_nao_sobe_pela_metade(dono):
+    """Subir o dono acima do gatilho SEM subir o preso quebra o `pip install`.
+
+    🪤 O erro não aparece em teste nenhum: ele acontece ANTES, quando o CI
+    tenta montar o ambiente. Verde local não diz nada sobre isso.
+    """
+    problema = violacao_de_par(dono, _pinos())
+    assert problema is None, problema
+
+
+def test_CONTROLE_a_combinacao_que_QUEBROU_o_CI_e_reprovada():
+    """🧪 Chama a MESMA função do teste acima, com a combinação exata de hoje.
+
+    É este teste que mantém o de cima honesto: com os pins atuais o par está
+    abaixo do gatilho e o guarda passa por vacuidade. Sem chamar a régua com
+    uma combinação ruim, "o par nunca reprova" passaria despercebido — e passou,
+    na 1ª versão.
+    """
+    quebrado = {"pdfplumber": (0, 11, 10), "pypdfium2": (4, 30, 0)}
+    problema = violacao_de_par("pdfplumber", quebrado)
+    assert problema is not None, (
+        "a combinação que derrubou o CI e o Render hoje passaria neste guarda")
+    assert "pypdfium2" in problema and "ResolutionImpossible" in problema
+
+
+def test_CONTROLE_a_combinacao_CONSERTADA_passa():
+    """🧪 O outro lado: o guarda não pode reprovar o que está certo. Sem isto,
+    uma régua que reprovasse tudo passaria no controle acima."""
+    bom = {"pdfplumber": (0, 11, 9), "pypdfium2": (4, 30, 0)}
+    assert violacao_de_par("pdfplumber", bom) is None
+    # e subir os DOIS juntos também é válido
+    juntos = {"pdfplumber": (0, 11, 10), "pypdfium2": (5, 9, 0)}
+    assert violacao_de_par("pdfplumber", juntos) is None
+
+
+def test_CONTROLE_o_par_do_weasyprint_tambem_reprova():
+    """🧪 O 2º par, achado pela varredura de 08/09. Sem controle próprio, ele
+    seria uma linha de tabela que ninguém nunca exercitou."""
+    quebrado = {"weasyprint": (63, 1), "pydyf": (0, 10, 0)}
+    assert violacao_de_par("weasyprint", quebrado) is not None
+    ok = {"weasyprint": (63, 1), "pydyf": (0, 11, 0)}
+    assert violacao_de_par("weasyprint", ok) is None
 
 
 def test_o_starlette_continua_EXPLICITO():
