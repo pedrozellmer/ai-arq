@@ -27763,7 +27763,15 @@ def _fin_selos_das_origens(req_leitura, job_id: str, rows) -> dict:
             est = _fin_estado_da_origem(l, por_id, por_desc) or {}
             # 'removido'/'ambiguo'/'indisponivel' não têm item resolvido: fora do
             # mapa, e o export carimba "Não confirmado" por ausência.
-            if est.get("origem_estado") in ("ok", "mudou"):
+            # 🩸 07/09/2026, revisão adversarial — 'mudou' SAI JUNTO. A linha
+            # cujo item mudou no quantitativo ia pro fornecedor carimbada
+            # "Medido do CAD" enquanto a TELA, ao lado, no mesmo dia, dizia
+            # "item mudou no quantitativo — conferir valor". O selo do item
+            # descreve a quantidade de HOJE; o dinheiro daquela linha foi
+            # fechado contra o RETRATO, que já não é o mesmo. Afirmar medição
+            # sobre um número que mudou é a regra dura nº1 pelo avesso — vai
+            # pro terceiro estado, que é o honesto: não deu pra confirmar.
+            if est.get("origem_estado") == "ok":
                 selos[ref] = str(est.get("origem_selo") or "")
         return selos
     except Exception as _e:

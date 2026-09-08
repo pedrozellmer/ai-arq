@@ -459,6 +459,70 @@ def test_o_export_nao_afirma_medicao_quando_a_leitura_e_cortada(monkeypatch):
     assert _selos_do_export(monkeypatch, muitos[1:]).get(_ITEM["id"]) == "confirmado"
 
 
+def test_item_que_MUDOU_nao_sai_carimbado_como_medido(monkeypatch):
+    """🚨 Achado crítico da revisão adversarial de 07/09.
+
+    A linha cujo item mudou no quantitativo ia pro fornecedor carimbada
+    "Medido do CAD" — enquanto a TELA, ao lado, no mesmo dia, dizia "item mudou
+    no quantitativo — conferir valor". O selo do item descreve a quantidade de
+    HOJE; o dinheiro daquela linha foi fechado contra o RETRATO, que já não é o
+    mesmo. Afirmar medição sobre número que mudou é a regra nº1 pelo avesso.
+    """
+    mudou = dict(_ITEM_TELA, quantity=2000.0)      # o retrato dizia 1062,0
+    selos = _selos_do_export(monkeypatch, [mudou])
+    assert selos.get(_ITEM["id"], "") != "confirmado", (
+        "🚨 item que MUDOU saiu como medido do CAD: %r" % selos)
+    # e o arquivo escreve o terceiro estado, não "Medido do CAD"
+    linhas = _por_descricao(montar_dados_export([dict(_LANC_TELA)], [], HOJE, selos=selos))
+    assert linhas["Porcelanato 60x60"]["selo"] == SELO_LABEL[""]
+
+
+def test_CONTROLE_item_em_dia_continua_carimbado(monkeypatch):
+    """O outro lado: sem mudança, o selo sai — senão o conserto matou a coluna."""
+    selos = _selos_do_export(monkeypatch, [_ITEM_TELA])
+    assert selos.get(_ITEM["id"]) == "confirmado"
+
+
+def test_a_legenda_nao_AFIRMA_a_causa_do_nao_confirmado():
+    """🩸 A legenda dizia que "Não confirmado" = "o projeto foi reprocessado".
+
+    O mesmo selo sai quando a leitura falhou, quando o PostgREST cortou em 1000
+    e quando o item só mudou. Num projeto grande, ou numa noite de 5xx, o
+    arquivo INTEIRO afirmaria pro fornecedor e pro banco um reprocesso que não
+    houve. É o log que chuta a causa — e aqui vai impresso pra fora da casa.
+    """
+    n = SELO_NOTA.lower()
+    assert "não foi possível confirmar" in n
+    assert "o projeto foi reprocessado" not in n, (
+        "a legenda voltou a afirmar a causa: %r" % SELO_NOTA)
+    # a causa continua sendo citada, mas como POSSIBILIDADE
+    assert "pode ter" in n
+
+
+def test_a_faixa_de_kpis_cobre_a_tabela_inteira():
+    """🪤 Terceiro índice cravado que a coluna SELO desalinhou.
+
+    `slots` parava na coluna 11 e a tabela passou a ter 12 — buraco branco no
+    canto direito, em cima da coluna do dinheiro.
+
+    🪤 A 1ª versão deste teste olhava a MAIOR mesclagem da planilha inteira — e
+    o título já cobre as 12 colunas, então ele passava com a faixa torta. A
+    mutação pegou. Agora o teste ancora na LINHA dos KPIs.
+    """
+    import financeiro_export as fx
+    ws = _xlsx(_dados()).active
+    linha_kpi = next((c.row for linha in ws.iter_rows() for c in linha
+                      if c.value == "Contratado" and c.column == 1), None)
+    assert linha_kpi, "não achei a faixa de KPIs na planilha"
+    faixa = [r for r in ws.merged_cells.ranges
+             if r.min_row in (linha_kpi, linha_kpi + 1)]
+    assert faixa, "a faixa de KPIs não tem mesclagem nenhuma"
+    assert max(r.max_col for r in faixa) == fx._COL_VALOR, (
+        "a faixa de KPIs vai até a coluna %d e a tabela tem %d — sobra buraco "
+        "em cima da coluna do dinheiro"
+        % (max(r.max_col for r in faixa), fx._COL_VALOR))
+
+
 def test_linha_do_comparativo_nao_ganha_selo_nosso():
     """A quantidade veio da COTAÇÃO do fornecedor — não é medição nem estimativa
     nossa. "Não confirmado" ali sugeriria falha nossa onde não há nada nosso."""

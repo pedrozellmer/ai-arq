@@ -132,12 +132,22 @@ SELO_LABEL = {
 #: chave do selo → classe CSS do PDF. Mapa explícito: classe faltando cai em
 #: "nc" (cinza, "não confirmado"), o lado seguro pela regra nº1.
 _SELO_CLS = {"medido": "med", "estimado": "est", "nao_confirmado": "nc"}
+#: 🩸 07/09/2026, revisão adversarial — A LEGENDA AFIRMAVA UMA CAUSA.
+#: Ela dizia que "Não confirmado" significa "o item de origem não está mais no
+#: quantitativo (o projeto foi reprocessado)". Mas o mesmo selo sai quando a
+#: leitura dos itens FALHOU, quando o PostgREST cortou em 1000, e quando o item
+#: só MUDOU. Num projeto grande, ou numa noite de 5xx, o arquivo inteiro sairia
+#: afirmando pro fornecedor e pro banco um reprocesso que não houve.
+#: 🔑 A legenda descreve o FATO — "não foi possível confirmar" — e lista as
+#: causas possíveis como possibilidades. É o mesmo erro do log que chuta a
+#: causa, e ele pesa mais aqui: isto vai impresso pra fora da casa.
 SELO_NOTA = (
     "A coluna SELO diz de onde saiu a QUANTIDADE de cada linha. "
     '"Medido do CAD" = medida na geometria do desenho. '
     '"Estimativa — confira" = número estimado, ainda não medido. '
-    '"Não confirmado" = o item de origem não está mais no quantitativo '
-    "(o projeto foi reprocessado) e não deu pra conferir. "
+    '"Não confirmado" = não foi possível confirmar a origem desta quantidade '
+    "agora — o item pode ter mudado ou saído do quantitativo, ou a leitura não "
+    "veio. Confira no projeto antes de usar. "
     "O valor em R$ é sempre do arquiteto — o AI.arq não precifica obra."
 )
 
@@ -358,7 +368,16 @@ def gerar_financeiro_xlsx(dados: Dict, output_path: str, branding: Optional[Dict
         ('Aguardando o cliente', k["aguardando"], f"{k['aguardando_n']} aguardando o cliente"
                                                   + _sufixo(k.get("aguardando_sem_valor", 0))),
     )
-    slots = ((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 10, 11))     # (rótulo de, rótulo até, coluna do valor)
+    # 🪤 07/09/2026 — era `((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 10, 11))`
+    # cravado na mão. A coluna SELO fez a tabela ir a 12 e a faixa de KPIs
+    # continuou parando na 11: buraco branco no canto direito, justamente em
+    # cima da coluna do dinheiro. Terceiro índice cravado que a coluna nova
+    # desalinhou — agora as 4 faixas repartem as colunas da tabela, e uma
+    # coluna futura estoura aqui em vez de sair torta calada.
+    assert _COL_VALOR % 4 == 0, "a faixa de KPIs reparte a tabela em 4 blocos iguais"
+    _bloco = _COL_VALOR // 4
+    slots = tuple((1 + i * _bloco, i * _bloco + _bloco - 1, i * _bloco + _bloco)
+                  for i in range(4))                 # (rótulo de, rótulo até, coluna do valor)
     linha_kpi, linha_sub = ro, ro + 1
     for (c1, c2, cv), (rot, val, sub) in zip(slots, kpis):
         if c2 > c1:
