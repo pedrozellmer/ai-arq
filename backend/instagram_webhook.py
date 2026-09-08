@@ -689,6 +689,18 @@ def scheduler_tick(request: Request, force_slot: Optional[str] = None):
     _tick = os.getenv("TICK_SECRET", "")
     if _tick and request.headers.get("X-Tick-Secret", "") != _tick:
         raise HTTPException(401, "Tick não autorizado")
+    # 🩸 O VIGIA VEM ANTES DE TODA SAÍDA. Ele morava depois do laço de
+    # publicação, e esta função tem DOIS retornos antecipados: "token não
+    # configurado" e "nada pra publicar agora". O cron chama 96×/dia e publica
+    # no máximo 1 — nas outras 95 o vigia nunca era alcançado, e não há post
+    # agendado entre o dia em que ele avisaria (08/10) e o dia em que o token
+    # morre (15/10).
+    # 🪤 08/09, 2ª tentativa: na 1ª eu o pus depois do `if not pending` e o CI
+    # ficou VERMELHO — porque a saída de "token não configurado" vem ANTES, e
+    # ela é justamente o estado em que o aviso mais importa. Meu teste passou
+    # na minha máquina só porque o `backend/.env` local tem META_ACCESS_TOKEN e
+    # o CI não: medi com ferramenta que o outro lado não tem.
+    _vigia_do_token()
     api = MetaGraphAPI()
     if not api.access_token or not api.ig_user_id:
         return {"ok": False, "error": "META_ACCESS_TOKEN ou IG_USER_ID não configurados"}
@@ -703,11 +715,6 @@ def scheduler_tick(request: Request, force_slot: Optional[str] = None):
 
     pending = _supa_select("instagram_scheduled_posts", query)
 
-    # 🩸 O VIGIA VEM ANTES DO RETORNO ANTECIPADO. Ele morava depois do laço de
-    # publicação, e o tick sai aqui em 95 das 96 chamadas do dia — o aviso do
-    # token só rodava em tick que publicou post, e não há post agendado entre o
-    # dia em que ele avisaria (08/10) e o dia em que o token morre (15/10).
-    _vigia_do_token()
     if not pending:
         return {"ok": True, "message": "Nada pra publicar agora", "checked_at": datetime.now(timezone.utc).isoformat()}
 

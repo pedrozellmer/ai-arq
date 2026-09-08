@@ -124,43 +124,71 @@ def test_falha_de_leitura_nao_derruba_o_tick(monkeypatch):
 # ══════════════════════════════════════════════════════════════════════════
 #  2 · 🚨 o invariante: roda MESMO SEM POST PRA PUBLICAR
 # ══════════════════════════════════════════════════════════════════════════
-def test_o_vigia_roda_no_tick_que_NAO_publica_nada(monkeypatch):
-    """🩸 O defeito de 08/09, no fato.
+@pytest.fixture
+def tick_hermetico(monkeypatch):
+    """O tick, SEM tocar rede e SEM depender do meu `.env`.
 
-    O tick sai cedo quando não há post pendente — 95 das 96 chamadas do dia. O
-    vigia ficava depois desse retorno. Aqui a gente roda o tick SEM nada
-    pendente e exige que ele tenha passado pelo vigia.
+    🪤 08/09 — A 1ª VERSÃO DESTE TESTE PASSOU NA MINHA MÁQUINA E DEIXOU O CI
+    VERMELHO, por dois erros meus:
+      1. eu fingia `iw.api`, mas o tick cria o SEU: `api = MetaGraphAPI()`
+         dentro da função. O fingimento não servia pra nada;
+      2. sem `META_ACCESS_TOKEN` o tick sai em "token não configurado" — e o
+         `backend/.env` da minha máquina TEM a variável, o CI não. Passei
+         medindo com ferramenta que o outro lado não tem (mesma família do
+         incidente do dukpy, 07/09).
+    🚨 E o pior: `pending` sai de `_supa_select`, que é leitura REAL do
+    Supabase. A bancada estava tocando produção — já custou caro antes.
     """
-    chamou = {"vigia": 0}
-    monkeypatch.setattr(iw, "_vigia_do_token",
-                        lambda: chamou.__setitem__("vigia", chamou["vigia"] + 1))
+    def montar(token="tok", pendentes=None):
+        chamou = {"vigia": 0}
+        monkeypatch.setattr(iw, "_vigia_do_token",
+                            lambda: chamou.__setitem__("vigia", chamou["vigia"] + 1))
 
-    class _Api:
-        access_token = "tok"
-        ig_user_id = "123"
+        class _Api:
+            access_token = token
+            ig_user_id = "123" if token else ""
 
-    monkeypatch.setattr(iw, "api", _Api(), raising=False)
-    monkeypatch.setattr(iw, "_posts_pendentes", lambda *a, **k: [], raising=False)
-    monkeypatch.setattr(iw, "TICK_SECRET", "", raising=False)
+        monkeypatch.setattr(iw, "MetaGraphAPI", lambda *a, **k: _Api())
+        # 🔒 nada de rede: se o teste chamar o Supabase, é defeito do teste
+        monkeypatch.setattr(iw, "_supa_select",
+                            lambda *a, **k: list(pendentes or []))
+        monkeypatch.delenv("TICK_SECRET", raising=False)
+        req = type("R", (), {"headers": {}})()
+        return chamou, iw.scheduler_tick(req)
+    return montar
 
-    req = type("R", (), {"headers": {}})()
-    try:
-        r = iw.scheduler_tick(req)
-    except TypeError:
-        r = iw.scheduler_tick(req, None)
+
+def test_o_vigia_roda_no_tick_que_NAO_publica_nada(tick_hermetico):
+    """🩸 O caminho de 95 das 96 chamadas do dia."""
+    chamou, r = tick_hermetico(pendentes=[])
     assert chamou["vigia"] == 1, (
-        "🚨 o tick saiu sem publicar nada e NÃO passou pelo vigia — é o "
-        "caminho de 95 das 96 chamadas do dia (saída: %r)" % (r,))
+        "🚨 o tick saiu sem publicar nada e NÃO passou pelo vigia (saída: %r)" % (r,))
 
 
-def test_CONTROLE_a_ordem_no_fonte_poe_o_vigia_antes_da_saida(monkeypatch):
-    """Controle de posição: se alguém mover o vigia de volta pra depois do
-    retorno antecipado, isto reprova mesmo que o teste acima seja driblado."""
+def test_o_vigia_roda_ATE_com_o_token_nao_configurado(tick_hermetico):
+    """🚨 A saída que derrubou o CI — e o estado em que o aviso MAIS importa.
+
+    Sem `META_ACCESS_TOKEN` o tick sai antes de tudo. Se o vigia estiver depois
+    dessa saída, ele nunca roda justamente quando a credencial está faltando.
+    """
+    chamou, r = tick_hermetico(token="")
+    assert chamou["vigia"] == 1, (
+        "o tick saiu por falta de token e não passou pelo vigia (saída: %r)" % (r,))
+
+
+def test_CONTROLE_a_ordem_no_fonte_poe_o_vigia_antes_de_TODA_saida():
+    """Controle de posição: o vigia tem que vir antes do PRIMEIRO `return` da
+    função, não só antes de um deles. A 1ª versão comparava com uma saída só
+    e por isso não pegou a outra."""
     import io
+    import re
     fonte = io.open(os.path.join(_BACKEND, "instagram_webhook.py"),
                     encoding="utf-8").read()
-    i_vigia = fonte.index("    _vigia_do_token()")
-    i_saida = fonte.index("    if not pending:")
-    assert i_vigia < i_saida, (
-        "o vigia voltou pra depois do retorno antecipado — ele só rodaria em "
-        "tick que publica post, e não há post entre 08/10 e 15/10")
+    i_def = fonte.index("def scheduler_tick(")
+    corpo = fonte[i_def:]
+    i_vigia = corpo.index("    _vigia_do_token()")
+    m = re.search(r"\n {4,}return ", corpo)
+    assert m, "não achei retorno nenhum em scheduler_tick"
+    assert i_vigia < m.start(), (
+        "o vigia está DEPOIS do primeiro retorno da função — em produção ele "
+        "só rodaria em parte das chamadas, que é o defeito de 08/09")
