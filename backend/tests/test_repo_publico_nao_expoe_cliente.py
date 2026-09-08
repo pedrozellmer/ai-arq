@@ -554,7 +554,7 @@ def test_CONTROLE_o_regex_do_rotulo_colado_ACHA_um_plantado():
     assert not _RX_ROTULO_COLADO.search("cliente-38, 16/06: 4a tentativa")
 
 
-_COMO_REGERAR = """
+_COMO_REGERAR = r"""
 Cliente novo entra na base e o guarda nao sabe. Rode no Supabase e cole o
 resultado acima — a consulta devolve SO hashes, nenhum nome sai do banco.
 

@@ -22,11 +22,17 @@ por rótulo no mesmo commit.
 devagar. Aqui não há dívida a tolerar — o custo de uma ocorrência é publicação
 imediata pra qualquer visitante. **Zero, sem teto**, como o guarda de e-mail.
 
-🪤 UM caso NÃO era vazamento e virou conserto de outro tipo: o exemplo
-`"Maria S. Souza Neta"` em cadastro.html ilustrava o encurtamento de nome e
-casou com a lista porque "maria" tambem e nome de cliente na base. Trocar o
-EXEMPLO (virou "Fulana") custa nada; afrouxar o guarda custaria a proxima
-Maria de verdade.
+🪤 DOIS casos NÃO eram vazamento e viraram conserto de outro tipo: um exemplo
+sintético de nome em `cadastro.html` (ilustrava o encurtamento de nome) e o
+nome de uma CIDADE num comentário do `admin.html`. Os dois casaram com a lista
+porque o primeiro nome também existe na base de clientes. Trocar o TEXTO custa
+nada; afrouxar o guarda custaria a próxima pessoa de verdade.
+
+🪤 E este docstring já errou uma vez: a 1ª versão CITAVA o exemplo que o commit
+tinha acabado de remover, e o guarda acusou o próprio arquivo que o explica —
+3 ocorrências. Documentação que reescreve o defeito é a mesma família de
+[[feedback_comentario_que_planta_o_defeito]]. Descrever o caso basta; escrever
+o nome nunca.
 """
 import io
 import os
