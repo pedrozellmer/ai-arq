@@ -705,4 +705,8 @@ th.num, td.num {{ text-align: right; }}
 def render_financeiro_pdf_bytes(dados: Dict, branding: Optional[Dict] = None) -> bytes:
     """HTML → PDF (WeasyPrint). Import aqui dentro, como no memorial e no cronograma."""
     from weasyprint import HTML
-    return HTML(string=montar_html_financeiro(dados, branding)).write_pdf()
+    # 🚨 08/09/2026 — sem `url_fetcher` o SERVIDOR busca o que o HTML
+    # mandar, e o texto do cliente entra nesse HTML. Ver pdf_seguro.py.
+    from pdf_seguro import fetcher_sem_rede
+    return HTML(string=montar_html_financeiro(dados, branding),
+                url_fetcher=fetcher_sem_rede).write_pdf()

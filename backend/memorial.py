@@ -450,7 +450,10 @@ th {{ background: #F9FAFB; width: 38%; font-weight: 600; }}
 {''.join(partes)}
 </body></html>"""
     from weasyprint import HTML
-    return HTML(string=html).write_pdf()
+    # 🚨 08/09/2026 — sem `url_fetcher` o SERVIDOR busca o que o HTML
+    # mandar, e o texto do cliente entra nesse HTML. Ver pdf_seguro.py.
+    from pdf_seguro import fetcher_sem_rede
+    return HTML(string=html, url_fetcher=fetcher_sem_rede).write_pdf()
 
 
 # ═══════════════════════════════════════════════════════════════

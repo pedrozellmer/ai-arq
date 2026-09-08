@@ -797,11 +797,25 @@ def build_context(cronograma: Dict, branding: Dict, template: str) -> Dict:
     fin_ctx = build_financeiro(cronograma)
 
     # Branding
+    # 🚨 08/09/2026 (auditoria) — TEXTO DO CLIENTE ENTRAVA CRU NO HTML.
+    # O `Environment` tem `autoescape=False` de propósito (os templates
+    # espelham CSS verbatim), então nada escapava sozinho. Um nome de projeto
+    # com `<img src="http://...">` fazia o SERVIDOR buscar a URL ao gerar o PDF.
+    # 🔑 Escapa AQUI, num lugar só, e não com `|e` nos 12 templates: template
+    # novo nasce protegido sem ninguém lembrar. Ver [[feedback_o_aviso_tem_que_chegar]]
+    # — defesa que depende de lembrar não é defesa.
+    # 🪤 O `url_fetcher` de `pdf_seguro.py` é a outra metade e a mais forte: ele
+    # fecha mesmo que um campo novo escape daqui. As duas somam.
+    from html import escape as _esc
+
+    def _texto_do_cliente(v, padrao=""):
+        return _esc(str(v or padrao).strip(), quote=True)
+
     b = {
-        "project_name": (branding.get("project_name") or "Projeto sem nome").strip(),
-        "architect_name": (branding.get("architect_name") or "").strip(),
-        "client_name": (branding.get("client_name") or "").strip(),
-        "company": (branding.get("company") or "").strip(),
+        "project_name": _texto_do_cliente(branding.get("project_name"), "Projeto sem nome"),
+        "architect_name": _texto_do_cliente(branding.get("architect_name")),
+        "client_name": _texto_do_cliente(branding.get("client_name")),
+        "company": _texto_do_cliente(branding.get("company")),
         "logo_uri": _logo_data_uri(branding),
         "emitido_em": datetime.now().strftime("%d/%m/%Y"),
         "job_id": branding.get("job_id") or "",
@@ -896,7 +910,12 @@ def render_pdf_bytes(cronograma: Dict, branding: Dict, template: str,
     (o chamador decide o fallback)."""
     from weasyprint import HTML
     html = montar_html(cronograma, branding, template, accent)
-    return HTML(string=html, base_url=_TEMPLATES_DIR).write_pdf()
+    # 🚨 08/09/2026 — o `url_fetcher` é o que impede o SERVIDOR de buscar o que
+    # o HTML mandar. Sem ele, um `<img src="http://...">` injetado pelo NOME DO
+    # PROJETO virava SSRF de dentro do Render. Ver pdf_seguro.py.
+    from pdf_seguro import fetcher_sem_rede
+    return HTML(string=html, base_url=_TEMPLATES_DIR,
+                url_fetcher=fetcher_sem_rede).write_pdf()
 
 
 def render_png_paginas(pdf_bytes: bytes, scale: float = 2.0) -> List[bytes]:
