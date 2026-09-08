@@ -607,6 +607,73 @@ def _supa_update(table: str, match_field: str, match_value: str, data: dict) -> 
         return False
 
 
+def _vigia_do_token() -> None:
+    """Avisa o Pedro ANTES de o token da Meta vencer. Best-effort: nunca levanta.
+
+    Por que existe: o token venceu em 08/08/2026 12:54 e NINGUÉM soube — 5 posts
+    falharam calados por uma semana ("Container falhou: None") e a conta que mais
+    trazia cadastro ficou muda. A renovação é manual (Pedro no painel da Meta),
+    então o mínimo é avisar ANTES, com folga.
+
+    Âncora durável: a linha `instagram:token-renovado` no error_log do Supabase
+    (o _config.json do agente mora em /tmp e evapora a cada restart do Render).
+    Toda renovação DEVE gravar essa linha. Avisa a partir do dia 53 (D-7 do
+    vencimento de 60 dias) e repete no máximo 1×/semana.
+
+    🩸 08/09/2026 — ELE NUNCA IA DISPARAR, E ISSO TEM DATA.
+    Este bloco morava DEPOIS do laço de publicação do tick, e o tick tem um
+    retorno antecipado: `if not pending: return {"Nada pra publicar agora"}`.
+    O cron chama o tick 96×/dia; publica no máximo 1. Nas outras 95 vezes o
+    vigia nunca era alcançado — ele só rodava em tick que publicou post.
+
+    E as datas fecham contra ele, medidas no banco em 08/09:
+        último post agendado ......... 03/10
+        aviso começaria (dia 53) ..... 08/10
+        token morre .................. 15/10
+        posts na janela do aviso ..... 0
+    Ou seja: entre o dia em que o aviso começaria e o dia em que o token morre
+    NÃO HÁ NENHUM POST agendado — nenhum tick chegaria ao vigia, e o token
+    morreria calado pela segunda vez.
+
+    🔑 Agora roda ANTES do retorno antecipado, em todo tick. O freio de
+    1×/semana já estava aqui e continua sendo o que evita a enxurrada.
+    """
+    try:
+        _tok = _supa_select("error_log",
+                            "stage=eq.instagram%3Atoken-renovado"
+                            "&select=created_at&order=created_at.desc&limit=1")
+        if not _tok:
+            return
+        _set_at = datetime.fromisoformat(
+            _tok[0]["created_at"].replace("Z", "+00:00"))
+        _idade_d = (datetime.now(timezone.utc) - _set_at).days
+        if _idade_d < 53:
+            return
+        _av = _supa_select("error_log",
+                           "stage=eq.instagram%3Atoken-aviso"
+                           "&select=created_at&order=created_at.desc&limit=1")
+        if _av:
+            _ult = datetime.fromisoformat(
+                _av[0]["created_at"].replace("Z", "+00:00"))
+            if (datetime.now(timezone.utc) - _ult).days < 6:
+                return
+        from main import _log_error, _notify_admin  # deferred: evita import circular
+        _rest = max(0, 60 - _idade_d)
+        _log_error("instagram:token-aviso",
+                   f"token com {_idade_d} dias — vence em ~{_rest} dia(s)")
+        _notify_admin(
+            f"⏰ Token do Instagram vence em ~{_rest} dia(s)",
+            f"O token do Meta foi renovado há {_idade_d} dias e vale 60.<br><br>"
+            f"Renovar (5 min): developers.facebook.com → app AI.arq → "
+            f"API do Instagram → Configuração da API → <b>Gerar token</b> na conta "
+            f"ai.arq.br → copiar → Render → ai-arq → Environment → "
+            f"<b>META_ACCESS_TOKEN</b> → colar → Save.<br><br>"
+            f"Em 08/08 ele venceu sem aviso e o Instagram ficou mudo por uma "
+            f"semana — este e-mail existe pra isso não repetir.")
+    except Exception as _e_tok:
+        logger.warning(f"vigia do token falhou (não-fatal): {_e_tok}")
+
+
 @router.post("/scheduler/tick")
 def scheduler_tick(request: Request, force_slot: Optional[str] = None):
     """Roda 1 ciclo do agendador.
@@ -636,6 +703,11 @@ def scheduler_tick(request: Request, force_slot: Optional[str] = None):
 
     pending = _supa_select("instagram_scheduled_posts", query)
 
+    # 🩸 O VIGIA VEM ANTES DO RETORNO ANTECIPADO. Ele morava depois do laço de
+    # publicação, e o tick sai aqui em 95 das 96 chamadas do dia — o aviso do
+    # token só rodava em tick que publicou post, e não há post agendado entre o
+    # dia em que ele avisaria (08/10) e o dia em que o token morre (15/10).
+    _vigia_do_token()
     if not pending:
         return {"ok": True, "message": "Nada pra publicar agora", "checked_at": datetime.now(timezone.utc).isoformat()}
 
@@ -789,50 +861,6 @@ def scheduler_tick(request: Request, force_slot: Optional[str] = None):
                 "error_message": str(e)[:500],
             })
             results.append({"slot": slot, "status": "failed", "error": str(e)})
-
-    # ── Vigia do VENCIMENTO DO TOKEN (16/08/2026) ────────────────────────────
-    # Por que existe: o token venceu em 08/08 12:54 e NINGUÉM soube — 5 posts
-    # falharam calados por uma semana ("Container falhou: None") e a conta que
-    # mais trazia cadastro ficou muda. A renovação é manual (Pedro no painel da
-    # Meta), então o mínimo é avisar ANTES, com folga.
-    # Âncora durável: linha `instagram:token-renovado` no error_log do Supabase
-    # (o _config.json do agente mora em /tmp e evapora a cada restart do
-    # Render). Toda renovação de token DEVE gravar essa linha — a de 16/08 foi
-    # gravada à mão. Avisa a partir do dia 53 (D-7 do vencimento de 60 dias) e
-    # repete no máximo 1×/semana. Best-effort: nunca derruba o tick.
-    try:
-        _tok = _supa_select("error_log",
-                            "stage=eq.instagram%3Atoken-renovado"
-                            "&select=created_at&order=created_at.desc&limit=1")
-        if _tok:
-            _set_at = datetime.fromisoformat(
-                _tok[0]["created_at"].replace("Z", "+00:00"))
-            _idade_d = (datetime.now(timezone.utc) - _set_at).days
-            if _idade_d >= 53:
-                _av = _supa_select("error_log",
-                                   "stage=eq.instagram%3Atoken-aviso"
-                                   "&select=created_at&order=created_at.desc&limit=1")
-                _pode = True
-                if _av:
-                    _ult = datetime.fromisoformat(
-                        _av[0]["created_at"].replace("Z", "+00:00"))
-                    _pode = (datetime.now(timezone.utc) - _ult).days >= 6
-                if _pode:
-                    from main import _log_error, _notify_admin  # deferred: evita import circular
-                    _rest = max(0, 60 - _idade_d)
-                    _log_error("instagram:token-aviso",
-                               f"token com {_idade_d} dias — vence em ~{_rest} dia(s)")
-                    _notify_admin(
-                        f"⏰ Token do Instagram vence em ~{_rest} dia(s)",
-                        f"O token do Meta foi renovado há {_idade_d} dias e vale 60.<br><br>"
-                        f"Renovar (5 min): developers.facebook.com → app AI.arq → "
-                        f"API do Instagram → Configuração da API → <b>Gerar token</b> na conta "
-                        f"ai.arq.br → copiar → Render → ai-arq → Environment → "
-                        f"<b>META_ACCESS_TOKEN</b> → colar → Save.<br><br>"
-                        f"Em 08/08 ele venceu sem aviso e o Instagram ficou mudo por uma "
-                        f"semana — este e-mail existe pra isso não repetir.")
-    except Exception as _e_tok:
-        logger.warning(f"vigia do token falhou (não-fatal): {_e_tok}")
 
     return {"ok": True, "processed": len(results), "results": results}
 
