@@ -21534,6 +21534,31 @@ def _coerencia_do_projeto(job_id: str) -> dict:
     """Estado de sincronia dos entregáveis do projeto: planilha, cronograma,
     memorial, comparativo de fornecedores e financeiro da obra."""
     import urllib.parse
+    # 🩸 08/09/2026 — A REGRA Nº7 FALHAVA CALADA, E ISSO FOI PROVADO RODANDO.
+    # O log `coerencia:projeto` existe desde 02/08 e NUNCA disparou em produção
+    # (0 linhas em 5.464 eventos). Não por sorte: o `except` da rota é
+    # inalcançável, porque TODO ajudante aqui engole a própria falha e devolve
+    # valor benigno — `_assinatura_atual` devolve "", `_supabase_get_cronograma`
+    # devolve None, `_supa_rest_service` nunca levanta.
+    # Medido com o Supabase 100% fora do ar (URLError, HTTP 500 e conexão
+    # resetada, os três):
+    #     tudo_em_dia=True  desatualizados=[]  erro=None  logs=0
+    # Ou seja: "não consegui conferir" saía IDÊNTICO a "está tudo em dia", e o
+    # cliente baixava cronograma e memorial velhos pra mandar pro cliente dele.
+    # 🪤 Pior que o silêncio total é a falha PARCIAL: com a leitura do memorial
+    # caindo e a planilha velha, a resposta vinha `desatualizados=['planilha']`
+    # — o memorial simplesmente SUMIA da lista. A resposta parece saudável.
+    # 🔑 Agora cada leitura que falha marca o entregável como `indisponivel` e
+    # deixa rastro NO PONTO em que a falha é conhecida, não num except que não
+    # roda. `conferido` diz se dá pra confiar na resposta inteira.
+    _indisponiveis: list = []
+
+    def _nao_consegui(nome: str, detalhe: str) -> dict:
+        _indisponiveis.append(nome)
+        _log_error("coerencia:projeto", f"{nome}: {detalhe}", job_id=job_id,
+                   severity="warning")
+        return {"existe": False, "desatualizado": False, "indisponivel": True}
+
     atual = _assinatura_atual(job_id)
 
     def _avaliar(nome: str, row: Optional[dict]) -> dict:
@@ -21558,9 +21583,20 @@ def _coerencia_do_projeto(job_id: str) -> dict:
     _st, _mem = _supa_rest_service(
         "GET", f"project_memorial?job_id=eq.{urllib.parse.quote(job_id)}"
                f"&select=updated_at,itens_assinatura&limit=1")
-    memorial = _avaliar("memorial", (_mem or [None])[0] if _st == 200 and _mem else None)
-    _cron_row = _supabase_get_cronograma(job_id)
-    cronograma = _avaliar("cronograma", _cron_row)
+    if _st != 200 or _mem is None:
+        memorial = _nao_consegui("memorial", f"project_memorial HTTP {_st}")
+    else:
+        memorial = _avaliar("memorial", (_mem or [None])[0] if _mem else None)
+    # 🪤 `_fin_cronograma_salvo` e não `_supabase_get_cronograma`: a docstring
+    # daquele diz, com todas as letras, que este ENGOLE "não existe" e "não
+    # consegui ler" no mesmo None. A régua com status já existia — usar a que
+    # existe em vez de reimplementar.
+    _st_cron, _cron_row = _fin_cronograma_salvo(None, job_id)
+    if _st_cron != 200:
+        cronograma = _nao_consegui("cronograma", f"cronogramas HTTP {_st_cron}")
+        _cron_row = None
+    else:
+        cronograma = _avaliar("cronograma", _cron_row)
     # 🪤 Cronograma com valor informado NÃO é só prazo — é dinheiro. Quando o
     # quantitativo muda, as durações mudam, o rateio muda e o DESEMBOLSO por mês
     # muda junto. Avisar só "o cronograma ficou velho" faria o cliente achar que
@@ -21579,19 +21615,31 @@ def _coerencia_do_projeto(job_id: str) -> dict:
         "GET", f"projects?job_id=eq.{urllib.parse.quote(job_id)}"
                f"&select=planilha_assinatura,planilha_gerada_em,"
                f"comparativo_assinatura,comparativo_gerado_em&limit=1")
-    _row = (_prj or [None])[0] if _st == 200 and _prj else None
-    planilha = _avaliar("planilha", {
-        "updated_at": _row.get("planilha_gerada_em"),
-        "itens_assinatura": _row.get("planilha_assinatura"),
-    } if _row and _row.get("planilha_gerada_em") else None)
+    # 🪤 UMA leitura alimenta DOIS entregáveis: se ela cai, os dois ficam sem
+    # resposta. Antes os dois saíam como "em dia" — dois avisos sumindo de uma
+    # vez, e nada no log.
+    _prj_falhou = (_st != 200 or _prj is None)
+    _row = (_prj or [None])[0] if not _prj_falhou and _prj else None
+    if _prj_falhou:
+        planilha = _nao_consegui("planilha", f"projects HTTP {_st}")
+    else:
+        planilha = _avaliar("planilha", {
+            "updated_at": _row.get("planilha_gerada_em"),
+            "itens_assinatura": _row.get("planilha_assinatura"),
+        } if _row and _row.get("planilha_gerada_em") else None)
 
     # O comparativo de fornecedores também sai daqui: ele confronta as cotações
     # contra os itens do quantitativo e fica salvo no Storage. Entrou na regra
     # em 03/08/2026 — nasceu antes dela e tinha ficado de fora.
-    comparativo = _avaliar("comparativo", {
-        "updated_at": _row.get("comparativo_gerado_em"),
-        "itens_assinatura": _row.get("comparativo_assinatura"),
-    } if _row and _row.get("comparativo_gerado_em") else None)
+    if _prj_falhou:
+        # mesma leitura, mesma sorte — mas sem um 2º log dizendo a mesma coisa
+        _indisponiveis.append("comparativo")
+        comparativo = {"existe": False, "desatualizado": False, "indisponivel": True}
+    else:
+        comparativo = _avaliar("comparativo", {
+            "updated_at": _row.get("comparativo_gerado_em"),
+            "itens_assinatura": _row.get("comparativo_assinatura"),
+        } if _row and _row.get("comparativo_gerado_em") else None)
 
     # O financeiro da obra (05/09/2026) nasce do quantitativo: cada linha guarda o retrato do
     # item de origem e a tela marca "item mudou / saiu". Aqui a mesma régua chega ao painel do
@@ -21602,6 +21650,8 @@ def _coerencia_do_projeto(job_id: str) -> dict:
         _log_error("coerencia:financeiro", str(e), job_id=job_id, severity="warning")
         financeiro = {"existe": False, "desatualizado": False, "indisponivel": True}
 
+    if financeiro.get("indisponivel") and "financeiro" not in _indisponiveis:
+        _indisponiveis.append("financeiro")
     desatualizados = [n for n, v in (("planilha", planilha),
                                      ("cronograma", cronograma),
                                      ("memorial", memorial),
@@ -21616,6 +21666,12 @@ def _coerencia_do_projeto(job_id: str) -> dict:
         "financeiro": financeiro,
         "desatualizados": desatualizados,
         "tudo_em_dia": not desatualizados,
+        # 🔑 `tudo_em_dia` continua respondendo "algum entregável está velho?".
+        # `conferido` responde outra pergunta, que a tela precisava e não tinha:
+        # "dá pra confiar nesta resposta?". Sem os dois, "não consegui conferir"
+        # e "está tudo em dia" chegavam idênticos na tela.
+        "conferido": not _indisponiveis,
+        "indisponivel": sorted(set(_indisponiveis)),
     }
 
 

@@ -292,6 +292,31 @@
       var mostra = contexto === 'cronograma' ? (d.cronograma || {}).desatualizado
                  : contexto === 'memorial'   ? (d.memorial || {}).desatualizado
                  : !d.tudo_em_dia;
+      // 🩸 08/09/2026 — "NÃO CONSEGUI CONFERIR" NÃO É "ESTÁ EM DIA".
+      // Medido rodando com o Supabase fora do ar: a resposta vinha
+      // `tudo_em_dia:true, desatualizados:[]`, o banner sumia, e o cliente
+      // baixava cronograma e memorial velhos achando que estavam frescos. O
+      // servidor agora manda `conferido:false` + `indisponivel:[...]`; a tela
+      // tem que DIZER isso, não esconder.
+      // 🪤 O caso pior era a falha PARCIAL: um entregável sumia da lista e a
+      // resposta parecia saudável. Por isso o teste é por entregável também.
+      var indisp = d.indisponivel || [];
+      var esteIndisp = (contexto === 'cronograma' || contexto === 'memorial')
+        ? indisp.indexOf(contexto) >= 0
+        : d.conferido === false;
+      if (!mostra && esteIndisp) {
+        // 🪤 `corpo`, não `texto`, e `acoes` como STRING: o `render` concatena
+        // HTML, e array vazio é truthy em JS — sairia uma div vazia e um
+        // "undefined" no corpo. Conserto pela metade é a armadilha da casa.
+        render(caixa, {
+          titulo: 'Não consegui conferir se os entregáveis estão atualizados',
+          corpo: 'A leitura falhou agora — isto NÃO quer dizer que está tudo em '
+               + 'dia. Recarregue a página em instantes; se continuar, fale com '
+               + 'a gente antes de enviar os arquivos.',
+          acoes: ''
+        });
+        return d;
+      }
       if (!mostra) {
         _todasAsCaixas().forEach(function (c) {
           c.classList.add('hidden'); c.innerHTML = '';

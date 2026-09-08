@@ -26,6 +26,12 @@ _ROTA = re.compile(r'@app\.(get|post|put|delete|patch)\("(/api/[^"]+)"')
 _IGNORA = ("/api/admin/", "/api/debug/", "/api/instagram/", "/api/whatsapp/",
            "/api/health", "/api/track", "/api/csp-report",
            "/api/emails/auto/tick", "/api/newsletter/", "/api/metricas/tick",
+           # 🪤 08/09/2026 — entra aqui, com os irmãos, e NÃO por um arquivo de
+           # migração pendente. Este guarda mede "o SITE chama?"; cron nunca é
+           # chamado pelo site. Mas atenção: estar no _IGNORA NÃO prova que o
+           # cron existe — e o de token NÃO existe (`cron.job` não tem job de
+           # token; medido em 08/09). Quem prova isso é uma consulta ao banco.
+           "/api/token/tick",
            "/api/public/", "/api/contact", "/api/nps")
 
 # 📉 TETO: 7 rotas sem consumidor, MEDIDAS por este detector em 31/08/2026.
@@ -45,24 +51,36 @@ def _fonte_do_site():
     """Tudo que pode CHAMAR uma rota — não só o site.
 
     🩸 06/09/2026 — este detector lia só HTML e JS da raiz e acusou
-    `/api/token/tick` de nascer morta. Ela não nasceu morta: é chamada por um
-    cron do Supabase, declarado em `backend/migrations_pendentes/*.sql`. O
-    guarda media a FORMA ("o site chama?") quando o fato que ele quer é
-    "alguém chama?". Rota de cron, de webhook e de CI é órfã do site por
-    desenho, e acusá-las ensina a desligar o guarda.
+    `/api/token/tick` de nascer morta. Eu tratei como falso-positivo e alarguei
+    a função pra ler `backend/migrations_pendentes/*.sql` como se fosse
+    chamador.
 
-    🪤 Continua ESTREITO de propósito: só entra quem é chamador de verdade
-    (site, cron em migração, workflow). Varrer o repo inteiro absolveria
-    qualquer rota citada num comentário — que é o defeito oposto.
+    🚨 08/09/2026 — ISSO ESTAVA ERRADO, E O GUARDA ESTAVA CERTO. Migração
+    PENDENTE é intenção, não chamador. Medido no banco de produção:
+    `cron.job` tem 4 jobs (ig_scheduler, metricas, newsletter, emails-auto) e
+    NENHUM de token; a tabela `meta_token` existe mas está VAZIA — ou seja, a
+    migração 002 rodou pela METADE (o bloco de cima criou a tabela, o
+    `cron.schedule` de baixo nunca foi aplicado). A rota nunca foi chamada uma
+    vez, e os 4 `_log_error` dentro dela são inalcançáveis.
+
+    🪤 A LIÇÃO: eu ALARGUEI UM GUARDA PRA CALAR UM ACHADO VERDADEIRO. Absolver
+    por um arquivo cujo nome diz "pendente" é o oposto de medir. E o preço é
+    real — a renovação do token do Instagram continua não existindo (ver o
+    aviso ao lado de `/api/token/tick` em main.py).
+
+    🔑 O tratamento certo é o mesmo dos irmãos: rota de cron entra no `_IGNORA`,
+    porque este guarda mede "o SITE chama?" e cron nunca é chamado pelo site.
+    Quem tem que provar que o cron existe é uma consulta ao `cron.job`, não um
+    teste que lê arquivo.
     """
     partes = []
     for nome in os.listdir(RAIZ):
         if nome.endswith((".html", ".js")):
             partes.append(io.open(os.path.join(RAIZ, nome), encoding="utf-8",
                                   errors="replace").read())
-    # cron do Supabase (pg_cron chama a rota por URL) e workflows do GitHub
-    for pasta, exts in ((os.path.join(BACKEND, "migrations_pendentes"), (".sql",)),
-                        (os.path.join(RAIZ, ".github", "workflows"), (".yml", ".yaml")),
+    # workflows e scripts do GitHub CHAMAM rota de verdade (o CI roda).
+    # 🚫 `migrations_pendentes` NÃO entra: ver o 🚨 de 08/09 acima.
+    for pasta, exts in ((os.path.join(RAIZ, ".github", "workflows"), (".yml", ".yaml")),
                         (os.path.join(RAIZ, ".github", "scripts"), (".py",))):
         if not os.path.isdir(pasta):
             continue
