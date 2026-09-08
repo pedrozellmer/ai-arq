@@ -990,7 +990,7 @@ def casar_texto_com_regiao(textos, regioes, max_por_regiao=1, min_preenchimento=
     🪤 Região sem bbox fica de fora, não chuta.
     🪤 EXIGE PREENCHIMENTO (`min_preenchimento`): retângulo NÃO é a forma. Uma
     hachura em L, em anel ou espalhada tem um retângulo enorme que engole texto
-    que não é dela — medido em 09/08 numa prancha real: "Sili da Silva" (nome no
+    que não é dela — medido em 09/08 numa prancha real: "Nome No Carimbo" (nome no
     carimbo) casou com 982 m² e "proj. armário" com 2.768 m². Se a área real
     ocupa pouco do próprio retângulo, o retângulo não diz nada sobre o que está
     dentro. Fill = area / (largura × altura).

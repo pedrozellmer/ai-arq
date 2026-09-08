@@ -83,60 +83,83 @@ _DO_DONO = {
 #: cadastro, sem marca de empresa nem de conta de teste), sem sobrenome comum
 #: e sem o nome do dono. Regenerar com a consulta em `_COMO_REGERAR` abaixo.
 _HASH_DE_NOME = frozenset("""
-02558a70324e7c4f269c69825450cec8 0410c49927fe2e0123dd9e19fadcadbb
-067036db8f53564d6a32e3f10466c99f 07a88e756847244f3496f63f473d6085
-0db513d0630a515d0b64efd30fdd0dd5 0e4d164a767ed5990a08089020eb696b
-0f5366b3b19afc3184d23bc73d8cd311 112c60a750df6654cc3a8dac9b4379c0
-132043adb2ba8acad21e401523cdc7fe 1434e827e7914d05c96e4e0934539776
+01b4aa2504786a6abb782dfd5d59f689 02558a70324e7c4f269c69825450cec8
+0410c49927fe2e0123dd9e19fadcadbb 067036db8f53564d6a32e3f10466c99f
+07a88e756847244f3496f63f473d6085 0db513d0630a515d0b64efd30fdd0dd5
+0e4d164a767ed5990a08089020eb696b 0f5366b3b19afc3184d23bc73d8cd311
+110d46fcd978c24f306cd7fa23464d73 112c60a750df6654cc3a8dac9b4379c0
+131b4969b68d0e5c0d195e9773600d3a 132043adb2ba8acad21e401523cdc7fe
+1434e827e7914d05c96e4e0934539776 1449bad536b588ec140ea1eeedbf2f41
 15b1dfdb3030371415e5e6c276388201 184e6788c1d056417c9d25f6716827eb
 18e59942c3d24ca9888364ce1455eb1a 19984dcaea13176bbb694f62ba6b5b35
 1b150854805cbe12194c8dbc55c900cd 1b207465eac83b5d4b12e335faa0b53a
 1ee1877c6655ecc71dfead311c771bd0 205a10818889cfe2de7c278fb6e9188f
-229e5b1363be0591e674cd57b3bb8645 276e697e74e8b5264465139a480db556
-29a2b2e1849474d94d12051309c7b4d7 2c42e5cf1cdbafea04ed267018ef1511
-2e247e2eb505c42b362e80ed4d05b078 2efb7ced7e8047462873546c5521aaba
-38054601a6487bd992ded83e3f33ebae 3805b13916b5664e3b029ee804edf3a4
-3a23bb515e06d0e944ff916e79a7775c 3df2175295d900d6f0c2f3a521d957cd
-3f28e55efb457c86a979da0edfa923be 3f3ce8d94f88d42322e7204f702c138f
-41008f06b76981093c7aa369d83c08ea 41847ec28c30f25acc5d96f0bef5ebfc
-4757067ca131abf21c7dedea7efd0c80 4b6683e45065f9f7116267016239705b
-502ff82f7f1f8218dd41201fe4353687 503873f51e44d687ec3ba06846aca82f
-52be95db6f26ac6b2d291443fcea77d8 5494e1e7b721c2a7c867f3588e577154
+2164e6a05df0c76ed7ccc03722fc8cd7 229e5b1363be0591e674cd57b3bb8645
+263bce650e68ab4e23f28263760b9fa5 276e697e74e8b5264465139a480db556
+29a2b2e1849474d94d12051309c7b4d7 2a4fbed09d245d236f4e46b0f874d6c9
+2c42e5cf1cdbafea04ed267018ef1511 2e247e2eb505c42b362e80ed4d05b078
+2efb7ced7e8047462873546c5521aaba 3805b13916b5664e3b029ee804edf3a4
+38efbc884fc2473d095d6680c5840885 3a23bb515e06d0e944ff916e79a7775c
+3df2175295d900d6f0c2f3a521d957cd 3f28e55efb457c86a979da0edfa923be
+3f3ce8d94f88d42322e7204f702c138f 41008f06b76981093c7aa369d83c08ea
+41602f23c972e56cb9661de649d4435a 41847ec28c30f25acc5d96f0bef5ebfc
+4757067ca131abf21c7dedea7efd0c80 4aab03d761754d4d2b27314d11313079
+4b2b772a039e1f20612cc32a5b633bce 4b6683e45065f9f7116267016239705b
+4c57da7cca7a66c425c6aa53636613f1 4dc5bfca8186349e8d77469db5ec608a
+4df055c5a76cccc7fb9d02c18858a07c 502ff82f7f1f8218dd41201fe4353687
+503873f51e44d687ec3ba06846aca82f 52be95db6f26ac6b2d291443fcea77d8
+5494e1e7b721c2a7c867f3588e577154 55815a0e411eeb2a4ef66dd7f19c0856
 55fadfd036b568d4b2d5796ee444caa0 5bb2ec2c8876622a004e241e3ceed2f7
 5d24aff18191f1177d00384e07736ef7 6209804952225ab3d14348307b5a4a27
 64b1c7a622073845494b9815348c0d28 680c3108617bfed131f7d20c929234b9
-68c2280bda076acef10b444c9665f052 6a796ddf660ddf10b7323414321d2a1b
-6c84cbd30cf9350a990bad2bcc1bec5f 726cd927c662edb20fedf29faf26c60b
+68830aef4dbfad181162f9251a1da51b 68c2280bda076acef10b444c9665f052
+6a117c1c8daea248caca1507b93ccb11 6a796ddf660ddf10b7323414321d2a1b
+6c84cbd30cf9350a990bad2bcc1bec5f 704797c6cd9bd24d777423f9bff26565
+726cd927c662edb20fedf29faf26c60b 729df251ee41cf92d45ec11a87c60ec0
 77949c9f02621a4c85964be115a9dcc9 790d0289dae439880bc46c13818998d5
 79df64f73eab9bc0d7b448d2008d876e 7bc6784b07998864a2c2891386970de9
-7fa81ff5e6a88a34ca2392240268c68f 8235bf5b8bf5057897114b8b7ef4e720
-8355185df4677535f568ea6498c80d84 841d93525b9f0960ceaf38f4fdf22e2e
-848ffd503f98d2368d47abceb4821465 8767bbc52e71900d1f3a50b53196d0e2
-89ba023086e37a345839e0c6a0d272eb 8ac291d567b1e54952a12f2f28740643
-8c3856f64ea9383b1d3d9fe834c73ff6 9135d8523ad3da99d8a4eb83afac13d1
-9491876179d7a80bb5c86f15dbe31422 9885921f1302d72826ee65394f50fdf7
-995bf053c4694e1e353cfd42b94e4447 997d13b90da22b35ce43bebdd332ad11
-9ac7dd42fc7e07f79b72f7d999188ab3 9be63b1329806f4c3cdff5fa92ba6b9a
-9c5ddd54107734f7d18335a5245c286b 9e85d98e8033df21f562a84a940133cc
-9ed083b1436e5f40ef984b28255eef18 a37b2a637d2541a600d707648460397e
-a3cd5afc9eab47fefcd573566c41594e a53bd0415947807bcb95ceec535820ee
-a64abe98558bb7bb5a9f1b8e2146cf68 ab892a649914a9e71aa3e869739253db
-ac1da964ea928cf1b7b59120b4179e76 af5caae019a33d603444b7492a436b7f
-b73cc1cbd7f3180f41013971b8edf2f9 b993e4526238d62f6b1b90e605532ff8
-bbb5ff6dc3826b999a5cf0c2e7b2c889 c11845c9a05c8df7b137f49504dd918b
-c13c253f3e26c1c6f265d444275bc7fb c26d483dd7cb0179994e7ed88fe8c7d4
+7e6595dae6c06c29dcc107d88fa93e46 7fa81ff5e6a88a34ca2392240268c68f
+841d93525b9f0960ceaf38f4fdf22e2e 845f18eea198bc4a7a26605a0615ad21
+848ffd503f98d2368d47abceb4821465 870f4f7827a85c1eb93bb583a6c9c293
+8767bbc52e71900d1f3a50b53196d0e2 89ba023086e37a345839e0c6a0d272eb
+8ac291d567b1e54952a12f2f28740643 8c278462dc2f486dd9697edc17eff391
+8c3856f64ea9383b1d3d9fe834c73ff6 8cebae137bc58ff04e6bb3baa4e5a4ce
+8eb479d8ea940abc1afdde436233c4cc 9135d8523ad3da99d8a4eb83afac13d1
+9491876179d7a80bb5c86f15dbe31422 9518fcbed21ea1baa2552302e13c66fe
+9885921f1302d72826ee65394f50fdf7 995bf053c4694e1e353cfd42b94e4447
+997d13b90da22b35ce43bebdd332ad11 9ac7dd42fc7e07f79b72f7d999188ab3
+9be63b1329806f4c3cdff5fa92ba6b9a 9c5ddd54107734f7d18335a5245c286b
+9d3d67d1c0edd25a04dc79788404a9e3 9e85d98e8033df21f562a84a940133cc
+9ed083b1436e5f40ef984b28255eef18 a1361cb85be840d6a2d762c68e4910e2
+a1607661a82efce42f12531480d680a4 a37b2a637d2541a600d707648460397e
+a3b96c3330d605fad966ad069ec45677 a3cd5afc9eab47fefcd573566c41594e
+a53bd0415947807bcb95ceec535820ee a64abe98558bb7bb5a9f1b8e2146cf68
+a9629ec3e248369c5c8b9a885bab85d8 aa3fec16d57bcd14cb027a3d0c0f5a4a
+aa47f8215c6f30a0dcdb2a36a9f4168e ab892a649914a9e71aa3e869739253db
+ac1da964ea928cf1b7b59120b4179e76 af465ebe364f4b50526eb5f59885d7aa
+af5caae019a33d603444b7492a436b7f b73cc1cbd7f3180f41013971b8edf2f9
+b993e4526238d62f6b1b90e605532ff8 bbb5ff6dc3826b999a5cf0c2e7b2c889
+c11845c9a05c8df7b137f49504dd918b c13c253f3e26c1c6f265d444275bc7fb
+c1ed60949799e3adcd72928bb3314fe0 c26d483dd7cb0179994e7ed88fe8c7d4
 c50eeda3f8f0d15c77754857c0cdc3eb c7b2af69cfca668a7eb128295789b6d3
 c810ed30521e174d8040df6f9c054567 c94596c251014e32ca68d59e18a8dd11
 c99868052fb8a76e4f4b9f2ee67d39fb cd86a0ad35cb75edda6569fc74941a7c
-cec4daff4af61548d4536c86cf60c164 d1778abf5069d30922f191b60cc383e8
-d1dcb1f278f32127505cb2133ab9bfc6 d252377a473501b19964bc41b5f503e7
-d2d8ffc663941ccd1392de0cf254d3ef da64c7daf16c4687b0b8686147448223
-db5fb5279b9f52c63638a39462d6c962 df8e65bca92091ec2d549727da81ee64
+cebdd715d4ecaafee8f147c2e85e0754 cf960696aa77325be0cbfe7020407e7d
+d1778abf5069d30922f191b60cc383e8 d1dcb1f278f32127505cb2133ab9bfc6
+d252377a473501b19964bc41b5f503e7 d2d8ffc663941ccd1392de0cf254d3ef
+d6607a0d5fa9ddbc40d551a695a3ddee da64c7daf16c4687b0b8686147448223
+db5fb5279b9f52c63638a39462d6c962 dccd96c256bc7dd39bae41a405f25e43
+dcf7ae580d3db76e6a5a832febbd242c df8e65bca92091ec2d549727da81ee64
+e0e34c5ad05aac3eef6ab31eacbf7a5c e17da2153e6c23b3da11ce17765ecb7a
+e1c565c5b1da2a3b81712427d06f5b34 e1d9614bc81cfc05391171cede492e79
 e4095399f03b0cc518535c29d75859c6 e5fef21172cc7f1991bf93c7ab6653aa
-e60408e9a55027070e3caf0550d2b4df e7ef7a9f4059ff0401e5b92afe7a4d04
+e60408e9a55027070e3caf0550d2b4df e70f86c2b08f055b0acdf9b36df2ab3b
+e7ef7a9f4059ff0401e5b92afe7a4d04 e982c8758a00a39fa94321e015ec6443
 eb54d2175a728ed5bd17575d9fdf694c ebc65bc5b4f82407a201c89670ce454d
 ec02d2d95c27675d87dca50018d89192 f1b6d941a97ababa0c81b92841b3189f
-f76405ac130dac085b2a6249073b213b fd820a2b4461bddd116c1518bc4b0f77
+f576e7b27eafbfdf37fc44a357a8b085 f76405ac130dac085b2a6249073b213b
+f883145b85cff801447fc390798d76a6 fd680d0cec4637cec6758e0393c2bd39
+fd820a2b4461bddd116c1518bc4b0f77 ffc150a160d37e92012c196b6af4160d
 """.split())
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -157,47 +180,94 @@ f76405ac130dac085b2a6249073b213b fd820a2b4461bddd116c1518bc4b0f77
 # caso é citado num comentário ("caso Fulano Beltrano, job abc12345"), e é a
 # combinação nome+job+data que identifica de verdade.
 _HASH_DE_NOME_COMPLETO = frozenset("""
-00982e4defbed08d2a754c86fec6b2f6 0160c5f292fcdd31a012baee0bae5bc9
-0265f04708a290429e59595908b75fab 036b0019476699b849bfa6b9c7a650ec
-04996e7d967e50beb6e878be65207851 04fd4d1fd1b09f6ecb0117bf8da16ac1
-074515ce6ee7b28a527c7345ec50d81f 082ae9acc39f27ffbb2e8a20584e99fc
-0a184cea884015f12c32b0f733ab7112 0bf2dde4c669cf00117403020a2a4377
-0d151b620f435495c78194f337a1db30 0e09b11ac2534be6ee75cb7d48b39aa7
-0eac6fe12f6062e2180d853ac8f42bb4 2732759f61a199da6c907d0cd75d9d4d
-2acb5f872cd545740dd9356743ad4466 303e40ddea89de7bc772cab9d2675db1
-3183fdc8314b1ed0f27786090fea4289 3196ec726cf3101c15e277524e062e76
-325b51d959f956fd7c9c1bcb42d8550a 363cf1f11f6a4fbccd71b526979a3a05
+004b77b1c386222c1ff1bd7635cdd825 0160c5f292fcdd31a012baee0bae5bc9
+0265f04708a290429e59595908b75fab 0354975f93564fd14b3b89fff3a9b3d2
+036b0019476699b849bfa6b9c7a650ec 04996e7d967e50beb6e878be65207851
+059dcbb410d7df4ae72994115b295ec2 074515ce6ee7b28a527c7345ec50d81f
+082ae9acc39f27ffbb2e8a20584e99fc 08b1baa21945bb4b93bf88b1cd2af69a
+0a184cea884015f12c32b0f733ab7112 0acbaf16cb340be1a19cb6ca143895a5
+0bf2dde4c669cf00117403020a2a4377 0d151b620f435495c78194f337a1db30
+0dd4bcad4362a07b9f8e723c56534274 0e09b11ac2534be6ee75cb7d48b39aa7
+0eac6fe12f6062e2180d853ac8f42bb4 0ee01de15e82a787f35ffcd10bd283b0
+14a4de94f99d2b9856c36ad24c7f7fe9 179df79e604fe2e5c962d52635642441
+192850af201f399cfa747bb91ce80a0d 1c7c76f5668a9209de399fffdcc6b030
+1e03c454c86a87c9f5f52a8206c3d6c7 1eef77bc3f1a38c1e68ce00a8b6946ea
+20d55c67c56607983d7231ba764bf1d6 217f7539cc1d9dcd2380cd8f5df02fc4
+24ca9f1281f7494f569157c4c0d91014 2732759f61a199da6c907d0cd75d9d4d
+27b09d369dc09d958a25e1caaefb965c 2a21cc7020095a4bb361da8938eeda4a
+2d030a597a35fc5990928c2c07afe870 303e40ddea89de7bc772cab9d2675db1
+3089b96b7feedb8ee11b03b5a8ed0d91 3183fdc8314b1ed0f27786090fea4289
+31cba6b09ee805fe14b4806f94f984e7 325b51d959f956fd7c9c1bcb42d8550a
+32c101d5832b1ac2992c47cedb87966d 32d6673760728f923915c6e6c1a88119
+3372046d3784b3b5530b2a443de731f5 34bf6dfcf4d642bbb43b4b0d163be5b1
+362990c9af8739a6f04509c53ae1c443 363cf1f11f6a4fbccd71b526979a3a05
 374321cf69b5bffb522873833be93c69 37e8e87edd1d2ff4e7df9a3580949eff
-49d915201e1d5d8be7fd8e66f825c3e5 55114626b5ee3695269b69c96e3d4a98
+3af4b18764a2d63840e6c5bd830b78f2 3dcfc4713d45ba536f1063955109f108
+402a4a0e2dd2a6455521f886c965950a 4236179e9d8b8e0f31e9cb07451e00b6
+49089f386f1b1449a874838e2208e389 4ae4d7a34d77091373cc080e863be95f
+50b9f41882a2f1cbc089d37657d82a87 5311bfbf6a4ac7e914a56cdf3109d018
+55114626b5ee3695269b69c96e3d4a98 56209f4c18443c73c291093eb69f8502
 59086131b4c8d4fe73a15ff02da16ed7 5bb8c3064ae03d876a243334f0513468
 5e0073aed32dd53be9d7a1f3cf70e865 5ec5238a6569b79157248586a5137301
-61564b78e544ef694482377e392a0d7f 627b41da30c51aeed8b4322210e0095a
-648af08ba4a648eaf8bb1ea39c1dafb5 655deed00c37560df1c951dca0ac1f89
-6e14e810e8cf687702962910d3b9a5a8 73975fdcfb5f95c3deea5d89089b2b0f
-73a43892948602faaa8cb4f80d8d46ea 746931e384bda5a3fea32a6a49cbc210
-77e4967b566faa295e848dff23902cf4 7bf01c095c0c0b9d8282ec279aebc4a4
-7c6187775a0a4533d9cc21bac7663bcd 7d2556a0442b63d33d20bbf1571d87be
-7fcca27bc9e9f50121d41a7470354ba3 81043e456bcf9ec34b9ef62ecff2f91e
-8a50c46638e523ff48ad7219a9c96dd2 8a71b35673118d7288e20260dacc29a1
-8c65d43e75a52d9fca800cb4a087f48e 8d8af10020f4c4a849fa1b04d00cda15
+627b41da30c51aeed8b4322210e0095a 629507f3b29e8fa9a6ed255a4f376d6d
+641bd0012d8ffd0244be94fc40f3f818 648af08ba4a648eaf8bb1ea39c1dafb5
+655deed00c37560df1c951dca0ac1f89 6659f5b3018408da9138b4c5b6eaca27
+69a21d0951044e11b257a7433a1438cd 69beb605700814da62ea2d5d1a9275f3
+6c00a867059915f13d7b0f3a98a9b85b 6db56c006c005ace22391786ea37ec5d
+6dd9d7e7f0ba286308f0db92980ed276 6e14e810e8cf687702962910d3b9a5a8
+6eac60d763c9e74bda9bc41a3d6a5e31 70a6323fc4f35ebf81a8a5e011115d55
+712832ec7d1614be5b277b65e9523b50 713262d170ad5ef328ec3bdb2b8c9fa9
+731dd17568a67e54657913507d69147c 7353ae8b76626bac16d36d9083240dda
+73975fdcfb5f95c3deea5d89089b2b0f 73a43892948602faaa8cb4f80d8d46ea
+746931e384bda5a3fea32a6a49cbc210 74b615ab9c264019dd5ebb175785d8b7
+779bb26ae04c86d062adf8449beddc75 77e4967b566faa295e848dff23902cf4
+7836a5f143401937ed98086a96b3c65b 78afd487fc9fd854e9184315934916cd
+7bf01c095c0c0b9d8282ec279aebc4a4 7c6187775a0a4533d9cc21bac7663bcd
+7dc218ac604bc51556bc8ec5b55e392e 7fcca27bc9e9f50121d41a7470354ba3
+81043e456bcf9ec34b9ef62ecff2f91e 87bb1eeee61fc31d08289332af30bace
+890bdb5e0048d3c128e587a3ecabdd77 8a50c46638e523ff48ad7219a9c96dd2
+8a71b35673118d7288e20260dacc29a1 8a72abc880812d5c7aaf8c2b73aa2d15
+8bca84e090b5adc11668d80da027e25e 8c65d43e75a52d9fca800cb4a087f48e
+8d80a2da663a2422c475419ad1d2be17 8d8af10020f4c4a849fa1b04d00cda15
+8e18908c5245eb733e4aa623060d3f5c 8fd0bb26b1437bad0ae0a1c3ec06adb6
 90f9c4d42119fed1028fe1a8be70cf65 93d874a673345ba090e19706b023c158
-96e2b9726caf46c7643a859491144e66 97f4383277b73ba87c0b70fa82644094
-98d2178ea26a567c265b4ee84f949577 99b49d126c5bb11fbff5450a76c85968
-9d5c7917f8ba31a21b8b8ba816ba4da6 9e3f0469db2c0d529bb08a218451ffd2
-9ebadcaa681f00e401738c5fe5a7d994 a79c3423d9ebce5712ad7d3618cd5292
-b2b149deacfa16e70ecfbae8691c552c b452a2418d170f538cff6f391456aaa8
-b45e3e38095239872003d99421c914b3 b8d82dc6febe1199406e18f20e886249
-ba3c3417ad2756943f84d83f8eba2a62 bc4be6bfa403c2e8c7c4374a3b1e08ea
-be92bedd33a192c6846f65b712b5fa2b bead27ab54f57531c74badd65a37eac8
+95303485dc220699e69866eaec6a782a 96e2b9726caf46c7643a859491144e66
+97df8a16a496419d58be423b97cdd850 97f4383277b73ba87c0b70fa82644094
+981fabc2501445a62599c9894bd7a9b2 99b49d126c5bb11fbff5450a76c85968
+9d0591fb298bc1f3582648b919dfa3e3 9d5c7917f8ba31a21b8b8ba816ba4da6
+9e3f0469db2c0d529bb08a218451ffd2 9ebadcaa681f00e401738c5fe5a7d994
+9fcfb5d7451c314068f05ada1876c3e5 a0488bdfc643d07c54b45b7ce5f0e28c
+a10cc2c230aab95bf86778cf1e57d162 a19efc3cf8fb3a7d02ab8dc6abd1cba4
+a3125f2b64b712a2de5fa8771f7dcb30 a48272cbd3f0b15804d88dcd565845fc
+a5f416f9b2739dc3bf4c6f1f7199fe47 a6660646c09291bc9053d8ed53aedbb3
+a79c3423d9ebce5712ad7d3618cd5292 ab792008ea10953fbbac6d38a35197ed
+af3b817539bc52a164238001642c7592 b2b149deacfa16e70ecfbae8691c552c
+b331e566bfae8a23db8c726680c52b2c b452a2418d170f538cff6f391456aaa8
+b45e3e38095239872003d99421c914b3 b4ddf716e68233b91a6c6f4903003697
+b7b4b5eb623bf3fec8328626377c203a b81d6b9217217d38e28ea692ba1449c9
+b823e6d77aabc9e05f6ebb2b76f658f6 b8d82dc6febe1199406e18f20e886249
+b9e05b40412ed7d6e74de8442b17b7fb ba3c3417ad2756943f84d83f8eba2a62
+bae1e86c2ca63bc70db52d2204115515 bc4be6bfa403c2e8c7c4374a3b1e08ea
+be92bedd33a192c6846f65b712b5fa2b c0507d176d68e66b6d819ebab077b559
 c5033826fced6ca757b0fb8e884b080c c52100121241b4cc4be452445130b251
-c632ccc944b7965486857b2d2b300af5 c897a781e1f349449b76bc069263cd5e
-cafe12bf9a95c848f348c7f72f595b6a cd8bdd2ce10c494ce3418dc209d2d157
-d194f6475b0b6f32b89fb7fa2faf613b d3d9d761fc047cea16d8ab7b08645bdb
-d732c8ff2c2894435635e53fb4777f8f db57029e5ca9d8ccd43fbf93d107f31c
-db5f3dbf634bb1b2dbfbb1e7c82f1493 e1faba15ea3ba86b1b683d13279b04bb
-e48053cbc46379b166a7250602c57112 e7ddb4c9a9081aca311db530f1daa9d7
-ea7597391383c8f6dea65af0581690a4 f9781a1014e0ae2874c1061196b34eb2
-feb81411322c1919b10bb1edc595bb7a
+c632ccc944b7965486857b2d2b300af5 c8f1c57d02ed8a83d57962b56123038e
+cd8bdd2ce10c494ce3418dc209d2d157 cdcd90995b19a0c85d7841e42536d5dd
+d1095f97895f2e41bea15bc81578644d d194f6475b0b6f32b89fb7fa2faf613b
+d392b62549a853d2741d97cd1cef60ac d3d9d761fc047cea16d8ab7b08645bdb
+d3ea48786b7a357656b8ed5ecfac2d29 d732c8ff2c2894435635e53fb4777f8f
+da4b1a6432ead6ba07334b2ac359d32e da6ccda680418cb3ce339859a8e81b4f
+db15cc0538fdefc3cb28dee717586bd7 db57029e5ca9d8ccd43fbf93d107f31c
+db5f3dbf634bb1b2dbfbb1e7c82f1493 dd5d43ac7337d77f5a18a2d307495fbc
+e1faba15ea3ba86b1b683d13279b04bb e3db62872313723858eb96c6fbc6b713
+e7ddb4c9a9081aca311db530f1daa9d7 ea7597391383c8f6dea65af0581690a4
+eaa08a58481ef55d0bb182d8d03c6a23 ebb004cadacd7ba9ca7f9490acc57cb9
+ec39749d62e9deb9fdae4aae302182b9 f0202629f4e8286159d3d2d4c87a3bf0
+f113df39dddd8e3e4d6035c2cddcc4a8 f2052044230bae98e8f0ce9acf0a3dda
+f20f6501c38993415d3d5fe229a1b23e f59a0af5c4c57ea7ce4d187797d064cd
+f8ee15f565c33093b00f7729f522d9a5 f9781a1014e0ae2874c1061196b34eb2
+fa65893d1ccd9bc85ccac658d3ccf014 fbb6a0a945bb0bb470f90690eb03675e
+feb81411322c1919b10bb1edc595bb7a ff0590ba9b883565db5fa7f319a86275
+ff301519e277d7229731d61780c55e6a
 """.split())
 
 #: O depoimento autorizado da home, como nome COMPLETO. Mesma razão do
@@ -274,6 +344,49 @@ def test_CONTROLE_o_nome_completo_ACHA_um_plantado():
         "o nome do depoimento saiu da lista — a exceção de consentimento virou "
         "letra morta e o guarda deixou de olhar aquele arquivo por nada")
     del _h
+
+
+def test_a_LISTA_cobre_as_5_FONTES_de_nome(monkeypatch):
+    """🩸 08/09/2026 — o achado n1 da auditoria de seguranca.
+
+    A lista nascia de 3 tabelas e IGNORAVA `profiles`, a do CADASTRO. Quem criou
+    conta e nunca teve projeto nunca entrava na peneira: **156 palavras na base
+    contra 108 na lista** — 48 palavras e 94 n-gramas que o guarda nunca viu. E
+    3 dos 5 nomes completos achados hoje caiam exatamente nessa fatia.
+
+    🔑 A lista e ESTATICA e so muda a mao. Nada no repositorio avisava que ela
+    tinha envelhecido — e ela envelheceu por 3 tabelas. Este teste nao consulta
+    o banco (bancada nao depende de rede): ele congela o TAMANHO medido, pra que
+    encolher a lista, ou regerar com as fontes antigas, reprove alto.
+    """
+    assert len(_HASH_DE_NOME) >= 154, (
+        "a lista de PALAVRA encolheu para %d (medido em 08/09: 154, de 5 fontes "
+        "com unaccent). Regerar com menos fontes deixa cliente invisivel — foi "
+        "assim que `profiles` ficou de fora por 3 tabelas." % len(_HASH_DE_NOME))
+    assert len(_HASH_DE_NOME_COMPLETO) >= 175, (
+        "a lista de nome COMPLETO encolheu para %d (medido em 08/09: 175)"
+        % len(_HASH_DE_NOME_COMPLETO))
+    del monkeypatch
+
+
+def test_a_receita_de_regerar_NAO_perdeu_as_fontes_novas():
+    """🪤 Guarda de fonte, e assumido: a receita e o que a proxima pessoa vai
+    rodar. Se ela voltar a listar 3 tabelas, a lista envelhece de novo no
+    proximo cliente — e o teste de tamanho acima so acusaria DEPOIS."""
+    # 🪤 Procura o SQL, nao a PALAVRA. A 1a versao conferia `"profiles" in
+    # _COMO_REGERAR` e a mutacao passou batida: o proprio texto que EXPLICA o
+    # defeito contem a palavra "profiles". Foi a quarta vez no dia que prosa
+    # citando codigo enganou um guarda meu.
+    for tabela in ("profiles", "contact_messages", "nps_responses",
+                   "chat_leads", "projects"):
+        assert ("from %s" % tabela) in _COMO_REGERAR, (
+            "a receita de regerar perdeu a fonte %r (procurei `from %s`)"
+            % (tabela, tabela))
+    assert "unaccent(btrim(p))" in _COMO_REGERAR, (
+        "a receita voltou a hashear COM acento — os dois lados precisam da "
+        "mesma regua, e a chamada tem que estar no SELECT das palavras")
+    assert "bc4be6bfa403c2e8c7c4374a3b1e08ea" in _COMO_REGERAR, (
+        "sumiu o lembrete de conferir o hash do depoimento consentido")
 
 
 def test_CONTROLE_o_ACENTO_nao_cega_o_guarda(monkeypatch):
@@ -393,31 +506,103 @@ def test_CONTROLE_o_depoimento_AUTORIZADO_continua_na_home():
     assert home, "index.html sumiu"
     assert "dtzarquitetura" in home, (
         "o @ do depoimento autorizado sumiu da home")
-    assert not re.search(r"cliente-\d+\s+[A-ZÀ-Ý][a-zà-ÿ]+", home), (
+    assert not _RX_ROTULO_COLADO.search(home), (
         "há um rótulo colado num sobrenome na home — é a marca de uma limpeza "
         "que cortou o nome pela metade: não anonimiza e quebra a copy")
 
 
+#: `cliente-38 Teixeira`: rótulo no primeiro nome, sobrenome intacto. Não
+#: anonimiza (o sobrenome ainda identifica) e ainda estraga a frase.
+_RX_ROTULO_COLADO = re.compile(r"cliente-\d+\s+[A-ZÀ-Ý][a-zà-ÿ]{2,}")
+
+#: 🪤 Onde a metade do nome é LEGÍTIMA: aqui o rótulo é seguido de palavra
+#: comum, não de sobrenome. Explícito e curto — se crescer, é sinal de que a
+#: peneira está larga demais.
+_ROTULO_SEGUIDO_DE_PALAVRA_OK = ("Rev", "Estrutura", "Arquitetura")
+
+
+def test_nenhum_rotulo_ficou_COLADO_num_sobrenome_em_lugar_nenhum():
+    """🩸 08/09 (auditoria): este controle existia e olhava SÓ o index.html.
+
+    A doença é a limpeza feita pela metade — o rótulo entra no primeiro nome e o
+    sobrenome fica. Não anonimiza nada e quebra a frase. Olhar uma amostra de um
+    arquivo enquanto o padrão vive em outros é o mesmo erro do guarda que só
+    conhecia 3 tabelas: a peneira certa, aplicada estreito demais.
+
+    🔑 A mudança é uma linha — rodar o mesmo regex sobre TODOS os versionados.
+    """
+    achados = []
+    for rel in _versionados():
+        src = _conteudo(rel)
+        if not src:
+            continue
+        for m in _RX_ROTULO_COLADO.finditer(src):
+            seguinte = m.group(0).split()[-1]
+            if seguinte in _ROTULO_SEGUIDO_DE_PALAVRA_OK:
+                continue
+            linha = src[:m.start()].count("\n") + 1
+            achados.append("%s:%d %r" % (rel, linha, m.group(0)))
+    assert not achados, (
+        "rótulo colado num sobrenome — limpeza pela metade, que não anonimiza "
+        "e ainda estraga a frase: %s" % achados[:6])
+
+
+def test_CONTROLE_o_regex_do_rotulo_colado_ACHA_um_plantado():
+    """🧪 Sem isto, um regex que não casasse nada passaria em tudo."""
+    assert _RX_ROTULO_COLADO.search("o caso do cliente-38 Teixeira mostrou")
+    assert not _RX_ROTULO_COLADO.search("o caso do cliente-38 mostrou")
+    assert not _RX_ROTULO_COLADO.search("cliente-38, 16/06: 4a tentativa")
+
+
 _COMO_REGERAR = """
-Cliente novo entra na base e o guarda não sabe. Rode no Supabase e cole o
-resultado acima — a consulta devolve SÓ hashes, nenhum nome sai do banco:
+Cliente novo entra na base e o guarda nao sabe. Rode no Supabase e cole o
+resultado acima — a consulta devolve SO hashes, nenhum nome sai do banco.
+
+🩸 08/09/2026 — A CONSULTA LIA 3 TABELAS E IGNORAVA `profiles`, A DO CADASTRO.
+Quem criou conta e nunca teve projeto nunca entrava na peneira: 156 palavras na
+base contra 108 na lista. E ela hasheava COM acento, enquanto a comparacao
+passou a ser sem — os dois lados precisam da MESMA regua.
+
+🔑 Agora sao 5 fontes e `unaccent()` dos dois lados:
 
   with fontes as (
     select coalesce(user_name,'') as nome from projects
     union all select coalesce(user_name,'') from nps_responses
     union all select coalesce(name,'') from chat_leads
+    union all select coalesce(full_name,'') from profiles          -- <- faltava
+    union all select coalesce(name,'') from contact_messages       -- <- faltava
   ), pessoas as (
     select nome from fontes
-    where array_length(regexp_split_to_array(btrim(nome), '\\s+'), 1) >= 2
+    where array_length(regexp_split_to_array(btrim(nome), '\s+'), 1) >= 2
       and nome !~* '(construtora|engenharia|arquitetura|ltda|eireli|smoke|fake|teste|admin|projetos|obras|incorporad|administrativ|confortar|servi)'
   ), palavras as (
-    select distinct lower(btrim(p)) as w
-    from pessoas, regexp_split_to_table(btrim(nome), '\\s+') as p
+    select distinct lower(unaccent(btrim(p))) as w
+    from pessoas, regexp_split_to_table(btrim(nome), '\s+') as p
     where length(btrim(p)) >= 4
   )
   select string_agg(md5(w), ' ' order by md5(w)) from palavras
-  where w !~ '^(junior|neto|filho|silva|santos|souza|costa|lima|dias|rosa|cruz|reis|nunes|pinto|marco|faria|campos|mota|melo|leal|braga|maia|serra|monte|amaral|prado|vale|barros|freitas|ramos|teixeira|moreira|cardoso|gomes|martins|araujo|carvalho|almeida|ribeiro|fernandes|goncalves|rodrigues|oliveira|pereira|ferreira|alves|barbosa|rocha|dantas|nascimento|moura|batista|machado|azevedo|correia|cavalcante|andrade)$'
-    and w ~ '^[a-záàâãéêíóôõúüç]+$' and w not in ('pedro','zellmer');
+  where w !~ '^(junior|neto|filho|silva|santos|souza|costa|lima|dias|rosa|cruz|reis|nunes|pinto|marco|marcos|passos|faria|campos|mota|melo|leal|braga|maia|serra|monte|amaral|prado|vale|barros|freitas|ramos|teixeira|moreira|cardoso|gomes|martins|araujo|carvalho|almeida|ribeiro|fernandes|goncalves|rodrigues|oliveira|pereira|ferreira|alves|barbosa|rocha|dantas|nascimento|moura|batista|machado|azevedo|correia|cavalcante|andrade)$'
+    and w ~ '^[a-z]+$' and w not in ('pedro','zellmer');
+
+🪤 `marcos` e `passos` entraram no corte: sao sobrenome E palavra comum, e
+sozinhas geravam 130 falsos positivos. O nome COMPLETO delas continua protegido
+pelo n-grama.
+
+Pra _HASH_DE_NOME_COMPLETO, a mesma base, montando 2- e 3-gramas:
+
+  ), toks as ( select nome, string_to_array(nome,' ') as w from pessoas ),
+  grams as (
+    select array_to_string(w[i:i+1],' ') as g from toks, generate_series(1, array_length(w,1)-1) as i
+    union
+    select array_to_string(w[i:i+2],' ') from toks, generate_series(1, array_length(w,1)-2) as i
+  )
+  select string_agg(md5(g), ' ' order by md5(g))
+  from (select distinct g from grams where length(g) >= 7 and g ~ '^[a-z ]+$') t;
+
+🚨 CONFERIR SEMPRE: o hash do depoimento AUTORIZADO
+(bc4be6bfa403c2e8c7c4374a3b1e08ea) tem que continuar na lista — se sair, a
+excecao de consentimento vira letra morta e o guarda passa a acusar a prova
+social da home.
 """
 
 #: 🩸 06/09/2026 — VAZAMENTO E CONSENTIMENTO NÃO SÃO A MESMA COISA, e a
@@ -469,7 +654,34 @@ _FORA_DA_CHECAGEM_DE_NOME = ("blog/posts",)
 # 🚨 O que ele achou na hora: 5 ocorrências de um nome COMPLETO de cliente,
 # duas delas em `backend/main.py`, com a bancada verde o tempo todo. Limpas no
 # mesmo commit.
-_TETO_DE_NOMES = 306
+# 🩸 08/09/2026, 2a mexida do dia: 306 -> 378, e o teto SOBE — o que contraria
+# a regra "o teto só desce". A exceção é honesta e tem motivo medido: a dívida
+# não cresceu, o guarda passou a ENXERGAR.
+#
+# A lista de hashes nascia de 3 tabelas (`projects.user_name`,
+# `nps_responses.user_name`, `chat_leads.name`) e IGNORAVA `profiles` — a tabela
+# do CADASTRO. Quem criou conta e nunca teve projeto nunca entrou na peneira.
+# Medido: a base tem 156 palavras de nome; a lista conhecia 108. Eram 48
+# palavras (31%) e 94 n-gramas de nome completo que o guarda NUNCA tinha visto.
+# Agora a consulta lê 5 fontes e normaliza acento dos dois lados.
+#
+# 🚨 O que apareceu na hora: 5 ocorrências de nome COMPLETO de cliente — em
+# `engine_rules.py`, `test_engine_rules.py`, `test_descarte_de_pilares.py` e
+# `test_pagina_destrava_a_medicao.py`. Todas limpas no mesmo commit.
+#
+# 🪤 `passos` e `marcos` FICARAM DE FORA da lista de palavra, de propósito: são
+# sobrenome E palavra comum ("os passos do motor", "marcos de referência"), e
+# sozinhas geravam 130 das 510 ocorrências. Guarda barulhento é guarda que
+# alguém desliga. O nome COMPLETO delas continua protegido pelo n-grama, que é
+# o identificador que importa — mesma troca que a lista já fazia com
+# silva/santos/campos.
+#
+# ⏭️ Daqui pra frente o teto SÓ DESCE de novo.
+# 08/09, 3a mexida: 378 -> 366. Esta DESCE, e pelo motivo certo: 12 ocorrencias
+# saíram de arquivos SERVIDOS ao visitante (dashboard/projeto/cadastro/admin).
+# Ver test_o_que_vai_pro_ar_nao_leva_nome_de_cliente — la o teto e ZERO, porque
+# comentario que vai pro ar nao e divida a pagar devagar: e publicacao.
+_TETO_DE_NOMES = 366
 
 _EXT_TEXTO = (".py", ".html", ".js", ".md", ".yml", ".yaml", ".css",
               ".json", ".txt", ".sql", ".toml", ".sh")

@@ -375,7 +375,7 @@
   // 🪤 `pagehide` + `keepalive` (o trackEvent já usa) é o par que sobrevive ao
   // fechamento da aba; `unload` não é confiável em celular.
   // 🪤 Quem NÃO aceita o banner de cookies não gera evento nenhum (LGPD) —
-  // então este instrumento também é cego pra esse grupo. Ver o caso da Cassia,
+  // então este instrumento também é cego pra esse grupo. Ver o caso da cliente-62,
   // 28 revisões com zero evento.
   (function () {
     var f = document.getElementById('form-cadastro');
@@ -481,7 +481,7 @@
     // vem PRIMEIRO, o nome do Google só preenche o que ficou vazio. Se eu
     // deixasse o restore depois, o Google encheria o campo e o rascunho (que
     // só preenche campo vazio, de propósito) não teria mais o que devolver —
-    // quem escreveu "Maria S. Souza Neta" viraria "Maria Souza" de novo.
+    // quem escreveu "Fulana S. Souza Neta" viraria "Fulana Souza" de novo.
     restoreDraft();
 
     // Pre-fill from Google session.

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Rota `async` não pode rodar trabalho pesado no laço de eventos.
 
-🚨 27/08/2026, madrugada. **cliente-18 Suica**, orçamentista, chegou pelo
+🚨 27/08/2026, madrugada. **cliente-18**, orçamentista, chegou pelo
 ChatGPT e cadastrou às 02:02 — do primeiro clique ao cadastro em 2 segundos.
 Às 02:03 selecionou 17 arquivos. E foi embora às 02:04:47 sem enviar nada.
 

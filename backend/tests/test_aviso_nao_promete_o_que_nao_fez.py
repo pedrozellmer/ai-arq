@@ -3,7 +3,7 @@
 
 🩸 DOIS CASOS REAIS DE 02/09/2026, do mesmo dia.
 
-**(1) O aviso que prometia.** cliente-31 Oliveira (job `bf72d192`) informou 150 m² no
+**(1) O aviso que prometia.** cliente-31 (job `bf72d192`) informou 150 m² no
 upload e recebeu: *"Área total de 150 m² foi INFORMADA POR VOCÊ… **Ela entra
 como BASE pros itens de área** — confira antes de orçar."*
 

@@ -3409,7 +3409,7 @@ def _build_falha_email(name: str, project_name: str, reprocessavel: bool, error_
             # 🩸 03/09 — a arte deste e-mail dizia "exporte em DXF" nos TRÊS
             # ramos. No ramo de tamanho isso contradiz o próprio texto logo
             # abaixo e manda o cliente pra mesma falha (DXF é texto puro e
-            # nasce 30–50x o DWG). Caso cliente-40 Lima, job 28f140ef.
+            # nasce 30–50x o DWG). Caso cliente-40, job 28f140ef.
             alt_img = "Um ajuste no arquivo resolve — mande só a prancha necessária"
             # 🩸 03/09 — o preheader (a linha que aparece na CAIXA DE ENTRADA,
             # antes de abrir) dizia "exporte em DXF" nos TRÊS ramos. No ramo de
@@ -7584,7 +7584,7 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
         # 🔑 Arquivo com mais de uma página medida é AMBÍGUO, igual à trava 4:
         # não preenche nenhum item dele. Linha vazia é honesta; a maior é chute.
         # 🩸 02/09/2026 — A AMBIGUIDADE DEIXOU DE SER FATAL: AGORA TEM A PÁGINA.
-        # Caso cliente-31 Oliveira (job bf72d192): 10 pranchas num PDF só, 583,6 m²
+        # Caso cliente-31 (job bf72d192): 10 pranchas num PDF só, 583,6 m²
         # medidos, e `preenchidos=0 criados_prancha=0`. A medição existia e não
         # chegava em item nenhum, porque o item guardava só o nome do arquivo.
         # Agora `ref_sheet` carrega `(pN)` quando o arquivo tem mais de uma

@@ -2,7 +2,7 @@
 """`pilares=0` numa prancha de FÔRMA não dizia por quê.
 
 🚨 27/08/2026. Puxando a família nº1 das correções de campo — itens de
-ESTRUTURA que o cliente preenche à mão — cheguei no **EVANDRO ALVES**
+ESTRUTURA que o cliente preenche à mão — cheguei no **cliente-55**
 (job `2933cc30`, 15/08). Ele fez tudo certo: escolheu o modo "estrutura" no
 upload e mandou o projeto estrutural (DWG + PDF de 18 pranchas). Recebeu **30
 itens com ZERO medido** e preencheu 17 linhas na mão:

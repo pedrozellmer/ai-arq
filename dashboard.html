@@ -3159,7 +3159,7 @@
   // ── "Isso não é do projeto que você acabou de mandar?" ────────────────
   // Caso real 03/08/2026: um cliente mandou o DWG, e 6 min depois o DXF —
   // cada um como projeto SEPARADO. Ficam dois quantitativos pela metade, e a
-  // planilha que ele leva pra obra não tem o projeto inteiro. A Eloídes fez o
+  // planilha que ele leva pra obra não tem o projeto inteiro. A cliente-57 fez o
   // mesmo com BOMBEIRO 01 Rev B (.dwg e .dxf).
   // A comparação é por NOME normalizado (o backend devolve a chave pronta em
   // `bases`, pra não existirem duas normalizações divergindo com o tempo).
@@ -3431,7 +3431,7 @@
       // O aviso não bloqueia — diz o que realmente muda o resultado.
       if (data.aviso_repetido) mostrarAvisoAec(data.aviso_repetido, 'reenvio');
       // 🩸 03/09 — o backend passou a devolver `aviso_area` quando a metragem
-      // digitada é implausível (o Fábio digitou 880.000 m², 269× a maior área
+      // digitada é implausível (cliente-45 digitou 880.000 m², 269× a maior área
       // real já informada), e NENHUMA tela lia a chave. Eu tinha trocado
       // "zerar calado" por "avisar" e o aviso morria no JSON — a mesma falha
       // silenciosa, um degrau adiante. É aqui, na tela do envio, que ele ainda
@@ -3548,10 +3548,10 @@
   // o envio existe um `await ensureAgeConfirmed()`; nesse intervalo o segundo
   // clique passa direto e vira um job novo. Medido no banco: **12+ pares** de
   // projetos do mesmo cliente criados com menos de 2 min de diferença, mesmo
-  // número de arquivos — cliente-50, cliente-40 (2×), cliente-21, Marco, Romulo,
-  // Elizeu. O do Elizeu saiu no MESMO SEGUNDO.
+  // número de arquivos — cliente-50, cliente-40 (2×), cliente-21, cliente-58,
+  // cliente-59 e cliente-60. O do cliente-60 saiu no MESMO SEGUNDO.
   // Custo: processamento e IA em dobro. E pior pro cliente — na cliente-21 saiu
-  // 48 itens num e 0 no outro; no Marco 43 e 0. Ele vê um projeto quebrado no
+  // 48 itens num e 0 no outro; no cliente-58, 43 e 0. Ele vê um projeto quebrado no
   // painel e não faz ideia do porquê.
   // 🪤 Trava por TEMPO, não por flag booleana: flag exige limpar em todo
   // caminho de saída (termos, idade, erro de rede, 402...) e esquecer UM deixa
@@ -4294,7 +4294,7 @@
   // ══════════════════════════════════════════════
   btnRetry.addEventListener('click', () => {
     // 🪤 LIMPA a seleção. Antes só voltava pra tela de envio com o arquivo que
-    // acabou de falhar ainda selecionado — o cliente Thalison (29/07) mandou o
+    // acabou de falhar ainda selecionado — cliente-61 (29/07) mandou o
     // MESMO DWG quebrado 2x e desistiu da prancha. Se o arquivo é o problema,
     // reenviá-lo não pode ser o caminho mais fácil da tela.
     selectedFiles = [];

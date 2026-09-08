@@ -520,10 +520,10 @@ check("casa com a MENOR região que contém", _dois[0]["area"] == 48.0)
 
 # 🚨 A TRAVA DO PREENCHIMENTO. Retângulo NÃO é a forma: hachura em L/anel tem
 # retângulo enorme e engole texto alheio. Medido em prancha real (09/08):
-# "Sili da Silva" (nome no carimbo) casou com 982 m²; "proj. armário" com 2.768 m².
+# "Nome No Carimbo" (nome no carimbo) casou com 982 m²; "proj. armário" com 2.768 m².
 _esparsa = _R(50.0, (0, 0, 100, 100))     # ocupa 0,5% do próprio retângulo
 check("forma esparsa NÃO casa (retângulo mentiroso)",
-      casar_texto_com_regiao([_T("Sili da Silva", (50, 50))], [_esparsa]) == [])
+      casar_texto_com_regiao([_T("Nome No Carimbo", (50, 50))], [_esparsa]) == [])
 check("forma cheia casa normalmente",
       len(casar_texto_com_regiao([_T("Sala", (3, 3))], [_R(48.0, (0, 0, 7, 7))])) == 1)
 

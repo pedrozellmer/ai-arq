@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """PDF com várias pranchas: a medição agora acha o dono.
 
-🩸 CASO LUANA OLIVEIRA, 02/09/2026 (job `bf72d192`). Ela mandou **10 pranchas
+🩸 CASO cliente-56, 02/09/2026 (job `bf72d192`). Ela mandou **10 pranchas
 dentro de um único PDF**. O motor mediu todas as dez — soma 583,6 m², a maior
 com 95,7 — e entregou:
 
