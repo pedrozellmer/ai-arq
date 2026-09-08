@@ -105,7 +105,23 @@ jobs:
           # de área e de LGPD. O guarda exige piso >= 75% do colhido, e 2300
           # tinha caído pra 74,6% — sexta vez que ele cobra, sempre pelo mesmo
           # motivo: piso que envelhece é piso que não guarda nada.
-          PISO: 2400
+          #
+          # 08/09/2026, 3a subida do dia: 2400 -> 2800. A bancada colhe 3201
+          # (guardas novos do requirements e dos pares acoplados) e o 2400
+          # tinha caído pra 74,98% — errou por UM teste.
+          #
+          # 🪤 E AQUI O PADRÃO IMPORTA MAIS QUE O NÚMERO: esta é a SÉTIMA vez
+          # que este guarda cobra, e todas as seis anteriores eu subi o piso pro
+          # MÍNIMO QUE PASSAVA. Piso no mínimo volta a quebrar assim que a
+          # bancada cresce ~8% — ou seja, na sessão seguinte. O trabalho de
+          # subir vira ritual, e ritual repetido é o que ensina a ignorar
+          # alarme (ver [[feedback_alarme_sem_controle_20260826]]).
+          #
+          # 🔑 2800 é 87,5% dos 3201 de hoje, e só volta a cobrar quando a
+          # bancada passar de 3733. Continua pegando qualquer queda maior que
+          # 12,5% — que é o que o piso existe pra pegar (colheita quebrada,
+          # arquivo que parou de ser coletado), não flutuação de rotina.
+          PISO: 2800
         run: |
           N=$(python -m pytest tests/ -q --collect-only 2>/dev/null | tail -1 | grep -oE '^[0-9]+' || echo 0)
           echo "testes colhidos: $N (piso: $PISO)"
