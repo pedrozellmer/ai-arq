@@ -136,6 +136,58 @@ def test_falha_de_verdade_DEIXA_RASTRO(monkeypatch):
         "o log não diz o que importa: que o arquivo ficou lá")
 
 
+#: 🩸 07/09/2026 — O CORPO REAL do Supabase quando o objeto não existe.
+#: Medido contra a produção: o HTTP é **400**, e o 404 vem no corpo. Confiar
+#: no `e.code` fazia todo delete de arquivo ausente contar como FALHA — e com
+#: a trava "só arquiva quando apagou tudo" (do mesmo dia) isso prenderia 135
+#: projetos na fila PRA SEMPRE, com um erro por noite, afirmando "o arquivo
+#: CONTINUA no storage" sobre um arquivo que nunca existiu.
+_CORPO_NAO_EXISTE = (b'{"statusCode":"404","error":"not_found",'
+                     b'"message":"Object not found","code":"NoSuchKey"}')
+
+
+def test_objeto_que_NAO_EXISTE_e_sucesso_mesmo_vindo_como_HTTP_400(monkeypatch):
+    """🚨 O invariante que faltava. Apagar o que já não está lá é objetivo
+    cumprido, não falha — venha o 404 no status ou no corpo."""
+    import io as _io
+    import urllib.error
+    import urllib.request
+
+    logs = []
+    monkeypatch.setattr(main, "_log_error",
+                        lambda *a, **k: logs.append(a))
+
+    def _urlopen(req, timeout=None):
+        raise urllib.error.HTTPError(
+            "u", 400, "Bad Request", {}, _io.BytesIO(_CORPO_NAO_EXISTE))
+
+    monkeypatch.setattr(urllib.request, "urlopen", _urlopen)
+    assert main._supabase_storage_delete("aiarq-planilhas", "job123.xlsx") is True, (
+        "objeto inexistente contou como FALHA — a trava de arquivamento prende "
+        "o projeto na fila pra sempre")
+    assert not logs, (
+        "gravou erro dizendo que o arquivo continua no storage, e ele nunca "
+        "existiu: %r" % (logs,))
+
+
+def test_CONTROLE_400_que_NAO_e_inexistencia_continua_sendo_FALHA(monkeypatch):
+    """O outro lado: 400 de verdade (requisição torta, permissão) é falha, e
+    tem que deixar rastro. Sem isto o conserto viraria 'engole todo 400'."""
+    import io as _io
+    import urllib.error
+    import urllib.request
+
+    logs = []
+    monkeypatch.setattr(main, "_log_error",
+                        lambda stage, msg, job=None, **k: logs.append((stage, msg)))
+    monkeypatch.setattr(urllib.request, "urlopen",
+                        lambda *a, **k: (_ for _ in ()).throw(urllib.error.HTTPError(
+                            "u", 400, "Bad Request", {},
+                            _io.BytesIO(b'{"error":"InvalidRequest"}'))))
+    assert main._supabase_storage_delete("aiarq-planilhas", "job123.xlsx") is False
+    assert logs, "400 real passou calado"
+
+
 def test_CONTROLE_o_404_continua_sendo_SUCESSO(monkeypatch):
     """Arquivo que já não existe é objetivo cumprido, não falha. Sem isto o
     cleanup viraria uma parede de erro falso a cada rodada."""

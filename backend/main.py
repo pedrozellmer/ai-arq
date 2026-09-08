@@ -28675,7 +28675,22 @@ def _supabase_storage_delete(bucket: str, object_path: str) -> bool:
         return True
     except urllib.error.HTTPError as e:
         # 404 = já não existe (tudo ok)
-        if e.code == 404:
+        # 🩸 07/09/2026 — E O SUPABASE NÃO DEVOLVE 404. Medido contra a
+        # produção: apagar objeto inexistente responde **HTTP 400** com o 404
+        # no CORPO — {"statusCode":"404","error":"not_found","code":"NoSuchKey"}.
+        # Confiar só no `e.code` fazia TODO delete de arquivo ausente contar
+        # como FALHA. Sozinho isso era ruído; com a trava nova ("só arquiva
+        # quando apagou tudo") vira armadilha: 135 projetos (99 com
+        # status=error e 36 concluídos sem planilha, medidos hoje) ficariam na
+        # fila PRA SEMPRE, gravando um `storage:delete-falhou` por noite —
+        # e a mensagem afirmaria "o arquivo CONTINUA no storage", que é falso:
+        # ele nunca existiu.
+        _corpo = ""
+        try:
+            _corpo = (e.read() or b"")[:300].decode("utf-8", "replace")
+        except Exception:
+            _corpo = ""
+        if e.code == 404 or "NoSuchKey" in _corpo or '"statusCode":"404"' in _corpo:
             return True
         _log_error("storage:delete-falhou",
                    "HTTP %s ao apagar %s/%s — o arquivo CONTINUA no storage e a "
