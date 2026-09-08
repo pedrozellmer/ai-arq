@@ -1,6 +1,33 @@
-fastapi==0.115.0
+# 🚨 08/09/2026 — DUAS PORTAS PÚBLICAS ABERTAS POR DEPENDÊNCIA PARADA.
+# Conferido por mim na API do OSV (api.osv.dev), não em documento:
+#
+#   starlette 0.38.6 (o que o fastapi 0.115.0 ARRASTAVA) .... 14 vulns, 3 ALTAS
+#   python-multipart 0.0.18 ................................. 14 vulns, 3 ALTAS
+#
+# O caminho: `POST /api/estimate-price` é PÚBLICO (sem login). As três travas
+# que existem — rate limit por IP, teto de 450 MB e o cheque de JWT — moram
+# DENTRO do corpo da rota, e o FastAPI só chega lá DEPOIS de já ter parseado o
+# formulário. Com 4 GB e `--workers 1`, poucas requisições simultâneas derrubam
+# o backend pra TODOS os clientes, não só pro atacante.
+#
+# 🪤 SUBIR SÓ PRA starlette 0.40.0 (o mínimo que fecha a CVE citada na
+# auditoria) fecharia UMA das três altas. As outras duas só caem em 1.1.0 e
+# 1.3.1 — e o `fastapi==0.115.0` PROÍBE isso: o pin dele é `starlette<0.39.0`.
+# Por isso o fastapi sobe junto: do 0.136.1 em diante o pin vira
+# `starlette>=0.46.0`, sem teto, e o starlette moderno passa a ser possível.
+#
+# 🔑 O pin do starlette fica EXPLÍCITO aqui de propósito. Ele era transitivo, e
+# dependência transitiva sem trava é exatamente o que ficou dois anos parada
+# sem ninguém ver.
+#
+# 📏 O 0.136.1 não é chute: é a versão contra a qual esta bancada já roda
+# (2.9k testes) na máquina onde ela foi escrita. A produção é que estava atrás.
+# 🪤 E isso é um achado em si: a bancada vinha validando bibliotecas que a
+# produção NÃO tinha. Ver [[feedback_medir_com_ferramenta_que_a_producao_nao_tem]].
+fastapi==0.136.1
+starlette==1.3.1
 uvicorn==0.30.0
-python-multipart==0.0.18
+python-multipart==0.0.31
 pdfplumber==0.11.0
 pypdfium2==4.30.0
 openpyxl==3.1.5
