@@ -7313,6 +7313,28 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
     _pd_ok = float(pe_direito or 0) > 0
     # 🚨 23/08 (auditoria): duas travas na preservação, porque texto não é prova.
     _mediu_linear = _tem_comprimento_medido(items)
+
+    def _area_informada_alcancaria(_it, _u):
+        """Se o cliente informar a área total no upload, ela CHEGA neste item?
+
+        Existe porque a mesma pergunta é feita em dois lugares que precisam
+        concordar: o ramo que PREENCHE com a área informada (logo abaixo) e a
+        frase que o cliente lê na linha zerada. Enquanto eram duas cópias, a
+        frase prometia uma coisa que a régua recusava.
+
+        🪤 SEM o `informado` DE PROPÓSITO. A frase é conselho pro PRÓXIMO
+        envio — quem ainda não informou é justamente quem precisa ler o
+        convite. Quem chama pra PREENCHER acrescenta `informado` (e as travas
+        de linha zerada e teto por família); quem chama pra ESCREVER A FRASE
+        não acrescenta nada. Condicionar a frase ao estado de hoje esconderia
+        o convite de quem ele serve.
+        """
+        return bool(_u in _FLOOR_M2_UNITS
+                    and _is_floor_surface_criar(getattr(_it, "description", ""))
+                    # a declaração não vira número onde a gente MEDIU (regra
+                    # nº3): tendo medição vetorial no job, informar a área não
+                    # muda esta linha — então não convidar pra isso.
+                    and float(pdfvec_m2 or 0) <= 0)
     filled = blanked = preservados = criados_prancha = apertou_teto = 0
     lineares_zerados = 0
     #: linhas que receberam de volta a medição que já estava escrita nelas
@@ -7665,10 +7687,8 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
         #   (c) teto por FAMÍLIA: no máximo uma superfície de piso e uma de
         #       forro herdam a área total. Da 2ª em diante, não preenche.
         _fam = _familia_da_superficie(getattr(it, "description", ""))
-        if (informado and u in _FLOOR_M2_UNITS
-                and _is_floor_surface_criar(getattr(it, "description", ""))
+        if (informado and _area_informada_alcancaria(it, u)
                 and q == 0
-                and float(pdfvec_m2 or 0) <= 0
                 and _usou_area_informada.get(_fam, 0) < 1
                 and not (apenas_preencher and q > 0)):
             # 🪤 31/08 (auditoria): quem fica com a área total é decidido pela
@@ -7882,10 +7902,33 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
                         "é confiável o bastante pra publicar. Preencha o metro ou "
                         "envie o DXF pra medirmos.")
                 else:
+                    # 🩸 08/09/2026 — O MESMO DEFEITO DO LINEAR, 33× MAIOR.
+                    # O conserto de 01/09 tirou "informe a área no upload" das
+                    # linhas de COMPRIMENTO e deixou a frase de ÁREA intacta,
+                    # como se toda área fosse piso. Medido hoje na base:
+                    # 936 linhas de área zeradas com esta frase, e 725 delas
+                    # (77,5%) nem passam pela condição NECESSÁRIA da régua —
+                    # são parede, revestimento de banheiro, ponto elétrico "a
+                    # 1,20 m do piso". O campo do upload alimenta piso/forro/
+                    # laje; pra elas informar a área não muda nada.
+                    # 🪤 E não é só a descrição. Tendo medição vetorial no job,
+                    # a declaração não vira número em item NENHUM (regra nº3),
+                    # nem em piso. Esse caso chega aqui quando a IA escreve um
+                    # número implausível — 5.000 m² num pavimento onde medimos
+                    # 278,8: a linha zera, a frase é escrita, e o convite saía
+                    # vazio. 📏 Medido rodando a função, porque o cenário
+                    # ÓBVIO (piso com 90 m² e pdfvec 278,8) NÃO reproduz: ali a
+                    # medição sustenta o número e a linha nem é zerada.
+                    # 🚫 NÃO é caso de PREENCHER: zerar segue certo, ninguém
+                    # mediu altura de parede. O que muda é parar de mandar o
+                    # cliente fazer um trabalho que a régua vai recusar.
+                    _opcoes = ["preencha a metragem"]
+                    if _area_informada_alcancaria(it, u):
+                        _opcoes.append("informe a área no upload")
+                    _opcoes.append("envie o DXF pra medir")
                     _frase = (
                         "Área NÃO medida (lida de PDF por IA, não da geometria) — "
-                        "preencha a metragem, informe a área no upload ou envie o "
-                        "DXF pra medir.")
+                        + ", ".join(_opcoes[:-1]) + " ou " + _opcoes[-1] + ".")
                 it.observations = (_obs + " | " + _frase).strip(" |")
             blanked += 1
     if preservados:
