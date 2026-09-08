@@ -132,6 +132,29 @@ window.supabase = {
   }
 };
 window.URL = function (u) { this.hostname = 'ai.arq.br'; this.href = String(u); };
+
+// 🩸 08/09/2026 — SEM ISTO, O RASTREADOR DE CLIQUES ERA CÓDIGO MORTO NA BANCADA.
+// `aiarq-utils.js` faz `new URLSearchParams(location.search).get('job_id')`
+// dentro do handler delegado. O duktape não tem URLSearchParams: a chamada
+// estourava, o `try/catch` do rastreador (que existe pra nunca quebrar o clique
+// do cliente) engolia, e NENHUM evento saía. Um teste que exercitasse cliques
+// veria zero eventos e passaria verde por ausência.
+// 🪤 É a armadilha de [[feedback_medir_com_ferramenta_que_a_producao_nao_tem]]
+// ao contrário: aqui a BANCADA é que não tinha o que a produção tem.
+window.URLSearchParams = function (qs) {
+  var pares = {};
+  String(qs || '').replace(/^\?/, '').split('&').forEach(function (p) {
+    if (!p) return;
+    var i = p.indexOf('=');
+    var k = i < 0 ? p : p.slice(0, i);
+    var v = i < 0 ? '' : p.slice(i + 1);
+    try { k = decodeURIComponent(k.replace(/\+/g, ' ')); } catch (e) {}
+    try { v = decodeURIComponent(v.replace(/\+/g, ' ')); } catch (e) {}
+    if (!(k in pares)) { pares[k] = v; }   // 1ª ocorrência vence, como no browser
+  });
+  this.get = function (k) { return (k in pares) ? pares[k] : null; };
+  this.has = function (k) { return k in pares; };
+};
 1;
 """
 

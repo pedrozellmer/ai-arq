@@ -577,12 +577,17 @@
           </div>
           <div class="flex items-center gap-2">
             <input type="text" id="search-users" placeholder="Buscar usu&#225;rio..." class="px-4 py-2 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none w-full sm:w-64">
-            <!-- 🕳️ 08/09/2026: a lista SEMPRE ordenou por data da CONTA, e a
-                 pergunta de quem abre o painel de manh&#227; &#233; "quem esteve aqui".
-                 Quem volta dias depois afundava na lista com a data velha. -->
+            <!-- 🚫 08/09/2026, MESMO DIA: eu tinha posto "última visita" como
+                 PADRÃO e o Pedro mandou voltar. A raz&#227;o dele derruba a minha:
+                 quem mais usa o sistema &#233; ELE, ent&#227;o a conta da casa vivia em
+                 1&#186; lugar e o painel passava a mostrar o dono em vez dos
+                 clientes. E a pergunta que ele faz de manh&#227; &#233; "quem apareceu e
+                 quem n&#227;o apareceu" &#8212; isso &#233; ordem de CHEGADA.
+                 A ordem por atividade fica como op&#231;&#227;o (foi ela que revelou um
+                 lead voltando depois de 4 dias), nunca como padr&#227;o. -->
             <select id="users-order" onchange="setUsersOrder(this.value)" title="Como ordenar a lista" class="px-3 py-2 rounded-xl border border-gray-300 text-sm text-gray-700 hover:bg-gray-50 outline-none whitespace-nowrap">
+              <option value="chegada">&#9675; Novos primeiro</option>
               <option value="atividade">&#9679; &#218;ltima visita</option>
-              <option value="chegada">&#9675; Chegou na plataforma</option>
             </select>
             <button onclick="exportUsersCsv()" class="px-3 py-2 rounded-xl border border-gray-300 text-sm text-gray-700 hover:bg-gray-50 whitespace-nowrap">&#8595; CSV</button>
           </div>
@@ -6379,18 +6384,28 @@ function setUsersFilter(filter) {
 }
 
 // ── Ordem da lista ────────────────────────────────────────────────────────
-// 🩸 08/09/2026 — O PAINEL RESPONDIA OUTRA PERGUNTA. A lista ordenava por
-// `auth_created_at` e nada mais. O lead mais forte da semana (2 contas em
-// 04/09, conta corporativa destravada na mão) voltou hoje às 08:23, completou
-// a ficha às 08:24 — e aparecia em 7º lugar, carimbado com 04/09. O Pedro
-// olhou o topo e disse "tem ninguém". Estava certo sobre a TELA.
+// 🩸 08/09/2026 — O PAINEL NÃO MOSTRAVA QUEM VOLTOU. A lista ordenava por
+// `auth_created_at` e nada mais. Um lead forte (2 contas em 04/09, a
+// corporativa destravada na mão) voltou hoje às 08:23, completou a ficha às
+// 08:24 — e aparecia em 7º lugar, carimbado com 04/09. O Pedro olhou o topo e
+// disse "tem ninguém". Estava certo sobre a TELA.
+//
+// 🚫 MAS ORDENAR POR ATIVIDADE COMO PADRÃO FOI ERRO MEU, e durou uma hora. O
+// Pedro: *"o meu usuário agora aparece direto em primeiro, acho que não faz
+// muito sentido"*. Quem mais usa o sistema é o dono — a conta da casa fixava o
+// 1º lugar e o painel passava a mostrar ELE em vez dos clientes. E a pergunta
+// real de quem abre isso de manhã é "quem apareceu e quem não apareceu", que é
+// ordem de CHEGADA. Padrão de volta pra chegada; atividade vira OPÇÃO.
+// 🔑 A lição: eu consertei o alcance (o lead sumia) e junto troquei o PADRÃO
+// sem precisar. O selo "voltou" já resolvia a visibilidade sem mexer na ordem.
+//
 // 📏 Medido antes de mexer: 10 das 120 contas já voltaram em outro dia. É
-// pouca gente — e é exatamente a mais valiosa que temos, porque é quem volta.
+// pouca gente — e é a mais valiosa, porque é quem volta.
 // 🪤 `last_sign_in_at` só muda em login NOVO (sessão retomada não conta), e o
 // projeto novo não mexe nele: por isso a atividade é o MAIOR entre login,
 // último projeto e a chegada — senão quem trabalhou hoje numa sessão antiga
-// some de novo, que é o defeito que este conserto existe pra matar.
-let usersOrder = 'atividade';
+// some de novo, que é o defeito que a opção existe pra matar.
+let usersOrder = 'chegada';
 
 function _ultimaAtividade(u) {
   const t = k => Date.parse(u[k] || '') || 0;
@@ -6408,7 +6423,7 @@ function _voltouDepois(u) {
   return new Date(a).toDateString() !== new Date(c).toDateString();
 }
 function setUsersOrder(v) {
-  usersOrder = (v === 'chegada') ? 'chegada' : 'atividade';
+  usersOrder = (v === 'atividade') ? 'atividade' : 'chegada';
   applyUsersView();
 }
 
@@ -6429,7 +6444,7 @@ function applyUsersView() {
   }
   // 🪤 ordena a CÓPIA visível, nunca `allUsers`: o array é lido por outras
   // partes do painel (origem, detalhe do usuário) que não pediram ordem nenhuma.
-  const chave = (usersOrder === 'chegada') ? _chegada : _ultimaAtividade;
+  const chave = (usersOrder === 'atividade') ? _ultimaAtividade : _chegada;
   list = list.slice().sort((a, b) => chave(b) - chave(a));
   renderUsers(list);
   const countEl = document.getElementById('users-count');

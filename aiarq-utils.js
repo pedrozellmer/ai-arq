@@ -190,6 +190,26 @@
       if (!alvo) return;
       var nome = (alvo.getAttribute('data-track') || '').trim();
       if (!nome) return;
+      // 🩸 08/09/2026 — O CLIQUE DO SELETOR DE ARQUIVO CONTAVA EM DOBRO.
+      // Medido em toda a base: 58 de 123 `clique:abrir-seletor-arquivo`
+      // chegavam em PAR (menos de 600 ms) — 47,2%, contra 0% em sete dos oito
+      // outros eventos de clique. Não é gente clicando duas vezes: é o
+      // `<label for=X>`, que dispara este rastreador uma vez E manda o
+      // navegador SINTETIZAR um clique em X. Como o `<input>` mora dentro do
+      // label (dashboard.html ~494), esse segundo clique sobe pelo mesmo
+      // `data-track` e é contado de novo.
+      // 🚨 Toda conta de "abriu o seletor" estava inflada ~1,9× — o real é
+      // ~65, não 123. Métrica inflada decide errado: é o número que a gente
+      // olha pra saber onde o cliente desiste.
+      // 🪤 Aqui, e não um dedupe por janela de tempo: dedupe esconde a causa e
+      // ainda pode comer clique legítimo. Isto some SÓ com o clique que o
+      // próprio label sintetizou no controle que ele comanda — a mesma
+      // gesticulação do cliente, contada uma vez.
+      if (alvo.tagName === 'LABEL') {
+        var _ctrl = alvo.control ||
+                    (alvo.htmlFor ? document.getElementById(alvo.htmlFor) : null);
+        if (_ctrl && _ctrl === ev.target) return;
+      }
       var meta = {};
       // rótulo visível ajuda a ler o painel sem abrir o HTML
       var _t = (alvo.getAttribute('aria-label') || alvo.textContent || '').replace(/\s+/g, ' ').trim();

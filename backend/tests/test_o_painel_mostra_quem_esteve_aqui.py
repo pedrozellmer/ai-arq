@@ -92,55 +92,81 @@ _TRIO = [_CHEGOU_HOJE_CEDO, _CHEGOU_HOJE_TARDE, _VOLTOU_HOJE]
 
 
 # ══════════════════════════════════════════════════════════════════════════
-#  O defeito
+#  O PADRÃO — é o Pedro quem define, e ele definiu: novos primeiro
 # ══════════════════════════════════════════════════════════════════════════
-def test_quem_voltou_hoje_nao_fica_atras_de_quem_chegou_antes_dele():
+def test_o_padrao_e_ordem_de_chegada():
+    """🚫 08/09/2026, uma hora depois de eu subir o contrário.
+
+    Eu tinha posto "última visita" como padrão. O Pedro: *"o meu usuário agora
+    aparece direto em primeiro, acho que não faz muito sentido... bota só os
+    novos, que é interessante pra eu olhar, quem apareceu, quem não apareceu"*.
+
+    Ele está certo por um motivo que eu não tinha pesado: **quem mais usa o
+    sistema é o dono**. Ordenar por atividade fixa a conta da casa no 1º lugar
+    e o painel passa a mostrar o Pedro em vez dos clientes.
+    """
     p = _pagina()
     _semeia(p, _TRIO)
     p.chama("applyUsersView(); 1;")
     ordem = _ordem_visivel(p)
 
-    assert ordem[0] == "b@x", "o mais recente de todos continua em 1º"
+    assert ordem == ["b@x", "a@x", "voltou@x"], (
+        "o padrão tem que ser data de CHEGADA (novos primeiro): " + str(ordem))
+
+
+def test_conta_que_usa_todo_dia_NAO_fixa_o_topo():
+    """A queixa do Pedro, no formato de guarda: a conta da casa é velha e está
+    sempre ativa. No padrão, ela fica onde chegou — lá embaixo."""
+    p = _pagina()
+    dono = {"email": "dono@x", "auth_created_at": "2026-04-13T12:00:00Z",
+            "last_sign_in_at": "2026-09-08T13:30:00Z",
+            "ultimo_projeto": "2026-09-08T13:30:00Z"}
+    _semeia(p, _TRIO + [dono])
+    p.chama("applyUsersView(); 1;")
+    ordem = _ordem_visivel(p)
+
+    assert ordem[-1] == "dono@x", (
+        "conta de abril, ativa agora, voltou pro topo — é exatamente o que o\n"
+        "Pedro pediu pra tirar: " + str(ordem))
+    assert ordem[0] == "b@x", "e o cadastro mais novo continua em 1º"
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  A OPÇÃO — continua existindo e funcionando, só não é padrão
+# ══════════════════════════════════════════════════════════════════════════
+def test_por_atividade_continua_disponivel_e_sobe_quem_voltou():
+    """Foi ela que revelou o lead voltando depois de 4 dias. Vira opção, não
+    some — mas se as duas ordens derem a mesma lista, o seletor é enfeite."""
+    p = _pagina()
+    _semeia(p, _TRIO)
+    p.chama("setUsersOrder('atividade'); 1;")
+    ordem = _ordem_visivel(p)
+
     assert ordem.index("voltou@x") < ordem.index("a@x"), (
-        "quem esteve aqui às 11:23 tem que vir antes de quem esteve às 11:20;\n"
-        "ordenando pela CONTA, ele afunda pra última posição: " + str(ordem))
+        "quem esteve aqui às 11:23 tem que vir antes de quem esteve às 11:20: "
+        + str(ordem))
 
 
-# ══════════════════════════════════════════════════════════════════════════
-#  CONTROLE POSITIVO — a outra ordem tem que continuar existindo e funcionando
-# ══════════════════════════════════════════════════════════════════════════
-def test_ordenar_por_chegada_continua_disponivel_e_afunda_quem_voltou():
+def test_o_seletor_volta_pro_padrao():
     p = _pagina()
     _semeia(p, _TRIO)
-    p.chama("setUsersOrder('chegada'); 1;")
-    ordem = _ordem_visivel(p)
-
-    assert ordem[-1] == "voltou@x", (
-        "'chegou na plataforma' tem que ordenar pela CONTA — se as duas opções\n"
-        "derem a mesma lista, o seletor é enfeite: " + str(ordem))
+    p.chama("setUsersOrder('atividade'); setUsersOrder('chegada'); 1;")
+    assert _ordem_visivel(p) == ["b@x", "a@x", "voltou@x"]
 
 
-def test_o_seletor_volta_pra_atividade():
-    p = _pagina()
-    _semeia(p, _TRIO)
-    p.chama("setUsersOrder('chegada'); setUsersOrder('atividade'); 1;")
-    ordem = _ordem_visivel(p)
-    assert ordem.index("voltou@x") < ordem.index("a@x")
-
-
-def test_valor_desconhecido_no_seletor_e_normalizado():
+def test_valor_desconhecido_no_seletor_cai_no_PADRAO():
     """🪤 A 1ª versão deste teste olhava a LISTA e não podia falhar.
 
-    Com `usersOrder = v` cru, 'xpto' cai no mesmo ramo do ternário e a ordem
-    sai idêntica — mutante EQUIVALENTE, não guarda cego. O que a linha de
-    saneamento protege é o ESTADO: se amanhã existir uma terceira ordem, um
-    valor solto passa a decidir. É o estado que este teste olha.
+    Com `usersOrder = v` cru o comportamento saía idêntico — mutante
+    EQUIVALENTE, não guarda cego. O que a linha de saneamento protege é o
+    ESTADO. E o alvo do saneamento mudou junto com o padrão: valor estranho
+    tem que cair em 'chegada', nunca na ordem que o Pedro recusou.
     """
     p = _pagina()
     _semeia(p, _TRIO)
     p.chama("setUsersOrder('xpto'); 1;")
-    assert p.eval("usersOrder") == "atividade"
-    assert _ordem_visivel(p)[0] == "b@x", "e a lista continua ordenada"
+    assert p.eval("usersOrder") == "chegada"
+    assert _ordem_visivel(p) == ["b@x", "a@x", "voltou@x"]
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -154,7 +180,7 @@ def test_projeto_de_hoje_conta_como_atividade_mesmo_sem_login_novo():
                  "last_sign_in_at": "2026-09-07T12:00:00Z",
                  "ultimo_projeto": "2026-09-08T13:00:00Z"}
     _semeia(p, [_CHEGOU_HOJE_TARDE, trabalhou])
-    p.chama("applyUsersView(); 1;")
+    p.chama("setUsersOrder('atividade'); 1;")
     ordem = _ordem_visivel(p)
     assert ordem[0] == "trabalhou@x", (
         "subiu projeto às 13h e ficou atrás de quem só entrou às 11h52: a\n"
@@ -168,7 +194,7 @@ def test_quem_nunca_entrou_nao_some_da_lista():
     nunca = {"email": "nunca@x", "auth_created_at": "2026-09-08T11:59:00Z",
              "last_sign_in_at": None}
     _semeia(p, [_VOLTOU_HOJE, nunca])
-    p.chama("applyUsersView(); 1;")
+    p.chama("setUsersOrder('atividade'); 1;")
     ordem = _ordem_visivel(p)
     assert ordem[0] == "nunca@x", (
         "sem login, a chegada é a atividade mais recente que existe: " + str(ordem))
