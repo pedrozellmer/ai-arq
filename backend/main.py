@@ -19802,7 +19802,11 @@ def meus_entregaveis(request: Request):
     if st_proj != 200:
         raise HTTPException(503, "Não consegui ler seus projetos agora. Tente de novo em instantes.")
     if not projetos:
-        return {"status": "ok", "projetos": [], "count": 0}
+        # sem projeto não há entregável pra conferir: `conferida` é verdade
+        # trivial, mas o campo tem que existir sempre — tela que lê
+        # `!== false` num campo ausente decide por acaso.
+        return {"status": "ok", "projetos": [], "count": 0,
+                "coerencia_conferida": True}
 
     jobs = [str(p.get("job_id")) for p in projetos if p.get("job_id")]
     filtro = "in.(" + ",".join(f'"{j}"' for j in jobs) + ")"
@@ -19868,20 +19872,34 @@ def meus_entregaveis(request: Request):
     # Reaproveita a MESMA RPC do chip de "desatualizado" em Meus Projetos:
     # devolve planilha/cronograma/memorial/comparativo por job numa consulta só.
     velho_por_job = {}
-    try:
-        _stv, _rowsv = _supa_rest_service(
-            "POST", "rpc/projetos_desatualizados", {"p_user_id": uid})
-        for r in (_rowsv or []) if _stv == 200 else ():
+    # 🩸 08/09/2026 — O RASTRO NUNCA ERA GRAVADO, E O COMENTÁRIO ABAIXO JÁ
+    # SABIA O QUE PRECISAVA ACONTECER. `coerencia:entregaveis` está no código
+    # desde que esta rota nasceu e nunca disparou em produção (0 linhas em
+    # 5.464 eventos do error_log). Motivo: `_supa_rest_service` NUNCA levanta —
+    # devolve (código, None) ou (0, None) —, então o `except` é inalcançável, e
+    # o `if _stv == 200 else ()` engolia a falha em silêncio. RPC fora do ar →
+    # `velho_por_job` vazio → TODO entregável aparece atualizado nas 6 abas do
+    # painel, que é o caminho mais quente da regra nº7.
+    # 🔑 A falha vira DADO, não sumiço: o status é conferido onde ele é
+    # conhecido, e a resposta carrega `coerencia_conferida` pra tela poder
+    # dizer "não consegui conferir" em vez de esconder o aviso.
+    _coer_ok = True
+    _stv, _rowsv = _supa_rest_service(
+        "POST", "rpc/projetos_desatualizados", {"p_user_id": uid})
+    if _stv != 200 or _rowsv is None:
+        _coer_ok = False
+        _log_error("coerencia:entregaveis",
+                   f"rpc/projetos_desatualizados HTTP {_stv} — as 6 abas do "
+                   f"painel mostram TODO entregável como atualizado sem ter "
+                   f"conferido", severity="warning")
+    else:
+        for r in (_rowsv or []):
             jid = str(r.get("job_id") or "")
             if jid:
                 velho_por_job[jid] = {
                     k: bool(r.get(k)) for k in
                     ("planilha", "cronograma", "memorial", "comparativo")
                 }
-    except Exception as _e:
-        # Aviso é acessório: falhou a leitura, não mostra alarme nenhum. Mas
-        # registra — "nenhum aviso" por falha é indistinguível de "está em dia".
-        _log_error("coerencia:entregaveis", str(_e))
 
     saida = []
     for p in projetos:
@@ -19947,7 +19965,11 @@ def meus_entregaveis(request: Request):
             },
         })
 
-    return {"status": "ok", "projetos": saida, "count": len(saida)}
+    # 🔑 `coerencia_conferida=False` diz que os selos de "desatualizado" desta
+    # resposta NÃO foram conferidos — sem isso, "não consegui" chega na tela
+    # igualzinho a "está tudo em dia" (o defeito de 08/09).
+    return {"status": "ok", "projetos": saida, "count": len(saida),
+            "coerencia_conferida": _coer_ok}
 
 
 @app.get("/api/projects/{job_id}/cashback")

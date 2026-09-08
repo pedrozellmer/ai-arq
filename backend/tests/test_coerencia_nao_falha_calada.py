@@ -167,6 +167,60 @@ def test_falha_parcial_nao_APAGA_o_entregavel_da_resposta(monkeypatch):
 
 
 # ══════════════════════════════════════════════════════════════════════════
+#  2b · o MESMO defeito nas 6 abas do painel (/api/meus-entregaveis)
+#
+#  Este é o caminho MAIS quente da regra nº7: uma chamada alimenta Downloads,
+#  Planilhas, Cronogramas, Memoriais, Comparativos e Revisão. Com a RPC de
+#  desatualizados fora do ar, `velho_por_job` ficava vazio e TODO entregável
+#  aparecia atualizado — sem nenhum log. O `except` não pegava porque
+#  `_supa_rest_service` NUNCA levanta: devolve (código, None).
+# ══════════════════════════════════════════════════════════════════════════
+def _entregaveis(monkeypatch, status_rpc):
+    logs = []
+    monkeypatch.setattr(main, "_log_error",
+                        lambda stage, msg, job_id=None, **k: logs.append((stage, str(msg))))
+    monkeypatch.setattr(main, "_get_user_from_request",
+                        lambda request, tolerante=False: {"id": "uid-1", "email": "x@y.z"})
+    monkeypatch.setattr(main, "_supa_rest_tudo", lambda *a, **k: (200, []))
+
+    # 🪤 A rota tem RETORNO ANTECIPADO quando o cliente não tem projeto — sem
+    # um projeto de mentira o teste nunca alcança o bloco da coerência e mede
+    # o vazio. O primeiro esboço deste teste caiu nisso.
+    def _rest(metodo, caminho, corpo=None, **k):
+        if "projetos_desatualizados" in caminho:
+            return (status_rpc, None if status_rpc != 200 else [])
+        # 🪤 o caminho vem como "/projects" (com barra) — comparar sem ela não
+        # casa, o cenário fica sem projeto e cai no retorno antecipado.
+        if caminho.lstrip("/").startswith("projects"):
+            return (200, [{"job_id": "job-1", "project_name": "Projeto",
+                           "status": "done", "created_at": "2026-09-01"}])
+        return (200, [])
+
+    monkeypatch.setattr(main, "_supa_rest_service", _rest)
+    r = main.meus_entregaveis(object())
+    assert r.get("count", 0) >= 1, (
+        "o cenário caiu no retorno antecipado (cliente sem projeto) e não "
+        "chegou no bloco da coerência: %r" % r)
+    return logs, r
+
+
+def test_rpc_de_desatualizados_fora_do_ar_deixa_rastro_e_avisa(monkeypatch):
+    """🚨 Sem isto, as 6 abas mostram tudo como atualizado e ninguém sabe."""
+    logs, r = _entregaveis(monkeypatch, 500)
+    assert r.get("coerencia_conferida") is False, (
+        "a resposta se diz conferida com a RPC fora do ar — a tela esconde o "
+        "aviso e o cliente manda arquivo velho")
+    assert any(s == "coerencia:entregaveis" for s, _ in logs), [s for s, _ in logs]
+
+
+def test_CONTROLE_com_a_RPC_de_pe_a_resposta_e_conferida(monkeypatch):
+    logs, r = _entregaveis(monkeypatch, 200)
+    assert r.get("coerencia_conferida") is True
+    assert not [s for s, _ in logs if s == "coerencia:entregaveis"], (
+        "logou falha numa leitura que funcionou — alarme falso")
+
+
+# ══════════════════════════════════════════════════════════════════════════
 #  3 · 🧪 CONTROLE — o caminho feliz não pode ter mudado
 # ══════════════════════════════════════════════════════════════════════════
 def test_CONTROLE_com_o_banco_de_pe_a_resposta_e_conferida(monkeypatch):

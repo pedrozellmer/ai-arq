@@ -1539,6 +1539,9 @@
   // refazer a chamada a cada troca de aba; quem quiser dado fresco passa true.
   let _entregaveisCache = null;
   let _entregaveisVoando = null;
+  //: false = o servidor nao conseguiu conferir se os entregaveis envelheceram.
+  //: Ausencia de selo "desatualizado" NAO prova que esta em dia.
+  let _coerenciaConferida = true;
 
   async function carregarEntregaveis(forcar) {
     if (_entregaveisCache && !forcar) return _entregaveisCache;
@@ -1548,6 +1551,11 @@
       if (!r.ok) throw new Error('HTTP ' + r.status);
       const d = await r.json();
       _entregaveisCache = d.projetos || [];
+      // 🩸 08/09/2026 — "nao consegui conferir" chegava aqui IGUAL a "esta tudo
+      // em dia": quando a RPC de desatualizados falhava, nenhum selo aparecia e
+      // as 6 abas mostravam todo entregavel como fresco. O servidor agora manda
+      // `coerencia_conferida`; a tela precisa DIZER, nao esconder.
+      _coerenciaConferida = (d.coerencia_conferida !== false);
       return _entregaveisCache;
     })();
     try { return await _entregaveisVoando; }
@@ -1691,7 +1699,15 @@
       return;
     }
 
-    box.innerHTML = filtros + '<div class="space-y-2">' + visiveis.map(l => {
+    // 🚨 Regra n7: se a conferencia nao rodou, a lista NAO pode passar por
+    // conferida. O aviso vem antes dos cartoes, uma vez so.
+    const avisoCoer = _coerenciaConferida ? '' :
+      '<div class="rounded-xl border-2 border-amber-300 bg-amber-50 px-4 py-3 mb-3">'
+      + '<p class="text-sm font-bold text-amber-900">⚠ Nao consegui conferir se estes arquivos estao atualizados</p>'
+      + '<p class="text-xs text-amber-800 leading-snug mt-1">A leitura falhou agora — a falta do selo '
+      + '"desatualizado" NAO quer dizer que esta em dia. Recarregue a pagina antes de enviar os arquivos.</p>'
+      + '</div>';
+    box.innerHTML = filtros + avisoCoer + '<div class="space-y-2">' + visiveis.map(l => {
       const cfg = ENTREGAVEIS_CFG[l.tipo];
       const c = CORES_ENTREGAVEL[l.tipo] || { fundo: '#EEF2FF', texto: '#4338CA', borda: '#C7D2FE' };
       const [url, nome] = cfg.arquivo(l.p.job_id);
