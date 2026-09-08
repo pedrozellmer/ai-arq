@@ -29207,8 +29207,30 @@ def token_tick(request: Request, force: int = 0, dry: int = 0):
                    "meta_token e as credenciais do Supabase.", severity="error")
         return {"status": "renovado_sem_gravar", **base}
 
+    # 🩸 08/09/2026 — A ÂNCORA NÃO ERA GRAVADA, E ISSO CRIA ALARME FALSO.
+    # O vigia do vencimento (`instagram_webhook._vigia_do_token`) calcula a
+    # idade do token a partir da ÚLTIMA linha `instagram:token-renovado` do
+    # error_log — e o comentário dele diz, com todas as letras: "Toda renovação
+    # de token DEVE gravar essa linha". Estava documentado e não implementado.
+    # Medido ao vivo hoje: o tick renovou (token novo vence 07/11) e a única
+    # âncora continuava sendo a de 16/08, escrita à mão. Sem esta linha o vigia
+    # avisaria em 08/10 "vence em ~7 dias" sobre um token que vence em 07/11 —
+    # e alarme falso ensina a ignorar alarme.
+    try:
+        _exp_txt = ""
+        if api.ultimo_expires_in:
+            _exp_txt = (" — vence em ~%d dia(s)"
+                        % (int(api.ultimo_expires_in) // 86400))
+        _log_error("instagram:token-renovado",
+                   "token do Meta renovado pelo tick automático "
+                   "(/api/token/tick, cron aiarq_token_tick)%s. Âncora de idade "
+                   "pro vigia do vencimento." % _exp_txt)
+    except Exception:
+        pass    # a âncora é acessória: renovar já aconteceu e não se desfaz
     return {"status": "ok", "renovado": True, "origem": estado["origem"],
-            "dias_restantes_antes": dias, "expira_em_dias": 60}
+            "dias_restantes_antes": dias,
+            "expira_em_dias": (int(api.ultimo_expires_in) // 86400
+                               if api.ultimo_expires_in else None)}
 
 
 @app.post("/api/metricas/tick")

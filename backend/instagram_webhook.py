@@ -639,16 +639,46 @@ def _vigia_do_token() -> None:
     1×/semana já estava aqui e continua sendo o que evita a enxurrada.
     """
     try:
-        _tok = _supa_select("error_log",
-                            "stage=eq.instagram%3Atoken-renovado"
-                            "&select=created_at&order=created_at.desc&limit=1")
-        if not _tok:
-            return
-        _set_at = datetime.fromisoformat(
-            _tok[0]["created_at"].replace("Z", "+00:00"))
-        _idade_d = (datetime.now(timezone.utc) - _set_at).days
-        if _idade_d < 53:
-            return
+        # 🔑 08/09/2026 — A DATA REAL VEM PRIMEIRO. `meta_token.expira_em` é o
+        # `expires_in` que a Meta devolveu na renovação: é a verdade, não uma
+        # idade derivada de um log. A âncora do error_log continua valendo como
+        # reserva (é o único registro que sobrevive quando a renovação foi
+        # MANUAL, no painel da Meta, e nada foi gravado na tabela).
+        # 🩸 Por que isso importa: hoje o tick renovou o token (passou a vencer
+        # em 07/11) e a única âncora ainda era a de 16/08 — o vigia avisaria em
+        # 08/10 "vence em ~7 dias" sobre um token com 60 dias de vida. Alarme
+        # falso ensina a ignorar alarme.
+        _rest = None
+        try:
+            _mt = _supa_select("meta_token", "select=expira_em&limit=1")
+            if _mt and _mt[0].get("expira_em"):
+                _exp = datetime.fromisoformat(
+                    str(_mt[0]["expira_em"]).replace("Z", "+00:00"))
+                _rest = (_exp - datetime.now(timezone.utc)).days
+        except Exception:
+            _rest = None                # cai na âncora do log, abaixo
+        _dias_restantes = None          # None = só sei a idade, não a data
+        _idade_d = None
+        if _rest is not None:
+            if _rest > 7:
+                return
+            _dias_restantes = _rest
+            # 🪤 NÃO se inventa uma idade a partir da data. A 1ª versão fazia
+            # `_idade_d = 60 - _rest` e a mensagem dizia "token com N dias" —
+            # número que ninguém mediu, e errado sempre que a Meta devolve
+            # validade diferente de 60. Quando a data é conhecida, o que se
+            # diz é o que se sabe: quanto FALTA.
+        else:
+            _tok = _supa_select("error_log",
+                                "stage=eq.instagram%3Atoken-renovado"
+                                "&select=created_at&order=created_at.desc&limit=1")
+            if not _tok:
+                return
+            _set_at = datetime.fromisoformat(
+                _tok[0]["created_at"].replace("Z", "+00:00"))
+            _idade_d = (datetime.now(timezone.utc) - _set_at).days
+            if _idade_d < 53:
+                return
         _av = _supa_select("error_log",
                            "stage=eq.instagram%3Atoken-aviso"
                            "&select=created_at&order=created_at.desc&limit=1")
@@ -658,12 +688,25 @@ def _vigia_do_token() -> None:
             if (datetime.now(timezone.utc) - _ult).days < 6:
                 return
         from main import _log_error, _notify_admin  # deferred: evita import circular
-        _rest = max(0, 60 - _idade_d)
-        _log_error("instagram:token-aviso",
-                   f"token com {_idade_d} dias — vence em ~{_rest} dia(s)")
+        # 🔑 Quando a DATA REAL veio do banco, ela manda. Só quando o único
+        # registro é a âncora do log (renovação manual) é que se estima os
+        # dias restantes supondo 60 — e supor é o que faz a data divergir da
+        # verdade, então só se supõe quando não há verdade disponível.
+        # 🔑 Cada caminho diz o que SABE, e nada além disso:
+        #   · com a data do banco → só "faltam N dias" (o N é medido);
+        #   · só com a âncora do log → "token com N dias", e o quanto falta é
+        #     ESTIMADO supondo 60 — e a frase avisa que é estimativa.
+        if _dias_restantes is not None:
+            _rest = _dias_restantes
+            _quanto = f"faltam ~{_rest} dia(s) (data de expiração registrada)"
+        else:
+            _rest = max(0, 60 - _idade_d)
+            _quanto = (f"token renovado há {_idade_d} dias; supondo validade de "
+                       f"60, faltam ~{_rest}")
+        _log_error("instagram:token-aviso", _quanto)
         _notify_admin(
             f"⏰ Token do Instagram vence em ~{_rest} dia(s)",
-            f"O token do Meta foi renovado há {_idade_d} dias e vale 60.<br><br>"
+            f"{_quanto[0].upper()}{_quanto[1:]}.<br><br>"
             f"Renovar (5 min): developers.facebook.com → app AI.arq → "
             f"API do Instagram → Configuração da API → <b>Gerar token</b> na conta "
             f"ai.arq.br → copiar → Render → ai-arq → Environment → "

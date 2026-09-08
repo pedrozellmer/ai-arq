@@ -93,7 +93,13 @@ jobs:
           # uma dimensao que o fixture nao variava (um item vira dois, um ramo
           # vira dois), entao cada lacuna fechada traz casos novos: a bancada
           # foi de 2482 pra 2728 nos quatro lotes.
-          PISO: 2200
+          # 08/09/2026: 2200 -> 2300. A bancada colhe 2938 depois da varredura
+          # dos 90 logs que nunca dispararam (6 instrumentos mortos, cada um com
+          # guarda próprio). O piso ficou em 74,9% e a regra exige 75% — o
+          # guarda `test_o_piso_do_CI_faz_sentido_contra_a_realidade` cobrou por
+          # UMA casa decimal, que é o tipo de precisão que faz o instrumento
+          # valer. Quinta subida; piso que envelhece é piso que não guarda nada.
+          PISO: 2300
         run: |
           N=$(python -m pytest tests/ -q --collect-only 2>/dev/null | tail -1 | grep -oE '^[0-9]+' || echo 0)
           echo "testes colhidos: $N (piso: $PISO)"
