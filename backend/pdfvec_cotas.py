@@ -386,6 +386,26 @@ def derive_scale_from_cotas(pdf_path: str, page_index: int = 0,
         return {"scale": None, "motivo": "nenhum elemento medível"}
 
     votos: dict[float, int] = {}
+    # 🔬 07/09/2026 — SONDAGEM, NÃO DECISÃO. Nada aqui muda o resultado da
+    # função: `votos` continua sendo o único que decide. Estes três só CONTAM,
+    # pra o log dizer o que a gente hoje não sabe.
+    #
+    # 🩸 Por quê: esta função subiu em 01/08 e NUNCA produziu uma escala em
+    # produção — 0 de 128 promoções (`pdfvec:promo`), 5 semanas, 143 jobs.
+    # E o motivo mais provável, achado em 07/09 na prancha FORRO: o voto é
+    # contado POR TOKEN, e o `break` elege o PRIMEIRO vão que casa. Quatro
+    # cotas com o mesmo texto "80" casando o mesmo vão viram 4 "votos
+    # independentes" — e derivaram 1:50 numa região que o PDF declara 1:100
+    # (erro de 2× linear, 4× em ÁREA). A resposta certa estava na lista de
+    # vãos, mais adiante, e o `break` nunca chegou nela.
+    #
+    # 🚨 O conserto NÃO entra hoje. Afrouxar ou mexer na régua sem medir anda
+    # na direção do erro de 4×, e a regra dura nº1 diz que número errado com
+    # cara de medido é muito pior que linha vazia. Primeiro estes números
+    # aparecem no log das pranchas REAIS que morrem; depois a gente decide.
+    votos_por_valor: dict[float, set] = {}   # escala -> {valores distintos que votaram}
+    votos_por_par: dict[float, set] = {}     # escala -> {(valor, vão) distintos}
+    _corte_eixo: dict[str, float] = {}       # eixo -> % do eixo descartada
     pares = 0
     for el in elems:
         ln_pt = el["len_pt"]
@@ -408,6 +428,9 @@ def derive_scale_from_cotas(pdf_path: str, page_index: int = 0,
             for padrao in ESCALAS_PADRAO:
                 if abs(implicita - padrao) <= TOL_ESCALA_REL * padrao:
                     votos[padrao] = votos.get(padrao, 0) + 1
+                    votos_por_valor.setdefault(padrao, set()).add(round(val, 3))
+                    votos_por_par.setdefault(padrao, set()).add(
+                        (round(val, 3), round(ln_pt, 1)))
                     break
 
     # 2ª fonte de votos: CADEIA DE COTAS. Cota parcial não mede elemento
@@ -421,6 +444,18 @@ def derive_scale_from_cotas(pdf_path: str, page_index: int = 0,
                          for p in el["span_pt"]})
         if len(pontas) < 3:
             continue
+        # 🔬 SONDAGEM (07/09): quanto do EIXO este corte joga fora.
+        # 🩸 `pontas` está ORDENADO POR COORDENADA, então `[:MAX_PONTAS]` não é
+        # amostra — é recorte espacial: guarda os N pontos mais à esquerda/baixo
+        # e descarta o resto da folha. Medido nos PDFs locais: prancha A0 perde
+        # 39,8% da largura (596 pontas), A1 de arquitetura perde 38,1% (505).
+        # E as COTAS não são cortadas: as do lado descartado seguem sendo
+        # pareadas contra vãos calculados só na outra metade — pareamento
+        # errado espalha voto, que é a assinatura do empate. Só CONTA por ora.
+        if len(pontas) > MAX_PONTAS and pontas[-1] > pontas[0]:
+            _faixa = pontas[-1] - pontas[0]
+            _usada = pontas[MAX_PONTAS - 1] - pontas[0]
+            _corte_eixo[eixo] = round(100.0 * (1 - _usada / _faixa), 1)
         pontas = pontas[:MAX_PONTAS]
         vaos: list[float] = []
         for i in range(len(pontas) - 1):
@@ -439,6 +474,9 @@ def derive_scale_from_cotas(pdf_path: str, page_index: int = 0,
                 for padrao in ESCALAS_PADRAO:
                     if abs(implicita - padrao) <= TOL_ESCALA_REL * padrao:
                         votos[padrao] = votos.get(padrao, 0) + 1
+                        votos_por_valor.setdefault(padrao, set()).add(round(val, 3))
+                        votos_por_par.setdefault(padrao, set()).add(
+                            (round(val, 3), round(d_pt, 1)))
                         pares += 1
                         break
                 else:
@@ -454,7 +492,24 @@ def derive_scale_from_cotas(pdf_path: str, page_index: int = 0,
     segundo = ranking[1][1] if len(ranking) > 1 else 0
     # Só aceita com apoio real E dominância clara sobre a 2ª colocada:
     # escala errada não junta votos, espalha.
+    # 🪤 07/09/2026 — MEDIDO: esta trava é INERTE justamente onde importa. Com
+    # `segundo` em {0, 1, 2} o `max(segundo, 1)` faz a 2ª cláusula exigir
+    # `n >= 2`, MENOR que o MIN_VOTOS de 4 — ou seja, ela nunca é a restrição
+    # ativa em página esparsa, e a `confianca` reporta 1,00 exatamente porque
+    # ninguém mais votou. Não mexo hoje: a função nunca produziu escala em
+    # produção (0 de 128 promoções), então hoje ela não erra — só não acerta.
+    # Mudar sem os números das pranchas REAIS anda pro lado do erro de 4×.
     ok = n_melhor >= MIN_VOTOS_ESCALA and n_melhor >= DOMINANCIA * max(segundo, 1)
+    # 🔬 SONDAGEM — nada abaixo entra na decisão; só sai no log pra responder,
+    # nas pranchas de produção que morrem sem escala, as perguntas que hoje a
+    # gente não sabe responder:
+    #   · o voto por VALOR DISTINTO (ou por par valor×vão) desempataria?
+    #   · quantos valores diferentes de cota a prancha realmente tem?
+    #   · o corte do MAX_PONTAS jogou fora parte da folha, e quanto?
+    _rk_valor = sorted(((k, len(v)) for k, v in votos_por_valor.items()),
+                       key=lambda kv: -kv[1])
+    _rk_par = sorted(((k, len(v)) for k, v in votos_por_par.items()),
+                     key=lambda kv: -kv[1])
     return {
         "scale": float(melhor) if ok else None,
         "votos": n_melhor,
@@ -463,6 +518,12 @@ def derive_scale_from_cotas(pdf_path: str, page_index: int = 0,
         "n_cotas": len(tokens),
         "confianca": round(n_melhor / max(sum(votos.values()), 1), 2),
         "candidatas": [{"escala": k, "votos": v} for k, v in ranking[:4]],
+        # ── sondagem ──
+        "valores_distintos": len({round(t["value_m"], 3) for t in tokens
+                                  if t.get("value_m")}),
+        "por_valor": [{"escala": k, "n": v} for k, v in _rk_valor[:3]],
+        "por_par": [{"escala": k, "n": v} for k, v in _rk_par[:3]],
+        "corte_eixo_pct": _corte_eixo or None,
     }
 
 

@@ -203,9 +203,19 @@ def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
             _cot = derive_scale_from_cotas(pdf_path, page_index, None,
                                            walls=(_w or {}).get("walls"),
                                            rooms_pt=None)
+            # 🔬 07/09/2026 — a sondagem viaja junto. Os cinco primeiros já
+            # existiam; os quatro de baixo respondem, NA PRANCHA REAL que morre
+            # sem escala, se o conserto candidato (voto por valor distinto, em
+            # vez de por token) desempataria — e se o corte do MAX_PONTAS jogou
+            # fora parte da folha. Nada disto muda a decisão: `_cot["scale"]`
+            # continua sendo o único que decide. Custo zero: os números já
+            # estavam calculados e eram descartados.
             out["cotas_derivacao"] = {k: _cot.get(k) for k in
                                       ("votos", "segundo_lugar", "total_pares",
-                                       "n_cotas", "confianca")}
+                                       "n_cotas", "confianca",
+                                       "candidatas", "valores_distintos",
+                                       "por_valor", "por_par", "corte_eixo_pct")
+                                      if _cot.get(k) is not None}
             if _cot.get("scale"):
                 den = float(_cot["scale"])
                 out["scale_src"] = "cotas"
