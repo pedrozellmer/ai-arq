@@ -2475,6 +2475,24 @@ function _contagemBox(html){
   if (el) { el.innerHTML = html; el.scrollIntoView({behavior:'smooth', block:'nearest'}); }
 }
 
+// 🚨 08/09/2026 (auditoria de segurança) — XSS ARMAZENADO NO PAINEL ADMIN.
+// `unidade` está na lista do que o CLIENTE pode editar (`allowed = {description,
+// unit, quantity, discipline, observations}`, main.py) e é gravada VERBATIM: sem
+// sanitização, sem teto de tamanho, coluna `text` sem limite. A única regra é
+// "não pode ficar vazia".
+// Daí ela vinha CRUA pro `innerHTML` de dois painéis do admin. A vítima é o
+// Pedro — a sessão dele é a que manda no sistema —, e basta um cliente digitar
+// a unidade certa e esperar ele abrir o painel.
+// 🪤 A descrição já tinha um `.replace(/</g,'&lt;')` — escape pela METADE, que
+// não cobre aspas nem `&`. Meio escape ensina que está escapado.
+// 🔑 UMA função, içada (`function`, não `const`): existiam TRÊS cópias locais de
+// `esc` neste arquivo, todas definidas DEPOIS destes dois pontos e invisíveis
+// aqui. Três cópias da mesma régua é como as coisas se separam.
+function _escHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
 async function rodarSpecBackfill(simulacao){
   _contagemBox('<div class="rounded-lg border border-violet-200 bg-violet-50 p-3 text-sm text-violet-800">Lendo os itens…</div>');
   try {
@@ -2487,9 +2505,9 @@ async function rodarSpecBackfill(simulacao){
     if (!res.ok) throw new Error(d.detail || ('HTTP ' + res.status));
     const ex = (d.exemplos || []).map(e =>
       `<div class="text-xs bg-white rounded p-2 border border-violet-200 mb-1">
-         <div class="text-gray-700">${(e.descricao || '').replace(/</g,'&lt;')}</div>
+         <div class="text-gray-700">${_escHtml(e.descricao)}</div>
          <div class="text-violet-800 font-medium mt-0.5">
-           ${[e.marca, e.codigo, e.cor].filter(Boolean).join(' &middot; ') || '—'}</div>
+           ${[e.marca, e.codigo, e.cor].filter(Boolean).map(_escHtml).join(' &middot; ') || '—'}</div>
        </div>`).join('');
     // 🚨 25/08: aqui dizia "50 de 1000 itens" e o 1000 era o TETO do Supabase,
     // não o acervo (7718). Lido como "de 1000 que existem". Agora o backend
@@ -2528,7 +2546,7 @@ async function rodarSeloHistorico(){
     const ex = (d.exemplos || []).slice(0, 8).map(e =>
       `<div class="text-xs bg-white rounded p-2 border border-amber-200 mb-1">
          <span class="font-mono text-gray-500">${e.job_id}</span>
-         ${(e.descricao || '').replace(/</g,'&lt;')} <span class="text-gray-400">(${e.unidade || ''})</span>
+         ${_escHtml(e.descricao)} <span class="text-gray-400">(${_escHtml(e.unidade)})</span>
        </div>`).join('');
     _contagemBox(`
       <div class="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
@@ -5905,7 +5923,10 @@ const OG_PALETTE = ['#6366F1','#06B6D4','#10B981','#F59E0B','#EF4444','#8B5CF6',
   '#EC4899','#14B8A6','#F97316','#3B82F6','#A855F7','#22C55E','#EAB308','#0EA5E9'];
 
 // DDD do WhatsApp → UF. Guard: só tira o 55 (DDI) quando tem 12+ dígitos, senão
-// um número com DDD 55 (RS/Santa Maria) seria confundido com DDI.
+// um número com DDD 55 (RS, região central) seria confundido com DDI.
+// 🪤 O nome da cidade saiu do comentário de propósito: ele casa com a lista de
+// nomes de cliente, e este arquivo é SERVIDO ao visitante. Trocar o exemplo
+// custa nada; afrouxar o guarda custaria a próxima pessoa de verdade.
 function _dddToUf(whatsapp){
   if(!whatsapp) return null;
   let d = String(whatsapp).replace(/\D/g,'');
