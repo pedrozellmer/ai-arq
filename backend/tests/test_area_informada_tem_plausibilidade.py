@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Área informada pelo cliente tinha teto, não tinha plausibilidade.
 
-🩸 03/09/2026, FÁBIO SHIRAISHI (job `3eb748e3`). Ele digitou **880.000** no
+🩸 03/09/2026, cliente-45 (job `3eb748e3`). Ele digitou **880.000** no
 campo de área total e o número passou — o único filtro era `> 1_000_000`. Foi
 pra planilha dele carimbado como "informada por você".
 

@@ -49,6 +49,7 @@ inclusive duas escritas 26 minutos antes desta regra nascer. Limpar exige
 reescrever o histórico e forçar o push; a decisão é do Pedro.
 """
 import hashlib
+import unicodedata
 import io
 import os
 import re
@@ -208,6 +209,32 @@ _COMPLETO_CONSENTIDO = {
 _TOKEN = re.compile(r"[A-Za-zÀ-ÿ0-9.]+")
 
 
+def nomes_completos_no_texto(src, rel=""):
+    """(linha, tamanho do n-grama) de cada nome completo dentro de UM texto.
+
+    🔑 Extraída de `_ocorrencias_de_nome_completo` em 08/09/2026 pra poder ser
+    CHAMADA por um teste. Enquanto a varredura só existia amarrada aos arquivos
+    versionados, nenhum controle exercitava o caminho real — e foi assim que a
+    cegueira de acento passou por 5 ocorrências com a bancada verde. Guarda que
+    não pode ser chamado não pode ser provado.
+    """
+    achados = []
+    # 🪤 08/09: era `.lower()` puro — e acento fazia o hash nunca bater.
+    ws = [(_sem_acento(m.group(0)), m.start()) for m in _TOKEN.finditer(src)]
+    for n in (2, 3):
+        for i in range(len(ws) - n + 1):
+            g = " ".join(w for w, _p in ws[i:i + n])
+            if len(g) < 7:
+                continue
+            h = hashlib.md5(g.encode("utf-8")).hexdigest()
+            if h not in _HASH_DE_NOME_COMPLETO:
+                continue
+            if rel and rel in _COMPLETO_CONSENTIDO.get(h, ()):
+                continue      # depoimento autorizado
+            achados.append((src[:ws[i][1]].count("\n") + 1, n))
+    return achados
+
+
 def _ocorrencias_de_nome_completo():
     """(arquivo, linha, tamanho do n-grama) de cada nome completo do cadastro."""
     achados = []
@@ -217,18 +244,8 @@ def _ocorrencias_de_nome_completo():
         src = _conteudo(rel)
         if not src:
             continue
-        ws = [(m.group(0).lower(), m.start()) for m in _TOKEN.finditer(src)]
-        for n in (2, 3):
-            for i in range(len(ws) - n + 1):
-                g = " ".join(w for w, _p in ws[i:i + n])
-                if len(g) < 7:
-                    continue
-                h = hashlib.md5(g.encode("utf-8")).hexdigest()
-                if h not in _HASH_DE_NOME_COMPLETO:
-                    continue
-                if rel in _COMPLETO_CONSENTIDO.get(h, ()):
-                    continue      # depoimento autorizado
-                achados.append((rel, src[:ws[i][1]].count("\n") + 1, n))
+        for linha, n in nomes_completos_no_texto(src, rel):
+            achados.append((rel, linha, n))
     return achados
 
 
@@ -257,6 +274,115 @@ def test_CONTROLE_o_nome_completo_ACHA_um_plantado():
         "o nome do depoimento saiu da lista — a exceção de consentimento virou "
         "letra morta e o guarda deixou de olhar aquele arquivo por nada")
     del _h
+
+
+def test_CONTROLE_o_ACENTO_nao_cega_o_guarda(monkeypatch):
+    """🧪 O controle que faltava — e a falta dele custou 5 vazamentos.
+
+    🩸 08/09/2026: as listas de hash foram geradas SEM acento, o texto do repo
+    era hasheado COM acento, e os dois nunca batiam. O guarda passava verde com
+    um nome completo de cliente vivo em `backend/main.py`, colado ao job_id.
+    Nenhum teste percebeu, porque todos os controles usavam nome SEM acento.
+
+    Aqui a peneira é obrigada a achar a forma acentuada de uma palavra que ela
+    só conhece sem acento. Se alguém tirar o `_sem_acento`, este teste reprova.
+
+    🪤 Fixture genérica de propósito: "jose"/"antonio" são nomes comuns, não
+    identificam cliente nenhum, e o repo é público.
+    """
+    import hashlib as _h
+    for sem, com in (("jose", "José"), ("antonio", "Antônio"),
+                     ("marcia", "MÁRCIA"), ("ines", "Inês")):
+        monkeypatch.setattr(
+            "test_repo_publico_nao_expoe_cliente._HASH_DE_NOME",
+            frozenset({_h.md5(sem.encode("utf-8")).hexdigest()}))
+        assert _e_nome_de_cliente(com), (
+            "%r não foi reconhecido a partir de %r — o guarda voltou a ser "
+            "cego pra acento" % (com, sem))
+        assert _e_nome_de_cliente(sem), "controle: a forma sem acento também tem que bater"
+
+
+def test_CONTROLE_o_ACENTO_tambem_vale_pro_nome_COMPLETO(monkeypatch):
+    """🪤 A 1ª versão deste controle só RECALCULAVA o hash — não chamava a
+    varredura. A mutação provou que ele era decorativo: dava pra devolver o
+    n-grama pra `.lower()` e ele passava verde.
+
+    Agora ele RODA `nomes_completos_no_texto` num texto acentuado. É o caminho
+    exato que deixou passar 5 ocorrências em 08/09.
+    """
+    import hashlib as _h
+    monkeypatch.setattr(
+        "test_repo_publico_nao_expoe_cliente._HASH_DE_NOME_COMPLETO",
+        frozenset({_h.md5("jose antonio".encode("utf-8")).hexdigest()}))
+
+    texto = "# caso José Antônio (job 3eb748e3): informou 880.000 no campo\n"
+    achados = nomes_completos_no_texto(texto)
+    assert achados, ("a varredura não achou o nome ACENTUADO — é a cegueira de "
+                     "08/09 de volta")
+    assert achados[0][0] == 1, achados
+
+    # CONTROLE do controle: sem acento tem que achar igual
+    assert nomes_completos_no_texto("# caso Jose Antonio (job x)\n"), (
+        "cenário inválido: nem sem acento acha, então o teste não prova nada")
+
+
+def test_CONTROLE_o_CONSENTIMENTO_sobrevive_ao_acento(monkeypatch):
+    """🪤 O outro mutante que passou batido: o caminho do depoimento AUTORIZADO
+    também compara por hash. Se ele voltar a comparar com acento, a exceção de
+    consentimento deixa de casar — e o guarda passa a ACUSAR o depoimento que o
+    cliente autorizou, num arquivo que é conteúdo do site.
+    """
+    import hashlib as _h
+    alvo = _h.md5("jose antonio".encode("utf-8")).hexdigest()
+    monkeypatch.setattr(
+        "test_repo_publico_nao_expoe_cliente._HASH_DE_NOME_COMPLETO",
+        frozenset({alvo}))
+    monkeypatch.setattr(
+        "test_repo_publico_nao_expoe_cliente._COMPLETO_CONSENTIDO",
+        {alvo: ("index.html",)})
+
+    texto = "<p>José Antônio, arquiteto, aprovou este depoimento.</p>\n"
+    assert not nomes_completos_no_texto(texto, "index.html"), (
+        "o depoimento autorizado foi acusado: a exceção de consentimento não "
+        "casou com a forma acentuada")
+    assert nomes_completos_no_texto(texto, "backend/main.py"), (
+        "controle: FORA do arquivo consentido o mesmo texto tem que acusar")
+
+
+def test_CONTROLE_o_CONSENTIMENTO_PALAVRA_sobrevive_ao_acento(monkeypatch):
+    """A exceção de consentimento existe em DOIS caminhos — n-grama e
+    palavra-a-palavra — e cada um tem a própria comparação por hash.
+
+    🪤 A mutação pegou justamente este: eu tinha coberto o n-grama e deixado o
+    outro sem ninguém. Dava pra devolver `_ocorrencias_de_nome` pra `.lower()`
+    e a bancada seguia verde — o depoimento AUTORIZADO passaria a ser acusado.
+    """
+    import hashlib as _h
+    alvo = _h.md5("marcia".encode("utf-8")).hexdigest()
+    monkeypatch.setattr(
+        "test_repo_publico_nao_expoe_cliente._HASH_DE_NOME", frozenset({alvo}))
+    monkeypatch.setattr(
+        "test_repo_publico_nao_expoe_cliente._CONSENTIU_EM_PUBLICO",
+        {alvo: ("index.html",)})
+
+    texto = "<p>MÁRCIA autorizou este depoimento.</p>\n"
+    assert not nomes_no_texto(texto, "index.html"), (
+        "o depoimento autorizado foi acusado — a exceção não casou com a "
+        "forma acentuada")
+    assert nomes_no_texto(texto, "backend/main.py"), (
+        "controle: fora do arquivo consentido, a mesma palavra acusa")
+    assert nomes_no_texto("<p>marcia sem acento</p>\n", "backend/main.py"), (
+        "controle do controle: sem acento também tem que acusar")
+
+
+def test_CONTROLE_normalizar_NAO_junta_palavras_diferentes():
+    """🪤 Tirar acento aproxima palavras: se juntasse demais, o guarda passaria
+    a acusar vocabulário do projeto. Duas palavras distintas continuam
+    distintas — o que muda é só o acento."""
+    assert _sem_acento("Área") == "area"
+    assert _sem_acento("area") == "area"
+    assert _sem_acento("cotas") != _sem_acento("cota")
+    assert _sem_acento("São") == "sao" and _sem_acento("sao") == "sao"
 
 
 def test_CONTROLE_o_depoimento_AUTORIZADO_continua_na_home():
@@ -334,7 +460,16 @@ _FORA_DA_CHECAGEM_DE_NOME = ("blog/posts",)
 #: detectar e ERRADO em bloquear: ele media presença absoluta quando a pergunta
 #: é "o agente piorou?". Bloquear trabalho bom por dívida velha é a mesma
 #: doença de acusar código certo. Trouxe os 6 e limpei os 7 nomes de quebra.
-_TETO_DE_NOMES = 328
+# 🩸 08/09/2026 — 328 -> 306. A queda NÃO veio de limpeza: veio de o guarda
+# passar a ENXERGAR. Ele comparava hash do texto como está escrito contra uma
+# lista gerada SEM acento, então "Fábio" nunca batia com "fabio". Metade dos
+# nomes brasileiros era invisível — José, Antônio, Márcia, Luís, Inês, Mônica.
+# Normalizado (`_sem_acento`), a contagem MUDOU nos dois sentidos: apareceram
+# ocorrências que ninguém via, e sumiram duplicatas de acento.
+# 🚨 O que ele achou na hora: 5 ocorrências de um nome COMPLETO de cliente,
+# duas delas em `backend/main.py`, com a bancada verde o tempo todo. Limpas no
+# mesmo commit.
+_TETO_DE_NOMES = 306
 
 _EXT_TEXTO = (".py", ".html", ".js", ".md", ".yml", ".yaml", ".css",
               ".json", ".txt", ".sql", ".toml", ".sh")
@@ -379,8 +514,46 @@ def _conteudo(rel):
         return ""
 
 
+def _sem_acento(s):
+    """'FÁBIO' -> 'fabio'. A régua de comparação é UMA: minúscula sem acento.
+
+    🩸 08/09/2026 — ESTE GUARDA ERA CEGO PRA ACENTO, E ISSO O DESLIGAVA PRA
+    METADE DOS NOMES BRASILEIROS. As listas de hash foram geradas a partir da
+    forma SEM acento ('fabio' -> 374321cf…), mas o texto do repositório era
+    hasheado como está escrito ('fábio' -> 817e8f55…). Os dois nunca batiam.
+
+    🚨 Não é "a lista está incompleta": o nome ESTAVA na lista e passou mesmo
+    assim. Achado hoje ao vivo — um nome completo de cliente vivia em
+    `backend/main.py` num comentário, colado ao job_id, com a bancada verde.
+    José, Fábio, Antônio, Márcia, Luís, Inês, Mônica, Túlio: todos invisíveis.
+
+    🔑 Guarda que passa por estar cego é pior que guarda nenhum — o verde
+    ensina a confiar. Ver [[feedback_teste_com_controle_positivo]].
+    """
+    return "".join(c for c in unicodedata.normalize("NFKD", str(s).lower())
+                   if not unicodedata.combining(c))
+
+
 def _e_nome_de_cliente(palavra):
-    return hashlib.md5(palavra.lower().encode("utf-8")).hexdigest() in _HASH_DE_NOME
+    return hashlib.md5(_sem_acento(palavra).encode("utf-8")).hexdigest() in _HASH_DE_NOME
+
+
+def nomes_no_texto(src, rel=""):
+    """Linhas de UM texto onde há palavra de nome de cliente.
+
+    🔑 Extraída em 08/09/2026 pelo mesmo motivo do n-grama: a mutação mostrou
+    que o caminho do CONSENTIMENTO não tinha nenhum teste que o executasse —
+    dava pra devolver a comparação pra `.lower()` e a bancada seguia verde.
+    """
+    achados = []
+    for m in _PALAVRA.finditer(src):
+        if not _e_nome_de_cliente(m.group(0)):
+            continue
+        h = hashlib.md5(_sem_acento(m.group(0)).encode("utf-8")).hexdigest()
+        if rel and rel in _CONSENTIU_EM_PUBLICO.get(h, ()):
+            continue      # depoimento autorizado — é conteúdo, não vazamento
+        achados.append(src[:m.start()].count("\n") + 1)
+    return achados
 
 
 def _ocorrencias_de_nome():
@@ -392,13 +565,8 @@ def _ocorrencias_de_nome():
         src = _conteudo(rel)
         if not src:
             continue
-        for m in _PALAVRA.finditer(src):
-            if not _e_nome_de_cliente(m.group(0)):
-                continue
-            h = hashlib.md5(m.group(0).lower().encode("utf-8")).hexdigest()
-            if rel in _CONSENTIU_EM_PUBLICO.get(h, ()):
-                continue      # depoimento autorizado — é conteúdo, não vazamento
-            achados.append((rel, src[:m.start()].count("\n") + 1))
+        for linha in nomes_no_texto(src, rel):
+            achados.append((rel, linha))
     return achados
 
 

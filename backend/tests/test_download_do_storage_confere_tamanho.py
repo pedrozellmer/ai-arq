@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Arquivo baixado pela metade não pode virar "o desenho do cliente está ruim".
 
-🩸 03/09/2026. Achado investigando o caso FÁBIO SHIRAISHI (job `75dab573`),
+🩸 03/09/2026. Achado investigando o caso do job `75dab573`),
 cujo ODA dizia "Unexpected end of file".
 
 🪤 E EU ATRIBUÍ O CASO DELE A ISTO, ERRADO. Com a conferência ligada, o arquivo

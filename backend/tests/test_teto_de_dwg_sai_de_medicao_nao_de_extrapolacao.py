@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """O teto de DWG recusou um arquivo que a gente lê — por causa de extrapolação.
 
-🩸 03/09/2026, FÁBIO SHIRAISHI (job `75dab573`, "BRB Estadio"), primeiro projeto
+🩸 03/09/2026, cliente-45 (job `75dab573`, "BRB Estadio"), primeiro projeto
 dele. DWG de 44,5 MB recusado por um teto de 40 MB, com o log dizendo:
 
     "converter pediria ~2227 MB de RAM e derrubaria o servidor; nem tentei"
