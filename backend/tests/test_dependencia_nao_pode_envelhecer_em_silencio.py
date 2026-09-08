@@ -46,6 +46,26 @@ _PISO = {
     "python-multipart": ((0, 0, 31),
                          "3 falhas ALTAS na mesma rota pública; a última "
                          "(GHSA-v9pg-7xvm-68hf) só cai em 0.0.31"),
+    "pdfplumber": ((0, 11, 10),
+                   "ele PINA o pdfminer.six com `==`; abaixo de 0.11.10 prende a "
+                   "20231228, que tem 2 ALTAS de execução de código via pickle"),
+    "Pillow": ((12, 3, 0),
+               "13 falhas ALTAS no 10.4.0. 📏 alcance baixo aqui (recebe bitmap "
+               "já decodificado, não parseia formato exótico), mas subir é barato"),
+    "Jinja2": ((3, 1, 6), "6 falhas, nenhuma ALTA — salto de patch"),
+}
+
+#: 🚫 Fica ATRÁS de propósito, com o motivo escrito. Sem isto, a próxima pessoa
+#: lê o piso, vê o weasyprint fora e conclui que foi esquecimento.
+_FICA_ATRAS_DE_PROPOSITO = {
+    "weasyprint": (
+        "62.3 tem UMA falha alta (GHSA-983w): bypass da proteção de SSRF via "
+        "redirect HTTP. O nosso `url_fetcher` (pdf_seguro.py) recusa tudo que "
+        "não seja `data:`, então não existe requisição HTTP pra redirecionar — "
+        "a falha não é alcançável nesta configuração. Subir seriam 8 versões "
+        "maiores num pacote que NÃO está instalado na máquina onde a bancada é "
+        "escrita: trocaria uma falha fechada por uma mudança que ninguém "
+        "consegue testar antes do deploy."),
 }
 
 _RX = re.compile(r"^\s*([A-Za-z0-9._-]+)\s*==\s*([0-9]+(?:\.[0-9]+)*)", re.M)
@@ -66,6 +86,10 @@ def _pinos():
 def test_o_pin_nao_esta_abaixo_do_piso_medido(pacote):
     piso, porque = _PISO[pacote]
     pinos = _pinos()
+    # 🪤 O nome no requirements tem caixa (Pillow, Jinja2) e o parser normaliza:
+    # comparar com caixa fazia o guarda acusar "sumiu do requirements" um pacote
+    # que estava lá. Guarda que acusa o inocente treina a ignorar.
+    pacote = pacote.lower()
     assert pacote in pinos, (
         "%s sumiu do requirements.txt. Se virou transitivo de novo, ninguém "
         "mais o revisa — foi assim que o starlette ficou dois anos parado."
@@ -74,6 +98,27 @@ def test_o_pin_nao_esta_abaixo_do_piso_medido(pacote):
     assert atual >= piso, (
         "%s pinado em %s, abaixo do piso %s.\n%s"
         % (pacote, ".".join(map(str, atual)), ".".join(map(str, piso)), porque))
+
+
+@pytest.mark.parametrize("pacote", sorted(_FICA_ATRAS_DE_PROPOSITO))
+def test_quem_fica_atras_tem_o_motivo_ESCRITO_no_requirements(pacote):
+    """🪤 Dependência velha sem explicação é indistinguível de esquecimento — e
+    a próxima auditoria vai reabrir o mesmo achado, gastando o dia de alguém.
+
+    Este teste não julga a decisão: ele exige que ela esteja escrita ONDE quem
+    for mexer vai ler, que é o requirements.txt.
+    """
+    txt = io.open(_REQ, encoding="utf-8").read()
+    i = txt.lower().find(pacote.lower() + "==")
+    assert i > 0, "%s sumiu do requirements" % pacote
+    # o bloco de comentário imediatamente acima da linha
+    antes = txt[:i].rsplit("\n\n", 1)[-1]
+    assert antes.count("#") >= 3, (
+        "%s está atrás da versão corrigida e o requirements.txt não explica "
+        "por quê — quem ler vai achar que foi esquecimento." % pacote)
+    assert "url_fetcher" in antes or "alcanc" in antes.lower(), (
+        "a explicação não diz por que a falha não alcança a gente: %r"
+        % antes[-160:])
 
 
 def test_o_starlette_continua_EXPLICITO():
