@@ -677,11 +677,15 @@ _FORA_DA_CHECAGEM_DE_NOME = ("blog/posts",)
 # silva/santos/campos.
 #
 # ⏭️ Daqui pra frente o teto SÓ DESCE de novo.
+# 08/09, 4a mexida: 366 -> 364. Saiu um [[link de memoria]] cujo NOME DE
+# ARQUIVO carregava o nome do cliente — a unica porta desse tipo no repo
+# (os outros ~40 wikilinks sao por TEMA). O guarda ja enxergava essa
+# ocorrencia; quem a absorvia era o teto. Por isso o teto desce junto.
 # 08/09, 3a mexida: 378 -> 366. Esta DESCE, e pelo motivo certo: 12 ocorrencias
 # saíram de arquivos SERVIDOS ao visitante (dashboard/projeto/cadastro/admin).
 # Ver test_o_que_vai_pro_ar_nao_leva_nome_de_cliente — la o teto e ZERO, porque
 # comentario que vai pro ar nao e divida a pagar devagar: e publicacao.
-_TETO_DE_NOMES = 366
+_TETO_DE_NOMES = 364
 
 _EXT_TEXTO = (".py", ".html", ".js", ".md", ".yml", ".yaml", ".css",
               ".json", ".txt", ".sql", ".toml", ".sh")

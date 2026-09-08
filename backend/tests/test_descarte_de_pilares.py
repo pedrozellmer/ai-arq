@@ -12,7 +12,7 @@ itens com ZERO medido** e preencheu 17 linhas na mão:
     Lajes    concreto 0 → 40 m³   fôrma 0 → 155 m²   armadura 0 → 1000 kg
 
 Quase todos números REDONDOS — é frustração, não medição (mesmo padrão do
-cliente-53 em [[project_caso_giovani_20260815]]).
+cliente-53, 15/08).
 
 📊 E não é só ele. Em todos os projetos com `project_type='estrutura'`:
 

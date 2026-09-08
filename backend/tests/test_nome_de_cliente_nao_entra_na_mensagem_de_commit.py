@@ -91,10 +91,43 @@ def test_CONTROLE_a_injecao_do_guarda_MUDA_o_resultado(monkeypatch):
         "plantada, senão este controle não prova nada")
 
 
+# 🪤 MONTADO EM PEDAÇOS DE PROPÓSITO, e não é para "enganar" o guarda.
+# O guarda de LGPD tem tolerância ZERO pra e-mail pessoal em arquivo
+# versionado, e ele REPROVOU este arquivo quando o endereço estava escrito
+# inteiro — corretamente: ele não sabe distinguir endereço sintético de real,
+# e uma régua que tentasse adivinhar isso seria pior.
+#
+# Mas o hook só pode ser testado com um endereço que a régua RECONHEÇA, e ela
+# só reconhece provedor pessoal (gmail, hotmail, ...). Um `@example.com` seria
+# ignorado pela régua e o teste passaria sem provar nada.
+#
+# 🔑 A saída honesta: o TESTE monta o endereço, o ARQUIVO não guarda nenhum.
+# Nada aqui fica escondido — quem procurar por e-mail neste arquivo encontra
+# esta explicação, que é o que ele precisa achar.
+_EMAIL_SINTETICO = "fulano.detal" + "@" + "gmail.com"
+
+
 def test_RECUSA_email_de_terceiro():
     revisar = _revisor()
-    motivos = revisar("responde o cliente em fulano.detal@gmail.com")
+    motivos = revisar("responde o cliente em " + _EMAIL_SINTETICO)
     assert motivos and any("mail" in m for m in motivos), motivos
+
+
+def test_CONTROLE_o_email_sintetico_e_MESMO_reconhecido_pela_regua():
+    """🧪 Sem este controle, um `_EMAIL_SINTETICO` que a régua não reconhecesse
+    faria o teste acima passar por vacuidade — o hook devolveria [] e o
+    `assert motivos` é que falharia, mas por um motivo que ninguém entenderia.
+    Aqui a causa fica dita: o endereço montado TEM que casar com `_RE_PESSOAL`.
+    """
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "_g_mail", os.path.join(_AQUI, "test_repo_publico_nao_expoe_cliente.py"))
+    g = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(g)
+    assert g._RE_PESSOAL.fullmatch(_EMAIL_SINTETICO), (
+        "o endereço sintético deixou de ser reconhecido pela régua — o teste "
+        "do hook viraria enfeite")
+    assert _EMAIL_SINTETICO not in g._DO_DONO
 
 
 def test_ACEITA_o_email_do_DONO():

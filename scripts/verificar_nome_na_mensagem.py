@@ -20,7 +20,6 @@ elas divergem — foi exatamente o defeito de hoje de manhã.
 """
 import io
 import os
-import re
 import sys
 
 _AQUI = os.path.dirname(os.path.abspath(__file__))
