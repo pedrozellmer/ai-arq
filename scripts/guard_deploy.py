@@ -122,9 +122,14 @@ def main() -> int:
     # JS compartilhado, mas os HTMLs têm milhares de linhas de JS inline que
     # nenhum guarda olhava (pyflakes não vê JS; a bancada lê o FONTE). Roda só
     # se uma página vigiada mudou.
+    # 🔒 08/09/2026 — 4ª trava: o requirements.txt RESOLVE? Um pin novo derrubou
+    # o CI e o build do Render no mesmo push, os dois no passo de INSTALAR — e a
+    # bancada local tinha fechado com 3166 verdes, porque ela nunca instala do
+    # requirements.txt. Roda só se o arquivo mudou.
     _sub = os.path.dirname(os.path.abspath(__file__))
     for _script, _oque in (("guard_front_contrato.py", "o contrato do front"),
-                           ("guard_paginas_carregam.py", "o carregamento das páginas")):
+                           ("guard_paginas_carregam.py", "o carregamento das páginas"),
+                           ("guard_requirements.py", "se o requirements.txt resolve")):
         try:
             import subprocess as _sp
             _r = _sp.run([sys.executable, os.path.join(_sub, _script)], timeout=420)
