@@ -32,11 +32,26 @@ python-multipart==0.0.31
 # 20231228: duas falhas ALTAS de EXECUÇÃO DE CÓDIGO por desserialização de
 # pickle (GHSA-f83h e GHSA-wf5f), conferidas por mim no OSV.
 # 🪤 NÃO adianta pôr `pdfminer.six>=...` aqui sem subir o pdfplumber: dá
-# conflito de resolução, porque o pin dele é `==`. Do 0.11.10 o pin é 20260107.
+# conflito de resolução, porque o pin dele é `==`.
+#
+# 🩸 E EU CAÍ NO IRMÃO DESSE MESMO BURACO, UM NÍVEL ACIMA. Pinei 0.11.10 e
+# derrubei o CI e o build do Render de uma vez — os dois no passo de INSTALAR,
+# não em teste:
+#     pdfplumber 0.11.10 depends on pypdfium2>=5.9.0
+#     The user requested pypdfium2==4.30.0
+# O pdfplumber prende o `pypdfium2` do mesmo jeito que prende o pdfminer, e o
+# `pypdfium2` é o RASTERIZADOR do motor — a versão 5 seria salto maior no
+# coração do PDF, não um patch de segurança.
+#
+# ✅ 0.11.9 é o degrau que resolve: `pypdfium2>=4.18.0` (o nosso 4.30.0 serve)
+# e já pina `pdfminer.six==20251230`. Conferido no OSV, com controle:
+# o 20231228 tem 4 falhas (2 ALTAS), o 20251230 tem ZERO. A segurança inteira,
+# sem encostar no rasterizador.
+#
 # 📏 Alcance honesto: o mantenedor do pdfminer diz que, em Linux, o PDF sozinho
-# NÃO dispara — precisa de um pickle já no disco. Subimos porque é barato, não
-# porque estava sangrando.
-pdfplumber==0.11.10
+# NÃO dispara — precisa de um pickle já no disco. Subimos porque é barato — e
+# quando a versão 0.11.10 provou NÃO ser barata, ela caiu por esse motivo.
+pdfplumber==0.11.9
 pypdfium2==4.30.0
 openpyxl==3.1.5
 python-docx==1.1.2
