@@ -15190,12 +15190,27 @@ def _perfil_existe_agora(email: str, uid: str = "") -> bool | None:
 
     Devolve None quando não deu pra saber: aí o chamador PULA, em vez de
     chutar. Chutar aqui vira e-mail errado permanente.
+
+    🩸 08/09/2026 — O FAIL-CLOSED FUNCIONAVA, MAS ERA MUDO. `_supa_rest_service`
+    NUNCA levanta (devolve `(código, None)`), então o `except` daqui era
+    inalcançável: `alerta-cadastro:perfil-agora` nunca apareceu no error_log em
+    2 meses. Provado rodando, com a rede caída: devolveu None e gravou ZERO log.
+    O efeito é o clássico "zero parece tranquilo": numa madrugada de Supabase
+    instável os lembretes de cadastro somem e a ausência de alerta se lê como
+    "ninguém parou no meio do cadastro". Agora o motivo fica escrito.
+    🪤 O chamador roda isto num laço sobre os cadastros NOVOS desde o último
+    tick (tipicamente 0 a 3) — uma linha por pessoa numa queda é sinal, não
+    enxurrada.
     """
     try:
         st, rows = _supa_rest_service(
             "GET", "/profiles",
             params={"select": "user_id", "email": f"eq.{email}", "limit": "1"})
         if st != 200:
+            _log_error("alerta-cadastro:perfil-agora",
+                       f"profiles HTTP {st} — não deu pra saber se o cadastro "
+                       f"foi concluído; o lembrete fica pro próximo tick",
+                       severity="warning")
             return None
         if rows:
             return True
@@ -15204,6 +15219,9 @@ def _perfil_existe_agora(email: str, uid: str = "") -> bool | None:
                 "GET", "/profiles",
                 params={"select": "user_id", "user_id": f"eq.{uid}", "limit": "1"})
             if st2 != 200:
+                _log_error("alerta-cadastro:perfil-agora",
+                           f"profiles (por uid) HTTP {st2} — lembrete adiado",
+                           severity="warning")
                 return None
             return bool(rows2)
         return False
@@ -17281,19 +17299,43 @@ def registrar_avaliacao(payload: NotaAvaliacao):
         # 🔑 Uma nota por (projeto, pessoa). Clicou de novo, TROCA a nota — que
         # é o que a pessoa quis dizer ao clicar de novo.
         _ja, _id_ant, _nota_ant = None, "", None
-        try:
-            _ja = _supa_rows("GET", "processing_survey",
-                             params={"job_id": f"eq.{payload.k or ''}",
-                                     "user_email": f"eq.{email}",
-                                     "question_key": "eq.nota_entrega_1a5",
-                                     "select": "id,answer",
-                                     "order": "created_at.desc", "limit": "1"})
-            if _ja:
-                _id_ant = str(_ja[0].get("id") or "")
-                _nota_ant = str(_ja[0].get("answer") or "")
-        except Exception as _eja:
-            _log_error("avaliacao:dedup", f"não consegui checar nota anterior: {_eja}",
-                       payload.k)
+        # 🩸 08/09/2026 — A DEDUPLICAÇÃO FALHAVA CALADA E GRAVAVA DUPLICATA.
+        # `_supa_rows` "devolve [] em qualquer falha" (a própria docstring dela
+        # diz) e NUNCA levanta — então o `except Exception` daqui era morto:
+        # `avaliacao:dedup` nunca apareceu no error_log em 2 meses.
+        # Pior que o log mudo é o EFEITO: `[]` é indistinguível de "essa pessoa
+        # ainda não avaliou", e o código caía no INSERT em vez do PATCH —
+        # gravando nota DUPLICADA e disparando o alerta pro Pedro de novo, que
+        # é exatamente o bug que a auditoria de 31/08 consertou. Provado
+        # rodando: com a rede caída e com HTTP 500, `_supa_rows` devolveu `[]`
+        # sem levantar e sem log.
+        # 🪤 Numa base com 7 respostas de NPS em toda a história, uma duplicata
+        # não é ruído — é uma fatia grande do dado.
+        # 🔑 Decide pelo STATUS, como `_projeto_patch` já faz. Não deu pra
+        # conferir → NÃO grava: repetir é pior que perder, porque a duplicata
+        # contamina a média e o alerta.
+        import urllib.parse as _upd
+        _st_ja, _ja = _supa_rest_service(
+            "GET", "processing_survey"
+                   f"?job_id=eq.{_upd.quote(payload.k or '')}"
+                   f"&user_email=eq.{_upd.quote(email)}"
+                   "&question_key=eq.nota_entrega_1a5"
+                   "&select=id,answer&order=created_at.desc&limit=1")
+        if _st_ja != 200 or _ja is None:
+            _log_error("avaliacao:dedup",
+                       f"processing_survey HTTP {_st_ja} — não dá pra saber se "
+                       f"já existe nota; NÃO gravo pra não duplicar", payload.k,
+                       severity="warning")
+            # 🪤 HTTPException, e não um dict próprio: `obrigado.html` decide
+            # por `d.status !== 'ok'` e só mostra o texto quando vem em
+            # `detail` (string). Um `{"ok": false}` faria a tela dizer "o
+            # servidor respondeu 200", que confunde mais do que ajuda. 502 é o
+            # mesmo código que a gravação usa logo abaixo.
+            raise HTTPException(502, "não consegui registrar sua nota agora — "
+                                     "abra o link de novo em instantes")
+        if _ja:
+            _id_ant = str(_ja[0].get("id") or "")
+            _nota_ant = str(_ja[0].get("answer") or "")
         if _id_ant:
             import urllib.parse as _up2
             _st_up, _ = _supa_rest_service(
