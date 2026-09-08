@@ -60,6 +60,7 @@ class _Nuvem:
         self.expirados = expirados if expirados is not None else [{"job_id": JOB}]
         self.apagados = []
         self.arquivados = []
+        self.dias_pedidos = []      # o `p_days` que a varredura mandou pra RPC
 
     def urlopen(self, req, timeout=None):
         url = getattr(req, "full_url", str(req))
@@ -76,6 +77,7 @@ class _Nuvem:
         if "/rpc/list_expired_projects" in url:
             return _resp(self.expirados)
         if "/rpc/list_expired_storage_leftovers" in url:
+            self.dias_pedidos.append(corpo.get("p_days"))
             return _resp(self.sobras)
         if "/rpc/mark_project_archived" in url:
             self.arquivados.append(corpo.get("p_job_id"))
@@ -103,7 +105,7 @@ def nuvem(monkeypatch):
     """Monta o cenário e devolve uma fábrica: `nuvem(...)` → (_Nuvem, stats)."""
     import urllib.request
 
-    def montar(dono=(200, [{"user_email": DONO}]), **kw):
+    def montar(dono=(200, [{"user_email": DONO}]), query=None, **kw):
         # 🪤 o dono entra AQUI, não num monkeypatch do teste: a fábrica roda
         # depois e sobrescreveria — dois testes passaram a apagar o que deviam
         # proteger porque a ordem estava invertida.
@@ -115,7 +117,7 @@ def nuvem(monkeypatch):
         monkeypatch.setattr(main, "_supa_rest_service", lambda *a, **k: dono)
         monkeypatch.setattr(main, "CLEANUP_SECRET", "segredo")
         req = type("Req", (), {"headers": {"X-Cleanup-Secret": "segredo"},
-                               "query_params": {}})()
+                               "query_params": dict(query or {})})()
         return n, main.cleanup_old_projects(req)
 
     return montar
@@ -196,9 +198,14 @@ def test_lote_cheio_da_listagem_conta_como_falha(monkeypatch):
 # ══════════════════════════════════════════════════════════════════════════
 #  3 · a varredura de resgate alcança o que já ficou pra trás
 # ══════════════════════════════════════════════════════════════════════════
+# 🔒 nº6 — o repo é PÚBLICO. A 1ª versão desta constante trazia job_id REAL e
+# nome REAL de arquivo CAD de cliente, copiados do storage de produção. O
+# job_id é permitido pela regra (é opaco), mas o NOME DO ARQUIVO identifica o
+# projeto e quem o encomendou. O teste precisa da FORMA — espaço no nome, que é
+# o defeito que ele guarda —, nunca de quem é o dono.
 SOBRAS = [
-    {"bucket_id": "aiarq-pranchas", "object_name": "78d0fab4/UFOP CENTRO-HID03.dwg"},
-    {"bucket_id": "aiarq-pranchas", "object_name": "7ae23214/Planta 2 - cobertura.pdf"},
+    {"bucket_id": "aiarq-pranchas", "object_name": "jobaaa01/PRANCHA 03 - HIDRAULICO.dwg"},
+    {"bucket_id": "aiarq-pranchas", "object_name": "jobbbb02/Planta 2 - cobertura.pdf"},
 ]
 
 
@@ -213,9 +220,35 @@ def test_resgate_apaga_o_que_sobrou_de_projeto_JA_arquivado(nuvem):
 
 
 def test_resgate_conta_a_falha_em_vez_de_dar_por_feito(nuvem):
-    n, stats = nuvem(expirados=[], sobras=SOBRAS, delete_falha=["UFOP"])
+    n, stats = nuvem(expirados=[], sobras=SOBRAS, delete_falha=["HIDRAULICO"])
     assert stats["resgatados"] == 1 and stats["resgate_falhou"] == 1, \
         "falha do resgate virou sucesso"
+
+
+def test_a_varredura_IGNORA_o_days_da_url(nuvem):
+    """🚨 O achado mais perigoso da revisão de 07/09.
+
+    `?days` existe pra ajustar o passo 2 em teste. A varredura é outra coisa:
+    é uma exclusão em MASSA, sem dono lido e sem projeto pra pular, e o
+    parâmetro chegava CRU na RPC. Medido no banco de produção:
+
+        list_expired_storage_leftovers(90) →   31 arquivos (o resíduo real)
+        list_expired_storage_leftovers(0)  → 1000 arquivos (o teto), de 1.282
+
+    Um `?days=0` apagaria o CAD de praticamente todos os clientes numa chamada.
+    A retenção é uma PROMESSA, não um botão de URL.
+    """
+    n, _ = nuvem(expirados=[], sobras=[], query={"days": "0"})
+    assert n.dias_pedidos, "a varredura nem chamou a RPC"
+    assert all(d == main.CLEANUP_RETENTION_DAYS for d in n.dias_pedidos), (
+        "🚨 o `?days` da URL chegou na varredura de massa: %r" % n.dias_pedidos)
+
+
+def test_o_days_da_url_continua_valendo_pro_passo_2(nuvem):
+    """O outro lado: o parâmetro não pode ter morrido — ele serve pra testar o
+    arquivamento de projeto, onde há dono lido e fixture pulada."""
+    n, stats = nuvem(query={"days": "7"})
+    assert stats["days_threshold"] == 7, stats.get("days_threshold")
 
 
 def test_resgate_recusa_balde_que_nao_e_nosso(nuvem):

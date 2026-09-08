@@ -135,6 +135,82 @@ def test_o_resgate_conta_no_log():
 
 
 # ══════════════════════════════════════════════════════════════════════════
+#  1b · 🚨 AS TRÊS TRAVAS — achadas pela revisão adversarial de 07/09
+#
+#  A 1ª versão deste ramo CRIAVA NÚMERO sem nenhuma das travas que os ramos
+#  vizinhos têm. Os três buracos foram reproduzidos rodando a função real.
+# ══════════════════════════════════════════════════════════════════════════
+def test_item_de_PAREDE_nao_recebe_a_area_do_PISO():
+    """🚨 Trava 1. `rooms_m2` é área de CHÃO. "Pintura látex sobre parede" em
+    m² citando 9,0 m² recebia os 9,0 do piso — atribuição errada com cara de
+    medição. `is_floor_surface_para_criar` é a função cuja docstring diz "use
+    onde o motor vai ESCREVER um número que não existia"."""
+    it, _, _ = _roda(300.0, OBS_AREA, "m2", desc="Pintura látex sobre parede")
+    assert _q(it) == 0, (
+        "🚨 item de parede recebeu a área de piso medida (saiu %r)" % it.quantity)
+
+
+def test_quatro_lineares_nao_recebem_TODOS_o_mesmo_comprimento():
+    """🚨 Trava 2. `walls_m` é UMA medição. Rodapé, soleira, perfil de LED e
+    dreno recebiam os mesmos 49,9 m — a mesma medição contada 4× no total da
+    obra. Empate na família deixa todos vazios (trava 4 do passo 7)."""
+    itens = [_Item(description=d, unit="ml", quantity=100.0,
+                   observations=OBS_LINEAR, ref_sheet="prancha.pdf")
+             for d in ("Rodapé em porcelanato", "Soleira de granito",
+                       "Perfil de LED embutido", "Dreno de ar-condicionado")]
+    main._apply_area_honesty(itens, pdfvec_m2=9.0, pdfvec_por_prancha=dict(PP))
+    preenchidos = [i.description for i in itens if _q(i)]
+    assert not preenchidos, (
+        "🚨 %d itens lineares receberam a MESMA medição: %r"
+        % (len(preenchidos), preenchidos))
+
+
+def test_item_de_arquivo_que_ninguem_mediu_nao_resgata():
+    """🚨 Trava 3. Com UMA prancha medida, o `ref_sheet` era ignorado e um item
+    de arquivo que nunca foi medido levava o número dela."""
+    it, _, _ = _roda(300.0, OBS_AREA, "m2", ref="OUTRO ARQUIVO.pdf")
+    assert _q(it) == 0, (
+        "🚨 item de arquivo não medido recebeu a medição de outro (saiu %r)"
+        % it.quantity)
+
+
+def test_item_sem_ref_sheet_nao_resgata():
+    """Sem dizer de qual prancha veio, não há atribuição honesta."""
+    it, _, _ = _roda(300.0, OBS_AREA, "m2", ref="")
+    assert _q(it) == 0
+
+
+def test_CONTROLE_o_unico_da_familia_continua_sendo_resgatado():
+    """O outro lado das três travas: elas não podem matar o caso legítimo."""
+    it, _, _ = _roda(300.0, OBS_AREA, "m2",
+                     desc="Piso cerâmico dos ambientes internos")
+    assert _q(it) == pytest.approx(9.0)
+    it2, _, _ = _roda(300.0, OBS_LINEAR, "ml", desc="Rodapé em porcelanato")
+    assert _q(it2) == pytest.approx(49.9)
+
+
+def test_piso_e_forro_da_MESMA_prancha_sao_familias_diferentes():
+    """A trava conta por FAMÍLIA: um piso e um forro não competem entre si."""
+    itens = [_Item(description="Piso cerâmico", unit="m2", quantity=300.0,
+                   observations=OBS_AREA, ref_sheet="prancha.pdf"),
+             _Item(description="Forro de gesso", unit="m2", quantity=300.0,
+                   observations=OBS_AREA, ref_sheet="prancha.pdf")]
+    main._apply_area_honesty(itens, pdfvec_m2=9.0, pdfvec_por_prancha=dict(PP))
+    assert [_q(i) for i in itens] == [pytest.approx(9.0), pytest.approx(9.0)]
+
+
+def test_dois_PISOS_da_mesma_prancha_deixam_os_dois_vazios():
+    """E dentro da MESMA família, empate = ninguém. Atribuir a área do
+    pavimento a dois pisos é o erro do 'somado em dobro' (28/08)."""
+    itens = [_Item(description="Piso cerâmico da sala", unit="m2", quantity=300.0,
+                   observations=OBS_AREA, ref_sheet="prancha.pdf"),
+             _Item(description="Piso vinílico dos quartos", unit="m2", quantity=300.0,
+                   observations=OBS_AREA, ref_sheet="prancha.pdf")]
+    main._apply_area_honesty(itens, pdfvec_m2=9.0, pdfvec_por_prancha=dict(PP))
+    assert [_q(i) for i in itens] == [0, 0]
+
+
+# ══════════════════════════════════════════════════════════════════════════
 #  2 · 🚨 o que NÃO pode acontecer (regra dura nº1)
 # ══════════════════════════════════════════════════════════════════════════
 def test_comprimento_medido_vezes_pe_direito_INVENTADO_continua_zerado():
@@ -186,9 +262,14 @@ def test_numero_em_m2_que_e_a_nossa_medicao_de_PAREDE_nao_resgata():
     A observação cita "49,9 m²" — com unidade de ÁREA — e 49,9 é o que a gente
     mediu de PAREDE (comprimento), não de ambiente. Se os alvos de área e de
     comprimento forem misturados, isso vira área medida. Não é.
+
+    🪤 A descrição TEM que ser superfície de chão ("Piso cerâmico"), senão a
+    trava 1 recusa antes e o teste mede outra coisa — foi o que aconteceu na
+    1ª versão, com "Pintura de parede": ele passava sem nunca exercitar a
+    família de unidade, e a mutação que as misturava passou batida.
     """
-    obs = "Área de parede: 49,9 m² conforme medição da prancha."
-    it, _, _ = _roda(25.0, obs, "m2", desc="Pintura de parede")
+    obs = "Área dos ambientes: 49,9 m² conforme medição da prancha."
+    it, _, _ = _roda(300.0, obs, "m2", desc="Piso cerâmico dos ambientes")
     assert _q(it) == 0, (
         "🚨 preencheu ÁREA com o número que a gente mediu de COMPRIMENTO "
         "(saiu %r)" % it.quantity)

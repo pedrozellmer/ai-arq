@@ -7519,6 +7519,98 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
                 _ambiguos.append(
                     ("%s%s" % (_arq, "" if _pg_chave is None else " p%d" % (int(_pg_chave) + 1)),
                      _fam2, len(_lista)))
+    # ── 🎯 07/09/2026 — PRÉ-PASSO DO RESGATE DA MEDIÇÃO ────────────────────
+    # `resgate_pdf=0` em 28 de 28 jobs desde 26/08: nunca disparou. A régua
+    # (`quantidade_medida_pelo_pdf`) está CERTA; errada era a ORDEM. Ela mora no
+    # laço de páginas, dentro de `if qty == 0`, e só vê item que a IA já
+    # devolveu zerado. Quem zera de verdade é esta função, que roda depois.
+    # Medido no job ev3e2880 (05/09), pelo relógio do error_log:
+    #   18:47:55  medimos a prancha: 9,0 m² e 49,9 m; a IA escreve "9,0 m²" na
+    #             observação e devolve quantidade ≠ 0 → o resgate é PULADO
+    #   18:49:33  esta função ZERA o item
+    #   sai `zerados=6 resgate_pdf=0`, com a NOSSA medição no texto da linha.
+    #
+    # 🚨 ESTE PASSO CRIA NÚMERO, então usa AS MESMAS TRAVAS do passo 7 — a
+    # primeira versão não usava nenhuma, e a revisão adversarial de 07/09
+    # reproduziu os três buracos, rodando:
+    #   1. "Pintura látex sobre PAREDE" (m²) recebia os 9,0 m² de ÁREA DE PISO
+    #      medidos. → agora exige `_is_floor_surface_criar` pra unidade de área
+    #      (é a função cuja docstring diz "use onde o motor vai ESCREVER um
+    #      número que não existia");
+    #   2. rodapé, soleira, perfil de LED e dreno recebiam TODOS os mesmos
+    #      49,9 m de parede — a mesma medição contada 4×. → agora no máximo UM
+    #      item por (prancha, família); empate deixa todos vazios, igual à
+    #      trava 4 do passo 7 ("na dúvida, não preenche NADA");
+    #   3. com uma prancha medida, item de arquivo NUNCA medido levava o
+    #      número. → agora a prancha do item é sempre RESOLVIDA pelo
+    #      `ref_sheet`; sem resolver, não resgata.
+    #
+    # 🪤 Índice PRÓPRIO, e não o `_por_arquivo` do passo 7: aquele exige
+    # `rooms_m2 > 0` e deixaria de fora a prancha que mediu SÓ PAREDE — que é
+    # justamente o alvo do resgate linear.
+    _resg_alvo = {}
+    if _pp:
+        _pp_arq = {}
+        for _r in _pp.values():
+            _a = str(_r.get("arquivo") or "").strip().lower()
+            try:
+                _tem = (float(_r.get("rooms_m2") or 0) > 0
+                        or float(_r.get("walls_m") or 0) > 0)
+            except (TypeError, ValueError):
+                _tem = False
+            if _a and _tem:
+                _pp_arq.setdefault(_a, []).append(_r)
+        _cand_resg = {}
+        for _it in items:
+            if getattr(_it, "origem", "") in ("dxf_geom", "revisao_cliente"):
+                continue
+            _u2 = (getattr(_it, "unit", "") or "").strip().lower()
+            _d2 = (getattr(_it, "description", "") or "")
+            if _u2 in _FLOOR_M2_UNITS:
+                # trava 1: só superfície horizontal recebe área medida de chão
+                if not _is_floor_surface_criar(_d2):
+                    continue
+                _fam_r = _familia_da_superficie(_d2)
+            elif _u2 in ("ml", "m"):
+                _fam_r = "linear"
+            else:
+                continue
+            _rs2 = (getattr(_it, "ref_sheet", "") or "").strip().lower()
+            if not _rs2:
+                continue        # sem dizer de qual prancha veio, não se atribui
+            # trava 3: a prancha do item, resolvida por nome (+ página)
+            _cas = [(_a, _rr, len(_a.rsplit(".", 1)[0]))
+                    for _a, _lst in _pp_arq.items() for _rr in _lst
+                    if _a.rsplit(".", 1)[0]
+                    and (_rs2.startswith(_a.rsplit(".", 1)[0])
+                         or _a.rsplit(".", 1)[0] in _rs2)]
+            if not _cas:
+                continue
+            _arqs = {c[0] for c in _cas}
+            if len(_arqs) > 1:
+                # dois arquivos casam: vence o nome mais longo; empate = ambíguo
+                _mais = sorted({(c[2], c[0]) for c in _cas}, reverse=True)
+                if len(_mais) > 1 and _mais[0][0] == _mais[1][0]:
+                    continue
+                _cas = [c for c in _cas if c[0] == _mais[0][1]]
+            _mesmo_arq = [c for c in _cas]
+            if len(_mesmo_arq) > 1:
+                # arquivo multipágina: só com a página no `ref_sheet`
+                _pg2 = _pagina_do_ref_sheet(_rs2)
+                _mesmo_arq = [c for c in _mesmo_arq
+                              if _pg2 is not None and c[1].get("pagina") == _pg2]
+                if len(_mesmo_arq) != 1:
+                    continue
+            _r_it = _mesmo_arq[0][1]
+            _cand_resg.setdefault(
+                (_mesmo_arq[0][0], _r_it.get("pagina"), _fam_r), []).append((_it, _r_it))
+        for _chave, _lst in _cand_resg.items():
+            # trava 2: no máximo UM por (prancha, família)
+            if len(_lst) != 1:
+                continue
+            _it0, _r0 = _lst[0]
+            _resg_alvo[id(_it0)] = ([float(_r0.get("rooms_m2") or 0)],
+                                    [float(_r0.get("walls_m") or 0)])
     # 🚨 24/08: `apenas_preencher` é pra quem REIDRATA itens do banco (/inform-area).
     # Ali o motor já decidiu, lá atrás, com a geometria em mãos; reavaliar depois,
     # a partir de linhas que perderam metade do contexto, é decidir com MENOS
@@ -7543,75 +7635,18 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
         # Regra dura nº7: o que veio da revisão do cliente não se toca, nunca.
         if str(getattr(it, "origem", "") or "") == "revisao_cliente":
             continue
-        # 🎯 07/09/2026 — O RESGATE DA MEDIÇÃO CHEGAVA TARDE DEMAIS.
-        # `resgate_pdf=0` em 28 de 28 jobs desde 26/08: nunca disparou uma vez.
-        # A régua (`quantidade_medida_pelo_pdf`) está CERTA — o que estava
-        # errado é a ORDEM. Ela mora no laço de páginas, dentro de `if qty == 0`,
-        # e só olha item que a IA já devolveu ZERADO. Quem zera de verdade é
-        # esta função, que roda depois. Medido no job ev3e2880 (05/09), pelo
-        # relógio do error_log:
-        #   18:47:55  medimos a prancha: 9,0 m² e 49,9 m
-        #             a IA escreve "9,0 m²" na observação e devolve qtd ≠ 0
-        #             → o resgate é PULADO pelo próprio guarda
-        #   18:49:33  esta função ZERA o item
-        #   sai `zerados=6 resgate_pdf=0`, com a NOSSA medição no texto da linha
-        # O cliente recebe uma linha vazia cujo texto diz que a gente mediu.
-        #
-        # 🔑 NÃO afrouxa nada: só preenche quando o número ESCRITO na observação
-        # bate ±1% com o que NÓS medimos NAQUELA prancha, e com a família de
-        # unidade certa. É a mesma régua do passo 6, perguntada na hora certa.
-        # Segue ESTIMADO (laranja) — escala de PDF vem de carimbo/viewport, e
-        # carimbo é declaração, não prova.
-        #
-        # 🪤 A prancha tem que ser INEQUÍVOCA. Passar todas como alvo foi o erro
-        # de 31/08 (cliente-14): a cobertura do espaço de números plausíveis vai
-        # de 0,38% pra 2,64% e a régua deixa de perguntar "é a medição DESTA
-        # prancha?" pra perguntar "parece alguma medição de alguma prancha?".
-        # Job de UMA prancha medida não tem ambiguidade; nos outros, só quando o
-        # `ref_sheet` resolve. Sem resolver, a linha continua vazia.
-        #
-        # 🪤 `_pp` direto no caso de uma prancha só, e não `_por_arquivo`: aquele
-        # índice exige `rooms_m2 > 0` e deixaria de fora a prancha que mediu só
-        # PAREDE — justamente o alvo do resgate linear.
-        _alvo_a, _alvo_c = [], []
-        if len(_pp) == 1:
-            _r_unica = next(iter(_pp.values()))
-            _alvo_a = [float(_r_unica.get("rooms_m2") or 0)]
-            _alvo_c = [float(_r_unica.get("walls_m") or 0)]
-        elif _pp:
-            _r_item = None
-            _rs_r = (getattr(it, "ref_sheet", "") or "").strip().lower()
-            if _rs_r:
-                _pg_r = _pagina_do_ref_sheet(_rs_r)
-                if _pg_r is not None:
-                    _c_r = [_r for (_a_r, _p_r), _r in _por_arquivo_pagina.items()
-                            if _p_r == _pg_r
-                            and (_rs_r.startswith(_a_r.rsplit(".", 1)[0])
-                                 or _a_r.rsplit(".", 1)[0] in _rs_r)]
-                    if len(_c_r) == 1:
-                        _r_item = _c_r[0]
-                if _r_item is None:
-                    _c_r = [(_r, len(_a_r.rsplit(".", 1)[0]))
-                            for _a_r, _r in _por_arquivo.items()
-                            if _a_r.rsplit(".", 1)[0]
-                            and (_rs_r.startswith(_a_r.rsplit(".", 1)[0])
-                                 or _a_r.rsplit(".", 1)[0] in _rs_r)]
-                    _c_r.sort(key=lambda c: c[1], reverse=True)
-                    # empate de comprimento = dois arquivos igualmente plausíveis
-                    if len(_c_r) == 1 or (_c_r and _c_r[0][1] > _c_r[1][1]):
-                        _r_item = _c_r[0][0]
-            if _r_item is not None:
-                _alvo_a = [float(_r_item.get("rooms_m2") or 0)]
-                _alvo_c = [float(_r_item.get("walls_m") or 0)]
+        # 🎯 07/09/2026 — O RESGATE DA MEDIÇÃO, perguntado NA HORA DE ZERAR.
+        # O alvo de cada item foi resolvido no pré-passo acima, com as MESMAS
+        # travas do passo 7. Aqui só se consulta a régua.
         _resgate = None
-        if _alvo_a or _alvo_c:
+        _alvos_r = _resg_alvo.get(id(it))
+        if _alvos_r:
             # 🪤 import DENTRO do ramo, não global novo: três testes dão `exec`
             # numa FATIA desta função com namespace montado à mão, e nome que
-            # nasce fora da fatia vira NameError neles (o aviso está lá embaixo,
-            # no ramo que zera). Aqui o nome nasce onde é usado.
+            # nasce fora da fatia vira NameError neles.
             from engine_rules import quantidade_medida_pelo_pdf as _q_medida_pdf
             _resgate = _q_medida_pdf(getattr(it, "observations", "") or "", u,
-                                     area_pdf=_alvo_a, comprimento_pdf=_alvo_c)
+                                     area_pdf=_alvos_r[0], comprimento_pdf=_alvos_r[1])
         # 🩸 31/08/2026 — CASO FLAVIO (job f271473f). Este ramo não olhava
         # NENHUM valor: bastava ser superfície e o cliente ter informado a área.
         # Resultado em 16 PDFs: 6 itens saíram com 400 m² — a área que ELE
@@ -28864,9 +28899,18 @@ def cleanup_old_projects(request: Request):
     # exatamente o que sobrou; fica vazia sozinha quando não há mais nada.
     stats["resgatados"] = 0
     stats["resgate_falhou"] = 0
+    # 🚨 A VARREDURA NÃO ACEITA `?days` — SEMPRE a retenção configurada.
+    # `days` existe pra ajustar o passo 2 em teste. Aqui é diferente: o passo 3
+    # é uma varredura de MASSA, sem dono lido e sem projeto pra pular, e o
+    # parâmetro chegava CRU na RPC. Medido em 07/09 no banco de produção:
+    #   list_expired_storage_leftovers(90)  →   31 arquivos (o resíduo real)
+    #   list_expired_storage_leftovers(0)   → 1000 arquivos (o teto), de 1.282
+    # Ou seja, um `?days=0` apagaria o CAD de praticamente todos os clientes
+    # numa chamada. A retenção é uma PROMESSA, não um botão de URL.
+    _dias_resgate = CLEANUP_RETENTION_DAYS
     try:
         _url_r = f"{SUPABASE_URL}/rest/v1/rpc/list_expired_storage_leftovers"
-        _body_r = _j.dumps({"p_days": days, "p_limit": 200}).encode("utf-8")
+        _body_r = _j.dumps({"p_days": _dias_resgate, "p_limit": 200}).encode("utf-8")
         _req_r = urllib.request.Request(_url_r, data=_body_r, method="POST")
         _req_r.add_header("apikey", SUPABASE_KEY)
         _req_r.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")

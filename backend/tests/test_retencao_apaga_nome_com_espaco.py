@@ -40,7 +40,11 @@ sys.path.insert(0, _BACKEND)
 import main  # noqa: E402
 
 #: Nomes reais do storage, na forma em que estão lá.
-_COM_ESPACO = "job123/UFOP-CENTRO CONVERGENCIA-REVITALIZACAO PE-HID03.dwg"
+# 🔒 nº6 — o repo é PÚBLICO. O nome do arquivo IDENTIFICA o projeto e o cliente,
+# e a versão anterior desta linha trazia o nome real copiado do storage. O que o
+# teste precisa é da FORMA (espaço, hífen, maiúscula, extensão .dwg), não de
+# quem é o dono. `job123` é rótulo de teste, não job_id de ninguém.
+_COM_ESPACO = "job123/CENTRO CONVIVENCIA-REVITALIZACAO PE-HID03.dwg"
 _SEM_ESPACO = "job123/planta_terreo.dxf"
 _COM_PARENTESES = "job123/Planta 1 - Galpao (rev 2).pdf"
 
