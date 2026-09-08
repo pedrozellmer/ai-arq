@@ -577,6 +577,13 @@
           </div>
           <div class="flex items-center gap-2">
             <input type="text" id="search-users" placeholder="Buscar usu&#225;rio..." class="px-4 py-2 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none w-full sm:w-64">
+            <!-- 🕳️ 08/09/2026: a lista SEMPRE ordenou por data da CONTA, e a
+                 pergunta de quem abre o painel de manh&#227; &#233; "quem esteve aqui".
+                 Quem volta dias depois afundava na lista com a data velha. -->
+            <select id="users-order" onchange="setUsersOrder(this.value)" title="Como ordenar a lista" class="px-3 py-2 rounded-xl border border-gray-300 text-sm text-gray-700 hover:bg-gray-50 outline-none whitespace-nowrap">
+              <option value="atividade">&#9679; &#218;ltima visita</option>
+              <option value="chegada">&#9675; Chegou na plataforma</option>
+            </select>
             <button onclick="exportUsersCsv()" class="px-3 py-2 rounded-xl border border-gray-300 text-sm text-gray-700 hover:bg-gray-50 whitespace-nowrap">&#8595; CSV</button>
           </div>
         </div>
@@ -5849,6 +5856,7 @@ function renderUsers(users) {
         <td class="px-4 py-3 align-top text-gray-500 text-xs">
           ${_fmtDataHora(u.auth_created_at || u.profile_created_at)}
           ${u.last_sign_in_at ? `<div class="text-gray-400">entrou ${_fmtDataHora(u.last_sign_in_at)}</div>` : ''}
+          ${_voltouDepois(u) ? `<div class="inline-flex items-center gap-1 mt-1 text-indigo-700 font-medium" title="esteve aqui num dia diferente do dia em que chegou">&#8635; voltou</div>` : ''}
           ${signalHtml}
         </td>
         <td class="px-4 py-3 align-top" onclick="event.stopPropagation()">${actions}</td>
@@ -6370,6 +6378,40 @@ function setUsersFilter(filter) {
   applyUsersView();
 }
 
+// ── Ordem da lista ────────────────────────────────────────────────────────
+// 🩸 08/09/2026 — O PAINEL RESPONDIA OUTRA PERGUNTA. A lista ordenava por
+// `auth_created_at` e nada mais. O lead mais forte da semana (2 contas em
+// 04/09, conta corporativa destravada na mão) voltou hoje às 08:23, completou
+// a ficha às 08:24 — e aparecia em 7º lugar, carimbado com 04/09. O Pedro
+// olhou o topo e disse "tem ninguém". Estava certo sobre a TELA.
+// 📏 Medido antes de mexer: 10 das 120 contas já voltaram em outro dia. É
+// pouca gente — e é exatamente a mais valiosa que temos, porque é quem volta.
+// 🪤 `last_sign_in_at` só muda em login NOVO (sessão retomada não conta), e o
+// projeto novo não mexe nele: por isso a atividade é o MAIOR entre login,
+// último projeto e a chegada — senão quem trabalhou hoje numa sessão antiga
+// some de novo, que é o defeito que este conserto existe pra matar.
+let usersOrder = 'atividade';
+
+function _ultimaAtividade(u) {
+  const t = k => Date.parse(u[k] || '') || 0;
+  return Math.max(t('last_sign_in_at'), t('ultimo_projeto'),
+                  t('auth_created_at'), t('profile_created_at'));
+}
+function _chegada(u) {
+  return Date.parse(u.auth_created_at || u.profile_created_at || '') || 0;
+}
+// "Voltou" = esteve aqui num DIA diferente do dia em que chegou. É o sinal que
+// a ordenação por chegada escondia; sem ele, subir na lista não explica por quê.
+function _voltouDepois(u) {
+  const a = _ultimaAtividade(u), c = _chegada(u);
+  if (!a || !c) return false;
+  return new Date(a).toDateString() !== new Date(c).toDateString();
+}
+function setUsersOrder(v) {
+  usersOrder = (v === 'chegada') ? 'chegada' : 'atividade';
+  applyUsersView();
+}
+
 // Fonte unica da lista visivel: allUsers -> filtro ativo -> texto da busca -> render + contador.
 function applyUsersView() {
   const searchEl = document.getElementById('search-users');
@@ -6385,6 +6427,10 @@ function applyUsersView() {
       return searchable.includes(q);
     });
   }
+  // 🪤 ordena a CÓPIA visível, nunca `allUsers`: o array é lido por outras
+  // partes do painel (origem, detalhe do usuário) que não pediram ordem nenhuma.
+  const chave = (usersOrder === 'chegada') ? _chegada : _ultimaAtividade;
+  list = list.slice().sort((a, b) => chave(b) - chave(a));
   renderUsers(list);
   const countEl = document.getElementById('users-count');
   if (countEl) {
