@@ -80,9 +80,23 @@ def test_a_pagina_que_matou_o_filho_NAO_e_medida_e_o_skip_fica_registrado(monkey
     paginas = [(a, "a.pdf", "x", 0), (b, "b.pdf", "x", 0)]
     medidas, payload = _roda(monkeypatch, tmp_path, paginas, pular={(a, 0)})
     assert medidas == [(b, 0)], f"a sombra mediu a página proibida: {medidas}"
-    assert payload and payload["n"] == 2
+    # 🔑 09/09: `n` passou a contar MEDIÇÃO, não linha gravada. Antes disto,
+    # 8 filhos mortos viravam "8 de 8 páginas medidas" — a recusa contava como
+    # cobertura. Aqui: 1 página medida, 1 recusada, 2 tentadas.
+    assert payload and payload["n"] == 1, payload
+    assert payload["tentadas"] == 2, payload
     skips = [p.get("skip") for p in payload["pages"] if p.get("skip")]
-    assert skips == ["filho morreu por memória — não repetir no servidor"], payload
+    assert len(skips) == 1, payload
+    # 🔑 Ancorado no FATO, não na frase. A versão anterior fixava o texto
+    # "filho morreu por memória — não repetir NO SERVIDOR", e em 09/09 essa
+    # frase virou MENTIRA: a sombra passou a medir num filho com RLIMIT, não no
+    # servidor. Guarda preso à prosa obriga a escolha entre atualizar a verdade
+    # e manter a bancada verde — e a bancada costuma ganhar.
+    assert "2 GB" in skips[0] or "memória" in skips[0], (
+        "o skip parou de dizer que a causa foi MEMÓRIA: %r" % skips[0])
+    assert "no servidor" not in skips[0], (
+        "o skip voltou a afirmar que a sombra mede dentro do servidor — ela "
+        "mede no filho protegido desde 09/09: %r" % skips[0])
 
 
 def test_so_a_pagina_certa_e_pulada_nao_o_arquivo_inteiro(monkeypatch, tmp_path):

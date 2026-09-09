@@ -6,8 +6,9 @@ view principal + ambientes/paredes via shapely) e LOGA o resultado no
 error_log (stage 'pdfvec:shadow', severity 'info') pra comparação offline
 com o que o Vision extraiu. NÃO altera nada visível pro usuário.
 
-Validado offline (06-07/07/2026) contra orçamento humano real (Granado 14º
-pav): envoltória ±1% entre pranchas independentes, paredes ±2% em 4 pranchas.
+Validado offline (06-07/07/2026) contra o orçamento humano real de um
+projeto de cliente (14º pavimento): envoltória ±1% entre pranchas
+independentes, paredes ±2% em 4 pranchas.
 Detalhes: memória project_spike_pdf_vetorial_20260706 + docs/ do repo.
 
 Regras de segurança:
@@ -54,7 +55,16 @@ MAX_FILE_MB = int(os.environ.get("PDFVEC_MAX_FILE_MB", "80"))
 #: impediria as duas quedas de 03/09 e deixa folga. 📏 Medido em 120 dias, 41
 #: medições: mediana 270 MB, p90 1.252 MB, p95 1.544 MB, máximo 1.573 MB.
 SHADOW_RLIMIT_BYTES = 2_000_000_000
-SHADOW_TIMEOUT_S = 75
+#: Cronômetro do filho da sombra. 🚨 TEM QUE SER MAIOR que os 75 s do filho da
+#: promoção (main.py). Com 75 aqui, a sombra vira uma cópia mais lenta dela e a
+#: página perdida por TEMPO deixa de ser medida em qualquer lugar — e é a única
+#: coisa que a sombra media a mais. O contrato está vivo em dois pontos:
+#: `_pular_sombra` (main.py) só barra 'processo'/'memoria' e DEIXA a perda por
+#: tempo vir pra cá, e a bancada afirma o porquê.
+#: 📏 Medido depois do parse único (05/09): CPQ11 112 s, FORRO 83 s, LAYOUT
+#: 74 s — as três passam de 75 s. Em produção a sombra já mediu uma página em
+#: 108 s que a promoção tinha perdido no cronômetro.
+SHADOW_TIMEOUT_S = 170
 
 
 def _parse_proc_status(texto: str) -> dict:
@@ -525,9 +535,16 @@ def medir_pagina_em_filho(pdf_path: str, page_index: int,
         return {"skip": "filho da sombra morreu",
                 "rc": _pr.returncode,
                 "err": ((_pr.stderr or "").strip()[-400:] or "(sem stderr)")}
+    # 🪤 A ÚLTIMA LINHA, não o stdout inteiro — é o que a produção faz
+    # (main.py, `.splitlines()[-1]`). O filho IMPRIME antes do JSON: página sem
+    # viewport cai no carimbo, que chama a IA, e o registro de cache do
+    # `llm_retry` sai em stdout. Ler o buffer todo faz `json.loads` estourar e a
+    # medição boa virar "JSON quebrado". Mesma decisão, dois lugares: era este
+    # o vício que este commit existe pra fechar, e eu o repeti aqui.
+    _saida = (_pr.stdout or "").strip()
     try:
-        return json.loads((_pr.stdout or "").strip() or "{}")
-    except (ValueError, TypeError) as e:
+        return json.loads(_saida.splitlines()[-1]) if _saida else {}
+    except (ValueError, TypeError, IndexError) as e:
         return {"skip": "filho da sombra devolveu JSON quebrado",
                 "err": "%s" % type(e).__name__}
 
@@ -538,6 +555,7 @@ def _run(page_units: list, job_id: str, api_key: str, log_fn, pular=None) -> Non
     deadline = time.time() + BUDGET_S
     results: list[dict] = []
     seen: set[tuple] = set()
+    _medidas = 0
     for unit in page_units:
         try:
             pdf_path, filename, _st, page_index = unit[0], unit[1], unit[2], unit[3]
@@ -547,17 +565,25 @@ def _run(page_units: list, job_id: str, api_key: str, log_fn, pular=None) -> Non
         if k in seen:
             continue
         seen.add(k)
-        if len(results) >= MAX_PAGES:
+        # 🪤 O teto conta MEDIÇÃO, não linha gravada. Contando linha, um job em
+        # que os 8 primeiros filhos da promoção morreram fecha com 8 recusas e
+        # ZERO medição, sem nunca olhar as páginas 9 em diante — que podiam
+        # medir perfeitamente. Skip continua sendo gravado (recusa registrada
+        # não é silêncio), só não consome a cota.
+        if _medidas >= MAX_PAGES:
             break
         if time.time() > deadline:
             results.append({"file": filename[:60], "page": page_index, "skip": "budget de tempo"})
             break
-        # PASSO 7 (05/09): página que matou o filho por memória não roda de novo
-        # aqui, sem teto, dentro do servidor. O skip fica REGISTRADO — recusa de
-        # propósito não é silêncio.
+        # PASSO 7 (05/09), motivo ATUALIZADO em 09/09: a sombra não mede mais
+        # "no servidor, sem teto" — ela usa o mesmo filho com RLIMIT de 2 GB da
+        # promoção. A regra continua valendo por OUTRO motivo: a página que
+        # estourou 2 GB lá vai estourar aqui também, e rodar é gastar o
+        # cronômetro pra chegar no mesmo caixão. O skip fica REGISTRADO —
+        # recusa de propósito não é silêncio.
         if k in (pular or ()):
             results.append({"file": filename[:60], "page": page_index,
-                            "skip": "filho morreu por memória — não repetir no servidor"})
+                            "skip": "estourou 2 GB no filho da promoção — mesmo teto aqui"})
             continue
         try:
             if os.path.getsize(pdf_path) > MAX_FILE_MB * 1024 * 1024:
@@ -567,9 +593,15 @@ def _run(page_units: list, job_id: str, api_key: str, log_fn, pular=None) -> Non
             results.append({"file": filename[:60], "page": page_index, "skip": "arquivo sumiu"})
             continue
         try:
-            _r = medir_pagina_em_filho(pdf_path, page_index)
+            # o filho não conhece o `deadline` do laço; sem passar o resto do
+            # orçamento, a thread vive BUDGET_S + SHADOW_TIMEOUT_S.
+            _sobra = max(30.0, deadline - time.time())
+            _r = medir_pagina_em_filho(pdf_path, page_index,
+                                       timeout_s=min(SHADOW_TIMEOUT_S, _sobra))
             _r.setdefault("file", filename[:60])
             _r.setdefault("page", page_index)
+            if not _r.get("skip"):
+                _medidas += 1
             results.append(_r)
         except Exception as e:  # nunca derrubar o processo por causa do shadow
             results.append({"file": filename[:60], "page": page_index,
@@ -577,7 +609,7 @@ def _run(page_units: list, job_id: str, api_key: str, log_fn, pular=None) -> Non
 
     if not results:
         # 🚨 Sair calado aqui é indistinguível de "a sombra nem rodou". Medido
-        # em 12/08 no job do Guilherme (428d2688, 3 PDFs): ZERO evento pdfvec no
+        # em 12/08 no job de cliente-NN (428d2688, 3 PDFs): ZERO evento pdfvec no
         # banco, e não dava pra saber qual das seis saídas mudas tinha disparado.
         # PDF é o caminho mais cego que temos — 38 envios, 27 sem medir nada.
         try:
@@ -608,6 +640,13 @@ def _run(page_units: list, job_id: str, api_key: str, log_fn, pular=None) -> Non
             d = {k: r[k] for k in keep if r.get(k) is not None}
             if isinstance(d.get("file"), str):
                 d["file"] = d["file"][:34]
+            # 🚨 O `err` do filho morto traz até 400 chars de stderr. Com 8
+            # páginas mortas isso passa dos 2.000 da coluna e o corte parte o
+            # JSON no meio — a linha inteira vira ilegível e leva junto as
+            # páginas que mediram bem. É a reabertura literal do incidente de
+            # 30/07 que o comentário acima registra.
+            if isinstance(d.get("err"), str):
+                d["err"] = d["err"][:120]
             return d
 
         _tot = 0.0
@@ -617,12 +656,19 @@ def _run(page_units: list, job_id: str, api_key: str, log_fn, pular=None) -> Non
             except (TypeError, ValueError):
                 pass
         _unicas = len({(x[0], x[3]) for x in page_units if len(x) > 3})
-        payload = json.dumps({"v": 2, "n": len(results), "de": _unicas,
+        # 🚨 `n` é MEDIÇÃO. Contando toda linha, 8 filhos mortos viravam
+        # "8 de 8 página(s) medida(s)" — zero medição registrada como cobertura
+        # de 100%, no instrumento com que eu decido se o leitor vetorial sai da
+        # sombra. `tentadas` guarda o outro número.
+        _n_medidas = sum(1 for r in results if not r.get("skip"))
+        payload = json.dumps({"v": 2, "n": _n_medidas, "de": _unicas,
+                              "tentadas": len(results),
                               "rooms_m2_total": round(_tot, 1),
                               "pages": [_resumo(r) for r in results]},
                              ensure_ascii=False)
         log_fn("pdfvec:shadow", payload[:2000], job_id, severity="info")
-        print(f"[pdfvec] shadow {job_id}: {len(results)} de {_unicas} página(s) medida(s)")
+        print(f"[pdfvec] shadow {job_id}: {_n_medidas} medida(s), "
+              f"{len(results) - _n_medidas} pulada(s), de {_unicas}")
     except Exception as e:
         print(f"[pdfvec] shadow log falhou: {e}")
 

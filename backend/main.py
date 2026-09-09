@@ -13514,7 +13514,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # thread lê os arquivos numa boa; se sumirem (restart), ela só pula.
         # 🪤 O `if` daqui duplicava a checagem que já existe DENTRO do
         # shadow_measure_async e engolia o caso "sem página" antes de chegar
-        # lá — por isso o job do Guilherme (428d2688, 3 PDFs, 12/08) terminou
+        # lá — por isso o job de cliente-NN (428d2688, 3 PDFs, 12/08) terminou
         # com ZERO evento pdfvec e eu não soube dizer o motivo. A decisão agora
         # mora num lugar só, e lá ela é registrada.
         try:
