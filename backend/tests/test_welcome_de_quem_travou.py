@@ -60,7 +60,7 @@ def _monta(**kw):
 # ══════════════════════════════════════════════════════════════════════════
 def test_quem_travou_ve_o_passo_que_falta_ANTES_de_tudo():
     """🔑 O bloco vem primeiro: é a única coisa que ela precisa fazer agora."""
-    subject, html = _monta(name="Victor", falta_cadastro=True,
+    subject, html = _monta(name="cliente-103", falta_cadastro=True,
                            link_cadastro="https://magic")
     corpo = html["body"]
     assert corpo.index("Falta um passo") < corpo.index("Oi"), (

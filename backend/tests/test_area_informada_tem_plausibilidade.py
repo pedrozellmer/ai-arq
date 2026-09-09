@@ -8,7 +8,7 @@ pra planilha dele carimbado como "informada por você".
 🔑 Teto não é conferência. Medido: TODAS as áreas já informadas por cliente na
 história, do maior pro menor:
 
-    880.000 (a do Fábio) · 3.274 · 400 · 378 · 335 · 290 · 192 · 190 · 150 · 73 · 31
+    880.000 (a do cliente-73) · 3.274 · 400 · 378 · 335 · 290 · 192 · 190 · 150 · 73 · 31
 
 A **segunda maior é 3.274 m²**. A dele é **269× isso**. O campo do pé-direito
 sempre teve banda plausível (1,8–8,0 m); a área nunca teve.
@@ -47,7 +47,7 @@ def _passa(valor):
     return not (valor < 0 or valor > MAX)
 
 
-def test_o_valor_do_fabio_e_recusado():
+def test_o_valor_do_cliente_73_e_recusado():
     """🩸 880.000 m² = 88 hectares, num projeto de rede de estádio."""
     assert not _passa(880000)
 
@@ -60,15 +60,15 @@ def test_NOTA_o_teto_antigo_de_1km2_aceitava_880_mil():
     com o produto inteiro quebrado. Controle que não exercita nada infla a
     contagem de guardas.
 
-    🔑 O controle DE VERDADE deste arquivo é `test_o_valor_do_fabio_e_recusado`,
+    🔑 O controle DE VERDADE deste arquivo é `test_o_valor_do_cliente_73_e_recusado`,
     que chama `_passa()` sobre a constante REAL do main. Esta aqui só registra
     por que o teto antigo não servia: 880.000 < 1.000.000, então passava.
     """
-    TETO_ANTIGO, VALOR_DO_FABIO = 1_000_000, 880_000
-    assert VALOR_DO_FABIO < TETO_ANTIGO, (
-        "os números do caso mudaram: o teto de então era 1 km² e o Fábio "
+    TETO_ANTIGO, VALOR_DO_CLIENTE_73 = 1_000_000, 880_000
+    assert VALOR_DO_CLIENTE_73 < TETO_ANTIGO, (
+        "os números do caso mudaram: o teto de então era 1 km² e o cliente-73 "
         "digitou 880.000 m² — por isso passou")
-    assert not _passa(VALOR_DO_FABIO), (
+    assert not _passa(VALOR_DO_CLIENTE_73), (
         "e a banda de HOJE tem que recusar o mesmo valor — este é o elo com o "
         "código real")
 

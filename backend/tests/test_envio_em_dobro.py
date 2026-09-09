@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """O site mandou o mesmo arquivo duas vezes e derrubou o servidor.
 
-🚨 26/08/2026, caso **AMANDA** — a cliente que se cadastrou às 08:19 e mandou o
+🚨 26/08/2026, caso **cliente-34** — a cliente que se cadastrou às 08:19 e mandou o
 primeiro projeto 4 minutos depois. Às 10:18 ela reenviou, e o site mandou o
 MESMO arquivo DUAS VEZES, com 1 segundo de diferença:
 
@@ -106,16 +106,16 @@ def rota_de_upload(monkeypatch, tmp_path):
     yield _chamar
     _limpar()
 
-def test_o_caso_da_AMANDA_o_segundo_envio_devolve_o_PRIMEIRO_job():
+def test_o_caso_da_CLIENTE_34_o_segundo_envio_devolve_o_PRIMEIRO_job():
     """O teste que define o commit."""
     _limpar()
     pares = [_par("ARQ_HARMONIA_R02.dwg", 41_000_000)]
-    a = M._assinatura_do_envio("u-amanda", "Harmonia - 9º Pavimentos", pares)
+    a = M._assinatura_do_envio("u-cliente-34", "Harmonia - 9º Pavimentos", pares)
 
     assert M._envio_recente_igual(a) is None, "não havia envio anterior"
     M._registrar_envio(a, "b249f3e4")
 
-    b = M._assinatura_do_envio("u-amanda", "Harmonia - 9º Pavimentos", pares)
+    b = M._assinatura_do_envio("u-cliente-34", "Harmonia - 9º Pavimentos", pares)
     assert M._envio_recente_igual(b) == "b249f3e4", (
         "o segundo envio criaria um job novo — foi assim que a memória dobrou "
         "e a instância reiniciou")

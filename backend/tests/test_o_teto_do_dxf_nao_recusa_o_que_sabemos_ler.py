@@ -33,16 +33,16 @@ MB = 1024 * 1024
 GB = 1024 * MB
 
 _TETO_ANTIGO = 250 * MB          # o valor de `_MAX_DXF_BYTES` em 03/09/2026
-_RAFAEL = 376 * MB               # o DXF que o libredwg gerou pro arquivo dele
+_CLIENTE_94 = 376 * MB               # o DXF que o libredwg gerou pro arquivo dele
 
 
 def _pode(tam, livre):
     return main._dxf_grande_pode_seguir(tam, _TETO_ANTIGO, livre)
 
 
-def test_o_arquivo_do_rafael_passa():
+def test_o_arquivo_do_cliente_94_passa():
     """O caso que originou tudo: 376 MB, disco folgado."""
-    assert _pode(_RAFAEL, 8 * GB), (
+    assert _pode(_CLIENTE_94, 8 * GB), (
         "o DXF de 376 MB do cliente-40 voltou a ser recusado antes do emagrecedor "
         "— medido, ele emagrece pra 34 MB e extrai em 19 s com 305 MB")
 
@@ -66,10 +66,10 @@ def test_CONTROLE_disco_apertado_recusa():
     Nada apaga os DXF convertidos dentro do laço, então um envio de várias
     pranchas grandes enche o disco do Render — foi por isso que o teto nasceu.
     """
-    assert not _pode(_RAFAEL, 2 * GB), (
+    assert not _pode(_CLIENTE_94, 2 * GB), (
         "com 2 GB livres, guardar mais 376 MB deixaria menos que a margem — "
         "tinha que recusar")
-    assert not _pode(_RAFAEL, 400 * MB)
+    assert not _pode(_CLIENTE_94, 400 * MB)
 
 
 def test_a_margem_de_disco_e_a_regra_e_nao_um_detalhe():
@@ -88,14 +88,14 @@ def test_a_margem_de_disco_e_a_regra_e_nao_um_detalhe():
     margem = main._DXF_MARGEM_DISCO
     assert margem == 2 * GB
     # A fronteira fica em MARGEM + tam, não em MARGEM.
-    assert _pode(_RAFAEL, _RAFAEL + margem + 1)
-    assert not _pode(_RAFAEL, _RAFAEL + margem)
+    assert _pode(_CLIENTE_94, _CLIENTE_94 + margem + 1)
+    assert not _pode(_CLIENTE_94, _CLIENTE_94 + margem)
     # E o extra reservado dá pra uma cópia do arquivo inteiro — que é o pior
     # caso do enxuto (95% do original).
-    _livre_no_limite = _RAFAEL + margem + 1
-    assert _livre_no_limite - _RAFAEL >= margem, (
+    _livre_no_limite = _CLIENTE_94 + margem + 1
+    assert _livre_no_limite - _CLIENTE_94 >= margem, (
         "sobrou menos que a margem depois de guardar o original")
-    assert _livre_no_limite >= margem + _RAFAEL, (
+    assert _livre_no_limite >= margem + _CLIENTE_94, (
         "a reserva parou de cobrir a cópia .slim.dxf que o emagrecedor escreve")
 
 
@@ -105,7 +105,7 @@ def test_disco_que_nao_deu_pra_medir_nao_vira_recusa():
     O pior caso de deixar seguir é o filho morrer na trava de memória dele —
     o cliente recebe a mesma recusa honesta, e o site não sente.
     """
-    assert _pode(_RAFAEL, None)
+    assert _pode(_CLIENTE_94, None)
     # mas o teto de sanidade continua valendo mesmo sem medir o disco
     assert not _pode(2 * GB, None)
 
@@ -124,7 +124,7 @@ def test_CONTROLE_a_regra_antiga_REPROVARIA_neste_teste():
     """
     def regra_antiga(tam, teto, livre):
         return tam <= teto
-    assert not regra_antiga(_RAFAEL, _TETO_ANTIGO, 8 * GB), (
+    assert not regra_antiga(_CLIENTE_94, _TETO_ANTIGO, 8 * GB), (
         "o controle está errado: a regra antiga precisa REPROVAR o arquivo do "
         "cliente-40, senão os testes acima não estão medindo nada")
 

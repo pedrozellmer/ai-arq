@@ -72,7 +72,7 @@ def test_layer_de_TEXTO_nao_gera_aviso_de_sobreposicao():
 def test_CONTROLE_layer_de_GEOMETRIA_continua_acusando():
     """🧪 O controle que impede o conserto de virar 'desligar a regra'.
 
-    Este é o caso REAL do Luiz (31/08): parede de 115 m² no layer 00_PAREDE e
+    Este é o caso REAL do cliente-89 (31/08): parede de 115 m² no layer 00_PAREDE e
     outra no layer ARQ-ALV. Ele apagou uma — o aviso estava certo."""
     itens = [
         _Item("Parede — alvenaria", "m²", 115.32, "ARQ-ALV"),

@@ -6,8 +6,8 @@ Pedido do Pedro em 03/08/2026: *"vamos fazer alguma trava no sistema que se
 tiver projeto em andamento, nenhum deploy sobe pra travar"*.
 
 Por que existe: push na main dispara deploy automático no Render, o servidor
-reinicia e o job que estava no meio MORRE. Aconteceu com o Walter (29/07) e em
-03/08 escapou por 4 minutos do projeto da Eloídes — que levou 4,4 min.
+reinicia e o job que estava no meio MORRE. Aconteceu com o cliente-105 (29/07) e em
+03/08 escapou por 4 minutos do projeto da cliente-70 — que levou 4,4 min.
 
 Como funciona: lê `jobs_em_curso` do /api/health (público de propósito, sem
 credencial) e sai com código != 0 se houver job rodando. O git aborta o push.
@@ -107,7 +107,7 @@ def main() -> int:
             partes.append(f"{u} arquivo{'s' if u > 1 else ''} subindo agora")
         print(f"\n🚦 PUSH BLOQUEADO — {' e '.join(partes)}.")
         print("   Deploy reinicia o servidor e MATA o trabalho do cliente no meio")
-        print("   (caso Walter, 29/07). Upload grande passa minutos aqui — o DXF")
+        print("   (caso cliente-105, 29/07). Upload grande passa minutos aqui — o DXF")
         print("   de 112 MB de 03/08 levou vários. Espere e tente de novo.")
         print("   Emergência: AIARQ_DEPLOY_FORCE=1 git push origin main\n")
         return 1

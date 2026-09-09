@@ -6,7 +6,7 @@ Roda em 2 níveis:
   NÍVEL 2 (opcional, se SMOKE_USER_EMAIL+SMOKE_USER_PASSWORD setados):
     autentica via Supabase Auth, baixa planilha de um job real, valida 200.
 
-Origem: bug de 2026-05-18 onde a Daniela tentou baixar planilha e recebeu
+Origem: bug de 2026-05-18 onde a cliente-65 tentou baixar planilha e recebeu
 404 'Projeto não encontrado'. A auditoria de seg de 2026-05-13 adicionou
 _require_project_owner em vários endpoints, mas a função _get_project_owner
 usava anon-key e a RLS bloqueava → 404 silencioso por 5 dias. Smoke test
@@ -278,7 +278,7 @@ def nivel_2():
     if not email or not password:
         print(f"\n{YELLOW}━━━ NÍVEL 2 — skipado (SMOKE_USER_EMAIL+SMOKE_USER_PASSWORD não setados) ━━━{RESET}")
         print(f"  Pra ativar: setar essas 2 env vars com credencial de um usuário real.")
-        print(f"  Esse nível pega o bug da Daniela (404 em download).")
+        print(f"  Esse nível pega o bug da cliente-65 (404 em download).")
         return
 
     print(f"\n{BLUE}━━━ NÍVEL 2 — com credencial de {email} ━━━{RESET}")
@@ -327,7 +327,7 @@ def nivel_2():
         f"job_id={job_id}",
     )
 
-    # GET /api/items/{job_id} — endpoint protegido (bug da Daniela)
+    # GET /api/items/{job_id} — endpoint protegido (bug da cliente-65)
     status, body, _ = _get(
         f"{API_BASE}/api/items/{job_id}",
         headers={"Authorization": f"Bearer {jwt}"},
@@ -376,7 +376,7 @@ def nivel_2():
         f"HTTP {status}",
     )
 
-    # GET /api/download/{job_id} — O TESTE QUE PEGARIA O BUG DA DANIELA
+    # GET /api/download/{job_id} — O TESTE QUE PEGARIA O BUG DA cliente-65
     status, body, headers_d = _get(
         f"{API_BASE}/api/download/{job_id}",
         headers={"Authorization": f"Bearer {jwt}"},

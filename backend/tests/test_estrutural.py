@@ -267,7 +267,7 @@ check("prompt de arquitetura SEM seção estrutural",
 print()
 
 # ══════════════════════════════════════════════════════════════════════
-#  DESENHO QUE NUMERA OS LAYERS (Isabelle, 05/08/2026)
+#  DESENHO QUE NUMERA OS LAYERS (cliente-82, 05/08/2026)
 # ══════════════════════════════════════════════════════════════════════
 # A planta de fôrma de um prédio de 7 pavimentos entregou 1 item medido: os
 # layers dela se chamam '02', '4', '5', '100' e layer_is_pilar não casa com

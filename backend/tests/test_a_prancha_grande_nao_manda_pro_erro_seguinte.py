@@ -105,7 +105,7 @@ def test_a_recusa_por_tamanho_nao_manda_reexportar_em_dxf():
         + (_NL + "  ").join(ruins))
 
 
-def test_CONTROLE_o_guarda_REPROVA_a_copy_que_o_rafael_leu():
+def test_CONTROLE_o_guarda_REPROVA_a_copy_que_o_cliente_94_leu():
     """Sem isto o teste acima passa por não achar nada, não por estar limpo."""
     antiga = (
         '    msg = ("essa prancha é grande demais pro nosso limite de memória "' + chr(10) +

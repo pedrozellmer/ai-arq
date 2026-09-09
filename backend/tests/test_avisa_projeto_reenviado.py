@@ -11,7 +11,7 @@ medida no banco:
 
 As pranchas do 2º envio têm nome idêntico às do 1º (07 PAREDE, 02 FORRO,
 03 ILUMINACAO, 04 LUMINARIAS, 08 PISO, 11 RODAPE, 13 BANCADA — todas
-`_LUANA_09.04`). Ele achou que o problema era o arquivo dele. Não era: PDF não
+`_CLIENTE_87_09.04`). Ele achou que o problema era o arquivo dele. Não era: PDF não
 dá comprimento confiável, e ele não informou pé-direito nem área — os dois
 campos que destravam medição de verdade.
 
@@ -37,9 +37,9 @@ import main  # noqa: E402
 
 # as pranchas reais do job 144c1f04
 CADERNO = [
-    "07.18_p parede_luana_09.04.pdf", "02.18_p forro_luana_09.04.pdf",
-    "03.18_p iluminacao_luana_09.04.pdf", "08.18_p piso_luana_09.04.pdf",
-    "11.18_p rodape_luana_09.04.pdf", "13.18_p bancada_luana_09.04.pdf",
+    "07.18_p parede_cliente_87_09.04.pdf", "02.18_p forro_cliente_87_09.04.pdf",
+    "03.18_p iluminacao_cliente_87_09.04.pdf", "08.18_p piso_cliente_87_09.04.pdf",
+    "11.18_p rodape_cliente_87_09.04.pdf", "13.18_p bancada_cliente_87_09.04.pdf",
 ]
 
 
@@ -240,7 +240,7 @@ def _chamar_upload(monkeypatch, nomes, pe_direito=0, area=0, tmp_path=None):
     resp = asyncio.run(main.process_files(
         _ReqUpload(), None, files=[_Upload(n) for n in nomes],
         sheet_types=[], sheet_ambientes=[],
-        project_name="LUANA", user_id="u1", user_email="cliente-nn@example.com",
+        project_name="cliente-87", user_id="u1", user_email="cliente-nn@example.com",
         user_total_area=area, user_pe_direito=pe_direito))
     return resp, logs
 

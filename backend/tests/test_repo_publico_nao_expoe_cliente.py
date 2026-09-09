@@ -173,7 +173,7 @@ fd820a2b4461bddd116c1518bc4b0f77 ffc150a160d37e92012c196b6af4160d
 #
 # 🔑 Hashear o nome INTEIRO resolve os dois lados: "Construtora Mr" é pego e
 # "construtora" sozinha continua livre. Mesma coisa para "Prof. Moab", "Eng.
-# Silveira", "Ana Paula", "Rafael Lima" — todos com token isolado genérico ou
+# cliente-99", "Ana Paula", "Rafael Lima" — todos com token isolado genérico ou
 # curto demais. Foram +27 ocorrências que a régua de palavra não via.
 #
 # 🪤 São os 2 e 3 primeiros tokens do cadastro, normalizados. É assim que um
@@ -647,7 +647,7 @@ _FORA_DA_CHECAGEM_DE_NOME = ("blog/posts",)
 #: doença de acusar código certo. Trouxe os 6 e limpei os 7 nomes de quebra.
 # 🩸 08/09/2026 — 328 -> 306. A queda NÃO veio de limpeza: veio de o guarda
 # passar a ENXERGAR. Ele comparava hash do texto como está escrito contra uma
-# lista gerada SEM acento, então "Fábio" nunca batia com "fabio". Metade dos
+# lista gerada SEM acento, então "cliente-73" nunca batia com "cliente-73". Metade dos
 # nomes brasileiros era invisível — José, Antônio, Márcia, Luís, Inês, Mônica.
 # Normalizado (`_sem_acento`), a contagem MUDOU nos dois sentidos: apareceram
 # ocorrências que ninguém via, e sumiram duplicatas de acento.
@@ -695,7 +695,21 @@ _FORA_DA_CHECAGEM_DE_NOME = ("blog/posts",)
 # 🪤 As 25 ocorrencias a mais que cairam sao nome de PESSOA que morava colado ao
 # nome da obra (`cliente-22 (Sobrenome)`), no mesmo padrao do rotulo colado que
 # ja consertei hoje de manha em outro lugar.
-_TETO_DE_NOMES = 339
+# 🧹 09/09/2026: 339 → **ZERO**. A dívida herdada acabou — 45 pessoas, 349
+# ocorrências, 74 arquivos.
+# 🩸 A 1ª tentativa CORROMPEU o repositório e o revert foi por HEAD: eu usei
+# `str.replace` cru e o nome "alan" casou dentro de "b**alan**ced" —
+# `extract_balanced_obj` virou lixo em 32 arquivos. Substring em vez de token,
+# no mesmo dia em que escrevi um guarda contra exatamente isso.
+# 🔑 A fronteira certa é `(?<![letra])nome(?![letra])`: aceita `_` e dígito
+# (onde nome aparece em identificador) e recusa letra colada (sempre pedaço de
+# outra palavra). `` NÃO serve: ele trata `_` como letra, então
+# `_QUADRO_<nome>` escapa — e o script diz "troquei" sem trocar nada.
+# 🪤 E compilar não basta: `f(cliente-88)` é sintaxe VÁLIDA (vira subtração) e
+# só quebra rodando. Quem pegou foi a bancada, no runner de script legado.
+# 🚨 O teto agora é ZERO e SÓ DESCE — não há mais dívida pra absorver
+# ocorrência nova. Qualquer nome que entrar reprova aqui.
+_TETO_DE_NOMES = 0
 
 _EXT_TEXTO = (".py", ".html", ".js", ".md", ".yml", ".yaml", ".css",
               ".json", ".txt", ".sql", ".toml", ".sh")
@@ -741,17 +755,17 @@ def _conteudo(rel):
 
 
 def _sem_acento(s):
-    """'FÁBIO' -> 'fabio'. A régua de comparação é UMA: minúscula sem acento.
+    """'cliente-73' -> 'cliente-73'. A régua de comparação é UMA: minúscula sem acento.
 
     🩸 08/09/2026 — ESTE GUARDA ERA CEGO PRA ACENTO, E ISSO O DESLIGAVA PRA
     METADE DOS NOMES BRASILEIROS. As listas de hash foram geradas a partir da
-    forma SEM acento ('fabio' -> 374321cf…), mas o texto do repositório era
+    forma SEM acento ('cliente-73' -> 374321cf…), mas o texto do repositório era
     hasheado como está escrito ('fábio' -> 817e8f55…). Os dois nunca batiam.
 
     🚨 Não é "a lista está incompleta": o nome ESTAVA na lista e passou mesmo
     assim. Achado hoje ao vivo — um nome completo de cliente vivia em
     `backend/main.py` num comentário, colado ao job_id, com a bancada verde.
-    José, Fábio, Antônio, Márcia, Luís, Inês, Mônica, Túlio: todos invisíveis.
+    José, cliente-73, Antônio, Márcia, Luís, Inês, Mônica, Túlio: todos invisíveis.
 
     🔑 Guarda que passa por estar cego é pior que guarda nenhum — o verde
     ensina a confiar. Ver [[feedback_teste_com_controle_positivo]].
@@ -817,7 +831,7 @@ def test_nenhum_email_pessoal_de_terceiro_no_codigo():
 
 def test_nenhum_apelido_de_cliente_sobreviveu():
     """A parte ANTES do @ identifica igual — e escapa do regex de e-mail."""
-    apelidos = ["ivaldogss", "jssoliveira88", "thallisson.producao", "eng.kovatch",
+    apelidos = ["ivaldogss", "jssoliveira88", "thallisson.producao", "eng.cliente-86",
                 "kasavitski", "rafaelcmnz", "humberto.oliveira", "marcioeng72",
                 "valimduda", "lpleonardo", "v.anjos.ia.81", "diana.golin",
                 "alansilvacosta", "ialves943", "estudosmaraligrupo",
@@ -893,9 +907,29 @@ def test_CONTROLE_a_lista_de_hash_RECONHECE_cliente_de_verdade():
     porque hoje, comprovadamente, há 374 ocorrências."""
     assert len(_HASH_DE_NOME) >= 100, (
         "a lista de hash encolheu para %d — foi truncada?" % len(_HASH_DE_NOME))
-    assert len(_ocorrencias_de_nome()) > 0, (
-        "o guarda parou de achar QUALQUER nome num repositório que tem 374 "
-        "ocorrências conhecidas — a peneira quebrou")
+    # 🩸 09/09/2026 — ESTE CONTROLE PRECISOU SER REANCORADO, e o motivo é bom.
+    # Ele exigia que o guarda ainda ACHASSE gente no repositório, *"porque hoje,
+    # comprovadamente, há 374 ocorrências"* — um controle apoiado na DÍVIDA. A
+    # dívida foi zerada, e ele passou a REPROVAR O CONSERTO. Controle que
+    # depende do defeito existir morre no dia em que o defeito acaba.
+    # 🔑 Agora a prova é sintética: acha por força bruta uma palavra que ESTÁ na
+    # lista de hash (sem nunca escrever nome nenhum aqui, que é o que este
+    # arquivo proíbe) e exige que a peneira a reconheça.
+    achou = None
+    import itertools as _it
+    for _n in range(3, 6):
+        for _c in _it.product("abcdefgilmnorstuv", repeat=_n):
+            _p = "".join(_c)
+            if _e_nome_de_cliente(_p):
+                achou = _p
+                break
+        if achou:
+            break
+    assert achou is not None, (
+        "a peneira não reconheceu NENHUMA palavra da própria lista de hash — "
+        "ela quebrou (md5 trocado, normalização diferente, lista esvaziada)")
+    assert not _e_nome_de_cliente("zzqxjw"), (
+        "a peneira diz SIM pra qualquer coisa — pior do que estar quebrada")
 
 
 def test_CONTROLE_o_dono_NAO_e_acusado():

@@ -161,7 +161,7 @@ class DXFExtraction:
     block_attributes: list = field(default_factory=list)
     # 🔬 26/08: por que `blocos` deu o número que deu. Sem isto não dá pra
     # distinguir "o desenho não tem bloco" de "a gente descartou todos"
-    # (caso André, prancha elétrica: blocos=0 com 76.824 linhas).
+    # (caso cliente-36, prancha elétrica: blocos=0 com 76.824 linhas).
     # {anonimo, utilitario, anotacao, ilegivel, amostra_anonimo}
     blocos_descartados: dict = field(default_factory=dict)
     # 🔬 27/08: por que `pilares` deu o número que deu. {nome_do_layer,
@@ -427,7 +427,7 @@ class DXFExtraction:
         # 10 descartadas por cético que rodou DXF real). Valor com NOME DE CAMPO,
         # escrito pelo autor do projeto — não é texto solto pra IA adivinhar.
         # 🪤 NÃO SOMAR ENTRE PRANCHAS: o mesmo quadro repete em várias folhas e o
-        # valor às vezes DIVERGE (118,1 × 128,7 m² no CGR). Somar é o caso Eloídes.
+        # valor às vezes DIVERGE (118,1 × 128,7 m² no CGR). Somar é o caso cliente-70.
         if getattr(self, "block_attributes", None):
             lines.append("QUADROS E ETIQUETAS DO PROJETISTA (atributos de bloco):")
             lines.append("  (o próprio autor do projeto escreveu estes valores com nome de campo."
@@ -777,7 +777,7 @@ def _detect_unit_factor(doc) -> float:
     # 🚨 21/08/2026: $MEASUREMENT=0 é o que o template imperial padrão do
     # AutoCAD (acad.dwt) grava. Projetista brasileiro que parte desse template
     # entrega um DWG "imperial" desenhado em metros. Em 20/08 os DOIS clientes
-    # reais do dia caíram aqui; a prancha de fôrma do Allan (42 × 35 unidades,
+    # reais do dia caíram aqui; a prancha de fôrma do cliente-17 (42 × 35 unidades,
     # DIMLFAC=100 — assinatura de metro com cota em cm) virou 12,8 × 10,7 m:
     # erro de 3,28× em TODO comprimento. E pés é o único palpite que NENHUMA
     # régua conserta: a das cotas abstém de fator não-métrico por desenho, e a
@@ -1063,7 +1063,7 @@ _UNIT_FACTOR_NAMES = {1.0: "metros", 0.1: "decímetros",
 # opcional. Prefixo de aproximação (~ ≈ ±) tolerado; qualquer outra palavra
 # ("VER DETALHE", "VAR.") invalida o uso como régua.
 # 🚨 COMENTÁRIO ENTRE PARÊNTESES depois do número é comum e NÃO invalida a
-# cota (17/08/2026, caso Giovani): o arquivo dele tem "11.70 (RGI)" e
+# cota (17/08/2026, caso cliente-81): o arquivo dele tem "11.70 (RGI)" e
 # "35.70 (RGI)" — o projetista anota a fonte da medida. O `$` no fim exigia
 # que o texto ACABASSE no número, então TODAS essas cotas eram descartadas,
 # a régua da prancha não rodava, e o cabeçalho mentiroso ($INSUNITS=4, mm,
@@ -1138,7 +1138,7 @@ def _dim_effective_dimlfac(doc, dim) -> float:
 # ══════════════════════════════════════════════════════════════════════
 #  UNIDADE PELO DIMLFAC — quando o cabeçalho mente e não há cota digitada
 # ══════════════════════════════════════════════════════════════════════
-# Caso Isabelle (05/08/2026): DXF declara $INSUNITS=4 (mm) e está em METRO.
+# Caso cliente-82 (05/08/2026): DXF declara $INSUNITS=4 (mm) e está em METRO.
 # Os 36 pilares somem no filtro de seção porque viram 0,34 mm. O validador por
 # COTAS não salva: exige ≥3 cotas DIGITADAS à mão e o arquivo tem ZERO.
 #
@@ -1163,9 +1163,9 @@ def _dim_effective_dimlfac(doc, dim) -> float:
 # CX2_micron_mm_ampliada passou pela plausibilidade: cotas de 18, 3 e 6
 # unidades viram 18 m, 3 m e 6 m, que são medidas de cômodo normais.
 # Recusar custa pouco (desenho em metro cotado em mm fica como hoje) e evitar
-# um erro de 1000× vale muito mais. O caso Isabelle é DIMLFAC=100.
+# um erro de 1000× vale muito mais. O caso cliente-82 é DIMLFAC=100.
 _LFAC_PARA_FATOR = {
-    100.0: 1.0,      # cota em cm, desenho em m   ← caso Isabelle
+    100.0: 1.0,      # cota em cm, desenho em m   ← caso cliente-82
     10.0: 0.01,      # cota em mm, desenho em cm
     0.1: 0.001,      # cota em cm, desenho em mm
     0.01: 0.01,      # cota em m,  desenho em cm
@@ -1574,7 +1574,7 @@ def _validate_unit_by_dimensions(doc, unit_factor: float) -> dict:
         # Sobrou ESTA: cair fora do `if` acima devolve `out` com o motivo
         # INICIAL, "nao-avaliada" — e aí o log afirma que a régua não rodou,
         # quando ela rodou e não achou prova.
-        # 🪤 Visto no job `evaa4391` (avaliação do Evandro, prancha estrutural):
+        # 🪤 Visto no job `evaa4391` (avaliação do cliente-71, prancha estrutural):
         #     regua=nao-decidiu utilizaveis=1104 porque=nao-avaliada
         # Mil e cento e quatro cotas lidas, e o log dizendo "não avaliada".
         # É a mesma família do instrumento que mente — só que agora era o MEU.
@@ -1764,7 +1764,7 @@ def convert_dwg_to_dxf(dwg_path: str) -> Optional[str]:
         logger.warning("ODA gerou .dxf.err (DWG inválido/corrompido): %s", err_content)
         # Classifica a causa pra main.py dar o conselho CERTO em vez de chutar
         # "versão nova do AutoCAD ou objetos especiais" — que foi o que o cliente
-        # Thalison leu em 29/07 quando o problema real era arquivo INCOMPLETO
+        # cliente-101 leu em 29/07 quando o problema real era arquivo INCOMPLETO
         # (ODA: "Unexpected end of file"). Conselho errado = ele reenviou o mesmo
         # arquivo 2x e desistiu da prancha.
         _low_err = (err_content or "").lower()
@@ -1966,7 +1966,7 @@ def unidade_do_cabecalho_dxf(dxf_path: str, limite_bytes: int = 2_000_000):
 def _resgatar_dxf_gigante(dwg2dxf: str, dwg_path: str, cheio: str, output_dir: str):
     """Reconverte com `--minimal` o DXF que passou da trava dura, e devolve o enxuto.
 
-    🎯 Caso Patrick (18/08/2026): 5 DWG de ~50 MB viraram DXF de **370 MB** cada.
+    🎯 Caso cliente-93 (18/08/2026): 5 DWG de ~50 MB viraram DXF de **370 MB** cada.
     A trava de 150 MB do extrator recusou as 5 e o cliente recebeu ZERO. O
     `dwg2dxf -m` grava só $ACADVER, HANDSEED e ENTITIES — medido em 6 arquivos
     reais, encolhe **90 a 96%** e derruba a RAM da extração de 77-202 MB para
@@ -2496,7 +2496,7 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         # real, não porque rendeu número.
         # Cotas não decidiram (sem número digitado, sem consenso). Última régua:
         # o DIMLFAC, que converte UNIDADE e não depende de escala de plotagem.
-        # Caso Isabelle (05/08): 28 cotas com DIMLFAC=100 provam metro num
+        # Caso cliente-82 (05/08): 28 cotas com DIMLFAC=100 provam metro num
         # arquivo que declara milímetro — e sem isso os 36 pilares somem.
         _lfac = _unidade_por_dimlfac(doc, unit_factor)
         if _lfac.get("status") == "corrigida_lfac":
@@ -2505,7 +2505,7 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             dim_check = _lfac
             _, unit_warnings = _validate_unit_factor(doc, unit_factor)
         else:
-            # 4ª e ÚLTIMA régua (17/08/2026, caso Giovani): cota e DIMLFAC se
+            # 4ª e ÚLTIMA régua (17/08/2026, caso cliente-81): cota e DIMLFAC se
             # calaram — o desenho, na unidade declarada, é fisicamente
             # possível? Núcleo denso de 1,2 cm × 2,1 cm num prédio de 4
             # apartamentos não é. Corrige SÓ no regime impossível e a
@@ -2632,7 +2632,7 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
                 metadata["heuristica_extensao_superada_por_cotas"] = \
                     dim_check["heuristica_superada"]
         elif _dim_status in ("corrigida", "corrigida_lfac"):
-            # corrigida_lfac (caso Isabelle) não deixava rastro no metadata — 21/08
+            # corrigida_lfac (caso cliente-82) não deixava rastro no metadata — 21/08
             metadata["unidade_corrigida_por_cotas"] = dim_check["mensagem"]
             metadata["unidade_nome_provada"] = dim_check["unidade_nome"]
         elif _dim_status == "provada_por_rotulo":
@@ -2792,7 +2792,7 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
     except Exception as _eat:
         logger.warning("[attrib] leitura falhou: %s", _eat)
 
-    # 🔬 26/08/2026 — CONTADOR DE DESCARTE. Caso André (prancha ELÉTRICA de
+    # 🔬 26/08/2026 — CONTADOR DE DESCARTE. Caso cliente-36 (prancha ELÉTRICA de
     # 78 MB, job d5dbe1ed): `blocos=0` com `paredes=76824`. Prancha elétrica é
     # FEITA de bloco — luminária, tomada, ponto — e contar bloco é a única coisa
     # que o motor faz muito bem. Mas o log dizia só o total FINAL, então não
@@ -2975,7 +2975,7 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
     # O laço acima só vê o MODELSPACE. Em muitos projetos de instalação o
     # eletroduto/eletrocalha/tubulação é desenhado DENTRO de blocos (MATRIZ,
     # blocos anônimos), então o comprimento sai ZERO e o item vem sem metro
-    # (caso Fábio/Engie 21/07: eletroduto nos blocos MATRIZ-*, 0 no modelspace).
+    # (caso cliente-73/Engie 21/07: eletroduto nos blocos MATRIZ-*, 0 no modelspace).
     #
     # Regra nº1 (nunca inflar/forjar): NÃO explodimos tudo — bloco de móvel,
     # símbolo ou legenda inflaria parede/piso. Só percorremos blocos pra medir
@@ -3064,7 +3064,7 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
     # LINE/LWPOLYLINE/POLYLINE/ARC/CIRCLE/INSERT/TEXT/MTEXT/DIMENSION/HATCH.
     #
     # Medido: AEC/MEP é 13 das 25 falhas de DWG de cliente, e quando o DWG abre
-    # direito ele mede bem (18 de 27). Explica o caso do João (07/08): o
+    # direito ele mede bem (18 de 27). Explica o caso do cliente-83 (07/08): o
     # libredwg abriu, o texto virou 41 itens e a geometria não apareceu —
     # estava toda dentro dos proxies.
     #
@@ -3142,11 +3142,11 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         finally:
             _ezlog2.setLevel(_ez_prev2)
         # 🕳️ 08/08 — a 1ª versão disto era `logger.info`, que só existe no fluxo
-        # do Render e NÃO é consultável. Reprocessei o arquivo do João pra medir
+        # do Render e NÃO é consultável. Reprocessei o arquivo do cliente-83 pra medir
         # o conserto e fiquei sem saber se ele achou proxy ou não — instrumento
         # feito, evidência jogada fora. É a armadilha de
         # [[feedback-evidencia-nao-sobrevive]], e foi ela que fez o log de
-        # unidade nascer (sem ele, o cabeçalho mentiroso da Isabelle só apareceu
+        # unidade nascer (sem ele, o cabeçalho mentiroso da cliente-82 só apareceu
         # abrindo o arquivo na mão).
         #
         # Agora vai pro `metadata`, que o main.py grava no error_log — o mesmo
@@ -3930,7 +3930,7 @@ if __name__ == "__main__":
 # ---------------------------------------------------------------------------
 # Régua da PLAUSIBILIDADE FÍSICA — a última, quando cota e DIMLFAC não decidem
 # ---------------------------------------------------------------------------
-# 🚨 Por que existe (17/08/2026, caso Giovani 75a774af): o arquivo declara
+# 🚨 Por que existe (17/08/2026, caso cliente-81 75a774af): o arquivo declara
 # MILÍMETRO ($INSUNITS=4) e está desenhado em METRO. O fator errado entra ao
 # QUADRADO na área: as 143 hachuras somaram 0,0019 m² e o cliente recebeu
 # alvenaria, revestimento e forro zerados — foi ele que digitou "100" de
@@ -3961,7 +3961,7 @@ def _nucleo_denso(doc, limite_pontos: int = 20000):
 
     Percentis 25–75 dos pontos de LINE/LWPOLYLINE/TEXT. Ignora carimbo e
     entidade solta longe da planta, que inflam a extensão total (no arquivo do
-    Giovani: total 2.837 × 610, núcleo 12,1 × 21,3).
+    cliente-81: total 2.837 × 610, núcleo 12,1 × 21,3).
     """
     xs: list = []
     ys: list = []

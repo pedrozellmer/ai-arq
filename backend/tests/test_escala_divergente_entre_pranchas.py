@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Pranchas do MESMO job lidas em escalas diferentes não podem sair MEDIDAS.
 
-🩸 CASO AMANDA — job `349e75a5`, 10/08/2026, 14 pranchas.
+🩸 CASO cliente-34 — job `349e75a5`, 10/08/2026, 14 pranchas.
 O mesmo projeto foi lido em TRÊS escalas:
 
     2 pranchas (9T-EDA, Cobertura)      fator 0.001    → milímetros
@@ -45,7 +45,7 @@ def _p(nome, fator, regua="nao-decidiu", unidade="?"):
 
 
 # ── Os casos REAIS, como saíram no banco ───────────────────────────────────
-def _amanda():
+def _cliente_34():
     """349e75a5 — três escalas, nenhuma provada por cota."""
     return ([_p("9T-EDA-PLD-GER0-01_R00", 0.001), _p("Cobertura", 0.001)]
             + [_p("9T-ELE-%d" % i, 0.0254) for i in range(6)]
@@ -53,21 +53,21 @@ def _amanda():
                _p("forro", 1.0), _p("Paginacao", 1.0)])
 
 
-def _alan():
+def _cliente_12():
     """e1c48ed7 — uma prancha em mm contra três em metros."""
     return [_p("4366-EL-B", 0.001), _p("4366-EL-E", 1.0),
             _p("4366-IH-E", 1.0), _p("4366-VA-E", 1.0)]
 
 
-def _tiago():
+def _cliente_102():
     """2a42f7ec — 01/09, climatização, 2 em mm e o resto em metros."""
     return ([_p("F01-GER", 0.001), _p("F02-GER", 0.001)]
             + [_p("F%02d" % i, 1.0, "corrigida_plausibilidade") for i in range(3, 20)])
 
 
-def test_amanda_TRES_escalas_e_ninguem_confiavel():
+def test_cliente_34_TRES_escalas_e_ninguem_confiavel():
     """🩸 O caso do dia. Sem árbitro, ninguém sai medido."""
-    div, susp, resumo = escala_divergente(_amanda())
+    div, susp, resumo = escala_divergente(_cliente_34())
     assert div is True, "não viu a divergência de 1000× do caso cliente-16"
     assert len(susp) == 12, (
         "com NENHUMA prancha provada por cota não há árbitro — todas as 12 "
@@ -76,8 +76,8 @@ def test_amanda_TRES_escalas_e_ninguem_confiavel():
     assert "nenhuma prancha provou" in resumo, resumo
 
 
-def test_alan_tambem_diverge():
-    div, susp, _ = escala_divergente(_alan())
+def test_cliente_12_tambem_diverge():
+    div, susp, _ = escala_divergente(_cliente_12())
     assert div is True
     assert len(susp) == 4, "sem prova, todas entram"
 
@@ -95,8 +95,8 @@ def test_quando_UMA_prancha_PROVA_por_cota_ela_e_o_arbitro():
     assert "provaram a escala por cota" in resumo
 
 
-def test_tiago_climatizacao():
-    div, susp, _ = escala_divergente(_tiago())
+def test_cliente_102_climatizacao():
+    div, susp, _ = escala_divergente(_cliente_102())
     assert div is True
     assert "F01-GER" in susp and "F02-GER" in susp
 
@@ -157,9 +157,9 @@ def test_CONTROLE_a_unidade_de_CONTAGEM_nunca_e_de_escala():
         assert item_e_de_escala(u) is True, "'%s' deixou de ser unidade de escala" % u
 
 
-def test_CONTROLE_o_item_da_amanda_seria_pego():
+def test_CONTROLE_o_item_da_cliente_34_seria_pego():
     """🧪 O teste que fecha o caso: a linha que ela recebeu carimbada."""
-    div, susp, _ = escala_divergente(_amanda())
+    div, susp, _ = escala_divergente(_cliente_34())
     item_unidade, item_prancha = "ml", "9T-ELE-IMP-GER0-03_220-127V_R00"
     assert div and item_e_de_escala(item_unidade), "a regra não alcança 'ml'"
     # a prancha dela está entre as suspeitas (nome parcial, como no ref_sheet)

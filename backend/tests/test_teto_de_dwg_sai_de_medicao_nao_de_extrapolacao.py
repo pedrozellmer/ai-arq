@@ -48,8 +48,8 @@ MB = 1024 * 1024
 
 # Os três casos reais medidos em 03/09/2026: (nome, MB do DWG, fator medido).
 _MEDIDOS = [("cliente-40 (produção)", 11.7, 29.0),
-            ("Fábio 75dab573", 44.5, 18.8),
-            ("Patrick dbd0d97e", 53.2, 26.0)]
+            ("cliente-73 75dab573", 44.5, 18.8),
+            ("cliente-93 dbd0d97e", 53.2, 26.0)]
 
 # Quanto o pico da conversão pode chegar sem ameaçar o container de 4 GiB.
 # O processo do servidor fica em ~100–230 MB medidos; 2,2 GB deixa ~1,6 GB.
@@ -261,9 +261,9 @@ def test_NOTA_o_teto_antigo_era_40MB_e_o_arquivo_tinha_44():
     próxima pessoa saiba de onde veio o teto — e reprove se alguém "arredondar"
     a história. Renomeada pra dizer isso.
     """
-    TETO_ANTIGO_MB, ARQUIVO_DO_FABIO_MB = 40, 44.5
-    assert ARQUIVO_DO_FABIO_MB > TETO_ANTIGO_MB, (
-        "os números do caso mudaram: o arquivo do Fábio tinha 44,5 MB e o teto "
+    TETO_ANTIGO_MB, ARQUIVO_DO_CLIENTE_73_MB = 40, 44.5
+    assert ARQUIVO_DO_CLIENTE_73_MB > TETO_ANTIGO_MB, (
+        "os números do caso mudaram: o arquivo do cliente-73 tinha 44,5 MB e o teto "
         "de então era 40 MB — se isso não é mais verdade, a história escrita "
         "nesta docstring precisa ser refeita")
 

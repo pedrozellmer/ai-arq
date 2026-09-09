@@ -10,7 +10,7 @@ name: Smoke Test (produção)
 #   abre projeto, clica em "Baixar XLSX" e confirma download. PEGA o bug que
 #   o nível 2 NÃO pega: <a href> / window.open / window.location.href NÃO
 #   enviam Authorization header → backend 401 mesmo com sessão válida.
-#   Capítulo 2 do bug Daniela (2026-05-18) — esse nível teria pego em 1min.
+#   Capítulo 2 do bug cliente-65 (2026-05-18) — esse nível teria pego em 1min.
 
 on:
   push:
@@ -109,7 +109,7 @@ jobs:
 
       # Instala Playwright + Chromium pro nível 3 (browser real headless).
       # ~1 min de overhead — vale demais quando o cron diário descobre
-      # regressão silenciosa só visível no navegador real (ex: bug Daniela).
+      # regressão silenciosa só visível no navegador real (ex: bug cliente-65).
       - name: Instalar Playwright
         run: |
           pip install playwright==1.48.0

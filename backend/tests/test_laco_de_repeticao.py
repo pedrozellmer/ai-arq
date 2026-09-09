@@ -55,7 +55,7 @@ def _resposta_normal(n=400):
     return '{"items":[' + ",".join(linhas) + "]}"
 
 
-def test_pega_o_laco_que_custou_as_pranchas_da_Amanda():
+def test_pega_o_laco_que_custou_as_pranchas_da_Cliente_34():
     t = _resposta_com_laco("+1")
     d = detectar_laco_repeticao(t, tokens_saida=32000)
     assert d["laco"] is True, (

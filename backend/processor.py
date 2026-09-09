@@ -193,7 +193,7 @@ def extract_text(pdf_path: str, page_index: int = 0, char_budget: int = 6000) ->
     lentíssimo por página (parseia cada objeto do desenho) e o extract_tables
     interpretava as milhares de linhas como bordas de tabela, estourando
     memória/CPU. Era a causa raiz do crash do "PROJETO EXECUTIVO" de 13 MB
-    derrubando o Render de 2 GB (caso sumi/lia, 06/07) — o extract_text antigo
+    derrubando o Render de 2 GB (caso cliente-100/lia, 06/07) — o extract_text antigo
     ainda varria TODAS as páginas. Benchmark: 7 pranchas densas = 0,85s no
     pdfium vs. >2min (travava) no pdfplumber. Lê só a página pedida.
     """

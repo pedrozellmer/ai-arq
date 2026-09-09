@@ -83,7 +83,7 @@ def salvage_truncated_json(s):
 def normalize_items_payload(parsed):
     """A IA às vezes devolve um array cru [...] em vez de {"items":[...]} (mais comum
     no prompt estrutural). Embrulha pra o caller nunca fazer .get() num list — bug
-    'list object has no attribute get' que derrubou o job do Luciano (27/06)."""
+    'list object has no attribute get' que derrubou o job do cliente-88 (27/06)."""
     if isinstance(parsed, list):
         return {"items": parsed}
     if not isinstance(parsed, dict):
@@ -98,16 +98,16 @@ _FORMA_PAT = _re.compile(r'f[ôo]rma', _re.IGNORECASE)
 def should_force_steel_kg(description):
     """Em projeto ESTRUTURAL, aço/armadura/estribo é SEMPRE kg (regra de norma,
     universal). True quando a descrição é claramente de aço E não é fôrma (m²).
-    NÃO casa 'concreto armado' (concreto/fôrma) — só o aço de verdade. Caso Luciano."""
+    NÃO casa 'concreto armado' (concreto/fôrma) — só o aço de verdade. Caso cliente-88."""
     d = description or ""
     return bool(_ACO_PAT.search(d)) and not _FORMA_PAT.search(d)
 
 
 def is_likely_wrong_type(quantities, threshold=0.75):
-    """Guardrail de tipo (caso Magno): um projeto marcado ESTRUTURAL que sai com
+    """Guardrail de tipo (caso cliente-90): um projeto marcado ESTRUTURAL que sai com
     quase tudo zerado provavelmente é arquitetura marcada errada no upload. True se
     >= threshold (75%) dos itens têm quantidade 0/None. Estrutural de verdade
-    (Luciano: 44% zerado) fica abaixo do corte e NÃO dispara."""
+    (cliente-88: 44% zerado) fica abaixo do corte e NÃO dispara."""
     qs = list(quantities or [])
     if not qs:
         return False
@@ -429,7 +429,7 @@ def is_floor_surface_para_criar(desc):
 # ── Coerência de unidade: item CONTÁVEL não sai em metro/m² ──────────────────
 # Caso cliente-40 (visto em 01/08/2026, job ed655532): "Condulete de dados —
 # 155,6 ml — CONFIRMADO". Condulete é caixa: conta-se em unidade. O motor mediu
-# 155,6 m de infra linear (fix do Fábio) e a IA pendurou os metros na linha
+# 155,6 m de infra linear (fix do cliente-73) e a IA pendurou os metros na linha
 # ERRADA — o condulete virou falso-medido e o eletroduto ficou zerado.
 # A regra só REBAIXA (confirmado → estimado) e anota; nunca apaga nem move
 # quantidade — mover seria adivinhar a qual linha os metros pertencem.
@@ -460,7 +460,7 @@ def is_unit_mismatch_countable(desc, unit):
 
 
 # ── O motor mediu, escreveu na observação, e a linha saiu errada ─────────────
-# Caso Eloídes (03/08/2026, job 2f9f81c2 — projeto de incêndio, 112 MB):
+# Caso cliente-70 (03/08/2026, job 2f9f81c2 — projeto de incêndio, 112 MB):
 #   "Tubulação de hidrantes"  → unidade m²  · qtd 12.642,38 · obs: "= 12.642,38 m"
 #   "Tubulação de sprinklers" → unidade un  · qtd 0         · obs: "= 28.714,56 m"
 #   "Conexões RetFire"        → unidade un  · qtd 0         · obs: "= 295,04 m"
@@ -614,7 +614,7 @@ def corrigir_comprimento_medido(desc, unit, quantity, obs):
     # 1) mediu e entregou ZERO — vem primeiro, e vale mesmo com a unidade certa.
     # 🪤 Este caso passou batido na 1ª versão: eu saía cedo quando a unidade já
     # era de comprimento, achando "então está tudo certo". O 2º projeto da
-    # Eloídes (df4f00ca, 191 itens) mostrou 2 itens em `ml` com quantidade 0 —
+    # cliente-70 (df4f00ca, 191 itens) mostrou 2 itens em `ml` com quantidade 0 —
     # rótulo certo, medição jogada fora do mesmo jeito. Unidade certa não diz
     # nada sobre a quantidade.
     if q <= 0:
@@ -1294,7 +1294,7 @@ def quantidades_da_geometria(items):
     fatos diferentes:
       • SELO zero  = nenhum item passou na conferência que libera o branco;
       • ORIGEM     = de onde a quantidade saiu.
-    O job `b5ce23ff` (EDVALDO, maior lead B2B) prova que dá pra ter selo zero
+    O job `b5ce23ff` (cliente-69, maior lead B2B) prova que dá pra ter selo zero
     com geometria medida: 90,86 m² de laje saíram de **hachura do layer LAJE**
     e 169,83 m de viga saíram do **comprimento das linhas do layer VIGA**, e
     ele leu que a planilha dele era transcrição de legenda.
@@ -1554,7 +1554,7 @@ def pode_fundir(desc_a: str, desc_b: str) -> bool:
 #
 # Custo medido nos últimos 30 dias: de 1.090 linhas em `un`, só 28% saem
 # medidas — e parte disso é contagem legítima rebaixada por ressalva de
-# escala. No arquivo do Giovani, as 32 janelas e as 4 geladeiras viraram
+# escala. No arquivo do cliente-81, as 32 janelas e as 4 geladeiras viraram
 # estimado por causa do cabeçalho mentiroso, que não tem nada a ver com
 # contar bloco.
 #
@@ -1598,7 +1598,7 @@ def caveat_atinge_unidade(metadata, unidade: str) -> bool:
 # ══════════════════════════════════════════════════════════════════════
 #  5ª RÉGUA — o rótulo de área que BATE com a geometria prova a unidade
 # ══════════════════════════════════════════════════════════════════════
-# 🚨 Descoberta em 17/08/2026 no arquivo do Giovani (75a774af), depois de
+# 🚨 Descoberta em 17/08/2026 no arquivo do cliente-81 (75a774af), depois de
 # corrigir a unidade por plausibilidade. O pareamento rótulo↔região devolveu:
 #
 #     "57,16m²"  →  hachura mede  57.16 m²
@@ -2192,7 +2192,7 @@ def comprimento_de_parede_na_observacao(observacao):
 # publicar "3 meses" é a gente virar orçamentista por um instante.
 #
 # 🪤 O PRÓPRIO PROJETO JÁ NÃO CONFIA NESTE NÚMERO. O cronograma se recusa a
-# consumi-lo, e o comentário lá (main.py, caso Eloídes 03/08) diz por quê:
+# consumi-lo, e o comentário lá (main.py, caso cliente-70 03/08) diz por quê:
 # "usar esse chute aqui seria o cronograma aprendendo com o palpite dele mesmo
 # e chamando de informação". Só o quantitativo ainda o publicava.
 #

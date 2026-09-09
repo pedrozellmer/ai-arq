@@ -148,7 +148,7 @@ def test_o_rascunho_vence_o_nome_da_conta_google():
 
     O rascunho só preenche campo VAZIO, de propósito. Se o nome do Google
     entrar primeiro, o campo deixa de estar vazio e o rascunho não devolve mais
-    nada: quem digitou "Maria S. Souza Neta" recebe "Maria Souza" de volta.
+    nada: quem digitou um nome composto recebe só o último sobrenome de volta.
 
     Antes de 04/09 a ordem certa era acidental — dependia de uma chamada no fim
     do script rodar antes de uma função async terminar. Agora é explícita, e

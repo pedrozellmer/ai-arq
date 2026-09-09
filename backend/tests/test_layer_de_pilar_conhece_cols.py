@@ -7,7 +7,7 @@ padrão AIA/CAD para pilar estrutural (Structural Columns). O filtro conhecia s�
 "PILAR" e "COLUMN", e `_has_token` quebra "S-COLS" em ["S","COLS"] — "COLS" não
 começa com "COLUMN", então recusava.
 
-🪤 "COLUNA" FOI TESTADO E RECUSADO. O Tiago (METAL-AR) tem o layer
+🪤 "COLUNA" FOI TESTADO E RECUSADO. O cliente-102 (METAL-AR) tem o layer
 `AC-Indicação coluna Frigorígenas` — coluna frigorígena de ar-condicionado, não
 pilar. Aceitar "COLUNA" faria toda prancha de climatização virar candidata a
 pilar. O teste abaixo guarda essa decisão pra ninguém "melhorar" o filtro
@@ -42,7 +42,7 @@ def test_os_nomes_que_ja_funcionavam_continuam():
 
 # ── CONTROLES: o filtro tem que RECUSAR ────────────────────────────────────
 def test_CONTROLE_coluna_FRIGORIGENA_nao_e_pilar():
-    """🪤 O layer REAL do Tiago. Se este teste falhar, toda prancha de
+    """🪤 O layer REAL do cliente-102. Se este teste falhar, toda prancha de
     climatização passa a ter 'pilar'."""
     for nome in ("AC-Indicação coluna Frigorígenas",
                  "AC-Indicacao coluna Frigorigenas",

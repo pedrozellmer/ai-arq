@@ -61,7 +61,7 @@ def _prancha(arquivo, pagina, m2):
 
 
 # as pranchas reais do job da cliente-31 (3 das 10, com os m² do error_log)
-CADERNO_LUANA = {
+CADERNO_CLIENTE_87 = {
     "p0": _prancha("casa bruna - plantas anteprojeto.pdf", 0, 29.1),
     "p3": _prancha("casa bruna - plantas anteprojeto.pdf", 3, 85.6),
     "p5": _prancha("casa bruna - plantas anteprojeto.pdf", 5, 95.7),
@@ -209,7 +209,7 @@ def test_com_a_pagina_o_item_RECEBE_a_medicao_da_prancha_dele():
     página 3 — não os 95,7 da maior, não zero."""
     it = _Item("Piso cerâmico", "m²", 0, ref_sheet="%s (p4)" % ARQ)
     main._apply_area_honesty([it], pdfvec_m2=210.4,
-                             pdfvec_por_prancha=CADERNO_LUANA)
+                             pdfvec_por_prancha=CADERNO_CLIENTE_87)
     assert it.quantity == 85.6, (
         "o item da página 4 não recebeu a medição dela (recebeu %r)" % it.quantity)
 
@@ -218,7 +218,7 @@ def test_cada_pagina_recebe_a_SUA_medicao():
     p1 = _Item("Piso cerâmico", "m²", 0, ref_sheet="%s (p1)" % ARQ)
     p6 = _Item("Piso vinílico", "m²", 0, ref_sheet="%s (p6)" % ARQ)
     main._apply_area_honesty([p1, p6], pdfvec_m2=210.4,
-                             pdfvec_por_prancha=CADERNO_LUANA)
+                             pdfvec_por_prancha=CADERNO_CLIENTE_87)
     assert (p1.quantity, p6.quantity) == (29.1, 95.7), (p1.quantity, p6.quantity)
 
 
@@ -227,7 +227,7 @@ def test_CONTROLE_POSITIVO_SEM_a_pagina_continua_ambiguo():
     passar a preencher, a trava 4 caiu e a gente voltou a chutar prancha."""
     it = _Item("Piso cerâmico", "m²", 0, ref_sheet=ARQ)   # sem (pN)
     main._apply_area_honesty([it], pdfvec_m2=210.4,
-                             pdfvec_por_prancha=CADERNO_LUANA)
+                             pdfvec_por_prancha=CADERNO_CLIENTE_87)
     assert it.quantity == 0, (
         "item SEM página foi preenchido num arquivo de 10 pranchas — isso é "
         "chute: não há como saber de qual pavimento ele veio")
@@ -237,7 +237,7 @@ def test_CONTROLE_pagina_que_NAO_foi_medida_nao_inventa():
     """Página 8 não está no caderno medido: fica zerada."""
     it = _Item("Piso cerâmico", "m²", 0, ref_sheet="%s (p9)" % ARQ)
     main._apply_area_honesty([it], pdfvec_m2=210.4,
-                             pdfvec_por_prancha=CADERNO_LUANA)
+                             pdfvec_por_prancha=CADERNO_CLIENTE_87)
     assert it.quantity == 0
 
 
@@ -246,7 +246,7 @@ def test_CONTROLE_o_selo_continua_ESTIMADO():
     atribuição acerta a prancha."""
     it = _Item("Piso cerâmico", "m²", 0, ref_sheet="%s (p4)" % ARQ)
     main._apply_area_honesty([it], pdfvec_m2=210.4,
-                             pdfvec_por_prancha=CADERNO_LUANA)
+                             pdfvec_por_prancha=CADERNO_CLIENTE_87)
     assert str(getattr(it.confidence, "value", it.confidence)) == "estimado"
 
 
@@ -263,6 +263,6 @@ def test_a_observacao_NOMEIA_a_prancha_certa():
     atribui por página, o texto tem que dizer de onde veio."""
     it = _Item("Piso cerâmico", "m²", 0, ref_sheet="%s (p4)" % ARQ)
     main._apply_area_honesty([it], pdfvec_m2=210.4,
-                             pdfvec_por_prancha=CADERNO_LUANA)
+                             pdfvec_por_prancha=CADERNO_CLIENTE_87)
     assert "85.6" in (it.observations or "") or "85,6" in (it.observations or ""), (
         "a observação não cita a medição que foi usada: %r" % it.observations)

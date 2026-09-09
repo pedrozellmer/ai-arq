@@ -46,7 +46,7 @@ AREAS = {"-TEFOR": 26.54, "-TEPAR": 268.39, "-TEDUTO": 12.0}
 COMPR = {"-TEPAR": 302.14, "-TEDUTO": 199.08}
 
 
-def test_o_forro_do_Alan_para_de_sair_zerado():
+def test_o_forro_do_Cliente_12_para_de_sair_zerado():
     obs = "Fonte: área hachurada do layer -TEFOR = 26.54 m² (17 hachuras). Pode ser acaba"
     assert q(obs, "m²", AREAS, COMPR) == 26.54
 

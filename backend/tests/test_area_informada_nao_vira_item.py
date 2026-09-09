@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """A área que o cliente INFORMA não vira quantidade de item (31/08/2026).
 
-🩸 CASO FLAVIO (job f271473f, cliente novo, 16 PDFs, 31/08). Ele informou
+🩸 CASO cliente-75 (job f271473f, cliente novo, 16 PDFs, 31/08). Ele informou
 400 m² no upload. A planilha saiu com **0% medido** e SEIS itens em m² com a
 quantidade 400 — a área que ele mesmo digitou. Entre eles:
 
@@ -42,7 +42,7 @@ class _Item:
         self.confidence = conf
 
 
-def _flavio():
+def _cliente_75():
     """A configuração literal do caso, com os itens que saíram com 400."""
     return [
         _Item("Rasgo em laje de concreto armado para implantação de nova escada",
@@ -56,7 +56,7 @@ def _flavio():
 
 def test_rasgo_de_laje_NAO_herda_a_area_da_casa():
     """O item mais visível do estrago: um vão de escada com a área do imóvel."""
-    itens = _flavio()
+    itens = _cliente_75()
     main._apply_area_honesty(itens, total_area=400, total_area_source="informado",
                              pe_direito=3)
     rasgo = itens[0]
@@ -74,7 +74,7 @@ def test_numero_que_ja_existia_NAO_VIRA_a_area_da_casa():
     no TEXTO da observação, pro cliente conferir.
     O ganho deste conserto é não virar 400. Preencher com o valor lido é outra
     decisão (o resgate de linha zerada), e não é esta."""
-    itens = _flavio()
+    itens = _cliente_75()
     main._apply_area_honesty(itens, total_area=400, total_area_source="informado",
                              pe_direito=3)
     gourmet = itens[1]
@@ -84,10 +84,10 @@ def test_numero_que_ja_existia_NAO_VIRA_a_area_da_casa():
         "o número que estava no desenho sumiu da observação")
 
 
-def test_o_ESTRAGO_INTEIRO_do_caso_flavio_encolhe():
+def test_o_ESTRAGO_INTEIRO_do_caso_cliente_75_encolhe():
     """A conta que o cliente enxerga: quantas superfícies saem com a área da
     casa inteira. Eram SEIS num imóvel de 400 m² (2.400 m² de piso e forro)."""
-    itens = _flavio()
+    itens = _cliente_75()
     main._apply_area_honesty(itens, total_area=400, total_area_source="informado",
                              pe_direito=3)
     com400 = [i.description for i in itens if i.quantity == 400]

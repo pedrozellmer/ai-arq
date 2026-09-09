@@ -130,7 +130,7 @@ _SPLIT_RE = re.compile(r"[-_\s./\\|:]+")
 # Structural Columns), e não casava: `_has_token` quebra "S-COLS" em ["S","COLS"]
 # e "COLS" não começa com "COLUMN". Apareceu no arquivo do cliente-23 (RACIONAL),
 # onde os 54 pilares vivem no layer `S-COLS`.
-# 🪤 "COLUNA" foi TESTADO e RECUSADO: o Tiago (METAL-AR) tem o layer
+# 🪤 "COLUNA" foi TESTADO e RECUSADO: o cliente-102 (METAL-AR) tem o layer
 # `AC-Indicação coluna Frigorígenas` — coluna frigorígena de ar-condicionado, e
 # não pilar. Casaria como falso positivo em toda prancha de climatização.
 # ⚠️ HONESTIDADE SOBRE O ALCANCE: isto sozinho NÃO destrava o caso do cliente-23.
@@ -674,7 +674,7 @@ def count_pillars(extraction) -> dict | None:
     _rects_todos = rects
     rects = [r for r in rects if layer_is_pilar(getattr(r, "layer", ""))]
 
-    # 🪤 DESENHO QUE NUMERA OS LAYERS (Isabelle, 05/08/2026). A planta de fôrma
+    # 🪤 DESENHO QUE NUMERA OS LAYERS (cliente-82, 05/08/2026). A planta de fôrma
     # de um prédio de 7 pavimentos entregou 1 item medido porque os layers dela
     # se chamam '02', '4', '5', '100' — layer_is_pilar não casa com nada e a
     # geometria inteira era descartada aqui em cima, antes de qualquer medição.
@@ -761,7 +761,7 @@ def count_pillars(extraction) -> dict | None:
 
     # Blocos que TÊM 'pilar' no nome/layer mas NÃO são o pilar de concreto:
     # eixos, hachura (rayado), cota, texto, tabela, símbolo. Contá-los inflava
-    # o total (caso Luciano: 'Eixos do pilar'=136 + 'RAYADO Pxx' → 184 falsos).
+    # o total (caso cliente-88: 'Eixos do pilar'=136 + 'RAYADO Pxx' → 184 falsos).
     _BLOCO_NAO_PILAR = (
         "EIXO", "RAYADO", "HACH", "HATCH", "COTA", "TEXTO", "TABELA", "QUADRO",
         "TITULO", "TÍTULO", "LEGENDA", "SIMBOLO", "SÍMBOLO", "CARIMBO", "NORTE",

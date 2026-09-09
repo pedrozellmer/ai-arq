@@ -104,7 +104,7 @@ def test_TODO_prompt_de_projeto_oferece_o_convite_ANTES_do_caminho_caro():
     for arq, nome, corpo in _de_projeto():
         assert "ANTES de qualquer outra saída" in corpo, (
             "%s:%s menciona o campo mas não manda oferecê-lo PRIMEIRO — foi "
-            "assim que o agente empurrou o DXF pro kovatch" % (arq, nome))
+            "assim que o agente empurrou o DXF pro cliente-86" % (arq, nome))
 
 
 def test_TODO_prompt_de_projeto_diz_o_que_o_campo_NAO_resolve():

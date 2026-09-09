@@ -69,7 +69,7 @@ def _zera(desc, unit, qty=50.0, **kw):
 
 # ── A frase ────────────────────────────────────────────────────────────────
 def test_item_LINEAR_zerado_NAO_diz_que_e_area():
-    """🩸 Os 25 itens do flavio."""
+    """🩸 Os 25 itens do cliente-75."""
     it = _zera(*RODAPE)
     assert it.quantity == 0, "o teste não está exercitando o ramo que zera"
     obs = (it.observations or "").lower()

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Item de área zerado recebe a medição da PRÓPRIA prancha (31/08/2026).
 
-🩸 CASO FLAVIO (job f271473f). O motor mediu 6 pranchas — 80,5 · 107,7 · 166,1
+🩸 CASO cliente-75 (job f271473f). O motor mediu 6 pranchas — 80,5 · 107,7 · 166,1
 · 77,1 · 112,0 · 198,4 m² — e entregou 32 linhas de área ZERADAS. A medição
 existia, por prancha, e não chegava a item nenhum.
 

@@ -3,7 +3,7 @@
 
 🏗️ 27/08/2026. Puxando a família nº1 das correções de campo (itens de estrutura
 preenchidos à mão), descobri que **o motor estrutural já acerta a parte difícil**.
-No job da Cassia (`62c49fe6`) ele detectou 219 pilares e entregou:
+No job da cliente-63 (`62c49fe6`) ele detectou 219 pilares e entregou:
 
     ✓ MEDIDO    Pilar de concreto 14×30 cm   171 un
     ✓ MEDIDO    Pilar de concreto 14×50 cm    37 un
@@ -74,7 +74,7 @@ def test_o_pe_direito_NAO_e_mais_descartado_no_estrutural():
 
 def test_ARQUITETURA_continua_funcionando():
     """🪤 O conserto não pode ter roubado o caminho que já funcionava — foi ele
-    que resolveu o caso Giovani (pintura zerada com pé-direito informado)."""
+    que resolveu o caso cliente-81 (pintura zerada com pé-direito informado)."""
     assert "elif _pd_cli > 0:" in _FONTE, (
         "o ramo de arquitetura sumiu — a pintura volta a sair zerada")
     i = _FONTE.find("elif _pd_cli > 0:")

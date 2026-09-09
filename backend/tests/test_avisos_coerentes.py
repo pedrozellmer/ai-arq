@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Os avisos que o cliente lê no topo do projeto não podem se contradizer.
 
-🚨 Caso Karlla (24/08/2026, job 503fe0d7). Ela recebeu, um embaixo do outro:
+🚨 Caso cliente-85 (24/08/2026, job 503fe0d7). Ela recebeu, um embaixo do outro:
 
     ⚠ "nenhuma quantidade foi medida da geometria"
     ✅ "Escala conferida pelo próprio desenho — 304 cotas batem COM A GEOMETRIA"
@@ -40,7 +40,7 @@ def test_escala_provada_sem_medicao_explica_o_buraco():
     txt = " ".join(linhas)
     assert "Escala conferida" in txt
     assert "NENHUM item" in txt, (
-        "o ✅ saiu sozinho num projeto que não mediu nada — foi o que a Karlla leu:\n"
+        "o ✅ saiu sozinho num projeto que não mediu nada — foi o que a cliente-85 leu:\n"
         + txt)
     assert "outro" in txt.lower() or "outra" in txt.lower(), (
         "não explica que saber a escala e medir são passos diferentes")
@@ -67,7 +67,7 @@ def test_o_padrao_continua_sendo_nao_afirmar():
     assert "NENHUM item" not in txt
 
 
-def test_o_controle_prova_que_o_caso_da_karlla_seria_reprovado():
+def test_o_controle_prova_que_o_caso_da_cliente_85_seria_reprovado():
     """Controle positivo: a combinação exata que ela viu."""
     linhas = _fn()(_provada(304), n_medidos=0)
     assert linhas, "sem linha nenhuma não dá pra testar"

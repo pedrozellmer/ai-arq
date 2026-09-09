@@ -16,7 +16,7 @@ Remontagem acontece em dois casos REAIS de cliente:
 receberam a versão remontada. Revisão é justo o momento em que o cliente mais
 precisa confiar no arquivo.
 
-🪤 Achado por um agente que conferia a planilha corrigida do Tiago contra a
+🪤 Achado por um agente que conferia a planilha corrigida do cliente-102 contra a
 original e percebeu que a coluna REF tinha 126 células e nenhum código.
 """
 import io

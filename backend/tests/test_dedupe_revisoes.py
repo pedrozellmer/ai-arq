@@ -18,7 +18,7 @@ def _n(paths):
     return len(mant), len(desc), [(os.path.basename(v), os.path.basename(k)) for v, k in desc]
 
 
-def test_caso_rafael_duas_revisoes():
+def test_caso_cliente_94_duas_revisoes():
     files = [
         "d/2060-PRJ-ELE-LO-008-GER.PL.TE-R03.dxf",
         "d/2060-PRJ-ELE-LO-008-GER.PL.TE-R04.dxf",

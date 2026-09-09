@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Selo zero NÃO prova que o número veio de texto — eram dois fatos, cinco vozes.
 
-🩸 03/09/2026, job `b5ce23ff` do EDVALDO (maior lead B2B, avaliando o produto).
+🩸 03/09/2026, job `b5ce23ff` do cliente-69 (maior lead B2B, avaliando o produto).
 Ele leu, na tela e na planilha:
 
     "nenhuma quantidade foi medida da geometria — o que saiu na planilha veio
@@ -44,7 +44,7 @@ class _It:
 
 
 # As 9 observações REAIS do job b5ce23ff, copiadas do banco.
-_EDVALDO = [
+_CLIENTE_69 = [
     _It(0, "Especificação lida diretamente do texto 'CONCRETO Fck=30MPa' no layer"),
     _It(90.86, "Fonte: área hachurada do layer 'LAJE' = 90.86 m² (10 hachuras)"),
     _It(0, "Área de projeção horizontal = 90.86 m² (layer 'LAJE'). Espessuras lidas"),
@@ -57,9 +57,9 @@ _EDVALDO = [
 ]
 
 
-def test_o_caso_do_edvaldo_conta_DUAS_quantidades_da_geometria():
+def test_o_caso_do_cliente_69_conta_DUAS_quantidades_da_geometria():
     """As duas que existem: a hachura da laje e o comprimento do layer da viga."""
-    assert quantidades_da_geometria(_EDVALDO) == 2
+    assert quantidades_da_geometria(_CLIENTE_69) == 2
 
 
 def test_CONTROLE_procedencia_de_TEXTO_nao_conta():
@@ -90,7 +90,7 @@ def test_CONTROLE_lista_vazia_e_lixo_nao_estouram():
 
 
 def test_a_frase_da_origem_muda_conforme_a_origem():
-    n_geo, frase = main._origem_das_quantidades(_EDVALDO)
+    n_geo, frase = main._origem_das_quantidades(_CLIENTE_69)
     assert n_geo == 2
     assert "tirada da geometria do desenho" in frase
     # 🩸 03/09, revisão adversarial: este assert exigia que a frase também

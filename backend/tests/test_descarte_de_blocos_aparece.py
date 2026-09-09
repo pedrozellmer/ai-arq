@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """`blocos=0` não distinguia "não tem" de "jogamos fora".
 
-🚨 26/08/2026, caso **André** (job `d5dbe1ed`, 09:46). Prancha ELÉTRICA de
+🚨 26/08/2026, caso **cliente-36** (job `d5dbe1ed`, 09:46). Prancha ELÉTRICA de
 78 MB, convertida pelo libredwg porque o ODA recusou:
 
     motor:geometria  hachuras=581 poligonos=9 paredes=76824 blocos=0
@@ -101,17 +101,17 @@ def test_log_LIMPO_quando_nao_houve_descarte():
     assert f(object()) == "", "objeto sem o campo não pode explodir o log"
 
 
-def test_controle_positivo_o_caso_do_ANDRE_apareceria():
+def test_controle_positivo_o_caso_do_CLIENTE_36_apareceria():
     """🧪 O teste que prova que o guarda REPROVA: um descarte real tem que
     virar texto legível, com o nome que decide a questão."""
     from main import _descarte_de_blocos as f
 
-    class _Andre:
+    class _Cliente_36:
         blocos_descartados = {"anonimo": 1843, "utilitario": 0, "anotacao": 12,
                               "ilegivel": 0,
                               "amostra_anonimo": ["A$C6BFD6B53", "*U5"]}
 
-    saida = f(_Andre())
+    saida = f(_Cliente_36())
     assert "anonimo=1843" in saida, saida
     assert "anotacao=12" in saida, saida
     assert "utilitario" not in saida, "filtro zerado não devia aparecer: %s" % saida

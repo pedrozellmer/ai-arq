@@ -26,7 +26,7 @@ diz ONDE ela estava quando saiu — é isso que decide o que encurtar.
 
 🔒 Grava o NOME do campo, NUNCA o valor digitado.
 🪤 Quem não aceita o banner de cookies não gera evento (LGPD) — o instrumento é
-cego pra esse grupo, como no caso da Cassia (28 revisões, zero evento).
+cego pra esse grupo, como no caso da cliente-63 (28 revisões, zero evento).
 """
 import io
 import os

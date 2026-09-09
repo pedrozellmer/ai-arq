@@ -8,12 +8,12 @@ De 4 pranchas, 1 chegou na planilha. As duas densas devolveram ZERO item com
 O que o acervo mostrou (4 leituras, correlação perfeita com CONTAGEM DE BLOCOS
 e NENHUMA com tamanho de arquivo):
 
-    Andre     78 MB DXF ·     0 blocos → entrada 13.499 tokens → 64 itens ✔
-    Amanda02  27 MB     ·    27 blocos → entrada 15.804        → 25 itens ✔
-    Amanda03  45 MB     ·   763 blocos → entrada 53.832        →  0 itens ✖
-    Amanda04  53 MB     · 1.570 blocos → entrada 74.875        →  0 itens ✖
+    cliente-36     78 MB DXF ·     0 blocos → entrada 13.499 tokens → 64 itens ✔
+    Cliente_3402  27 MB     ·    27 blocos → entrada 15.804        → 25 itens ✔
+    Cliente_3403  45 MB     ·   763 blocos → entrada 53.832        →  0 itens ✖
+    Cliente_3404  53 MB     · 1.570 blocos → entrada 74.875        →  0 itens ✖
 
-O arquivo do Andre é o MAIOR dos quatro e gerou o MENOR prompt: parede entra
+O arquivo do cliente-36 é o MAIOR dos quatro e gerou o MENOR prompt: parede entra
 somada por layer, bloco entra UMA LINHA POR NOME. E o libredwg — que faz 88%
 das conversões — dá um nome por instância. Num DXF real: 1.202 nomes para
 1.349 peças, e a seção virou 44% do prompt.

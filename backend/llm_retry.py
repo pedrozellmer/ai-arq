@@ -222,7 +222,7 @@ def _clean_str(s: str) -> str:
     """Remove surrogates soltos / bytes não-codificáveis em UTF-8. Fast-path:
     string sã volta intacta. CAD brasileiro às vezes tem MTEXT com surrogate
     órfão (lixo de encoding) → a API responde 400 'invalid high surrogate' e o
-    job inteiro morre disfarçado de 'IA sobrecarregada' (caso Rodrigo 19/07)."""
+    job inteiro morre disfarçado de 'IA sobrecarregada' (caso cliente-96 19/07)."""
     try:
         s.encode("utf-8")
         return s
@@ -342,7 +342,7 @@ def _is_retryable(exc: Exception) -> bool:
 # chamar de "provedor sobrecarregado" com PROVA de transitório. 400/401/403/404/
 # 413/invalid_request/surrogate são PERMANENTES e NUNCA viram "é o provedor,
 # reprocesse" — era essa inversão de default que prendia o cliente em loop
-# (caso Rodrigo 19/07: model-id errado dava 404 em todo DXF e virava "sobrecarga").
+# (caso cliente-96 19/07: model-id errado dava 404 em todo DXF e virava "sobrecarga").
 
 # Marcadores de erro PERMANENTE (nosso/arquivo) — reprocessar sozinho não conserta.
 _PERMANENT_TOKENS = (
@@ -692,4 +692,4 @@ def call_with_retry_stream(
     if last_exc:
         raise last_exc
     raise RuntimeError("call_with_retry_stream: loop terminou sem exception nem retorno")
-# deploy: restart 19/07 23h — destravar job órfão do Rodrigo (sem mudança funcional)
+# deploy: restart 19/07 23h — destravar job órfão do cliente-96 (sem mudança funcional)

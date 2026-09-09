@@ -59,7 +59,7 @@ def main() -> int:
         #   ai.arq.br     → GitHub Pages : 200, cert OK, #login-email presente
         #   api.ai.arq.br → Render       : 200, cert OK
         # 🪤 A camada Cloudflare continua coberta pelo NÍVEL 1 (que bate em
-        # ai.arq.br através do CF). Aqui o alvo é o fluxo do cliente (bug Daniela).
+        # ai.arq.br através do CF). Aqui o alvo é o fluxo do cliente (bug cliente-65).
         # IPs resolvidos em runtime (não hardcode) — se a resolução falhar, cai
         # no caminho normal e o skip do BFM abaixo evita alarme falso.
         import socket

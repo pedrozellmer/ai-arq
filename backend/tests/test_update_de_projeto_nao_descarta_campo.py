@@ -16,7 +16,7 @@ tela diz "Salvando…", o cliente vê OK, e o banco não muda.
 genérico "Projeto <data>".
 
 **2. O conserto do `/add-file` de 31/07 nunca funcionou.** O bloco existe pra
-corrigir "o painel mostra 1 PDF num projeto que já tem CAD" (caso Fernando) — e
+corrigir "o painel mostra 1 PDF num projeto que já tem CAD" (caso cliente-74) — e
 mandava `files_count`/`file_types` pelo mesmo caminho que os descarta. 5
 projetos de cliente afetados; o pior mostra "1 prancha" com 18 DWG no Storage,
 e dois seguem contados como PDF puro na estatística PDF × CAD.

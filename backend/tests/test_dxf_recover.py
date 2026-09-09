@@ -20,7 +20,7 @@ e trocar o encoding do arquivo não conserta uma chave de layout inconsistente.
 `ezdxf.recover` é o remédio documentado pra arquivo de escritor não-Autodesk.
 
 Medido no acervo: 22 falhas de extração, TODAS de arquivo do libredwg. 20 são a
-trava de 150 MB (guarda deliberada, caso Patrick 18/08). As outras 2 são esta.
+trava de 150 MB (guarda deliberada, caso cliente-93 18/08). As outras 2 são esta.
 """
 import os
 import sys
@@ -90,7 +90,7 @@ def test_recover_salva_a_prancha_quando_o_readfile_morre(
 def test_quando_nem_o_recover_abre_a_mensagem_diz_as_DUAS_causas(tmp_path):
     """Se nada abre, o erro precisa carregar o motivo do caminho normal E o do
     recover — senão a investigação seguinte começa no escuro (a lição do caso
-    Patrick, em que a causa real morreu em dois cortes de log)."""
+    cliente-93, em que a causa real morreu em dois cortes de log)."""
     from dwg_extractor import extract_dxf
     ruim = tmp_path / "quebrado.dxf"
     ruim.write_text("isto não é um DXF", encoding="utf-8")

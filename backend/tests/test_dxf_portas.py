@@ -250,7 +250,7 @@ def test_controle_o_arquivo_bom_abre_pelo_caminho_normal(dxf_valido, capsys):
 
 
 @pytest.mark.parametrize("nome_layout", ["DO", "LAYOUT", "00-Ã\x8dNDICE DO PROJETO"])
-def test_abrir_dxf_recupera_o_keyerror_do_caso_alan(
+def test_abrir_dxf_recupera_o_keyerror_do_caso_cliente_12(
         nome_layout, dxf_valido, monkeypatch, capsys):
     """Reproduz os três KeyError reais do job e1c48ed7.
 

@@ -652,7 +652,7 @@ def _alerta_lacuna(job_id: str, question: str) -> None:
     longa — o objetivo é sinalizar o projeto, não cada frase.
     """
     # 🩸 03/09/2026 — ESTE ALARME LEU O CHECKLIST DO CLIENTE COMO QUEIXA.
-    # O FÁBIO (job eebe543a) mandou um briefing pedindo auditoria do projeto de
+    # O cliente-73 (job eebe543a) mandou um briefing pedindo auditoria do projeto de
     # rede DELE, com itens tipo "Falta de reserva técnica" e "Falta de espaço
     # para expansão futura". O `falt(a|ou)` casou, e o Pedro recebeu
     # "Chat: cliente diz que faltou medição" — coisa que ele não disse.

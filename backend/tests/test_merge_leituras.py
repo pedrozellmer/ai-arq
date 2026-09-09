@@ -244,7 +244,7 @@ _REAIS = [
 ]
 
 
-def test_extrai_os_codigos_reais_do_projeto_do_alan():
+def test_extrai_os_codigos_reais_do_projeto_do_cliente_12():
     for desc, esperado in _REAIS:
         assert merge_tokens(desc) == esperado, desc
 

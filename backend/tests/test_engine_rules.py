@@ -3,7 +3,7 @@
 (engine_rules.py) sem chamar a IA. Roda em segundos: `python tests/test_engine_rules.py`.
 
 Cada teste trava um comportamento que JÁ quebrou ou que NÃO pode quebrar. Vários
-codificam bugs reais de 27/06 (caso Luciano/Ademir/Magno) pra nunca voltarem.
+codificam bugs reais de 27/06 (caso cliente-88/cliente-107/cliente-90) pra nunca voltarem.
 """
 import io
 import os
@@ -56,7 +56,7 @@ check("chave } dentro de string nao fecha cedo", obj == '{"a":"x}y"}')
 obj, _ = extract_balanced_obj('{"a":"esc\\"}", "b":1}', 0)
 check("aspas escapada respeitada", obj == '{"a":"esc\\"}", "b":1}')
 
-print("== salvage_truncated_json (caso Ademir: JSON cortado no teto) ==")
+print("== salvage_truncated_json (caso cliente-107: JSON cortado no teto) ==")
 trunc = ('{"project_data": {"name": "SSP-PE", "total_area": 1200}, "items": [\n'
          '  {"item_num":"1","description":"parede drywall {especial}","unit":"m","quantity":120},\n'
          '  {"item_num":"2","description":"piso 60x60","unit":"m2","quantity":340},\n'
@@ -70,13 +70,13 @@ full = '{"items":[{"item_num":"1","quantity":1},{"item_num":"2","quantity":2}]}'
 check("json completo -> todos os itens", len(salvage_truncated_json(full)["items"]) == 2)
 check("lixo -> items vazio (nunca lanca)", salvage_truncated_json("xpto")["items"] == [])
 
-print("== normalize_items_payload (caso Luciano: 'list' object has no attribute get) ==")
+print("== normalize_items_payload (caso cliente-88: 'list' object has no attribute get) ==")
 check("array cru vira {items:[...]}", normalize_items_payload([{"a": 1}, {"b": 2}]) == {"items": [{"a": 1}, {"b": 2}]})
 check("dict passa intacto", normalize_items_payload({"items": [1]}) == {"items": [1]})
 check("None -> items vazio", normalize_items_payload(None) == {"items": []})
 check("string -> items vazio", normalize_items_payload("xpto") == {"items": []})
 
-print("== should_force_steel_kg (caso Luciano: aco sempre kg, nunca m2) ==")
+print("== should_force_steel_kg (caso cliente-88: aco sempre kg, nunca m2) ==")
 check("estribos -> forca kg", should_force_steel_kg("Estribos ∅5 mm CA-50 — Vigas Piso 1") is True)
 check("aco S-400 -> forca kg", should_force_steel_kg("Aço S-400 — Pilar tipo peso unitário 20,5 kg") is True)
 check("armadura em aco -> forca kg", should_force_steel_kg("Pilares de concreto armado — armadura em aço CA-50") is True)
@@ -86,10 +86,10 @@ check("concreto NAO vira kg (e m3)", should_force_steel_kg("Pilares de concreto 
 check("item de arquitetura nao vira kg", should_force_steel_kg("Piso porcelanato 60x60") is False)
 check("vazio nao vira kg", should_force_steel_kg("") is False)
 
-print("== is_likely_wrong_type (caso Magno: estrutural que e arquitetura) ==")
-check("Magno 6/6 zerado -> dispara", is_likely_wrong_type([0, 0, 0, 0, 0, 0]) is True)
-luciano = [0] * 15 + [1.5] * 19   # 34 itens, 44% zerado (estrutural REAL)
-check("Luciano 44% zerado -> NAO dispara", is_likely_wrong_type(luciano) is False)
+print("== is_likely_wrong_type (caso cliente-90: estrutural que e arquitetura) ==")
+check("cliente-90 6/6 zerado -> dispara", is_likely_wrong_type([0, 0, 0, 0, 0, 0]) is True)
+CLIENTE_88 = [0] * 15 + [1.5] * 19   # 34 itens, 44% zerado (estrutural REAL)
+check("cliente-88 44% zerado -> NAO dispara", is_likely_wrong_type(CLIENTE_88) is False)
 check("tudo medido -> NAO dispara", is_likely_wrong_type([1, 2, 3, 4]) is False)
 check("lista vazia -> NAO dispara", is_likely_wrong_type([]) is False)
 check("exatamente 75% -> dispara (>=)", is_likely_wrong_type([0, 0, 0, 1]) is True)
@@ -173,7 +173,7 @@ check("luminária em m² -> MISMATCH", is_unit_mismatch_countable("Luminária LE
 check("cabeamento em ml -> ok", is_unit_mismatch_countable("Cabeamento par trançado Cat.6", "ml") is False)
 
 
-# ── comprimento medido descartado ou com rótulo errado (Eloídes, 03/08/2026) ──
+# ── comprimento medido descartado ou com rótulo errado (cliente-70, 03/08/2026) ──
 # 🔒 As observações abaixo são TEXTO REAL de produção, copiado de `project_items`
 # (projeto de 03/08 11:33). A regra tinha sido escrita contra um exemplo à mão e
 # nunca rodou num job de verdade — o deploy entrou 5 min DEPOIS do único job que

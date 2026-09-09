@@ -230,7 +230,7 @@ def test_o_nome_do_arquivo_do_cliente_NAO_entra_na_tabela_de_dinheiro():
     """🪤 A tag de produção carrega o nome do arquivo (analyzer.py:1243,
     main.py:9391). Isso torna o agrupamento impossível E põe dado de cliente
     numa tabela interna (regra nº6)."""
-    etapa, escopo = _etapa_e_escopo("analyzer:CASA DO JOÃO - PLANTA BAIXA.pdf")
+    etapa, escopo = _etapa_e_escopo("analyzer:CASA DO cliente-83 - PLANTA BAIXA.pdf")
     assert etapa == "prancha", etapa
     assert escopo == "projeto"
     etapa2, _ = _etapa_e_escopo("dxf:280-PE-ARQ-CASA 02 DORMIT.dxf")

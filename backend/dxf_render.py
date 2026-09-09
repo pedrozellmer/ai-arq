@@ -29,7 +29,7 @@ from ezdxf.addons.drawing.matplotlib import MatplotlibBackend
 
 # Teto de entidades pro PREVIEW.
 #
-# Origem (17/07): o DXF do Rômulo (CEM Profa Isabel Castro Viana) com 9.766
+# Origem (17/07): o DXF do cliente-97 (prancha de uma escola pública) com 9.766
 # entidades fez o matplotlib acumular 2,4 GB sem completar, e o process_job
 # inteiro chegou a 4,3 GB — num servidor de 2 GB, OOM → reinício → job órfão.
 # O teto virou 3000 pra proteger o SERVIDOR.
@@ -195,7 +195,7 @@ def render_dxf_to_png_safe(dxf_path: str, output_png_path: str,
     `motivo_out`: lista opcional onde este wrapper DEPOSITA o motivo da falha.
     🚨 Por que existe (15/08/2026): o filho já imprime a razão exata — "preview
     PULADO: N entidades", "Erro ao abrir", "Erro ao renderizar: <exceção>" — e
-    o `capture_output=True` daqui jogava tudo fora. No 1º DWG do Giovani o
+    o `capture_output=True` daqui jogava tudo fora. No 1º DWG do cliente-81 o
     preview falhou em 10s com `sem_dxf=0` (arquivo presente!) e o log só sabia
     dizer "falhou (nao foi tempo)". A causa existia, escrita, a um passo de ser
     gravada — a mesma falha silenciosa que este arquivo inteiro combate.
@@ -203,7 +203,7 @@ def render_dxf_to_png_safe(dxf_path: str, output_png_path: str,
     Era via threading (17/07): quando dava timeout, o t.join só parava de
     ESPERAR — a thread do matplotlib continuava viva alocando memória (não dá
     pra matar thread em Python). Num DXF denso isso virava uma thread zumbi
-    comendo RAM até o OOM derrubar o servidor inteiro (caso Rômulo).
+    comendo RAM até o OOM derrubar o servidor inteiro (caso cliente-97).
     Subprocesso é matável: no timeout, kill() libera a memória DE VERDADE, e
     um estouro isola no filho sem levar o processo principal junto.
 

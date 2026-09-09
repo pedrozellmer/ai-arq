@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """O aprendizado da revisão gravava SUCESSO como ERRO.
 
-🚨 26/08/2026. A Cassia é a cliente que mais revisou no produto: **28 itens
+🚨 26/08/2026. A cliente-63 é a cliente que mais revisou no produto: **28 itens
 tocados, 8 correções de verdade e 3 planilhas revisadas devolvidas** — sozinha,
 num dia. O job dela aparecia no painel com **"3 erros"**, e os três eram:
 
@@ -62,7 +62,7 @@ def test_as_tres_chamadas_de_desfecho_existem():
 
 
 def test_sucesso_do_aprendizado_NAO_e_gravado_como_erro():
-    """O caso da Cassia: 3 sucessos vestidos de erro no painel."""
+    """O caso da cliente-63: 3 sucessos vestidos de erro no painel."""
     for trecho in _chamadas_de_sucesso():
         assert "severity=" in trecho, (
             "chamada sem severidade explícita — o padrão do `_log_error` é "

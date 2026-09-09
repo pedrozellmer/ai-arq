@@ -45,7 +45,7 @@ _CONTAINER_MB = 4096            # Render Pro
 # conversão é FIXA, então o fator CAI conforme o arquivo cresce. Medido em três
 # arquivos GRANDES de cliente no mesmo dia:
 #     11,7 MB → ~29×   (produção, Render)
-#     44,5 MB →  18,8×  ← o do FÁBIO, recusado por 44 > 40 MB
+#     44,5 MB →  18,8×  ← o do cliente-73, recusado por 44 > 40 MB
 #     53,2 MB →  26×
 # Aplicar 53× a um arquivo de 44 MB previa 2.227 MB; o real foi 836 MB.
 # O preço do erro: cliente novo recusado no primeiro projeto, e ele foi tentar
@@ -68,7 +68,7 @@ def test_os_dois_tetos_cabem_no_container():
         "container" % (dx._MAX_DWG_BYTES // _MB, pico_conversao))
 
 
-def test_a_prancha_que_a_Amanda_perdeu_passa_agora():
+def test_a_prancha_que_a_Cliente_34_perdeu_passa_agora():
     """O caso concreto que motivou a mudança."""
     assert 24.58 * _MB <= dx._MAX_DWG_BYTES, (
         "o DWG de 24,58 MB dela seria barrado antes de converter")

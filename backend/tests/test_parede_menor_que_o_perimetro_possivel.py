@@ -202,7 +202,7 @@ def test_o_comprimento_e_lido_da_OBSERVACAO():
         "da forma do item e some nas rodadas em que a parede sai em m²")
 
 
-def test_o_caso_da_Caroline_e_pego_pelas_DUAS_formas():
+def test_o_caso_da_Cliente_56_e_pego_pelas_DUAS_formas():
     area = 46.79
     por_ml = _abaixo(17.18, area)[0]                 # rodada 1: item em ml
     por_obs = _abaixo(_compr(_OBS_REAL), area)[0]    # rodada 2: item em m²

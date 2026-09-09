@@ -40,11 +40,11 @@ print("== resultado BOM passa ==")
 bom = [{"description": "parede drywall", "unit": "m2", "quantity": 120, "discipline": "Fechamentos Verticais"}] * 20
 check("arquitetura boa -> sem falhas", fails(check_project(bom, {"project_type": "arquitetura"}, SPEC_ARCH)) == [])
 
-print("== pega 0 itens (bug Vinicius) ==")
+print("== pega 0 itens (bug cliente-104) ==")
 r = check_project([], {"project_type": "arquitetura"}, SPEC_ARCH)
 check("0 itens -> falha 'processou com itens'", "processou com itens (nunca 0)" in fails(r))
 
-print("== pega tudo zerado (bug Magno) ==")
+print("== pega tudo zerado (bug cliente-90) ==")
 zerado = [{"description": "x", "unit": "un", "quantity": 0, "discipline": "Complementares"}] * 12
 check("tudo zerado -> falha 'tem quantidade'", "tem quantidade (não 100% zerado)" in [f for f in fails(check_project(zerado, {}, SPEC_ARCH))])
 
@@ -52,7 +52,7 @@ print("== pega faixa de itens fora ==")
 poucos = [{"description": "x", "unit": "m2", "quantity": 5}] * 3
 check("poucos itens -> falha faixa", any("faixa" in f for f in fails(check_project(poucos, {}, SPEC_ARCH))))
 
-print("== estrutural: aço em m2 e pego (bug Luciano) ==")
+print("== estrutural: aço em m2 e pego (bug cliente-88) ==")
 estrut_ruim = [
     {"description": "Armadura de aço CA-50 pilares", "unit": "m2", "quantity": 1007, "discipline": "Estrutura"},
     {"description": "Concreto C25", "unit": "m3", "quantity": 10, "discipline": "Estrutura"},
@@ -69,7 +69,7 @@ estrut_bom = [
 ]
 check("estrutural certo -> sem falhas", fails(check_project(estrut_bom, {"project_type": "estrutura"}, SPEC_ESTRUT)) == [])
 
-print("== estrutural: sem disciplina Estrutura e pego (bug Magno/Complementares) ==")
+print("== estrutural: sem disciplina Estrutura e pego (bug cliente-90/Complementares) ==")
 sem_estrut = [{"description": "Concreto", "unit": "m3", "quantity": 5, "discipline": "Complementares"}] * 6
 check("tudo Complementares -> falha 'tem disciplina Estrutura'", "tem disciplina 'Estrutura'" in fails(check_project(sem_estrut, {"project_type": "estrutura"}, SPEC_ESTRUT)))
 

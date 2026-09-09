@@ -21,7 +21,7 @@ código virar indistinguível de "o desenho não tem cota".
 qualificou, 0 cotas com número digitado" aponta exatamente qual condição travou
 a correção.
 
-📌 Visto no job `evaa4391` — avaliação isolada da prancha estrutural do Evandro,
+📌 Visto no job `evaa4391` — avaliação isolada da prancha estrutural do cliente-71,
 rodada pra investigar `pilares=0`. O instrumento de ontem achou o buraco do
 instrumento de ontem.
 """

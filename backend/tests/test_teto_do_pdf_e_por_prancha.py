@@ -62,11 +62,11 @@ def _prancha(arquivo, m2):
 
 # as 5 primeiras pranchas do job 144c1f04, com os números do error_log
 CADERNO = {
-    "parede_p0": _prancha("07.18_P PAREDE_LUANA_09.04.pdf", 270.6),
-    "forro_p0": _prancha("02.18_P FORRO_LUANA_09.04.pdf", 24.2),
-    "ilum_p0": _prancha("03.18_P ILUMINACAO_LUANA_09.04.pdf", 185.4),
-    "piso_p0": _prancha("08.18_P PISO_LUANA_09.04.pdf", 41.5),
-    "rodape_p0": _prancha("11.18_P RODAPE_LUANA_09.04.pdf", 63.6),
+    "parede_p0": _prancha("07.18_P PAREDE_CLIENTE_87_09.04.pdf", 270.6),
+    "forro_p0": _prancha("02.18_P FORRO_CLIENTE_87_09.04.pdf", 24.2),
+    "ilum_p0": _prancha("03.18_P ILUMINACAO_CLIENTE_87_09.04.pdf", 185.4),
+    "piso_p0": _prancha("08.18_P PISO_CLIENTE_87_09.04.pdf", 41.5),
+    "rodape_p0": _prancha("11.18_P RODAPE_CLIENTE_87_09.04.pdf", 63.6),
 }
 SOMA = 585.3          # o que o teto usava
 MAIOR = 270.6         # o que o teto usa agora
@@ -206,7 +206,7 @@ MAIOR_TEKOA = 129.1         # teto novo:   167,8
 
 
 def test_MEDICAO_INCOMPLETA_nao_aperta_o_teto():
-    """🩸 O mezanino da karina. 255,66 não cabe em 1,3 × 129,1, mas a gente só
+    """🩸 O mezanino da cliente-84. 255,66 não cabe em 1,3 × 129,1, mas a gente só
     mediu 2 das 3 páginas — não temos base pra dizer que é demais."""
     it = _Item("Laje do mezanino", "m²", 255.66)
     main._apply_area_honesty([it], pdfvec_m2=SOMA_TEKOA,

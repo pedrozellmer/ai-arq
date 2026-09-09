@@ -211,7 +211,7 @@ def test_CONTROLE_o_aviso_explica_o_que_foi_feito():
 
 # ───────── o quadro tem BORDA: o desenho em volta não é linha da tabela ──────
 
-# 🚨 29/08/2026 — CASO EDUARDA, e é o mais caro dos dois.
+# 🚨 29/08/2026 — CASO cliente-68, e é o mais caro dos dois.
 #
 # O quadro dela é PERFEITO. Conferi as 6 linhas contra a NBR 7480 uma por uma
 # (852 m × 0,154 = 131,2 e o quadro diz 131; e assim as seis). A planilha saiu
@@ -231,7 +231,7 @@ def test_CONTROLE_o_aviso_explica_o_que_foi_feito():
 # 🩸 Seis linhas certas viraram laranja por causa de um ferro a 94 unidades.
 
 # O quadro real da cliente-20, com as posições do DXF dela.
-_QUADRO_EDUARDA = [
+_QUADRO_CLIENTE_68 = [
     ("AÇO", 102.12, 60.08), ("BIT", 104.23, 60.08),
     ("COMPR", 106.21, 60.08), ("PESO", 109.84, 60.08),
     ("mm", 104.55, 59.60), ("m", 106.92, 59.65), ("kgf", 110.30, 59.65),
@@ -262,10 +262,10 @@ def _texto(tuplas):
     return [_T(t, x, y, 0.20) for t, x, y in tuplas]
 
 
-def test_o_quadro_da_EDUARDA_sozinho_e_lido_e_confiavel():
+def test_o_quadro_da_CLIENTE_68_sozinho_e_lido_e_confiavel():
     """📌 Controle: sem a planta em volta, o quadro dela sempre funcionou.
     É isso que prova que o problema é o CONTEXTO, não a tabela."""
-    r = parse_steel_table(_texto(_QUADRO_EDUARDA))
+    r = parse_steel_table(_texto(_QUADRO_CLIENTE_68))
     assert r is not None, "não reconheceu o quadro dela"
     assert r["confiavel"] is True, r["avisos"]
     assert _soma(r) == 816.0, (
@@ -275,7 +275,7 @@ def test_o_quadro_da_EDUARDA_sozinho_e_lido_e_confiavel():
 def test_FERRO_DESENHADO_NA_PLANTA_nao_derruba_o_quadro():
     """🚨 O caso cliente-20. Mesmo quadro, agora com a planta em volta — que é
     como o arquivo dela realmente é. Antes deste conserto: tudo [REFERÊNCIA]."""
-    r = parse_steel_table(_texto(_QUADRO_EDUARDA + _FERROS_NA_PLANTA))
+    r = parse_steel_table(_texto(_QUADRO_CLIENTE_68 + _FERROS_NA_PLANTA))
     assert r is not None, "não reconheceu o quadro"
     assert r["confiavel"] is True, (
         "o desenho em volta derrubou o quadro de novo — a planilha dela volta a "
@@ -290,7 +290,7 @@ def test_a_borda_nao_e_tao_apertada_que_corte_o_proprio_quadro():
     desalinhada do próprio quadro, e aí o quadro sairia INCOMPLETO — que é pior
     que sair laranja, porque sai com número menor parecendo certo."""
     torto = [(t, x + (0.9 if t in ("131", "394") else 0.0), y)
-             for t, x, y in _QUADRO_EDUARDA]
+             for t, x, y in _QUADRO_CLIENTE_68]
     r = parse_steel_table(_texto(torto))
     assert _soma(r) == 816.0, (
         "célula levemente desalinhada foi cortada: leu %.2f de 816" % _soma(r))
@@ -305,7 +305,7 @@ def test_CONTROLE_POSITIVO_a_sabotagem_da_borda_reprova():
     # os dois viravam a MESMA linha, e o intruso era lido como total, não como
     # dado. O teste falhava por colisão de fixture, não por defeito do código.
     # y=58,75 fica a 0,18 e 0,17 dos vizinhos: linha própria.
-    intruso = _QUADRO_EDUARDA + [("%%c 5", 104.2, 58.75), ("9999", 109.8, 58.75)]
+    intruso = _QUADRO_CLIENTE_68 + [("%%c 5", 104.2, 58.75), ("9999", 109.8, 58.75)]
     r = parse_steel_table(_texto(intruso))
     assert not (r["confiavel"] and _soma(r) == 816.0), (
         "um intruso DENTRO das colunas passou despercebido — a borda virou "
@@ -329,7 +329,7 @@ def test_PESO_TOTAL_e_linha_de_total_e_NAO_cabecalho_de_quadro_novo():
     fora, então desfazer este conserto não mudava nada nos outros testes. O que
     denuncia é o TOTAL — e nenhum teste olhava pra ele.
     """
-    r = parse_steel_table(_texto(_QUADRO_EDUARDA))
+    r = parse_steel_table(_texto(_QUADRO_CLIENTE_68))
     assert r["total_kg"] == 816.0, (
         "o TOTAL declarado veio %s. As duas linhas 'Peso Total' voltaram a ser "
         "lidas como cabeçalho de quadro novo — e aí o último 'quadro' varre a "
@@ -342,20 +342,20 @@ def test_PESO_TOTAL_e_linha_de_total_e_NAO_cabecalho_de_quadro_novo():
 def test_e_a_soma_das_bitolas_BATE_com_o_total_declarado():
     """📌 O fecho: 131+50+62+76+394+103 = 816, e a prancha declara 131+685=816.
     Quando os dois batem, o quadro é confiável e o aço sai MEDIDO."""
-    r = parse_steel_table(_texto(_QUADRO_EDUARDA))
+    r = parse_steel_table(_texto(_QUADRO_CLIENTE_68))
     assert _soma(r) == r["total_kg"] == 816.0
     assert r["confiavel"] is True, r["avisos"]
 
 
 # ── o buraco que a régua do próprio motor não enxergava ──────────────────────
 
-def _quadro_da_eduarda(duplicado=False, com_total=True):
+def _quadro_da_cliente_68(duplicado=False, com_total=True):
     """Monta o quadro real dela, opcionalmente com as linhas REPETIDAS logo
     abaixo — que é como fica quando a prancha traz o resumo geral colado embaixo
     do mesmo cabeçalho, sem cabeçalho novo."""
-    cab = [t for t in _QUADRO_EDUARDA if t[2] >= 59.6]
-    dados = [t for t in _QUADRO_EDUARDA if 57.4 < t[2] < 59.6]
-    tots = [t for t in _QUADRO_EDUARDA if t[2] < 57.4]
+    cab = [t for t in _QUADRO_CLIENTE_68 if t[2] >= 59.6]
+    dados = [t for t in _QUADRO_CLIENTE_68 if 57.4 < t[2] < 59.6]
+    tots = [t for t in _QUADRO_CLIENTE_68 if t[2] < 57.4]
     fora = list(dados)
     if duplicado:
         fora += [(t, x, y - 2.5) for t, x, y in dados]
@@ -380,7 +380,7 @@ def test_bitola_REPETIDA_sem_total_pra_conferir_NAO_pode_ser_medido():
     Seis de seis passando com folga, e a obra recebendo o DOBRO com selo de
     MEDIDO. Conferi o motor com a régua do próprio motor.
     """
-    r = parse_steel_table(_quadro_da_eduarda(duplicado=True, com_total=False))
+    r = parse_steel_table(_quadro_da_cliente_68(duplicado=True, com_total=False))
     assert r["confiavel"] is False, (
         "leu %.0f kg num quadro de 816 e carimbou de MEDIDO. Sem TOTAL "
         "declarado, soma repetida é indistinguível de leitura em dobro."
@@ -393,7 +393,7 @@ def test_CONTROLE_com_TOTAL_declarado_a_conferencia_e_INDEPENDENTE():
     """🧪 O outro lado: quando a prancha declara o peso total, existe âncora de
     verdade. Foi ela que salvou 5 das 6 pranchas da cliente-20 — leitura em dobro
     não bate com o total impresso, e aí o rebaixamento vem pelo motivo certo."""
-    r = parse_steel_table(_quadro_da_eduarda(duplicado=True, com_total=True))
+    r = parse_steel_table(_quadro_da_cliente_68(duplicado=True, com_total=True))
     assert r["confiavel"] is False
     assert any("difere do TOTAL declarado" in a for a in r["avisos"]), (
         "com total declarado, o motivo do rebaixamento tem que ser a "
@@ -403,7 +403,7 @@ def test_CONTROLE_com_TOTAL_declarado_a_conferencia_e_INDEPENDENTE():
 def test_CONTROLE_quadro_NORMAL_dela_nao_foi_afetado():
     """🧪 O risco do conserto é rebaixar quadro honesto. O dela tem uma linha
     por bitola — nenhuma repetição — e continua MEDIDO, com os 816 kg."""
-    r = parse_steel_table(_quadro_da_eduarda(duplicado=False, com_total=True))
+    r = parse_steel_table(_quadro_da_cliente_68(duplicado=False, com_total=True))
     assert r["confiavel"] is True, r["avisos"]
     assert _soma(r) == 816.0 and r["total_kg"] == 816.0
 

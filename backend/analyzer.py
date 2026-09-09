@@ -1298,7 +1298,7 @@ def analyze_sheet(client: anthropic.Anthropic, sheet: SheetInfo,
     try:
         # STREAMING + teto maior + salvage: prancha de arquitetura complexa gerava
         # resposta > max_tokens (8000), truncava o JSON e caía em {items:[]} ->
-        # "IA sobrecarregada" enganoso (mesmo bug do caminho DXF). Caso Luciano.
+        # "IA sobrecarregada" enganoso (mesmo bug do caminho DXF). Caso cliente-88.
         response = call_with_retry_stream(
             client,
             tag=f"analyzer:{sheet.filename}",

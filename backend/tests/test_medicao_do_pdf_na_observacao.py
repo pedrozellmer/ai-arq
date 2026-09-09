@@ -397,7 +397,7 @@ def test_o_log_conta_o_resgate_e_nao_mente_mais_no_nome():
 # 741,8 — e o log fechou `resgate_pdf=0`, que se lê como "não havia o que
 # resgatar" quando a verdade era "a régua media a coisa errada".
 
-_OBS_FLAVIO = "Área medida da geometria do PDF: 80,5 m² (13 ambientes)"
+_OBS_CLIENTE_75 = "Área medida da geometria do PDF: 80,5 m² (13 ambientes)"
 _POR_PRANCHA = [107.7, 80.5, 166.1, 77.1, 112.0, 198.4]   # as 6 pranchas reais
 
 
@@ -409,12 +409,12 @@ def _q(**kw):
 def test_a_SOMA_do_job_nao_casa_com_a_prancha():
     """Reproduz o bug: é o comportamento de antes, e tem que continuar sendo
     None — o conserto não é fazer a soma casar, é oferecer o alvo certo."""
-    assert _q(observacao=_OBS_FLAVIO, unidade="m²", area_pdf=741.8) is None
+    assert _q(observacao=_OBS_CLIENTE_75, unidade="m²", area_pdf=741.8) is None
 
 
 def test_a_medicao_POR_PRANCHA_casa():
     """O conserto: com os valores por prancha na lista, o 80,5 é resgatado."""
-    assert _q(observacao=_OBS_FLAVIO, unidade="m²", area_pdf=_POR_PRANCHA) == 80.5
+    assert _q(observacao=_OBS_CLIENTE_75, unidade="m²", area_pdf=_POR_PRANCHA) == 80.5
 
 
 def test_numero_que_NAO_medimos_continua_recusado():
@@ -439,9 +439,9 @@ def test_fora_da_tolerancia_de_1_por_cento_continua_recusado():
 def test_numero_solto_continua_funcionando():
     """CONTROLE de compatibilidade: quem passa float (job de 1 página) segue
     valendo — a mudança é aditiva."""
-    assert _q(observacao=_OBS_FLAVIO, unidade="m²", area_pdf=80.5) == 80.5
+    assert _q(observacao=_OBS_CLIENTE_75, unidade="m²", area_pdf=80.5) == 80.5
 
 
 def test_sem_alvo_nenhum_nao_inventa():
-    assert _q(observacao=_OBS_FLAVIO, unidade="m²", area_pdf=[]) is None
-    assert _q(observacao=_OBS_FLAVIO, unidade="m²", area_pdf=None) is None
+    assert _q(observacao=_OBS_CLIENTE_75, unidade="m²", area_pdf=[]) is None
+    assert _q(observacao=_OBS_CLIENTE_75, unidade="m²", area_pdf=None) is None

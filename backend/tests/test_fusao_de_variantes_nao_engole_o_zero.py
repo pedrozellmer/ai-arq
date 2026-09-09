@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Quatro linhas zeradas específicas valem mais que uma genérica zerada.
 
-🩸 03/09/2026, caso EDVALDO (job `d2bedf82`, o maior lead B2B). Ele reprocessou
+🩸 03/09/2026, caso cliente-69 (job `d2bedf82`, o maior lead B2B). Ele reprocessou
 o MESMO arquivo e a entrega piorou: 11 itens viraram 7, e as quatro linhas de
 concreto — Lajes, Vigas, Pilares, Escadas — viraram UMA, chamada "Concreto
 estrutural fck=30MPa (várias variantes)", com quantidade 0.

@@ -17,7 +17,7 @@ aprovações — o cliente conserta o palpite.
 "3 meses" é virar orçamentista por um instante.
 
 🪤 O PROJETO JÁ NÃO CONFIAVA NESSE NÚMERO em outro lugar: o cronograma se recusa
-a consumi-lo, e o comentário de lá (caso Eloídes, 03/08) diz por quê — "usar
+a consumi-lo, e o comentário de lá (caso cliente-70, 03/08) diz por quê — "usar
 esse chute aqui seria o cronograma aprendendo com o palpite dele mesmo e
 chamando de informação". Só o quantitativo ainda o publicava.
 

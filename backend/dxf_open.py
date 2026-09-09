@@ -35,7 +35,7 @@ def recuperar_dxf(filepath: str, motivo: str = ""):
     normal já falhou — é mais lento e come mais RAM.
 
     Devolve o `doc`. Levanta a exceção do recover se nem ele abrir, para o
-    chamador poder juntar as DUAS causas na mensagem (a lição do caso Patrick,
+    chamador poder juntar as DUAS causas na mensagem (a lição do caso cliente-93,
     18/08: a causa real morreu em dois cortes de log).
     """
     import ezdxf.recover as _rec

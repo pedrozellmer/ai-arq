@@ -224,7 +224,7 @@ check("lista vazia nao quebra", correcao_e_absurda([]) is False)
 # ══════════════════════════════════════════════════════════════════════
 #  UNIDADE PELO DIMLFAC — quando o cabeçalho mente e não há cota digitada
 # ══════════════════════════════════════════════════════════════════════
-# Caso Isabelle (05/08/2026): DXF declara mm, está em metro, e as 28 cotas dele
+# Caso cliente-82 (05/08/2026): DXF declara mm, está em metro, e as 28 cotas dele
 # exibem texto automático — o validador por cotas exige ≥3 DIGITADAS e abstém.
 # O DIMLFAC salva porque converte UNIDADE, não escala.
 # Medido no arquivo real: DIMLFAC=100 em 28/28 cotas → metro → 36 pilares

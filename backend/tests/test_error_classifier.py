@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Rede de regressão do QW2 (20/07): classificação HONESTA de erro.
 
-Trava pra sempre o cenário Rodrigo (19/07): um model-id errado dava 404 em todo
+Trava pra sempre o cenário cliente-96 (19/07): um model-id errado dava 404 em todo
 DXF e o sistema carimbava "IA sobrecarregada, reprocesse" → cliente em loop
 infinito. Regra nova: só 'transient' com PROVA (429/529/timeout/overloaded);
 404/401/403/413/invalid_request/surrogate são 'permanent'; o resto é 'unknown'
@@ -23,7 +23,7 @@ CASES = [
     ("read timed out", "transient"),
     ("[status=503] service unavailable", "transient"),
     ("connection aborted", "transient"),
-    # cenário Rodrigo: model-id errado → 404 → NUNCA 'sobrecarga'
+    # cenário cliente-96: model-id errado → 404 → NUNCA 'sobrecarga'
     ("[status=404] Error code: 404 - not_found_error: model xyz", "permanent"),
     ("[status=400] invalid_request_error: invalid high surrogate", "permanent"),
     ("[status=401] authentication_error", "permanent"),

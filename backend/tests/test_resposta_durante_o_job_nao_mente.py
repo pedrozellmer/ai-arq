@@ -14,7 +14,7 @@ e prazo. Três defeitos nas mesmas dez linhas:
    aviso pro cliente e sem registro pra nós. As duas portas irmãs que escrevem o
    MESMO campo já avisavam: o upload devolve `aviso_area` e loga
    `upload:area-implausivel`; o `/inform-area` levanta 400 e loga. Só esta
-   calava — é o furo do Fábio (880.000 m²) na terceira porta.
+   calava — é o furo do cliente-73 (880.000 m²) na terceira porta.
 
 3. **O PATCH não era conferido.** `_supa_rest_service` **nunca levanta**: erro
    devolve `(code, None)`, falha total devolve `(0, None)`. O retorno não era

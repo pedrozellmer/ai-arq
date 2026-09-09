@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """O aviso do plano B não pode afirmar medição que os guardas já derrubaram.
 
-🩸 CASO TIAGO — METAL-AR ENGENHARIA, 01/09/2026, job `2a42f7ec`.
+🩸 CASO cliente-102 — METAL-AR ENGENHARIA, 01/09/2026, job `2a42f7ec`.
 18 pranchas de climatização, todas recusadas pelo ODA e abertas pelo libredwg.
 Ele recebeu, literalmente:
 
@@ -44,7 +44,7 @@ _FIM = "        try:\n            _n_med_esc = -1"
 
 _CAB = ("18 arquivo(s) precisaram do leitor alternativo (plano B): "
         "CBS-PRO-IAC-EX-F01-GER-SJ-R01.DWG. ")
-_TEXTO_QUE_O_TIAGO_RECEBEU = _CAB + (
+_TEXTO_QUE_O_CLIENTE_102_RECEBEU = _CAB + (
     "As medições saíram (2 item(ns) medido(s) do CAD), mas vale conferir "
     "2-3 medidas-chave contra o projeto antes de fechar orçamento.")
 
@@ -96,8 +96,8 @@ def _roda(itens, warnings, idx=0, cab=_CAB):
 
 
 def test_zero_medidos_no_fim_APAGA_a_afirmacao_de_medicao():
-    """🩸 O que o Tiago leu."""
-    avisos, _ = _roda([_Item() for _ in range(132)], [_TEXTO_QUE_O_TIAGO_RECEBEU])
+    """🩸 O que o cliente-102 leu."""
+    avisos, _ = _roda([_Item() for _ in range(132)], [_TEXTO_QUE_O_CLIENTE_102_RECEBEU])
     assert "As medições saíram" not in avisos[0], (
         "o aviso ainda afirma medição numa planilha sem nenhum medido:\n" + avisos[0])
     assert "nenhum item saiu com o selo" in avisos[0], avisos[0]
@@ -107,14 +107,14 @@ def test_zero_medidos_no_fim_APAGA_a_afirmacao_de_medicao():
 def test_o_cabecalho_com_os_nomes_dos_arquivos_e_PRESERVADO():
     """A parte verdadeira do aviso (quais DWG precisaram do plano B) não pode
     sumir junto com a parte falsa."""
-    avisos, _ = _roda([_Item()], [_TEXTO_QUE_O_TIAGO_RECEBEU])
+    avisos, _ = _roda([_Item()], [_TEXTO_QUE_O_CLIENTE_102_RECEBEU])
     assert avisos[0].startswith(_CAB), avisos[0]
     assert "CBS-PRO-IAC-EX-F01-GER-SJ-R01.DWG" in avisos[0]
 
 
 def test_a_recontagem_deixa_RASTRO_quando_muda():
     """Sem log, ninguém descobre em quantos jobs isto vinha mentindo."""
-    _, logs = _roda([_Item() for _ in range(10)], [_TEXTO_QUE_O_TIAGO_RECEBEU])
+    _, logs = _roda([_Item() for _ in range(10)], [_TEXTO_QUE_O_CLIENTE_102_RECEBEU])
     assert logs, "mudou o texto e não registrou nada"
     assert "aviso-planob-recontado" in str(logs[0])
 
@@ -122,7 +122,7 @@ def test_a_recontagem_deixa_RASTRO_quando_muda():
 def test_projeto_que_MEDIU_de_verdade_mantem_a_contagem():
     """Controle: quando há medido no fim, o aviso continua dizendo quantos."""
     itens = [_Item("confirmado")] * 27 + [_Item()] * 5
-    avisos, _ = _roda(itens, [_TEXTO_QUE_O_TIAGO_RECEBEU])
+    avisos, _ = _roda(itens, [_TEXTO_QUE_O_CLIENTE_102_RECEBEU])
     assert "27 item(ns) medido(s) do CAD" in avisos[0], avisos[0]
     assert "nenhum item saiu com o selo" not in avisos[0]
 
@@ -150,7 +150,7 @@ def test_CONTROLE_indice_fora_da_lista_nao_quebra_nem_inventa():
 
 
 def test_CONTROLE_nao_encosta_nos_OUTROS_avisos():
-    outros = ["⚠ aviso A", _TEXTO_QUE_O_TIAGO_RECEBEU, "⚠ aviso C"]
+    outros = ["⚠ aviso A", _TEXTO_QUE_O_CLIENTE_102_RECEBEU, "⚠ aviso C"]
     avisos, _ = _roda([_Item()] * 3, outros, idx=1)
     assert avisos[0] == "⚠ aviso A" and avisos[2] == "⚠ aviso C"
     assert "nenhum item saiu com o selo" in avisos[1]
@@ -160,7 +160,7 @@ def test_CONTROLE_o_teste_REPROVA_o_comportamento_ANTIGO():
     """🧪 Controle positivo: o comportamento antigo era simplesmente NÃO
     recontar. Reproduzo isso (não rodar o trecho) e confiro que a asserção
     principal acusa. Sem isto, o teste passaria com o conserto desligado."""
-    antigo = [_TEXTO_QUE_O_TIAGO_RECEBEU]          # ninguém recontou
+    antigo = [_TEXTO_QUE_O_CLIENTE_102_RECEBEU]          # ninguém recontou
     assert "As medições saíram" in antigo[0], (
         "o texto de partida não reproduz o caso real — o teste inteiro estaria "
         "guardando um problema que não existe")
@@ -173,13 +173,13 @@ def test_CONTROLE_enum_de_confidence_e_contado_certo():
     str — este teste existe pra a terceira vez não passar batida."""
     from models import Confidence
     itens = [_Item(Confidence.CONFIRMADO), _Item(Confidence.CONFIRMADO), _Item()]
-    avisos, _ = _roda(itens, [_TEXTO_QUE_O_TIAGO_RECEBEU])
+    avisos, _ = _roda(itens, [_TEXTO_QUE_O_CLIENTE_102_RECEBEU])
     assert "2 item(ns) medido(s)" in avisos[0], (
         "com o enum real a contagem saiu errada:\n" + avisos[0])
 
 
 def test_selo_zero_COM_geometria_nao_acusa_a_planilha_de_ser_texto():
-    """🩸 O que o EDVALDO leu — job b5ce23ff, maior lead B2B, 03/09/2026.
+    """🩸 O que o cliente-69 leu — job b5ce23ff, maior lead B2B, 03/09/2026.
 
     O aviso dizia "nenhuma quantidade foi medida da geometria — o que saiu na
     planilha veio de texto lido das pranchas". A planilha dele tinha 90,86 m² de
@@ -195,7 +195,7 @@ def test_selo_zero_COM_geometria_nao_acusa_a_planilha_de_ser_texto():
               observations="Fonte: comprimento total de linhas do layer 'VIGA' = 339.66 m"),
         _Item(quantity=0, observations="Área de fôrma de viga não calculada"),
     ]
-    avisos, _ = _roda(itens, [_TEXTO_QUE_O_TIAGO_RECEBEU])
+    avisos, _ = _roda(itens, [_TEXTO_QUE_O_CLIENTE_102_RECEBEU])
     assert "nenhum item saiu com o selo" in avisos[0], avisos[0]
     assert "O que saiu na planilha veio de texto lido das pranchas." not in avisos[0], (
         "o aviso ainda acusa a planilha de ser transcrição de legenda, com "
@@ -214,7 +214,7 @@ def test_CONTROLE_selo_zero_SEM_geometria_continua_dizendo_que_veio_de_texto():
               observations="Fonte: texto layer 'ARQ-TEXTO 1': 'AREA TOTAL = 264,54 m2'"),
         _Item(quantity=12, observations="Conforme legenda da prancha, quadro de esquadrias"),
     ]
-    avisos, _ = _roda(itens, [_TEXTO_QUE_O_TIAGO_RECEBEU])
+    avisos, _ = _roda(itens, [_TEXTO_QUE_O_CLIENTE_102_RECEBEU])
     assert "veio de texto lido das pranchas" in avisos[0], avisos[0]
     assert "tirada da geometria" not in avisos[0], avisos[0]
 
@@ -228,6 +228,6 @@ def test_CONTROLE_linha_ZERADA_que_cita_hachura_nao_conta_como_medida():
     """
     itens = [_Item(quantity=0,
                    observations="Fonte: área hachurada do layer 'LAJE' = 90.86 m²")]
-    avisos, _ = _roda(itens, [_TEXTO_QUE_O_TIAGO_RECEBEU])
+    avisos, _ = _roda(itens, [_TEXTO_QUE_O_CLIENTE_102_RECEBEU])
     assert "veio de texto lido das pranchas" in avisos[0], avisos[0]
     assert "tirada da geometria" not in avisos[0], avisos[0]

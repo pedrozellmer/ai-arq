@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """O aviso de ESTRUTURA não pode AFIRMAR o que o arquivo do cliente é.
 
-🚨 CASO EDVALDO — Racional, 01/09/2026, job `b5ce23ff`.
+🚨 CASO cliente-69 — Racional, 01/09/2026, job `b5ce23ff`.
 
 Coordenador de estrutura de uma construtora grande, primeiro projeto, nome
 "TESTE" — uma avaliação. Ele mandou `TOP-EST-PE-116-FRM-TIP-R00.dwg`:
@@ -92,7 +92,7 @@ def _roda(itens, pe_direito=0, is_structural=True):
 
 
 # ── O caso real do cliente-23, item por item como saiu no banco ────────────────
-def _itens_edvaldo():
+def _itens_cliente_69():
     return [
         _Item("Concreto estrutural Fck=30 MPa — especificação confirmada", 0, "m³",
               observations="Volume não calculado: altura de pavimento e seções não "
@@ -123,7 +123,7 @@ _FRASE_ACUSATORIA = "O arquivo enviado não traz o que a medição de estrutura 
 
 def test_planta_de_forma_NAO_e_acusada_de_nao_ser_planta_de_forma():
     """🩸 O que o cliente-23 leu. Este é o teste do dia."""
-    avisos, _, _ = _roda(_itens_edvaldo())
+    avisos, _, _ = _roda(_itens_cliente_69())
     assert len(avisos) == 1, "o aviso de estrutura tem que sair (nada foi medido)"
     txt = avisos[0]
     assert _FRASE_ACUSATORIA not in txt, (
@@ -134,7 +134,7 @@ def test_planta_de_forma_NAO_e_acusada_de_nao_ser_planta_de_forma():
 
 
 def test_o_aviso_novo_explica_POR_QUE_a_altura_falta():
-    txt = _roda(_itens_edvaldo())[0][0]
+    txt = _roda(_itens_cliente_69())[0][0]
     assert "2D" in txt, "não explica que planta é 2D e por isso não tem altura"
     for esperado in ("pé-direito", "altura de viga"):
         assert esperado in txt, "faltou citar " + esperado + ":\n" + txt
@@ -142,7 +142,7 @@ def test_o_aviso_novo_explica_POR_QUE_a_altura_falta():
 
 def test_a_dica_do_pe_direito_dispara_SEM_pilar_contado_em_un():
     """🪤 O 2º furo: nenhum item do cliente-23 é pilar em 'un'."""
-    itens = _itens_edvaldo()
+    itens = _itens_cliente_69()
     assert not any(i.unit == "un" for i in itens), (
         "o caso real não tem pilar contado em 'un' — se tivesse, este teste "
         "estaria guardando outra coisa")
@@ -153,7 +153,7 @@ def test_a_dica_do_pe_direito_dispara_SEM_pilar_contado_em_un():
 
 def test_com_pe_direito_informado_a_dica_NAO_se_repete():
     """Controle negativo: quem já informou não precisa ouvir de novo."""
-    txt = _roda(_itens_edvaldo(), pe_direito=2.9)[0][0]
+    txt = _roda(_itens_cliente_69(), pe_direito=2.9)[0][0]
     assert "PÉ-DIREITO" not in txt, "repetiu a dica pra quem já informou:\n" + txt
 
 
@@ -179,7 +179,7 @@ def test_CONTROLE_arquivo_que_REALMENTE_nao_serve_recebe_o_aviso_antigo():
 def test_CONTROLE_os_dois_ramos_produzem_avisos_DIFERENTES():
     """🧪 Prova que o discriminador discrimina. Se os dois textos fossem
     iguais, todos os testes acima passariam e nada teria sido consertado."""
-    com_forma = _roda(_itens_edvaldo())[0][0]
+    com_forma = _roda(_itens_cliente_69())[0][0]
     sem_forma = _roda([_Item("Concreto Fck=30", 0, "m³", observations="sem dados")])[0][0]
     assert com_forma != sem_forma, "os dois ramos dão o MESMO texto — nada mudou"
 
@@ -214,7 +214,7 @@ def test_CONTROLE_falta_altura_sozinho_nao_basta():
 
 def test_projeto_que_MEDIU_nao_recebe_aviso_nenhum():
     """Controle de silêncio: 1 item confirmado com grandeza já basta."""
-    itens = _itens_edvaldo() + [
+    itens = _itens_cliente_69() + [
         _Item("Pilar — concreto", 12.5, "m³", confidence="confirmado",
               observations="medido do bloco"),
     ]
@@ -223,9 +223,9 @@ def test_projeto_que_MEDIU_nao_recebe_aviso_nenhum():
 
 
 def test_confirmado_em_unidade_SEM_grandeza_nao_cala_o_aviso():
-    """🪤 Caso Allan (20/08): o único 'confirmado' era '1 vb — Especificação de
+    """🪤 Caso cliente-17 (20/08): o único 'confirmado' era '1 vb — Especificação de
     concreto', e ele suprimia o aviso num projeto todo zerado."""
-    itens = _itens_edvaldo() + [
+    itens = _itens_cliente_69() + [
         _Item("Especificação de concreto", 1, "vb", confidence="confirmado"),
     ]
     avisos, _, _ = _roda(itens)
@@ -235,7 +235,7 @@ def test_confirmado_em_unidade_SEM_grandeza_nao_cala_o_aviso():
 def test_o_log_registra_qual_ramo_saiu():
     """Sem isto não dá pra medir depois quantos projetos caem em cada ramo —
     é a família do 'gravação que falha calada'."""
-    _, _, chamadas = _roda(_itens_edvaldo())
+    _, _, chamadas = _roda(_itens_cliente_69())
     assert chamadas, "o log não foi chamado"
     msg = " ".join(str(a) for a, _ in chamadas)
     assert "ramo=falta-altura" in msg, msg
@@ -244,5 +244,5 @@ def test_o_log_registra_qual_ramo_saiu():
 
 def test_nao_estrutural_nao_dispara_nada():
     """🪤 Só project_type=estrutura. Não generalizar sem medir."""
-    avisos, _, _ = _roda(_itens_edvaldo(), is_structural=False)
+    avisos, _, _ = _roda(_itens_cliente_69(), is_structural=False)
     assert avisos == []

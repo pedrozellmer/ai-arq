@@ -64,7 +64,7 @@ def test_suprimido_devolve_o_motivo_sem_ligar_pra_caixa(monkeypatch, limpo):
     monkeypatch.setattr(main, "_supa_rest_service", svc)
     assert main._email_suprimido("cliente2@example.com") == "7 devoluções caixa cheia"
     assert main._email_suprimido("  cliente5@example.com ") == "3 devoluções caixa cheia"
-    assert main._email_suprimido("william@exemplo.com") is None
+    assert main._email_suprimido("cliente-106@exemplo.com") is None
     assert main._email_suprimido("") is None and main._email_suprimido(None) is None
     assert len(svc.chamadas) == 1, "3 consultas, 1 leitura — o cache segura"
     assert "liberado_em=is.null" in svc.chamadas[0]["path"], "quem foi liberado volta a receber"
@@ -127,7 +127,7 @@ def test_um_log_por_dia_por_endereco_e_tipo(monkeypatch, limpo):
 def test_CONTROLE_endereco_fora_da_lista_segue_o_caminho_normal(monkeypatch, limpo):
     monkeypatch.setattr(main, "_email_suprimido", lambda e: None)
     _sem_smtp(monkeypatch)
-    ok = main._send_email_smtp("william@exemplo.com", "A", "b", log_kind="planilha_pronta")
+    ok = main._send_email_smtp("cliente-106@exemplo.com", "A", "b", log_kind="planilha_pronta")
     assert ok is False, "sem SMTP configurado ele não sai — mas pelo motivo de sempre"
     assert not [l for l in limpo if l[0] == "email:suprimido"]
 

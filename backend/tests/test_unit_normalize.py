@@ -2,7 +2,7 @@
 """Regressão de _normalize_unit_for_item.
 
 A unidade é decidida pela IDENTIDADE do item (o NOME), não pelo contexto entre
-parênteses. Caso Roberta (23/07/2026): uma TV numa "planta de forro" virava m²
+parênteses. Caso cliente-95 (23/07/2026): uma TV numa "planta de forro" virava m²
 porque a palavra "forro" aparecia na descrição (era localização, não o tipo).
 """
 import os

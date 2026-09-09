@@ -228,7 +228,7 @@ def test_a_central_de_emails_conhece_o_texto_novo():
 #  O caso real, reproduzido
 # ─────────────────────────────────────────────────────────────────────────────
 
-def test_CONTROLE_o_caso_do_Devair_NAO_cairia_mais_na_comemoracao():
+def test_CONTROLE_o_caso_do_Cliente_66_NAO_cairia_mais_na_comemoracao():
     """Reproduz a aritmética exata do job 40550d3e: 124 itens, 53 em branco,
     zero medidos. Com o limite de 80%, a irmã de má notícia NÃO pega — e é por
     isso que o terceiro caminho precisa existir."""

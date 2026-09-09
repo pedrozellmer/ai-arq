@@ -13,13 +13,13 @@
     "not_all_zero": true
   },
   "arch_pdf": {
-    "description": "PDF de arquitetura (referência caso Vinicius, ~78 itens; PDF = tudo estimativa)",
+    "description": "PDF de arquitetura (referência caso cliente-104, ~78 itens; PDF = tudo estimativa)",
     "min_items": 25,
     "max_items": 130,
     "not_all_zero": true
   },
   "estrutural_dwg": {
-    "description": "projeto estrutural em DWG (referência caso Luciano)",
+    "description": "projeto estrutural em DWG (referência caso cliente-88)",
     "project_type": "estrutura",
     "min_items": 8,
     "max_items": 90,

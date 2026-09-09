@@ -63,7 +63,7 @@ def prever_ganho_textual(path: str) -> tuple:
 
     🚨 POR QUE EXISTE (18/08/2026, 12:45): eu tinha religado o plano B pra
     rodar sempre que o arquivo passasse da trava dura. No arquivo real do
-    Patrick isso escreveu uma cópia de **369 MB** (e outra de 349 MB) pra ganhar
+    cliente-93 isso escreveu uma cópia de **369 MB** (e outra de 349 MB) pra ganhar
     **0,17%** — e o servidor CAIU às 12:45:26, com o disco do Render em 83%.
     Alerta do Render e tudo. Foi a segunda vez no mesmo dia que uma mudança
     minha "de graça" custou caro.
@@ -135,7 +135,7 @@ def prever_ganho_textual(path: str) -> tuple:
 def emagrecer_por_texto(path: str, out: str) -> tuple:
     """Emagrece um DXF SEM ezdxf, lendo o arquivo como bytes em pares de linhas.
 
-    🎯 Por que existe (18/08/2026, caso Patrick): o caminho do `iterdxf` quebra
+    🎯 Por que existe (18/08/2026, caso cliente-93): o caminho do `iterdxf` quebra
     em `AssertionError: dictionary handle #X not resolved` na hora de ESCREVER.
     Medido em 11 DXF reais convertidos por libredwg: **9 falharam**; um DXF
     escrito pelo próprio ezdxf passou (controle negativo). Ou seja, o
@@ -259,7 +259,7 @@ def emagrecer_dxf_se_preciso(path: str, limiar_mb: int = LIMIAR_SLIM_MB,
         # 🔑 QUANDO O ARQUIVO PASSA DA TRAVA DURA, O PLANO B É A ÚNICA SAÍDA.
         # De manhã eu pus aqui um atalho que PULAVA o plano B acima de ~156 MB,
         # com base nos 4% de ganho medidos em 11 arquivos pequenos — e com isso
-        # desliguei o resgate exatamente no caso que precisava dele (Patrick,
+        # desliguei o resgate exatamente no caso que precisava dele (cliente-93,
         # DXF de 370 MB). Os 4% valem pra arquivo que já é quase só entidade
         # útil; num DWG de AEC recusado pelo ODA, o lastro (proxy, 3DSOLID,
         # MESH, WIPEOUT) pode ser a maior parte do arquivo. Não dá pra decidir
@@ -316,7 +316,7 @@ def emagrecer_dxf_se_preciso(path: str, limiar_mb: int = LIMIAR_SLIM_MB,
                     except Exception:
                         pass
                 # 🪤 O original vai embora AGORA. São centenas de MB por prancha
-                # e o disco do Render estava em 83% no dia do caso Patrick —
+                # e o disco do Render estava em 83% no dia do caso cliente-93 —
                 # deixar os dois de pé é o que enche o disco de cliente.
                 # Só apaga depois que o enxuto provou que serve.
                 if _resgatou:
@@ -355,7 +355,7 @@ def emagrecer_dxf_se_preciso(path: str, limiar_mb: int = LIMIAR_SLIM_MB,
         # some justamente no caso que ela deveria cobrir.
         # Até 11/08/2026 isto era só `print`: `error_log` tinha ZERO linha de
         # slim, e não dava pra saber a frequência. Medido no mesmo dia: falhou
-        # em 4 de 4 arquivos testados (HWB e rafael), todos com
+        # em 4 de 4 arquivos testados (HWB e cliente-94), todos com
         # "AssertionError: dictionary handle não resolvido" — um padrão, não
         # azar. É a mesma família do preview que falhava calado.
         # 🪤 O registrador vem por PARÂMETRO, não por import de `main`: este

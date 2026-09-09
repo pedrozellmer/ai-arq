@@ -31,7 +31,7 @@ class _Req:
 
 
 PERFIL = {"user_id": "u-9", "full_name": "cliente-13",
-          "email": "marcelo@exemplo.com", "company": "MA Arq", "role": "arquiteto"}
+          "email": "cliente-91@exemplo.com", "company": "MA Arq", "role": "arquiteto"}
 PROJETO = {"job_id": "j1", "project_name": "Casa", "status": "done",
            "items_count": 40, "is_eval": False}
 
@@ -66,7 +66,7 @@ def _falso_banco(mapa, quebra=()):
     return _f
 
 
-def _chamar(monkeypatch, mapa, quebra=(), chave="marcelo@exemplo.com"):
+def _chamar(monkeypatch, mapa, quebra=(), chave="cliente-91@exemplo.com"):
     monkeypatch.setattr(main, "_require_admin", lambda *a, **k: {"email": "admin@x"})
     monkeypatch.setattr(main, "_supa_rest_service", _falso_banco(mapa, quebra))
     return main.admin_ficha_usuario(chave, _Req())
@@ -130,7 +130,7 @@ def test_aceita_user_id_alem_do_email(monkeypatch):
     """A tela do admin navega por ?id=<user_id>; o Pedro busca por e-mail."""
     d = _chamar(monkeypatch, {"profiles": [PERFIL], "projects": [PROJETO]},
                 chave="u-9")
-    assert d["user_id"] == "u-9" and d["email"] == "marcelo@exemplo.com"
+    assert d["user_id"] == "u-9" and d["email"] == "cliente-91@exemplo.com"
     assert d["resumo"]["projetos"] == 1
 
 
@@ -187,7 +187,7 @@ def _mapa_com_iscas():
     }
 
 
-@pytest.mark.parametrize("chave", ["marcelo@exemplo.com", "u-9"],
+@pytest.mark.parametrize("chave", ["cliente-91@exemplo.com", "u-9"],
                          ids=["por_email", "por_user_id"])
 def test_nao_devolve_documento_nem_telefone_de_terceiro(monkeypatch, chave):
     """Privacidade: a ficha existe pra entender USO. CPF/CNPJ nao ajuda nisso,
@@ -234,7 +234,7 @@ def test_a_rota_exige_admin(monkeypatch):
     monkeypatch.setattr(main, "_require_admin", _nega)
     monkeypatch.setattr(main, "_supa_rest_service", _falso_banco({"profiles": [PERFIL]}))
     try:
-        main.admin_ficha_usuario("marcelo@exemplo.com", _Req())
+        main.admin_ficha_usuario("cliente-91@exemplo.com", _Req())
     except main.HTTPException as e:
         assert e.status_code == 403
     else:

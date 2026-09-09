@@ -82,7 +82,7 @@ def _com_respostas(monkeypatch, respostas):
 
 
 def test_arquivo_truncado_NAO_e_devolvido_como_se_fosse_o_arquivo(monkeypatch):
-    """🩸 O caso do Fábio: 30% do arquivo, sem erro nenhum."""
+    """🩸 O caso do cliente-73: 30% do arquivo, sem erro nenhum."""
     inteiro = b"X" * 1000
     _com_respostas(monkeypatch, [_resp(inteiro[:300], 1000)] * 3)
     assert main._supabase_storage_download_prancha("job1", "planta.dwg") is None, (
@@ -149,7 +149,7 @@ def test_a_desistencia_deixa_RASTRO_critico(monkeypatch):
 def test_o_timeout_nao_voltou_a_ser_curto_demais(monkeypatch):
     """🪤 30 s é pouco pra 44 MB em rede ruim, e o corte vira truncamento.
 
-    O arquivo do Fábio tem 44,5 MB. Com 30 s, qualquer soluço de rede corta a
+    O arquivo do cliente-73 tem 44,5 MB. Com 30 s, qualquer soluço de rede corta a
     leitura no meio — que é exatamente o defeito que este arquivo guarda.
 
     🩸 03/09, revisão adversarial: este teste era `assert "timeout=120" in
