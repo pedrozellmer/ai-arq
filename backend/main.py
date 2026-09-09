@@ -10323,15 +10323,12 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                 # gasta o unico reprocesso gratis do cliente por nada.
                                 # 🪤 e citava '4366-EL-E_libredwg.dxf': ele mandou
                                 # .dwg, o "_libredwg" e artefato NOSSO de conversao.
+                                # 🔑 A MESMA frase do caminho do PDF, de uma régua só.
+                                # Ela estava escrita aqui e o PDF tinha outra, velha.
+                                import engine_rules as _rules_corte
                                 project_data.warnings = (project_data.warnings or []) + [
-                                    f"A leitura da prancha '{_nome_prancha_bonito(dxf_path)}' ficou "
-                                    f"INCOMPLETA: ela tem itens demais para uma leitura só, e a IA foi "
-                                    f"cortada no meio da lista (li {_n_salv} itens; os que vieram estão "
-                                    f"certos, mas faltam itens do final). Reprocessar normalmente NÃO "
-                                    f"resolve — o corte vem da densidade da prancha, não de uma falha "
-                                    f"passageira. Para ter a prancha inteira, exporte-a em partes (por "
-                                    f"exemplo um pavimento ou uma disciplina por arquivo) e reenvie, ou "
-                                    f"fale com a gente que a gente divide aqui."
+                                    _rules_corte.aviso_de_leitura_cortada(
+                                        _nome_prancha_bonito(dxf_path), _n_salv)
                                 ]
                             except Exception:
                                 pass
@@ -11263,9 +11260,14 @@ bloco — só cite os que estão no inventário deste arquivo."""
             # cortada no teto). Avisa — não entrega parcial calado (caso Ademir).
             if result.get("_truncated"):
                 try:
+                    import engine_rules as _rules_corte
                     project_data.warnings = (project_data.warnings or []) + [
-                        f"A leitura de '{filename}' pode estar INCOMPLETA (a resposta da IA "
-                        f"foi cortada por tamanho; pode faltar item). Reprocessar pode completar."
+                        # 🩸 09/09/2026: aqui dizia "Reprocessar pode completar."
+                        # — o conselho APOSENTADO em 24/08, que gasta o reprocesso
+                        # do cliente à toa: o corte vem da DENSIDADE da prancha e
+                        # reprocessar corta no mesmo lugar. O caminho do DXF foi
+                        # consertado naquele dia; este ficou. Régua única agora.
+                        _rules_corte.aviso_de_leitura_cortada(filename)
                     ]
                 except Exception:
                     pass
@@ -26616,12 +26618,18 @@ def _merge_avisos(pai: dict, filho: dict, plano: dict, medidos: int,
             # MENOS. Copiar o texto velho seria reintroduzir o conselho que
             # gasta o unico reprocesso gratis do cliente por nada.
             if fam.startswith("corte"):
-                ws = ws.replace(
-                    "Reprocessar pode completar a planilha.",
-                    "Reprocessar normalmente NÃO resolve — o corte vem da "
-                    "densidade da prancha, não de uma falha passageira. Para ter "
-                    "a prancha inteira, exporte-a em partes e reenvie, ou fale "
-                    "com a gente.")
+                # 🪤 09/09/2026: este replace procurava SÓ a variante longa
+                # ("…completar A PLANILHA."), e o caminho do PDF produzia a
+                # CURTA ("…completar."). A rede errava por três palavras e o
+                # conselho aposentado atravessava o merge inteiro. Agora as duas
+                # variantes caem, e as duas fontes já nascem com a frase certa.
+                _certo = ("Reprocessar normalmente NÃO resolve — o corte vem da "
+                          "densidade da prancha, não de uma falha passageira. Para ter "
+                          "a prancha inteira, exporte-a em partes e reenvie, ou fale "
+                          "com a gente.")
+                for _velho in ("Reprocessar pode completar a planilha.",
+                               "Reprocessar pode completar."):
+                    ws = ws.replace(_velho, _certo)
             # 4. contagem global e reescrita com o numero do MERGE
             if fam == "plano_b":
                 ws = _re.sub(r"\(\s*\d+\s*item\(ns\) medido\(s\) do CAD\s*\)",

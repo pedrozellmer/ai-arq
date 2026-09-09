@@ -274,33 +274,88 @@ def test_boa_noticia_vai_por_ultimo():
 #  2. Conselho impossível
 # ══════════════════════════════════════════════════════════════════════════
 def test_o_aviso_de_corte_nao_manda_mais_reprocessar():
+    """🩸 09/09/2026 — ESTE GUARDA ERA CEGO E O DEFEITO VIVEU 16 DIAS.
+
+    Ele ancorava no texto do caminho DXF (`"INCOMPLETA: ela tem itens demais"`)
+    e depois proibia a variante LONGA `"Reprocessar pode completar a planilha"`.
+    Só que o caminho do PDF produzia a variante CURTA, `"Reprocessar pode
+    completar."`, e essa passava. O conselho aposentado em 24/08 continuou
+    saindo pro cliente de PDF — e o saneador do merge errava pelo MESMO motivo:
+    também procurava a string longa.
+
+    🚨 O custo é dinheiro do cliente: o corte vem da DENSIDADE da prancha, então
+    reprocessar corta no mesmo lugar. Na elétrica do cliente-19 cortou 3 de 3
+    vezes, e a 3ª deu MENOS itens.
+
+    🔑 Agora o guarda CHAMA a régua em vez de ler o fonte.
+    """
+    from engine_rules import aviso_de_leitura_cortada
+    for frase in (aviso_de_leitura_cortada("x.pdf"),
+                  aviso_de_leitura_cortada("x.dxf", 87)):
+        assert "Reprocessar normalmente NÃO" in frase, frase
+        assert "Reprocessar pode completar" not in frase, (
+            "o conselho aposentado voltou: %r" % frase)
+
+
+@pytest.mark.parametrize("velho", [
+    "Reprocessar pode completar a planilha.",   # variante do DXF, já morta
+    "Reprocessar pode completar.",              # 🩸 a do PDF — a que escapava
+])
+def test_o_saneador_do_merge_pega_AS_DUAS_variantes(velho):
+    """🧪 Controle positivo da rede de segurança. Ela existe pro caso de um
+    aviso GRAVADO antes do conserto voltar pelo merge — e errava a curta."""
+    import main as M
     src = _main()
-    i = src.index("ficou \nINCOMPLETA") if "ficou \nINCOMPLETA" in src else src.index("INCOMPLETA: ela tem itens demais")
-    trecho = src[max(0, i - 900):i + 900]
-    assert "Reprocessar normalmente NÃO" in trecho, (
-        "o aviso de corte voltou a prometer que reprocessar completa a planilha "
-        "— na elétrica do cliente-19 cortou 3 de 3 vezes, e a 3ª deu MENOS itens")
-    assert "Reprocessar pode completar a planilha" not in _sem_o_que_e_removido(
-        _sem_comentarios(src)), (
-        "o texto antigo ainda é ENVIADO ao cliente (fora de comentário e fora "
-        "de um .replace que o remove)")
+    i = src.index('for _velho in ("Reprocessar pode completar a planilha."')
+    trecho = src[i:i + 260]
+    assert velho in trecho, (
+        "o saneador do merge não remove a variante %r — foi exatamente assim "
+        "que o conselho velho atravessou o merge inteiro" % velho)
+    assert hasattr(M, "app")
+
+
+def test_os_DOIS_caminhos_vivos_usam_a_MESMA_regua_de_corte():
+    """🪤 O defeito nasceu de duas cópias da mesma frase, e só uma consertada.
+    Ancorado na AST: comentário citando a frase não pode fazer isto passar."""
+    import ast
+    arvore = ast.parse(_main())
+    chamadas = [n for n in ast.walk(arvore)
+                if isinstance(n, ast.Call)
+                and (getattr(n.func, "id", None) or getattr(n.func, "attr", None))
+                == "aviso_de_leitura_cortada"]
+    assert len(chamadas) >= 2, (
+        "o main.py chama a régua do aviso de corte %d vez(es); são DOIS "
+        "caminhos (DXF/DWG e PDF) e os dois precisam chamar — senão volta a "
+        "divergir, que é como o conselho velho sobreviveu 16 dias"
+        % len(chamadas))
 
 
 def test_o_aviso_de_corte_diz_o_que_o_cliente_PODE_fazer():
-    """Tirar o conselho errado sem pôr o certo deixa o cliente sem saída."""
-    src = _main()
-    i = src.index("INCOMPLETA: ela tem itens demais")
-    trecho = src[i:i + 900]
-    assert "exporte-a em partes" in trecho
-    assert "fale com a gente" in trecho
+    """Tirar o conselho errado sem pôr o certo deixa o cliente sem saída.
+
+    🔑 09/09: passou a CHAMAR a régua. Lia o fonte do main.py e quebrou quando a
+    frase mudou de arquivo — guarda que lê fonte mede onde o texto MORA, não o
+    que o cliente RECEBE."""
+    from engine_rules import aviso_de_leitura_cortada
+    for frase in (aviso_de_leitura_cortada("x.pdf"),
+                  aviso_de_leitura_cortada("x.dxf", 87)):
+        assert "exporte-a em partes" in frase, frase
+        assert "fale com a gente" in frase, frase
+        # 🪤 A mutação pegou este buraco: tirar o EXEMPLO deixava "exporte-a em
+        # partes" no lugar e o teste passava — mas "em partes" COMO? Conselho
+        # sem exemplo concreto é conselho que o cliente não consegue seguir, e
+        # foi o vazio disso que criou o "reprocessar" em primeiro lugar.
+        assert ("pavimento" in frase and "disciplina" in frase), (
+            "o aviso diz 'exporte em partes' e não diz em que partes: %r" % frase)
 
 
 def test_o_aviso_de_corte_nao_assusta_sobre_o_que_veio():
     """Os itens lidos ANTES do corte estão certos. Não dizer isso faria o
     cliente desconfiar da planilha inteira."""
-    src = _main()
-    i = src.index("INCOMPLETA: ela tem itens demais")
-    assert "os que vieram estão " in src[i:i + 900]
+    from engine_rules import aviso_de_leitura_cortada
+    assert "os que vieram estão certos" in aviso_de_leitura_cortada("x.dxf", 87)
+    # e no caminho sem contagem a frase tem que seguir tranquilizando
+    assert "estão certos" in aviso_de_leitura_cortada("x.pdf")
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -308,8 +363,8 @@ def test_o_aviso_de_corte_nao_assusta_sobre_o_que_veio():
 # ══════════════════════════════════════════════════════════════════════════
 def test_o_aviso_de_corte_usa_o_nome_real_da_prancha():
     src = _main()
-    i = src.index("INCOMPLETA: ela tem itens demais")
-    trecho = src[max(0, i - 400):i]
+    i = src.index("_rules_corte.aviso_de_leitura_cortada(")
+    trecho = src[i:i + 220]
     assert "_nome_prancha_bonito(dxf_path)" in trecho, (
         "voltou o os.path.basename cru — o cliente lê '_libredwg.dxf', que ele "
         "nunca enviou")

@@ -2336,3 +2336,42 @@ def numero_declarado_parcial(observacao):
     if not obs:
         return False
     return any(rx.search(obs) for rx in _FRASES_DE_VALOR_PARCIAL)
+
+
+# ── O AVISO DE LEITURA CORTADA (uma frase só) ──────────────────────────────
+
+def aviso_de_leitura_cortada(nome_prancha, n_itens_lidos=None):
+    """A frase ÚNICA pra "a resposta da IA foi cortada no teto".
+
+    🩸 09/09/2026 — POR QUE ISTO VIROU FUNÇÃO. A mesma decisão tinha DUAS
+    cópias vivas e só uma foi consertada:
+
+        DXF/DWG (consertada em 24/08) → "Reprocessar normalmente NÃO resolve…"
+        PDF     (esquecida)           → "Reprocessar pode completar."
+
+    🚨 O conselho velho CUSTA DINHEIRO ao cliente: ele gasta o reprocesso à toa,
+    porque o corte vem da DENSIDADE da prancha, não de uma falha passageira —
+    reprocessar corta no mesmo lugar. Foi por isso que a frase foi aposentada em
+    24/08; ela só não foi aposentada nos dois lugares.
+
+    🪤 E as DUAS redes de segurança erraram pelo MESMO motivo: procuravam a
+    variante LONGA ("Reprocessar pode completar **a planilha**.") enquanto o
+    caminho do PDF produzia a CURTA. O saneador do merge não casava, e o guarda
+    ancorava no texto do DXF — verde desde sempre com o defeito aberto.
+
+    🔑 Agora os dois caminhos CHAMAM daqui. Divergir exige apagar a chamada, e
+    há guarda pra isso.
+    """
+    nome = str(nome_prancha or "esta prancha").strip() or "esta prancha"
+    if n_itens_lidos:
+        _quanto = (" (li %d itens; os que vieram estão certos, mas faltam "
+                   "itens do final)" % int(n_itens_lidos))
+    else:
+        _quanto = " (os itens que vieram estão certos, mas pode faltar item do final)"
+    return (
+        "A leitura da prancha '%s' ficou INCOMPLETA: ela tem itens demais para "
+        "uma leitura só, e a IA foi cortada no meio da lista%s. Reprocessar "
+        "normalmente NÃO resolve — o corte vem da densidade da prancha, não de "
+        "uma falha passageira. Para ter a prancha inteira, exporte-a em partes "
+        "(por exemplo um pavimento ou uma disciplina por arquivo) e reenvie, ou "
+        "fale com a gente que a gente divide aqui." % (nome, _quanto))
