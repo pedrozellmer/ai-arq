@@ -949,6 +949,50 @@ MAX_IMGS_POR_PRANCHA = 4
 _REF_SEP = " · "
 
 
+def sanear_qtd_e_selo(qty, conf):
+    """Devolve `(qty, conf)` saneados. 🚨 NUNCA inventa número.
+
+    🩸 09/09/2026 — POR QUE ESTA FUNÇÃO EXISTE. A mesma decisão vivia em TRÊS
+    lugares, e as três divergiram. A versão CERTA morava em `analyze_all_sheets`
+    — que o `main.py` importa e NUNCA chama. As duas do caminho vivo faziam:
+
+        if qty == 0 and conf == "confirmado":
+            qty = 1                  # ← inventa, e nem rebaixa o selo
+
+    O conserto de 26/08 foi aplicado só na cópia morta. Em produção o defeito
+    continuou vivo por 14 dias — e PIOR que a versão consertada, porque mantinha
+    o selo `confirmado`: o número inventado saía como **MEDIDO** na planilha.
+
+    🚨 Por que zero é o certo: a IA marca `confirmado + 0` justamente pros itens
+    que o projeto manda NÃO ORÇAR — "[EXISTENTE — sem intervenção] Porta PE1",
+    "Alvenaria existente a manter". Ela tem certeza de que existe e certeza de
+    que não há obra. O `qty = 1` vira "não orçar" em "orçar 1" na planilha.
+    📏 Medido em 26/08: 77 itens em 41 projetos com essa cara. Medido hoje:
+    614 itens com `qty=1 + confirmado` em 82 jobs, dos quais 13 têm descrição
+    explícita de "não orçar".
+
+    🪤 Zero NÃO é estado quebrado — é o estado honesto, a política já o permite
+    pra "estimado", e a tela de revisão existe pro cliente preencher. Número
+    inventado infla o quantitativo em silêncio, que é o oposto da regra nº1.
+
+    🔑 A decisão mora AQUI e os três lugares CHAMAM. Duas cópias da mesma régua
+    é como elas divergem — ver [[feedback_nao_reimplemente_a_regua_pergunte_ao_guarda]].
+    """
+    # 🪤 Valor ilegível (None, texto) vira ZERO, não vira 1. Antes ele caía no
+    # `qty = 1` e virava número inventado; deixar passar `None` empurraria o
+    # problema pra planilha. Zero é o que a gente honestamente sabe.
+    try:
+        q = float(qty)
+    except (TypeError, ValueError):
+        qty, q = 0, 0.0
+    if q < 0:
+        qty, q = 0, 0.0
+    if q == 0 and conf == "confirmado":
+        # rebaixa o SELO (regra nº1: confirmado exige geometria), não inventa
+        return qty, "estimado"
+    return qty, conf
+
+
 def monta_ref_sheet(filename, page_index, page_count, hint_da_ia: str) -> str:
     """`arquivo.pdf`, `arquivo.pdf (p3)`, `arquivo.pdf (p3 · hint)`.
 
@@ -1438,10 +1482,7 @@ def analyze_all_sheets(sheets: list[SheetInfo], api_key: str,
                 # própria política acima já permite pra "estimado", e a tela de
                 # revisão existe pro cliente preencher. Inventar 1 infla o
                 # quantitativo em silêncio, que é o oposto da regra nº1.
-                if qty < 0:
-                    qty = 0
-                if qty == 0 and conf == "confirmado":
-                    conf = "estimado"
+                qty, conf = sanear_qtd_e_selo(qty, conf)
 
                 item = BudgetItem(
                     item_num=str(item_data.get("item_num", "")),

@@ -10427,8 +10427,13 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                     if _q_proc:
                                         qty = _q_proc
                                         _n_resgate_proc += 1
-                                if qty == 0 and conf == "confirmado":
-                                    qty = 1  # defensivo: confirmado sem número cai em vb=1
+                                # 🩸 09/09/2026: aqui havia `qty = 1`, chamado de
+                                # "defensivo". Inventava número, e mantinha o selo
+                                # CONFIRMADO — o valor saía como MEDIDO na planilha.
+                                # A régua correta vivia só na cópia MORTA do
+                                # analyzer. Agora é uma só, e ela CHAMA.
+                                from analyzer import sanear_qtd_e_selo as _sanear
+                                qty, conf = _sanear(qty, conf)
 
                                 # Normalização pós-IA: força unidade correta pra descrição
                                 # (ex.: "piso vinílico" sempre m², nunca ml).
@@ -11362,8 +11367,10 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         if _q_pdf:
                             qty = _q_pdf
                             _n_resgate_pdf += 1
-                    if qty == 0 and conf == "confirmado":
-                        qty = 1
+                    # 🩸 09/09/2026: idem ao caminho de cima — `qty = 1` inventava
+                    # o número e deixava o selo em CONFIRMADO. Régua única.
+                    from analyzer import sanear_qtd_e_selo as _sanear
+                    qty, conf = _sanear(qty, conf)
 
                     # Normalização pós-IA: força unidade consistente com descrição
                     original_unit = item_data.get("unit", "vb")
