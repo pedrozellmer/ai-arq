@@ -148,6 +148,12 @@ class DXFExtraction:
     dimensions: list  # list of (label, value) tuples
     metadata: dict = field(default_factory=dict)
     polygon_areas: list = field(default_factory=list)  # áreas de polilinha FECHADA (ambiente/piso/forro) — m² medido, fonte distinta de HATCH
+    #: 🩸 09/09/2026 — por que o contorno fechado foi RECUSADO, por motivo.
+    #: Sem isto, `poligonos=0` tinha dois significados opostos ("o desenho não
+    #: tem contorno fechado" e "tem, e a peneira de NOME jogou fora") e os dois
+    #: viravam a mesma ausência. Só observação: não muda nada do que é medido.
+    poly_recusa: dict = field(default_factory=dict)
+    poly_layers_recusados: dict = field(default_factory=dict)
     struct_rects: list = field(default_factory=list)  # retângulos/círculos FECHADOS em layer de PILAR (StructRect) — contagem de pilar medida
     # Atributos de bloco (ATTRIB): dado ESTRUTURADO que o projetista escreveu
     # com nome de campo — quadro de áreas, etiqueta de ambiente, carimbo.
@@ -3170,18 +3176,37 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
     _AREA_DENY = ("trama", "pagina", "rotulo", "rótulo", "legenda", "cota", "carimbo",
                   "titulo", "título", "hachura", "eixo", "memorial", "quadro", "zona")
     _poly_cands: list = []  # (area_m2, bbox, layer)
+    # 🩸 09/09/2026 — O DESCARTE ERA MUDO, E ISSO PRODUZIU DIAGNÓSTICO ERRADO.
+    # No job 43c52488 o log dizia `poligonos=0` nos dois arquivos e eu li como
+    # "o desenho não tem contorno fechado". O código não permite afirmar isso:
+    # a allowlist abaixo só aceita a palavra POR EXTENSO ("piso", "cobertura"),
+    # e os layers daquele projeto eram `ARQ_COB`, `A-ROOF`, `ARQ_ALV` — nenhuma
+    # abreviação BR usual nem termo em inglês casa. "Não tem" e "tem e a
+    # peneira de NOME jogou fora" viram a MESMA ausência.
+    # 🚫 NÃO ampliar a lista antes de ter o número. E ao ampliar, 🪤 nunca
+    # acrescentar "for": neste acervo FOR é ambíguo — significa FÔRMA, e na
+    # convenção do próprio prompt "FOR-" é layer de projeto NOVO, não forro.
+    _poly_recusa = {"deny": 0, "fora_da_allowlist": 0, "area_minima": 0,
+                    "poucos_pontos": 0}
+    _poly_layers_recusados: dict = {}
 
     def _consider_poly(layer_name, pts):
         try:
             if len(pts) < 3:
+                _poly_recusa["poucos_pontos"] += 1
                 return
             clean = layer_name.split("|", 1)[-1].lower()
             if any(t in clean for t in _AREA_DENY):
+                _poly_recusa["deny"] += 1
                 return
             if not any(t in clean for t in _AREA_ALLOW):
+                _poly_recusa["fora_da_allowlist"] += 1
+                _poly_layers_recusados[layer_name] = (
+                    _poly_layers_recusados.get(layer_name, 0) + 1)
                 return  # allowlist: só superfície física reconhecível
             a = abs(_shoelace_area(pts)) * area_factor
             if a < 0.5:
+                _poly_recusa["area_minima"] += 1
                 return
             xs = [p[0] for p in pts]
             ys = [p[1] for p in pts]
@@ -3548,6 +3573,9 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         dimensions=dims,
         metadata=metadata,
         polygon_areas=polygon_areas,
+        poly_recusa=dict(_poly_recusa),
+        poly_layers_recusados=dict(
+            sorted(_poly_layers_recusados.items(), key=lambda kv: -kv[1])[:8]),
         struct_rects=struct_rects,
         block_attributes=block_attributes,
         blocos_descartados=dict(_desc, amostra_anonimo=list(_amostra_anonimo)),

@@ -25,6 +25,8 @@ import os
 import threading
 import time
 
+import filho_protegido
+
 # 🚨 Conserto 3 de 15/08 (feito 30/08): era 3 FIXO e cortava CALADO —
 # dois jobs de 43 páginas viraram 3 e o relatório dizia só "medi 3".
 # Teto agora é env e o resumo diz "n de m" (o BUDGET_S continua sendo
@@ -54,7 +56,9 @@ MAX_FILE_MB = int(os.environ.get("PDFVEC_MAX_FILE_MB", "80"))
 #: Teto de endereço do filho da sombra. O MESMO da produção (main.py): 2 GB
 #: impediria as duas quedas de 03/09 e deixa folga. 📏 Medido em 120 dias, 41
 #: medições: mediana 270 MB, p90 1.252 MB, p95 1.544 MB, máximo 1.573 MB.
-SHADOW_RLIMIT_BYTES = 2_000_000_000
+#: 🔑 Apelido do teto único, não uma segunda constante: dois números iguais em
+#: dois arquivos divergem no dia em que alguém muda um só.
+SHADOW_RLIMIT_BYTES = filho_protegido.RLIMIT_BYTES
 #: Cronômetro do filho da sombra. 🚨 TEM QUE SER MAIOR que os 75 s do filho da
 #: promoção (main.py). Com 75 aqui, a sombra vira uma cópia mais lenta dela e a
 #: página perdida por TEMPO deixa de ser medida em qualquer lugar — e é a única
@@ -485,68 +489,24 @@ def medir_pagina_em_filho(pdf_path: str, page_index: int,
     cronômetro não limita memória; só o kernel limita — foi a lição da queda de
     03/09, que a produção aprendeu e a sombra não.
 
-    🔑 Devolve sempre um dict: se o filho morrer (OOM, aborto em código C,
-    timeout), volta `{"skip": ..., "err": ...}` em vez de derrubar o servidor.
-    Recusa registrada não é silêncio.
-
-    🪤 `OPENBLAS_NUM_THREADS`/`MALLOC_ARENA_MAX` no env do FILHO (nunca do
-    servidor): o RLIMIT_AS cobra ENDEREÇO, e o OpenBLAS que o numpy do shapely
-    importa reserva mais de 1 GB virtual que nem chega a virar RAM. Sem isso o
-    teto mata medição legítima. Mesma receita do filho da produção.
+    🔑 A RECEITA (teto, env, contrato de "sempre devolve dict", argumentos por
+    argv) mora em `filho_protegido`. Em 09/09 eu escrevi aqui uma SEGUNDA cópia
+    dela e horas depois a auditoria achou uma TERCEIRA porta com o mesmo risco,
+    pública. Três cópias da mesma decisão é a doença da casa; aqui sobrou só o
+    que é específico da sombra — o que rodar e por quanto tempo.
     """
-    import subprocess as _sp
-    import sys as _sys
-    _lim = int(SHADOW_RLIMIT_BYTES)
-    # 🪤 Montado por LISTA + join, não por concatenação com `%`: a versão
-    # anterior misturava `+` e `%` e a formatação colou só no último literal.
-    #
-    # 🪤 E o caminho do PDF vai por ARGV, não embutido no fonte. A 1ª versão
-    # colava `r'{0}'.format(pdf_path)` dentro do código do filho: um caminho com
-    # aspa simples (`O'Brien`, nome de projeto de cliente) fecharia a string e o
-    # filho morreria com SyntaxError — que este runner arquivaria como "filho da
-    # sombra morreu", indistinguível de estouro de memória. Defeito que se
-    # disfarça do defeito que a função existe pra medir. Por argv não há aspa
-    # nenhuma pra escapar.
-    _aqui = os.path.dirname(os.path.abspath(__file__))
-    _linhas = [
-        "try:",
-        "    import resource; resource.setrlimit("
-        "resource.RLIMIT_AS, ({0}, {0}))".format(_lim),
-        "except Exception:",
-        "    pass",
-        "import sys, json",
-        "sys.path.insert(0, sys.argv[1])",
-        "from pdf_vector import _measure_page",
-        "print(json.dumps(_measure_page(sys.argv[2], int(sys.argv[3]), '')))",
-    ]
-    _cmd = [_sys.executable, "-c", chr(10).join(_linhas),
-            _aqui, str(pdf_path), str(int(page_index))]
-    try:
-        _pr = _sp.run(_cmd, capture_output=True, text=True, timeout=timeout_s,
-                      env={**os.environ, "PYTHONFAULTHANDLER": "1",
-                           "OPENBLAS_NUM_THREADS": "1", "MALLOC_ARENA_MAX": "2"})
-    except _sp.TimeoutExpired:
-        return {"skip": "filho da sombra estourou o tempo",
-                "timeout_s": timeout_s}
-    except Exception as e:
-        return {"skip": "filho da sombra nao rodou",
-                "err": "%s: %s" % (type(e).__name__, str(e)[:100])}
-    if _pr.returncode != 0:
-        return {"skip": "filho da sombra morreu",
-                "rc": _pr.returncode,
-                "err": ((_pr.stderr or "").strip()[-400:] or "(sem stderr)")}
-    # 🪤 A ÚLTIMA LINHA, não o stdout inteiro — é o que a produção faz
-    # (main.py, `.splitlines()[-1]`). O filho IMPRIME antes do JSON: página sem
-    # viewport cai no carimbo, que chama a IA, e o registro de cache do
-    # `llm_retry` sai em stdout. Ler o buffer todo faz `json.loads` estourar e a
-    # medição boa virar "JSON quebrado". Mesma decisão, dois lugares: era este
-    # o vício que este commit existe pra fechar, e eu o repeti aqui.
-    _saida = (_pr.stdout or "").strip()
-    try:
-        return json.loads(_saida.splitlines()[-1]) if _saida else {}
-    except (ValueError, TypeError, IndexError) as e:
-        return {"skip": "filho da sombra devolveu JSON quebrado",
-                "err": "%s" % type(e).__name__}
+    return filho_protegido.rodar(
+        corpo=[
+            "import sys, json",
+            "sys.path.insert(0, sys.argv[1])",
+            "from pdf_vector import _measure_page",
+            "print(json.dumps(_measure_page(sys.argv[2], int(sys.argv[3]), '')))",
+        ],
+        argv=[os.path.dirname(os.path.abspath(__file__)),
+              str(pdf_path), int(page_index)],
+        timeout_s=timeout_s,
+        rlimit_bytes=SHADOW_RLIMIT_BYTES,
+        rotulo="filho da sombra")
 
 
 def _run(page_units: list, job_id: str, api_key: str, log_fn, pular=None) -> None:

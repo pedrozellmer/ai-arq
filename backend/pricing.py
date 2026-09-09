@@ -210,10 +210,61 @@ def _pdf_parece_escaneado(path: str) -> bool:
         return False
 
 
+#: Cronômetro do filho do precheck. Menor que o da sombra de propósito: aqui
+#: tem GENTE ESPERANDO a tela do preço; lá é telemetria depois do job pronto.
+PRECHECK_FILHO_TIMEOUT_S = 40
+
+
+def precheck_em_filho(file_paths: list[str],
+                      timeout_s: float = PRECHECK_FILHO_TIMEOUT_S) -> list[str]:
+    """`precheck_warnings` num processo FILHO com teto de memória do kernel.
+
+    🩸 09/09/2026 — a auditoria achou esta porta e ela é a PIOR das três:
+    `POST /api/estimate-price` é **pública, sem login**, e mandava
+    `precheck_warnings` pro threadpool DO SERVIDOR. Lá dentro roda
+    `pdfplumber.open()` + `extract_text()` — a mesmíssima amplificação que em
+    03/09 transformou 2,63 MB em ~2,7 GB e deixou o serviço com ZERO instância
+    por 2 minutos.
+
+    🪤 O `asyncio.wait_for` que existia NÃO protege: ele só para de ESPERAR. A
+    thread continua viva alocando, porque não dá pra matar thread em Python. O
+    cronômetro devolve a tela ao cliente e deixa o servidor morrendo por dentro
+    — é justamente o tipo de proteção que parece proteção.
+
+    🔒 Sem login, o teto de tamanho de arquivo é a única barreira contra quem
+    quiser derrubar o site de fora — e a casa já mediu que ele não protege
+    nada (o PDF da queda era 4,6× menor que o teto).
+
+    🔑 Best-effort igual ao original: filho morto devolve lista VAZIA. Aviso é
+    acessório — o preço sai igual, como sempre saiu quando o precheck falhava.
+    """
+    import filho_protegido
+    import os as _os
+    if not file_paths:
+        return []
+    r = filho_protegido.rodar(
+        corpo=[
+            "import sys, json",
+            "sys.path.insert(0, sys.argv[1])",
+            "from pricing import precheck_warnings",
+            "print(json.dumps(precheck_warnings(sys.argv[2:])))",
+        ],
+        argv=[_os.path.dirname(_os.path.abspath(__file__))] + list(file_paths),
+        timeout_s=timeout_s,
+        rotulo="filho do precheck")
+    # 🔑 O JSON de sucesso é uma LISTA; `rodar` devolve dict quando morre.
+    return r if isinstance(r, list) else []
+
+
 def precheck_warnings(file_paths: list[str]) -> list[str]:
     """Lista de avisos ANTES de pagar (vazia = nada a apontar). Best-effort —
     nunca levanta. Campo novo/opcional na resposta do estimate: front antigo
-    ignora, não muda preço."""
+    ignora, não muda preço.
+
+    🚨 NÃO CHAMAR DIRETO de rota do servidor — use `precheck_em_filho`. Isto
+    abre PDF com pdfplumber e aloca proporcional ao número de elementos
+    vetoriais da prancha, não ao tamanho do arquivo (~500× medido em 03/09).
+    """
     avisos: list[str] = []
     for p in file_paths or []:
         ext = os.path.splitext(p)[1].lower()

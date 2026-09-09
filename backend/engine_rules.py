@@ -701,6 +701,58 @@ def layer_is_carimbo(layer_name) -> bool:
     return False
 
 
+#: Tokens de layer que carregam ANOTAÇÃO, não elemento construtivo.
+#: 🩸 09/09/2026 — o caso que criou isto: num projeto de pórtico, `ARQ_TEX-4`
+#: respondia por **3.782 m dos 4.258 m** somados como "layer de parede" (88,8%),
+#: e a alvenaria de verdade (`ARQ_ALV`) somava 119 m. No arquivo vizinho o topo
+#: era `ARQ_TXT-2`. O cliente recebeu linhas como *"Acabamento/textura — linear
+#: layer ARQ_TEX-3, 109,40 ml"* com selo **BRANCO** — e ninguém precifica isso
+#: (regra dura nº5: quem precifica é um orçamentista humano).
+#: 🔑 O comprimento É medido; o que não se sustenta é o par "nome de layer na
+#: descrição + selo de MEDIDO". Rebaixar é o conserto, apagar não: o nome do
+#: layer no item é ponteiro DELIBERADO em outro caminho (infra linear), pra o
+#: cliente reconhecer a origem e completar.
+#: 📏 Medido antes de ligar, com ESTE vocabulário (remedido depois de alargar
+#: o prefixo TEXT): **60 de 2.121 itens confirmados (2,8%)**, em 29 de 118
+#: projetos — e **ZERO projeto perde a cobrabilidade**, porque todos têm
+#: outra linha medida de verdade. A primeira medição, com o conjunto mais
+#: estreito, dizia 41 em 21: alargar a régua e não remedir teria deixado um
+#: número velho fingindo ser medição.
+#: 🪤 `TEXT` é PREFIXO, não token exato — os nomes reais do nosso banco são
+#: `TEXTOS`, `TEXTO_TABELAS`, `ELE-TEXTOS`, `G-ANNO-TEXT`, `PDF_TEXT`. Meu
+#: primeiro conjunto era exato e ficou mais ESTREITO que a régua de substring
+#: que já existia — a bancada pegou (guarda antigo de sobreposição). Conferido
+#: no acervo: nenhum layer com "TEXTURA" tem item confirmado, então o prefixo
+#: não custa nada hoje; se aparecer, `TEXTURA` é decoração de desenho e o
+#: comprimento dela também não é serviço.
+_ANOTACAO_PREFIXO = ("ANNO", "ANOTA", "LEGEND", "TITUL", "TITLE", "HACH",
+                     "CARIMB", "CHAMAD", "TEXT", "COTA", "NOTA")
+_ANOTACAO_EXATO = {"TXT", "TEX", "DIM", "DIMS", "DETL", "LEG", "TAG"}
+
+
+def layer_is_anotacao(layer_name) -> bool:
+    """True se o layer carrega TEXTO/COTA/LEGENDA/HACHURA — não obra.
+
+    🪤 Compara por TOKEN, nunca por substring — a mesma trava de
+    `layer_is_carimbo`. Sem isso 'ARQ_TEXTURA_PISO' e, pior, qualquer layer que
+    contenha 'dim' (como 'JARDIM') cairia aqui.
+
+    🔒 Direção segura: um falso positivo custa um selo branco; um falso
+    negativo custa uma quantidade inventada com cara de medição. Na dúvida,
+    rebaixa — é a regra dura nº1.
+    """
+    if not layer_name:
+        return False
+    for tok in _CARIMBO_SPLIT.split(str(layer_name).upper()):
+        if not tok:
+            continue
+        if tok in _ANOTACAO_EXATO:
+            return True
+        if tok.startswith(_ANOTACAO_PREFIXO):
+            return True
+    return False
+
+
 # ─── Área total lida do QUADRO DE ÁREAS, por regra (08/08/2026) ──────────────
 # 🚨 POR QUE existe: a área total do projeto sai HOJE só da IA lendo o quadro de
 # áreas da prancha. Medido em 08/08 — o MESMO arquivo, rodado duas vezes no

@@ -55,6 +55,7 @@ from engine_rules import (
     is_unit_mismatch_countable as _is_unit_mismatch_countable,
     corrigir_comprimento_medido as _corrigir_comprimento_medido,
     layer_is_carimbo as _layer_is_carimbo,
+    layer_is_anotacao as _layer_is_anotacao,
     medida_de_comprimento_na_observacao as _medida_comprimento_obs,
     medida_e_base_de_calculo as _medida_e_base_de_calculo,
     AREA_UNITS_HONESTY as _AREA_UNITS_HONESTY,
@@ -560,6 +561,12 @@ _STAGES_DIAGNOSTICO = frozenset({
     "motor:prancha-itens", "motor:sinapi-unidade", "motor:area-regra",
     "motor:pe-direito", "motor:escala-aviso", "motor:concordancia-rotulo",
     "motor:parede-medida",
+    # 🩸 09/09/2026: os três nasceram de perguntas que o log de hoje não
+    # respondia — "42 hachuras de quê?", "quem levou os 5 itens?" e "a
+    # calibração rodou ou foi pulada?".
+    "motor:area-medida",
+    "motor:itens-removidos",
+    "motor:densidade",
     "motor:revisao-concluida", "motor:fusao-revisao", "motor:honestidade-area",
     "motor:versao-anterior", "motor:pai-e-filho", "motor:download-regen",
     "motor:respostas-releitura", "motor:informou-depois",
@@ -5211,7 +5218,28 @@ def _dedupe_by_block(items: list) -> list:
     A IA às vezes cria o mesmo bloco em 2-3 disciplinas (ex: 'cad-escr-02' como
     'Cadeira para escritório' E 'Mobiliário de escritório') → a contagem inflava
     (14 viravam 28). Mesmo bloco = MESMA contagem física: mantém 1 item (o de
-    maior confiança/descrição), usa a MAIOR qty (NÃO soma), descarta o resto."""
+    maior confiança/descrição), usa a MAIOR qty (NÃO soma), descarta o resto.
+
+    🚨 09/09/2026 — E "MESMA PEÇA" SÓ VALE DENTRO DA MESMA PRANCHA.
+    O caso que criou esta função é a IA duplicando o bloco DENTRO de uma
+    prancha. Entre pranchas DIFERENTES é outra pergunta, e a resposta já foi
+    dada em 06/09 na passada 6 do consolidador: **não funde e não descarta** —
+    mantém as duas linhas e anexa o aviso "aparece em N pranchas; confira se
+    são trechos diferentes, que somam, ou o mesmo trecho desenhado mais de uma
+    vez". A justificativa está escrita lá e é sólida: *duplicar é um erro que o
+    arquiteto VÊ; apagar é um erro que ele NÃO vê.*
+
+    🩸 Só que esta função roda DEPOIS da passada 6 e não olhava `ref_sheet`:
+    ela desfazia a decisão de 06/09 num arquivo ao lado, com `max()` (não
+    soma), e ainda escrevia na observação *"mesma peça do CAD"* — uma
+    afirmação que ela não tinha como provar. Medido no job 43c52488: o bloco
+    'Pilar metálico' aparecia com 4 INSERTs numa prancha e 7 na outra.
+    A política de 06/09 tinha pegado UM dos quatro pontos que descartam linha.
+
+    🔑 Agora a chave inclui a prancha. Mesmo bloco na MESMA prancha continua
+    sendo a mesma contagem física (o caso original); em pranchas diferentes as
+    duas linhas sobrevivem e a passada 6 tem a última palavra.
+    """
     try:
         from models import Confidence
         _conf_ok = Confidence("confirmado")
@@ -5224,10 +5252,14 @@ def _dedupe_by_block(items: list) -> list:
         if not bk:
             passthrough.append(it)
         else:
-            by_block.setdefault(bk, []).append(it)
+            # 🔑 A prancha entra na CHAVE. Sem ela, o mesmo bloco desenhado em
+            # duas pranchas virava uma linha só e a leitura de uma delas era
+            # apagada em silêncio.
+            _pr = (getattr(it, "ref_sheet", "") or "").strip().lower()
+            by_block.setdefault((bk, _pr), []).append(it)
     merged = list(passthrough)
     fundidos = 0
-    for bk, group in by_block.items():
+    for (bk, _pr), group in by_block.items():
         if len(group) == 1:
             merged.append(group[0])
             continue
@@ -5242,13 +5274,13 @@ def _dedupe_by_block(items: list) -> list:
         except Exception:
             pass
         best.observations = ((getattr(best, "observations", "") or "") +
-            f" | Bloco '{bk}' aparecia em {len(group)} itens — fundido pra não "
-            f"duplicar a contagem (mesma peça do CAD)").strip(" |")
+            f" | Bloco '{bk}' aparecia em {len(group)} itens DA MESMA PRANCHA — "
+            f"fundido pra não duplicar a contagem (mesma peça do CAD)").strip(" |")
         merged.append(best)
         fundidos += len(group) - 1
     if fundidos:
         print(f"[dedup-bloco] {fundidos} itens duplicados de bloco fundidos")
-    return merged
+    return merged, fundidos
 
 
 def _drop_nonsense_items(items: list) -> list:
@@ -6179,8 +6211,10 @@ def _apply_post_consolidation_rules(items: list) -> tuple[list, int]:
     # 🩸 Por que isso é caro: em 31/08 um cliente APAGOU um item por causa
     # deste aviso. Aviso falso manda o cliente apagar linha certa — e exclusão
     # é justamente o sinal que a gente acabou de destravar pra aprender.
-    _LAYER_ANOTACAO = ("anno", "text", "texto", "cota", "dim", "detl",
-                       "legend", "title", "carimbo", "anota", "hach")
+    # 🔑 A régua de "isto é anotação" mora em `engine_rules.layer_is_anotacao`.
+    # Até 09/09 ela existia SÓ aqui, como tupla local, e era usada só pra evitar
+    # um alarme falso de sobreposição de m² — conhecimento parado enquanto
+    # anotação virava quantidade com selo branco no caminho ao lado.
     by_layer: dict[str, list] = {}
     for it in items:
         if (it.unit or "").lower() not in ("m²", "m2", "m³", "m3"):
@@ -6188,7 +6222,7 @@ def _apply_post_consolidation_rules(items: list) -> tuple[list, int]:
         layer = _extract_layer_from_obs(it.observations or "")
         if not layer:
             continue
-        if any(k in layer.lower() for k in _LAYER_ANOTACAO):
+        if _layer_is_anotacao(layer):
             continue
         by_layer.setdefault(layer, []).append(it)
 
@@ -9635,6 +9669,33 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                                " · ".join("%s=%.1f" % (k, float(v or 0))
                                           for k, v in _topo)),
                             job_id)
+                        # 🩸 09/09 — O ESPELHO QUE FALTAVA: existia o log de
+                        # PAREDE por layer e nenhum de ÁREA. No job 43c52488 o
+                        # motor registrou `hachuras=42` nos DOIS arquivos e não
+                        # havia como responder "42 hachuras de quê?" — se somam
+                        # 3 m² de moldura de legenda ou 300 m² de piso. Pra
+                        # parede eu tinha o número; pra área, só a contagem. Foi
+                        # essa assimetria que me fez suspeitar de teto/cache que
+                        # não existiam. Só leitura: não muda selo nem quantidade.
+                        try:
+                            _al = dict(extraction.get_areas_by_layer() or {})
+                            for _k, _v in (extraction.get_polygon_areas_by_layer()
+                                           or {}).items():
+                                _al[_k] = float(_al.get(_k, 0)) + float(_v or 0)
+                            _soma_ar = sum(float(v or 0) for v in _al.values())
+                            _topo_ar = sorted(_al.items(),
+                                              key=lambda kv: float(kv[1] or 0),
+                                              reverse=True)[:8]
+                            _log_error(
+                                "motor:area-medida",
+                                "arq=%s layers_com_area=%d soma=%.2f m2 | topo: %s"
+                                % (os.path.basename(dxf_path), len(_al), _soma_ar,
+                                   " · ".join("%s=%.1f" % (k, float(v or 0))
+                                              for k, v in _topo_ar) or "(nenhum)"),
+                                job_id)
+                        except Exception as _eam:
+                            _log_error("motor:area-medida",
+                                       "falhou: %s" % _eam, job_id, severity="info")
                     except Exception as _ewl:
                         print(f"[parede-medida] nao-fatal: {_ewl}")
                     # 🪤 GRAVAR SEMPRE a decisão de unidade — inclusive quando não
@@ -9763,6 +9824,10 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                                 f"arq={os.path.basename(dxf_path)} "
                                 f"hachuras={len(extraction.hatches or [])} "
                                 f"poligonos={len(extraction.polygon_areas or [])} "
+                                # 🩸 09/09: `poligonos=0` tinha dois significados
+                                # opostos e os dois viravam a mesma ausência.
+                                f"poly_recusados={sum((getattr(extraction, 'poly_recusa', None) or {}).values())} "
+                                f"({(getattr(extraction, 'poly_recusa', None) or {})}) "
                                 f"paredes={len(extraction.walls or [])} "
                                 f"blocos={len(extraction.blocks or [])} "
                                 f"textos={len(extraction.texts or [])} "
@@ -10003,6 +10068,18 @@ O campo "confidence" TEM apenas duas categorias possíveis:
    - Cota numérica que aparece em "COTAS/DIMENSÕES"
    A quantidade do item TEM que bater com o número extraído. Se você multiplicou, somou
    ou fez qualquer cálculo além de copiar o valor, NÃO é confirmado.
+
+   🚨 MAS O NÚMERO SER MEDIDO NÃO BASTA — O LAYER TEM QUE SER DE OBRA.
+   Layers de TEXTO/COTA/LEGENDA/TÍTULO/CHAMADA/HACHURA DE ANOTAÇÃO (nomes tipo
+   ARQ_TXT, ARQ_TEX, *-COTA, *-LEGENDA, *-ANNO) contêm setas, letras e traços de
+   desenho — o comprimento deles é REAL e não é serviço nenhum. NUNCA use como
+   quantidade e NUNCA marque "confirmado".
+   ⚠️ E NÃO crie item cujo NOME é o nome do layer ("Acabamento/textura — linear
+   layer ARQ_TEX-3"). Quem lê esta planilha é um ORÇAMENTISTA: ele precisa saber
+   QUE SERVIÇO é pra poder precificar. Se você não consegue dizer que serviço um
+   layer representa, ou não crie o item, ou crie com "estimado", quantity=0 e a
+   observação dizendo o que você viu — o cliente completa. O layer vai na
+   OBSERVAÇÃO, como origem; nunca na descrição, como se fosse o serviço.
 
 IMPORTANTE — SEÇÃO ESQUADRIAS (quando presente nos dados):
 Cada linha tem o formato "NOME: N un | ~Wm × Hm = Xm²". Isso é DADO ESTRUTURADO
@@ -10456,6 +10533,25 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                     conf = "estimado"
                                     obs_raw = ("⚠ FONTE = CARIMBO DA PRANCHA, não o desenho — "
                                                "confirme se este serviço existe na obra. " + obs_raw)
+                                # 🩸 09/09/2026 — LAYER DE ANOTAÇÃO NÃO É OBRA.
+                                # O prompt autoriza selo BRANCO pra "comprimento
+                                # somado de um layer" (ver COMPRIMENTOS POR LAYER)
+                                # sem exigir que o layer represente elemento
+                                # construtivo. Resultado medido num pórtico:
+                                # `ARQ_TEX-4` = 3.782 m de 4.258 m somados como
+                                # "parede" (88,8%), e o cliente recebeu
+                                # "Acabamento/textura — linear layer ARQ_TEX-3,
+                                # 109,40 ml" com ✓ MEDIDO. Ninguém precifica isso.
+                                # 🔑 O comprimento É medido — o que não se sustenta
+                                # é o par "layer de anotação + selo de medido".
+                                # Rebaixa e DIZ POR QUÊ; não apaga a linha (o
+                                # ponteiro pro layer é deliberado em infra linear).
+                                elif _lys and all(_layer_is_anotacao(_l) for _l in _lys):
+                                    conf = "estimado"
+                                    obs_raw = ("⚠ FONTE = LAYER DE ANOTAÇÃO (texto/cota/legenda/"
+                                               "hachura), não elemento construído — o comprimento "
+                                               "foi medido, mas do desenho da anotação. Confirme o "
+                                               "serviço e a quantidade. " + obs_raw)
 
                                 # CROSS-CHECK determinístico (opt-in via env DXF_CONFIRM_CROSSCHECK):
                                 # promove 'estimado' → 'confirmado' SÓ quando TODAS batem:
@@ -11469,9 +11565,27 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # un=inteiro (corrige quando a IA devolve un com decimais suspeitos).
         jobs.update_field(job_id, current_step="Consolidando itens duplicados...")
         n_before = len(all_items)
+        # 🩸 09/09/2026 — CINCO REMOVEDORES RODAM AQUI E SÓ UM GRAVAVA NO BANCO.
+        # No job 43c52488 as pranchas renderam 35 + 23 = 58 itens e a planilha
+        # saiu com 53. Os 5 que sumiram não são atribuíveis a ninguém: os outros
+        # removedores deixavam `print()`, que o Render descarta. É a mesma
+        # doença que o comentário de `_consolidate_items` diz ter consertado
+        # ("199 linhas sumiram e o único registro era um print() que ninguém
+        # lê") — o conserto tinha pegado um quinto do problema.
+        # 🔑 Agora cada passo registra QUANTO tirou, no error_log, com nome.
+        _n0 = len(all_items)
         all_items = _consolidate_items(all_items)
-        all_items = _dedupe_by_block(all_items)  # funde itens do mesmo bloco CAD (anti-duplicação)
+        _n1 = len(all_items)
+        all_items, _fund_bloco = _dedupe_by_block(all_items)  # mesmo bloco CAD, MESMA prancha
+        _n2 = len(all_items)
         all_items = _drop_nonsense_items(all_items)       # tira "seção transversal" e afins
+        _n3 = len(all_items)
+        if (_n0 - _n3) > 0:
+            _log_error("motor:itens-removidos",
+                       f"{_n0} -> {_n3} ({_n0 - _n3} a menos) | "
+                       f"consolidacao={_n0 - _n1} bloco={_n1 - _n2} "
+                       f"sem-sentido={_n2 - _n3}",
+                       job_id, severity="info")
         # ── SELO BRANCO NÃO VAI EM ITEM QUE A GENTE NÃO SABE O QUE É ────────
         # 🩸 04/09/2026, olhando o 1º projeto da cliente-22: a planilha
         # dela trazia "Equipamento não identificado — bloco CAD '1258C37_v'",
@@ -11544,56 +11658,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
             project_data.warnings = (project_data.warnings or []) + [multi_warning]
             print(f"[multifamiliar] sinal detectado: {evidencias}")
 
-        # ── Validação de plausibilidade ──
-        # Detecta disciplina×unidade mismatch, range absurdo, área > laje×1.5.
-        # Marca estimado (laranja) e anota o motivo pra usuário revisar.
-        jobs.update_field(job_id, current_step="Validando plausibilidade dos itens...")
-        flagged_count = 0
-        laje_area = project_data.total_area or 0
-        for it in all_items:
-            plausible, reason = _check_plausibility(it, laje_area)
-            if not plausible:
-                try:
-                    from models import Confidence
-                    it.confidence = Confidence("estimado")
-                except Exception:
-                    pass
-                it.observations = (
-                    (it.observations or "") + f" | ⚠ Revisar: {reason}"
-                ).strip(" |")
-                flagged_count += 1
-        if flagged_count > 0:
-            print(f"[plausibilidade] {flagged_count} itens flagados pra revisão")
 
-        # ── Calibração por DENSIDADE (ratios qty/área) ──
-        # Compara a densidade (qty/área) de cada item contra benchmarks
-        # agregados de projetos históricos (mesma tipologia). Desvio > ±2σ
-        # vira observação laranja. NUNCA promove pra confirmado.
-        # Área de referência: layout_area se disponível, senão total_area.
-        ref_area = project_data.layout_area or project_data.total_area or 0
-        if HAS_DENSITY_CAL and ref_area > 0:
-            try:
-                from density_calibration import check_density_anomaly
-                benchmarks = density_get_benchmarks(typology=typology)
-                density_flagged = 0
-                for it in all_items:
-                    is_anom, reason = check_density_anomaly(
-                        it, ref_area, benchmarks=benchmarks, typology=typology,
-                    )
-                    if is_anom:
-                        try:
-                            from models import Confidence
-                            it.confidence = Confidence("estimado")
-                        except Exception:
-                            pass
-                        it.observations = (
-                            (it.observations or "") + f" | ⚠ Calibração: {reason}"
-                        ).strip(" |")
-                        density_flagged += 1
-                if density_flagged > 0:
-                    print(f"[densidade] {density_flagged} itens fora do padrão histórico")
-            except Exception as e:
-                print(f"[densidade] Erro no check de anomalia: {e}")
 
         # ── SALVAMENTO DE LAYOUT (20/07, caso cliente-21) ──
         # Antes de declarar "0 itens = falha": uma planta de ESTUDO DE LAYOUT
@@ -12077,13 +12142,118 @@ bloco — só cite os que estão no inventário deste arquivo."""
             # trás. Quando não acha, o cliente recebia a planilha em SILÊNCIO: sem
             # saber que faltou a base dos itens de área, e sem saber que podia
             # informar a metragem. Agora ele sabe e tem o que fazer.
+            # 🩸 09/09/2026 — ESTE CONSELHO SAÍA SEM OLHAR SE ALCANÇA ALGUÉM.
+            # A régua que decide se a área informada CHEGA num item já existe
+            # (`_area_informada_alcancaria`, dentro de `_apply_area_honesty`):
+            # ela só aceita piso/forro/laje/teto, com PAREDE bloqueada. Num
+            # projeto de pórtico — estrutura de entrada, sem cômodos — não há
+            # um item sequer que a área informada preencheria, e o cliente
+            # recebia "reenvie informando a área total" mesmo assim: trabalho
+            # pedido a ele que não mudaria nada.
+            # 🪤 É a doença de 08/09 (conselho que a régua recusa) de novo, agora
+            # no aviso de PROJETO em vez do de item. Consertar num lado só foi o
+            # que a deixou viva aqui.
+            _alcanca = any(
+                (getattr(_i, "unit", "") or "") in _FLOOR_M2_UNITS
+                and _is_floor_surface_criar(getattr(_i, "description", "") or "")
+                for _i in all_items)
+            if _alcanca:
+                _conselho = (
+                    " Pra resolver: reenvie informando a área total no campo do "
+                    "envio, ou mande também a prancha que tem o quadro de áreas.")
+            else:
+                # 🔑 Honesto: diz o que houve e NÃO pede trabalho inútil.
+                _conselho = (
+                    " Neste projeto não há item de piso/forro/laje que a área "
+                    "total preencheria, então informá-la não mudaria a planilha "
+                    "— é só uma base de conferência que ficou faltando.")
             project_data.warnings = (project_data.warnings or []) + [
                 "⚠ Não encontramos a área total do projeto — a prancha não trazia um quadro "
                 "de áreas legível. Os itens medidos em m² saíram sem essa base de conferência, "
-                "então confira com atenção. Pra resolver: reenvie informando a área total no "
-                "campo do envio, ou mande também a prancha que tem o quadro de áreas."
+                "então confira com atenção." + _conselho
             ]
-            print(f"[area-ausente] job={job_id}: sem área total e sem área informada")
+            print(f"[area-ausente] job={job_id}: sem área total e sem área informada "
+                  f"(conselho de reenvio: {_alcanca})")
+
+        # 🩸 09/09/2026 — ESTES DOIS BLOCOS RODAVAM ANTES DA ÁREA EXISTIR.
+        # `laje_area` e `ref_area` liam `project_data.total_area`, que só é
+        # atribuída ~400 linhas ABAIXO (consenso de área) e no bloco da área
+        # informada. O campo nasce 0 em `models.py` e `mesclar_project_data`
+        # nunca faz setattr — então os dois valiam ZERO em 100% das execuções:
+        #   • a regra "item em m² > 1,5× a laje" (dupla contagem) NUNCA disparou;
+        #   • a CALIBRAÇÃO POR DENSIDADE — a regra dura nº3 — NUNCA executou,
+        #     em nenhum projeto, desde o commit 65f95d8 (20/04/2026), que
+        #     consertou as duplicatas movendo a atribuição da área pro fim.
+        # 📅 A leitura nasceu em 19/04 e morreu em 20/04: viveu UM DIA, e ficou
+        # 142 dias em silêncio porque o `if` não tinha `else`.
+        # 🔑 Movidos pra CÁ, depois da área existir (consenso + área informada).
+        # De quebra passam a ver os itens do SALVAMENTO DE LAYOUT, que são
+        # acrescentados a `all_items` depois de onde eles ficavam.
+        # ── Validação de plausibilidade ──
+        # Detecta disciplina×unidade mismatch, range absurdo, área > laje×1.5.
+        # Marca estimado (laranja) e anota o motivo pra usuário revisar.
+        jobs.update_field(job_id, current_step="Validando plausibilidade dos itens...")
+        flagged_count = 0
+        laje_area = project_data.total_area or 0
+        for it in all_items:
+            plausible, reason = _check_plausibility(it, laje_area)
+            if not plausible:
+                try:
+                    from models import Confidence
+                    it.confidence = Confidence("estimado")
+                except Exception:
+                    pass
+                it.observations = (
+                    (it.observations or "") + f" | ⚠ Revisar: {reason}"
+                ).strip(" |")
+                flagged_count += 1
+        if flagged_count > 0:
+            print(f"[plausibilidade] {flagged_count} itens flagados pra revisão")
+
+        # ── Calibração por DENSIDADE (ratios qty/área) ──
+        # Compara a densidade (qty/área) de cada item contra benchmarks
+        # agregados de projetos históricos (mesma tipologia). Desvio > ±2σ
+        # vira observação laranja. NUNCA promove pra confirmado.
+        # Área de referência: layout_area se disponível, senão total_area.
+        ref_area = project_data.layout_area or project_data.total_area or 0
+        if HAS_DENSITY_CAL and ref_area > 0:
+            try:
+                from density_calibration import check_density_anomaly
+                benchmarks = density_get_benchmarks(typology=typology)
+                density_flagged = 0
+                for it in all_items:
+                    is_anom, reason = check_density_anomaly(
+                        it, ref_area, benchmarks=benchmarks, typology=typology,
+                    )
+                    if is_anom:
+                        try:
+                            from models import Confidence
+                            it.confidence = Confidence("estimado")
+                        except Exception:
+                            pass
+                        it.observations = (
+                            (it.observations or "") + f" | ⚠ Calibração: {reason}"
+                        ).strip(" |")
+                        density_flagged += 1
+                if density_flagged > 0:
+                    print(f"[densidade] {density_flagged} itens fora do padrão histórico")
+                _log_error("motor:densidade",
+                           f"ref_area={ref_area:.1f} m² · {density_flagged} de "
+                           f"{len(all_items)} item(ns) fora do padrão",
+                           job_id, severity="info")
+            except Exception as e:
+                print(f"[densidade] Erro no check de anomalia: {e}")
+                _log_error("motor:densidade", f"exceção: {e}", job_id)
+        else:
+            # 🚨 O `else` que faltava. Sem ele, a regra dura nº3 ficou 142 dias
+            # PULADA sem deixar um único rastro — e "não rodou" é
+            # indistinguível de "rodou e não achou nada". Silêncio que se
+            # parece com sucesso é o defeito que esta casa mais persegue.
+            _log_error("motor:densidade",
+                       f"PULADA — ref_area={ref_area} "
+                       f"(has_cal={HAS_DENSITY_CAL}): sem área de referência a "
+                       f"calibração não roda e nenhum item é comparado com o "
+                       f"histórico", job_id, severity="warning")
 
         # ── ESCALA: CONTA AO CLIENTE COMO FOI CONFERIDA (21/08/2026) ──────────
         # Prova por cota existe desde 05/08 e ficava só no log. Linha ✅ quando
@@ -20549,7 +20719,7 @@ async def estimate_price(request: Request,
                 except OSError: pass
                 raise HTTPException(413, f"Arquivo '{f.filename}' grande demais (máx. ~150 MB por prancha).")
             saved_paths.append(p)
-        from pricing import estimate_for_files, precheck_warnings
+        from pricing import estimate_for_files, precheck_em_filho
         # 🚨 27/08/2026 — ISTO RODAVA DENTRO DO LAÇO DE EVENTOS E TRAVAVA O
         # SERVIDOR INTEIRO. Rota `async def` executa no laço; trabalho pesado
         # síncrono ali não é "lento", é BLOQUEANTE: nenhuma outra requisição é
@@ -20579,8 +20749,19 @@ async def estimate_price(request: Request,
             # 🪤 Thread livra o SERVIDOR, mas não livra o CLIENTE: 17 s por PDF
             # viraria minutos de espera na tela dele. O orçamento corta e a
             # estimativa sai sem os avisos, que são acessórios.
+            #
+            # 🩸 09/09/2026 — E A THREAD NÃO LIVRAVA O SERVIDOR COISA NENHUMA.
+            # `precheck_warnings` abre PDF com pdfplumber, que aloca
+            # proporcional a quantos elementos vetoriais a prancha tem (~500×
+            # medido em 03/09, quando 2,63 MB viraram ~2,7 GB e o serviço ficou
+            # com ZERO instância por 2 minutos). O `wait_for` abaixo só para de
+            # ESPERAR — a thread segue viva alocando, porque não dá pra matar
+            # thread em Python. E esta rota é PÚBLICA, sem login: era a porta
+            # mais exposta das três que tinham o mesmo risco.
+            # 🔑 Agora vai pro filho protegido (RLIMIT do kernel), onde o
+            # cronômetro é kill de verdade e o estouro isola.
             warnings = await _asyncio.wait_for(
-                run_in_threadpool(precheck_warnings, saved_paths),
+                run_in_threadpool(precheck_em_filho, saved_paths),
                 timeout=_PRECHECK_ORCAMENTO_S)
         except _asyncio.TimeoutError:
             _log_error("motor:precheck-estourou",

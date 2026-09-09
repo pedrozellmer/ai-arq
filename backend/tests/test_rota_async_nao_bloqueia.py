@@ -88,8 +88,17 @@ def _rodar_estimativa(monkeypatch, tmp_path, estimativa=None, precheck=None,
         return (estimativa or (lambda: {"pranchas": 1, "preco": 97}))()
 
     def _pre(caminhos):
-        diario["threads"]["precheck_warnings"] = threading.current_thread()
-        diario["caminhos"]["precheck_warnings"] = list(caminhos or [])
+        # 🔑 09/09/2026: o dublê passou a ser `precheck_em_filho`, não
+        # `precheck_warnings`. O FATO que este guarda mede não mudou — a rota
+        # não pode bloquear o laço de eventos —, mas a rota deixou de chamar o
+        # precheck em thread do servidor: ele agora roda num PROCESSO FILHO com
+        # teto de memória do kernel, porque `pdfplumber` aloca proporcional aos
+        # elementos vetoriais da prancha (~500× medido) e esta rota é PÚBLICA,
+        # sem login. Ver `test_o_filho_protegido_e_um_so.py`.
+        # 🪤 Dublar o nome antigo deixaria este guarda medindo um telefone
+        # desligado: verde, e sem exercitar o caminho real.
+        diario["threads"]["precheck"] = threading.current_thread()
+        diario["caminhos"]["precheck"] = list(caminhos or [])
         return (precheck or (lambda: ["aviso de precheck"]))()
 
     async def _grava_encenado(upload_file, path):
@@ -97,7 +106,7 @@ def _rodar_estimativa(monkeypatch, tmp_path, estimativa=None, precheck=None,
         return 14, b""
 
     monkeypatch.setattr(pricing, "estimate_for_files", _est)
-    monkeypatch.setattr(pricing, "precheck_warnings", _pre)
+    monkeypatch.setattr(pricing, "precheck_em_filho", _pre)
     monkeypatch.setattr(main, "_rate_limit_ok", lambda *a, **k: True)
     monkeypatch.setattr(main, "WORK_DIR", str(tmp_path))
     monkeypatch.setattr(main, "_stream_upload_to_disk", _grava_encenado)
@@ -263,7 +272,7 @@ def test_a_estimativa_usa_thread(monkeypatch, tmp_path, n_arquivos):
     """
     resp, d = _rodar_estimativa(monkeypatch, tmp_path, n_arquivos=n_arquivos)
     assert resp["status"] == "ok"
-    assert set(d["threads"]) == {"estimate_for_files", "precheck_warnings"}, (
+    assert set(d["threads"]) == {"estimate_for_files", "precheck"}, (
         "alguma das duas funções pesadas não chegou a rodar: %r" % (d["threads"],))
     for nome, th in d["threads"].items():
         assert th is not d["thread_do_laco"], (
