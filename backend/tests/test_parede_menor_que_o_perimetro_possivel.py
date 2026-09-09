@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """O motor mediu MENOS parede do que a geometria permite — e não disse nada.
 
-🩸 04/09/2026, no PRIMEIRO projeto da cliente-22 (Bolognesi, "Parque Aurora").
+🩸 04/09/2026, no PRIMEIRO projeto da cliente-22.
 O motor apurou **17,18 m** de parede numa casa de **46,79 m²**, e daí saíram a
 alvenaria (44,67 m² = 17,18 × 2,60), o chapisco, o reboco e o rodapé dela.
 
@@ -54,7 +54,7 @@ _FONTE = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
 
 # Os TRÊS casos reais medidos no banco em 04/09/2026.
 _REAIS = [
-    ("caroline.passos (Parque Aurora)", 17.18, 46.79),
+    ("cliente-22", 17.18, 46.79),
     ("cliente-07", 34.65, 264.54),
     ("cliente-08", 49.51, 309.75),
 ]

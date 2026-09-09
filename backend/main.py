@@ -8270,7 +8270,7 @@ def _resumo_escala_arquivo(caminho: str, md: dict) -> dict:
         if md.get("unidade_por_consenso_projeto"):
             return {"nome": nome, "status": "consenso", "n": 0, "unidade": uni}
         if md.get("alerta_unidade") or md.get("unidade_corrigida_por_plausibilidade"):
-            # 🚨 01/09/2026 — CASO GABRIELLE (sabrar, job ffac8a79, NOTA 1/5).
+            # 🚨 01/09/2026 — CASO cliente-80 (job ffac8a79, NOTA 1/5).
             # Este ramo devolvia só {"nome", "status": "alerta"} com o comentário
             # "já vira ressalva por outro caminho". O outro caminho REBAIXA O
             # SELO EM SILÊNCIO — não fala com o cliente. Resultado: a prancha com
@@ -8309,7 +8309,7 @@ def _linhas_escala_projeto(arqs: list, n_medidos: int = -1,
     """
     provadas = [a for a in arqs if a.get("status") in ("cotas", "rotulo", "consenso")]
     sem = [a for a in arqs if a.get("status") == "sem_prova"]
-    # 🚨 01/09 (caso Gabrielle): 'alerta' não gerava linha NENHUMA — o desfecho
+    # 🚨 01/09 (caso cliente-80): 'alerta' não gerava linha NENHUMA — o desfecho
     # mais grave era o único mudo. Vai PRIMEIRO, porque "a escala está suspeita"
     # é pior que "não consegui provar a escala".
     alerta = [a for a in arqs if a.get("status") == "alerta"]
@@ -8737,7 +8737,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                 # `tempfile.mkdtemp(prefix="arq_dxf_")` (dwg_extractor.py:1402).
                 # Resultado: TODO projeto de DWG pulava o preview, sempre, calado.
                 # Medido em 10/08/2026 no Storage: o projeto de 8 DWG da cliente-16
-                # (fa371b0c) gerou ZERO PNG; o cliente franweldon (f9ccf0e4) deu
+                # (fa371b0c) gerou ZERO PNG; o cliente cliente-79 (f9ccf0e4) deu
                 # `sem_dxf=1` no contador novo — foi ele que entregou a causa, 1h
                 # depois de o contador subir. Eu tinha apostado em timeout.
                 # `dxf_paths` já guarda o caminho REAL: o original quando veio DXF,
@@ -8845,7 +8845,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
         # falhou/estourou o tempo). Sem esta lista, a thread de preview acha o
         # caminho morto em `dxf_paths` e conta `sem_dxf` — o mesmo balde de
         # "sumiu e não sei por quê" que existe justamente pra achar causa. Foi
-        # olhando `sem_dxf` que a causa do preview do cliente franweldon
+        # olhando `sem_dxf` que a causa do preview do cliente cliente-79
         # apareceu, em 10/08; se ele vier envenenado pela nossa própria
         # limpeza, a próxima investigação começa por uma pista falsa.
         _descartadas = set()
@@ -9218,7 +9218,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
         # ("troque o arquivo / PDF escaneado") em vez de "IA sobrecarregada,
         # reprocesse grátis". Declarado ANTES do loop pra estar em escopo no
         # except da IA (armadilha #11 do CLAUDE.md reaparecendo no caminho DXF).
-        # 🔍 DE ONDE VEM CADA LEITURA DE ÁREA (18/08/2026). No job do Elizeu o
+        # 🔍 DE ONDE VEM CADA LEITURA DE ÁREA (18/08/2026). No job do cliente-78 o
         # consenso recebeu 27 leituras de `total_area` e escolheu 11,78 m² num
         # projeto de 310 — mas só 8 vinham da regra do quadro de texto. Passei a
         # noite tentando descobrir a origem das outras 19 lendo indentação, e o
@@ -9255,7 +9255,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
         # cache fica vazio (nada a reaproveitar), mas os checkpoints são SALVOS
         # durante o run — pra existir se o servidor cair no meio. Antes só o
         # caminho PDF salvava/lia; o DXF não guardava nada, então um job de 43
-        # DXF que caía refazia TUDO na retomada (caso perplan/cliente-40 21/07).
+        # DXF que caía refazia TUDO na retomada (caso cliente-40 21/07).
         _ckpt_cache = {}
         # 🪤 Default 0 e NÃO "desconhecido": se esta consulta falhar, o cache por
         # conteúdo fica LIGADO. É a escolha certa porque o pior caso do cache
@@ -9661,7 +9661,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                             # 🚨 LISTA DE CÔMODOS NÃO É LEITURA DA ÁREA TOTAL.
                             # Medido com a instrumentação de origem (filhote
                             # evdcedd7, 19/08/2026): das 27 leituras de
-                            # total_area no arquivo do Elizeu, **26 vinham
+                            # total_area no arquivo do cliente-78, **26 vinham
                             # daqui** e 1 da IA. Cada área de ambiente virava um
                             # "voto" sobre a área do PROJETO e a moda escolhia o
                             # tamanho de cômodo mais comum: capa de **11,78 m²**
@@ -11451,7 +11451,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
         all_items = _dedupe_by_block(all_items)  # funde itens do mesmo bloco CAD (anti-duplicação)
         all_items = _drop_nonsense_items(all_items)       # tira "seção transversal" e afins
         # ── SELO BRANCO NÃO VAI EM ITEM QUE A GENTE NÃO SABE O QUE É ────────
-        # 🩸 04/09/2026, olhando o 1º projeto da cliente-22 (Bolognesi): a planilha
+        # 🩸 04/09/2026, olhando o 1º projeto da cliente-22: a planilha
         # dela trazia "Equipamento não identificado — bloco CAD '1258C37_v'",
         # 1 un, com o selo ✓ MEDIDO DO CAD.
         # 🔑 Medido na base: 75 itens assim, 55 com o selo branco. E das 6 vezes
@@ -12206,7 +12206,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
             print(f"[admin-local] nao-fatal: {_eal}")
 
         # ── PAREDE MENOR QUE O PERÍMETRO POSSÍVEL (regra nº1) ───────────────
-        # 🩸 04/09/2026, no 1º projeto da cliente-22 (Bolognesi): 17,18 m de
+        # 🩸 04/09/2026, no 1º projeto da cliente-22: 17,18 m de
         # parede numa casa de 46,79 m². O mínimo geométrico — o perímetro do
         # quadrado de mesma área — é 27,36 m. Faltam 59%, e isso IGNORANDO as
         # paredes internas. Dessa metragem saíram a alvenaria (44,67 m²), o
@@ -12403,7 +12403,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # ── ESTRUTURA SEM MEDIÇÃO NÃO PASSA POR LEVANTAMENTO (19/08/2026) ──
         # Três casos medidos numa semana: cliente-20 (16/08, NPS 2 — armadura,
         # concreto e fôrma ZERADOS), Silveira (14/08 — 0 medido, digitou
-        # 100/500/1500 kg na mão), Elizeu (18/08, orçamentista — 10 itens TODOS
+        # 100/500/1500 kg na mão), cliente-78 (18/08, orçamentista — 10 itens TODOS
         # "Estimativa por índice": 310 m² × 25 kg/m² = 7.759 kg de tabela).
         # O selo laranja e a fórmula na observação JÁ existem item a item; o que
         # faltava era o aviso de TOPO dizendo o conjunto: "nada de estrutura
@@ -25125,7 +25125,7 @@ async def reprocess_project(job_id: str, request: Request):
 
     🆕 18/08/2026 — ACEITA TROCAR O TIPO (`project_type` no corpo).
 
-    Caso Elizeu (orçamentista, 1º dia): escolheu "Estrutura" e subiu a prancha
+    Caso cliente-78 (orçamentista, 1º dia): escolheu "Estrutura" e subiu a prancha
     de ARQUITETURA. Não havia estrutura pra medir, então saíram 10 itens, todos
     estimados por índice. E o MESMO arquivo tinha 2.453 hachuras, 53.894 linhas
     de parede e 2.920 cotas que o motor nem olhou — porque a pergunta foi outra.
@@ -28560,7 +28560,7 @@ async def finalize_review(job_id: str, request: Request):
     # mas não havia nada pra aprender" produzem o mesmo zero — e em 10/08 eu
     # afirmei o primeiro sobre o Felipe sem ter como saber.
     # Dois clientes entraram na tela em 2 dias: Felipe (6cd52d01) editou a
-    # unidade, franweldon (4b2db70b) clicou approve. Nenhum dos dois deixou
+    # unidade, cliente-79 (4b2db70b) clicou approve. Nenhum dos dois deixou
     # rastro do passo final.
     # 🚨 23/08 (auditoria): aqui era `len(_supa_rest_service(...))`. O retorno é
     # a TUPLA (status, dados), e len(tupla) é SEMPRE 2 — este log vinha dizendo

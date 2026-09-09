@@ -49,7 +49,7 @@ def _corpo_do_process_job():
 def test_o_terceiro_email_existe_e_nao_comemora():
     """Nem 'está pronta', nem 'não consegui ler seu arquivo'. O meio."""
     assunto, html = main._build_leu_sem_medir_email(
-        "cliente-15", "orçamento são lourenço", "40550d3e", 124, 53,
+        "cliente-15", "orçamento de obra", "40550d3e", 124, 53,
         email="x@y.com")
     assert "pronta" not in assunto.lower(), assunto
     baixo = html.lower()
@@ -244,7 +244,7 @@ def test_CONTROLE_o_caso_do_Devair_NAO_cairia_mais_na_comemoracao():
 
 def test_CONTROLE_entrega_que_MEDIU_continua_comemorando():
     """O outro lado: quem teve medição de verdade não pode receber má notícia."""
-    n_total, n_zerado, n_med = 108, 12, 88   # o SMARTFIT, melhor projeto de setembro
+    n_total, n_zerado, n_med = 108, 12, 88   # o obra comercial, melhor projeto de setembro
     _LIMITE = 0.8
     nada_medido = (n_total > 0 and n_med == 0 and n_zerado >= _LIMITE * n_total)
     assert nada_medido is False

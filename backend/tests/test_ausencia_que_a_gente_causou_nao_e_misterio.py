@@ -8,7 +8,7 @@ de extração apaga de propósito a pasta da conversão de toda prancha que falh
 Resultado: **a nossa própria limpeza virava `sem_dxf`.**
 
 🔑 Por que isso importa mais do que parece: `sem_dxf` não é enfeite, é o balde
-de diagnóstico. Foi olhando ele que a causa do preview do cliente franweldon
+de diagnóstico. Foi olhando ele que a causa do preview do cliente cliente-79
 apareceu, em 10/08 — eu tinha apostado em timeout e estava errado. Balde de
 diagnóstico envenenado pela própria limpeza faz a próxima investigação começar
 por uma pista falsa. Agora são dois fatos separados: `descartada` (fomos nós) e

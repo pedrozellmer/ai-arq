@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Prancha com a escala SUSPEITA tem que avisar o cliente. Era a única muda.
 
-🩸 CASO GABRIELLE — sabrar.com.br, 01/09/2026, job `ffac8a79`, projeto SMARTFIT.
+🩸 CASO cliente-80, 01/09/2026, job `ffac8a79`, projeto obra comercial.
 Primeira cliente que chegou pelo ChatGPT, orçamentista, e-mail corporativo.
 Cadastrou 11:50, subiu o projeto 11:52, recebeu a planilha 12:00 e avaliou a
 entrega com **NOTA 1 de 5** às 12:02. Foi a primeira nota da história do produto.
@@ -59,8 +59,8 @@ def _fns():
     return ns["_resumo_escala_arquivo"], ns["_linhas_escala_projeto"]
 
 
-# ── O metadata REAL da prancha da Gabrielle ────────────────────────────────
-_MD_GABRIELLE = {
+# ── O metadata REAL da prancha da cliente-80 ────────────────────────────────
+_MD_CLIENTE_80 = {
     "unidade_desenho": "Polegadas",
     "fator_para_metros": 0.0254,
     "regua_cotas_status": "nao-decidiu",
@@ -72,9 +72,9 @@ _ARQ = "/tmp/SBRRJCCGD05-EXE-ARC-000-PROJ-R03_libredwg.slim.dxf"
 
 
 def test_a_prancha_suspeita_GERA_linha_pro_cliente():
-    """🩸 O que a Gabrielle NÃO recebeu."""
+    """🩸 O que a cliente-80 NÃO recebeu."""
     resumo, linhas = _fns()
-    a = resumo(_ARQ, _MD_GABRIELLE)
+    a = resumo(_ARQ, _MD_CLIENTE_80)
     assert a["status"] == "alerta", a
     out = linhas([a], n_medidos=88)
     assert out, "a prancha com escala SUSPEITA não gerou aviso nenhum — foi o bug"
@@ -86,7 +86,7 @@ def test_a_prancha_suspeita_GERA_linha_pro_cliente():
 def test_o_aviso_diz_o_MOTIVO_que_o_motor_calculou():
     """Frase genérica não convence orçamentista. '5127m (>500m)' convence."""
     resumo, linhas = _fns()
-    txt = " ".join(linhas([resumo(_ARQ, _MD_GABRIELLE)], n_medidos=88))
+    txt = " ".join(linhas([resumo(_ARQ, _MD_CLIENTE_80)], n_medidos=88))
     assert "5127m" in txt, "jogou fora o motivo que o próprio motor calculou:\n" + txt
 
 
@@ -94,20 +94,20 @@ def test_o_aviso_explica_por_que_a_CONTAGEM_continua_valendo():
     """Ela tinha 88 itens medidos em 'un' — legítimos. O aviso não pode fazer
     ela jogar fora a parte boa junto com a ruim."""
     resumo, linhas = _fns()
-    txt = " ".join(linhas([resumo(_ARQ, _MD_GABRIELLE)], n_medidos=88))
+    txt = " ".join(linhas([resumo(_ARQ, _MD_CLIENTE_80)], n_medidos=88))
     assert "un" in txt and "contar não depende de escala" in txt, txt
 
 
 def test_o_aviso_diz_o_que_FAZER():
     resumo, linhas = _fns()
-    txt = " ".join(linhas([resumo(_ARQ, _MD_GABRIELLE)], n_medidos=88))
+    txt = " ".join(linhas([resumo(_ARQ, _MD_CLIENTE_80)], n_medidos=88))
     assert "área total" in txt, "não diz o que destrava:\n" + txt
 
 
 def test_a_linha_de_SUSPEITA_vem_ANTES_da_de_sem_prova():
     """Gravidade manda: 'está errada' é pior que 'não consegui provar'."""
     resumo, linhas = _fns()
-    a = resumo(_ARQ, _MD_GABRIELLE)
+    a = resumo(_ARQ, _MD_CLIENTE_80)
     b = {"nome": "OUTRA", "status": "sem_prova", "declarada": "Milímetros"}
     out = linhas([b, a], n_medidos=1)
     assert len(out) == 2, out
@@ -169,7 +169,7 @@ def test_CONTROLE_a_lista_de_PROVADAS_nao_engole_a_suspeita():
     resumo, linhas = _fns()
     ok = resumo("/tmp/BOA.dxf", {"unidade_validada_por_cotas": 44,
                                  "unidade_nome_provada": "metros"})
-    ruim = resumo(_ARQ, _MD_GABRIELLE)
+    ruim = resumo(_ARQ, _MD_CLIENTE_80)
     txt = " ".join(linhas([ok, ruim], n_medidos=10))
     assert "Escala conferida" in txt and "ESCALA SUSPEITA" in txt, (
         "o ✅ de uma prancha escondeu o ⚠ da outra:\n" + txt)

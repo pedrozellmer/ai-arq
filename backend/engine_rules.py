@@ -929,7 +929,7 @@ def tipo_de_conflito_de_unidade(unidade_item, unidade_sinapi):
     quando o lado suspeito é o NOSSO — medimos uma dimensão que não é a do
     serviço.
 
-    🩸 04/09/2026, do 1º projeto da cliente-22 (Bolognesi). Ela recebeu, e
+    🩸 04/09/2026, do 1º projeto da cliente-22. Ela recebeu, e
     apagou em 3 minutos, uma linha com a nossa própria observação:
 
         "⚠ CONFERIR A UNIDADE: o serviço SINAPI 103689 é medido em M2, e
@@ -1059,7 +1059,7 @@ def casar_texto_com_regiao(textos, regioes, max_por_regiao=1, min_preenchimento=
 #  UNIDADE IMPERIAL EM PROJETO BRASILEIRO — desconfiar, nunca corrigir
 #
 # Medido em 10/08/2026 no `error_log` (stage motor:unidade): 9 pranchas
-# declararam Polegadas — 7 da escola FNDE da cliente-16 (349e75a5) e 2 de outros
+# declararam Polegadas — 7 da escola pública da cliente-16 (349e75a5) e 2 de outros
 # clientes. As 7 da cliente-16 são TODAS as elétricas do projeto: não é arquivo
 # estragado, é o template de elétrica do projetista saindo em polegada.
 # Nas nove, `cotas=-`: nenhuma tinha cota pra confirmar nem desmentir o
@@ -1113,7 +1113,7 @@ def aviso_unidade_imperial(insunits, dim_status=None):
 # resultado é nada. O cliente lê "medido: 0" e conclui que o serviço não
 # existe no projeto, quando a verdade é que a gente não conseguiu medir.
 #
-# Achado em 10/08/2026 no 1º projeto da cliente-16 (349e75a5, escola FNDE de 14
+# Achado em 10/08/2026 no 1º projeto da cliente-16 (349e75a5, escola pública de 14
 # pranchas): 4 linhas brancas com 0 — e a observação de cada uma CARREGAVA o
 # número medido ("área de contorno fechado no layer ARQ-COBERTURA = 752,21
 # m²"; "comprimento do layer 'EL-Condutos (Teto)' = 79,65 m"). O número se
@@ -1999,7 +1999,7 @@ def quantidade_da_procedencia(observacao, unidade, areas_por_layer=None,
 
 
 # ── ITEM CUJA IDENTIDADE É O BLOCO DO CAD (regra nº1) ──────────────────────
-# 🩸 04/09/2026, olhando o 1º projeto da cliente-22 (Bolognesi). A planilha dela
+# 🩸 04/09/2026, olhando o 1º projeto da cliente-22. A planilha dela
 # trazia "Equipamento não identificado — bloco CAD '1258C37_v' — verificar com
 # projetista", 1 un, carimbado **✓ MEDIDO DO CAD**.
 #
@@ -2051,7 +2051,7 @@ def item_e_bloco_sem_identidade(descricao, unidade) -> bool:
 
 
 # ── PAREDE MENOR QUE O PERÍMETRO POSSÍVEL (regra nº1) ──────────────────────
-# 🩸 04/09/2026, no 1º projeto da cliente-22 (Bolognesi). O motor mediu
+# 🩸 04/09/2026, no 1º projeto da cliente-22. O motor mediu
 # **17,18 m** de parede numa casa de **46,79 m²** — e daí saiu a alvenaria
 # (44,67 m² = 17,18 × 2,60), o chapisco e o rodapé.
 #

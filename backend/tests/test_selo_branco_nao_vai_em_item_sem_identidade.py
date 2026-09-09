@@ -2,8 +2,7 @@
 """"✓ MEDIDO DO CAD" num item cujo nome é o do bloco — o selo mais forte no
 item mais fraco.
 
-🩸 04/09/2026, olhando o PRIMEIRO projeto da cliente-22 (Bolognesi, "Parque
-Aurora"). A planilha dela trazia:
+🩸 04/09/2026, olhando o PRIMEIRO projeto da cliente-22. A planilha dela trazia:
 
     "Equipamento não identificado — bloco CAD '1258C37_v' — verificar com
      projetista"   ·   1 un   ·   ✓ MEDIDO DO CAD

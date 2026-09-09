@@ -884,7 +884,7 @@ def _diag_unidade_cabecalho(doc) -> dict:
     $MEASUREMENT=0. Mas $MEASUREMENT=0 é o que o template imperial padrão do
     AutoCAD (acad.dwt) grava — um projetista brasileiro que começa do template
     errado entrega um DWG "imperial" desenhado em metros. Em 20/08/2026 os DOIS
-    clientes reais do dia (FRUTMEL, 800 m²; fôrma do 1º pavimento do Allan)
+    clientes reais do dia (galpão de 800 m²; fôrma do 1º pavimento de outro)
     caíram nessa regra, e a régua das cotas NÃO consegue corrigir fator
     não-métrico (abstém de propósito). Antes de trocar a regra — função que
     multiplica TODO número de TODO projeto — precisamos de N: o que o cabeçalho
@@ -2548,7 +2548,7 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
                     _unit_consenso[0], _unit_consenso[1])
     # ── Unidade IMPERIAL em projeto brasileiro: desconfiar, nunca corrigir ────
     # Medido em 10/08/2026 no `error_log` (stage motor:unidade): 9 pranchas
-    # declararam Polegadas — 6 da escola FNDE da cliente-16 (349e75a5, todas as
+    # declararam Polegadas — 6 da escola pública da cliente-16 (349e75a5, todas as
     # elétricas) e 3 de outros clientes. Nas NOVE, `cotas=-`: nenhuma tinha
     # cota pra confirmar ou desmentir o cabeçalho, e nenhuma foi corrigida.
     # Projeto de escola pública brasileira não é desenhado em polegada — é o

@@ -4,10 +4,10 @@
 🩸 01/09/2026, cliente-42 (cliente novo, primeiro projeto). Linha do tempo
 medida no banco:
 
-    20:40  sobe 20 PDFs  ("LUANA E JAILSON")
+    20:40  sobe 20 PDFs  ("CADERNO COMPLETO")
     21:08  recebe 161 itens — 25 de 25 linhas de METRO em branco,
            42 de 50 de área em branco
-    21:19  sobe DE NOVO o mesmo caderno, com 5 arquivos a menos ("LUANA")
+    21:19  sobe DE NOVO o mesmo caderno, com 5 arquivos a menos (subconjunto do caderno)
 
 As pranchas do 2º envio têm nome idêntico às do 1º (07 PAREDE, 02 FORRO,
 03 ILUMINACAO, 04 LUMINARIAS, 08 PISO, 11 RODAPE, 13 BANCADA — todas
@@ -57,7 +57,7 @@ def _falso_supa(projetos, itens_por_job):
 
 
 def _cenario(monkeypatch, refs_antigos, tinha_pd=None, tinha_area=None):
-    projetos = [{"job_id": "144c1f04", "project_name": "LUANA E JAILSON",
+    projetos = [{"job_id": "144c1f04", "project_name": "CADERNO COMPLETO",
                  "created_at": "2026-09-01T23:40:00+00:00",
                  "user_pe_direito": tinha_pd, "user_total_area": tinha_area}]
     monkeypatch.setattr(main, "_supa_rows",

@@ -685,7 +685,17 @@ _FORA_DA_CHECAGEM_DE_NOME = ("blog/posts",)
 # saíram de arquivos SERVIDOS ao visitante (dashboard/projeto/cadastro/admin).
 # Ver test_o_que_vai_pro_ar_nao_leva_nome_de_cliente — la o teto e ZERO, porque
 # comentario que vai pro ar nao e divida a pagar devagar: e publicacao.
-_TETO_DE_NOMES = 364
+# 08/09, 5a mexida: 364 -> 339. Varredura NOVA, por NOME DE OBRA: hasheei no
+# proprio banco as palavras de `projects.project_name` (sem materializar nome
+# nenhum em arquivo) e varri o repo contra os hashes. 8 exposicoes reais, e uma
+# delas em ARQUIVO SERVIDO ao visitante.
+# 🔑 O que isso revelou vale mais que a lista: o guarda de tolerancia ZERO dos
+# arquivos servidos so conhece nome de PESSOA — nome de EMPRESA passa direto.
+# Foi assim que um nome de obra chegou no projeto.html.
+# 🪤 As 25 ocorrencias a mais que cairam sao nome de PESSOA que morava colado ao
+# nome da obra (`cliente-22 (Sobrenome)`), no mesmo padrao do rotulo colado que
+# ja consertei hoje de manha em outro lugar.
+_TETO_DE_NOMES = 339
 
 _EXT_TEXTO = (".py", ".html", ".js", ".md", ".yml", ".yaml", ".css",
               ".json", ".txt", ".sql", ".toml", ".sh")
