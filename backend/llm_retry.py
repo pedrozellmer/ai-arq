@@ -91,6 +91,13 @@ _ETAPAS: dict[str, str] = {
     "classifier": "projeto",           # classifier.py:186
     "salvage-layout-counts": "projeto",  # main.py:6379
     "pdfvec-carimbo": "projeto",       # pdfvec_carimbo.py:170
+    # 🔑 09/09/2026 — escala lida no RÓTULO AO LADO DA VISTA, quando o carimbo
+    # diz "indicadas". Escopo `projeto` igual ao carimbo: é uma chamada por
+    # prancha, dentro do processamento de UM projeto, e é ele que paga.
+    # 🪤 Entrou no MESMO commit da fonte, porque o guarda de cobertura reprova
+    # tag fora do catálogo — e com razão: sem entrada aqui ela gravaria
+    # "desconhecido" e sumiria da conta de custo do cliente.
+    "pdfvec-escala-vista": "projeto",  # pdfvec_escala_por_vista.py
     "memorial-intro": "projeto",       # main.py:20571
     "chat-projeto": "projeto",         # main.py:18102
     "agent": "projeto",                # agent.py:756 (tag crua: "agent:job=<id>")
