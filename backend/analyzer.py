@@ -949,7 +949,7 @@ MAX_IMGS_POR_PRANCHA = 4
 _REF_SEP = " · "
 
 
-def _monta_ref_sheet(sheet, hint_da_ia: str) -> str:
+def monta_ref_sheet(filename, page_index, page_count, hint_da_ia: str) -> str:
     """`arquivo.pdf`, `arquivo.pdf (p3)`, `arquivo.pdf (p3 · hint)`.
 
     🔑 O que decide a atribuição da medição é a PÁGINA, e ela só existe quando o
@@ -960,18 +960,35 @@ def _monta_ref_sheet(sheet, hint_da_ia: str) -> str:
     o casamento por prefixo do `_apply_area_honesty` acham o arquivo. Quebrar
     isso quebraria o botão "Ver prancha" — que é justamente por que o hint da IA
     já vivia entre parênteses desde sempre.
+
+    🩸 09/09/2026 — POR QUE ESTA FUNÇÃO RECEBE PRIMITIVOS E NÃO O `SheetInfo`.
+    Ela nasceu recebendo o objeto, e por isso o caminho VIVO não podia
+    chamá-la: na RETOMADA de um job, `main.py` faz `text = crop_paths = sheet =
+    None` de propósito (o comentário lá diz que quem ler tem que estourar
+    alto). Chamar com o objeto quebraria justamente o job pesado que a retomada
+    existe pra salvar — e o estouro cairia dentro do `try/except` que descarta
+    o item em silêncio. `filename`, `page_index` e `page_count` vêm do laço e
+    estão vivos nos DOIS ramos.
     """
-    nome = sheet.filename
+    nome = filename or ""
     dentro = []
     try:
-        if int(getattr(sheet, "page_count", 1) or 1) > 1:
-            dentro.append("p%d" % (int(getattr(sheet, "page_index", 0) or 0) + 1))
+        if int(page_count or 1) > 1:
+            dentro.append("p%d" % (int(page_index or 0) + 1))
     except (TypeError, ValueError):
         pass
     _h = (hint_da_ia or "").strip()
     if _h and _h.lower() not in nome.lower():
         dentro.append(_h[:60])
     return nome + (" (%s)" % _REF_SEP.join(dentro) if dentro else "")
+
+
+def _monta_ref_sheet(sheet, hint_da_ia: str) -> str:
+    """Fachada pra quem já tem o `SheetInfo` em mãos. A régua é a de cima."""
+    return monta_ref_sheet(sheet.filename,
+                           getattr(sheet, "page_index", 0),
+                           getattr(sheet, "page_count", 1),
+                           hint_da_ia)
 
 
 def _pagina_do_ref_sheet(ref_sheet: str):

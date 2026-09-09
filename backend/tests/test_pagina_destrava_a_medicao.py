@@ -69,7 +69,103 @@ CADERNO_LUANA = {
 ARQ = "casa bruna - plantas anteprojeto.pdf"
 
 
+# ══════════════════════════════════════════════════════════════════════════
+#  🩸 O QUE ESTE ARQUIVO NÃO GUARDAVA — e por isso o conserto morreu
+# ══════════════════════════════════════════════════════════════════════════
+# 09/09/2026. Os testes deste arquivo exercitam as DUAS PONTAS e nunca a PONTE:
+# uns chamam `analyzer._monta_ref_sheet` DIRETO, outros montam
+# `ref_sheet="... (p4)"` À MÃO antes de chamar `_apply_area_honesty`. Quem
+# deveria PRODUZIR o `(p4)` em produção — o laço de itens do `main.py` — não era
+# exercitado por teste nenhum.
+#
+# 📏 O preço: 0 de 12.818 itens no banco, desde 20/04, têm `(pN)`. Nunca foi
+# escrito UMA vez. O `main.py` montava o `_ref` à mão, ignorando o `SheetInfo`,
+# e quem escreve a página só era chamado de `analyze_all_sheets` — que o
+# `main.py` IMPORTA E NUNCA CHAMA. O conserto de 02/09 nasceu morto e este
+# arquivo ficou VERDE o tempo todo.
+#
+# 🔑 Guarda que chama a função direto mede a função, não o produto. Os dois
+# testes abaixo entram pelo CALL SITE de produção — via AST, porque comentário
+# não vira nó de AST e eu já escrevi guarda que casava com o próprio
+# comentário. Ver [[project_guardas_cegos_medidos_20260906]].
+
+def _ast_do_main():
+    import ast as _ast
+    import io as _io
+    _raiz = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return _ast.parse(_io.open(os.path.join(_raiz, "main.py"),
+                               encoding="utf-8").read())
+
+
+def test_o_call_site_de_producao_USA_a_pagina():
+    """🩸 O guarda que faltava. O `ref_sheet` do item tem que ser construído
+    por `monta_ref_sheet`, recebendo `page_index` e `page_count` do laço.
+
+    Se alguém voltar a montar a string à mão, o `(pN)` some outra vez e a
+    medição por prancha volta a não achar dono — calada, como ficou 4 meses.
+    """
+    import ast
+    arvore = _ast_do_main()
+    achou = False
+    for n in ast.walk(arvore):
+        if not isinstance(n, ast.Call):
+            continue
+        alvo = getattr(n.func, "id", None) or getattr(n.func, "attr", None)
+        if alvo not in ("monta_ref_sheet", "_monta_ref"):
+            continue
+        args = [getattr(a, "id", None) for a in n.args]
+        if "page_index" in args and "page_count" in args:
+            achou = True
+    assert achou, (
+        "o main.py não constrói o ref_sheet do item com monta_ref_sheet("
+        "filename, page_index, page_count, hint). Sem isso o `(pN)` não é "
+        "escrito e a medição por prancha não acha dono — foi o defeito de "
+        "02/09 a 09/09, com 0 de 12.818 itens marcados.")
+
+
+def test_o_call_site_NAO_usa_o_sheet_que_a_retomada_zera():
+    """🪤 O conserto óbvio quebraria a RETOMADA.
+
+    No ramo de checkpoint o `main.py` faz `text = crop_paths = sheet = None` de
+    propósito. Chamar `monta_ref_sheet(sheet, ...)` estouraria em `sheet.filename`
+    — e o estouro cai dentro do `try/except` que DESCARTA o item em silêncio.
+    Job retomado perderia todos os itens de PDF: pior que o buraco original.
+    """
+    import ast
+    arvore = _ast_do_main()
+    for n in ast.walk(arvore):
+        if not isinstance(n, ast.Call):
+            continue
+        alvo = getattr(n.func, "id", None) or getattr(n.func, "attr", None)
+        if alvo not in ("monta_ref_sheet", "_monta_ref"):
+            continue
+        args = [getattr(a, "id", None) for a in n.args]
+        assert "sheet" not in args, (
+            "o call site passa `sheet`, que é None na retomada — job retomado "
+            "perderia os itens de PDF calado")
+
+
+def test_CONTROLE_a_leitura_por_AST_nao_casa_com_COMENTARIO(tmp_path):
+    """🧪 Sem isto, "eu leio a AST" seria só uma frase no docstring."""
+    import ast
+    p = tmp_path / "so_comentario.py"
+    p.write_text("# monta_ref_sheet(filename, page_index, page_count, h)\n"
+                 "x = 1\n", encoding="utf-8")
+    arvore = ast.parse(p.read_text(encoding="utf-8"))
+    chamadas = [n for n in ast.walk(arvore) if isinstance(n, ast.Call)]
+    assert not chamadas, "comentário virou chamada — a leitura por AST está errada"
+
+
 # ── O formato do ref_sheet ─────────────────────────────────────────────────
+def test_a_regua_aceita_PRIMITIVOS_e_nao_so_o_objeto():
+    """🔑 É esta assinatura que permite o caminho vivo chamar a régua: na
+    retomada só existem os primitivos, o objeto é None."""
+    assert analyzer.monta_ref_sheet("casa.pdf", 2, 10, "") == "casa.pdf (p3)"
+    assert analyzer.monta_ref_sheet("casa.pdf", 0, 1, "") == "casa.pdf"
+    # e a fachada do objeto continua valendo pra quem tem o SheetInfo
+    assert analyzer._monta_ref_sheet(_sheet("casa.pdf", 2, 10), "") == "casa.pdf (p3)"
+
+
 def test_arquivo_de_UMA_pagina_nao_ganha_pN():
     """🪤 90% dos casos. Pôr "(p1)" ali seria ruído e mexeria no `ref_sheet` de
     quem não tem o problema."""

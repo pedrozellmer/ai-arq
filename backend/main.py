@@ -7619,11 +7619,20 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
             if len(_rs_list) == 1:
                 _por_arquivo[_arq] = _rs_list[0]
             else:
+                # 🩸 09/09/2026 — o `if not _por_arquivo_pagina` olhava o dicionário
+                # GLOBAL, não este arquivo. Bastava UM arquivo qualquer contribuir
+                # com página pra que o aviso "multipágina" nunca mais disparasse
+                # pra nenhum outro — inclusive pros que não acharam página nenhuma.
+                # 📏 Medido: o aviso disparou 2 vezes em 90 dias, ambas ANTES do
+                # deploy de 02/09, e ZERO depois. O cliente parou de ser avisado
+                # de que a prancha estava ambígua, e a gente parou de enxergar.
+                _achou_pagina_aqui = False
                 for _r in _rs_list:
                     _pg = _r.get("pagina")
                     if _pg is not None:
                         _por_arquivo_pagina[(_arq, int(_pg))] = _r
-                if not _por_arquivo_pagina:
+                        _achou_pagina_aqui = True
+                if not _achou_pagina_aqui:
                     _ambiguos.append((_arq, "multipagina", len(_rs_list)))
         # quem são os candidatos de cada prancha, por família
         _cand = {}
@@ -11371,11 +11380,26 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     # ref_sheet SEMPRE tem o filename real pra que o botão
                     # "Ver prancha" na revisão inline funcione. Hint da IA
                     # vai entre parênteses se for diferente do nome.
+                    #
+                    # 🩸 09/09/2026 — AQUI MORAVA O CONSERTO DE 02/09, MORTO.
+                    # Em 02/09 o `SheetInfo` ganhou `page_index`/`page_count`
+                    # (linha ~11207) pra que "um PDF de 10 pranchas" parasse de
+                    # virar 10 itens com o MESMO ref_sheet. Só que estas linhas
+                    # montavam o `_ref` À MÃO, ignorando o `sheet` inteiro —
+                    # quem escreve o `(pN)` é `analyzer.monta_ref_sheet`, e ela
+                    # só era chamada de `analyze_all_sheets`, que o main.py
+                    # IMPORTA E NUNCA CHAMA.
+                    # 📏 Medido: 0 de 12.818 itens desde 20/04 têm `(pN)`.
+                    # Nunca foi escrito uma vez. E o job aec7cac2 (08/09, UM
+                    # PDF) teve 15 pranchas medidas, 1.044 itens, 836 zerados —
+                    # e a medição não achou dono em NENHUM.
+                    # 🪤 Usar `sheet` aqui QUEBRARIA a retomada: no ramo de
+                    # checkpoint ele é `None` de propósito, e o estouro cairia
+                    # no `except` que descarta o item calado. `filename`,
+                    # `page_index` e `page_count` vêm do laço e valem nos dois.
+                    from analyzer import monta_ref_sheet as _monta_ref
                     ia_hint = (item_data.get("ref_sheet") or "").strip()
-                    if ia_hint and ia_hint.lower() not in filename.lower():
-                        _ref = f"{filename} ({ia_hint[:60]})"
-                    else:
-                        _ref = filename
+                    _ref = _monta_ref(filename, page_index, page_count, ia_hint)
                     item = BudgetItem(
                         item_num=str(item_data.get("item_num", "")),
                         description=desc,
