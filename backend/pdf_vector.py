@@ -180,8 +180,41 @@ def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
             out["err_carimbo"] = f"{type(e).__name__}: {e}"[:120]
         _marca("carimbo", _t_et)
 
+    if not den and out.get("indicadas"):
+        # 🔑 3ª fonte (09/09/2026): a escala AO LADO DE CADA VISTA.
+        #
+        # `indicadas` NÃO é falha do carimbo — é o carimbo DIZENDO onde
+        # procurar. Medido no arquivo real de um cliente (job aec7cac2): o
+        # carimbo trazia "Como se indica" ("escalas indicadas", em português de
+        # Portugal) e o campo Escala dizia "A3 - A1", porque a folha imprime em
+        # DOIS tamanhos — pôr uma razão ali seria mentira.
+        # 📏 E as razões existiam: `1:100`, `1:50`, `1:50`, todas em x=5% da
+        # largura, na margem ESQUERDA, uma por vista. O carimbo é lido nos 18%
+        # da DIREITA: nunca ia achar.
+        #
+        # 🚫 Só roda com `indicadas` verdadeiro — não é varredura cega. Sem esse
+        # gatilho seria uma chamada de Vision a mais em toda prancha sem escala,
+        # inclusive nas que não têm rótulo nenhum.
+        _t_et = time.time()
+        try:
+            from pdfvec_escala_por_vista import read_view_scales
+            _pv = read_view_scales(pdf_path, page_index)
+            out["escala_por_vista"] = {
+                "por_vista": _pv.get("por_vista"),
+                "n_vistas": _pv.get("n_vistas"),
+                "bboxes": _pv.get("bboxes"),
+            }
+            if _pv.get("erro"):
+                out["err_escala_vista"] = _pv["erro"]
+            if _pv.get("main_scale"):
+                den = _pv["main_scale"]
+                out["scale_src"] = "vista"
+        except Exception as e:
+            out["err_escala_vista"] = f"{type(e).__name__}: {e}"[:120]
+        _marca("escala_vista", _t_et)
+
     if not den:
-        # 3ª fonte: DERIVAR a escala das cotas escritas (01/08/2026).
+        # 4ª fonte: DERIVAR a escala das cotas escritas (01/08/2026).
         # Medido nas 30 pranchas da sombra: 47% morriam aqui, mesmo tendo cota
         # desenhada — uma delas trazia 122 cotas. A cota até então só validava
         # uma escala já conhecida; agora ela também descobre.

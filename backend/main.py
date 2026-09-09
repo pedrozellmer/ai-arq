@@ -8221,6 +8221,13 @@ _FONTE_DA_ESCALA = {
     "cotas": ("das cotas escritas na prancha (por votação)",
               "a votação encontrou a escala nas cotas, mas nenhum par "
               "cota×elemento medido a confirmou na view principal"),
+    # 🔑 09/09/2026 — fonte nova. Entra JUNTO com a fonte, no mesmo commit: sem
+    # frase aqui o cliente leria um vazio no lugar da procedência, que é
+    # exatamente o defeito que o `_frase_da_escala_sem_prova` existe pra evitar.
+    "vista": ("do rótulo escrito ao lado do próprio desenho",
+              "o rótulo da vista DECLARA a escala — declaração não é medida, e "
+              "nesta prancha o carimbo dizia 'escalas indicadas', ou seja, cada "
+              "desenho tem a sua"),
 }
 
 
