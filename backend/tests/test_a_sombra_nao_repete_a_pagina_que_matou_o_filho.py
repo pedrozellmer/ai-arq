@@ -14,6 +14,23 @@ motivos "processo"/"memoria") NÃO vai à sombra — e o skip fica registrado
 ("recusada de propósito" não é silêncio). Página perdida por TEMPO continua
 indo: a sombra é hoje a única que mede além dos 75 s.
 
+✅ 09/09/2026 — A METADE (B) DESTE DIAGNÓSTICO FOI CONSERTADA. A sombra agora
+mede num filho protegido igual ao da promoção (`medir_pagina_em_filho`,
+RLIMIT_AS de 2 GB). O parágrafo acima descreve o mundo de 05/09, quando ela
+media no processo do servidor — deixado inteiro de propósito, porque é o
+diagnóstico que gerou esta regra.
+
+🔑 E a regra CONTINUA VALENDO, por outro motivo: a página que estourou 2 GB no
+filho da promoção vai estourar no filho da sombra também (mesmo teto). Rodar é
+gastar 75 s pra chegar no mesmo caixão. Antes era risco de derrubar o site;
+agora é desperdício — e o skip registrado continua sendo a diferença entre
+"recusei" e "sumiu".
+
+🪤 Estes três testes dublavam `_measure_page`, que a `_run` chamava DIRETO. Com
+o conserto ela chama o runner do filho, e a dublagem passou a espionar um
+telefone desligado: as três ficaram VERMELHAS na bancada. Agora dublam
+`medir_pagina_em_filho` — o mesmo lugar por onde a decisão passa de verdade.
+
 🧪 Controles: sem `pular` a sombra mede tudo como antes (o teste antigo
 test_sombras_nao_perdem_evidencia segue verde); página por tempo NÃO é pulada.
 """
@@ -34,14 +51,14 @@ _SRC_MAIN = sem_comentarios(fonte("main.py"))
 
 
 def _roda(monkeypatch, tmp_path, paginas, pular):
-    """_run de verdade: sleep anulado, _measure_page falso, log capturado."""
+    """_run de verdade: sleep anulado, filho da sombra dublado, log capturado."""
     monkeypatch.setattr(pv.time, "sleep", lambda *_: None)
     medidas = []
 
-    def _mp(pdf, page, key):
+    def _mp(pdf, page, *_a, **_k):
         medidas.append((pdf, page))
         return {"file": os.path.basename(pdf), "page": page, "scale": 100.0, "n_rooms": 2, "rooms_m2": 40.0}
-    monkeypatch.setattr(pv, "_measure_page", _mp)
+    monkeypatch.setattr(pv, "medir_pagina_em_filho", _mp)
     logs = []
     pv._run(paginas, "job-teste", "chave-fake", lambda *a, **k: logs.append(a), pular=pular)
     payload = next((json.loads(a[1]) for a in logs if a[0] == "pdfvec:shadow" and '"n"' in a[1]), None)

@@ -50,11 +50,18 @@ def test_a_sombra_aceita_e_propaga_a_fonte():
 # ── consertos 2 e 3: evidência sobrevive e o corte fala ─────────────────────
 
 def _roda_shadow_pdf(monkeypatch, paginas, medida_fake):
-    """Chama pdf_vector._run DE VERDADE, com sleep anulado, _measure_page
-    dublado e log capturado."""
+    """Chama pdf_vector._run DE VERDADE, com sleep anulado, o filho da sombra
+    dublado e log capturado.
+
+    🪤 09/09/2026: dublava `_measure_page`, que a `_run` chamava direto. A
+    sombra passou a medir num FILHO protegido (RLIMIT_AS de 2 GB, o mesmo da
+    promoção) e a dublagem virou espionagem de telefone desligado — dois
+    testes daqui ficaram vermelhos. O que eles provam não mudou: é a `_run`
+    que tem que preservar a evidência da medição no resumo."""
     import pdf_vector as pv
     monkeypatch.setattr(pv.time, "sleep", lambda *_: None)
-    monkeypatch.setattr(pv, "_measure_page", lambda *a, **k: dict(medida_fake))
+    monkeypatch.setattr(pv, "medir_pagina_em_filho",
+                        lambda *a, **k: dict(medida_fake))
     capturado = {}
 
     def log_fn(stage, payload, job_id, severity="error"):
