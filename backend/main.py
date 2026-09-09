@@ -10339,18 +10339,13 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         # Extrair project_data
                         if "project_data" in result:
                             pd = result["project_data"]
-                            # Acumula em vez de sobrescrever — resolvido via consenso depois
-                            for _fld in ("total_area", "layout_area", "no_intervention_area"):
-                                _v = pd.get(_fld)
-                                if _v:
-                                    _vf = sf(_v)
-                                    if _vf > 0:
-                                        _area_readings[_fld].append(_vf)
-                                        _reg_area("ia-dxf", _fld)
-                            if pd.get("name") and not project_data.name: project_data.name = pd["name"]
-                            if pd.get("demolition_notes"): project_data.demolition_notes.extend(pd["demolition_notes"])
-                            if pd.get("new_rooms"): project_data.new_rooms.extend(pd["new_rooms"])
-                            if pd.get("kept_elements"): project_data.kept_elements.extend(pd["kept_elements"])
+                            # 🩸 09/09/2026 — este bloco DESCARTAVA `warnings`,
+                            # `workstations` e `departments`, e o laço do PDF
+                            # (11281) colhia dois deles. Duas cópias da mesma
+                            # mesclagem, divergidas. Régua única agora.
+                            from engine_rules import mesclar_project_data as _mescla_pd
+                            _mescla_pd(project_data, pd, _area_readings,
+                                       _reg_area, "ia-dxf", sf)
 
                         # 🎯 26/08/2026 — A MEDIÇÃO ESTAVA NA OBSERVAÇÃO E A
                         # QUANTIDADE VINHA ZERO. Caso cliente-19 (24/08 21:39): 31 de
@@ -11279,23 +11274,14 @@ bloco — só cite os que estão no inventário deste arquivo."""
             if "project_data" in result:
                 pd = result["project_data"]
                 # Acumula em vez de sobrescrever — consenso ao final do loop
-                for _fld in ("total_area", "layout_area", "no_intervention_area"):
-                    _v = pd.get(_fld)
-                    if _v:
-                        _vf = sf(_v)
-                        if _vf > 0:
-                            _area_readings[_fld].append(_vf)
-                            _reg_area("ia-pdf", _fld)
-                if pd.get("workstations"):
-                    try: project_data.workstations = int(float(str(pd["workstations"]).replace('un','').strip()))
-                    except: pass
-                if pd.get("departments"): project_data.departments = pd["departments"]
-                if pd.get("demolition_notes"): project_data.demolition_notes.extend(pd["demolition_notes"])
-                if pd.get("new_rooms"): project_data.new_rooms.extend(pd["new_rooms"])
-                if pd.get("kept_elements"): project_data.kept_elements.extend(pd["kept_elements"])
-                if pd.get("name") and not project_data.name: project_data.name = pd["name"]
-                if pd.get("address") and not project_data.address: project_data.address = pd["address"]
-                if pd.get("architect") and not project_data.architect: project_data.architect = pd["architect"]
+                # 🩸 09/09/2026 — este bloco colhia workstations/departments e o
+                # laço do DXF (10339) NÃO. E os DOIS descartavam `warnings`: a
+                # IA escreve "falta a planta baixa pro quadro de
+                # especificações" e o aviso morria aqui. Quem colhia era a
+                # `analyze_all_sheets`, que era MORTA. Régua única agora.
+                from engine_rules import mesclar_project_data as _mescla_pd
+                _mescla_pd(project_data, pd, _area_readings,
+                           _reg_area, "ia-pdf", sf)
 
             # 5. Extrair itens
             valid_disciplines = [

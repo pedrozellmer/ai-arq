@@ -2375,3 +2375,82 @@ def aviso_de_leitura_cortada(nome_prancha, n_itens_lidos=None):
         "uma falha passageira. Para ter a prancha inteira, exporte-a em partes "
         "(por exemplo um pavimento ou uma disciplina por arquivo) e reenvie, ou "
         "fale com a gente que a gente divide aqui." % (nome, _quanto))
+
+
+# ── A MESCLAGEM DO `project_data` QUE A IA DEVOLVE (uma só) ────────────────
+
+def mesclar_project_data(destino, pd, area_readings=None, reg_area=None,
+                         origem="ia", sf=None):
+    """Junta o `project_data` que a IA devolveu de UMA prancha no acumulado.
+
+    🩸 09/09/2026 — POR QUE ISTO VIROU FUNÇÃO. A mesma mesclagem existia em
+    DOIS laços vivos do `main.py` (DXF/DWG e PDF) e eles DIVERGIRAM:
+
+        campo                        DXF      PDF
+        áreas, name, new_rooms...    colhe    colhe
+        workstations, departments    DESCARTA colhe
+        warnings                     DESCARTA DESCARTA
+
+    🚨 O `warnings` é o que doía. A IA DETECTA que falta a planta baixa pro
+    quadro de especificações e escreve o aviso pedindo o arquivo que falta —
+    e os dois laços jogavam fora. Quem colhia era a `analyze_all_sheets`, que
+    era MORTA e foi apagada. O cliente recebia itens com "status não
+    identificável" e NENHUMA linha dizendo o que enviar pra resolver.
+    🪤 E o aparato inteiro existia dos dois lados: o prompt PEDE o aviso, o
+    `models.py` tem o campo, o `spreadsheet.py` tem o bloco "⚠ AVISOS DO MOTOR"
+    na capa, e o painel acende "precisa de complemento". Só o meio faltava.
+
+    🪤 `workstations`/`departments`: o prompt do DXF PEDE os dois
+    (main.py ~10180), o laço descartava, e a capa da planilha tem campo pra
+    eles. O MESMO projeto saía com em PDF e sem em DWG.
+
+    🔑 Uma função, os dois chamam. Divergir agora exige apagar a chamada, e há
+    guarda pra isso.
+    """
+    if not isinstance(pd, dict):
+        return destino
+    _sf = sf or (lambda v: float(v or 0))
+
+    if area_readings is not None:
+        for campo in ("total_area", "layout_area", "no_intervention_area"):
+            v = pd.get(campo)
+            if not v:
+                continue
+            try:
+                vf = _sf(v)
+            except Exception:
+                continue
+            if vf and vf > 0:
+                area_readings.setdefault(campo, []).append(vf)
+                if reg_area:
+                    try:
+                        reg_area(origem, campo)
+                    except Exception:
+                        pass
+
+    # texto que só vale se ainda não temos (o primeiro que vier manda)
+    for campo in ("name", "address", "architect"):
+        if pd.get(campo) and not getattr(destino, campo, ""):
+            setattr(destino, campo, pd[campo])
+
+    # listas: acumulam de todas as pranchas
+    for campo in ("demolition_notes", "new_rooms", "kept_elements", "warnings"):
+        v = pd.get(campo)
+        if not v:
+            continue
+        atual = list(getattr(destino, campo, None) or [])
+        try:
+            atual.extend(v if isinstance(v, (list, tuple)) else [v])
+        except TypeError:
+            continue
+        setattr(destino, campo, atual)
+
+    if pd.get("workstations"):
+        try:
+            destino.workstations = int(float(
+                str(pd["workstations"]).replace("un", "").strip()))
+        except (TypeError, ValueError):
+            pass
+    if pd.get("departments"):
+        destino.departments = pd["departments"]
+    return destino

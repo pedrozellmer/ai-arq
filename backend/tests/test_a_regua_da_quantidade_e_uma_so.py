@@ -142,13 +142,30 @@ def test_os_DOIS_caminhos_vivos_CHAMAM_a_regua():
         "(DXF/DWG e PDF) e os dois precisam chamar" % len(chamadas))
 
 
-def test_a_copia_do_analyzer_tambem_chama_a_MESMA_regua():
-    """🪤 A cópia morta continua no repo (outro assunto, outro commit). Enquanto
-    ela existir, tem que usar a MESMA régua — senão volta a divergir e o próximo
-    conserto cai no lado errado outra vez."""
+def test_o_analyzer_GUARDA_a_regua_mas_nao_tem_laco_proprio():
+    """🪦 A cópia morta foi apagada horas depois deste arquivo nascer.
+
+    🪤 ESTE TESTE JÁ FOI OUTRO, e ele reprovou quando o conserto chegou — de
+    propósito. A versão anterior exigia que o `analyzer.py` CHAMASSE a régua,
+    porque a cópia morta ainda existia e precisava usar a mesma. Apagada a
+    cópia, sumiu o chamador, e o guarda acusou. Reescrevi pro invariante NOVO
+    em vez de apagar pra calar o alarme.
+
+    🔑 O invariante de hoje: o `analyzer.py` é a CASA da régua (ela mora aqui e
+    é importável), mas quem a APLICA é o laço de item do `main.py`. Se voltar a
+    aparecer chamada aqui dentro, é sinal de que nasceu um segundo laço — que é
+    exatamente a armação que produziu os três defeitos de 09/09.
+    """
+    import analyzer
+    assert callable(getattr(analyzer, "sanear_qtd_e_selo", None)), (
+        "a régua sumiu do analyzer — o main.py a importa de lá")
+
     arvore = _ast_de("analyzer.py")
-    chamadas = [n for n in ast.walk(arvore)
+    chamadas = [n.lineno for n in ast.walk(arvore)
                 if isinstance(n, ast.Call)
                 and (getattr(n.func, "id", None) or getattr(n.func, "attr", None))
                 == "sanear_qtd_e_selo"]
-    assert chamadas, "analyzer.py não chama a própria régua"
+    assert not chamadas, (
+        "o analyzer.py voltou a CHAMAR a régua (linhas %s) — isso significa um "
+        "segundo laço de item, e foi essa duplicação que deixou o `qty = 1` "
+        "vivo por 14 dias. A aplicação mora no main.py." % chamadas)
