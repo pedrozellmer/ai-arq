@@ -36,14 +36,11 @@ else:
     load_dotenv()
 
 from models import ProcessingStatus
-from processor import process_pdfs
-from analyzer import analyze_all_sheets
 from spreadsheet import generate_spreadsheet
 from instagram_webhook import router as instagram_router
 from whatsapp_notify import router as whatsapp_router, send_whatsapp_template
 from engine_rules import (
     salvage_truncated_json as _salvage_truncated_json,
-    extract_balanced_obj as _extract_balanced_obj,
     normalize_items_payload as _normalize_items_payload,
     should_force_steel_kg as _should_force_steel_kg,
     is_likely_wrong_type as _is_likely_wrong_type,
@@ -66,7 +63,6 @@ from engine_rules import (
     pode_fundir as _pode_fundir,
     caveat_atinge_unidade as _caveat_atinge_unidade,
     selos_sem_medida as _selos_sem_medida,
-    unidade_conflita_com_sinapi as _unidade_conflita_sinapi,  # noqa: F401
     tipo_de_conflito_de_unidade as _tipo_conflito_unidade,
     quantidade_da_procedencia as _quantidade_da_procedencia,
     quantidade_medida_pelo_pdf as _quantidade_medida_pelo_pdf,
@@ -8894,7 +8890,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
             jobs.update_field(job_id, progress=5)
             jobs.update_field(job_id, current_step="Processando arquivos DWG/DXF...")
             try:
-                from dwg_extractor import extract_from_file, generate_budget_data, convert_dwg_to_dxf, dwg_has_aec_markers
+                from dwg_extractor import extract_from_file, convert_dwg_to_dxf, dwg_has_aec_markers
                 n_cad = len(cad_paths)
                 conv_span = conv_end_pct - 5  # ex.: 15 ou 10 pts
                 dwg_failed = []  # acumular DWGs que falharam pra reportar erro real depois
