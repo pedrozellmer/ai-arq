@@ -2763,6 +2763,20 @@ app.add_middleware(
 )
 
 
+# 🔒 08/09/2026 — teto de corpo que age ENQUANTO os bytes chegam.
+# A trava de 450 MB abaixo (linhas ~14292, ~20497, ~27346) mora no CORPO da
+# rota, e o FastAPI parseia o formulário ANTES de a função rodar: quando o 413
+# executa, o multipart inteiro já foi lido do socket. E ela some inteira quando
+# o cliente não manda `Content-Length` (`if _clen and ...`), o que NÃO é caso
+# exótico — o Starlette nunca lê esse header em request. Medido contra a
+# produção: chunked sem Content-Length devolveu 200.
+# 🔑 Um único leve fecha os dois caminhos de estrago (1 arquivo enorme em disco,
+# ou 1000 partes de 1 MB presas na RAM pelo SpooledTemporaryFile): contar o
+# total. Detalhes e medições em upload_teto.py.
+from upload_teto import TetoDeCorpo as _TetoDeCorpo  # noqa: E402
+app.add_middleware(_TetoDeCorpo)
+
+
 @app.middleware("http")
 async def _contar_uploads_em_curso(request: Request, call_next):
     """Conta as rotas que RECEBEM arquivo enquanto elas estão de pé.
