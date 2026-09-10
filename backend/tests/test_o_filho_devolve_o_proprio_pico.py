@@ -126,12 +126,36 @@ def test_o_pai_guarda_memoria_e_etapas_nos_DOIS_ramos_da_promocao():
 
 
 def test_o_pai_grava_a_linha_pdfvec_memoria_com_VmPeak_e_VmHWM():
-    # 🪤 o NOME do stage também aparece na lista _STAGES_DIAGNOSTICO — procurar a CHAMADA
-    i = _SRC_MAIN.find('_log_error("pdfvec:memoria"')
-    assert i > 0, "o log pdfvec:memoria sumiu — o número volta a não existir no banco"
-    trecho = _SRC_MAIN[max(0, i - 1500):i]
-    for chave in ("VmPeak", "VmHWM", "ini_VmSize", "etapas="):
-        assert chave in trecho, f"a linha pdfvec:memoria perdeu {chave}"
+    """🩸 10/09/2026: este guarda lia os 1.500 caracteres ANTES da chamada e
+    procurava as palavras. A linha passou a ser montada por
+    `_linha_pdfvec_memoria` (função de módulo): o texto saiu dali e o
+    comportamento ficou igual. Guarda de TEXTO reprova conserto e aprova defeito;
+    este CHAMA a função e confere, pela AST, que é ELA que vai pro `_log_error`."""
+    import ast
+    import main
+    linha = main._linha_pdfvec_memoria([{
+        "arquivo": "planta.pdf", "pagina": 0, "secs": 12.0,
+        "mem_kb": {"VmPeak": 1_600_000, "VmHWM": 900_000},
+        "mem_kb_inicio": {"VmSize": 14_000},
+        "etapas": {"rooms": 5.0}, "mem_etapas": {}}])
+    for chave in ("VmPeak=", "VmHWM=", "ini_VmSize=", "etapas="):
+        assert chave in linha, f"a linha pdfvec:memoria perdeu {chave}: {linha!r}"
+
+    arvore = ast.parse(fonte("main.py"))
+    chamadas = [n for n in ast.walk(arvore)
+                if isinstance(n, ast.Call) and getattr(n.func, "id", None) == "_log_error"
+                and n.args and isinstance(n.args[0], ast.Constant)
+                and n.args[0].value == "pdfvec:memoria"]
+    assert len(chamadas) == 1, "o log pdfvec:memoria sumiu ou duplicou: %d" % len(chamadas)
+    arg = chamadas[0].args[1]
+    assert isinstance(arg, ast.Name), ast.unparse(arg)
+    origens = [n for n in ast.walk(arvore)
+               if isinstance(n, ast.Assign) and len(n.targets) == 1
+               and isinstance(n.targets[0], ast.Name) and n.targets[0].id == arg.id
+               and isinstance(n.value, ast.Call)
+               and getattr(n.value.func, "id", None) == "_linha_pdfvec_memoria"]
+    assert origens, ("o que vai pro log pdfvec:memoria não sai de _linha_pdfvec_memoria "
+                     "— a escolha por pico e a memória por etapa ficam no lado morto")
 
 
 def test_pdfvec_memoria_e_diagnostico_nao_erro():

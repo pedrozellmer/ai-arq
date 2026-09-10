@@ -12857,25 +12857,12 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 # (custo fixo dos imports) e os segundos por etapa. É o número que
                 # faltava pra escolher o teto com dado: até aqui NENHUMA medida de
                 # memória do caminho PDF existia no banco.
-                def _mb(d, k):
-                    try:
-                        return int((d or {}).get(k) or 0) // 1024
-                    except (TypeError, ValueError):
-                        return 0
-                _linhas_mem = []
-                for r in _res[:6]:
-                    _mk, _mi = r.get("mem_kb") or {}, r.get("mem_kb_inicio") or {}
-                    if not _mk:
-                        continue
-                    _et = r.get("etapas") or {}
-                    _linhas_mem.append(
-                        "%s p%s: VmPeak=%dMB VmHWM=%dMB ini_VmSize=%dMB secs=%.0f etapas={%s}"
-                        % (r["arquivo"][:24], r.get("pagina"),
-                           _mb(_mk, "VmPeak"), _mb(_mk, "VmHWM"), _mb(_mi, "VmSize"),
-                           r.get("secs") or 0,
-                           ",".join("%s:%s" % (k[:5], v) for k, v in _et.items())))
-                if _linhas_mem:
-                    _log_error("pdfvec:memoria", " | ".join(_linhas_mem), job_id,
+                # 🩸 10/09/2026: a linha é montada por `_linha_pdfvec_memoria`, que
+                # escolhe as pranchas por PICO (não por área) e leva a memória POR
+                # ETAPA. Função de módulo pro guarda CHAMAR em vez de recortar texto.
+                _linha_mem = _linha_pdfvec_memoria(_res)
+                if _linha_mem:
+                    _log_error("pdfvec:memoria", _linha_mem, job_id,
                                severity="info")
         except NameError:
             pass              # job sem PDF
@@ -14414,6 +14401,98 @@ def _saida_do_filho_pdfvec(rc, vm) -> tuple:
         return "sem_escala", (f"{vm.get('skip')} — viewport={viewport} carimbo={carimbo} "
                               f"cotas={cotas} secs={vm.get('secs')}")
     return None, ""
+
+
+def _linha_pdfvec_memoria(pranchas, teto: int = 1900) -> str:
+    """Monta a linha `pdfvec:memoria`: quanto de memória cada medição de PDF gastou.
+
+    🩸 10/09/2026 — DOIS FUROS NO INSTRUMENTO DO TETO, achados pela revisão de
+    10 agentes sobre as pranchas que o filho da promoção perde:
+
+    1. As 6 pranchas eram escolhidas por ÁREA medida (herdavam a ordem do
+       `pdfvec:por-prancha`). A mais PESADA quase nunca é a de maior área: no
+       job aec7cac2 a única prancha com MemoryError ficou FORA da linha. Um
+       instrumento de memória que pulava justo a prancha que estourou a memória.
+    2. `mem_etapas` — a memória POR ETAPA — era medida pelo filho, guardada no
+       índice por prancha e jogada fora aqui. Sem ela não dá pra dizer EM QUE
+       ETAPA o endereço sobe, que é a pergunta de qualquer mexida no teto.
+
+    🔑 Escolhe por VmPeak (a régua do RLIMIT_AS) e acrescenta
+    `pico={etapa:VmPeak/VmSize}` em MiB, depois de `etapas={...}`.
+
+    🪤 O prefixo `VmPeak=..MB VmHWM=..MB ini_VmSize=..MB secs=..` fica IDÊNTICO e
+    na MESMA ordem: a consulta que deu o p95 do teto casa esse texto por regex.
+    Campo novo só entra no FIM da linha de cada prancha.
+    🪤 Checkpoint salvo antes deste deploy traz `mem_etapas` com 2 números
+    [VmRSS, VmHWM]: essa prancha sai sem `pico=`, sem quebrar a linha.
+    🪤 Cabe por construção no corte de 2.000 do `_log_error`: passando do `teto`,
+    sai primeiro o `pico=` das pranchas mais LEVES; depois as próprias pranchas
+    mais leves, declaradas em `(+N fora)`. Corte calado lê como "foi tudo".
+    """
+    def _mb(d, k):
+        try:
+            return int((d or {}).get(k) or 0) // 1024
+        except (TypeError, ValueError, AttributeError):
+            return 0
+
+    def _pico_kb(r):
+        try:
+            return int((r.get("mem_kb") or {}).get("VmPeak") or 0)
+        except (TypeError, ValueError, AttributeError):
+            return 0
+
+    def _pico_por_etapa(r):
+        partes = []
+        for et, v in (r.get("mem_etapas") or {}).items():
+            if not isinstance(v, (list, tuple)) or len(v) < 4:
+                continue        # checkpoint antigo: só [VmRSS, VmHWM]
+            try:
+                partes.append("%s:%d/%d" % (str(et)[:5], int(v[3] or 0) // 1024,
+                                            int(v[2] or 0) // 1024))
+            except (TypeError, ValueError):
+                continue
+        return ",".join(partes)
+
+    def _linha(r, com_pico):
+        _mk, _mi = r.get("mem_kb") or {}, r.get("mem_kb_inicio") or {}
+        _et = r.get("etapas") or {}
+        try:
+            _secs = float(r.get("secs") or 0)
+        except (TypeError, ValueError):
+            _secs = 0.0
+        linha = ("%s p%s: VmPeak=%dMB VmHWM=%dMB ini_VmSize=%dMB secs=%.0f etapas={%s}"
+                 % (str(r.get("arquivo") or "")[:24], r.get("pagina"),
+                    _mb(_mk, "VmPeak"), _mb(_mk, "VmHWM"), _mb(_mi, "VmSize"), _secs,
+                    ",".join("%s:%s" % (str(k)[:5], v) for k, v in _et.items())))
+        if com_pico:
+            _p = _pico_por_etapa(r)
+            if _p:
+                linha += " pico={%s}" % _p
+        return linha
+
+    todas = sorted((r for r in (pranchas or [])
+                    if isinstance(r, dict) and r.get("mem_kb")),
+                   key=_pico_kb, reverse=True)
+    escolhidas = todas[:6]
+    com_pico = [True] * len(escolhidas)
+    n = len(escolhidas)
+
+    def _monta():
+        s = " | ".join(_linha(r, com_pico[i]) for i, r in enumerate(escolhidas[:n]))
+        if s and len(todas) > n:
+            s += " | (+%d fora)" % (len(todas) - n)
+        return s
+
+    s = _monta()
+    i = len(escolhidas) - 1
+    while len(s) > teto and i >= 0:
+        com_pico[i] = False
+        i -= 1
+        s = _monta()
+    while len(s) > teto and n > 1:
+        n -= 1
+        s = _monta()
+    return s
 
 
 _RX_ESTRUT_NOME = None

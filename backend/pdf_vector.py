@@ -178,7 +178,13 @@ def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
         _etapas[nome] = round(time.time() - t_ini, 1)
         _m = _mem_kb()
         if _m:
-            _mem_et[nome] = [_m.get("VmRSS"), _m.get("VmHWM")]
+            # 🩸 10/09/2026: [VmRSS, VmHWM] são RESIDENTES — e o RLIMIT_AS cobra
+            # ENDEREÇO. Só com esses dois não dava pra dizer em que etapa o
+            # endereço sobe, que é a pergunta de qualquer mexida no teto.
+            # VmSize (endereço agora) e VmPeak (maior endereço até aqui) vão
+            # ACRESCENTADOS no fim: quem lê [0] e [1] continua lendo o mesmo.
+            _mem_et[nome] = [_m.get("VmRSS"), _m.get("VmHWM"),
+                             _m.get("VmSize"), _m.get("VmPeak")]
 
     # 1) ESCALA — fonte primária: viewport embutido no PDF (exato, R$0, resolve
     # "INDICADAS"). Fallback: carimbo via Vision. (Achado #2 do estudo 07/07.)
