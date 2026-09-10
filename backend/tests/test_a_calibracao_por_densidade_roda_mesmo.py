@@ -88,10 +88,14 @@ def test_a_rede_de_area_LE_depois_de_a_area_ser_ESCRITA():
     leem = _linhas_que_leem_a_area_pra_rede(arv)
     assert escrevem, "ninguém mais escreve `project_data.total_area`"
     assert leem, "sumiram `laje_area`/`ref_area` — a rede foi removida?"
-    assert min(leem) > min(escrevem), (
-        "a rede de área lê na linha %d e a área só é escrita na %d — "
-        "`ref_area` vale 0 em TODA execução e a regra dura nº3 não roda. "
-        "Foi assim por 142 dias." % (min(leem), min(escrevem)))
+    # 🪤 Contra a ÚLTIMA escrita, não a primeira. Com `min(escrevem)` dava pra
+    # silenciar o guarda acrescentando uma atribuição inócua lá em cima: o fato
+    # que importa é "a leitura vem depois de TUDO que ainda pode mudar a área"
+    # — e a área informada pelo cliente é escrita DEPOIS do consenso.
+    assert min(leem) > max(escrevem), (
+        "a rede de área lê na linha %d e a última escrita da área é na %d — "
+        "`ref_area` fica 0 (ou desatualizada) e a regra dura nº3 não vale. "
+        "Foi assim por 142 dias." % (min(leem), max(escrevem)))
 
 
 def test_CONTROLE_o_detector_de_ORDEM_acha_a_inversao_plantada():
@@ -105,7 +109,7 @@ def test_CONTROLE_o_detector_de_ORDEM_acha_a_inversao_plantada():
     escrevem = _linhas_que_escrevem_a_area(arv)
     leem = _linhas_que_leem_a_area_pra_rede(arv)
     assert escrevem == [3] and leem == [2], (escrevem, leem)
-    assert not (min(leem) > min(escrevem)), "o detector não viu a inversão"
+    assert not (min(leem) > max(escrevem)), "o detector não viu a inversão"
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -210,3 +214,61 @@ def test_CONTROLE_o_detector_do_ELSE_reprova_else_que_so_faz_print():
                 and (getattr(x.func, "id", None)
                      or getattr(x.func, "attr", None)) == "_log_error"]
     assert not registra, "o predicado aceitou um `else` que só faz print"
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  🩸 A REGRA DOS 1,5× SÓ VALE PRA SUPERFÍCIE HORIZONTAL
+# ══════════════════════════════════════════════════════════════════════════
+def test_PAREDE_e_PINTURA_nao_sao_acusadas_de_dupla_contagem():
+    """🩸 O comentário dizia "só pra superfícies" e o código NÃO checava.
+
+    Enquanto a área valia 0 (o defeito de 142 dias) a regra nunca disparava e
+    isso ficou invisível. No minuto em que a área passou a chegar, ela passaria
+    a acusar PAREDE — que excede 1,5× a laje por natureza (um apartamento de
+    100 m² tem ~250 m² de parede pintada).
+
+    📏 Medido no acervo ANTES de ligar: de 714 itens em m² com área conhecida,
+    43 seriam acusados — e **34 (79%) são pintura, reboco, revestimento ou
+    alvenaria**. Só 9 eram piso/forro.
+    🚨 Acusação falsa vai na observação que o cliente LÊ e queima o aviso
+    verdadeiro (regra nº7).
+    """
+    for desc in ("Pintura acrílica em paredes internas",
+                 "Emboço e reboco de paredes",
+                 "Revestimento cerâmico em parede",
+                 "Alvenaria de bloco cerâmico 14 cm"):
+        ok, motivo = m._check_plausibility(_Item(400.0, "m²", "Revestimentos"), 100.0)
+        _it = _Item(400.0, "m²", "Revestimentos")
+        _it.description = desc
+        ok, motivo = m._check_plausibility(_it, 100.0)
+        assert ok is True, (
+            "%r foi acusado de dupla contagem: %s" % (desc, motivo))
+
+
+def test_CONTROLE_PISO_absurdo_continua_sendo_acusado():
+    """🧪 O outro lado: gatear demais desliga a rede. Piso de 400 m² num
+    projeto de 100 m² É dupla contagem."""
+    _it = _Item(400.0, "m²", "Pisos e Rodapés")
+    _it.description = "Piso cerâmico esmaltado 60x60"
+    ok, motivo = m._check_plausibility(_it, 100.0)
+    assert ok is False and "dupla contagem" in motivo, motivo
+
+
+def test_a_calibracao_tem_TETO_e_CHAVE_de_desligar():
+    """🚨 `check_density_anomaly` chama `classify_item`, que é uma chamada de
+    LLM REAL por item. Enquanto a área valia 0 isso nunca rodava; ao consertar
+    a regra eu liguei a conta — um job de 53 itens paga ~53 chamadas de ~3 s no
+    caminho crítico, pra comparar com um histórico de DOIS projetos.
+    🔑 A regra dura nº3 continua rodando; o que não pode é a conta ser
+    invisível e ilimitada."""
+    import ast
+    import io as _io
+    fonte = _io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
+    assert "AIARQ_DENSIDADE_MAX_ITENS" in fonte, "sumiu o teto por job"
+    assert "AIARQ_DENSIDADE" in fonte, "sumiu a chave de desligar"
+    # e o teto tem que ser USADO num break, não só existir
+    arv = ast.parse(fonte)
+    usa = [n for n in ast.walk(arv) if isinstance(n, ast.Name)
+           and n.id == "_DENS_TETO"]
+    assert len(usa) >= 2, (
+        "o teto é definido e não é comparado — constante decorativa")

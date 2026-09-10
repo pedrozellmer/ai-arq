@@ -346,11 +346,66 @@ class DXFExtraction:
                 lines.append("")
 
         # Wall lengths
+        # 🩸 09/09/2026 — ESTA LISTA IA CRUA PRA IA, E UM QUARTO DELA É TEXTO.
+        # `walls` recebe TODA LINE/LWPOLYLINE/POLYLINE/ARC/CIRCLE do modelspace,
+        # sem filtro de layer nenhum — enquanto os outros dois caminhos que
+        # alimentam `walls` filtram por `INFRA_LINEAR_RX`.
+        # 🩸 CORREÇÃO (09/09, mesma noite): eu escrevi aqui que "o bloco de ÁREA
+        # logo abaixo tem allowlist E denylist" e ISSO ESTAVA ERRADO. As listas
+        # `_AREA_ALLOW`/`_AREA_DENY` valem só pra POLILINHA FECHADA
+        # (`_consider_poly`); o laço de HATCH — que é o que alimenta ÁREAS
+        # HACHURADAS POR LAYER — não filtra layer nenhum. Ou seja, hachura de
+        # layer de anotação também vira área, e eu tinha afirmado o contrário
+        # num comentário permanente. Por isso o rótulo abaixo vale pros DOIS.
+        # 📏 Medido nos logs `motor:parede-medida` (7 jobs, 98 layers de topo):
+        # **18 layers de anotação somando 7.401 m de 29.227 m — 25,3%** do que o
+        # motor chama de "comprimento de parede". Num pórtico, `ARQ_TEX-4`
+        # sozinha respondia por 88,8% do total do arquivo.
+        #
+        # 🚫 POR QUE NÃO FILTRAR. Tirar essas layers de `walls` mexeria em
+        # `sinal_medido` (`len(blocks)+len(walls)+...`), que é o que decide se a
+        # extração é declarada ESTÉRIL — um arquivo legítimo podia passar a ser
+        # recusado. E apagar dado é o erro que ninguém vê: a casa já decidiu o
+        # contrário no consolidador (*"duplicar é erro que o arquiteto vê,
+        # apagar é erro que ele não vê"*).
+        # 🔑 Então a lista continua inteira e ganha um RÓTULO. A IA passa a ver
+        # qual layer é anotação em vez de ter que adivinhar pelo nome — e o
+        # rebaixamento determinístico do selo (`layer_is_anotacao` no main.py)
+        # continua sendo a rede embaixo, pra quando ela ignorar o rótulo.
+        # 🪤 O import fica FORA dos dois blocos: `_anot` é usado tanto em
+        # COMPRIMENTOS quanto em ÁREAS HACHURADAS, e uma prancha pode ter
+        # hachura sem ter parede — deixá-lo dentro do `if walls_by_layer`
+        # daria NameError justamente nessa prancha.
+        try:
+            from engine_rules import layer_is_anotacao as _anot
+        except Exception:                        # best-effort: sem régua, sem rótulo
+            def _anot(_x):
+                return False
         walls_by_layer = self.get_walls_by_layer()
         if walls_by_layer:
             lines.append("COMPRIMENTOS POR LAYER:")
+            _n_anot = 0
             for layer, length in sorted(walls_by_layer.items()):
-                lines.append(f"  {layer}: {length:.2f} m")
+                if _anot(layer):
+                    _n_anot += 1
+                    # 🪤 O texto NÃO pode conter "layer <palavra>": a régua
+                    # que lê layer da observação (`_LAYER_RE`, main.py) casa
+                    # "layer DE" e captura a preposição como se fosse o nome do
+                    # layer. Se a IA ecoasse este aviso, o rebaixamento
+                    # determinístico do selo deixaria de disparar — o aviso
+                    # desligaria a rede que ele existe pra complementar.
+                    lines.append(f"  {layer}: {length:.2f} m"
+                                 f"   ⚠ ANOTAÇÃO DO DESENHO (texto/cota/legenda/"
+                                 f"hachura) — o comprimento é de letras e setas, "
+                                 f"NÃO é elemento de obra: não use como quantidade")
+                else:
+                    lines.append(f"  {layer}: {length:.2f} m")
+            if _n_anot:
+                # 🪤 Pede um TOKEN FIXO, não prosa livre: prosa em português
+                # perto da palavra "layer" envenena a régua que lê a observação.
+                lines.append(f"  ({_n_anot} marcada(s) como ANOTAÇÃO acima. Não crie "
+                             f"item a partir delas; se criar, marque 'estimado' e "
+                             f"escreva na observação exatamente: origem=anotacao)")
             lines.append("")
 
         # Hatch areas
@@ -395,9 +450,21 @@ class DXFExtraction:
             lines.append("  (o PADRÃO da hachura é o que separa acabamento no CAD: porcelanato e"
                          " cerâmica desenhados no MESMO layer têm padrões diferentes. Layer com UM"
                          " padrão só mede UM acabamento; layer com vários mistura acabamentos.)")
+            _n_anot_ar = 0
             for layer, area in sorted(areas_by_layer.items()):
                 _pats = _hatch_pat.get(layer, {})
                 _n = sum(_pats.values())
+                # 🔑 Simetria com COMPRIMENTOS POR LAYER: hachura em layer de
+                # anotação é preenchimento de legenda/carimbo, não superfície de
+                # obra. O laço de HATCH não filtra layer — este rótulo é a única
+                # coisa que diz isso pra IA.
+                if _anot(layer):
+                    _n_anot_ar += 1
+                    lines.append(f"  {layer}: {area:.2f} m²   ⚠ ANOTAÇÃO DO DESENHO "
+                                 f"(texto/cota/legenda) — área de preenchimento de "
+                                 f"desenho, NÃO é superfície de obra: não use como "
+                                 f"quantidade")
+                    continue
                 if len(_pats) > 1:
                     _top = ", ".join(f"{k} x{v}" for k, v in
                                      sorted(_pats.items(), key=lambda x: -x[1])[:4])

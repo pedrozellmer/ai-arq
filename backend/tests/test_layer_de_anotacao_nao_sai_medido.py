@@ -205,3 +205,94 @@ def test_o_rebaixamento_NAO_apaga_o_item_nem_a_quantidade():
             assert palavra in texto, (
                 "o aviso não diz %r — o cliente precisa saber que o número "
                 "existe e que ele tem que conferir o serviço" % palavra)
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  🩸 PROSA EM PORTUGUÊS NÃO É NOME DE LAYER
+# ══════════════════════════════════════════════════════════════════════════
+def test_preposicao_NAO_vira_nome_de_layer():
+    """🩸 09/09, pego pela revisão adversarial ANTES do push, e é o defeito
+    mais bonito do dia: o aviso que eu escrevi pra DEFENDER a regra nº1
+    DESLIGARIA a rede que a garante.
+
+    `_LAYER_RE` casa "layer <PALAVRA>" e captura a palavra. Meu texto dizia
+    "LAYER DE ANOTAÇÃO" — a régua devolvia o layer fantasma 'DE', o
+    `all(layer_is_anotacao(...))` virava False, e o rebaixamento não disparava.
+    E o mesmo 'DE' entrava no dedup de m² como se fosse um layer, reabrindo o
+    falso alarme de sobreposição consertado em 31/08.
+
+    📏 O defeito era ANTIGO e latente: 0 de 12.999 observações reais tinham
+    "layer de/da/do". Quem ia acioná-lo em escala era eu.
+    🔑 Conserto na RÉGUA (aqui), não só no texto — prosa futura em português
+    volta a acontecer, e ela não pode envenenar a leitura.
+    """
+    import main as m
+    obs = ("⚠ FONTE = ANOTAÇÃO DO DESENHO (texto/cota/legenda/hachura). "
+           "Fonte: comprimento somado do layer ARQ_TEX-3 = 109.40 m.")
+    assert m._layers_da_obs(obs) == ["ARQ_TEX-3"], m._layers_da_obs(obs)
+    assert m._extract_layer_from_obs(obs) == "ARQ_TEX-3"
+    assert all(layer_is_anotacao(l) for l in m._layers_da_obs(obs)), (
+        "o rebaixamento não dispararia nesta observação")
+
+
+@pytest.mark.parametrize("frase", [
+    "medido no layer de parede ARQ_ALV",
+    "o layer da prancha não tinha cota",
+    "somado do layer do forro",
+    "layer em uso: A-WALL",
+    "layer com hachura",
+])
+def test_CONTROLE_nenhuma_preposicao_escapa(frase):
+    import main as m
+    achados = m._layers_da_obs(frase)
+    assert not any(a in ("DE", "DA", "DO", "EM", "COM") for a in achados), (
+        "preposição virou nome de layer em %r: %s" % (frase, achados))
+
+
+def test_CONTROLE_layer_de_verdade_continua_sendo_lido():
+    """🧪 Sem isto, uma régua que devolvesse [] sempre passaria em tudo acima —
+    e aí NENHUM item seria rebaixado, nunca."""
+    import main as m
+    for obs, esperado in [
+        ("Fonte: comprimento somado do layer 'ARQ_ALV-4' = 91.35 m", "ARQ_ALV-4"),
+        ("área hachurada do layer A-FLOR-PATT", "A-FLOR-PATT"),
+    ]:
+        assert m._extract_layer_from_obs(obs) == esperado, obs
+
+
+def test_o_resgate_de_quantidade_NAO_preenche_com_anotacao():
+    """🩸 09/09, pego pela revisão adversarial. `_quantidade_da_procedencia`
+    recebia `get_walls_by_layer()` CRU e preenchia a quantidade quando a
+    observação citava um layer e o valor batia. Item que cita `ARQ_TEX-4`
+    ganhava 3.782 m — a metragem das LETRAS — como quantidade.
+
+    🔑 Por que aqui filtrar é certo e no prompt não era: no prompt a lista é
+    informação pra IA JULGAR, e apagar é o erro que ninguém vê. No resgate
+    automático não há ninguém pra julgar depois — a régua decide, e inventar
+    número é regra dura nº1.
+
+    🪤 Ancorado na AST: exijo que os dois dicionários passem pela régua ANTES
+    de virarem argumento.
+    """
+    import ast
+    import io as _io
+    fonte = _io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
+    arv = ast.parse(fonte)
+    filtrados = set()
+    for n in ast.walk(arv):
+        if not isinstance(n, ast.Assign):
+            continue
+        alvo = {getattr(t, "id", None) for t in n.targets}
+        if not (alvo & {"_compr_ly", "_areas_ly"}):
+            continue
+        usa_regua = any(
+            isinstance(c, ast.Call)
+            and (getattr(c.func, "id", None) or getattr(c.func, "attr", None))
+            in ("_layer_is_anotacao", "layer_is_anotacao")
+            for c in ast.walk(n))
+        if usa_regua:
+            filtrados |= {a for a in alvo if a}
+    assert filtrados == {"_compr_ly", "_areas_ly"}, (
+        "o resgate de quantidade voltou a receber layer de anotação sem "
+        "filtro (filtrados: %s) — item citando layer de texto ganha a "
+        "metragem das letras como quantidade" % sorted(filtrados))

@@ -172,8 +172,9 @@ fd820a2b4461bddd116c1518bc4b0f77 ffc150a160d37e92012c196b6af4160d
 # arquivos JÁ NO REPOSITÓRIO.
 #
 # 🔑 Hashear o nome INTEIRO resolve os dois lados: "Construtora Mr" é pego e
-# "construtora" sozinha continua livre. Mesma coisa para "Prof. Moab", "Eng.
-# cliente-99", "Ana Paula", "Rafael Lima" — todos com token isolado genérico ou
+# "construtora" sozinha continua livre. Mesma coisa para os n-gramas com
+# título ("Prof. X", "Eng. Y") e para os de dois nomes comuns — todos com
+# token isolado genérico ou
 # curto demais. Foram +27 ocorrências que a régua de palavra não via.
 #
 # 🪤 São os 2 e 3 primeiros tokens do cadastro, normalizados. É assim que um
@@ -499,9 +500,10 @@ def test_CONTROLE_normalizar_NAO_junta_palavras_diferentes():
 
 
 def test_CONTROLE_o_depoimento_AUTORIZADO_continua_na_home():
-    """🩸 06/09: a limpeza trocou o depoimento da home por 'cliente-38
-    Teixeira' e foi pro ar assim. Prova social quebrada, e nem anonimizada —
-    o sobrenome ficou. A regra protege quem NÃO consentiu."""
+    """🩸 06/09: a limpeza trocou o primeiro nome do depoimento da home por um
+    rótulo e foi pro ar assim, com o SOBRENOME intacto. Prova social quebrada, e
+    nem anonimizada. A regra protege quem NÃO consentiu.
+    🔁 09/09: aconteceu DE NOVO, na limpeza em massa — e este guarda pegou."""
     home = _conteudo("index.html")
     assert home, "index.html sumiu"
     assert "dtzarquitetura" in home, (
@@ -511,8 +513,10 @@ def test_CONTROLE_o_depoimento_AUTORIZADO_continua_na_home():
         "que cortou o nome pela metade: não anonimiza e quebra a copy")
 
 
-#: `cliente-38 Teixeira`: rótulo no primeiro nome, sobrenome intacto. Não
-#: anonimiza (o sobrenome ainda identifica) e ainda estraga a frase.
+#: Rótulo no primeiro nome + SOBRENOME intacto: não anonimiza (o sobrenome
+#: ainda identifica) e ainda estraga a frase. 🪤 O exemplo do padrão é montado
+#: em tempo de execução no controle — escrevê-lo aqui seria, ele próprio, meio
+#: nome de cliente no repo público.
 _RX_ROTULO_COLADO = re.compile(r"cliente-\d+\s+[A-ZÀ-Ý][a-zà-ÿ]{2,}")
 
 #: 🪤 Onde a metade do nome é LEGÍTIMA: aqui o rótulo é seguido de palavra
@@ -548,8 +552,13 @@ def test_nenhum_rotulo_ficou_COLADO_num_sobrenome_em_lugar_nenhum():
 
 
 def test_CONTROLE_o_regex_do_rotulo_colado_ACHA_um_plantado():
-    """🧪 Sem isto, um regex que não casasse nada passaria em tudo."""
-    assert _RX_ROTULO_COLADO.search("o caso do cliente-38 Teixeira mostrou")
+    """🧪 Sem isto, um regex que não casasse nada passaria em tudo.
+
+    🪤 O sobrenome do exemplo é SINTÉTICO e montado aqui: usar um real faria
+    este controle ser o vazamento que ele caça — e desde 09/09 o guarda varre
+    o próprio arquivo, então ele reprovaria a si mesmo (e reprovou)."""
+    _sobrenome = "So" + "brenome"
+    assert _RX_ROTULO_COLADO.search("o caso do cliente-38 %s mostrou" % _sobrenome)
     assert not _RX_ROTULO_COLADO.search("o caso do cliente-38 mostrou")
     assert not _RX_ROTULO_COLADO.search("cliente-38, 16/06: 4a tentativa")
 
@@ -625,7 +634,7 @@ _CONSENTIU_EM_PUBLICO = {
 }
 
 #: 🪤 O BLOG FICA DE FORA DA CHECAGEM DE NOME, E É DE PROPÓSITO.
-#: Os posts citam AUTORES de artigos e normas ("Adriana de Paula Lacerda
+#: Os posts citam AUTORES de artigos e normas (nome completo de pesquisador
 #: Santos; Antonio Edésio Jungles"). São a FONTE que a regra de copy pública
 #: exige em toda afirmação — apagar destruiria a citação e a regra. Que um
 #: cliente compartilhe primeiro nome com um autor citado é coincidência, não
@@ -648,7 +657,8 @@ _FORA_DA_CHECAGEM_DE_NOME = ("blog/posts",)
 # 🩸 08/09/2026 — 328 -> 306. A queda NÃO veio de limpeza: veio de o guarda
 # passar a ENXERGAR. Ele comparava hash do texto como está escrito contra uma
 # lista gerada SEM acento, então "cliente-73" nunca batia com "cliente-73". Metade dos
-# nomes brasileiros era invisível — José, Antônio, Márcia, Luís, Inês, Mônica.
+# nomes brasileiros era invisível — todo primeiro nome com acento, e no Brasil
+# isso é uma fatia enorme da base.
 # Normalizado (`_sem_acento`), a contagem MUDOU nos dois sentidos: apareceram
 # ocorrências que ninguém via, e sumiram duplicatas de acento.
 # 🚨 O que ele achou na hora: 5 ocorrências de um nome COMPLETO de cliente,
@@ -698,7 +708,8 @@ _FORA_DA_CHECAGEM_DE_NOME = ("blog/posts",)
 # 🧹 09/09/2026: 339 → **ZERO**. A dívida herdada acabou — 45 pessoas, 349
 # ocorrências, 74 arquivos.
 # 🩸 A 1ª tentativa CORROMPEU o repositório e o revert foi por HEAD: eu usei
-# `str.replace` cru e o nome "alan" casou dentro de "b**alan**ced" —
+# `str.replace` cru e um primeiro nome de 4 letras casou DENTRO de uma palavra
+# inglesa comum do código —
 # `extract_balanced_obj` virou lixo em 32 arquivos. Substring em vez de token,
 # no mesmo dia em que escrevi um guarda contra exatamente isso.
 # 🔑 A fronteira certa é `(?<![letra])nome(?![letra])`: aceita `_` e dígito
@@ -744,7 +755,7 @@ def _versionados():
             for f in files:
                 arqs.append(os.path.relpath(os.path.join(base, f), _RAIZ).replace("\\", "/"))
     return [a for a in arqs
-            if a.endswith(_EXT_TEXTO) and os.path.basename(a) != _ESTE_ARQUIVO]
+            if a.endswith(_EXT_TEXTO)]
 
 
 def _conteudo(rel):
@@ -760,12 +771,13 @@ def _sem_acento(s):
     🩸 08/09/2026 — ESTE GUARDA ERA CEGO PRA ACENTO, E ISSO O DESLIGAVA PRA
     METADE DOS NOMES BRASILEIROS. As listas de hash foram geradas a partir da
     forma SEM acento ('cliente-73' -> 374321cf…), mas o texto do repositório era
-    hasheado como está escrito ('fábio' -> 817e8f55…). Os dois nunca batiam.
+    hasheado COM acento (o mesmo nome dá outro md5). Os dois nunca batiam.
 
     🚨 Não é "a lista está incompleta": o nome ESTAVA na lista e passou mesmo
     assim. Achado hoje ao vivo — um nome completo de cliente vivia em
     `backend/main.py` num comentário, colado ao job_id, com a bancada verde.
-    José, cliente-73, Antônio, Márcia, Luís, Inês, Mônica, Túlio: todos invisíveis.
+    Todo primeiro nome acentuado ficava invisível — e no Brasil isso é uma
+    fatia enorme da base de clientes.
 
     🔑 Guarda que passa por estar cego é pior que guarda nenhum — o verde
     ensina a confiar. Ver [[feedback_teste_com_controle_positivo]].
@@ -774,8 +786,27 @@ def _sem_acento(s):
                    if not unicodedata.combining(c))
 
 
-def _e_nome_de_cliente(palavra):
-    return hashlib.md5(_sem_acento(palavra).encode("utf-8")).hexdigest() in _HASH_DE_NOME
+#: Palavra que COINCIDE com o primeiro nome de um cliente mas, NAQUELE arquivo
+#: e naquele uso, não fala dele. Chaveado por (hash, arquivo) — nunca por
+#: arquivo inteiro, senão vira porta aberta.
+#: 🩸 09/09/2026 — o caso que criou isto: a limpeza em massa trocou o nome
+#: DENTRO do nome de uma unidade federativa, numa tabela do `admin.html` que
+#: VAI PRO AR.
+#: Restaurar a palavra fez o guarda acusar — e ele estava tecnicamente certo e
+#: praticamente errado. 🪤 A exceção é o remédio; alargar a peneira pra "ignorar
+#: nomes de estado" seria inventar regra pra um caso.
+_HOMONIMO_CONHECIDO = {
+    "d6607a0d5fa9ddbc40d551a695a3ddee": ("admin.html",),      # nome de unidade federativa
+}
+
+
+def _e_nome_de_cliente(palavra, rel=""):
+    h = hashlib.md5(_sem_acento(palavra).encode("utf-8")).hexdigest()
+    if h not in _HASH_DE_NOME:
+        return False
+    if rel and rel in _HOMONIMO_CONHECIDO.get(h, ()):
+        return False
+    return True
 
 
 def nomes_no_texto(src, rel=""):
@@ -787,7 +818,7 @@ def nomes_no_texto(src, rel=""):
     """
     achados = []
     for m in _PALAVRA.finditer(src):
-        if not _e_nome_de_cliente(m.group(0)):
+        if not _e_nome_de_cliente(m.group(0), rel):
             continue
         h = hashlib.md5(_sem_acento(m.group(0)).encode("utf-8")).hexdigest()
         if rel and rel in _CONSENTIU_EM_PUBLICO.get(h, ()):
@@ -829,20 +860,76 @@ def test_nenhum_email_pessoal_de_terceiro_no_codigo():
         "opaco. O valor do comentário é o CASO, não a pessoa." % achados[:8])
 
 
+#: md5 dos APELIDOS de cliente (a parte antes do @, que identifica igual e
+#: escapa do regex de e-mail).
+#: 🩸 09/09/2026 — ESTA LISTA ESTAVA EM TEXTO PURO, DENTRO DO REPO PÚBLICO.
+#: Era a lista de apelidos de cliente escrita por extenso no arquivo do guarda —
+#: exatamente o que o cabeçalho deste arquivo diz ter resolvido pros NOMES,
+#: hasheando. E pior: `_versionados()` exclui este arquivo da própria varredura
+#: (pelo basename), então nem o guarda se via. Uma busca pública por qualquer um
+#: desses apelidos devolvia este arquivo.
+#: 🪤 E a limpeza de nomes de 09/09 REESCREVEU UMA DAS AGULHAS: um apelido virou
+#: "eng.cliente-NN". Como esta lista não é prosa — é o CONJUNTO DE AGULHAS que o
+#: teste procura —, o guarda passou a caçar uma string que só existe nele mesmo,
+#: e o apelido real ficou sem vigia. Recuperado do commit anterior.
+#: 🔑 Regenerar: hash md5 do apelido em minúsculas.
+_HASH_DE_APELIDO = frozenset("""
+75a297863c92abea141dde7b7643bd07 2144313c78734ecf8e9c71d8947065ff
+22655dfead35ff3a65d959c9bbb29ab8 7f3d2753230db37743dfce9483e1bfbd
+43fd81ebb84bceffc66e1568e38aa0ed d2ccc89455f63c146623e1b745b528b1
+d8120e9453ac34ef8bc4ca120bbe4bef 38df2200bcc9369fc6719bf7239b0551
+f94ab5e691932764e2e26e21fa389771 8ca4a082a7d6060fcde10c82f71a5333
+daa65c4b1e4bda939467f82157f84ba5 25796f152436d0f060eb4e9040b2b577
+8a70f920a39ccfef7278af4985aa0d02 5a8741a96a4c52d906d852f317a9eb3f
+85cb62786fe6cc3e621303957814588c 61a623424aabbbc690c57b65d1cc4662
+8238ced88d136d363a28c2642738beb7
+""".split())
+
+#: candidatos a apelido no texto: 5+ caracteres de letra/dígito/._-
+_TOKEN_APELIDO = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{4,}")
+
+
+def apelidos_no_texto(src):
+    """Linhas onde um apelido de cliente aparece. Extraída pra poder ser
+    CHAMADA por um controle — guarda que não pode ser provado não vale."""
+    fora = []
+    for m in _TOKEN_APELIDO.finditer(src or ""):
+        tok = m.group(0).lower().strip(".-_")
+        if hashlib.md5(tok.encode("utf-8")).hexdigest() in _HASH_DE_APELIDO:
+            fora.append(src[:m.start()].count(chr(10)) + 1)
+    return fora
+
+
 def test_nenhum_apelido_de_cliente_sobreviveu():
     """A parte ANTES do @ identifica igual — e escapa do regex de e-mail."""
-    apelidos = ["ivaldogss", "jssoliveira88", "thallisson.producao", "eng.cliente-86",
-                "kasavitski", "rafaelcmnz", "humberto.oliveira", "marcioeng72",
-                "valimduda", "lpleonardo", "v.anjos.ia.81", "diana.golin",
-                "alansilvacosta", "ialves943", "estudosmaraligrupo",
-                "professormoabgarcia", "adn.arquiteturadinamica"]
     achados = []
     for rel in _versionados():
-        src = _conteudo(rel)
-        for a in apelidos:
-            if a in src:
-                achados.append("%s: %s" % (rel, a[:4] + "***"))
-    assert not achados, "apelido de cliente ainda no repositório público: %s" % achados
+        for linha in apelidos_no_texto(_conteudo(rel)):
+            achados.append("%s:%d" % (rel, linha))
+    assert not achados, (
+        "apelido de cliente ainda no repositório PÚBLICO: %s" % achados[:8])
+
+
+def test_CONTROLE_a_peneira_de_apelido_ACHA_um_plantado():
+    """🧪 Prova que o predicado reprova — sem escrever apelido nenhum aqui.
+    Monta o texto a partir de um hash conhecido? Não dá (md5 não inverte).
+    Então planta um hash FALSO e confere que a peneira o reconhece."""
+    global _HASH_DE_APELIDO
+    _orig = _HASH_DE_APELIDO
+    try:
+        _HASH_DE_APELIDO = frozenset([
+            hashlib.md5(b"apelido.de.mentira").hexdigest()])
+        assert apelidos_no_texto("olha o apelido.de.mentira no meio da frase")
+        assert not apelidos_no_texto("nada aqui")
+    finally:
+        _HASH_DE_APELIDO = _orig
+
+
+def test_a_LISTA_de_apelido_nao_encolheu():
+    """🪤 Lista estática só muda à mão. Encolher = cliente sem vigia."""
+    assert len(_HASH_DE_APELIDO) >= 17, (
+        "a lista de apelido encolheu para %d (medido em 09/09: 17)"
+        % len(_HASH_DE_APELIDO))
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -880,9 +967,12 @@ def test_o_teto_de_nomes_esta_APERTADO():
 # ═══════════════════════════════════════════════════════════════════════════
 
 def test_CONTROLE_o_padrao_ACHA_um_email_plantado():
-    falso = "# 🚨 caso maria.silva@gmail.com — 3 devoluções"
+    # 🪤 Montado em tempo de execução: escrever um endereço aqui faria o
+    # controle do guarda de e-mail ser, ele próprio, um e-mail no repo público.
+    _end = "fulana" + "." + "detal" + "@" + "gmail" + "." + "com"
+    falso = "# 🚨 caso %s — 3 devoluções" % _end
     m = _RE_PESSOAL.search(falso)
-    assert m and m.group(0) == "maria.silva@gmail.com"
+    assert m and m.group(0) == _end
 
 
 def test_CONTROLE_o_padrao_NAO_acusa_o_que_e_nosso():

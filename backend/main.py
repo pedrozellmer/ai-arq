@@ -3402,7 +3402,7 @@ def _build_falha_email(name: str, project_name: str, reprocessavel: bool, error_
                       "acontecer com arquivo salvo numa versão muito recente do AutoCAD, ou "
                       "com objetos especiais (comum em incêndio, hidráulica e elétrica feitos "
                       "em software MEP).")
-            # 🩸 03/09/2026, caso cliente-73 cliente-98. Esta frase oferecia DXF e PDF
+            # 🩸 03/09/2026, caso cliente-73. Esta frase oferecia DXF e PDF
             # como se fossem equivalentes. Ele recebeu este e-mail às 14:02 e
             # subiu um PDF às 14:04 — dois minutos depois. Recebeu 19 de 19
             # linhas ZERADAS.
@@ -6069,15 +6069,46 @@ def _consolidate_items(items: list) -> list:
 #     obrigatório quando ainda está confirmado.
 # ═══════════════════════════════════════════════════════════════════════════
 
-_LAYER_RE = _re.compile(r"layer\s+'?([A-Z][A-Z0-9_-]+)'?", _re.IGNORECASE)
+#: 🪤 O primeiro caractere aceita DÍGITO: layers como `04-TEXTOS` e
+#: `1_PLANTA BAIXA_EST-PIL` existem no acervo e o `[A-Z]` inicial os deixava
+#: passar em branco — nem o rebaixamento por carimbo nem o por anotação viam
+#: nada, porque `_lys` saía vazio e os dois exigem `_lys and all(...)`.
+#: Continua exigindo pelo menos UMA letra, pra "layer 04" (sem nome) não virar
+#: layer.
+_LAYER_RE = _re.compile(r"layer\s+'?([A-Z0-9][A-Z0-9_-]*[A-Z][A-Z0-9_-]*)'?",
+                        _re.IGNORECASE)
+
+#: 🩸 09/09/2026 — PROSA EM PORTUGUÊS VIRAVA NOME DE LAYER.
+#: `_LAYER_RE` casa "layer DE" e captura "DE" — e captura PRIMEIRO. Qualquer
+#: frase natural ("medido no layer de parede ARQ_ALV", "o layer da prancha")
+#: envenena as duas leituras: `_extract_layer_from_obs` devolve o layer fantasma
+#: 'DE', e `_layers_da_obs` devolve ['DE', 'ARQ_ALV'] — que faz o
+#: `all(layer_is_anotacao(...))` do rebaixamento virar False e o guarda NÃO
+#: disparar.
+#: 📏 O defeito é ANTIGO e estava latente: 0 de 12.999 observações reais tinham
+#: "layer de/da/do". Quem ia acioná-lo em escala era eu, ao escrever um aviso
+#: com a frase "LAYER DE ANOTAÇÃO" — o texto que existe pra DEFENDER a regra
+#: nº1 desligaria a rede que a garante.
+#: 🔑 Conserto na RÉGUA, não no texto: nome de layer não é preposição.
+_NAO_E_LAYER = {"DE", "DA", "DO", "DAS", "DOS", "EM", "NO", "NA", "NOS", "NAS",
+                "AO", "AOS", "COM", "SEM", "POR", "PARA", "QUE", "OU", "SE",
+                "UM", "UMA", "ESSE", "ESSA", "ESTE", "ESTA", "CADA"}
+
+
+def _e_nome_de_layer(tok: str) -> bool:
+    """Filtra o que a régua capturou mas não pode ser nome de layer."""
+    t = (tok or "").upper()
+    return bool(t) and t not in _NAO_E_LAYER
 
 
 def _extract_layer_from_obs(obs: str) -> str:
     """Extrai o nome do layer CAD da observação (ex.: 'A-FLOR-PATT'). Vazio se não achar."""
     if not obs:
         return ""
-    m = _LAYER_RE.search(obs)
-    return m.group(1).upper() if m else ""
+    for m in _LAYER_RE.finditer(obs):
+        if _e_nome_de_layer(m.group(1)):
+            return m.group(1).upper()
+    return ""
 
 
 def _layers_da_obs(obs: str) -> list:
@@ -6090,7 +6121,7 @@ def _layers_da_obs(obs: str) -> list:
     """
     if not obs:
         return []
-    return [m.upper() for m in _LAYER_RE.findall(obs)]
+    return [m.upper() for m in _LAYER_RE.findall(obs) if _e_nome_de_layer(m)]
 
 
 def _detect_multifamiliar_signal(items: list, current_typology: str) -> tuple[bool, list]:
@@ -6305,8 +6336,21 @@ def _check_plausibility(item, project_total_area_m2: float = 0) -> tuple[bool, s
     if mismatch_key in _DISCIPLINE_UNIT_MISMATCHES:
         return False, _DISCIPLINE_UNIT_MISMATCHES[mismatch_key]
 
-    # 3. Área vs laje (só pra superfícies)
-    if unit == "m²" and project_total_area_m2 > 0 and qty > project_total_area_m2 * 1.5:
+    # 3. Área vs laje — SÓ PRA SUPERFÍCIE HORIZONTAL (piso/forro/laje/teto).
+    # 🩸 09/09/2026 — O COMENTÁRIO DIZIA "só pra superfícies" E O CÓDIGO NÃO
+    # CHECAVA. Enquanto `project_total_area_m2` valia 0 em toda execução (o
+    # defeito de 142 dias, ver o bloco que foi movido em `process_job`) isso não
+    # aparecia: a regra nunca disparava. No minuto em que a área passou a chegar
+    # aqui, ela passaria a acusar PAREDE.
+    # 📏 Medido no acervo antes de ligar: de 714 itens em m² com área conhecida,
+    # 43 seriam acusados — e **34 deles (79%) são pintura, reboco, revestimento
+    # ou alvenaria**, que passam de 1,5× a laje POR NATUREZA (um apartamento de
+    # 100 m² tem ~250 m² de parede). Só 9 eram piso/forro.
+    # 🚨 Acusação falsa é pior que silêncio: ela vai na observação que o cliente
+    # LÊ, e queima o aviso verdadeiro (regra nº7).
+    if (unit == "m²" and project_total_area_m2 > 0
+            and qty > project_total_area_m2 * 1.5
+            and _is_floor_surface_criar(getattr(item, "description", "") or "")):
         return False, (
             f"área {qty:.1f} m² é maior que 1.5× área da laje "
             f"({project_total_area_m2:.0f} m²) — possível dupla contagem"
@@ -10436,6 +10480,22 @@ bloco — só cite os que estão no inventário deste arquivo."""
                             _areas_ly = extraction.get_areas_by_layer() or {}
                             _areas_ly.update(extraction.get_polygon_areas_by_layer() or {})
                             _compr_ly = extraction.get_walls_by_layer() or {}
+                            # 🩸 09/09/2026 — AQUI, DIFERENTE DO PROMPT, FILTRAR
+                            # É O CERTO. Estes dois dicionários não são
+                            # informação pra IA decidir: eles PREENCHEM a
+                            # quantidade automaticamente quando a observação
+                            # cita um layer e o valor bate. Preencher com o
+                            # comprimento de um layer de TEXTO é inventar
+                            # número — o item saía com a metragem das letras.
+                            # 🔑 No prompt a lista fica inteira e ganha rótulo
+                            # (apagar é o erro que ninguém vê); no resgate
+                            # automático não há ninguém pra julgar depois, então
+                            # a régua decide. `sinal_medido` não é tocado: ele
+                            # conta a LISTA `walls`, não este dicionário.
+                            _compr_ly = {k: v for k, v in _compr_ly.items()
+                                         if not _layer_is_anotacao(k)}
+                            _areas_ly = {k: v for k, v in _areas_ly.items()
+                                         if not _layer_is_anotacao(k)}
                         except Exception:
                             _areas_ly, _compr_ly = {}, {}
                         _n_resgate_proc = 0
@@ -10529,8 +10589,21 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                 # 110 caracteres da observação (o resto fica no hover, que não
                                 # existe no celular) e o insert corta em 1000.
                                 _lys = _layers_da_obs(obs_raw)
+                                # 🔒 Marca que o selo foi rebaixado PELA FONTE
+                                # (carimbo/anotação). Sem isto, o cross-check
+                                # abaixo — que só exige `conf == "estimado"` —
+                                # poderia RE-PROMOVER pra confirmado justamente
+                                # o item que estas duas regras acabaram de
+                                # rebaixar: o conserto desfeito 40 linhas
+                                # depois, no mesmo laço.
+                                # ⚠️ Hoje ele está DESLIGADO por padrão
+                                # (DXF_CONFIRM_CROSSCHECK=0), então isto é
+                                # armadilha desarmada — e é exatamente quando
+                                # sai barato fechar.
+                                _rebaixado_pela_fonte = False
                                 if _lys and all(_layer_is_carimbo(_l) for _l in _lys):
                                     conf = "estimado"
+                                    _rebaixado_pela_fonte = True
                                     obs_raw = ("⚠ FONTE = CARIMBO DA PRANCHA, não o desenho — "
                                                "confirme se este serviço existe na obra. " + obs_raw)
                                 # 🩸 09/09/2026 — LAYER DE ANOTAÇÃO NÃO É OBRA.
@@ -10548,7 +10621,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                 # ponteiro pro layer é deliberado em infra linear).
                                 elif _lys and all(_layer_is_anotacao(_l) for _l in _lys):
                                     conf = "estimado"
-                                    obs_raw = ("⚠ FONTE = LAYER DE ANOTAÇÃO (texto/cota/legenda/"
+                                    _rebaixado_pela_fonte = True
+                                    obs_raw = ("⚠ FONTE = ANOTAÇÃO DO DESENHO (texto/cota/legenda/"
                                                "hachura), não elemento construído — o comprimento "
                                                "foi medido, mas do desenho da anotação. Confirme o "
                                                "serviço e a quantidade. " + obs_raw)
@@ -10564,7 +10638,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                 # Sem ressalva, sem unidade ajustada, qty>0. Conserta a "timidez"
                                 # da IA sem falso-medido. Revisão adversarial 15/07.
                                 if (_XCHECK_ON and conf == "estimado" and not _dxf_sem_procedencia
-                                        and not unit_corrected and qty > 0):
+                                        and not unit_corrected and qty > 0
+                                        and not _rebaixado_pela_fonte):
                                     _q2 = round(qty, 2)
                                     _icat = _item_geo_category(desc, discipline)
                                     _promo = False
@@ -12192,7 +12267,10 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # ── Validação de plausibilidade ──
         # Detecta disciplina×unidade mismatch, range absurdo, área > laje×1.5.
         # Marca estimado (laranja) e anota o motivo pra usuário revisar.
-        jobs.update_field(job_id, current_step="Validando plausibilidade dos itens...")
+        # 🪤 SEM `update_field` aqui. Ele viajou junto com o bloco e passou a
+        # rodar DEPOIS do passo que já gravou progress=92 / "Gerando planilha" —
+        # a barra do cliente andava PRA TRÁS. O passo é acessório; a ordem que o
+        # cliente vê, não.
         flagged_count = 0
         laje_area = project_data.total_area or 0
         for it in all_items:
@@ -12216,12 +12294,30 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # vira observação laranja. NUNCA promove pra confirmado.
         # Área de referência: layout_area se disponível, senão total_area.
         ref_area = project_data.layout_area or project_data.total_area or 0
-        if HAS_DENSITY_CAL and ref_area > 0:
+        # 🚨 09/09/2026 — O CUSTO QUE EU LIGUEI JUNTO COM A REGRA.
+        # `check_density_anomaly` chama `classify_item`, que é uma chamada de LLM
+        # REAL, POR ITEM. O cache é in-memory por (descrição, unidade) e
+        # descrição é quase sempre única no projeto — então um job de 53 itens
+        # paga ~53 chamadas (~3 s cada) no caminho crítico. Enquanto `ref_area`
+        # valia 0, isso nunca acontecia; ao consertar a regra eu liguei a conta.
+        # 📏 E o histórico contra o qual ela compara são DOIS projetos, todos
+        # `office`, congelados em 19/04 — alcance real de 24 dos 167 projetos
+        # concluídos (14,4%). Pagar N chamadas de IA pra comparar com 2 projetos
+        # é uma troca ruim, e ela tem que ser VISÍVEL, não silenciosa.
+        # 🔑 Teto por job + registro do que custou + chave de desligar. A regra
+        # dura nº3 continua rodando; o que não pode é a conta ser invisível.
+        _DENS_TETO = int(os.environ.get("AIARQ_DENSIDADE_MAX_ITENS", "40"))
+        _DENS_ON = os.environ.get("AIARQ_DENSIDADE", "1") != "0"
+        if HAS_DENSITY_CAL and ref_area > 0 and _DENS_ON:
             try:
                 from density_calibration import check_density_anomaly
                 benchmarks = density_get_benchmarks(typology=typology)
                 density_flagged = 0
+                _dens_vistos = 0
                 for it in all_items:
+                    if _dens_vistos >= _DENS_TETO:
+                        break
+                    _dens_vistos += 1
                     is_anom, reason = check_density_anomaly(
                         it, ref_area, benchmarks=benchmarks, typology=typology,
                     )
@@ -12238,8 +12334,11 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 if density_flagged > 0:
                     print(f"[densidade] {density_flagged} itens fora do padrão histórico")
                 _log_error("motor:densidade",
-                           f"ref_area={ref_area:.1f} m² · {density_flagged} de "
-                           f"{len(all_items)} item(ns) fora do padrão",
+                           f"ref_area={ref_area:.1f} m² tip={typology} · "
+                           f"{density_flagged} fora do padrão em {_dens_vistos} "
+                           f"item(ns) conferido(s) de {len(all_items)} "
+                           f"(teto={_DENS_TETO}) · benchmarks={len(benchmarks or {})} "
+                           f"com_n2={sum(1 for b in (benchmarks or {}).values() if (b.get('n_projects') or 0) >= 2)}",
                            job_id, severity="info")
             except Exception as e:
                 print(f"[densidade] Erro no check de anomalia: {e}")
@@ -12249,11 +12348,15 @@ bloco — só cite os que estão no inventário deste arquivo."""
             # PULADA sem deixar um único rastro — e "não rodou" é
             # indistinguível de "rodou e não achou nada". Silêncio que se
             # parece com sucesso é o defeito que esta casa mais persegue.
+            # 🪤 severity="info", não "warning": isto acontece na MAIORIA dos
+            # jobs (73,7% não têm área) e é diagnóstico, não incidente. Encher o
+            # painel de alarme rotineiro é como não ter alarme — a regressão de
+            # 23/08.
             _log_error("motor:densidade",
-                       f"PULADA — ref_area={ref_area} "
-                       f"(has_cal={HAS_DENSITY_CAL}): sem área de referência a "
-                       f"calibração não roda e nenhum item é comparado com o "
-                       f"histórico", job_id, severity="warning")
+                       f"PULADA — ref_area={ref_area} tip={typology} "
+                       f"(has_cal={HAS_DENSITY_CAL} ligada={_DENS_ON}): sem área "
+                       f"de referência a calibração não roda e nenhum item é "
+                       f"comparado com o histórico", job_id, severity="info")
 
         # ── ESCALA: CONTA AO CLIENTE COMO FOI CONFERIDA (21/08/2026) ──────────
         # Prova por cota existe desde 05/08 e ficava só no log. Linha ✅ quando
