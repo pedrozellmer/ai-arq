@@ -185,6 +185,19 @@ def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
             # ACRESCENTADOS no fim: quem lê [0] e [1] continua lendo o mesmo.
             _mem_et[nome] = [_m.get("VmRSS"), _m.get("VmHWM"),
                              _m.get("VmSize"), _m.get("VmPeak")]
+        # 🩸 10/09/2026 — FOTO POR ETAPA: até onde o filho chegou, com flush.
+        # Só telemetria (nada disto vira medição). O env é conferido ANTES de
+        # montar a foto e a montagem mora no try: foto nunca derruba medição.
+        if os.environ.get("FILHO_IMPRIME_FOTO") == "1":
+            try:
+                filho_protegido.imprimir_foto({
+                    "etapa": nome,
+                    "t": round(time.time() - t0, 1),
+                    "vmpeak_mb": int((_m or {}).get("VmPeak") or 0) // 1024,
+                    "vmhwm_mb": int((_m or {}).get("VmHWM") or 0) // 1024,
+                })
+            except Exception:
+                pass
 
     # 1) ESCALA — fonte primária: viewport embutido no PDF (exato, R$0, resolve
     # "INDICADAS"). Fallback: carimbo via Vision. (Achado #2 do estudo 07/07.)
@@ -689,6 +702,13 @@ def _run(page_units: list, job_id: str, api_key: str, log_fn, pular=None) -> Non
             _pv = rastro_da_escala_por_vista(r)
             if _pv:
                 d["escala_por_vista"] = _pv
+            # 🩸 10/09/2026: filho que morreu ou estourou o tempo diz até onde
+            # chegou (foto por etapa). Curto: só a etapa e o tempo.
+            _ft = r.get("foto")
+            if isinstance(_ft, dict) and _ft.get("etapa"):
+                d["foto_etapa"] = str(_ft.get("etapa"))[:20]
+                if _ft.get("t") is not None:
+                    d["foto_t"] = _ft.get("t")
             return d
 
         _tot = 0.0

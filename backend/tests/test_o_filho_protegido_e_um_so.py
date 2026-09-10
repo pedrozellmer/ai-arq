@@ -118,13 +118,15 @@ def test_o_teto_da_producao_e_o_MESMO_do_filho_protegido():
 
 
 def _envs_de_subprocesso(fonte):
-    """Chaves de cada `env={...}` passado a um subprocess.run no fonte.
+    """{chave: valor} de cada `env={...}` passado a um subprocess.run no fonte.
 
     🪤 Ancorado na AST porque a 1ª versão procurava a PALAVRA no texto — e a
     mutação passou batida: os comentários que EXPLICAM por que
-    `PYTHONFAULTHANDLER` existe contêm a palavra. Tirar a chave do dicionário
-    de verdade não mudava nada pro guarda. É a quinta vez que prosa citando
-    código engana um guarda meu.
+    `PYTHONFAULTHANDLER` existe contêm a palavra. É a quinta vez que prosa
+    citando código engana um guarda meu.
+    🩸 10/09/2026: guardava só as CHAVES. `"FILHO_IMPRIME_FOTO": "0"` passava
+    verde e a promoção ficava sem foto. Agora o VALOR constante vem junto
+    (valor que não é literal vira None e não casa com a receita).
     """
     fora = []
     for n in ast.walk(ast.parse(fonte)):
@@ -135,32 +137,44 @@ def _envs_de_subprocesso(fonte):
         for kw in n.keywords:
             if kw.arg != "env" or not isinstance(kw.value, ast.Dict):
                 continue
-            fora.append({k.value for k in kw.value.keys
-                         if isinstance(k, ast.Constant) and isinstance(k.value, str)})
+            fora.append({
+                k.value: (v.value if isinstance(v, ast.Constant) else None)
+                for k, v in zip(kw.value.keys, kw.value.values)
+                if isinstance(k, ast.Constant) and isinstance(k.value, str)})
     return fora
 
 
+def _leva_a_receita(env):
+    return all(env.get(k) == v for k, v in fp.ENV_DO_FILHO.items())
+
+
 @pytest.mark.parametrize("chave", ["PYTHONFAULTHANDLER", "OPENBLAS_NUM_THREADS",
-                                   "MALLOC_ARENA_MAX"])
+                                   "MALLOC_ARENA_MAX", "FILHO_IMPRIME_FOTO"])
 def test_o_env_da_producao_e_o_MESMO(chave):
     """🪤 Cada uma dessas tem um motivo MEDIDO: sem faulthandler a morte em
-    código C sai com stderr vazio; sem os outros dois o OpenBLAS reserva >1 GB
-    de endereço virtual que nunca vira RAM e o RLIMIT_AS mata medição boa."""
+    código C sai com stderr vazio; sem os dois seguintes o OpenBLAS reserva
+    >1 GB de endereço virtual que o RLIMIT_AS cobra; sem a foto, estouro de
+    tempo não diz em que etapa estava."""
     assert chave in fp.ENV_DO_FILHO, chave
     envs = _envs_de_subprocesso(_fonte("main.py"))
-    completos = [e for e in envs if set(fp.ENV_DO_FILHO) <= e]
+    completos = [e for e in envs if _leva_a_receita(e)]
     assert completos, (
-        "nenhum subprocess.run do main.py passa a receita completa %s — o "
-        "filho da produção perdeu %r e os dois lados divergiram"
-        % (sorted(fp.ENV_DO_FILHO), chave))
+        "nenhum subprocess.run do main.py passa a receita completa %s, com os "
+        "MESMOS valores — o filho da produção perdeu %r e os dois lados divergiram"
+        % (sorted(fp.ENV_DO_FILHO.items()), chave))
 
 
-def test_CONTROLE_o_leitor_de_env_ACHA_a_chave_removida():
-    """🧪 Prova que o predicado reprova: o mesmo fonte sem uma chave."""
-    com = 'subprocess.run(c, env={**os.environ, "PYTHONFAULTHANDLER": "1", "OPENBLAS_NUM_THREADS": "1", "MALLOC_ARENA_MAX": "2"})'
-    sem = 'subprocess.run(c, env={**os.environ, "OPENBLAS_NUM_THREADS": "1", "MALLOC_ARENA_MAX": "2"})'
-    assert [e for e in _envs_de_subprocesso(com) if set(fp.ENV_DO_FILHO) <= e]
-    assert not [e for e in _envs_de_subprocesso(sem) if set(fp.ENV_DO_FILHO) <= e]
+def test_CONTROLE_o_leitor_de_env_ACHA_a_chave_removida_e_o_valor_trocado():
+    """🧪 Prova que o predicado reprova: sem uma chave, e com um valor trocado.
+    Montado a partir da receita, pra não envelhecer quando ela crescer."""
+    pares = ", ".join('"%s": "%s"' % kv for kv in fp.ENV_DO_FILHO.items())
+    com = "subprocess.run(c, env={**os.environ, %s})" % pares
+    sem = com.replace('"PYTHONFAULTHANDLER": "1", ', "")
+    trocado = com.replace('"FILHO_IMPRIME_FOTO": "1"', '"FILHO_IMPRIME_FOTO": "0"')
+    assert sem != com and trocado != com
+    assert [e for e in _envs_de_subprocesso(com) if _leva_a_receita(e)]
+    assert not [e for e in _envs_de_subprocesso(sem) if _leva_a_receita(e)]
+    assert not [e for e in _envs_de_subprocesso(trocado) if _leva_a_receita(e)]
 
 
 def test_o_teto_vem_ANTES_de_qualquer_import_no_corpo():

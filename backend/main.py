@@ -11108,7 +11108,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     _pr = _sp.run(_cmd, capture_output=True, text=True, timeout=75,
                                   env={**os.environ, "PYTHONFAULTHANDLER": "1",
                                        "OPENBLAS_NUM_THREADS": "1",
-                                       "MALLOC_ARENA_MAX": "2"})
+                                       "MALLOC_ARENA_MAX": "2",
+                                       "FILHO_IMPRIME_FOTO": "1"})
                     # 🚨 31/08 (auditoria do mesmo dia): o commit se chama "parar de
                     # perder prancha em silêncio" e ESTE caminho continuava mudo.
                     # `_pdfvec_falhas` só era alimentado pelo `except` lá embaixo, que
@@ -11133,9 +11134,17 @@ bloco — só cite os que estão no inventário deste arquivo."""
                             "motivo": "processo", "rc": _pr.returncode,
                             "pdf_path": pdf_path, "pagina": page_index,
                         })
+                        # 🩸 10/09/2026: até onde o filho chegou antes de morrer
+                        # (foto por etapa). Import DENTRO do ramo: testes executam
+                        # esta fatia com namespace montado.
+                        try:
+                            import filho_protegido as _fpf
+                            _foto_txt = _fpf.foto_em_texto(_fpf.ultima_foto(_pr.stdout))
+                        except Exception:
+                            _foto_txt = ""
                         _log_error("pdfvec:filho-morreu",
                                    f"{_stem} ({filename}): medição geométrica morreu "
-                                   f"com rc={_pr.returncode} — {_err} | stdout: {_saida}",
+                                   f"com rc={_pr.returncode}{_foto_txt} — {_err} | stdout: {_saida}",
                                    job_id, severity="error")
                         print(f"[pdfvec] {_stem}: filho rc={_pr.returncode} — {_err[:200]}")
                     _vm = _jv.loads(_pr.stdout.strip().splitlines()[-1]) if _pr.returncode == 0 and _pr.stdout.strip() else {}
@@ -11371,8 +11380,21 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     # job usa. A falha ficava invisível justamente por ser grave.
                     # 🔑 Stage PRÓPRIO pra falha: sai do balde de diagnóstico e
                     # a severidade volta a significar o que diz.
+                    # 🩸 10/09/2026: no estouro de tempo, até onde o filho chegou.
+                    # 🪤 No Linux `_ve.stdout` vem em BYTES (ou None) mesmo com
+                    # text=True — `ultima_foto` trata os três. A etiqueta vai
+                    # ANTES da exceção: o texto do TimeoutExpired carrega o
+                    # comando inteiro e empurraria a foto pra fora do corte.
+                    _foto_txt = ""
+                    if _eh_tempo:
+                        try:
+                            import filho_protegido as _fpf
+                            _foto_txt = _fpf.foto_em_texto(
+                                _fpf.ultima_foto(getattr(_ve, "stdout", None)))
+                        except Exception:
+                            _foto_txt = ""
                     _log_error("pdfvec:promo-falhou",
-                               f"{_stem}: FALHOU {type(_ve).__name__}: {_ve}"[:200],
+                               f"{_stem}: FALHOU {type(_ve).__name__}{_foto_txt}: {_ve}"[:400],
                                job_id,
                                severity="warning" if _eh_tempo else "error")
 

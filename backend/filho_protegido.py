@@ -63,6 +63,9 @@ ENV_DO_FILHO = {
     "PYTHONFAULTHANDLER": "1",
     "OPENBLAS_NUM_THREADS": "1",
     "MALLOC_ARENA_MAX": "2",
+    # 🩸 10/09/2026: liga a FOTO POR ETAPA (ver `imprimir_foto`). Sem ela, o
+    # filho que estoura o tempo ou morre não diz em que etapa estava.
+    "FILHO_IMPRIME_FOTO": "1",
 }
 
 
@@ -81,6 +84,92 @@ def prefixo_do_teto(rlimit_bytes: int = RLIMIT_BYTES) -> list[str]:
         "except Exception:",
         "    pass",
     ]
+
+
+#: Marca que separa a FOTO de uma etapa do JSON final da medição.
+MARCA_DA_FOTO = "_foto_da_etapa"
+
+#: Foto maior que isto não sai: é telemetria, não compete com o JSON final.
+TETO_DA_FOTO = 3500
+
+
+def imprimir_foto(campos) -> None:
+    """Imprime, com flush, uma linha curta dizendo até onde o filho chegou.
+
+    🩸 10/09/2026 — reprocesso interno do job 7ddbccc1: a medição estourou os
+    75 s pela terceira vez, e a sombra, com 170 s, também. Nenhuma das duas
+    disse EM QUE ETAPA o relógio venceu: o filho só imprime o JSON no fim, e
+    quem morre no meio não imprime nada. Sem isso, qualquer conserto de tempo
+    é chute.
+
+    🔑 Só telemetria. Nada do que sai aqui vira medição na planilha.
+    🪤 Três cuidados, cada um um furo que a revisão adversarial achou:
+    - o env é conferido ANTES de montar qualquer coisa, e tudo mora num
+      try/except: foto nunca derruba a medição, nem com MemoryError;
+    - flush explícito: processo que aborta (SIGABRT) não esvazia o buffer;
+    - a marca vai dentro da linha, pro pai nunca confundir foto com o JSON
+      final.
+    """
+    try:
+        if os.environ.get("FILHO_IMPRIME_FOTO") != "1":
+            return
+        dados = dict(campos or {})
+        dados[MARCA_DA_FOTO] = 1
+        linha = json.dumps(dados, ensure_ascii=True, separators=(",", ":"),
+                           default=str)
+        if len(linha) > TETO_DA_FOTO:
+            return
+        sys.stdout.write(linha + chr(10))
+        sys.stdout.flush()
+    except Exception:
+        pass
+
+
+def ultima_foto(saida) -> dict:
+    """A última foto COMPLETA num stdout de filho — ou {} se não houver.
+
+    🪤 No Linux o `TimeoutExpired.stdout` chega em BYTES mesmo com
+    `text=True` (ou None, se nada foi lido); no Windows chega em str. Guarda
+    que só testasse str passaria aqui e quebraria em produção.
+    🪤 A última linha pode vir cortada no meio (o kill chega durante a
+    escrita): vale a última linha INTEIRA que tenha a marca.
+    """
+    try:
+        if saida is None:
+            return {}
+        if isinstance(saida, (bytes, bytearray)):
+            saida = bytes(saida).decode("utf-8", "replace")
+        for linha in reversed(str(saida).splitlines()):
+            linha = linha.strip()
+            if not (linha.startswith("{") and linha.endswith("}")):
+                continue
+            try:
+                d = json.loads(linha)
+            except ValueError:
+                continue
+            if isinstance(d, dict) and d.get(MARCA_DA_FOTO):
+                d.pop(MARCA_DA_FOTO, None)
+                return d
+    except Exception:
+        return {}
+    return {}
+
+
+def foto_em_texto(foto) -> str:
+    """A foto numa etiqueta curta pro log.
+
+    🪤 "lida", não "concluída": no Linux uma foto escrita na janela final do
+    relógio pode ainda estar no pipe quando o pai desiste. A etapa EM CURSO
+    na hora da morte é a seguinte à que aparece aqui — e é desconhecida.
+    """
+    if not isinstance(foto, dict) or not foto.get("etapa"):
+        return " [nenhuma etapa lida]"
+    partes = ["ultima_etapa_lida=%s" % str(foto.get("etapa"))[:20]]
+    if foto.get("t") is not None:
+        partes.append("t=%ss" % foto.get("t"))
+    if foto.get("vmpeak_mb"):
+        partes.append("vmpeak=%sMB" % foto.get("vmpeak_mb"))
+    return " [" + " ".join(partes) + "]"
 
 
 def rodar(corpo: list[str], argv: list[str], timeout_s: float,
@@ -103,20 +192,39 @@ def rodar(corpo: list[str], argv: list[str], timeout_s: float,
         pr = subprocess.run(cmd, capture_output=True, text=True,
                             timeout=timeout_s,
                             env={**os.environ, **ENV_DO_FILHO})
-    except subprocess.TimeoutExpired:
-        return {"skip": "%s estourou o tempo" % rotulo, "timeout_s": timeout_s}
+    except subprocess.TimeoutExpired as e:
+        r = {"skip": "%s estourou o tempo" % rotulo, "timeout_s": timeout_s}
+        # 🩸 10/09/2026: até onde chegou. Aninhada, NUNCA no topo: quem não
+        # conhece a foto a ignora, e a sombra não conta morte como medição.
+        foto = ultima_foto(getattr(e, "stdout", None))
+        if foto:
+            r["foto"] = foto
+        return r
     except Exception as e:
         return {"skip": "%s nao rodou" % rotulo,
                 "err": "%s: %s" % (type(e).__name__, str(e)[:100])}
     if pr.returncode != 0:
-        return {"skip": "%s morreu" % rotulo, "rc": pr.returncode,
-                "err": ((pr.stderr or "").strip()[-400:] or "(sem stderr)")}
+        r = {"skip": "%s morreu" % rotulo, "rc": pr.returncode,
+             "err": ((pr.stderr or "").strip()[-400:] or "(sem stderr)")}
+        foto_da_morte = ultima_foto(pr.stdout)
+        if foto_da_morte:
+            r["foto"] = foto_da_morte
+        return r
     # 🪤 A ÚLTIMA LINHA, não o buffer inteiro: bibliotecas e o registro de
     # cache do `llm_retry` imprimem ANTES do JSON. Ler tudo faz a medição boa
     # virar "JSON quebrado" — perda silenciosa no instrumento de medida.
     saida = (pr.stdout or "").strip()
     try:
-        return json.loads(saida.splitlines()[-1]) if saida else {}
+        final = json.loads(saida.splitlines()[-1]) if saida else {}
     except (ValueError, TypeError, IndexError) as e:
-        return {"skip": "%s devolveu JSON quebrado" % rotulo,
-                "err": "%s" % type(e).__name__}
+        r = {"skip": "%s devolveu JSON quebrado" % rotulo,
+             "err": "%s" % type(e).__name__}
+        foto_do_quebrado = ultima_foto(saida)
+        if foto_do_quebrado:
+            r["foto"] = foto_do_quebrado
+        return r
+    # 🪤 rc=0 com uma FOTO na última linha: o filho saiu sem imprimir o JSON
+    # final. Não é medição completa — nunca devolver a foto como se fosse.
+    if isinstance(final, dict) and final.get(MARCA_DA_FOTO):
+        return {"skip": "%s não terminou" % rotulo, "foto": ultima_foto(saida)}
+    return final
