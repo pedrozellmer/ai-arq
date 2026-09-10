@@ -14376,8 +14376,22 @@ def _saida_do_filho_pdfvec(rc, vm) -> tuple:
                    or (vm.get("declared") or None) or "-")
         cotas = vm.get("cotas_derivacao") or vm.get("err_cotas_derive") or "-"
         viewport = vm.get("err_viewport") or vm.get("n_viewports") or "-"
+        # 🩸 10/09/2026: o que a busca da escala AO LADO DA VISTA achou. Vem
+        # ANTES das cotas, que são longas: se a linha for cortada, o rastro
+        # fica. A forma curta mora em `pdf_vector.rastro_da_escala_por_vista`.
+        try:
+            from pdf_vector import rastro_da_escala_por_vista
+            _pv = rastro_da_escala_por_vista(vm)
+        except Exception:
+            _pv = {"erro": "rastro indisponível"}
+        if not _pv:
+            vista = "-"
+        else:
+            vista = "n=%s lidas=%s" % (_pv.get("n"), _pv.get("lidas"))
+            if _pv.get("erro"):
+                vista += " erro=%s" % _pv["erro"]
         return "sem_escala", (f"{vm.get('skip')} — viewport={viewport} carimbo={carimbo} "
-                              f"cotas={cotas} secs={vm.get('secs')}")
+                              f"vista={vista} cotas={cotas} secs={vm.get('secs')}")
     return None, ""
 
 

@@ -487,6 +487,40 @@ def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
     return out
 
 
+def rastro_da_escala_por_vista(r) -> dict:
+    """O que a busca da escala AO LADO DA VISTA achou, em forma curta.
+
+    🩸 10/09/2026 — MEDIDO E DESCARTADO, dentro do próprio instrumento. O
+    reprocesso interno do job 135fdfac saiu "sem escala" com o carimbo dizendo
+    `indicadas` — exatamente o gatilho da busca por vista. `_measure_page`
+    guardava o resultado em `escala_por_vista`, e ele não entrava nem no log
+    `pdfvec:sem-escala` nem no resumo da sombra. Impossível dizer se a busca
+    recortou as vistas e não leu rótulo nenhum, ou se nem achou vista.
+
+    🔑 Curto de propósito: `n` vistas recortadas e a escala lida em cada uma
+    (None = sem rótulo legível). `bboxes` fica de fora: é longo e só serve pra
+    depurar à mão.
+    🔑 UMA decisão, dois consumidores: o resumo da sombra (`_run`) e o detalhe
+    do log `pdfvec:sem-escala` (`main._saida_do_filho_pdfvec`). Resumir de novo
+    em cada lado é o lado morto que esta casa persegue.
+
+    Devolve None quando a busca não rodou (carimbo sem `indicadas`).
+    """
+    if not isinstance(r, dict):
+        return None
+    pv = r.get("escala_por_vista")
+    err = r.get("err_escala_vista")
+    if not isinstance(pv, dict) and not err:
+        return None
+    saida = {}
+    if isinstance(pv, dict):
+        saida["n"] = pv.get("n_vistas")
+        saida["lidas"] = list(pv.get("por_vista") or [])[:12]
+    if err:
+        saida["erro"] = str(err)[:120]
+    return saida
+
+
 def medir_pagina_em_filho(pdf_path: str, page_index: int,
                          timeout_s: float = SHADOW_TIMEOUT_S) -> dict:
     """`_measure_page` num processo FILHO com teto de memória do kernel.
@@ -649,6 +683,12 @@ def _run(page_units: list, job_id: str, api_key: str, log_fn, pular=None) -> Non
             for _k in list(d):
                 if _k.startswith("err") and isinstance(d.get(_k), str):
                     d[_k] = d[_k][:120]
+            # 🩸 10/09/2026: o que a busca da escala ao lado da vista achou —
+            # calculado pelo filho e descartado aqui até hoje. Forma curta e
+            # decisão única em `rastro_da_escala_por_vista`.
+            _pv = rastro_da_escala_por_vista(r)
+            if _pv:
+                d["escala_por_vista"] = _pv
             return d
 
         _tot = 0.0
