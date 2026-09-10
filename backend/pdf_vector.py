@@ -592,11 +592,26 @@ def _run(page_units: list, job_id: str, api_key: str, log_fn, pular=None) -> Non
             # CALCULADO e jogado fora aqui — a 3ª fonte falhou 40 vezes e
             # ninguém soube por quê. Keep-list que descarta evidência é o
             # mesmo vício da keep-list de `meta` da auditoria de 27/08.
+            # 🩸 09/09/2026 — A PAREDE ERA MEDIDA E JOGADA FORA AQUI.
+            # `_measure_page` roda `detect_walls` e devolve `walls_m`, `n_walls`
+            # e `err_walls` — e nenhum dos três estava nesta lista. Resultado:
+            # **ZERO página** com `walls_m` no banco, em todos os dias.
+            # 🪤 E o custo não é só perder o número: eu passei a ler a AUSÊNCIA
+            # DE REGISTRO como ausência de MEDIÇÃO, e quase concluí "o motor
+            # acha ambiente e não acha parede em 78% das páginas" — afirmação
+            # que o dado não sustenta. É o mesmo erro do `poligonos=0`, que eu
+            # tinha apontado poucas horas antes, no mesmo dia.
+            # 🔑 Isso importa porque a parede é o gargalo do PDF: as linhas em
+            # `ml` saem 83,3% zeradas, e os 789 m² de parede zerados (86,8% de
+            # todo o m² perdido no PDF) dependem de comprimento × pé-direito.
+            # Sem `walls_m` no log não dá pra saber se falta MEDIR ou falta
+            # ENTREGAR — e são consertos completamente diferentes.
             keep = ("file", "page", "scale", "scale_src", "n_rooms",
                     "rooms_m2", "n_grupos", "grupo_maior_m2", "grupo_maior_comodos",
                     "envelope_m2", "envelope_m2_150", "envelope_top",
                     "cotas_derivacao", "err_cotas_derive", "err_cotas",
-                    "scale_derivada_por_cota", "skip", "err")
+                    "scale_derivada_por_cota", "skip", "err",
+                    "walls_m", "n_walls", "err_walls")
             d = {k: r[k] for k in keep if r.get(k) is not None}
             if isinstance(d.get("file"), str):
                 d["file"] = d["file"][:34]
@@ -605,8 +620,9 @@ def _run(page_units: list, job_id: str, api_key: str, log_fn, pular=None) -> Non
             # JSON no meio — a linha inteira vira ilegível e leva junto as
             # páginas que mediram bem. É a reabertura literal do incidente de
             # 30/07 que o comentário acima registra.
-            if isinstance(d.get("err"), str):
-                d["err"] = d["err"][:120]
+            for _k in ("err", "err_walls"):
+                if isinstance(d.get(_k), str):
+                    d[_k] = d[_k][:120]
             return d
 
         _tot = 0.0

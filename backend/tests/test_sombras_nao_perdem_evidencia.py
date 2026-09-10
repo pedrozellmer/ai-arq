@@ -124,3 +124,77 @@ def test_teto_agora_e_env():
         del os.environ["PDFVEC_MAX_PAGES"]
         importlib.reload(pv)
         assert pv.MAX_PAGES == 8  # default novo (era 3 fixo)
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  🩸 A PAREDE MEDIDA NÃO PODE MORRER NA KEEP-LIST
+# ══════════════════════════════════════════════════════════════════════════
+def test_a_PAREDE_medida_sobrevive_no_resumo(monkeypatch, tmp_path):
+    """🩸 09/09/2026. `_measure_page` roda `detect_walls` e devolve `walls_m`,
+    `n_walls` e `err_walls`. Nenhum dos três estava na keep-list — resultado:
+    **ZERO página com `walls_m` no banco**, em todos os dias medidos.
+
+    🪤 E o custo não foi só perder o número. Eu li a AUSÊNCIA DE REGISTRO como
+    ausência de MEDIÇÃO e quase afirmei ao Pedro que "o motor acha ambiente e
+    não acha parede em 78% das páginas" — conclusão que o dado não sustenta. É
+    o mesmo erro do `poligonos=0`, que eu tinha apontado poucas horas antes no
+    mesmo dia.
+
+    🔑 Por que a parede é o campo que mais importa no PDF, medido em 09/09:
+      • linhas em `ml` saem **83,3% zeradas**;
+      • dos 909 m² zerados do PDF, **789 (86,8%) são parede/pintura**, e o
+        m² de parede sai de comprimento × pé-direito;
+      • sem `walls_m` no log não dá pra saber se falta MEDIR ou falta
+        ENTREGAR — e são consertos completamente diferentes.
+    """
+    f = tmp_path / "p.pdf"
+    f.write_bytes(b"%PDF-fake")
+    payload = _roda_shadow_pdf(monkeypatch, [(str(f), "p.pdf", "arq", 0)], {
+        "file": "p.pdf", "page": 0, "scale": 50, "scale_src": "carimbo",
+        "n_rooms": 12, "rooms_m2": 140.0,
+        "walls_m": 276.3, "n_walls": 41,
+    })
+    pagina = payload["pages"][0]
+    assert pagina.get("walls_m") == 276.3, pagina
+    assert pagina.get("n_walls") == 41, pagina
+
+
+def test_o_ERRO_do_passo_de_parede_tambem_sobrevive(monkeypatch, tmp_path):
+    """🔑 Se `detect_walls` estourar, o motivo tem que chegar. Sem isto,
+    "não mediu" e "estourou" viram a mesma ausência — foi essa confusão que
+    custou 40 falhas sem resposta na 3ª fonte de escala (conserto de 15/08)."""
+    f = tmp_path / "q.pdf"
+    f.write_bytes(b"%PDF-fake")
+    payload = _roda_shadow_pdf(monkeypatch, [(str(f), "q.pdf", "arq", 0)], {
+        "file": "q.pdf", "page": 0, "scale": 50, "n_rooms": 3,
+        "err_walls": "ValueError: sem pares de paralelas",
+    })
+    assert payload["pages"][0]["err_walls"].startswith("ValueError")
+
+
+def test_o_stderr_do_passo_de_parede_e_CORTADO(monkeypatch, tmp_path):
+    """🪤 `err_walls` entrou na keep-list junto com `walls_m`. Se ele entrar
+    INTEIRO, repete o estouro dos 2.000 caracteres da coluna que hoje já parte
+    o JSON — o mesmo defeito, por um campo novo."""
+    import json as _j
+    f = tmp_path / "r.pdf"
+    f.write_bytes(b"%PDF-fake")
+    payload = _roda_shadow_pdf(monkeypatch, [(str(f), "r.pdf", "arq", 0)], {
+        "file": "r.pdf", "page": 0, "scale": 50,
+        "err_walls": "Traceback " + "x" * 600,
+    })
+    assert len(payload["pages"][0]["err_walls"]) <= 120, (
+        "err_walls foi inteiro pro log e vai estourar a coluna")
+    _j.dumps(payload)
+
+
+def test_CONTROLE_pagina_SEM_parede_nao_inventa_campo(monkeypatch, tmp_path):
+    """🧪 O outro lado: a keep-list só copia o que EXISTE. Página que não mediu
+    parede não pode ganhar `walls_m: 0` — zero medido e nada medido são coisas
+    diferentes, e é justamente a confusão que este arquivo combate."""
+    f = tmp_path / "s.pdf"
+    f.write_bytes(b"%PDF-fake")
+    payload = _roda_shadow_pdf(monkeypatch, [(str(f), "s.pdf", "arq", 0)], {
+        "file": "s.pdf", "page": 0, "scale": 50, "n_rooms": 5, "rooms_m2": 60.0,
+    })
+    assert "walls_m" not in payload["pages"][0], payload["pages"][0]
