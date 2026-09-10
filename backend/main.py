@@ -5714,6 +5714,9 @@ def _consolidate_items(items: list) -> list:
         buckets_p3.setdefault(key, []).append(it)
 
     pass3 = list(keep_as_is)
+    # itens que esta passada RECUSOU fundir por atributo diferente — a passada 5
+    # não pode apagá-los depois (ver o guarda de lá)
+    _recusados_p3: set = set()
     for (disc, noun, unit, code_tag), group in buckets_p3.items():
         descs = [it.description for it in group]
 
@@ -5764,17 +5767,22 @@ def _consolidate_items(items: list) -> list:
         # 250 × 241 cm — 2 variantes consolidadas" com 4 un. A outra janela sumiu
         # dentro da AL004, e a própria planilha, no desconto da pintura, contava
         # AL004 = 2 un. Os pilares do mesmo projeto: 4 seções numa linha só.
-        # 📏 Nos projetos de cliente desde 01/09: 269 linhas fundidas aqui em 74
-        # projetos; 34 (26 projetos) ficaram com dimensão na descrição — teto do
-        # alcance, porque a descrição que sobra não prova o que foi somado.
+        # 📏 Projetos de cliente: 272 linhas fundidas aqui em 75 projetos no
+        # histórico (93 em 17 desde 01/09). Mudança de entrega PROVADA: 2 linhas
+        # em 2 projetos — esta AL004 e um pilar "15×20 — 7 variantes" cujas 7
+        # seções o próprio projeto lista. A linha consumida não é gravada, então o
+        # resto não se prova. 🪤 A 1ª versão deste comentário dizia "269 desde
+        # 01/09": era o histórico inteiro — tirei o mínimo de uma data em TEXTO.
         # 🔑 Mesma decisão das passadas 1, 2 e 6: atributo distintivo diferente
         # (dimensão, código, bitola, classe, fck) é item diferente — regra dura
         # nº4. Aqui a checagem é PAR A PAR: um item sem dimensão no começo do
         # grupo não pode liberar duas dimensões diferentes depois dele.
-        # 🪤 As passadas 1 e 6 comparam só com o primeiro do grupo.
+        # 🪤 As passadas 1 e 6 comparam só com o primeiro do grupo e a 2 com o
+        # primeiro da família: o resultado delas depende da ordem (achado separado).
         _descs_p3 = [it.description or "" for it in group]
         if any(not _pode_fundir(_a, _b)
                for _i, _a in enumerate(_descs_p3) for _b in _descs_p3[_i + 1:]):
+            _recusados_p3.update(id(_x) for _x in group)
             pass3.extend(group)
             continue
 
@@ -5889,7 +5897,12 @@ def _consolidate_items(items: list) -> list:
     vague_by_disc: dict[str, list] = {}
     pass5 = []
     for it in pass4:
-        if _is_vague(it):
+        # 🩸 10/09/2026 (revisão adversarial do conserto da passada 3): o que a
+        # passada 3 RECUSOU fundir por atributo diferente não pode ser apagado
+        # aqui. Com 1 un cada, AL004 + AL005 "por definir" viravam UMA linha
+        # "Itens de ... a especificar em projeto executivo" de 1 vb — as janelas e
+        # o box ao lado sumiam. Antes do conserto a soma (2 un) escapava deste corte.
+        if _is_vague(it) and id(it) not in _recusados_p3:
             vague_by_disc.setdefault(it.discipline or "Complementares", []).append(it)
         else:
             pass5.append(it)
