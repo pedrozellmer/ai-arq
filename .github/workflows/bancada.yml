@@ -52,7 +52,32 @@ jobs:
 
       - name: pytest
         working-directory: backend
-        run: python -m pytest tests/ -q
+        run: |
+          set -o pipefail
+          python -m pytest tests/ -q 2>&1 | tee "$RUNNER_TEMP/pytest.txt"
+
+      # 🩸 09/09/2026 — EU NAO CONSEGUIA LER A PROPRIA FALHA.
+      # O CI ficou vermelho num commit meu e o log da Action exige LOGIN: a API
+      # publica devolve 403 em /jobs/{id}/logs, a pagina web pede "Sign in to
+      # view logs", e artefato tambem e autenticado. A bancada passava verde na
+      # minha maquina (Windows) e caia so no Linux — 13 testes sao Unix-only e
+      # eu nao tenho sinal nenhum deles aqui.
+      # 🔑 A memoria diz "CI vermelho e MEU de achar". Sem isto, nao era: eu
+      # dependia do Pedro copiar o log pra mim.
+      # As ANOTACOES de check run SAO publicas — e sao o unico canal que sai
+      # sem autenticacao. Entao a falha vira anotacao.
+      - name: a falha tem que ser legivel SEM login
+        if: failure()
+        run: |
+          F="$RUNNER_TEMP/pytest.txt"
+          [ -f "$F" ] || { echo "::error::pytest nao deixou saida em $F"; exit 0; }
+          grep -E "^(FAILED|ERROR)" "$F" | head -40 | while IFS= read -r l; do
+            echo "::error::$l"
+          done
+          # o resumo e as ultimas linhas dizem QUANTOS e POR QUE
+          tail -25 "$F" | while IFS= read -r l; do
+            echo "::error::| $l"
+          done
 
       # 🚨 25/08/2026 (auditoria do dia): o passo acima conferia o VERDE e nao o
       # NUMERO. Foi exatamente assim que a bancada ficou apagada em 23/08 —
