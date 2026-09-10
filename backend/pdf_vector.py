@@ -424,22 +424,31 @@ def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
         # envoltória: ponte proporcional à escala (1,2 m reais). Antes era 12pt
         # fixo — batia com 1,2 m só em 1:100; em 1:50 fechava apenas 0,6 m.
         _marca("rooms", _t_et)
-        _t_et = time.time()
-        env_gap_pt = 1.2 / (PT_TO_M * den)
-        # 🪤 O piso de 400 m² é arbitrário e estava DESCARTANDO setor real: no
-        # projeto de teste o setor "área sem intervenção" tem 380,9 m² e ficava
-        # de fora — por isso a envoltória não saía em 5 das 7 pranchas. Agora a
-        # busca desce a 150 m² e registramos AS DUAS leituras (a de 400, que é o
-        # comportamento atual, e a mais baixa) pra decidir o piso com dado real.
-        # Mesmo custo: continua UMA passada. 30/07/2026.
-        env = detect_rooms(pdf_path, page_index, den, bbox,
-                           min_m2=150, max_m2=5000, bridge_gaps_pt=env_gap_pt,
-                           _segments=_segs)
-        _env_areas = sorted((r["area_m2"] for r in env), reverse=True)
-        out["envelope_m2"] = round(max((a for a in _env_areas if a >= 400), default=0), 1) or None
-        out["envelope_m2_150"] = round(_env_areas[0], 1) if _env_areas else None
-        out["envelope_top"] = [round(a, 1) for a in _env_areas[:4]]
-        _marca("envoltoria", _t_et)
+        # 🩸 10/09/2026 — A PROMOÇÃO NÃO CALCULA A ENVOLTÓRIA. Ninguém no
+        # main.py lê `envelope_*` (só a keep-list da sombra), e ela chama as
+        # MESMAS funções de sala que passaram a acusar falta de memória: uma
+        # falha AQUI marcaria como incompleta uma prancha cujas salas saíram
+        # perfeitas (achado da revisão adversarial). Interruptor no molde do
+        # PDFVEC_CAMADAS; a sombra segue calculando.
+        if os.environ.get("PDFVEC_ENVOLTORIA", "1") != "0":
+            _t_et = time.time()
+            env_gap_pt = 1.2 / (PT_TO_M * den)
+            # 🪤 O piso de 400 m² é arbitrário e estava DESCARTANDO setor real: no
+            # projeto de teste o setor "área sem intervenção" tem 380,9 m² e ficava
+            # de fora — por isso a envoltória não saía em 5 das 7 pranchas. Agora a
+            # busca desce a 150 m² e registramos AS DUAS leituras (a de 400, que é o
+            # comportamento atual, e a mais baixa) pra decidir o piso com dado real.
+            # Mesmo custo: continua UMA passada. 30/07/2026.
+            env = detect_rooms(pdf_path, page_index, den, bbox,
+                               min_m2=150, max_m2=5000, bridge_gaps_pt=env_gap_pt,
+                               _segments=_segs)
+            _env_areas = sorted((r["area_m2"] for r in env), reverse=True)
+            out["envelope_m2"] = round(max((a for a in _env_areas if a >= 400), default=0), 1) or None
+            out["envelope_m2_150"] = round(_env_areas[0], 1) if _env_areas else None
+            out["envelope_top"] = [round(a, 1) for a in _env_areas[:4]]
+            _marca("envoltoria", _t_et)
+        else:
+            out["envoltoria"] = "pulada: a promoção não lê"
     except Exception as e:
         out["err_rooms"] = f"{type(e).__name__}: {e}"[:120]
         _marca("envoltoria" if "rooms" in _etapas else "rooms", _t_et)

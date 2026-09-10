@@ -110,29 +110,66 @@ def test_a_linha_do_log_diz_quantas_e_quais():
     assert "VmPeak=" not in linha, "a série do p95 casa 'VmPeak=' — outro log não pode imitar"
 
 
-def test_o_process_job_grava_o_sinal_junto_da_memoria():
-    from _corpo import fonte
-    arvore = ast.parse(fonte("main.py"))
-    chama = [n for n in ast.walk(arvore) if isinstance(n, ast.Call)
-             and getattr(n.func, "id", None) == "_pranchas_perto_do_teto"]
-    assert len(chama) == 1 and [ast.unparse(a) for a in chama[0].args] == ["_res"], (
-        [ast.unparse(a) for c in chama for a in c.args])
-    logs = [n for n in ast.walk(arvore) if isinstance(n, ast.Call)
-            and getattr(n.func, "id", None) == "_log_error" and n.args
-            and isinstance(n.args[0], ast.Constant) and n.args[0].value == "pdfvec:perto-do-teto"]
-    assert len(logs) == 1, len(logs)
+def test_o_process_job_grava_o_sinal_so_com_prancha_pesada():
+    """🩸 10/09/2026 (revisão adversarial): a 1ª versão deste guarda só
+    conferia na AST que a chamada e o log EXISTIAM — quatro mutantes (o `if`
+    que nunca dispara, argumento trocado) passavam verdes. Agora o bloco real
+    do `process_job` é EXECUTADO com `_log_error` espionado."""
+    import _executa
+    import main
+    logs = []
+
+    def _prancha_real(nome, pico_mb):
+        return {"arquivo": nome, "pagina": 0, "rooms_m2": 10.0, "walls_m": 5.0,
+                "mem_kb": {"VmPeak": pico_mb * 1024, "VmHWM": pico_mb * 512},
+                "mem_kb_inicio": {"VmSize": 14 * 1024}, "etapas": {"rooms": 1.0},
+                "mem_etapas": {}}
+
+    def _roda(pranchas):
+        logs.clear()
+        escopo = dict(vars(main))
+        escopo.update({
+            "_pdfvec_por_prancha": {p["arquivo"]: p for p in pranchas},
+            "_pdfvec_area_m2": 20.0, "job_id": "job-teste",
+            "_log_error": lambda stage, msg, *a, **k: logs.append((stage, msg)),
+        })
+        _executa.roda("process_job", "_perto = _pranchas_perto_do_teto(", escopo, tamanho=1)
+        return [m for st, m in logs if st == "pdfvec:perto-do-teto"]
+
+    msgs = _roda([_prancha_real("pesada.pdf", 1800), _prancha_real("leve.pdf", 900)])
+    assert len(msgs) == 1, msgs
+    assert "pesada.pdf p0=1800MB" in msgs[0] and "leve.pdf" not in msgs[0], msgs[0]
+    assert _roda([_prancha_real("leve.pdf", 900)]) == [], "alarme sem prancha pesada"
 
 
-# ── MemoryError não é engolido nas etapas que a planilha lê ──────────────────
+# ── falta de memória não é engolida nas etapas que a planilha lê ─────────────
+#: 🩸 10/09/2026 (revisão adversarial): nas funções de SALA a falta de memória
+#: vem do GEOS como GEOSException("bad allocation"/"std::bad_alloc") — o handler
+#: tem que perguntar a `e_falta_de_memoria`; `except MemoryError` não pega. Nas
+#: de PAREDE o parse é Python puro (pdfminer): MemoryError de verdade basta.
+_FUNCOES_DE_SALA = ("_dedupe_rooms", "_drop_lattice", "_middle_layer")
+_FUNCOES_DE_PAREDE = ("_form_local_segments", "_extract_raw_segments")
 _FUNCOES_VIGIADAS = {
-    "pdfvec_rooms.py": ("_dedupe_rooms", "_drop_lattice", "_middle_layer"),
-    "pdfvec_walls.py": ("_form_local_segments", "_extract_raw_segments"),
+    "pdfvec_rooms.py": _FUNCOES_DE_SALA,
+    "pdfvec_walls.py": _FUNCOES_DE_PAREDE,
 }
 
 
-def _handlers_que_engolem_sem_memoryerror_antes(src, funcoes):
-    """[(funcao, linha)] de todo `except Exception` sem um `except MemoryError:
-    raise` ANTES dele no mesmo try."""
+def _pergunta_a_regua(handler):
+    """O `except Exception as X` chama e_falta_de_memoria(X) e relança?"""
+    if not handler.name:
+        return False
+    for n in ast.walk(ast.Module(body=handler.body, type_ignores=[])):
+        if (isinstance(n, ast.If) and isinstance(n.test, ast.Call)
+                and getattr(n.test.func, "id", None) == "e_falta_de_memoria"
+                and [ast.unparse(a) for a in n.test.args] == [handler.name]
+                and any(isinstance(x, ast.Raise) for x in n.body)):
+            return True
+    return False
+
+
+def _handlers_que_engolem(src, funcoes, aceita_so_memoryerror):
+    """[(funcao, linha)] de todo `except Exception` que engole falta de memória."""
     faltando = []
     for n in ast.walk(ast.parse(src)):
         if not (isinstance(n, ast.FunctionDef) and n.name in funcoes):
@@ -143,26 +180,32 @@ def _handlers_que_engolem_sem_memoryerror_antes(src, funcoes):
             protegido = False
             for h in t.handlers:
                 nome = ast.unparse(h.type) if h.type is not None else ""
-                if nome == "MemoryError":
+                if nome == "MemoryError" and aceita_so_memoryerror:
                     protegido = (len(h.body) == 1 and isinstance(h.body[0], ast.Raise)
                                  and h.body[0].exc is None)
-                if nome == "Exception" and not protegido:
+                if nome == "Exception" and not (protegido or _pergunta_a_regua(h)):
                     faltando.append((n.name, h.lineno))
     return faltando
 
 
-@pytest.mark.parametrize("arquivo", sorted(_FUNCOES_VIGIADAS))
-def test_nenhum_except_Exception_engole_MemoryError(arquivo):
+def test_nenhum_handler_de_SALA_engole_a_falta_de_memoria_do_GEOS():
     from _corpo import fonte
-    faltando = _handlers_que_engolem_sem_memoryerror_antes(fonte(arquivo),
-                                                           _FUNCOES_VIGIADAS[arquivo])
+    faltando = _handlers_que_engolem(fonte("pdfvec_rooms.py"), _FUNCOES_DE_SALA,
+                                     aceita_so_memoryerror=False)
     assert not faltando, (
-        "handler que engole MemoryError calado em %s: %s — sob pressão de memória "
-        "a geometria muda sem erro nenhum" % (arquivo, faltando))
+        "handler de sala que engole a falta de memória do GEOS: %s — "
+        "`except MemoryError` não pega GEOSException('bad allocation')" % faltando)
+
+
+def test_nenhum_handler_de_PAREDE_engole_MemoryError():
+    from _corpo import fonte
+    faltando = _handlers_que_engolem(fonte("pdfvec_walls.py"), _FUNCOES_DE_PAREDE,
+                                     aceita_so_memoryerror=True)
+    assert not faltando, faltando
 
 
 def test_as_funcoes_vigiadas_existem_e_tem_os_seis_handlers():
-    """Se uma função mudar de nome, o guarda acima passaria olhando o vazio."""
+    """Se uma função mudar de nome, os guardas acima passariam olhando o vazio."""
     from _corpo import fonte
     total = 0
     for arquivo, funcoes in _FUNCOES_VIGIADAS.items():
@@ -178,14 +221,24 @@ def test_as_funcoes_vigiadas_existem_e_tem_os_seis_handlers():
 
 
 def test_CONTROLE_o_guarda_REPROVA_handler_sem_a_protecao():
-    src_sem = ("def _dedupe_rooms(r):" + chr(10) + "    try:" + chr(10) + "        x = 1" + chr(10)
-               + "    except Exception:" + chr(10) + "        pass" + chr(10))
-    src_engole = ("def _dedupe_rooms(r):" + chr(10) + "    try:" + chr(10) + "        x = 1" + chr(10)
-                  + "    except MemoryError:" + chr(10) + "        pass" + chr(10)
-                  + "    except Exception:" + chr(10) + "        pass" + chr(10))
-    assert _handlers_que_engolem_sem_memoryerror_antes(src_sem, ("_dedupe_rooms",))
-    assert _handlers_que_engolem_sem_memoryerror_antes(src_engole, ("_dedupe_rooms",)), (
+    nl = chr(10)
+    sem = nl.join(["def _dedupe_rooms(r):", "    try:", "        x = 1",
+                   "    except Exception:", "        pass", ""])
+    so_memoryerror = nl.join(["def _dedupe_rooms(r):", "    try:", "        x = 1",
+                              "    except MemoryError:", "        raise",
+                              "    except Exception:", "        pass", ""])
+    engole = nl.join(["def _form_local_segments(r):", "    try:", "        x = 1",
+                      "    except MemoryError:", "        pass",
+                      "    except Exception:", "        pass", ""])
+    certo = nl.join(["def _dedupe_rooms(r):", "    try:", "        x = 1",
+                     "    except Exception as _e:", "        if e_falta_de_memoria(_e):",
+                     "            raise MemoryError(str(_e)) from _e", "        pass", ""])
+    assert _handlers_que_engolem(sem, _FUNCOES_DE_SALA, False)
+    assert _handlers_que_engolem(so_memoryerror, _FUNCOES_DE_SALA, False), (
+        "a versão do commit 2961a96 (só MemoryError) tem que ser REPROVADA nas de sala")
+    assert _handlers_que_engolem(engole, _FUNCOES_DE_PAREDE, True), (
         "um `except MemoryError: pass` também engole — tem que ser `raise`")
+    assert not _handlers_que_engolem(certo, _FUNCOES_DE_SALA, False)
 
 
 class _FaceQueEstoura:

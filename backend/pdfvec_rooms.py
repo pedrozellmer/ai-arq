@@ -51,6 +51,7 @@ from collections import Counter
 from typing import Optional, Sequence
 
 import pdfplumber
+from filho_protegido import e_falta_de_memoria  # 10/09: GEOS também fica sem memória
 from shapely.geometry import LineString, MultiLineString, Polygon, box
 from shapely.ops import polygonize, unary_union
 from shapely.strtree import STRtree
@@ -370,13 +371,17 @@ def _dedupe_rooms(
                 continue
             try:
                 inter = shells[i].intersection(shells[j]).area
-            # 🩸 10/09/2026: MemoryError NÃO é engolido. Sob pressão de memória
-            # este `continue` pulava um par de salas calado e o número mudava
-            # sem erro nenhum; subindo, vira `err_rooms=MemoryError` e o motor
-            # avisa que a prancha não terminou. Outra exceção segue pulada.
-            except MemoryError:
-                raise
-            except Exception:
+            # 🩸 10/09/2026: falta de memória NÃO é engolida. Sob pressão de
+            # memória este `continue` pulava um par de salas calado e o número
+            # mudava sem erro nenhum. 🪤 E ela chega de DOIS jeitos: MemoryError
+            # de Python, ou GEOSException("bad allocation"/"std::bad_alloc") de
+            # dentro do GEOS — a 1ª versão deste conserto só pegava o primeiro,
+            # e o GEOS nunca produz o primeiro aqui. Subindo como MemoryError,
+            # vira `err_rooms` e o motor avisa que a prancha não terminou.
+            # Outra exceção (topologia etc.) segue pulada.
+            except Exception as _e:
+                if e_falta_de_memoria(_e):
+                    raise MemoryError(str(_e)) from _e
                 continue
             ai, aj = shells[i].area, shells[j].area
             if ai <= 0 or aj <= 0 or inter <= 0:
@@ -433,9 +438,9 @@ def _drop_lattice(
                 continue
             try:
                 inter = rings[i].intersection(rings[j])
-            except MemoryError:
-                raise                   # ver _dedupe_rooms (10/09/2026)
-            except Exception:
+            except Exception as _e:     # ver _dedupe_rooms (10/09/2026)
+                if e_falta_de_memoria(_e):
+                    raise MemoryError(str(_e)) from _e
                 continue
             shared = 0.0
             if inter.geom_type == "LineString":
@@ -484,9 +489,9 @@ def _middle_layer(
     for f in faces:
         try:
             shell = Polygon(f.exterior)
-        except MemoryError:
-            raise                       # ver _dedupe_rooms (10/09/2026)
-        except Exception:
+        except Exception as _e:         # ver _dedupe_rooms (10/09/2026)
+            if e_falta_de_memoria(_e):
+                raise MemoryError(str(_e)) from _e
             continue
         a = shell.area * sq
         if not (min_m2 <= a <= max_m2):
@@ -502,10 +507,11 @@ def _middle_layer(
                     blen += bridges[int(bi)].intersection(band).length
                 # 🚨 Esta é a pior das quatro: engolir aqui SUBESTIMA a fração
                 # de ponte, e a trava contra sala fabricada de ponte (logo
-                # abaixo) deixa passar uma sala que não existe.
-                except MemoryError:
-                    raise
-                except Exception:
+                # abaixo) deixa passar uma sala que não existe — reproduzido sob
+                # teto de memória real: sala de 12,45 m² aceita.
+                except Exception as _e:
+                    if e_falta_de_memoria(_e):
+                        raise MemoryError(str(_e)) from _e
                     continue
             bfrac = blen / max(ring.length, 1e-9)
             if bfrac > BRIDGE_PERIM_FRAC:

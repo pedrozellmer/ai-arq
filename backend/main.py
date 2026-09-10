@@ -11111,7 +11111,10 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                        "MALLOC_ARENA_MAX": "2",
                                        "FILHO_IMPRIME_FOTO": "1",
                                        # 🩸 10/09: camadas custam até +629 MB e ninguém lê
-                                       "PDFVEC_CAMADAS": "0"})
+                                       "PDFVEC_CAMADAS": "0",
+                                       # 🩸 10/09: envoltória também ninguém lê — e usa as
+                                       # mesmas funções de sala que agora acusam memória
+                                       "PDFVEC_ENVOLTORIA": "0"})
                     # 🚨 31/08 (auditoria do mesmo dia): o commit se chama "parar de
                     # perder prancha em silêncio" e ESTE caminho continuava mudo.
                     # `_pdfvec_falhas` só era alimentado pelo `except` lá embaixo, que
@@ -14396,8 +14399,13 @@ def _saida_do_filho_pdfvec(rc, vm) -> tuple:
     """
     if rc != 0 or not isinstance(vm, dict) or not vm:
         return None, ""
+    # 🩸 10/09/2026: a falta de memória também chega como GEOSException
+    # ("bad allocation" / "std::bad_alloc") de dentro do shapely. Reconhecer
+    # mora em `filho_protegido.e_falta_de_memoria` — os handlers da geometria
+    # usam a MESMA decisão.
+    import filho_protegido as _fpm
     errs_mem = {k: str(v)[:80] for k, v in vm.items()
-                if k.startswith("err_") and "MemoryError" in str(v)}
+                if k.startswith("err_") and _fpm.e_falta_de_memoria(str(v))}
     if errs_mem:
         return "memoria", "; ".join(f"{k}={v}" for k, v in sorted(errs_mem.items()))
     if vm.get("skip"):

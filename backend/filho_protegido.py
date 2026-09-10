@@ -86,6 +86,36 @@ def prefixo_do_teto(rlimit_bytes: int = RLIMIT_BYTES) -> list[str]:
     ]
 
 
+#: Como a falta de memória chega ao Python. 🩸 10/09/2026: dentro do GEOS
+#: (shapely) ela NÃO vira MemoryError — o GEOS captura o `std::bad_alloc` do C++
+#: e o shapely levanta `GEOSException` com o texto do sistema: "bad allocation"
+#: no Windows (MSVC), "std::bad_alloc" no Linux (libstdc++).
+_MARCAS_DE_FALTA_DE_MEMORIA = ("MemoryError", "bad_alloc", "bad allocation")
+
+
+def e_falta_de_memoria(erro) -> bool:
+    """A exceção (ou o texto `Tipo: mensagem` de um `err_*`) é falta de memória?
+
+    🩸 10/09/2026 — a revisão adversarial do próprio conserto achou, por três
+    lentes independentes: eu tinha posto `except MemoryError: raise` em volta
+    das chamadas do shapely em `pdfvec_rooms`, e o guarda simulava um
+    MemoryError de Python. Sob teto de memória real o GEOS levanta
+    `GEOSException('bad allocation')`: o raise nunca disparava, o par de salas
+    continuava pulado calado (dedupe manteve 24 salas em vez de 12; sala de
+    ponte de 12,45 m² aceita) e o classificador, que só procurava o texto
+    "MemoryError", nem sabia que tinha faltado memória.
+    🔑 Uma decisão, dois consumidores: os handlers da geometria (recebem a
+    exceção) e o classificador da saída do filho (recebe o texto gravado).
+    Só reconhece — não decide o que fazer com a prancha.
+    """
+    if isinstance(erro, MemoryError):
+        return True
+    if erro is None:
+        return False
+    texto = erro if isinstance(erro, str) else "%s: %s" % (type(erro).__name__, erro)
+    return any(m in texto for m in _MARCAS_DE_FALTA_DE_MEMORIA)
+
+
 #: Marca que separa a FOTO de uma etapa do JSON final da medição.
 MARCA_DA_FOTO = "_foto_da_etapa"
 
