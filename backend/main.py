@@ -5756,12 +5756,37 @@ def _consolidate_items(items: list) -> list:
             pass3.extend(group)
             continue
 
+        # 🩸 10/09/2026 — ESTA PASSADA SOMAVA O QUE AS OUTRAS SE RECUSARAM A JUNTAR.
+        # Cliente novo, 1º projeto: duas linhas de caixilho com 2 un cada e
+        # MEDIDAS diferentes. A passada 2 as manteve separadas (o guarda de
+        # atributo viu dimensões diferentes); aqui as duas diziam "por definir
+        # conforme memorial" → `_is_legend_variant` → viraram "Caixilho AL004 —
+        # 250 × 241 cm — 2 variantes consolidadas" com 4 un. A outra janela sumiu
+        # dentro da AL004, e a própria planilha, no desconto da pintura, contava
+        # AL004 = 2 un. Os pilares do mesmo projeto: 4 seções numa linha só.
+        # 📏 Nos projetos de cliente desde 01/09: 269 linhas fundidas aqui em 74
+        # projetos; 34 (26 projetos) ficaram com dimensão na descrição — teto do
+        # alcance, porque a descrição que sobra não prova o que foi somado.
+        # 🔑 Mesma decisão das passadas 1, 2 e 6: atributo distintivo diferente
+        # (dimensão, código, bitola, classe, fck) é item diferente — regra dura
+        # nº4. Aqui a checagem é PAR A PAR: um item sem dimensão no começo do
+        # grupo não pode liberar duas dimensões diferentes depois dele.
+        # 🪤 As passadas 1 e 6 comparam só com o primeiro do grupo.
+        _descs_p3 = [it.description or "" for it in group]
+        if any(not _pode_fundir(_a, _b)
+               for _i, _a in enumerate(_descs_p3) for _b in _descs_p3[_i + 1:]):
+            pass3.extend(group)
+            continue
+
         # Consolida
         best = max(group, key=lambda x: (len(x.description or ""), _desempate_estavel(x)))
         total_qty = round(sum(float(it.quantity or 0) for it in group), 2)
         # Remove sufixo numérico da legenda pra descrição limpa
         clean = _re.sub(r"\s*(conforme\s+)?(especifica[çc][aã]o\s+\d+|especifica[çc][aã]o\b).*$",
                         "", best.description, flags=_re.IGNORECASE).strip()
+        # 🩸 10/09/2026: cortar a partir de "especificação" deixava o parêntese
+        # aberto — o cliente recebeu "250 × 241 cm ( — 2 variantes consolidadas".
+        clean = _re.sub(r"[\s(\[{—–,;:\-]+$", "", clean)
         if not clean or len(clean) < 5:
             clean = noun.capitalize()
         consolidated = BudgetItem(
@@ -5772,6 +5797,9 @@ def _consolidate_items(items: list) -> list:
             observations=(
                 f"Consolidado de {len(group)} entradas com mesma família "
                 f"({noun}) — soma: {total_qty} {unit}. "
+                # 🩸 10/09/2026: o que foi somado fica escrito na linha, como na
+                # passada 1 — a janela que sumiu na AL004 não deixou rastro.
+                f"Veio de: {_resumo_do_grupo(group)}. "
                 f"Ver legenda do projeto pra especificações individuais."
             ),
             ref_sheet=best.ref_sheet,
