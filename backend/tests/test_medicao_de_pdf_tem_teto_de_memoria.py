@@ -265,11 +265,14 @@ def _bloco_do_aviso():
     """O `try:` que transforma `_pdfvec_falhas` em `project_data.warnings`.
 
     Só o CORPO é executado: o `except NameError: pass` de produção existe pro
-    job sem PDF, e engoli-lo aqui esconderia um erro de bancada."""
+    job sem PDF, e engoli-lo aqui esconderia um erro de bancada.
+    🩸 10/09/2026: a decisão foi pra `_avisos_da_medicao_pdfvec`. O bloco é
+    achado pela atribuição que CHAMA a decisão (filho direto do try, senão os
+    try que o envolvem também casariam)."""
     no = _no_unico(
         lambda n: isinstance(n, ast.Try) and any(
-            isinstance(s, ast.Assign) and len(s.targets) == 1
-            and isinstance(s.targets[0], ast.Name) and s.targets[0].id == "_falhou"
+            isinstance(s, ast.Assign) and isinstance(s.value, ast.Call)
+            and getattr(s.value.func, "id", None) == "_avisos_da_medicao_pdfvec"
             for s in n.body),
         "bloco que monta o aviso de prancha sem medição")
     return ast.Module(body=no.body, type_ignores=[])
@@ -279,10 +282,16 @@ class _PD:
     warnings = None
 
 
-def _aviso_do_cliente(falhas):
-    """Roda o consumidor de verdade e devolve (avisos, logs)."""
+def _aviso_do_cliente(falhas, por_prancha=None):
+    """Roda o consumidor de verdade e devolve (avisos, logs).
+
+    🩸 10/09/2026: o índice por prancha entra no escopo — é ele que separa a
+    página MEDIDA da não medida."""
+    import main
     pd, logs = _PD(), []
     ns = {"_pdfvec_falhas": list(falhas), "project_data": pd, "job_id": "job-de-teste",
+          "_pdfvec_por_prancha": dict(por_prancha or {}),
+          "_avisos_da_medicao_pdfvec": main._avisos_da_medicao_pdfvec,
           "_log_error": lambda *a, **k: logs.append((a, k))}
     exec(compile(_bloco_do_aviso(), "<aviso>", "exec"), ns)
     return list(pd.warnings or []), logs

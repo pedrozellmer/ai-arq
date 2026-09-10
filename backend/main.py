@@ -12873,39 +12873,17 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # — e na planilha isso é indistinguível de "essa prancha não tinha o
         # que medir". O cliente merece saber em qual arquivo olhar.
         try:
-            # 🚨 31/08 (auditoria): aqui filtrava SÓ motivo == "tempo", e a prancha
-            # cujo processo de medição MORREU (OOM, ImportError, exceção no filho)
-            # ficava fora do aviso — invisível pro cliente exatamente como antes.
-            # Pro cliente o efeito é o mesmo: a prancha não foi medida. O motivo
-            # muda o texto, não o direito dele de saber.
-            # 05/09: "memoria" = MemoryError engolido por etapa (filho rc=0, parcial).
-            # Pro cliente é a mesma coisa: a prancha não foi medida. Frase própria:
-            # 'densa demais' ≠ 'não havia o que medir'.
-            _falhou = [f for f in _pdfvec_falhas
-                       if f.get("motivo") in ("tempo", "processo", "memoria")]
-            if _falhou:
-                _arqs = sorted({f["arquivo"] for f in _falhou})
-                _nomes = ", ".join(_arqs[:3])
-                _mais = "" if len(_arqs) <= 3 else " e outras"
-                _motivos = {f.get("motivo") for f in _falhou}
-                _so_tempo = _motivos == {"tempo"}
-                if _so_tempo:
-                    _porque = "não deram tempo de ser medidas geometricamente"
-                elif "memoria" in _motivos:
-                    _porque = ("são densas demais para a nossa medição geométrica "
-                               "(faltou memória — limite nosso, não defeito do arquivo)")
-                else:
-                    _porque = "não puderam ser medidas geometricamente"
-                project_data.warnings = (getattr(project_data, "warnings", None) or []) + [
-                    "⚠ %d prancha(s) %s (%s%s). Elas foram lidas assim mesmo, mas os "
-                    "itens delas saem como estimativa — confira essas contra o projeto "
-                    "antes de fechar orçamento."
-                    % (len(_arqs), _porque, _nomes, _mais)]
-                _log_error("pdfvec:sem-medicao",
-                           "%d prancha(s) sem medição (%s): %s"
-                           % (len(_arqs),
-                              ",".join(sorted({str(f.get("motivo")) for f in _falhou})),
-                              _nomes), job_id, severity="warning")
+            # 🩸 10/09/2026 — O AVISO CONTAVA ARQUIVO E CHAMAVA DE PRANCHA (job
+            # aec7cac2: 3 páginas, 3 motivos, uma delas MEDIDA — e o cliente leu
+            # "1 prancha(s) densas demais"). A decisão e a história moram em
+            # `_avisos_da_medicao_pdfvec`, função de módulo pro guarda CHAMAR.
+            _avisos_pdfvec, _msg_pdfvec = _avisos_da_medicao_pdfvec(
+                _pdfvec_falhas, _pdfvec_por_prancha)
+            if _avisos_pdfvec:
+                project_data.warnings = (
+                    (getattr(project_data, "warnings", None) or []) + _avisos_pdfvec)
+                _log_error("pdfvec:sem-medicao", _msg_pdfvec, job_id,
+                           severity="warning")
         except NameError:
             pass              # job sem PDF
         try:
@@ -14493,6 +14471,96 @@ def _linha_pdfvec_memoria(pranchas, teto: int = 1900) -> str:
         n -= 1
         s = _monta()
     return s
+
+
+#: Motivos de falha da medição de PDF que viram aviso pro cliente. Motivo fora
+#: daqui (nome de exceção do pai, diagnóstico interno) não é texto pra quem lê a
+#: planilha — é log.
+_MOTIVOS_DO_AVISO_PDFVEC = ("tempo", "processo", "memoria")
+
+
+def _avisos_da_medicao_pdfvec(falhas, por_prancha=None) -> tuple:
+    """Transforma as falhas da medição de PDF nos avisos que o cliente lê.
+
+    Devolve (avisos, mensagem_de_log). Nada a avisar → ([], "").
+
+    🩸 31/08/2026 (caso cliente-14): 2 de 16 pranchas estouraram o tempo da
+    medição geométrica e a planilha não distinguia "não tinha o que medir" de
+    "não deu tempo de medir". Daí nasceu o aviso — e a mesma auditoria pôs no
+    aviso também a prancha cujo PROCESSO morreu. 05/09: "memoria" ganhou frase
+    própria ('densa demais' não é 'não havia o que medir').
+
+    🩸 10/09/2026 — O AVISO CONTAVA ARQUIVO E CHAMAVA DE PRANCHA. Job aec7cac2,
+    um caderno único de 30+ páginas: a p11 estourou o tempo, a p28 abortou e a
+    p27 FOI MEDIDA (entrou no prompt e no índice) com um MemoryError numa etapa
+    posterior. O cliente leu "1 prancha(s) são densas demais (faltou memória)":
+    errou a conta, errou o motivo das outras duas e chamou de não medida a
+    página medida. 📏 Medido desde 02/09: foi o único dos 7 avisos com a conta
+    errada — os outros eram PDFs de uma página, onde arquivo e página coincidem.
+
+    🔑 Três regras:
+    - conta PÁGINAS (a chave é a prancha, `<arquivo>_p<N>`) e nomeia
+      "<arquivo> pág. N", com N a partir de 1;
+    - a frase de memória só quando TODAS as páginas do grupo foram memória;
+      motivos misturados → "não puderam ser medidas", que é verdade pros três;
+    - página que está no índice por prancha FOI medida: sai num aviso próprio
+      que só afirma o que é verdade por construção — a medição não terminou
+      todas as etapas, o que foi medido serviu de base pra leitura, e item de
+      PDF sai como estimativa (`_pdf_downgrade` rebaixa todo 'confirmado').
+    🚫 Nunca dizer que a medição "entrou na planilha": parede medida não vira
+    linha linear sozinha (a planilha zera com "Comprimento NÃO medido").
+    """
+    por_prancha = por_prancha or {}
+    paginas = {}
+    for f in falhas or []:
+        if not isinstance(f, dict) or f.get("motivo") not in _MOTIVOS_DO_AVISO_PDFVEC:
+            continue
+        chave = f.get("prancha") or "%s_p%s" % (f.get("arquivo"), f.get("pagina"))
+        paginas.setdefault(chave, []).append(f)
+    if not paginas:
+        return [], ""
+
+    def _rotulo(f):
+        arq = str(f.get("arquivo") or "?")
+        try:
+            return "%s pág. %d" % (arq, int(f.get("pagina")) + 1)
+        except (TypeError, ValueError):
+            return arq
+
+    def _lista(grupo):
+        rotulos = sorted({_rotulo(fs[0]) for fs in grupo})
+        return ", ".join(rotulos[:3]) + ("" if len(rotulos) <= 3 else " e outras")
+
+    nao_medidas = [fs for ch, fs in paginas.items() if ch not in por_prancha]
+    em_parte = [fs for ch, fs in paginas.items() if ch in por_prancha]
+    avisos, log = [], []
+    if nao_medidas:
+        motivos = {f.get("motivo") for fs in nao_medidas for f in fs}
+        if motivos == {"tempo"}:
+            porque = "não deram tempo de ser medidas geometricamente"
+        elif motivos == {"memoria"}:
+            porque = ("são densas demais para a nossa medição geométrica "
+                      "(faltou memória — limite nosso, não defeito do arquivo)")
+        else:
+            porque = "não puderam ser medidas geometricamente"
+        avisos.append(
+            "⚠ %d prancha(s) %s (%s). Elas foram lidas assim mesmo, mas os itens "
+            "delas saem como estimativa — confira essas contra o projeto antes de "
+            "fechar orçamento." % (len(nao_medidas), porque, _lista(nao_medidas)))
+        log.append("%d prancha(s) sem medição (%s): %s" % (
+            len(nao_medidas), ",".join(sorted(str(m) for m in motivos)),
+            _lista(nao_medidas)))
+    if em_parte:
+        motivos_p = {f.get("motivo") for fs in em_parte for f in fs}
+        avisos.append(
+            "⚠ %d prancha(s) foram medidas, mas a medição geométrica não terminou "
+            "todas as etapas (%s). O que chegou a ser medido serviu de base para a "
+            "leitura, e os itens delas saem como estimativa — confira essas contra o "
+            "projeto antes de fechar orçamento." % (len(em_parte), _lista(em_parte)))
+        log.append("%d medida(s) só em parte (%s): %s" % (
+            len(em_parte), ",".join(sorted(str(m) for m in motivos_p)),
+            _lista(em_parte)))
+    return avisos, " | ".join(log)
 
 
 _RX_ESTRUT_NOME = None

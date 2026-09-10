@@ -104,10 +104,15 @@ def test_o_pai_chama_o_classificador_logo_depois_de_ler_o_json():
 
 
 def test_o_aviso_ao_cliente_inclui_memoria_com_frase_propria():
-    i = _SRC.find('if f.get("motivo") in ("tempo", "processo", "memoria")]')
-    assert i > 0, "o filtro do aviso voltou a ignorar o motivo 'memoria' — cliente sem aviso"
-    trecho = _SRC[i:i + 900]
-    assert "densas demais" in trecho and "limite nosso" in trecho, (
+    """🩸 10/09/2026: este guarda procurava o filtro LITERAL no fonte e as
+    palavras nos 900 caracteres seguintes. A decisão foi pra
+    `_avisos_da_medicao_pdfvec`, e o guarda passou a CHAMÁ-LA."""
+    import main
+    avisos, _log = main._avisos_da_medicao_pdfvec(
+        [{"prancha": "p_p0", "arquivo": "p.pdf", "motivo": "memoria", "rc": 0,
+          "pagina": 0}], {})
+    assert len(avisos) == 1, "o motivo 'memoria' voltou a ficar sem aviso — cliente sem aviso"
+    assert "densas demais" in avisos[0] and "limite nosso" in avisos[0], (
         "faltou a frase própria: 'densa demais' não é 'não havia o que medir'")
 
 
