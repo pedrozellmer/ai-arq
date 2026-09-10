@@ -298,7 +298,18 @@ def _bridge_dangling(segments: list[LineString], max_gap_pt: float) -> list[Line
             k = key(p)
             occ[k] += 1
             owner[k] = si
-    dang = [k for k, n in occ.items() if n == 1]
+    # 🩸 10/09/2026 — A ORDEM DOS TRAÇOS DECIDIA AS PONTES. Cada ponta só
+    # procurava vizinhas entre as que vinham DEPOIS dela na lista (herança da
+    # versão O(n²)): a mesma geometria guardada em outra ordem, ou com traços
+    # no sentido contrário, ganhava outras pontes, e sala com porta podia não
+    # fechar. 📏 A/B no corpus de teste: coleta do pdfminer e leitor rápido com
+    # o MESMO conjunto de segmentos davam envoltória 828,6 × 850,4 m²; trocando
+    # só a ordem, cada uma dava o resultado da outra. Planta sintética com
+    # gabarito (663 salas): embaralhar mudava as salas em 105 de 240 casos;
+    # com K vizinhas de verdade, em 0, e as salas certas foram de 94 a 101.
+    # 🔑 Pontas em ordem de COORDENADA (empate de distância decide pela
+    # geometria) e cada uma olha as K mais próximas entre TODAS.
+    dang = sorted(k for k, n in occ.items() if n == 1)
     if len(dang) < 2 or len(dang) > MAX_DANGLING:
         return []
 
@@ -307,26 +318,26 @@ def _bridge_dangling(segments: list[LineString], max_gap_pt: float) -> list[Line
     for idx, k in enumerate(dang):
         grid_map[(int(k[0] // cell), int(k[1] // cell))].append(idx)
 
-    cands: list[tuple[float, int, int]] = []
+    cands: set[tuple[float, int, int]] = set()
     for idx, a in enumerate(dang):
         cx, cy = int(a[0] // cell), int(a[1] // cell)
         near: list[tuple[float, int]] = []
         for dx in (-1, 0, 1):
             for dy in (-1, 0, 1):
                 for jdx in grid_map.get((cx + dx, cy + dy), ()):
-                    if jdx <= idx:
+                    if jdx == idx:
                         continue
                     b = dang[jdx]
                     d = math.hypot(a[0] - b[0], a[1] - b[1])
                     if 1e-9 < d <= max_gap_pt and owner[a] != owner[b]:
                         near.append((d, jdx))
         near.sort()
-        cands.extend((d, idx, j) for d, j in near[:BRIDGE_KNN])
+        # o par entra uma vez, venha da vizinhança de qualquer das duas pontas
+        cands.update((d, min(idx, j), max(idx, j)) for d, j in near[:BRIDGE_KNN])
 
-    cands.sort()
     used: set[int] = set()
     bridges: list[LineString] = []
-    for _d, i, j in cands:
+    for _d, i, j in sorted(cands):
         if i in used or j in used:
             continue
         used.add(i)
