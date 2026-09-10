@@ -133,12 +133,12 @@ def _curve_pts_bottom_up(curve: dict, page_height: float) -> list[tuple[float, f
     return pts
 
 
-def _collect_raw_segments(page: "pdfplumber.page.Page") -> list[tuple[tuple[float, float], tuple[float, float]]]:
-    """Extrai segmentos brutos (linhas, bordas de rects, lados de curvas).
+def _filtro_de_segmentos():
+    """(push, segs): filtro de micro-segmento + dedupe canônico da coleta.
 
-    Filtro de micro-segmentos (<MIN_SEG_PT) e dedupe acontecem AQUI, inline,
-    porque pranchas de forro/hachura chegam a >1M de sub-segmentos e materializar
-    tudo custava ~12s so' em Python.
+    🔑 10/09/2026 — UMA decisão pras duas coletas (pdfminer e leitor rápido). Se
+    cada uma filtrasse do seu jeito, trocar de leitor mudaria as salas por um
+    detalhe de arredondamento, e ninguém saberia qual lado mudou.
     """
     min_len = LEN_THRESHOLDS[0]
     seen: set[tuple[float, float, float, float]] = set()
@@ -154,6 +154,50 @@ def _collect_raw_segments(page: "pdfplumber.page.Page") -> list[tuple[tuple[floa
             return
         seen.add(key)
         segs.append(((ax, ay), (bx, by)))
+
+    return push, segs
+
+
+def _collect_raw_segments_rapido(page: "pdfplumber.page.Page") -> list[tuple[tuple[float, float], tuple[float, float]]]:
+    """A MESMA coleta, lendo o content stream direto em vez do layout do pdfminer.
+
+    🩸 10/09/2026 — a foto por etapa mostrou em produção que a página de 234
+    ambientes morre no PARSE: o pdfplumber montando o layout do pdfminer (um
+    objeto Python por traço) levou 62 s e bateu o teto de 2 GB. O leitor do
+    content stream já existia nas paredes (`pdfvec_walls._fast_stream_segments`).
+    📏 A/B no corpus de teste (7 pranchas): coleta 8–10× mais rápida e pico de
+    memória 51–75% menor, com as MESMAS salas, vistas e envoltória nas 7. Antes
+    disso o A/B achou dois defeitos da coleta antiga, consertados antes desta
+    troca: a diagonal descendente saía espelhada, e as salas dependiam da ordem
+    dos traços (a ponte de porta só olhava pra frente).
+    🔑 Mesmo filtro e dedupe (`_filtro_de_segmentos`); curvas entram como CORDAS,
+    que é o que o pdfminer entrega. Quem chama volta ao pdfminer se isto falhar.
+    """
+    from pdfminer.pdftypes import resolve1
+    from pdfvec_walls import _fast_stream_segments, _initial_ctm
+
+    po = page.page_obj
+    data = b" ".join(resolve1(s).get_data() for s in (po.contents or []))
+    push, segs = _filtro_de_segmentos()
+    if not data:
+        return segs
+    res = resolve1(po.resources) or {}
+    xobjects = resolve1(res.get("XObject")) if res.get("XObject") else None
+    ctm0 = _initial_ctm(po.mediabox, po.attrs.get("Rotate", 0))
+    for ax, ay, bx, by in _fast_stream_segments(data, ctm0, xobjects, cordas=True):
+        push(ax, ay, bx, by)
+    return segs
+
+
+def _collect_raw_segments(page: "pdfplumber.page.Page") -> list[tuple[tuple[float, float], tuple[float, float]]]:
+    """Extrai segmentos brutos (linhas, bordas de rects, lados de curvas).
+
+    Filtro de micro-segmentos (<MIN_SEG_PT) e dedupe acontecem AQUI, inline,
+    porque pranchas de forro/hachura chegam a >1M de sub-segmentos e materializar
+    tudo custava ~12s so' em Python.
+    """
+    min_len = LEN_THRESHOLDS[0]
+    push, segs = _filtro_de_segmentos()
 
     h = float(page.height)
     for l in page.lines:

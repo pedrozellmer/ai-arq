@@ -338,10 +338,35 @@ def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
         _t_et = time.time()
         try:
             import pdfplumber
-            from pdfvec_rooms import _collect_raw_segments
+            from pdfvec_rooms import _collect_raw_segments, _collect_raw_segments_rapido
             with pdfplumber.open(pdf_path) as _pdf:
                 _pg = _pdf.pages[page_index]
-                _segs = (_collect_raw_segments(_pg), float(_pg.width), float(_pg.height))
+                _raw = None
+                # 🩸 10/09/2026 — LEITOR RÁPIDO. O parse pelo layout do pdfminer
+                # é ~40% do tempo da medição (p90 24,5 s em produção) e foi onde
+                # a página de 234 ambientes morreu (62 s, teto de 2 GB). O leitor
+                # do content stream dá a MESMA coleta e as MESMAS salas, vistas e
+                # envoltória (A/B nas 7 pranchas de teste), 8–10× mais rápido e com
+                # 51–75% menos memória.
+                # 🪤 Interruptor PDFVEC_PARSE_RAPIDO=0 volta ao pdfminer sem deploy.
+                # Falha do leitor rápido cai no pdfminer, registrada — MENOS falta
+                # de memória, que sobe como `err_parse_unico` (igual a antes): o
+                # pdfminer gasta o dobro, não adianta tentá-lo aqui. 🪤 O caminho
+                # antigo por etapa, logo abaixo, ainda reparseia com o pdfminer
+                # nesse caso — era assim antes do leitor rápido e segue igual.
+                if os.environ.get("PDFVEC_PARSE_RAPIDO", "1") != "0":
+                    try:
+                        _raw = _collect_raw_segments_rapido(_pg)
+                        out["parse_leitor"] = "rapido"
+                    except Exception as _er:
+                        import filho_protegido as _fpr
+                        if _fpr.e_falta_de_memoria(_er):
+                            raise
+                        out["err_parse_rapido"] = f"{type(_er).__name__}: {_er}"[:120]
+                if _raw is None:
+                    _raw = _collect_raw_segments(_pg)
+                    out["parse_leitor"] = "pdfminer"
+                _segs = (_raw, float(_pg.width), float(_pg.height))
             out["parse_unico"] = len(_segs[0])
         except Exception as e:
             out["err_parse_unico"] = f"{type(e).__name__}: {e}"[:120]
@@ -700,7 +725,9 @@ def _run(page_units: list, job_id: str, api_key: str, log_fn, pular=None) -> Non
                     "escala_validada", "cotas_batem", "cotas_encontradas",
                     "n_viewports", "n_views", "scale_snapped", "indicadas",
                     "err_rooms", "err_viewport", "err_carimbo", "err_views",
-                    "err_escala_vista")
+                    "err_escala_vista",
+                    # 🩸 10/09/2026: qual leitor fez o parse (rápido ou pdfminer)
+                    "parse_leitor", "err_parse_rapido")
             d = {k: r[k] for k in keep if r.get(k) is not None}
             if isinstance(d.get("file"), str):
                 d["file"] = d["file"][:34]

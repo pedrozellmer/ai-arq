@@ -105,6 +105,11 @@ def _fast_stream_segments(
     xobjects: Optional[dict] = None,
     depth: int = 0,
     form_cache: Optional[dict[int, list[RawSeg]]] = None,
+    # 🩸 10/09/2026: `cordas=True` emite a CORDA de cada curva (c/v/y) — o ponto
+    # corrente ligado ao ponto final, que é o que o pdfminer entrega nas curvas
+    # e o que a coleta das SALAS usa. Paredes seguem sem cordas (curva não é
+    # parede).
+    cordas: bool = False,
 ) -> list[RawSeg]:
     """Interpreta só o necessário do content stream: caminhos m/l/h/re + CTM.
 
@@ -158,11 +163,17 @@ def _fast_stream_segments(
         elif t == b"c":
             if cur is not None and len(stack) >= 6:
                 x, y = stack[-2], stack[-1]
-                cur = (a * x + c * y + e, b * x + d * y + f)
+                _p = (a * x + c * y + e, b * x + d * y + f)
+                if cordas:
+                    path.append((cur[0], cur[1], _p[0], _p[1]))
+                cur = _p
         elif t in (b"v", b"y"):
             if cur is not None and len(stack) >= 4:
                 x, y = stack[-2], stack[-1]
-                cur = (a * x + c * y + e, b * x + d * y + f)
+                _p = (a * x + c * y + e, b * x + d * y + f)
+                if cordas:
+                    path.append((cur[0], cur[1], _p[0], _p[1]))
+                cur = _p
         elif t == b"h":
             if cur is not None and start is not None:
                 path.append((cur[0], cur[1], start[0], start[1]))
@@ -206,7 +217,7 @@ def _fast_stream_segments(
         elif t == b"Do":
             if xobjects and last_name in xobjects and depth < _MAX_FORM_DEPTH:
                 local = _form_local_segments(
-                    xobjects[last_name], depth, form_cache)
+                    xobjects[last_name], depth, form_cache, cordas)
                 segs.extend(
                     (a * x0 + c * y0 + e, b * x0 + d * y0 + f,
                      a * x1 + c * y1 + e, b * x1 + d * y1 + f)
@@ -220,6 +231,7 @@ def _form_local_segments(
     ref: object,
     depth: int,
     form_cache: dict[int, list[RawSeg]],
+    cordas: bool = False,
 ) -> list[RawSeg]:
     """Segmentos de um Form XObject no espaço LOCAL (já com a Matrix do form).
 
@@ -241,7 +253,7 @@ def _form_local_segments(
         res = resolve1(attrs.get("Resources")) or {}
         nested = resolve1(res.get("XObject")) if res.get("XObject") else None
         segs = _fast_stream_segments(
-            xo.get_data(), matrix, nested, depth + 1, form_cache)
+            xo.get_data(), matrix, nested, depth + 1, form_cache, cordas)
         form_cache[key] = segs
     # 🩸 10/09/2026: MemoryError NÃO é "form ilegível". Engolido, o form
     # contribuía zero parede calado; subindo, vira `err_walls=MemoryError`.

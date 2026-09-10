@@ -62,7 +62,8 @@ def _sem_ruido(out: dict) -> dict:
     """Tira o que muda entre rodadas (tempo, memória) e o carimbo do parse único."""
     return {k: v for k, v in out.items()
             if k not in ("secs", "etapas", "mem_etapas", "mem_kb", "mem_kb_inicio",
-                         "parse_unico", "err_parse_unico")}
+                         "parse_unico", "err_parse_unico",
+                         "parse_leitor", "err_parse_rapido")}
 
 
 # ── 1. detect_rooms com _segments == detect_rooms parseando ───────────────
@@ -153,6 +154,8 @@ def test_falha_na_coleta_unica_cai_no_caminho_antigo(tmp_path, monkeypatch):
     def _boom(*a, **k):
         raise RuntimeError("coleta quebrada de propósito")
     monkeypatch.setattr(pdfvec_rooms, "_collect_raw_segments", _boom)
+    # 10/09/2026: o parse único tenta primeiro o leitor rápido — quebrar os dois
+    monkeypatch.setattr(pdfvec_rooms, "_collect_raw_segments_rapido", _boom)
     out = pdf_vector._measure_page(_pdf_com_salas(tmp_path), 0, "")
     assert "err_parse_unico" in out and "parse_unico" not in out
     # e a medição seguiu pelo caminho antigo (views tem a própria cópia da coleta)
