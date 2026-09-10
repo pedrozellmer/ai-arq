@@ -155,15 +155,30 @@ def _collect_raw_segments(page: "pdfplumber.page.Page") -> list[tuple[tuple[floa
         seen.add(key)
         segs.append(((ax, ay), (bx, by)))
 
+    h = float(page.height)
     for l in page.lines:
-        push(float(l["x0"]), float(l["y0"]), float(l["x1"]), float(l["y1"]))
+        # 🩸 10/09/2026 — A DIAGONAL DESCENDENTE SAÍA ESPELHADA. `x0,y0,x1,y1`
+        # do pdfplumber é a CAIXA da linha (mínimos e máximos), não os seus
+        # pontos: uma parede desenhada de (50,250) a (150,50) virava
+        # (50,50)–(150,250), a OUTRA diagonal da mesma caixa. Linha em eixo não
+        # muda (a caixa é a própria linha), diagonal subindo também não.
+        # 📏 Achado no A/B do leitor rápido (corpus de teste, prancha DEMOLIR):
+        # 41 segmentos diferentes entre as duas coletas, os 41 eram isso — e
+        # bastaram pra mudar as salas detectadas.
+        # 🔑 Os pontos reais vêm em `pts`, na mesma convenção das curvas, com a
+        # mesma detecção de orientação. Sem `pts`, a caixa (comportamento antigo).
+        pts = _curve_pts_bottom_up(l, h) if l.get("pts") else None
+        if pts and len(pts) >= 2:
+            (ax, ay), (bx, by) = pts[0], pts[-1]
+            push(ax, ay, bx, by)
+        else:
+            push(float(l["x0"]), float(l["y0"]), float(l["x1"]), float(l["y1"]))
     for r in page.rects:
         x0, y0, x1, y1 = float(r["x0"]), float(r["y0"]), float(r["x1"]), float(r["y1"])
         push(x0, y0, x1, y0)
         push(x1, y0, x1, y1)
         push(x1, y1, x0, y1)
         push(x0, y1, x0, y0)
-    h = float(page.height)
     for c in page.curves:
         # curva com bbox minusculo (hachura/simbolo) nunca fecha ambiente
         if float(c["x1"]) - float(c["x0"]) < min_len and float(c["y1"]) - float(c["y0"]) < min_len:
