@@ -611,7 +611,23 @@ def _run(page_units: list, job_id: str, api_key: str, log_fn, pular=None) -> Non
                     "envelope_m2", "envelope_m2_150", "envelope_top",
                     "cotas_derivacao", "err_cotas_derive", "err_cotas",
                     "scale_derivada_por_cota", "skip", "err",
-                    "walls_m", "n_walls", "err_walls")
+                    "walls_m", "n_walls", "err_walls",
+                    # 🩸 10/09/2026 — MEDI A LACUNA INTEIRA em vez de tapar
+                    # buraco a buraco: `_measure_page` produz 44 campos e esta
+                    # lista gravava 21. Três vezes num dia eu quis decidir algo
+                    # e o campo não estava aqui (parede, polígono, viewport).
+                    # 🔑 Entram os que RESPONDEM uma pergunta que eu já tive:
+                    #  • escala foi PROVADA por cota, ou é declaração?
+                    #  • havia outro viewport pra escolher, ou só o de detalhe?
+                    #  • a escala é exata ou aproximada?
+                    #  • o carimbo disse "indicadas"?
+                    #  • por que o passo falhou?
+                    # 🚫 NÃO entram os de memória/tempo: eles já têm log próprio
+                    # (`pdfvec:memoria`) e aqui só gastariam orçamento.
+                    "escala_validada", "cotas_batem", "cotas_encontradas",
+                    "n_viewports", "n_views", "scale_snapped", "indicadas",
+                    "err_rooms", "err_viewport", "err_carimbo", "err_views",
+                    "err_escala_vista")
             d = {k: r[k] for k in keep if r.get(k) is not None}
             if isinstance(d.get("file"), str):
                 d["file"] = d["file"][:34]
@@ -620,8 +636,12 @@ def _run(page_units: list, job_id: str, api_key: str, log_fn, pular=None) -> Non
             # JSON no meio — a linha inteira vira ilegível e leva junto as
             # páginas que mediram bem. É a reabertura literal do incidente de
             # 30/07 que o comentário acima registra.
-            for _k in ("err", "err_walls"):
-                if isinstance(d.get(_k), str):
+            # 🪤 TODO campo de erro truncado, por PREFIXO — não por lista.
+            # Lista de exceção envelhece: `err_walls` entrou ontem e eu tive
+            # que lembrar de acrescentá-lo aqui. O próximo `err_*` já nasce
+            # cortado.
+            for _k in list(d):
+                if _k.startswith("err") and isinstance(d.get(_k), str):
                     d[_k] = d[_k][:120]
             return d
 
@@ -637,11 +657,30 @@ def _run(page_units: list, job_id: str, api_key: str, log_fn, pular=None) -> Non
         # de 100%, no instrumento com que eu decido se o leitor vetorial sai da
         # sombra. `tentadas` guarda o outro número.
         _n_medidas = sum(1 for r in results if not r.get("skip"))
-        payload = json.dumps({"v": 2, "n": _n_medidas, "de": _unicas,
-                              "tentadas": len(results),
-                              "rooms_m2_total": round(_tot, 1),
-                              "pages": [_resumo(r) for r in results]},
-                             ensure_ascii=False)
+
+        # 🚨 O PAYLOAD PASSA A CABER POR CONSTRUÇÃO, não por corte cego.
+        # 🩸 A coluna do error_log corta em 2.000 caracteres. Cortar no fim
+        # parte o JSON no meio e a linha inteira vira ilegível — leva junto as
+        # páginas que mediram bem. Já aconteceu (30/07) e voltou a acontecer
+        # quando o `err` do filho morto entrou com 400 chars.
+        # 🔑 Agora as páginas entram enquanto couberem e o resumo DIZ quantas
+        # ficaram de fora. Sem isto, cada campo novo na keep-list é uma roleta:
+        # o log some em silêncio no dia em que o job tiver páginas demais.
+        _TETO = 1900
+        def _monta(pgs, cortadas):
+            base = {"v": 2, "n": _n_medidas, "de": _unicas,
+                    "tentadas": len(results),
+                    "rooms_m2_total": round(_tot, 1), "pages": pgs}
+            if cortadas:
+                base["cortadas"] = cortadas
+            return json.dumps(base, ensure_ascii=False)
+
+        _resumos = [_resumo(r) for r in results]
+        _cabem = list(_resumos)
+        payload = _monta(_cabem, 0)
+        while len(payload) > _TETO and _cabem:
+            _cabem.pop()
+            payload = _monta(_cabem, len(_resumos) - len(_cabem))
         log_fn("pdfvec:shadow", payload[:2000], job_id, severity="info")
         print(f"[pdfvec] shadow {job_id}: {_n_medidas} medida(s), "
               f"{len(results) - _n_medidas} pulada(s), de {_unicas}")

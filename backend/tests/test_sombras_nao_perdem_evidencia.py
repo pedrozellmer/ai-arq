@@ -13,6 +13,8 @@ import json
 import os
 import sys
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
@@ -198,3 +200,139 @@ def test_CONTROLE_pagina_SEM_parede_nao_inventa_campo(monkeypatch, tmp_path):
         "file": "s.pdf", "page": 0, "scale": 50, "n_rooms": 5, "rooms_m2": 60.0,
     })
     assert "walls_m" not in payload["pages"][0], payload["pages"][0]
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  🔑 O RESUMO CABE POR CONSTRUÇÃO — e diz o que ficou de fora
+# ══════════════════════════════════════════════════════════════════════════
+def test_o_payload_NUNCA_sai_como_JSON_quebrado(monkeypatch, tmp_path):
+    """🩸 A coluna do error_log corta em 2.000 caracteres. Cortar no FIM parte
+    o JSON no meio e a linha inteira vira ilegível — leva junto as páginas que
+    mediram bem. Já aconteceu em 30/07, e voltou a acontecer quando o `err` do
+    filho morto entrou com 400 chars.
+
+    🔑 Sem orçamento, cada campo novo na keep-list é uma roleta: o log some em
+    silêncio no dia em que o job tiver páginas demais. Aqui: 8 páginas gordas,
+    e o resultado tem que continuar sendo JSON válido.
+    """
+    import json as _j
+    gordo = {"file": "prancha-com-nome-bem-comprido.pdf", "scale": 50,
+             "scale_src": "carimbo", "n_rooms": 40, "rooms_m2": 812.4,
+             "n_grupos": 6, "grupo_maior_m2": 640.2, "grupo_maior_comodos": 31,
+             "envelope_m2": 900.0, "envelope_m2_150": 950.0,
+             "envelope_top": [1, 2, 3], "walls_m": 1234.5, "n_walls": 210,
+             "escala_validada": True, "cotas_batem": 13, "cotas_encontradas": 40,
+             "n_viewports": 4, "n_views": 7, "scale_snapped": True,
+             "indicadas": False,
+             "err_rooms": "X" * 300, "err_walls": "Y" * 300,
+             "err_viewport": "Z" * 300, "err_carimbo": "W" * 300}
+    bruto, payload = _roda_a_sombra_gorda(monkeypatch, tmp_path, 8, gordo)
+    assert len(bruto) <= 2000, "o payload passou do corte da coluna: %d" % len(bruto)
+    _j.loads(bruto)          # 🧪 continua sendo JSON válido
+
+
+def test_o_que_ficou_de_FORA_e_declarado(monkeypatch, tmp_path):
+    """🚫 Corte silencioso lê como 'foi tudo'. Se página não coube, o resumo
+    diz quantas — é a mesma regra do `n de m` que consertou o corte de 15/08."""
+    gordo = {"file": "p.pdf", "scale": 50, "n_rooms": 30, "rooms_m2": 500.0,
+             "walls_m": 900.0, "n_walls": 120, "err_rooms": "X" * 300,
+             "err_walls": "Y" * 300, "err_viewport": "Z" * 300}
+    _b, payload = _roda_a_sombra_gorda(monkeypatch, tmp_path, 12, gordo)
+    if len(payload.get("pages", [])) < 12:
+        assert payload.get("cortadas", 0) > 0, (
+            "páginas ficaram de fora e o resumo não disse: %r" % payload)
+        assert (len(payload["pages"]) + payload["cortadas"]) == 12, payload
+
+
+def test_CONTROLE_job_pequeno_NAO_perde_pagina_nem_declara_corte(monkeypatch, tmp_path):
+    """🧪 O outro lado: um orçamento apertado demais cortaria sempre, e o
+    guarda acima passaria feliz. Job normal tem que sair inteiro."""
+    magro = {"file": "p.pdf", "scale": 50, "n_rooms": 3, "rooms_m2": 40.0}
+    _b, payload = _roda_a_sombra_gorda(monkeypatch, tmp_path, 4, magro)
+    assert len(payload["pages"]) == 4, payload
+    assert "cortadas" not in payload, payload
+
+
+def test_TODO_campo_de_erro_e_truncado_por_PREFIXO(monkeypatch, tmp_path):
+    """🪤 Antes a lista de campos a truncar era escrita à mão: `err_walls`
+    entrou num dia e eu tive que lembrar de acrescentá-lo. Lista de exceção
+    envelhece — o próximo `err_*` já nasce cortado."""
+    gordo = {"file": "p.pdf", "scale": 50,
+             "err_rooms": "A" * 400, "err_walls": "B" * 400,
+             "err_viewport": "C" * 400, "err_carimbo": "D" * 400,
+             "err_cotas": "E" * 400}
+    _b, payload = _roda_a_sombra_gorda(monkeypatch, tmp_path, 1, gordo)
+    pag = payload["pages"][0]
+    for k, v in pag.items():
+        if k.startswith("err") and isinstance(v, str):
+            assert len(v) <= 120, "%s saiu com %d chars" % (k, len(v))
+
+
+def _roda_a_sombra_gorda(monkeypatch, tmp_path, n_paginas, resposta):
+    """Roda `_run` de verdade com o filho dublado; devolve (bruto, dict)."""
+    import json as _j
+    import pdf_vector as pv
+    monkeypatch.setattr(pv.time, "sleep", lambda *_: None)
+    monkeypatch.setattr(pv, "MAX_PAGES", max(n_paginas, 8))
+    monkeypatch.setattr(pv, "medir_pagina_em_filho",
+                        lambda pdf, pag, **_k: dict(resposta))
+    unidades = []
+    for i in range(n_paginas):
+        f = tmp_path / ("g%d.pdf" % i)
+        f.write_bytes(b"%PDF-1.4 x")
+        unidades.append((str(f), "g%d.pdf" % i, "arq", i))
+    gravados = []
+    pv._run(unidades, "job-teste", "chave", lambda *a, **k: gravados.append(a))
+    bruto = next((a[1] for a in gravados if a[0] == "pdfvec:shadow"), None)
+    assert bruto is not None, "a sombra não gravou nada"
+    return bruto, _j.loads(bruto)
+
+
+@pytest.mark.parametrize("campo,valor", [
+    ("escala_validada", True),      # a escala foi PROVADA por cota, ou é declaração?
+    ("cotas_batem", 13),            # quantas cotas bateram
+    ("cotas_encontradas", 40),      # quantas existiam
+    ("n_viewports", 4),             # havia alternativa ao viewport de detalhe?
+    ("n_views", 7),                 # quantas vistas a página tinha
+    ("scale_snapped", True),        # escala exata ou aproximada pro padrão?
+    ("indicadas", False),           # o carimbo disse "indicadas"?
+    ("walls_m", 276.3),             # o comprimento de parede — o gargalo do PDF
+    ("n_walls", 41),
+])
+def test_o_campo_que_RESPONDE_pergunta_chega_no_log(monkeypatch, tmp_path, campo, valor):
+    """🩸 10/09/2026 — `_measure_page` produz 44 campos e a keep-list gravava
+    21. TRÊS vezes num só dia eu quis decidir alguma coisa e o campo não estava
+    lá: a parede, o polígono recusado, e o viewport alternativo. Nas três eu
+    comecei a ler AUSÊNCIA DE REGISTRO como ausência de MEDIÇÃO.
+
+    🔑 Cada campo desta lista responde uma pergunta que eu JÁ TIVE na mão e não
+    consegui responder. Guarda por campo, não por contagem: tirar um de dentro
+    da lista tem que reprovar aqui — a mutação mostrou que sem isto dava pra
+    remover `escala_validada` e `n_viewports` sem nada acusar.
+    """
+    _b, payload = _roda_a_sombra_gorda(
+        monkeypatch, tmp_path, 1,
+        {"file": "p.pdf", "scale": 50, "n_rooms": 3, campo: valor})
+    assert payload["pages"][0].get(campo) == valor, (
+        "o campo %r não chegou no log — a decisão que ele responde volta a ser "
+        "chute" % campo)
+
+
+def test_CONTROLE_a_keep_list_continua_FILTRANDO_o_que_nao_conhece(monkeypatch, tmp_path):
+    """🧪 O outro lado. Uma keep-list que aceitasse TUDO passaria em cada um dos
+    testes acima e voltaria a estourar a coluna no 1º job grande — o defeito de
+    09/09. O filtro tem que continuar existindo: campo que ninguém pediu não
+    entra no resumo.
+
+    🪤 Guarda por comportamento, não por leitura do fonte: um `assert "for k in
+    keep" in fonte` passaria com a linha comentada logo abaixo.
+    """
+    _b, payload = _roda_a_sombra_gorda(
+        monkeypatch, tmp_path, 1,
+        {"file": "p.pdf", "scale": 50, "n_rooms": 3,
+         "debug_interno_gigante": "Z" * 5000,
+         "objeto_que_nao_vira_json": object()})
+    pag = payload["pages"][0]
+    assert "debug_interno_gigante" not in pag, (
+        "a keep-list virou passa-tudo: campo interno vazou pro log")
+    assert "objeto_que_nao_vira_json" not in pag, pag
