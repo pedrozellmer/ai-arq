@@ -11109,7 +11109,9 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                   env={**os.environ, "PYTHONFAULTHANDLER": "1",
                                        "OPENBLAS_NUM_THREADS": "1",
                                        "MALLOC_ARENA_MAX": "2",
-                                       "FILHO_IMPRIME_FOTO": "1"})
+                                       "FILHO_IMPRIME_FOTO": "1",
+                                       # 🩸 10/09: camadas custam até +629 MB e ninguém lê
+                                       "PDFVEC_CAMADAS": "0"})
                     # 🚨 31/08 (auditoria do mesmo dia): o commit se chama "parar de
                     # perder prancha em silêncio" e ESTE caminho continuava mudo.
                     # `_pdfvec_falhas` só era alimentado pelo `except` lá embaixo, que
@@ -12886,6 +12888,12 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 if _linha_mem:
                     _log_error("pdfvec:memoria", _linha_mem, job_id,
                                severity="info")
+                # 🩸 10/09/2026: o sinal que substitui o das camadas (ver
+                # `_pranchas_perto_do_teto`). Só log — nada muda na planilha.
+                _perto = _pranchas_perto_do_teto(_res)
+                if _perto:
+                    _log_error("pdfvec:perto-do-teto", _linha_perto_do_teto(_perto),
+                               job_id, severity="warning")
         except NameError:
             pass              # job sem PDF
 
@@ -14507,6 +14515,54 @@ def _linha_pdfvec_memoria(pranchas, teto: int = 1900) -> str:
         n -= 1
         s = _monta()
     return s
+
+
+#: Fração do teto de endereço do filho a partir da qual a prancha é anotada
+#: como "perto do teto". Com o teto de 2e9 bytes (1.907 MiB), 90% = 1.716 MiB.
+_FRACAO_PERTO_DO_TETO = 0.9
+
+
+def _pranchas_perto_do_teto(pranchas, teto_bytes=None,
+                            fracao: float = _FRACAO_PERTO_DO_TETO) -> list:
+    """Pranchas medidas cujo pico de endereço passou de `fracao` do teto do filho.
+
+    🩸 10/09/2026 — o sinal que substitui o das camadas. O passo de camadas era
+    o único que acusava falta de memória (o único MemoryError desde 02/09 foi
+    lá) e saiu da promoção. Sem outro sinal, prancha rodando no limite ficaria
+    invisível — e é sob pressão de memória que a geometria errava calada.
+
+    🔑 Só observação: grava log, não muda planilha nem aviso. A régua é o
+    VmPeak que o próprio filho devolve, a mesma que o RLIMIT_AS cobra, e o teto
+    vem de `filho_protegido.RLIMIT_BYTES` — número escrito em dois lugares é
+    como os dois lados divergem.
+    Devolve [(rotulo, vmpeak_mib)], do maior pico pro menor.
+    """
+    if teto_bytes is None:
+        import filho_protegido
+        teto_bytes = filho_protegido.RLIMIT_BYTES
+    limite_kb = int(teto_bytes * fracao) // 1024
+    achadas = []
+    for r in pranchas or []:
+        if not isinstance(r, dict):
+            continue
+        try:
+            pico_kb = int((r.get("mem_kb") or {}).get("VmPeak") or 0)
+        except (TypeError, ValueError, AttributeError):
+            continue
+        if pico_kb and pico_kb >= limite_kb:
+            rotulo = "%s p%s" % (str(r.get("arquivo") or "?")[:24], r.get("pagina"))
+            achadas.append((rotulo, pico_kb // 1024))
+    return sorted(achadas, key=lambda x: -x[1])
+
+
+def _linha_perto_do_teto(perto, teto_bytes=None) -> str:
+    """A mensagem do log `pdfvec:perto-do-teto`."""
+    if teto_bytes is None:
+        import filho_protegido
+        teto_bytes = filho_protegido.RLIMIT_BYTES
+    return ("%d prancha(s) acima de %d%% do teto de endereço do filho (%d MiB): %s"
+            % (len(perto), int(_FRACAO_PERTO_DO_TETO * 100), teto_bytes // 1048576,
+               "; ".join("%s=%dMB" % p for p in list(perto)[:6])))
 
 
 #: Motivos de falha da medição de PDF que viram aviso pro cliente. Motivo fora

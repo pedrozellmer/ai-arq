@@ -485,13 +485,24 @@ def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
     # 5) POR LAYER (descoberta 07/07: OCG preserva os layers do CAD no PDF) —
     # parede só do layer de alvenaria/divisória (sem contaminação) + inventário
     # de símbolos (IND-*/LUM-*). Determinístico, sem IA. Coleta pra calibrar.
-    _t_et = time.time()
-    try:
-        from pdfvec_layers import summarize_layers
-        out["layers"] = summarize_layers(pdf_path, page_index, room_den, room_bbox)
-    except Exception as e:
-        out["err_layers"] = f"{type(e).__name__}: {e}"[:120]
-    _marca("layers", _t_et)
+    # 🩸 10/09/2026 — A PROMOÇÃO NÃO CALCULA MAIS CAMADAS. Ninguém lê
+    # `out["layers"]`: nem o índice por prancha da promoção nem a keep-list da
+    # sombra. E ele é caro onde dói: no reprocesso interno do job 5f28b6ab a
+    # prancha mais pesada foi de 1.051 MB (depois das cotas) a 1.680 MB SÓ
+    # nesta etapa (+629 MB), perto do teto de 1.907 MiB, e comeu 6,4 s dos 75
+    # do relógio. Foi também o único MemoryError desde 02/09 (aec7cac2 p27).
+    # 🔑 Interruptor por env, no molde do PDFVEC_PARSE_UNICO: a promoção manda
+    # PDFVEC_CAMADAS=0; a sombra e quem roda direto seguem calculando.
+    if os.environ.get("PDFVEC_CAMADAS", "1") != "0":
+        _t_et = time.time()
+        try:
+            from pdfvec_layers import summarize_layers
+            out["layers"] = summarize_layers(pdf_path, page_index, room_den, room_bbox)
+        except Exception as e:
+            out["err_layers"] = f"{type(e).__name__}: {e}"[:120]
+        _marca("layers", _t_et)
+    else:
+        out["camadas"] = "puladas: a promoção não lê"
 
     out["secs"] = round(time.time() - t0, 1)
     out["etapas"] = _etapas

@@ -243,6 +243,10 @@ def _form_local_segments(
         segs = _fast_stream_segments(
             xo.get_data(), matrix, nested, depth + 1, form_cache)
         form_cache[key] = segs
+    # 🩸 10/09/2026: MemoryError NÃO é "form ilegível". Engolido, o form
+    # contribuía zero parede calado; subindo, vira `err_walls=MemoryError`.
+    except MemoryError:
+        raise
     except Exception:
         pass  # form ilegível: contribui zero, resto da página segue
     return form_cache[key]
@@ -260,6 +264,10 @@ def _extract_raw_segments(page: "pdfplumber.page.Page") -> tuple[list[RawSeg], s
         xobjects = resolve1(res.get("XObject")) if res.get("XObject") else None
         ctm0 = _initial_ctm(page_obj.mediabox, page_obj.attrs.get("Rotate", 0))
         return _fast_stream_segments(data, ctm0, xobjects), "fast"
+    # 🩸 10/09/2026: sem memória, NÃO cair no parse completo do pdfplumber —
+    # é o caminho MAIS pesado, justo quando falta memória.
+    except MemoryError:
+        raise
     except Exception:
         h = float(page.height)
         segs: list[RawSeg] = [

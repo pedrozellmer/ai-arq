@@ -370,6 +370,12 @@ def _dedupe_rooms(
                 continue
             try:
                 inter = shells[i].intersection(shells[j]).area
+            # 🩸 10/09/2026: MemoryError NÃO é engolido. Sob pressão de memória
+            # este `continue` pulava um par de salas calado e o número mudava
+            # sem erro nenhum; subindo, vira `err_rooms=MemoryError` e o motor
+            # avisa que a prancha não terminou. Outra exceção segue pulada.
+            except MemoryError:
+                raise
             except Exception:
                 continue
             ai, aj = shells[i].area, shells[j].area
@@ -427,6 +433,8 @@ def _drop_lattice(
                 continue
             try:
                 inter = rings[i].intersection(rings[j])
+            except MemoryError:
+                raise                   # ver _dedupe_rooms (10/09/2026)
             except Exception:
                 continue
             shared = 0.0
@@ -476,6 +484,8 @@ def _middle_layer(
     for f in faces:
         try:
             shell = Polygon(f.exterior)
+        except MemoryError:
+            raise                       # ver _dedupe_rooms (10/09/2026)
         except Exception:
             continue
         a = shell.area * sq
@@ -490,6 +500,11 @@ def _middle_layer(
             for bi in bridge_tree.query(ring):
                 try:
                     blen += bridges[int(bi)].intersection(band).length
+                # 🚨 Esta é a pior das quatro: engolir aqui SUBESTIMA a fração
+                # de ponte, e a trava contra sala fabricada de ponte (logo
+                # abaixo) deixa passar uma sala que não existe.
+                except MemoryError:
+                    raise
                 except Exception:
                     continue
             bfrac = blen / max(ring.length, 1e-9)
