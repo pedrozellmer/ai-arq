@@ -38,6 +38,7 @@ import pytest
 
 _AQUI = os.path.dirname(os.path.abspath(__file__))
 _BACKEND = os.path.dirname(_AQUI)
+_RAIZ = os.path.dirname(_BACKEND)
 sys.path.insert(0, _BACKEND)
 sys.path.insert(0, _AQUI)
 
@@ -80,7 +81,7 @@ def test_email_do_tipo_estrutura_aponta_o_reprocessar_e_nao_pede_outro_arquivo()
     assert "ler como arquitetura" in baixo, html[:900]
     # a arte falha-arquivo.png desenha "DWG → DXF, um ajuste no arquivo resolve"
     for proibido in ("escaneada", "dxf", "não vai resolver", "outro arquivo",
-                     "outra prancha", "falha-arquivo.png"):
+                     "outra prancha", "falha-arquivo.png", "revisar o arquivo"):
         assert proibido not in baixo, (proibido, html[:900])
     assert "outro arquivo" not in subject.lower() and "reenvie" not in subject.lower(), subject
     assert "estrutura" in subject.lower(), subject
@@ -219,6 +220,7 @@ def tela():
     p.eval("var _RECEITAS_ERRO = window.AIARQ_RECEITAS_ERRO; 1;")
     p.eval(funcao_js("_receitaPara", "projeto.html") + "\n1;")
     p.eval(funcao_js("_erroEmTopicos", "projeto.html") + "\n1;")
+    p.eval(funcao_js("_rotularTipoDoReprocesso", "projeto.html") + "\n1;")
     return p
 
 
@@ -362,3 +364,102 @@ def test_o_alerta_nao_tem_mais_a_frase_FIXA():
     literais = [n.value for n in ast.walk(ast.parse(src))
                 if isinstance(n, ast.Constant) and isinstance(n.value, str)]
     assert not any("O cliente já recebeu o email de falha" in t for t in literais)
+
+
+# ── o Reprocessar da página e o botão do painel (a 2ª revisão) ───────────────
+# 🩸 A mensagem de zero item passou a mandar o cliente pro Reprocessar › "Ler como
+# Arquitetura" — e a página, sem o tipo do projeto, escondia essa opção num projeto
+# Estrutura; no painel, o único botão reenviava como Estrutura.
+def test_o_meta_do_api_items_traz_o_TIPO_do_projeto(monkeypatch):
+    from fastapi.testclient import TestClient
+    urls = []
+
+    def falso(req, timeout=None):
+        urls.append(getattr(req, "full_url", str(req)))
+        return _Resp([{"project_name": "Projeto teste", "status": "error",
+                       "project_type": "estrutura"}])
+    monkeypatch.setattr(main, "_require_project_owner", lambda request, job_id: None)
+    monkeypatch.setattr(main, "_itens_do_projeto_completos", lambda job_id, timeout=15: ([], True))
+    monkeypatch.setattr(main, "SUPABASE_URL", "https://exemplo.supabase.co")
+    monkeypatch.setattr("urllib.request.urlopen", falso)
+    r = TestClient(main.app, raise_server_exceptions=False).get("/api/items/job-guarda")
+    assert r.status_code == 200, r.text[:200]
+    assert urls and "project_type" in _parametro(urls[0], "select").split(","), urls
+    assert r.json()["project"].get("project_type") == "estrutura", r.json()
+
+
+_SELETOR = r"""(function(){
+  var ops = [{value:'', textContent:'Mesmo tipo de antes'},
+             {value:'arquitetura', textContent:'Ler como Arquitetura'},
+             {value:'estrutura', textContent:'Ler como Estrutura'}];
+  ops.forEach(function(o){ o.remove = function(){ ops.splice(ops.indexOf(o), 1); }; });
+  _rotularTipoDoReprocesso({ options: ops }, %s);
+  return JSON.stringify(ops.map(function(o){ return [o.value, o.textContent]; }));
+})()"""
+
+
+@pytest.mark.parametrize("tipo_js,tem_arq,tem_est,rotulo", [
+    ("undefined", True, True, "Mesmo tipo de antes"),        # a forma da lista by-user
+    ("'estrutura'", True, False, "Mesmo tipo (Estrutura)"),
+    ("'arquitetura'", False, True, "Mesmo tipo (Arquitetura)"),
+])
+def test_TELA_reprocessar_de_projeto_estrutura_oferece_ler_como_arquitetura(tela, tipo_js, tem_arq, tem_est, rotulo):
+    ops = json.loads(tela.eval(_SELETOR % tipo_js))
+    valores = [v for v, _ in ops]
+    assert ("arquitetura" in valores) == tem_arq, ops
+    assert ("estrutura" in valores) == tem_est, ops
+    assert ops[0] == ["", rotulo], ops
+
+
+def test_a_pagina_do_projeto_entrega_o_tipo_do_meta_ao_reprocessar():
+    src = io.open(os.path.join(_RAIZ, "projeto.html"), encoding="utf-8").read()
+    liga = "if (proj && !proj.project_type && pmeta.project_type) proj.project_type = pmeta.project_type;"
+    assert liga in src, "o tipo do meta não entra no proj"
+    assert src.index(liga) < src.index("renderHeader(proj)"), "o tipo entra DEPOIS de desenhar o cabeçalho"
+    assert "_rotularTipoDoReprocesso(_selTipo, p.project_type)" in src
+    assert "(p.project_type || 'arquitetura')" not in src, "a suposição de 'arquitetura' voltou"
+
+
+def _botao(tela, msg, job):
+    return json.loads(tela.eval("JSON.stringify(window.aiArqBotaoDoErro(%s, %s))"
+                                % (json.dumps(msg), json.dumps(job))))
+
+
+def test_PAINEL_erro_de_estrutura_troca_o_botao_por_abrir_o_projeto(tela):
+    b = _botao(tela, main._mensagem_sem_itens(True, 3), "job 1")
+    assert b == {"rotulo": "Abrir o projeto", "href": "projeto.html?job_id=job%201#processamento"}, b
+
+
+def test_PAINEL_o_botao_do_erro_de_verdade_troca_e_DESFAZ_rotulo_e_destino(tela):
+    """O `_botaoDoErro` do dashboard.html rodando: troca pro erro de Estrutura e
+    desfaz no erro seguinte (senão o "Abrir o projeto" fica grudado)."""
+    from _jsbancada import funcao_js
+    tela.eval("var btnRetry = {textContent: 'Enviar outro arquivo', dataset: {}}; 1;")
+    tela.eval(funcao_js("_botaoDoErro", "dashboard.html") + "\n1;")
+    estado = "JSON.stringify([btnRetry.textContent, btnRetry.dataset.abrir])"
+    tela.eval("_botaoDoErro(%s, 'job-1'); 1;" % json.dumps(main._mensagem_sem_itens(True, 3)))
+    assert json.loads(tela.eval(estado)) == ["Abrir o projeto", "projeto.html?job_id=job-1#processamento"]
+    tela.eval("_botaoDoErro('', null); 1;")
+    assert json.loads(tela.eval(estado)) == ["Enviar outro arquivo", ""]
+
+
+@pytest.mark.parametrize("msg,job", [
+    (main._mensagem_sem_itens(True, 3), None),                                   # sem job, sem link
+    ("Não conseguimos abrir automaticamente o seu DWG (versão muito recente).", "job-1"),
+    ("Reenvio duplicado: a versão boa é a mais recente.", "job-1"),              # semUpload sem vista
+    (main._mensagem_sem_itens(False, 0), "job-1"),
+])
+def test_CONTROLE_PAINEL_outros_erros_mantem_enviar_outro_arquivo(tela, msg, job):
+    assert _botao(tela, msg, job) == {"rotulo": "Enviar outro arquivo", "href": ""}, msg
+
+
+def test_PAINEL_toda_tela_de_erro_passa_pelo_botao_do_erro():
+    src = io.open(os.path.join(_RAIZ, "dashboard.html"), encoding="utf-8").read()
+    linhas = src.splitlines()
+    sitios = [i for i, l in enumerate(linhas) if "showState(stateError)" in l]
+    assert sitios, "não achei tela de erro no painel"
+    for i in sitios:
+        assert any("_botaoDoErro(" in l for l in linhas[max(0, i - 3):i]), (
+            "tela de erro sem _botaoDoErro na linha %d — o rótulo do erro anterior fica" % (i + 1))
+    assert "_botaoDoErro(_txtErro, currentJobId)" in src
+    assert "if (btnRetry.dataset.abrir) { window.location.href = btnRetry.dataset.abrir; return; }" in src

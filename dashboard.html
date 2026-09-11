@@ -2112,6 +2112,14 @@
   const btnReview = document.getElementById('btn-review');
   const btnNewProject = document.getElementById('btn-new-project');
   const btnRetry = document.getElementById('btn-retry');
+  // 🩸 11/09/2026 — ver aiArqBotaoDoErro (aiarq-utils.js). Toda tela de erro passa
+  // por aqui, inclusive pra DESFAZER o "Abrir o projeto" de um erro anterior.
+  function _botaoDoErro(txt, jobId) {
+    const b = window.aiArqBotaoDoErro ? window.aiArqBotaoDoErro(txt, jobId)
+                                      : { rotulo: 'Enviar outro arquivo', href: '' };
+    btnRetry.textContent = b.rotulo;
+    btnRetry.dataset.abrir = b.href || '';
+  }
   const btnLogout = document.getElementById('btn-logout');
   const userAvatar = document.getElementById('user-avatar');
   const userName = document.getElementById('user-name');
@@ -3446,6 +3454,7 @@
     } catch (err) {
       console.error('Erro ao enviar:', err);
       errorMessage.textContent = (window.aiArqErroComReceita ? aiArqErroComReceita(err.message) : err.message) || 'Erro ao enviar os arquivos. Tente novamente.';
+      _botaoDoErro(err.message, null);
       showState(stateError);
     }
   }
@@ -3859,6 +3868,7 @@
           errorMessage.textContent = 'O servidor reiniciou no meio do caminho (acontece em deploy). ' +
             'Se o processamento j\u00e1 tinha come\u00e7ado, ele continua sozinho e a planilha chega por e-mail \u2014 ' +
             'confira em Meus projetos antes de enviar de novo.';
+          _botaoDoErro('', null);
           showState(stateError);
         }
         return;
@@ -3962,6 +3972,7 @@
         const _txtErro = data.error_message || data.error || data.message || 'Ocorreu um erro durante o processamento.';
         errorMessage.textContent = window.aiArqErroComReceita ? aiArqErroComReceita(_txtErro) : _txtErro;
         saveProjectToHistory('error');
+        _botaoDoErro(_txtErro, currentJobId);
         showState(stateError);
       }
 
@@ -3974,6 +3985,7 @@
         pollTimer = null;
         errorMessage.textContent = 'N\u00e3o consegui falar com o servidor por 5 minutos. ' +
           'Seu projeto pode ter continuado: confira em Meus projetos (e no e-mail) antes de enviar de novo.';
+        _botaoDoErro('', null);
         showState(stateError);
       }
     }
@@ -4293,6 +4305,7 @@
   //  RETRY
   // ══════════════════════════════════════════════
   btnRetry.addEventListener('click', () => {
+    if (btnRetry.dataset.abrir) { window.location.href = btnRetry.dataset.abrir; return; }
     // 🪤 LIMPA a seleção. Antes só voltava pra tela de envio com o arquivo que
     // acabou de falhar ainda selecionado — cliente-61 (29/07) mandou o
     // MESMO DWG quebrado 2x e desistiu da prancha. Se o arquivo é o problema,

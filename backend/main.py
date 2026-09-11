@@ -3486,7 +3486,8 @@ def _linha_do_email_ao_cliente(email: str, criado_em: str) -> str:
     _hora = _quando[11:16] or "?"
     if _antes:
         return ("O cliente recebeu e-mail de falha (%s) às %s UTC, de um envio ANTERIOR "
-                "a este projeto — o freio de 15 min não repete o aviso." % (_kind, _hora))
+                "a este projeto (pode ter sido o freio de 15 min, que não repete o "
+                "aviso)." % (_kind, _hora))
     return "O cliente recebeu e-mail de falha (%s) às %s UTC." % (_kind, _hora)
 
 
@@ -3575,9 +3576,9 @@ def _build_falha_email(name: str, project_name: str, reprocessavel: bool, error_
                        "Arquitetura' — não precisa enviar de novo.")
         elif "desenho vetorial" in _eh:
             # 🩸 11/09/2026: o PDF foi lido como VETOR — não é escaneado.
-            motivo = ("lemos o desenho do seu arquivo, mas não saiu nenhuma quantidade "
-                      "— costuma ser prancha só com o desenho, sem quadros de áreas, "
-                      "legendas ou especificações.")
+            motivo = ("não saiu nenhuma quantidade do desenho que lemos — costuma ser "
+                      "prancha só com o desenho, sem quadros de áreas, legendas ou "
+                      "especificações.")
             fix = ("O ideal é <b>reenviar a planta completa exportada direto do CAD, "
                    "em DXF</b> — é dele que sai quantidade medida do desenho.")
             alt_img = "Um ajuste no arquivo resolve — reenvie exportado do CAD"
@@ -22139,10 +22140,13 @@ def get_project_items(job_id: str, request: Request):
         # então a linha não vem na lista e o tempo/datas ficavam "--"). Best-effort.
         _meta = {}
         try:
+            # 🩸 11/09/2026: + project_type. A lista by-user (RPC list_user_projects)
+            # não traz o tipo, e o Reprocessar da página supunha "arquitetura" —
+            # num projeto Estrutura escondia justamente "Ler como Arquitetura".
             _murl = (f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}"
                      f"&select=project_name,status,typology,files_count,items_count,"
                      f"total_area,user_total_area,user_pe_direito,user_prazo_meses,"
-                     f"created_at,completed_at,phase&limit=1")
+                     f"created_at,completed_at,phase,project_type&limit=1")
             _mreq = urllib.request.Request(_murl, method="GET")
             _mreq.add_header("apikey", SUPABASE_KEY)
             _mreq.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")

@@ -1365,6 +1365,11 @@ async function carregarStatsEntregas() {
     };
   }
 
+  // 🩸 11/09/2026 — a lista by-user (RPC list_user_projects) não traz
+  // `project_type`. O tipo vem do meta do /api/items; sem ele o Reprocessar não
+  // sabe o que é "o mesmo tipo" (ver _rotularTipoDoReprocesso).
+  if (proj && !proj.project_type && pmeta.project_type) proj.project_type = pmeta.project_type;
+
   if (!proj) {
     document.querySelector('main').innerHTML = `
       <div class="text-center py-12">
@@ -2579,6 +2584,26 @@ async function generateComparison() {
   }
 }
 
+// 🩸 11/09/2026 — O REPROCESSAR ESCONDIA A SAÍDA DO PROJETO ESTRUTURA. A página
+// supunha "arquitetura" quando o tipo não vinha (e ele nunca vinha da lista
+// by-user): rotulava a 1ª opção "Mesmo tipo (Arquitetura)" — que reprocessa como
+// ESTRUTURA — e removia "Ler como Arquitetura", justamente a saída que a mensagem
+// de zero item passou a ensinar. Sem o tipo, nenhuma opção some.
+function _rotularTipoDoReprocesso(sel, tipoGravado) {
+  if (!sel || !sel.options || !sel.options.length) return;
+  const tipo = String(tipoGravado || '').toLowerCase();
+  if (tipo !== 'arquitetura' && tipo !== 'estrutura') {
+    sel.options[0].textContent = 'Mesmo tipo de antes';
+    return;
+  }
+  sel.options[0].textContent = 'Mesmo tipo (' + (tipo === 'estrutura' ? 'Estrutura' : 'Arquitetura') + ')';
+  // Some a opção que repete o tipo atual: escolher "Estrutura" num projeto que
+  // já é estrutura não muda nada e só confunde.
+  Array.prototype.slice.call(sel.options).forEach(function (o) {
+    if (o.value && o.value === tipo) o.remove();
+  });
+}
+
 function renderHeader(p) {
   document.getElementById('proj-title').textContent =
     (window.tituloProjeto || String)(p.project_name || 'Projeto sem nome');
@@ -2613,16 +2638,7 @@ function renderHeader(p) {
       // Rotula a opção "mesmo tipo" com o tipo REAL do projeto — "mesmo de
       // antes" sozinho não diz nada a quem não lembra o que escolheu no upload.
       const _selTipo = document.getElementById('reprocess-tipo');
-      const _tipoAtual = (p.project_type || 'arquitetura');
-      if (_selTipo) {
-        const _rot = _tipoAtual === 'estrutura' ? 'Estrutura' : 'Arquitetura';
-        _selTipo.options[0].textContent = `Mesmo tipo (${_rot})`;
-        // Some a opção que repete o tipo atual: escolher "Estrutura" num projeto
-        // que já é estrutura não muda nada e só confunde.
-        [..._selTipo.options].forEach(o => {
-          if (o.value && o.value === _tipoAtual) o.remove();
-        });
-      }
+      _rotularTipoDoReprocesso(_selTipo, p.project_type);
       btnReprocess.addEventListener('click', async () => {
         const _novoTipo = _selTipo ? _selTipo.value : '';
         const _aviso = _novoTipo

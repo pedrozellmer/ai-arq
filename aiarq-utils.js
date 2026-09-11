@@ -494,6 +494,7 @@
     // Processamento. Por isso o botão de enviar arquivo some.
     quando: /item de ESTRUTURA/i,
     semUpload: true,
+    abrirVista: 'processamento',   // o painel troca "Enviar outro arquivo" por "Abrir o projeto"
     titulo: 'Se o seu arquivo é de arquitetura',
     passos: [
       'No menu do projeto, abra <b>Processamento</b>',
@@ -558,6 +559,19 @@
     if (r.passos && r.passos.length) partes.push((r.titulo || 'Como resolver') + ':\n' + r.passos.map(function (p, k) { return (k + 1) + '. ' + semTag(p); }).join('\n'));
     if (r.acao) partes.push(semTag(r.acao));
     return partes.join('\n\n');
+  };
+  // 🩸 11/09/2026 — o botão da tela de erro do painel era sempre "Enviar outro
+  // arquivo", que volta pro envio com o MESMO tipo marcado: no tipo Estrutura em
+  // planta de arquitetura, o texto dizia "não precisa enviar de novo" e o único
+  // botão reenviava como Estrutura. Receita com `abrirVista` leva pra página do
+  // projeto, onde a saída mora (Processamento › Reprocessar).
+  window.aiArqBotaoDoErro = function (txt, jobId) {
+    var r = window.aiArqReceitaPara(txt);
+    if (r && r.abrirVista && jobId) {
+      return { rotulo: 'Abrir o projeto',
+               href: 'projeto.html?job_id=' + encodeURIComponent(jobId) + '#' + r.abrirVista };
+    }
+    return { rotulo: 'Enviar outro arquivo', href: '' };
   };
 
   // ─── authFetch ───────────────────────────────────────────────
