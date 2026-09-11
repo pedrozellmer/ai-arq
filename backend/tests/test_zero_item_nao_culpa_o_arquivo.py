@@ -10,29 +10,45 @@ cliente já recebeu o email de falha" e o cliente não tinha recebido (nenhum re
 de envio). Ele reenviou duas vezes marcando Estrutura de novo; o projeto que deu
 certo depois do anexo ficou "done" com o erro antigo gravado.
 
-Estes guardas CHAMAM `_mensagem_sem_itens`, `_build_falha_email` e
-`_linha_do_email_ao_cliente`; a AST do `process_job` só onde não dá pra chamar.
+🩸 A revisão adversarial do 1º conserto pegou, ANTES de subir:
+  1. `error_message=None` no store derrubava o /api/status com 500 em TODO projeto
+     concluído (e as conclusões de complemento já faziam isso desde 15-16/07);
+  2. no banco a limpeza era inerte: a RPC faz COALESCE e ignora None;
+  3. o meu guarda de AST aprovava os dois defeitos e reprovava os consertos;
+  4. a TELA seguia dizendo "PDF escaneado" pro vetorial, e no tipo Estrutura
+     mandava "Salve em DXF" com o botão que anexa ao MESMO projeto Estrutura;
+  5. o alerta diria "NÃO há registro" pra quem foi avisado pelo projeto irmão
+     (freio de 15 min) — 18 de 20 casos medidos.
+
+Estes guardas CHAMAM o código: `_mensagem_sem_itens`, `_build_falha_email`,
+`_linha_do_email_ao_cliente`, `_supabase_update`, a rota `/api/status`, o fim real do
+`process_job` (`_fim_do_job`), o alerta `_auto_retry_erros_transitorios` e as
+receitas da tela rodando no duktape. AST só onde não dá pra chamar: o `raise` do
+meio do `process_job`.
 """
 import ast
 import io
 import json
 import os
 import sys
+from datetime import datetime, timedelta
+from urllib.parse import unquote
 
 import pytest
 
 _AQUI = os.path.dirname(os.path.abspath(__file__))
 _BACKEND = os.path.dirname(_AQUI)
 sys.path.insert(0, _BACKEND)
+sys.path.insert(0, _AQUI)
 
 import main  # noqa: E402
 
 
 # ── a mensagem do cliente ─────────────────────────────────────────────────────
-def test_tipo_ESTRUTURA_sem_item_manda_marcar_arquitetura_e_nao_culpa_o_pdf():
+def test_tipo_ESTRUTURA_sem_item_aponta_ler_como_arquitetura_e_nao_culpa_o_pdf():
     msg = main._mensagem_sem_itens(True, 3)
-    assert "Arquitetura" in msg and "Estrutura" in msg, msg
-    assert "escaneada" not in msg.lower(), msg
+    assert "Ler como Arquitetura" in msg and "Estrutura" in msg, msg
+    assert "escaneada" not in msg.lower() and "dxf" not in msg.lower(), msg
 
 
 def test_PDF_vetorial_lido_nunca_vira_escaneado():
@@ -58,10 +74,16 @@ def _falha(msg):
     return main._build_falha_email("Fulano", "Edifício Teste", False, error_hint=msg)
 
 
-def test_email_do_tipo_estrutura_manda_reenviar_marcando_arquitetura():
+def test_email_do_tipo_estrutura_aponta_o_reprocessar_e_nao_pede_outro_arquivo():
     subject, html = _falha(main._mensagem_sem_itens(True, 3))
-    assert "Arquitetura" in html and "escaneada" not in html.lower(), html[:600]
-    assert "outro arquivo" not in subject and "Arquitetura" in subject, subject
+    baixo = html.lower()
+    assert "ler como arquitetura" in baixo, html[:900]
+    # a arte falha-arquivo.png desenha "DWG → DXF, um ajuste no arquivo resolve"
+    for proibido in ("escaneada", "dxf", "não vai resolver", "outro arquivo",
+                     "outra prancha", "falha-arquivo.png"):
+        assert proibido not in baixo, (proibido, html[:900])
+    assert "outro arquivo" not in subject.lower() and "reenvie" not in subject.lower(), subject
+    assert "estrutura" in subject.lower(), subject
 
 
 def test_email_de_pdf_vetorial_nao_fala_em_escaneado():
@@ -84,41 +106,156 @@ def _process_job():
                 if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == "process_job")
 
 
-def test_o_process_job_monta_o_erro_de_zero_item_pelo_helper_com_o_TIPO():
+def test_o_process_job_monta_o_erro_de_zero_item_com_o_TIPO_e_as_PRANCHAS_lidas():
     fn = _process_job()
     usos = [n for n in ast.walk(fn)
             if isinstance(n, ast.Call) and getattr(n.func, "id", "") == "_mensagem_sem_itens"]
     assert usos, "o process_job não chama _mensagem_sem_itens"
-    assert all(isinstance(u.args[0], ast.Name) and u.args[0].id == "is_structural" for u in usos), \
-        "o 1º argumento tem que ser o tipo do projeto (is_structural)"
+
+    def _arg(chamada, pos, nome):
+        if len(chamada.args) > pos:
+            return chamada.args[pos]
+        return next((k.value for k in chamada.keywords if k.arg == nome), None)
+
+    for u in usos:
+        tipo, pranchas = _arg(u, 0, "is_structural"), _arg(u, 1, "paginas_vetoriais")
+        assert isinstance(tipo, ast.Name) and tipo.id == "is_structural", \
+            "o 1º argumento tem que ser o tipo do projeto (is_structural)"
+        assert pranchas is not None and any(
+            isinstance(x, ast.Name) and x.id == "_pdfvec_por_prancha" for x in ast.walk(pranchas)), \
+            "as pranchas vetoriais lidas não chegam na mensagem — o PDF vetorial volta a ser 'escaneado'"
     literais = [n.value for n in ast.walk(fn) if isinstance(n, ast.Constant) and isinstance(n.value, str)]
     assert not any("Nenhum item quantificável foi identificado neste" in t for t in literais), \
         "o texto antigo voltou solto dentro do process_job"
 
 
-def test_concluir_o_projeto_LIMPA_o_erro_antigo():
-    fn = _process_job()
-    gravacoes = []
-    for n in ast.walk(fn):
-        if isinstance(n, ast.Call) and getattr(n.func, "id", "") == "_supabase_update":
-            for a in n.args:
-                if isinstance(a, ast.Dict):
-                    ch = {k.value: v for k, v in zip(a.keys, a.values) if isinstance(k, ast.Constant)}
-                    st = ch.get("status")
-                    if isinstance(st, ast.Constant) and st.value == "done" and "items_count" in ch:
-                        gravacoes.append(ch)
-    assert gravacoes, "não achei a gravação de conclusão do process_job"
-    for ch in gravacoes:
-        em = ch.get("error_message")
-        assert isinstance(em, ast.Constant) and em.value is None, "a conclusão não limpa error_message"
-    locais = [n for n in ast.walk(fn)
-              if isinstance(n, ast.Call) and getattr(n.func, "attr", "") == "update_field"
-              and any(k.arg == "status" and isinstance(k.value, ast.Constant) and k.value.value == "done"
-                      for k in n.keywords)]
-    assert locais, "não achei o status local de conclusão"
-    for n in locais:
-        assert any(k.arg == "error_message" for k in n.keywords), \
-            "status local 'done' sem limpar error_message (linha %d)" % n.lineno
+# ── a tela de acompanhamento não cai (o 500 que a revisão pegou) ─────────────
+@pytest.fixture
+def cliente_status(monkeypatch, tmp_path):
+    from fastapi.testclient import TestClient
+    monkeypatch.setattr(main, "JOBS_FILE", str(tmp_path / "_jobs.json"))
+    monkeypatch.setattr(main, "_require_project_owner", lambda request, job_id: None)
+    return TestClient(main.app, raise_server_exceptions=False)
+
+
+@pytest.mark.parametrize("gravado", [
+    {"status": "done", "error_message": None},
+    # a forma exata das duas conclusões de complemento
+    {"status": "done", "progress": 100, "error_message": None,
+     "current_step": "Complemento sem itens — planilha anterior mantida"},
+])
+def test_status_de_projeto_concluido_nao_cai_com_erro_None_no_store(cliente_status, gravado):
+    jid = "guarda-status-none"
+    main.jobs[jid] = main.ProcessingStatus(job_id=jid, status="processing", progress=90)
+    main.jobs.update_field(jid, **gravado)
+    r = cliente_status.get("/api/status/%s" % jid)
+    assert r.status_code == 200, "a tela do projeto nunca recarrega: %s" % r.text[:200]
+    assert r.json()["status"] == "done" and r.json()["error_message"] == "", r.json()
+
+
+def test_CONTROLE_status_com_erro_de_verdade_continua_mostrando_o_erro(cliente_status):
+    jid = "guarda-status-erro"
+    main.jobs[jid] = main.ProcessingStatus(job_id=jid, status="processing", progress=40)
+    main.jobs.update_field(jid, status="error", error_message="falhou de verdade")
+    r = cliente_status.get("/api/status/%s" % jid)
+    assert r.status_code == 200 and r.json()["error_message"] == "falhou de verdade", r.text[:200]
+
+
+# ── limpar o erro no banco funciona de verdade ───────────────────────────────
+def _espiona_banco(monkeypatch, rpc_ok=True):
+    ch = {"rpc": [], "patch": []}
+    monkeypatch.setattr(main, "_rpc_update_project_status",
+                        lambda j, d: ch["rpc"].append((j, dict(d))) or rpc_ok)
+    monkeypatch.setattr(main, "_projeto_patch",
+                        lambda j, c: ch["patch"].append((j, dict(c))) or True)
+    return ch
+
+
+def test_None_explicito_de_error_message_LIMPA_no_banco_por_patch(monkeypatch):
+    ch = _espiona_banco(monkeypatch)
+    main._supabase_update("projects", "job_id", "j1", {"status": "done", "error_message": None})
+    assert ch["rpc"], "o status tem que continuar indo pela RPC"
+    assert ch["patch"] == [("j1", {"error_message": None})], (
+        "a RPC faz COALESCE e ignora None — sem o PATCH o erro antigo fica gravado: %r" % ch)
+
+
+@pytest.mark.parametrize("dados,rpc_ok", [
+    ({"status": "done"}, True),                                # ninguém pediu pra limpar
+    ({"status": "error", "error_message": "falhou"}, True),    # erro novo vai pela RPC
+    ({"status": "done", "error_message": None}, False),        # status não gravou
+])
+def test_CONTROLE_sem_pedido_de_limpar_ou_status_que_nao_gravou_nao_mexe_no_erro(monkeypatch, dados, rpc_ok):
+    ch = _espiona_banco(monkeypatch, rpc_ok)
+    main._supabase_update("projects", "job_id", "j1", dados)
+    assert ch["rpc"] and not ch["patch"], ch
+
+
+def test_a_conclusao_REAL_do_process_job_pede_pra_limpar_o_erro_antigo():
+    from _fim_do_job import roda_ate_o_email
+    from models import BudgetItem, Confidence
+    itens = [BudgetItem(item_num="1.%d" % k, description="Serviço %d" % k, unit="m²",
+                        quantity=10.0 + k,
+                        confidence=(Confidence.CONFIRMADO if k == 0 else Confidence.ESTIMADO),
+                        origem="dxf_geom")
+             for k in range(2)]
+    gravado = []
+    roda_ate_o_email(itens, antes_do_email={
+        "_supabase_update": lambda *a, **k: gravado.append(a) or True})
+    concl = [a[3] for a in gravado
+             if len(a) >= 4 and isinstance(a[3], dict)
+             and a[3].get("status") == "done" and "items_count" in a[3]]
+    assert concl, "não achei a gravação de conclusão: %r" % (gravado,)
+    for d in concl:
+        assert "error_message" in d and d["error_message"] is None, (
+            "a conclusão não pede pra limpar o erro antigo: %r" % d)
+
+
+# ── a tela do projeto e o painel (o JS de verdade, no duktape) ───────────────
+@pytest.fixture(scope="module")
+def tela():
+    from _bancada_js import Pagina
+    from _jsbancada import funcao_js
+    p = Pagina(("aiarq-utils.js",))
+    p.eval("var _RECEITAS_ERRO = window.AIARQ_RECEITAS_ERRO; 1;")
+    p.eval(funcao_js("_receitaPara", "projeto.html") + "\n1;")
+    p.eval(funcao_js("_erroEmTopicos", "projeto.html") + "\n1;")
+    return p
+
+
+def _receita(tela, msg):
+    return json.loads(tela.eval("JSON.stringify(window.aiArqReceitaPara(%s) || null)" % json.dumps(msg)))
+
+
+def _cartao(tela, msg):
+    return tela.eval("_erroEmTopicos(%s)" % json.dumps(msg))
+
+
+def _painel(tela, msg):
+    return tela.eval("window.aiArqErroComReceita(%s)" % json.dumps(msg))
+
+
+def test_TELA_pdf_vetorial_nao_vira_pdf_escaneado(tela):
+    msg = main._mensagem_sem_itens(False, 3)
+    cartao, painel = _cartao(tela, msg), _painel(tela, msg)
+    assert "escanead" not in cartao.lower(), cartao
+    assert "escanead" not in painel.lower(), painel
+    assert "DXF" in cartao, cartao
+
+
+def test_TELA_tipo_estrutura_aponta_ler_como_arquitetura_e_esconde_o_envio_de_arquivo(tela):
+    msg = main._mensagem_sem_itens(True, 3)
+    rec = _receita(tela, msg)
+    assert rec and rec.get("semUpload") is True, (
+        "o botão 'Enviar outro arquivo' anexa ao MESMO projeto Estrutura — repete o ciclo: %r" % rec)
+    cartao, painel = _cartao(tela, msg), _painel(tela, msg)
+    for texto in (cartao, painel):
+        assert "Ler como Arquitetura" in texto, texto
+        assert "Salve o arquivo em DXF" not in texto and "escanead" not in texto.lower(), texto
+
+
+def test_CONTROLE_TELA_mensagem_generica_e_a_historica_seguem_no_escaneado(tela):
+    for msg in (main._mensagem_sem_itens(False, 0), main._MSG_SEM_ITENS_GENERICA):
+        assert "PDF escaneado" in _cartao(tela, msg), msg
 
 
 # ── o alerta interno ──────────────────────────────────────────────────────────
@@ -130,7 +267,10 @@ class _Resp:
         return self._b
 
 
-def _linha(monkeypatch, dados=None, erro=None):
+_CRIADO = "2026-09-11T12:36:10+00:00"
+
+
+def _linha(monkeypatch, dados=None, erro=None, email="cliente@exemplo.com", criado=_CRIADO):
     pedidos = []
 
     def falso(req, timeout=None):
@@ -140,24 +280,81 @@ def _linha(monkeypatch, dados=None, erro=None):
         return _Resp(dados)
     monkeypatch.setattr(main, "SUPABASE_URL", "https://exemplo.supabase.co")
     monkeypatch.setattr("urllib.request.urlopen", falso)
-    linha = main._linha_do_email_ao_cliente("cliente@exemplo.com", "2026-09-11T12:36:10+00:00")
-    return linha, pedidos
+    return main._linha_do_email_ao_cliente(email, criado), pedidos
 
 
-def test_alerta_NAO_afirma_email_sem_registro_e_olha_so_DEPOIS_do_projeto(monkeypatch):
+def _parametro(url, nome):
+    for par in url.split("?", 1)[1].split("&"):
+        if par.startswith(nome + "="):
+            return par[len(nome) + 1:]
+    return None
+
+
+def test_alerta_sem_registro_diz_ATE_AGORA_e_olha_desde_15_min_ANTES_de_criado(monkeypatch):
     linha, pedidos = _linha(monkeypatch, dados=[])
-    assert "NÃO há registro" in linha, linha
-    assert pedidos and "sent_at=gte." in pedidos[0] and "erro_trocar" in pedidos[0], pedidos
+    assert "não há e-mail de falha registrado" in linha, linha
+    assert pedidos and "erro_trocar" in pedidos[0], pedidos
+    desde = unquote(_parametro(pedidos[0], "sent_at")[len("gte."):])
+    assert datetime.fromisoformat(desde) == datetime.fromisoformat(_CRIADO) - timedelta(minutes=15), (
+        "o freio de 15 min avisa pelo projeto irmão, ANTES deste ser criado: %s" % pedidos[0])
 
 
-def test_alerta_diz_que_recebeu_quando_o_registro_existe(monkeypatch):
+def test_alerta_de_quem_foi_avisado_pelo_projeto_IRMAO_nao_diz_que_falta_aviso(monkeypatch):
+    linha, _ = _linha(monkeypatch, dados=[{"kind": "erro_trocar", "sent_at": "2026-09-11T12:31:10+00:00"}])
+    assert linha.startswith("O cliente recebeu e-mail de falha") and "ANTERIOR" in linha, linha
+
+
+def test_alerta_diz_que_recebeu_quando_o_envio_e_depois_do_projeto(monkeypatch):
     linha, _ = _linha(monkeypatch, dados=[{"kind": "erro_trocar", "sent_at": "2026-09-11T12:38:40+00:00"}])
-    assert linha.startswith("O cliente recebeu o e-mail de falha"), linha
+    assert linha.startswith("O cliente recebeu e-mail de falha"), linha
+    assert "ANTERIOR" not in linha and "12:38" in linha, linha
+
+
+def test_alerta_sem_data_de_criacao_nao_consulta_nem_afirma(monkeypatch):
+    linha, pedidos = _linha(monkeypatch, dados=[{"kind": "erro_trocar", "sent_at": "2020-01-01T00:00:00+00:00"}],
+                            criado="")
+    assert "Não deu pra confirmar" in linha and not pedidos, (linha, pedidos)
+
+
+def test_alerta_de_conta_interna_nao_diz_que_falta_aviso(monkeypatch):
+    linha, pedidos = _linha(monkeypatch, dados=[], email=main.ADMIN_EMAIL)
+    assert "Conta interna" in linha and not pedidos, (linha, pedidos)
+
+
+def test_alerta_codifica_o_mais_do_email(monkeypatch):
+    _, pedidos = _linha(monkeypatch, dados=[], email="cliente+obra@exemplo.com")
+    assert _parametro(pedidos[0], "email") == "ilike.cliente%2Bobra%40exemplo.com", pedidos[0]
 
 
 def test_alerta_diz_que_nao_deu_pra_confirmar_quando_a_consulta_falha(monkeypatch):
     linha, _ = _linha(monkeypatch, erro=OSError("rede fora"))
     assert "Não deu pra confirmar" in linha, linha
+
+
+def test_o_alerta_terminal_pede_created_at_e_entrega_pra_linha_do_email(monkeypatch):
+    linha_args, urls, avisos = [], [], []
+    row = {"job_id": "job-guarda", "user_email": "cliente@exemplo.com",
+           "project_name": "Projeto teste", "error_message": main._mensagem_sem_itens(True, 3),
+           "typology": "office", "project_type": "estrutura", "auto_resume_count": 0,
+           "created_at": _CRIADO}
+
+    def falso(req, timeout=None):
+        urls.append(getattr(req, "full_url", str(req)))
+        return _Resp([row])
+    monkeypatch.setattr(main, "SUPABASE_URL", "https://exemplo.supabase.co")
+    monkeypatch.setattr("urllib.request.urlopen", falso)
+    monkeypatch.setattr(main, "_email_auto_ja_enviado", lambda *a, **k: False)
+    monkeypatch.setattr(main, "_email_auto_registrar", lambda *a, **k: None)
+    monkeypatch.setattr(main, "_error_log_causa_real", lambda j: "")
+    monkeypatch.setattr(main, "_notify_admin", lambda assunto, corpo: avisos.append(corpo) or True)
+    monkeypatch.setattr(main, "_retomar_job_do_storage",
+                        lambda *a, **k: pytest.fail("erro de tipo não é passageiro"))
+    monkeypatch.setattr(main, "_linha_do_email_ao_cliente",
+                        lambda e, c: linha_args.append((e, c)) or "LINHA-DO-EMAIL")
+    main._auto_retry_erros_transitorios()
+    assert "created_at" in _parametro(urls[0], "select").split(","), urls[0]
+    assert linha_args == [("cliente@exemplo.com", _CRIADO)], linha_args
+    assert avisos and "LINHA-DO-EMAIL" in avisos[0], avisos
 
 
 def test_o_alerta_nao_tem_mais_a_frase_FIXA():

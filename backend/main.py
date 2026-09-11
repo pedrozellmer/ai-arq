@@ -878,7 +878,17 @@ def _supabase_update(table, match_field, match_value, data):
     if table == "projects" and match_field == "job_id":
         if any(k in _META_FIELDS for k in data.keys()):
             return _rpc_update_project_meta(match_value, data)
-        return _rpc_update_project_status(match_value, data)
+        _ok_rpc = _rpc_update_project_status(match_value, data)
+        # 🩸 11/09/2026 — a RPC faz `COALESCE(p_error_message, error_message)`: o
+        # `"error_message": None` que as chamadas mandam pra LIMPAR o erro
+        # (retomada, anexo, complemento, conclusão) era descartado calado, e o
+        # projeto que falhou e depois deu certo ficava "done" com o erro antigo.
+        # 🔑 None explícito quer dizer "limpar": vai por PATCH direto, que grava
+        # NULL — e só depois que o status gravou, pra não sobrar projeto "error"
+        # sem mensagem nenhuma.
+        if _ok_rpc and "error_message" in data and data["error_message"] is None:
+            _projeto_patch(match_value, {"error_message": None})
+        return _ok_rpc
 
     try:
         url = f"{SUPABASE_URL}/rest/v1/{table}?{match_field}=eq.{match_value}"
@@ -3395,11 +3405,16 @@ def _mensagem_sem_itens(is_structural: bool, paginas_vetoriais: int = 0) -> str:
     PDF vetorial lido → nunca "escaneado"; sem sinal nenhum → o texto de sempre.
     """
     if is_structural:
+        # 🪤 A 1ª versão mandava "reenvie marcando Arquitetura" — e o botão de enviar
+        # arquivo da tela anexa ao MESMO projeto, que continua Estrutura: foi o ciclo
+        # do caso. O caminho que não repete o erro é o Reprocessar com "Ler como
+        # Arquitetura", na vista Processamento: mesmos arquivos, outra pergunta.
         return ("Nenhum item de ESTRUTURA foi identificado neste arquivo. Com o tipo "
                 "'Estrutura', o motor procura só concreto, fôrma e aço — planta de "
                 "fôrma, detalhamento de armação ou quadro de ferros. Se o seu arquivo "
-                "é de ARQUITETURA, reenvie marcando 'Arquitetura' no tipo de projeto, "
-                "ou fale com o suporte pelo botão 'Reportar problema'.")
+                "é de ARQUITETURA, não precisa enviar de novo: no menu do projeto, "
+                "abra 'Processamento', escolha 'Ler como Arquitetura' e clique em "
+                "Reprocessar. Dúvidas: botão 'Reportar problema'.")
     if paginas_vetoriais > 0:
         return ("Nenhum item quantificável foi identificado neste arquivo. Lemos o "
                 "desenho vetorial (%d prancha%s), mas não saiu nenhuma quantidade — "
@@ -3417,30 +3432,62 @@ def _linha_do_email_ao_cliente(email: str, criado_em: str) -> str:
     email de falha com orientação", e o cliente daquele alerta NÃO tinha recebido:
     nenhum erro_trocar/erro_reprocessar no email_sent_log, só as boas-vindas.
     `_send_email_smtp` só grava no sucesso; falha, freio e exceção viram print().
-    🔑 Olha o registro DESTE projeto (envio depois de criado) e diz o que achou —
-    inclusive quando não deu pra olhar.
+    🩸 E a 1ª versão desta função errava pro outro lado: olhava só envio DEPOIS de
+    criado o projeto, e o freio de 15 min de `_email_falha_cliente` avisa pelo
+    projeto IRMÃO, criado antes — quem reenvia o arquivo cai exatamente aí. Em 39
+    alertas medidos pela revisão, 20 sairiam "NÃO há registro" e só 2 eram verdade.
+    🔑 Olha desde 15 min ANTES de criado, diz de quando é o envio achado, e diz
+    quando não deu pra olhar. Casa por e-mail e horário, não por job: "recebeu"
+    quer dizer "recebeu um aviso de falha nessa janela".
     """
     import urllib.request as _u, urllib.parse as _up, json as _j
+    from datetime import timezone as _tz
     if not email:
         return "Projeto sem e-mail de cliente — nenhum aviso de falha pôde sair."
+    if _email_eh_interno(email):
+        return ("Conta interna — o registro de envios não guarda e-mail interno, então "
+                "não dá pra confirmar o aviso de falha.")
+    _nao_deu = "Não deu pra confirmar se o cliente recebeu o e-mail de falha (%s)."
+    if not criado_em:
+        # sem data, a consulta perderia o filtro e acharia envio de projeto antigo
+        return _nao_deu % "projeto sem data de criação"
+    try:
+        _criado = datetime.fromisoformat(str(criado_em).replace("Z", "+00:00"))
+        if _criado.tzinfo is None:
+            _criado = _criado.replace(tzinfo=_tz.utc)
+    except ValueError:
+        return _nao_deu % "data de criação ilegível"
+    _desde = (_criado - timedelta(minutes=15)).isoformat()
     try:
         q = (f"{SUPABASE_URL}/rest/v1/email_sent_log?select=kind,sent_at"
-             f"&email=ilike.{_up.quote(email)}"
+             f"&email=ilike.{_up.quote(email, safe='')}"
              f"&kind=in.(erro_trocar,erro_reprocessar)"
-             + (f"&sent_at=gte.{_up.quote(criado_em)}" if criado_em else "")
-             + "&order=sent_at.asc&limit=1")
+             f"&sent_at=gte.{_up.quote(_desde, safe='')}"
+             f"&order=sent_at.asc&limit=1")
         req = _u.Request(q, method="GET")
         req.add_header("apikey", SUPABASE_KEY)
         req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         rows = _j.loads(_u.urlopen(req, timeout=10).read().decode("utf-8"))
     except Exception as e:
-        return ("Não deu pra confirmar se o cliente recebeu o e-mail de falha "
-                "(a consulta ao registro de envios falhou: %s)." % type(e).__name__)
-    if rows:
-        return ("O cliente recebeu o e-mail de falha (%s, registrado em %s UTC)."
-                % (rows[0].get("kind"), str(rows[0].get("sent_at") or "")[:16]))
-    return ("⚠ NÃO há registro de e-mail de falha para o cliente — ele pode não "
-            "ter sido avisado. Vale falar com ele.")
+        return _nao_deu % ("a consulta ao registro de envios falhou: %s" % type(e).__name__)
+    if not rows:
+        return ("⚠ Até agora não há e-mail de falha registrado para este cliente (desde "
+                "15 min antes deste projeto) — ele pode não ter sido avisado. Vale "
+                "falar com ele.")
+    _kind = rows[0].get("kind")
+    _quando = str(rows[0].get("sent_at") or "")
+    try:
+        _enviado = datetime.fromisoformat(_quando.replace("Z", "+00:00"))
+        if _enviado.tzinfo is None:
+            _enviado = _enviado.replace(tzinfo=_tz.utc)
+        _antes = _enviado < _criado
+    except ValueError:
+        _antes = False
+    _hora = _quando[11:16] or "?"
+    if _antes:
+        return ("O cliente recebeu e-mail de falha (%s) às %s UTC, de um envio ANTERIOR "
+                "a este projeto — o freio de 15 min não repete o aviso." % (_kind, _hora))
+    return "O cliente recebeu e-mail de falha (%s) às %s UTC." % (_kind, _hora)
 
 
 def _build_falha_email(name: str, project_name: str, reprocessavel: bool, error_hint: str = ""):
@@ -3510,15 +3557,22 @@ def _build_falha_email(name: str, project_name: str, reprocessavel: bool, error_
                        "(PURGE) ou mandar só a prancha necessária.")
         elif "item de estrutura" in _eh and "arquitetura" in _eh:
             # 🩸 11/09/2026: tipo "Estrutura" marcado em planta de arquitetura — o
-            # conserto é trocar o TIPO, não o arquivo (ver `_mensagem_sem_itens`).
+            # conserto é trocar a PERGUNTA, não o arquivo (ver `_mensagem_sem_itens`).
+            # 🪤 Sem imagem: a arte `falha-arquivo.png` desenha "DWG → DXF, um ajuste
+            # no arquivo resolve" — diria que o arquivo está errado. E sem
+            # "reprocessar não resolve": aqui reprocessar como Arquitetura É a saída.
             _trocar_tipo = True
-            motivo = ("o projeto foi enviado com o tipo <b>Estrutura</b>, e nesse tipo o "
-                      "motor procura só concreto, fôrma e aço — planta de fôrma, "
-                      "armação ou quadro de ferros.")
-            fix = ("Se o seu arquivo é de <b>arquitetura</b>, é só <b>reenviar o mesmo "
-                   "arquivo marcando 'Arquitetura'</b> no tipo de projeto.")
-            alt_img = "Um ajuste resolve — reenvie marcando Arquitetura"
-            pre_txt = "Reenvie o mesmo arquivo marcando 'Arquitetura' no tipo de projeto."
+            motivo = ("não encontramos nenhum item de <b>estrutura</b> nele. Com o tipo "
+                      "<b>Estrutura</b>, o motor procura só concreto, fôrma e aço — "
+                      "planta de fôrma, armação ou quadro de ferros.")
+            fix = ("Se o seu arquivo é de <b>arquitetura</b>, não precisa enviar de "
+                   "novo: abra o projeto no painel, vá em <b>Processamento</b>, "
+                   "escolha <b>Ler como Arquitetura</b> e clique em "
+                   "<b>Reprocessar</b>. Se esse projeto já tiver sido reprocessado, "
+                   "crie um projeto novo marcando Arquitetura.")
+            alt_img = ""
+            pre_txt = ("Se o arquivo é de arquitetura, reprocesse escolhendo 'Ler como "
+                       "Arquitetura' — não precisa enviar de novo.")
         elif "desenho vetorial" in _eh:
             # 🩸 11/09/2026: o PDF foi lido como VETOR — não é escaneado.
             motivo = ("lemos o desenho do seu arquivo, mas não saiu nenhuma quantidade "
@@ -3552,6 +3606,22 @@ def _build_falha_email(name: str, project_name: str, reprocessavel: bool, error_
             alt_img = "Um ajuste no arquivo resolve — reenvie exportado do CAD"
             pre_txt = ("Reprocessar não resolve este caso: reenvie a planta "
                        "exportada direto do CAD.")
+        if _trocar_tipo:
+            body = (f"{greet}<br><br>"
+                    f"Recebemos o projeto <b>{pn}</b>, mas {motivo}<br><br>"
+                    f"{fix}<br><br>"
+                    f"Se ficar alguma dúvida, é só responder este e-mail que a gente te "
+                    f"ajuda. 🙂")
+            # 🪤 O assunto diz o que houve, sem afirmar que é arquitetura (a gente não
+            # provou) e sem "precisamos de outro arquivo" (o arquivo pode servir).
+            subject = (f"{_pn_raw} — sem itens de estrutura"
+                       if _pn_raw else "Seu projeto no AI.arq — sem itens de estrutura")
+            html = _email_wrap("Nenhum item de estrutura neste arquivo", body,
+                               "Abrir meu painel", "https://ai.arq.br/dashboard.html",
+                               badge="⚠ Conferir o tipo do projeto", badge_color="amber",
+                               preheader=pre_txt,
+                               reason="Você está recebendo este e-mail porque enviou um projeto ao AI.arq.")
+            return subject, html
         body = (f"{greet}<br><br>"
                 f"Recebemos o projeto <b>{pn}</b>, mas {motivo} Ou seja, <b>reprocessar o "
                 f"mesmo arquivo não vai resolver</b>."
@@ -3561,14 +3631,8 @@ def _build_falha_email(name: str, project_name: str, reprocessavel: bool, error_
                 f"preparar. 🙂")
         subject = (f"{_pn_raw} — precisamos de outro arquivo"
                    if _pn_raw else "Sobre o seu projeto no AI.arq — precisamos de outro arquivo")
-        if _trocar_tipo:
-            # "precisamos de outro arquivo" seria mentira: o arquivo serve, o tipo não
-            subject = (f"{_pn_raw} — reenvie marcando Arquitetura"
-                       if _pn_raw else "Sobre o seu projeto no AI.arq — reenvie marcando Arquitetura")
-        html = _email_wrap("Reenvie marcando Arquitetura" if _trocar_tipo
-                           else "Precisamos de outro arquivo pra continuar", body,
-                           "Reenviar no painel" if _trocar_tipo else "Enviar outra prancha",
-                           "https://ai.arq.br/dashboard.html",
+        html = _email_wrap("Precisamos de outro arquivo pra continuar", body,
+                           "Enviar outra prancha", "https://ai.arq.br/dashboard.html",
                            badge="⚠ Revisar o arquivo", badge_color="amber",
                            preheader=pre_txt,
                            reason="Você está recebendo este e-mail porque enviou um projeto ao AI.arq.")
@@ -4389,7 +4453,14 @@ class JobsStore:
         jobs = _load_jobs()
         if key not in jobs:
             raise KeyError(key)
-        return ProcessingStatus(**jobs[key])
+        # 🩸 11/09/2026 — `error_message=None` gravado no store (as duas conclusões
+        # de complemento fazem isso desde 15-16/07) levantava ValidationError aqui,
+        # porque o campo é `str`, e o /api/status devolvia 500: a página do projeto
+        # nunca recarregava e o painel acabava em "não consegui falar com o
+        # servidor". A revisão adversarial pegou o mesmo 500 no conserto que eu ia
+        # subir, na conclusão NORMAL de todo projeto.
+        # 🔑 None no store quer dizer "sem valor": vale o padrão do modelo.
+        return ProcessingStatus(**{k: v for k, v in jobs[key].items() if v is not None})
 
     def __setitem__(self, key, value):
         with _JOBS_LOCK:
@@ -13849,9 +13920,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
         print(f"[storage] upload {job_id}.xlsx ok={_storage_ok}")
 
         jobs.update_field(job_id, progress=100)
-        # 🩸 11/09/2026: projeto que falhou e depois deu certo (anexo) ficava "done"
-        # com o erro ANTIGO gravado ("PDF escaneado"). Concluir limpa o erro.
-        jobs.update_field(job_id, status="done", error_message=None)
+        jobs.update_field(job_id, status="done")
 
         # ─── A RÉGUA DE COBRANÇA (06/09/2026) ────────────────────────────────
         # "só cobra o projeto que mediu pelo menos UMA linha do CAD".
@@ -13899,6 +13968,9 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 % (len(all_items) - _itens_no_banco, _itens_no_banco, len(all_items))]
         _supa_ok = _supabase_update("projects", "job_id", job_id, {
             "status": "done",
+            # 🩸 11/09/2026: projeto que falhou e depois deu certo (anexo) ficava
+            # "done" com o erro ANTIGO gravado. None = limpar; `_supabase_update`
+            # manda isso por PATCH, porque a RPC ignora None.
             "error_message": None,
             "items_count": _itens_no_banco,
             "total_area": project_data.total_area if project_data.total_area else None,

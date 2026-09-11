@@ -486,6 +486,36 @@
     acao: 'Separado, cada prancha mede igual — o que estoura é o arquivo inteiro de uma vez. Não adianta converter pra DXF: o DXF fica ainda maior.',
   },
   {
+    // 🩸 11/09/2026 — tipo "Estrutura" marcado em planta de ARQUITETURA: zero item.
+    // Sem receita, o card punha em negrito "Salve o arquivo em DXF e envie de novo
+    // no botão abaixo" — e esse botão anexa ao MESMO projeto, que continua
+    // Estrutura: foi o ciclo do caso. O arquivo pode servir; quem muda é a
+    // pergunta, e o Reprocessar com "Ler como Arquitetura" mora na vista
+    // Processamento. Por isso o botão de enviar arquivo some.
+    quando: /item de ESTRUTURA/i,
+    semUpload: true,
+    titulo: 'Se o seu arquivo é de arquitetura',
+    passos: [
+      'No menu do projeto, abra <b>Processamento</b>',
+      'Em Reprocessar, escolha <b>Ler como Arquitetura</b>',
+      'Clique em <b>Reprocessar</b> — usa os mesmos arquivos, não precisa enviar de novo',
+    ],
+    acao: 'Com o tipo Estrutura o motor procura só concreto, fôrma e aço. Se o Reprocessar deste projeto já tiver sido usado, crie um projeto novo marcando Arquitetura.',
+  },
+  {
+    // 🩸 11/09/2026 — PDF lido como VETOR e mesmo assim sem item. A receita de
+    // baixo casava "Nenhum item quantificável" e respondia "Num PDF escaneado as
+    // cotas viraram imagem" pra quem mandou o PDF exportado do CAD.
+    quando: /desenho vetorial/i,
+    titulo: 'Como resolver',
+    passos: [
+      'Se você tem o CAD, exporte a planta completa em <b>DXF</b>',
+      'Se só tiver o PDF, confira se a prancha tem <b>cotas, quadro de áreas e legendas</b>',
+      'Envie o arquivo aqui',
+    ],
+    acao: 'O seu PDF foi lido como desenho — não é problema de escaneamento. É do DXF que sai quantidade medida do desenho.',
+  },
+  {
     // PDF escaneado/fotografado: as cotas viraram pixel. Não existe "salvar
     // como DXF" que resolva — é preciso o arquivo original.
     quando: /nenhum item quantific[áa]vel|imagem escaneada|escaneado ou fotografado/i,
