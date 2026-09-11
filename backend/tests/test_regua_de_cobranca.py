@@ -191,8 +191,17 @@ def test_a_regua_NAO_mora_dentro_do_bloco_de_EMAIL():
         "a régua voltou pra dentro do caminho do e-mail — quem não tem e-mail, "
         "complemento e reprocesso ficariam sem carimbo")
 
-    # e tem que estar colada no ponto em que o projeto vira 'done'
-    pos_done = src.index('jobs.update_field(job_id, status="done")')
+    # e tem que estar colada no ponto em que o projeto vira 'done'.
+    # 🪤 11/09/2026: aqui se procurava o texto exato `status="done")`, e o guarda
+    # quebrou quando a conclusão passou a limpar o erro antigo
+    # (`error_message=None`) — sem a régua ter saído do lugar. O ponto de
+    # conclusão é a ÚLTIMA gravação de status "done" ANTES da régua, com
+    # quaisquer outros argumentos; o `^[ \t]+` deixa comentário de fora.
+    _concl = [m.start() for m in re.finditer(
+        r'^[ \t]+jobs\.update_field\(job_id,\s*status="done"', src, re.M)
+        if m.start() < pos_regua]
+    assert _concl, "não achei onde o process_job conclui o projeto antes da régua"
+    pos_done = _concl[-1]
     assert 0 < (pos_regua - pos_done) < 1500, (
         "a régua se afastou do ponto em que o projeto é concluído (%d chars) — "
         "é ali que ela tem que carimbar" % (pos_regua - pos_done))
