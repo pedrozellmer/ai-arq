@@ -3370,6 +3370,79 @@ def _email_wrap(title: str, body_html: str, cta_text: str = "", cta_url: str = "
 _falha_emailed = set()
 
 
+_MSG_SEM_ITENS_GENERICA = (
+    "Nenhum item quantificável foi identificado neste "
+    "arquivo. Causas mais comuns: (1) o PDF é uma imagem "
+    "escaneada ou fotografada — o motor lê PDF vetorial "
+    "exportado direto do CAD (AutoCAD/Revit); (2) a prancha "
+    "tem só o desenho de layout, sem quadros de áreas, "
+    "legendas ou especificações. Reenvie a planta "
+    "arquitetônica completa exportada do CAD, ou fale com "
+    "o suporte pelo botão 'Reportar problema'."
+)
+
+
+def _mensagem_sem_itens(is_structural: bool, paginas_vetoriais: int = 0) -> str:
+    """O texto que o cliente lê quando a leitura termina com ZERO item.
+
+    🩸 11/09/2026 — orçamentista de construtora, 1º projeto: marcou "Estrutura" e
+    mandou 3 PDFs VETORIAIS de arquitetura (o leitor vetorial mediu os três). Com o
+    prompt de estrutura a IA devolveu 0 itens; o guarda "parece ARQUITETURA"
+    (`is_likely_wrong_type`) não dispara com lista vazia; e esta mensagem disse "o
+    PDF é uma imagem escaneada" e pediu "a planta exportada do CAD" — o que ele
+    tinha mandado. Ele reenviou duas vezes, marcando Estrutura de novo.
+    🔑 Três situações, três verdades: tipo Estrutura → o tipo é a causa provável;
+    PDF vetorial lido → nunca "escaneado"; sem sinal nenhum → o texto de sempre.
+    """
+    if is_structural:
+        return ("Nenhum item de ESTRUTURA foi identificado neste arquivo. Com o tipo "
+                "'Estrutura', o motor procura só concreto, fôrma e aço — planta de "
+                "fôrma, detalhamento de armação ou quadro de ferros. Se o seu arquivo "
+                "é de ARQUITETURA, reenvie marcando 'Arquitetura' no tipo de projeto, "
+                "ou fale com o suporte pelo botão 'Reportar problema'.")
+    if paginas_vetoriais > 0:
+        return ("Nenhum item quantificável foi identificado neste arquivo. Lemos o "
+                "desenho vetorial (%d prancha%s), mas não saiu nenhuma quantidade — "
+                "costuma ser prancha só com o desenho, sem quadros de áreas, legendas "
+                "ou especificações. Reenvie a planta completa exportada do CAD (DXF), "
+                "ou fale com o suporte pelo botão 'Reportar problema'."
+                % (paginas_vetoriais, "s" if paginas_vetoriais != 1 else ""))
+    return _MSG_SEM_ITENS_GENERICA
+
+
+def _linha_do_email_ao_cliente(email: str, criado_em: str) -> str:
+    """O que o alerta interno pode AFIRMAR sobre o e-mail de falha ao cliente.
+
+    🩸 11/09/2026 — o alerta de erro terminal dizia, fixo, "O cliente já recebeu o
+    email de falha com orientação", e o cliente daquele alerta NÃO tinha recebido:
+    nenhum erro_trocar/erro_reprocessar no email_sent_log, só as boas-vindas.
+    `_send_email_smtp` só grava no sucesso; falha, freio e exceção viram print().
+    🔑 Olha o registro DESTE projeto (envio depois de criado) e diz o que achou —
+    inclusive quando não deu pra olhar.
+    """
+    import urllib.request as _u, urllib.parse as _up, json as _j
+    if not email:
+        return "Projeto sem e-mail de cliente — nenhum aviso de falha pôde sair."
+    try:
+        q = (f"{SUPABASE_URL}/rest/v1/email_sent_log?select=kind,sent_at"
+             f"&email=ilike.{_up.quote(email)}"
+             f"&kind=in.(erro_trocar,erro_reprocessar)"
+             + (f"&sent_at=gte.{_up.quote(criado_em)}" if criado_em else "")
+             + "&order=sent_at.asc&limit=1")
+        req = _u.Request(q, method="GET")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        rows = _j.loads(_u.urlopen(req, timeout=10).read().decode("utf-8"))
+    except Exception as e:
+        return ("Não deu pra confirmar se o cliente recebeu o e-mail de falha "
+                "(a consulta ao registro de envios falhou: %s)." % type(e).__name__)
+    if rows:
+        return ("O cliente recebeu o e-mail de falha (%s, registrado em %s UTC)."
+                % (rows[0].get("kind"), str(rows[0].get("sent_at") or "")[:16]))
+    return ("⚠ NÃO há registro de e-mail de falha para o cliente — ele pode não "
+            "ter sido avisado. Vale falar com ele.")
+
+
 def _build_falha_email(name: str, project_name: str, reprocessavel: bool, error_hint: str = ""):
     """Monta (subject, html) do email de falha. Separado pra reuso no preview.
     error_hint = mensagem do erro; usada pra dar orientação ESPECÍFICA quando
@@ -3397,6 +3470,7 @@ def _build_falha_email(name: str, project_name: str, reprocessavel: bool, error_
         # Orientação ESPECÍFICA por tipo de problema de arquivo (mesmo diagnóstico do
         # erro técnico). Reprocessar o MESMO arquivo não resolve em nenhum destes.
         _eh = (error_hint or "").lower()
+        _trocar_tipo = False
         if "dwg" in _eh and ("abrir" in _eh or "convert" in _eh):
             motivo = ("não conseguimos <b>abrir o seu DWG</b> automaticamente — costuma "
                       "acontecer com arquivo salvo numa versão muito recente do AutoCAD, ou "
@@ -3434,6 +3508,27 @@ def _build_falha_email(name: str, project_name: str, reprocessavel: bool, error_
             # que o cliente lê — antes do texto certo lá dentro.
             pre_txt = ("Reprocessar não resolve: o caminho é aliviar o arquivo "
                        "(PURGE) ou mandar só a prancha necessária.")
+        elif "item de estrutura" in _eh and "arquitetura" in _eh:
+            # 🩸 11/09/2026: tipo "Estrutura" marcado em planta de arquitetura — o
+            # conserto é trocar o TIPO, não o arquivo (ver `_mensagem_sem_itens`).
+            _trocar_tipo = True
+            motivo = ("o projeto foi enviado com o tipo <b>Estrutura</b>, e nesse tipo o "
+                      "motor procura só concreto, fôrma e aço — planta de fôrma, "
+                      "armação ou quadro de ferros.")
+            fix = ("Se o seu arquivo é de <b>arquitetura</b>, é só <b>reenviar o mesmo "
+                   "arquivo marcando 'Arquitetura'</b> no tipo de projeto.")
+            alt_img = "Um ajuste resolve — reenvie marcando Arquitetura"
+            pre_txt = "Reenvie o mesmo arquivo marcando 'Arquitetura' no tipo de projeto."
+        elif "desenho vetorial" in _eh:
+            # 🩸 11/09/2026: o PDF foi lido como VETOR — não é escaneado.
+            motivo = ("lemos o desenho do seu arquivo, mas não saiu nenhuma quantidade "
+                      "— costuma ser prancha só com o desenho, sem quadros de áreas, "
+                      "legendas ou especificações.")
+            fix = ("O ideal é <b>reenviar a planta completa exportada direto do CAD, "
+                   "em DXF</b> — é dele que sai quantidade medida do desenho.")
+            alt_img = "Um ajuste no arquivo resolve — reenvie exportado do CAD"
+            pre_txt = ("Reprocessar não resolve este caso: reenvie a planta completa "
+                       "exportada do CAD.")
         else:
             motivo = ("não conseguimos ler as quantidades nesse arquivo. Quase sempre é "
                       "porque o PDF é uma imagem escaneada/fotografada, ou a prancha tem só "
@@ -3466,8 +3561,14 @@ def _build_falha_email(name: str, project_name: str, reprocessavel: bool, error_
                 f"preparar. 🙂")
         subject = (f"{_pn_raw} — precisamos de outro arquivo"
                    if _pn_raw else "Sobre o seu projeto no AI.arq — precisamos de outro arquivo")
-        html = _email_wrap("Precisamos de outro arquivo pra continuar", body,
-                           "Enviar outra prancha", "https://ai.arq.br/dashboard.html",
+        if _trocar_tipo:
+            # "precisamos de outro arquivo" seria mentira: o arquivo serve, o tipo não
+            subject = (f"{_pn_raw} — reenvie marcando Arquitetura"
+                       if _pn_raw else "Sobre o seu projeto no AI.arq — reenvie marcando Arquitetura")
+        html = _email_wrap("Reenvie marcando Arquitetura" if _trocar_tipo
+                           else "Precisamos de outro arquivo pra continuar", body,
+                           "Reenviar no painel" if _trocar_tipo else "Enviar outra prancha",
+                           "https://ai.arq.br/dashboard.html",
                            badge="⚠ Revisar o arquivo", badge_color="amber",
                            preheader=pre_txt,
                            reason="Você está recebendo este e-mail porque enviou um projeto ao AI.arq.")
@@ -4589,7 +4690,7 @@ def _auto_retry_erros_transitorios():
         q = (f"{SUPABASE_URL}/rest/v1/projects?status=eq.error&archived=not.is.true"
              f"&is_eval=not.is.true"  # avaliações (teste) ficam fora do auto-retry/alerta
              f"&created_at=gte.{_cut}"
-             f"&select=job_id,user_email,project_name,error_message,typology,project_type,auto_resume_count"
+             f"&select=job_id,user_email,project_name,error_message,typology,project_type,auto_resume_count,created_at"
              f"&limit=20")
         req = _u.Request(q, method="GET")
         req.add_header("apikey", SUPABASE_KEY)
@@ -4621,8 +4722,12 @@ def _auto_retry_erros_transitorios():
         # TERMINAL: esgotou tentativas, não é transitório, ou não tem arquivo.
         # Alerta interno 1x por job — o diagnóstico chega no email do Pedro.
         if not _email_auto_ja_enviado(NOTIFY_EMAIL, "alerta_erro_terminal", ref=job_id):
+            # 🩸 11/09/2026: "problema no arquivo do cliente" era rótulo de TODO erro
+            # não passageiro — inclusive tipo errado e defeito nosso. O rótulo diz só
+            # o que se sabe; a causa técnica vem logo abaixo.
             _causa = ("esgotou as 2 re-tentativas automáticas" if transitorio
-                      else "problema no arquivo do cliente (não re-tentável)")
+                      else "não é erro passageiro — reprocessar o mesmo arquivo do mesmo "
+                           "jeito não resolve (veja a causa técnica)")
             # QW3 (20/07): a causa TÉCNICA real (error_log) ao lado do rótulo que
             # o cliente viu — pro Pedro parar de investigar às cegas.
             _causa_real = _error_log_causa_real(job_id)
@@ -4635,7 +4740,7 @@ def _auto_retry_erros_transitorios():
                 f"<b>Classificação:</b> {_causa}<br>"
                 f"<b>Rótulo que o cliente viu:</b> {msg[:400]}<br>"
                 f"{_bloco_real}<br>"
-                f"O cliente já recebeu o email de falha com orientação. "
+                f"{_linha_do_email_ao_cliente(row.get('user_email') or '', row.get('created_at') or '')} "
                 f"Se for caso de resgate manual, o arquivo está no Storage "
                 f"(job <code>{job_id}</code>).")
             if _ok:
@@ -11973,16 +12078,10 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 # A IA rodou sem erro mas não achou nada quantificável.
                 # Reprocessar o MESMO arquivo daria o mesmo resultado —
                 # a mensagem orienta a trocar o arquivo de entrada.
-                raise RuntimeError(
-                    "Nenhum item quantificável foi identificado neste "
-                    "arquivo. Causas mais comuns: (1) o PDF é uma imagem "
-                    "escaneada ou fotografada — o motor lê PDF vetorial "
-                    "exportado direto do CAD (AutoCAD/Revit); (2) a prancha "
-                    "tem só o desenho de layout, sem quadros de áreas, "
-                    "legendas ou especificações. Reenvie a planta "
-                    "arquitetônica completa exportada do CAD, ou fale com "
-                    "o suporte pelo botão 'Reportar problema'."
-                )
+                # 🩸 11/09/2026: o texto depende do que a gente SABE — tipo Estrutura
+                # ou PDF vetorial lido não podem virar "PDF escaneado" (ver o helper).
+                raise RuntimeError(_mensagem_sem_itens(
+                    is_structural, len(_pdfvec_por_prancha or {})))
 
         # ── Falha PARCIAL: vieram itens, mas pranchas/DXF falharam ──
         # O guard acima só pega o caso de ZERO itens. Se sobram itens mas uma
@@ -13750,7 +13849,9 @@ bloco — só cite os que estão no inventário deste arquivo."""
         print(f"[storage] upload {job_id}.xlsx ok={_storage_ok}")
 
         jobs.update_field(job_id, progress=100)
-        jobs.update_field(job_id, status="done")
+        # 🩸 11/09/2026: projeto que falhou e depois deu certo (anexo) ficava "done"
+        # com o erro ANTIGO gravado ("PDF escaneado"). Concluir limpa o erro.
+        jobs.update_field(job_id, status="done", error_message=None)
 
         # ─── A RÉGUA DE COBRANÇA (06/09/2026) ────────────────────────────────
         # "só cobra o projeto que mediu pelo menos UMA linha do CAD".
@@ -13798,6 +13899,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 % (len(all_items) - _itens_no_banco, _itens_no_banco, len(all_items))]
         _supa_ok = _supabase_update("projects", "job_id", job_id, {
             "status": "done",
+            "error_message": None,
             "items_count": _itens_no_banco,
             "total_area": project_data.total_area if project_data.total_area else None,
             "layout_area": project_data.layout_area if project_data.layout_area else None,
