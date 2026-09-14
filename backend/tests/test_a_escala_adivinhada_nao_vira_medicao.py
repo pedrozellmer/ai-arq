@@ -248,3 +248,64 @@ def test_quem_BARRA_a_medicao_deixa_rastro():
         "main.py linha(s) %s barram a medição da prancha SEM registrar — descarte "
         "SILENCIOSO: ninguém consegue medir depois quanto este conserto tirou"
         % ", ".join(str(x) for x in mudos))
+
+# ── o CLIENTE fica sabendo (senão é zerar calado de novo) ────────────────
+def _falha(motivo="escala-adivinhada", pagina=6):
+    return {"prancha": "X_p%d" % pagina, "arquivo": "planta cliente-nn.pdf",
+            "motivo": motivo, "pagina": pagina}
+
+
+def test_o_cliente_LE_por_que_a_folha_ficou_sem_medicao():
+    """🩸 14/09, achado da revisão: o passo 2 barrava certo, registrava pro Pedro
+    e NÃO contava ao cliente — que veria a linha vazia igual a "não tinha o que
+    medir". É a família do zerar CALADO que o passo 1 consertou na planilha.
+
+    🪤 A frase é PRÓPRIA: as outras três dizem "não deu" (limite nosso); esta diz
+    "deu e a gente recusou". A saída do cliente é escrever a escala na prancha ou
+    mandar o CAD — não esperar a gente melhorar."""
+    avisos, log = main._avisos_da_medicao_pdfvec([_falha()], {})
+    assert avisos, "a folha barrada por escala adivinhada não gerou aviso nenhum"
+    txt = avisos[0]
+    assert "escala" in txt and "adivinhado" in txt, txt
+    assert "pág. 7" in txt, ("o aviso não diz em qual folha olhar: %s" % txt)
+    assert "escala-adivinhada" in log
+
+
+def test_CONTROLE_a_falha_TECNICA_mantem_a_frase_dela():
+    """Prova que o guarda sabe distinguir: tempo e memória são limite NOSSO e
+    continuam com o texto de sempre — não podem herdar o texto novo."""
+    a_tempo, _ = main._avisos_da_medicao_pdfvec([_falha("tempo")], {})
+    assert "não deram tempo" in a_tempo[0] and "adivinhado" not in a_tempo[0]
+    a_mem, _ = main._avisos_da_medicao_pdfvec([_falha("memoria")], {})
+    assert "densas demais" in a_mem[0] and "adivinhado" not in a_mem[0]
+
+
+def test_CONTROLE_motivos_misturados_nao_afirmam_um_so():
+    """Duas folhas, dois motivos: a frase tem que ser a genérica — dizer 'não
+    dizem a escala' de uma que morreu por tempo seria mentir sobre o motor."""
+    avisos, _ = main._avisos_da_medicao_pdfvec(
+        [_falha("escala-adivinhada", 6), _falha("tempo", 9)], {})
+    assert "não puderam ser medidas" in avisos[0], avisos[0]
+    assert "adivinhado" not in avisos[0]
+
+
+def test_quem_BARRA_alimenta_o_aviso_do_cliente():
+    """🪤 Ponto de chamada: a frase pode existir e ninguém marcar a folha."""
+    arv = ast.parse(io.open(_MAIN_PY, encoding="utf-8").read())
+    fn = next((n for n in ast.walk(arv)
+               if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+               and n.name == "process_job"), None)
+    assert fn is not None
+    marcam = 0
+    for no in ast.walk(fn):
+        if (isinstance(no, ast.Call) and isinstance(no.func, ast.Attribute)
+                and no.func.attr == "append"
+                and isinstance(no.func.value, ast.Name)
+                and no.func.value.id == "_pdfvec_falhas"):
+            for d in ast.walk(no):
+                if isinstance(d, ast.Constant) and d.value == "escala-adivinhada":
+                    marcam += 1
+                    break
+    assert marcam >= 2, (
+        "só %d ramo(s) marcam a folha pro aviso do cliente — eram 2 (o laço de "
+        "medição e a porta do checkpoint)" % marcam)

@@ -7750,6 +7750,55 @@ def _tem_derivacao_deterministica(descricao: str, unidade: str) -> bool:
     return False
 
 
+def _limpa_afirmacao_de_medida(obs: str) -> str:
+    """Tira do texto a AFIRMAÇÃO de que esta linha foi medida na geometria.
+
+    🩸 14/09/2026 — A MESMA OBSERVAÇÃO DIZIA AS DUAS COISAS. No job de um
+    cliente de hoje (loja de varejo, 3 PDFs), uma linha de drywall com
+    quantidade ZERO trazia, no mesmo texto: "Medido do desenho com escala 1:50
+    lida do carimbo da prancha — confira a escala do seu PDF" e "Área NÃO
+    medida (lida de PDF por IA, não da geometria) — preencha a metragem".
+    📏 Medido na base (30 dias, 8.941 linhas): 424 linhas em 29 jobs se
+    contradizem assim — 349 delas zeradas. Praticamente todo cliente do mês
+    recebeu alguma. Por forma: 352 são a frase que a IA escreve porque o nosso
+    prompt manda escrever a procedência, 66 são a nossa frase antiga e 5 já são
+    a frase NOVA do passo 1 — o conserto de ontem também estava sendo
+    contradito.
+    🔑 Este é o espelho de `_limpa_aviso_nao_medida` (05/08, achado 7): lá a
+    linha COM número trazia a instrução que destrói o número; aqui a linha SEM
+    número traz a afirmação de que foi medida. Mesmo dano — "mensagem
+    contraditória queima a confiança do cliente mais rápido que erro de
+    número" —, direção oposta.
+    🪤 Duas formas, dois tratamentos, porque os textos nascem em lugares
+    diferentes: a NOSSA frase é um segmento inteiro depois do "|" (e leva junto
+    a prancha, a escala e o "confira antes de orçar" que só fazem sentido com
+    ela); a da IA vem no meio do parágrafo dela, e aí sai só a SENTENÇA, pra
+    não levar embora "Código PA09 identificado na legenda. Área estimada."
+    🚫 Não mexe em número nenhum: zerar continua certo. Muda o que o texto diz.
+    """
+    _NOSSA = "medido da geometria do pdf"
+    _DA_IA = ("medido do desenho com escala", "medido da geometria do pdf")
+    segs = []
+    for seg in str(obs or "").split("|"):
+        seg = seg.strip()
+        if not seg:
+            continue
+        if seg.lower().startswith(_NOSSA):
+            continue                      # segmento inteiro é a nossa afirmação
+        frases, fora = [], False
+        for frase in seg.split(". "):
+            if any(m in frase.lower() for m in _DA_IA):
+                fora = True
+                continue
+            frases.append(frase)
+        novo = ". ".join(f for f in frases if f.strip())
+        if fora and novo and not novo.rstrip().endswith("."):
+            novo = novo.rstrip() + "."
+        if novo.strip():
+            segs.append(novo.strip())
+    return " | ".join(segs)
+
+
 def _limpa_aviso_nao_medida(obs: str) -> str:
     """Tira do texto os trechos "Área NÃO medida … informe a área no upload".
 
@@ -8520,7 +8569,9 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
                 it.confidence = Confidence("estimado")
             except Exception:
                 pass
-            _obs = it.observations or ""
+            # 🩸 14/09: a linha vai ser zerada — o texto não pode continuar
+            # AFIRMANDO que ela foi medida. Ver `_limpa_afirmacao_de_medida`.
+            _obs = _limpa_afirmacao_de_medida(it.observations or "")
             # 🩸 01/09/2026 (job 144c1f04, cliente-42, 20 PDFs) — A FRASE
             # MENTIA SOBRE O QUE A LINHA É. Os 25 itens LINEARES do job (rodapé,
             # soleira, tubulação frigorígena, dreno, perfil de LED) saíram
@@ -11500,6 +11551,11 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                % (_stem, filename, _vm_ckpt.get("scale"),
                                   _vm_ckpt.get("rooms_m2"), _vm_ckpt.get("walls_m") or 0),
                                job_id, severity="warning")
+                    _pdfvec_falhas.append({
+                        "prancha": _stem, "arquivo": filename,
+                        "motivo": "escala-adivinhada",
+                        "pdf_path": pdf_path, "pagina": page_index,
+                    })
                     _vm_ckpt = None
                 # 🪤 A pergunta aparece AQUI de novo, e não só no `if` de cima:
                 # é o que deixa o guarda `test_TODA_porta_que_grava_a_prova...`
@@ -11736,12 +11792,17 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         # motor achou que tinha medido. São ~6 linhas por mês.
                         _log_error("pdfvec:escala-adivinhada",
                                    "%s (%s): escala 1:%s vinha de VOTAÇÃO de cotas "
-                                   "sem confirmação — nao entreguei a medição "
+                                   "sem confirmação — não entreguei a medição "
                                    "(ambientes=%s m2=%s paredes_m=%s n_paredes=%s)"
                                    % (_stem, filename, _vm.get("scale"),
                                       _vm.get("n_rooms"), _vm.get("rooms_m2"),
                                       _vm.get("walls_m") or 0, _vm.get("n_walls") or 0),
                                    job_id, severity="warning")
+                        _pdfvec_falhas.append({
+                            "prancha": _stem, "arquivo": filename,
+                            "motivo": "escala-adivinhada",
+                            "pdf_path": pdf_path, "pagina": page_index,
+                        })
                         print(f"[pdfvec-promo] {_stem}: escala adivinhada por votação — sem promoção")
                     elif (_vm.get("n_rooms") or _vm.get("walls_m")) and _vm.get("scale"):
                         # 🎯 ESCALA SEM PROVA (12/08/2026) — entrega como ESTIMADO.
@@ -15103,7 +15164,12 @@ def _linha_perto_do_teto(perto, teto_bytes=None) -> str:
 #: Motivos de falha da medição de PDF que viram aviso pro cliente. Motivo fora
 #: daqui (nome de exceção do pai, diagnóstico interno) não é texto pra quem lê a
 #: planilha — é log.
-_MOTIVOS_DO_AVISO_PDFVEC = ("tempo", "processo", "memoria")
+# 🩸 14/09/2026 — o motivo NOVO. Até hoje o aviso só falava de falha
+# TÉCNICA nossa (tempo, processo morto, memória). A folha barrada por
+# escala adivinhada saía igual a "não tinha o que medir" — que é
+# exatamente a confusão que este aviso existe pra desfazer, e a mesma
+# família do zerar CALADO que o passo 1 consertou na planilha.
+_MOTIVOS_DO_AVISO_PDFVEC = ("tempo", "processo", "memoria", "escala-adivinhada")
 
 
 def _avisos_da_medicao_pdfvec(falhas, por_prancha=None) -> tuple:
@@ -15168,6 +15234,14 @@ def _avisos_da_medicao_pdfvec(falhas, por_prancha=None) -> tuple:
         elif motivos == {"memoria"}:
             porque = ("são densas demais para a nossa medição geométrica "
                       "(faltou memória — limite nosso, não defeito do arquivo)")
+        elif motivos == {"escala-adivinhada"}:
+            # 🪤 Frase PRÓPRIA de propósito: as outras três dizem "não deu" —
+            # esta diz "deu, e a gente recusou". A diferença importa pro cliente:
+            # a saída dele é escrever a escala na prancha (ou mandar o CAD), não
+            # esperar a gente melhorar.
+            porque = ("não dizem a escala em lugar nenhum, e a escala que daria "
+                      "pra deduzir das cotas não se confirmou — preferimos não "
+                      "medir a entregar número adivinhado")
         else:
             porque = "não puderam ser medidas geometricamente"
         avisos.append(

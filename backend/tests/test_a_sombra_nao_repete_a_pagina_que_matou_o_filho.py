@@ -207,8 +207,40 @@ def test_CONTROLE_job_sem_PDF_nao_derruba_o_processo(monkeypatch):
 
 
 def test_toda_falha_do_filho_carrega_pdf_path_e_pagina():
-    assert _SRC_MAIN.count('"pdf_path": pdf_path, "pagina": page_index,') == 3, (
-        "os 3 appends de _pdfvec_falhas (processo, memoria, tempo/exceção) têm que dizer QUAL página")
+    """Toda falha empilhada tem que dizer QUAL página — senão a sombra não sabe
+    o que pular e roda de novo a página que acabou de matar o filho.
+
+    🪤 14/09/2026: este guarda contava `== 3` ocorrências de um TEXTO. Ele
+    reprovou no dia em que a lista ganhou um 4º e 5º motivo (a folha barrada por
+    escala adivinhada) — com as duas chaves no lugar. Guarda presa à FORMA
+    reprova conserto certo e, pior, passaria se alguém escrevesse o mesmo texto
+    com outra ordem de chaves. Agora cobra o FATO, pela AST: todo `append` em
+    `_pdfvec_falhas` carrega `pdf_path` e `pagina`, sejam quantos forem.
+    """
+    import ast as _ast
+    arv = _ast.parse(_SRC_MAIN)
+    faltando = []
+    vistos = 0
+    for no in _ast.walk(arv):
+        if not (isinstance(no, _ast.Call) and isinstance(no.func, _ast.Attribute)
+                and no.func.attr == "append"
+                and isinstance(no.func.value, _ast.Name)
+                and no.func.value.id == "_pdfvec_falhas"):
+            continue
+        vistos += 1
+        alvo = no.args[0] if no.args else None
+        if isinstance(alvo, _ast.Dict):
+            chaves = {k.value for k in alvo.keys
+                      if isinstance(k, _ast.Constant) and isinstance(k.value, str)}
+            if not {"pdf_path", "pagina"} <= chaves:
+                faltando.append((no.lineno, sorted({"pdf_path", "pagina"} - chaves)))
+        elif not (isinstance(alvo, _ast.Call) and getattr(alvo.func, "id", "") == "dict"):
+            # `append(dict(result[...]))` repassa o que já veio checado do ckpt
+            faltando.append((no.lineno, ["forma não conferível"]))
+    assert vistos >= 3, "só achei %d append(s) de _pdfvec_falhas — o guarda perdeu o alvo" % vistos
+    assert not faltando, (
+        "append(s) de _pdfvec_falhas sem dizer QUAL página: %s"
+        % "; ".join("main.py:%d falta %s" % (ln, ", ".join(f)) for ln, f in faltando))
 
 
 # ══════════════════════════════════════════════════════════════════════════
