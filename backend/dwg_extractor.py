@@ -1705,6 +1705,35 @@ def _find_oda_converter() -> Optional[str]:
 _FALHA_MOTIVO: dict = {}
 
 
+#: Texto do `.dxf.err` por arquivo — o que o ODA de fato disse, numa linha.
+#: 🩸 14/09/2026: medido em 45 dias, 49 de 60 jobs com DWG caíram no libredwg
+#: e o log só dizia "(ODA recusou)". Com isso não dá pra saber se é versão do
+#: CAD, objeto AEC ou arquivo quebrado — ou seja, não dá pra decidir se vale
+#: consertar. O motivo existia: morria no tempdir que o Render apaga.
+_FALHA_DETALHE: dict = {}
+
+
+def detalhe_do_err(err_content: str) -> str:
+    """Texto do `.dxf.err` em UMA linha, com o motivo REAL preservado.
+
+    🪤 A 1ª linha do ODA é genérica ("OdError thrown during readFile of drawing
+    ... :") e o motivo vem DEPOIS. Ficar só com a primeira devolve uma frase que
+    termina em dois-pontos — foi assim que o log do Render mostrou o erro o dia
+    inteiro sem dizer nada. Junta todas com ` · ` pra caber numa linha do banco.
+    🔑 Função de módulo porque é o que o guarda consegue CHAMAR: enquanto isto
+    era um bloco dentro de `convert_dwg_to_dxf` (que precisa do ODA instalado),
+    o teste só conseguia repetir a lógica — e teste que repete a régua não
+    reprova quando a régua muda.
+    """
+    linhas = [l.strip() for l in str(err_content or "").splitlines() if l.strip()]
+    return " · ".join(linhas)[:240]
+
+
+def dwg_failure_detail(dwg_path: str) -> str:
+    """O que o ODA disse ao recusar este DWG, em UMA linha (ou "")."""
+    return _FALHA_DETALHE.get(os.path.basename(str(dwg_path)), "")
+
+
 def dwg_failure_reason(dwg_path: str) -> str:
     """Por que este DWG não converteu: 'truncado' ou '' (não classificado).
 
@@ -1829,6 +1858,14 @@ def convert_dwg_to_dxf(dwg_path: str) -> Optional[str]:
         except Exception:
             err_content = ""
         logger.warning("ODA gerou .dxf.err (DWG inválido/corrompido): %s", err_content)
+        # 🔑 O motivo vive DEPOIS do "OdError thrown ... :" — quase sempre na
+        # linha seguinte. Junta tudo numa linha só pra caber no log do banco:
+        # quebra de linha vira ` · `, e o que interessa deixa de morrer no
+        # tempdir.
+        try:
+            _FALHA_DETALHE[os.path.basename(dwg_path)] = detalhe_do_err(err_content)
+        except Exception:
+            pass
         # Classifica a causa pra main.py dar o conselho CERTO em vez de chutar
         # "versão nova do AutoCAD ou objetos especiais" — que foi o que o cliente
         # cliente-101 leu em 29/07 quando o problema real era arquivo INCOMPLETO

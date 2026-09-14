@@ -9754,9 +9754,17 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                                 # 🪤 project_data ainda NÃO existe aqui (nasce depois da
                                 # análise) — acumular na lista local, aplicar adiante.
                                 dwg_via_libredwg.append(os.path.basename(cad_path))
+                                # 🩸 14/09: "(ODA recusou)" não dizia POR QUE, e é essa
+                                # pergunta que decide se vale consertar a conversão —
+                                # 49 de 60 jobs com DWG em 45 dias vieram por aqui.
+                                try:
+                                    from dwg_extractor import dwg_failure_detail as _det_oda
+                                    _pq_oda = _det_oda(cad_path) or "motivo não registrado pelo ODA"
+                                except Exception:
+                                    _pq_oda = "motivo não registrado pelo ODA"
                                 _log_error("libredwg:usado-no-fluxo",
                                            f"{os.path.basename(cad_path)} convertido via "
-                                           f"fallback libredwg (ODA recusou)",
+                                           f"fallback libredwg — ODA recusou: {_pq_oda}",
                                            job_id, severity="info")
                         elif _descartou_por_tamanho:
                             # Já foi contado e explicado com precisão em
