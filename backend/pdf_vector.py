@@ -214,6 +214,10 @@ def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
             bbox = vp.get("main_bbox")  # bbox exato da view principal (melhor que clustering)
             out["scale_src"] = "viewport"
             out["scale_snapped"] = vp.get("snapped")
+            # 🩸 14/09: sem isto não dá pra responder "quantas pranchas o
+            # conserto da polegada pegou?", que é a pergunta que diz se ele
+            # foi bom. Viaja junto da medição e sai nos logs da prancha.
+            out["scale_unidade"] = vp.get("unidade") or "cm"
             out["n_viewports"] = len(vp.get("viewports", []))
             alt_viewports = [v for v in vp.get("viewports", [])
                              if v.get("bbox") != bbox]

@@ -254,6 +254,77 @@ _CM_PER_PT = 2.54 / 72.0            # 0.0352778 — 1 ponto em escala 1:1
 _STD_SCALES = [10, 20, 25, 33, 50, 75, 100, 125, 150, 200, 250, 500, 1000]
 
 
+#: 🩸 11/09/2026, job b0fa9104 — PDF DE LOJA AMERICANA LIDO COMO SE FOSSE
+#: CENTÍMETRO. O `/C` do `/Measure` é um fator de conversão, e a unidade dele
+#: mora no `/U` do mesmo dicionário. Aqui o `/U` nunca foi lido: o código dividia
+#: por `_CM_PER_PT` sempre. Num PDF do AutoCAD americano o `/C` vem em POLEGADA
+#: por ponto, e `C × 72` é o próprio denominador da escala (1/2/4/8/12/16/24/32/
+#: 48/64/96/120 — o "3/8\" = 1'-0\"" da prancha é 1:32).
+#: 📏 Medido nos 71 viewports daquele arquivo: `C × 72` caía nesses valores com
+#: erro ≤0,064%, e a cota ESCRITA de 13.997 mm confirmou 1:32 (−0,002%). Lido
+#: como cm o motor usou 1:13 — comprimento ÷2,46 e área ÷6,06.
+#: 🧪 CONTROLE, rodado nos 14 PDFs brasileiros locais (47 viewports): 7 saem
+#: hoje com `snapped=False` (1:433, 1:581, 1:579, 1:158 — escala que não existe
+#: em arquitetura) e NENHUM deles casa como polegada; ZERO viewports ambíguos.
+#: Ou seja, esta regra não muda nada do que a gente já lia certo.
+_IMPERIAL_DENOMS = [1, 2, 4, 8, 12, 16, 24, 32, 48, 64, 96, 120]
+_TOL_IMPERIAL = 0.003     # 0,3% — o caso real errou 0,064%
+_U_METRICA = ("cm", "m", "mm", "metro", "metros", "centimetro", "centímetro")
+_U_IMPERIAL = ("in", "inch", "inches", "ft", "feet", '"', "'")
+
+
+def _denominador_imperial(c: float):
+    """`C` em POLEGADA por ponto → denominador da escala, ou None.
+
+    Adimensional de propósito: quem converte ponto→metro adiante multiplica
+    pelo denominador, e essa conta é a mesma em qualquer unidade. O defeito era
+    só o NÚMERO — 12,6 no lugar de 32.
+    """
+    try:
+        v = float(c) * 72.0
+    except (TypeError, ValueError):
+        return None
+    for d in _IMPERIAL_DENOMS:
+        if abs(v - d) <= _TOL_IMPERIAL * d:
+            return d
+    return None
+
+
+def _unidade_declarada(u: str):
+    """(metrica?, imperial?) do que o `/U` do viewport diz. ("", "") = calado."""
+    t = str(u or "").strip().strip("()").lower()
+    if not t:
+        return False, False
+    return (any(t == m or t.startswith(m) for m in _U_METRICA),
+            any(t == i or t.startswith(i) for i in _U_IMPERIAL))
+
+
+def _pagina_e_imperial(brutos) -> bool:
+    """A PÁGINA inteira está em polegada?
+
+    🪤 Decisão por PÁGINA, não por viewport: um viewport solto cujo número caia
+    por acaso na faixa imperial não pode virar unidade nova. Exige DOIS, e que
+    nenhum outro da mesma página case com escala métrica padrão — prancha não
+    mistura sistema de unidade.
+    🔑 O `/U` manda quando existe: declaração explícita ganha da estatística nos
+    dois sentidos. Nos 47 viewports locais, NENHUM declarava — por isso a regra
+    de baixo existe.
+    """
+    metricas = imperiais = 0
+    for b in brutos:
+        m, i = _unidade_declarada(b.get("u"))
+        metricas += 1 if m else 0
+        imperiais += 1 if i else 0
+    if metricas:
+        return False
+    if imperiais:
+        return True
+    casam_imperial = sum(1 for b in brutos if _denominador_imperial(b.get("c")) is not None)
+    casam_metrico = sum(1 for b in brutos
+                        if (_snap_scale(float(b.get("c") or 0) / _CM_PER_PT) or (0, False))[1])
+    return casam_imperial >= 2 and casam_metrico == 0
+
+
 def _snap_scale(raw: float):
     """Aproxima pra escala padrão de arquitetura se estiver a ≤5%. C é cm/pt
     (padrão do /RL). NÃO tenta unidades alternativas — isso fazia a folha 1:1
@@ -281,24 +352,43 @@ def scale_from_viewport(pdf_path: str, page_index: int = 0) -> dict:
         pw = float(page.MediaBox[2]) - float(page.MediaBox[0])
         ph = float(page.MediaBox[3]) - float(page.MediaBox[1])
         page_area = pw * ph
-        views = []
+        # 1ª passada: junta o que cada viewport DIZ, sem decidir unidade ainda —
+        # a unidade é da página, e pra saber dela é preciso ver todas.
+        brutos = []
         for v in vps:
             try:
                 meas = v.get("/Measure")
                 bbox = [float(x) for x in v.get("/BBox")]
-                c = float(meas.get("/X")[0].get("/C"))
+                x0 = meas.get("/X")[0]
+                c = float(x0.get("/C"))
             except Exception:
                 continue
-            snap = _snap_scale(c / _CM_PER_PT)
-            if not snap:
-                continue
-            denom, snapped = snap
             area = abs(bbox[2] - bbox[0]) * abs(bbox[3] - bbox[1])
             # ignora a viewport da folha inteira (é o quadro do papel, não um
             # desenho) — sempre por ÁREA, nunca pelo denominador.
             if area >= 0.9 * page_area:
                 continue
-            views.append({"bbox": bbox, "scale": denom, "snapped": snapped, "area": area})
+            try:
+                u = str(x0.get("/U") or "")
+            except Exception:
+                u = ""
+            brutos.append({"bbox": bbox, "c": c, "area": area, "u": u})
+
+        imperial = _pagina_e_imperial(brutos)
+        views = []
+        for b in brutos:
+            if imperial:
+                denom = _denominador_imperial(b["c"])
+                if denom is None:
+                    continue      # numa página imperial, o que não é imperial não entra
+                snapped = True
+            else:
+                snap = _snap_scale(b["c"] / _CM_PER_PT)
+                if not snap:
+                    continue
+                denom, snapped = snap
+            views.append({"bbox": b["bbox"], "scale": denom, "snapped": snapped,
+                          "area": b["area"], "unidade": "polegada" if imperial else "cm"})
         if not views:
             return {}
         main = max(views, key=lambda x: x["area"])
@@ -306,6 +396,7 @@ def scale_from_viewport(pdf_path: str, page_index: int = 0) -> dict:
             x.pop("area", None)
         return {"main_scale": main["scale"], "main_bbox": main["bbox"],
                 "snapped": main["snapped"], "viewports": views,
+                "unidade": main.get("unidade", "cm"),
                 "page_size": (pw, ph)}
     except Exception as e:
         return {"error": f"{type(e).__name__}: {e}"[:100]}
