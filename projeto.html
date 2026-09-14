@@ -185,6 +185,10 @@
         <div id="erro-msg" class="text-sm text-red-800 mt-1">Não foi possível processar os arquivos.</div>
         <div class="mt-4 flex flex-wrap gap-2">
           <input id="erro-file-input" type="file" multiple accept=".dwg,.dxf,.pdf" class="hidden"/>
+          <a id="erro-btn-vista" href="#processamento"
+             class="hidden inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition no-underline">
+            Abrir Processamento
+          </a>
           <button id="erro-btn-arquivo" type="button" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition disabled:opacity-60">
             <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
             Enviar outro arquivo
@@ -1663,6 +1667,21 @@ function mostrarProcessando(live, session, pmeta) {
 
 // Projeto ✗: card vermelho com o MOTIVO real vindo do backend + saídas
 // (enviar outro arquivo pro mesmo projeto via /add-file, ou reportar).
+// 🩸 14/09 — O CARD DE ERRO DEIXAVA O CLIENTE SEM SAÍDA. Com `semUpload` o
+// botão de enviar arquivo some (certo: anexar repete o ciclo do tipo errado) e
+// sobrava só "Reportar problema". Quem chega pelas listas do painel entra sem
+// hash, e no celular a vista Processamento mora dentro do menu ☰.
+// 🪤 Função separada de propósito: é o que o guarda consegue CHAMAR — o mesmo
+// motivo de `_completarTipo`.
+function _ligaBotaoDaVista(el, rec, irPraVista) {
+  if (!el) return null;
+  const vista = (rec && rec.abrirVista) || '';
+  el.classList.toggle('hidden', !vista);
+  if (!vista) return null;
+  el.onclick = function (e) { if (e && e.preventDefault) e.preventDefault(); irPraVista(vista); };
+  return vista;
+}
+
 function mostrarErro(msg, session) {
   const bloco = document.getElementById('erro-block');
   if (!bloco) return;
@@ -1680,6 +1699,8 @@ function mostrarErro(msg, session) {
     if (_rot && _rot.nodeType === 3) _rot.textContent = '\n            ' +
       ((_rec && _rec.botao) || 'Enviar outro arquivo') + '\n          ';
   }
+  _ligaBotaoDaVista(document.getElementById('erro-btn-vista'), _rec,
+                    function (v) { mostrarVista(v); });
   bloco.classList.remove('hidden');
   // 🪤 Projeto que falhou NÃO tem planilha. Deixar entregas-section, o chat
   // do quantitativo e o comparativo visíveis fazia a vista Quantitativo

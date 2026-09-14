@@ -3491,11 +3491,13 @@ def _linha_do_email_ao_cliente(email: str, criado_em: str) -> str:
     return "O cliente recebeu e-mail de falha (%s) às %s UTC." % (_kind, _hora)
 
 
-def _build_falha_email(name: str, project_name: str, reprocessavel: bool, error_hint: str = ""):
+def _build_falha_email(name: str, project_name: str, reprocessavel: bool,
+                       error_hint: str = "", job_id: str = ""):
     """Monta (subject, html) do email de falha. Separado pra reuso no preview.
     error_hint = mensagem do erro; usada pra dar orientação ESPECÍFICA quando
     reprocessavel=False (DWG não abre vs arquivo grande vs sem cotas)."""
     import html as _hf
+    from urllib.parse import quote as _quote_cta
     pn = _hf.escape(project_name or "seu projeto")
     _pn_raw = (project_name or "").strip()
     greet = _greeting_line(_hf.escape(name or ""))
@@ -3617,8 +3619,17 @@ def _build_falha_email(name: str, project_name: str, reprocessavel: bool, error_
             # provou) e sem "precisamos de outro arquivo" (o arquivo pode servir).
             subject = (f"{_pn_raw} — sem itens de estrutura"
                        if _pn_raw else "Seu projeto no AI.arq — sem itens de estrutura")
+            # 🩸 14/09 — O BOTÃO IA PRO PAINEL, e o caminho que a mensagem ensina
+            # mora DENTRO do projeto (vista Processamento). Com o job_id em mãos, o
+            # e-mail abre a página certa; sem ele, cai no painel como antes.
+            # 🪤 A vista é a mesma que a receita da tela manda abrir — o guarda
+            # `test_os_NOMES_que_a_mensagem_cita_existem_na_tela` amarra as duas.
+            _cta_txt = "Abrir o projeto" if job_id else "Abrir meu painel"
+            _cta_url = ("https://ai.arq.br/projeto.html?job_id=%s#processamento"
+                        % _quote_cta(str(job_id), safe="")) if job_id \
+                else "https://ai.arq.br/dashboard.html"
             html = _email_wrap("Nenhum item de estrutura neste arquivo", body,
-                               "Abrir meu painel", "https://ai.arq.br/dashboard.html",
+                               _cta_txt, _cta_url,
                                badge="⚠ Conferir o tipo do projeto", badge_color="amber",
                                preheader=pre_txt,
                                reason="Você está recebendo este e-mail porque enviou um projeto ao AI.arq.")
@@ -3706,7 +3717,8 @@ def _email_falha_cliente(job_id: str, reprocessavel: bool = True) -> bool:
             _nm,
             _rows[0].get("project_name") or "seu projeto",
             reprocessavel,
-            error_hint=(_rows[0].get("error_message") or ""))
+            error_hint=(_rows[0].get("error_message") or ""),
+            job_id=job_id)
         ok = _send_email_smtp(_email, _subject, _html,
                               log_kind="erro_reprocessar" if reprocessavel else "erro_trocar")
         _falha_emailed.add(job_id)

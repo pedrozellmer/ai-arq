@@ -577,3 +577,76 @@ def test_os_NOMES_que_a_mensagem_cita_existem_na_tela():
     assert ("'%s'" % item.group(1)) in msg, (
         "a mensagem manda abrir %r, mas o menu chama de %r"
         % (vista.group(1), item.group(1)))
+
+# ── o e-mail e o card levam direto ao Reprocessar (14/09) ────────────────────
+def _vista_da_receita():
+    utils = io.open(os.path.join(_RAIZ, "aiarq-utils.js"), encoding="utf-8").read()
+    return re.search(r"abrirVista:\s*'([a-z]+)'", utils).group(1)
+
+
+def test_email_de_estrutura_abre_o_PROJETO_quando_tem_o_codigo():
+    """🩸 14/09: o botão ia pro painel, e o caminho que a mensagem ensina mora
+    DENTRO do projeto. O cliente do caso chegou por e-mail."""
+    _, html = main._build_falha_email("Fulano", "Projeto Teste", False,
+                                      error_hint=main._mensagem_sem_itens(True, 3),
+                                      job_id="job 1")
+    destino = re.search(r'href="(https://ai\.arq\.br/[^"]+)"', html).group(1)
+    assert destino == "https://ai.arq.br/projeto.html?job_id=job%201#processamento", destino
+    assert destino.endswith("#" + _vista_da_receita()), (
+        "o e-mail manda abrir uma vista diferente da que a receita da tela abre")
+    assert "Abrir o projeto" in html and "Abrir meu painel" not in html
+
+
+def test_CONTROLE_email_sem_o_codigo_do_projeto_cai_no_painel():
+    _, html = main._build_falha_email("Fulano", "Projeto Teste", False,
+                                      error_hint=main._mensagem_sem_itens(True, 3))
+    destino = re.search(r'href="(https://ai\.arq\.br/[^"]+)"', html).group(1)
+    assert destino == "https://ai.arq.br/dashboard.html", destino
+    assert "Abrir meu painel" in html
+
+
+def test_o_email_de_falha_LEVA_o_codigo_do_projeto():
+    """🪤 Guarda de ponto de chamada: a função pode aceitar o job_id e ninguém
+    passar — foi assim que o `files_count` do /add-file nasceu morto."""
+    from _corpo import corpo_de
+    corpo = corpo_de("_email_falha_cliente")
+    assert "job_id=job_id" in corpo, (
+        "o e-mail de falha não passa o código do projeto — o botão volta pro painel")
+
+
+def test_o_card_de_erro_LIGA_o_botao_da_vista(tela):
+    """O card da Visão geral: com `semUpload` o botão de enviar some, e sem este
+    botão sobra só "Reportar problema". Roda a função de verdade."""
+    from _jsbancada import funcao_js
+    tela.eval(funcao_js("_ligaBotaoDaVista", "projeto.html") + "\n1;")
+    tela.eval("""
+      var escondido = null, foiPra = null, clique = null;
+      var el = { onclick: null,
+                 classList: { toggle: function (c, v) { escondido = !!v; } } };
+      function _ir(v) { foiPra = v; }
+      1;
+    """)
+    v = _vista_da_receita()
+    assert tela.eval("_ligaBotaoDaVista(el, {abrirVista: '%s'}, _ir)" % v) == v
+    assert json.loads(tela.eval("JSON.stringify(escondido)")) is False
+    tela.eval("el.onclick({preventDefault: function () { clique = 'barrado'; }}); 1;")
+    assert json.loads(tela.eval("JSON.stringify([foiPra, clique])")) == [v, "barrado"], (
+        "o clique não levou pra vista (ou não barrou o pulo do link)")
+
+    tela.eval("el.onclick = null; 1;")
+    assert tela.eval("_ligaBotaoDaVista(el, {}, _ir)") is None
+    assert json.loads(tela.eval("JSON.stringify([escondido, el.onclick])")) == [True, None], (
+        "receita sem vista deixou o botão visível")
+
+
+def test_o_rotulo_do_botao_do_card_e_o_NOME_da_vista_no_menu():
+    """🪤 Se o menu renomear a vista, o botão do card passa a prometer um nome
+    que não existe na tela."""
+    proj = io.open(os.path.join(_RAIZ, "projeto.html"), encoding="utf-8").read()
+    menu = io.open(os.path.join(_RAIZ, "menu-lateral.js"), encoding="utf-8").read()
+    v = _vista_da_receita()
+    rotulo_menu = re.search(r"#%s'[^}]*rotulo:\s*'([^']+)'" % v, menu).group(1)
+    botao = re.search(r'id="erro-btn-vista".*?>\s*([^<]+?)\s*</a>', proj, re.S)
+    assert botao, "o card de erro não tem o botão da vista"
+    assert rotulo_menu in botao.group(1), (
+        "o botão do card diz %r e o menu chama de %r" % (botao.group(1), rotulo_menu))
