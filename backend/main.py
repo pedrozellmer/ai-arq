@@ -7736,6 +7736,61 @@ def _limpa_aviso_nao_medida(obs: str) -> str:
     return " | ".join(segs)
 
 
+def _prancha_do_ref_sheet(rs: str, por_arquivo: dict, por_arquivo_pagina: dict):
+    """De qual prancha MEDIDA veio este item: (arquivo, medição) ou None.
+
+    Devolve `(achou, ambiguidade)`. `ambiguidade` é a tupla que o chamador
+    empilha em `_ambiguos` quando não dá pra decidir — na dúvida, não atribui.
+
+    🚨 31/08, auditoria: aqui havia um `break` no PRIMEIRO prefixo que casasse, e
+    isso pega a prancha ERRADA quando um nome de arquivo é prefixo de outro.
+    Provado rodando: com "PLANTA BAIXA.pdf" (80,5) e "PLANTA BAIXA 2
+    PAVIMENTO.pdf" (198,4), o item do 2º pavimento recebia 80,5 e a observação
+    NOMEAVA a prancha errada — quem decidia o vencedor era a ordem de
+    processamento. Com nome curto era pior: "01.pdf" capturava qualquer
+    ref_sheet contendo "01".
+    🔑 Vence o casamento MAIS LONGO: o nome exato sempre ganha do prefixo. (O
+    casamento por prefixo continua existindo só pra tolerar o sufixo do hint da
+    IA: "planta.pdf (planta baixa)".)
+    🩸 02/09 — MULTIPÁGINA COM PÁGINA NO `ref_sheet` PASSA A CASAR. Antes o
+    arquivo com N páginas ficava fora do `por_arquivo` e o item não achava dono.
+    🪤 Casa por (arquivo, página): sem os DOIS não atribui nada. Página sozinha
+    não basta — dois PDFs multipágina no mesmo job têm p1 cada.
+    🩸 11/09/2026 — ERA CÓDIGO SOLTO DENTRO DE `_apply_area_honesty`, e só o
+    passo 7 (linha ZERADA) o usava. Quem PRESERVA número usava o teto do job
+    inteiro: 3 linhas de 180 m² de uma capa sem escala passaram porque OUTRA
+    prancha do PDF tinha "medido" 1.071,9 m². Virou função pra os dois lados
+    perguntarem a mesma coisa — e pra um teste conseguir chamar.
+    """
+    from analyzer import _pagina_do_ref_sheet
+    _casaram = []
+    for _arq, _r in (por_arquivo or {}).items():
+        _base = _arq.rsplit(".", 1)[0]
+        if _base and (rs.startswith(_base) or _base in rs):
+            _casaram.append((_arq, _r, len(_base)))
+    _achou = None
+    if por_arquivo_pagina:
+        _pg_do_item = _pagina_do_ref_sheet(rs)
+        if _pg_do_item is not None:
+            _cands_pg = [(_a, _r) for (_a, _p), _r in por_arquivo_pagina.items()
+                         if _p == _pg_do_item
+                         and (rs.startswith(_a.rsplit(".", 1)[0])
+                              or _a.rsplit(".", 1)[0] in rs)]
+            if len(_cands_pg) == 1:
+                _achou = _cands_pg[0]
+            elif len(_cands_pg) > 1:
+                # dois arquivos multipágina cujo nome casa: não chuta
+                return None, (rs, "pagina-em-2-arquivos", len(_cands_pg))
+    if _achou is None and _casaram:
+        _casaram.sort(key=lambda c: c[2], reverse=True)
+        # empate no comprimento = dois arquivos igualmente plausíveis
+        if len(_casaram) == 1 or _casaram[0][2] > _casaram[1][2]:
+            _achou = (_casaram[0][0], _casaram[0][1])
+        else:
+            return None, (rs, "nome-ambiguo", len(_casaram))
+    return _achou, None
+
+
 def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "",
                         pe_direito: float = 0,
                         apenas_preencher: bool = False,
@@ -7790,6 +7845,7 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
                     # muda esta linha — então não convidar pra isso.
                     and float(pdfvec_m2 or 0) <= 0)
     filled = blanked = preservados = criados_prancha = apertou_teto = 0
+    zerados_sem_prancha = 0   # zerado porque a PRÓPRIA prancha do item não mediu
     lineares_zerados = 0
     #: linhas que receberam de volta a medição que já estava escrita nelas
     resgatados = 0
@@ -7877,6 +7933,9 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
         _teto_m2 = float(pdfvec_m2 or 0)
     _medida_da_prancha = {}
     _ambiguos = []
+    _por_arquivo = {}
+    #: (arquivo, pagina) -> medição daquela prancha. Só pra multipágina.
+    _por_arquivo_pagina = {}
     if _pp:
         # 🚨 31/08, AUDITORIA DO MESMO DIA — AQUI EU TINHA ESCRITO "fica a maior
         # medição", e isso erra pra MAIS, contra as quatro travas que o próprio
@@ -7904,9 +7963,6 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
             _arq = str(_r.get("arquivo") or "").strip().lower()
             if _arq and float(_r.get("rooms_m2") or 0) > 0:
                 _paginas_do_arquivo.setdefault(_arq, []).append(_r)
-        _por_arquivo = {}
-        #: (arquivo, pagina) -> medição daquela prancha. Só pra multipágina.
-        _por_arquivo_pagina = {}
         for _arq, _rs_list in _paginas_do_arquivo.items():
             if len(_rs_list) == 1:
                 _por_arquivo[_arq] = _rs_list[0]
@@ -7943,47 +7999,9 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
             if not _is_floor_surface_criar(_d):   # passo 7 CRIA número
                 continue
             _rs = (getattr(_it, "ref_sheet", "") or "").strip().lower()
-            # 🚨 31/08, auditoria: aqui havia um `break` no PRIMEIRO prefixo que
-            # casasse, e isso pega a prancha ERRADA quando um nome de arquivo é
-            # prefixo de outro. Provado rodando: com "PLANTA BAIXA.pdf" (80,5) e
-            # "PLANTA BAIXA 2 PAVIMENTO.pdf" (198,4), o item do 2º pavimento
-            # recebia 80,5 e a observação NOMEAVA a prancha errada — quem decidia
-            # o vencedor era a ordem de processamento. Com nome curto era pior:
-            # "01.pdf" capturava qualquer ref_sheet contendo "01".
-            # 🔑 Vence o casamento MAIS LONGO: o nome exato sempre ganha do
-            # prefixo. (O casamento por prefixo continua existindo só pra tolerar
-            # o sufixo do hint da IA: "planta.pdf (planta baixa)".)
-            _casaram = []
-            for _arq, _r in _por_arquivo.items():
-                _base = _arq.rsplit(".", 1)[0]
-                if _base and (_rs.startswith(_base) or _base in _rs):
-                    _casaram.append((_arq, _r, len(_base)))
-            _achou = None
-            # 🩸 02/09 — MULTIPÁGINA COM PÁGINA NO `ref_sheet` PASSA A CASAR.
-            # Antes o arquivo com N páginas ficava fora do `_por_arquivo` e o
-            # item não achava dono. Agora, se o item diz de qual prancha veio,
-            # a medição daquela prancha é atribuída a ele.
-            # 🪤 Casa por (arquivo, página): sem os DOIS não atribui nada. Página
-            # sozinha não basta — dois PDFs multipágina no mesmo job têm p1 cada.
-            if _por_arquivo_pagina:
-                _pg_do_item = _pagina_do_ref_sheet(_rs)
-                if _pg_do_item is not None:
-                    _cands_pg = [(_a, _r) for (_a, _p), _r in _por_arquivo_pagina.items()
-                                 if _p == _pg_do_item
-                                 and (_rs.startswith(_a.rsplit(".", 1)[0])
-                                      or _a.rsplit(".", 1)[0] in _rs)]
-                    if len(_cands_pg) == 1:
-                        _achou = _cands_pg[0]
-                    elif len(_cands_pg) > 1:
-                        # dois arquivos multipágina cujo nome casa: não chuta
-                        _ambiguos.append((_rs, "pagina-em-2-arquivos", len(_cands_pg)))
-            if _achou is None and _casaram:
-                _casaram.sort(key=lambda c: c[2], reverse=True)
-                # empate no comprimento = dois arquivos igualmente plausíveis
-                if len(_casaram) == 1 or _casaram[0][2] > _casaram[1][2]:
-                    _achou = (_casaram[0][0], _casaram[0][1])
-                else:
-                    _ambiguos.append((_rs, "nome-ambiguo", len(_casaram)))
+            _achou, _amb = _prancha_do_ref_sheet(_rs, _por_arquivo, _por_arquivo_pagina)
+            if _amb:
+                _ambiguos.append(_amb)
             if not _achou:
                 continue
             _fam2 = _familia_da_superficie(_d)
@@ -8004,6 +8022,124 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
                 _ambiguos.append(
                     ("%s%s" % (_arq, "" if _pg_chave is None else " p%d" % (int(_pg_chave) + 1)),
                      _fam2, len(_lista)))
+    _cache_prancha_item = {}
+    #: arquivo (minúsculo) -> algum registro daquele arquivo traz `pagina`?
+    _arq_tem_pagina = {}
+    for _r_ap in (_pp or {}).values():
+        _a_ap = str(_r_ap.get("arquivo") or "").strip().lower()
+        if _a_ap:
+            _arq_tem_pagina[_a_ap] = (_arq_tem_pagina.get(_a_ap, False)
+                                      or _r_ap.get("pagina") is not None)
+
+    def _arquivo_do_item_nao_diz_pagina(_rs_i):
+        """O arquivo deste item mediu, mas nenhum registro dele traz a página?"""
+        for _a_ap, _tem in _arq_tem_pagina.items():
+            _base_ap = _a_ap.rsplit(".", 1)[0]
+            if _base_ap and (_rs_i.startswith(_base_ap) or _base_ap in _rs_i):
+                if not _tem:
+                    return True
+        return False
+
+    def _prancha_do_item_e_cobravel(_it):
+        """(medição da prancha DESTE item, dá-pra-cobrar-ela-dele).
+
+        `cobravel=False` quer dizer "a pergunta não tem resposta" — e aí vale a
+        régua de antes (o teto da maior prancha). São quatro casos:
+          · job sem medição POR PRANCHA (`_pp` vazio: caller antigo);
+          · medição INCOMPLETA — 🩸 02/09, cliente-45: uma das 3 páginas estourou
+            o tempo e o teto apertado zerou um mezanino de 255,66 m² ESCRITO na
+            prancha. Quando a gente sabe que não mediu tudo, apertar é cobrar do
+            cliente uma falha nossa;
+          · o item NÃO declara a página (`(pN)` no `ref_sheet`) — 120 das 193
+            linhas com a frase, em 30 dias;
+          · 🩸 11/09 (2ª revisão): o REGISTRO da medição não traz `pagina`. Antes
+            isso zerava o item cuja página estava CERTA, invertendo a própria
+            regra — o item sem página é poupado, o registro sem página não pode
+            acusar. A porta aberta era o checkpoint antigo (`_pdfvec_por_prancha`
+            reidratado de JSON gravado antes de a chave existir).
+
+        `cobravel=True` com `medicao=None` é o caso em que o conserto zera: o item
+        diz de qual prancha veio, e aquela prancha não mediu (ou o nome não casou).
+        """
+        _k = id(_it)
+        if _k in _cache_prancha_item:
+            return _cache_prancha_item[_k]
+        _res = (None, False)
+        if _pp and not medicao_incompleta:
+            from analyzer import _pagina_do_ref_sheet as _pg_ref
+            _rs_i = (getattr(_it, "ref_sheet", "") or "").strip().lower()
+            _pg_item = _pg_ref(_rs_i) if _rs_i else None
+            if _pg_item is not None:
+                _achou_i, _ = _prancha_do_ref_sheet(_rs_i, _por_arquivo, _por_arquivo_pagina)
+                _m_i = (_achou_i[1] or {}) if _achou_i else {}
+                try:
+                    # coage igual ao mapa (`int(_pg)` lá em cima): "3" e 3 são a
+                    # mesma página; ausente é pergunta sem resposta.
+                    _pg_reg = _m_i.get("pagina")
+                    _pg_reg = None if _pg_reg is None else int(_pg_reg)
+                except (TypeError, ValueError):
+                    _pg_reg = None
+                if _achou_i and _pg_reg is None:
+                    _res = (None, False)          # registro sem página não acusa
+                elif _pg_reg is not None and _pg_reg != _pg_item:
+                    _res = (None, True)           # é outra prancha: zera
+                elif _achou_i:
+                    _res = ((_m_i or None), True)
+                elif _arquivo_do_item_nao_diz_pagina(_rs_i):
+                    # 🩸 11/09 (2ª revisão, 2ª forma): com 2+ páginas medidas e
+                    # NENHUMA trazendo `pagina`, o arquivo não entra nos índices e
+                    # o casamento falha inteiro — o item cairia zerado antes da
+                    # exceção acima. É a forma real do risco (checkpoint antigo
+                    # reidratado sem a chave). Também é pergunta sem resposta.
+                    _res = (None, False)
+                else:
+                    _res = (None, True)           # a prancha dele não mediu
+        _cache_prancha_item[_k] = _res
+        return _res
+
+    def _exige_propria_prancha(_it):
+        """Dá pra cobrar a medição da PRÓPRIA prancha deste item?
+
+        Só quando as três coisas valem:
+          · o job tem medição POR PRANCHA (`_pp`);
+          · a medição não está INCOMPLETA — 🩸 02/09, cliente-45: uma das 3
+            páginas estourou o tempo e o teto apertado zerou um mezanino de
+            255,66 m² ESCRITO na prancha. Quando a gente sabe que não mediu
+            tudo, apertar é cobrar do cliente uma falha nossa;
+          · o item DIZ de qual prancha veio (`(pN)` no `ref_sheet`). Sem isso a
+            pergunta não tem resposta, e zerar seria tesoura: 120 das 193 linhas
+            com a frase, em 30 dias, não declaram página.
+        """
+        return _prancha_do_item_e_cobravel(_it)[1]
+
+    def _medida_da_propria_prancha(_it, _q):
+        """A medição da PRÓPRIA prancha do item, se o número CABE nela (1,3×).
+
+        🩸 11/09/2026, job b0fa9104 (PDF de 16 pranchas de uma loja). A trava 3
+        comparava com o TETO DO JOB — a maior medição de QUALQUER prancha. Uma
+        folha de tabela "mediu" 1.071,9 m² (escala 1:500 tirada dos dígitos do
+        carimbo), o teto virou 1.393 m², e três linhas de 180 m² vindas da CAPA,
+        que não tem escala, passaram escritas "Medido da GEOMETRIA do PDF":
+        540 dos 743 m² da planilha. O número não era nosso; a frase dizia que era.
+        🔑 A pergunta certa é sobre a prancha DO ITEM, não sobre o job: a medição
+        da página dele cabe no número? Sem medição naquela página, não preserva —
+        linha zerada é honesta, número com procedência falsa não é.
+        🪤 Fora do alcance de `_exige_propria_prancha` NÃO muda nada: caller antigo,
+        medição incompleta ou item que não declara a página seguem no teto de antes.
+        📏 Medido na base (30 dias, 193 linhas com a frase em 26 jobs): 73 declaram
+        página, e destas 10 perdem o número — 1.575,83 m² dos 12.208 (183 das 193
+        seguem, 94,8%). As 3 linhas de 180 m² do caso declaram `(p1 …)`, a folha de
+        notas que não mediu nada; outras 3 vêm de prancha com `rooms_m2 = 0`.
+        """
+        _m_i, _cobravel = _prancha_do_item_e_cobravel(_it)
+        if not _cobravel or not _m_i:
+            return None
+        try:
+            _r_i = float(_m_i.get("rooms_m2") or 0)
+        except (TypeError, ValueError):
+            return None
+        return _m_i if (_r_i > 0 and float(_q) <= 1.3 * _r_i) else None
+
     # ── 🎯 07/09/2026 — PRÉ-PASSO DO RESGATE DA MEDIÇÃO ────────────────────
     # `resgate_pdf=0` em 28 de 28 jobs desde 26/08: nunca disparou. A régua
     # (`quantidade_medida_pelo_pdf`) está CERTA; errada era a ORDEM. Ela mora no
@@ -8192,14 +8328,19 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
         #   2. só SUPERFÍCIE HORIZONTAL (piso/forro/laje) — a mesma peneira do
         #      ramo da área informada. Parede e pintura dependem do pé-direito e
         #      continuam zerando, porque não medimos altura;
-        #   3. só quando o número CABE no que foi medido (≤ 1,3× a área dos
-        #      ambientes). Sem isso, um chute da IA sobreviveria de carona.
+        #   3. só quando o número CABE no que a PRÓPRIA PRANCHA DO ITEM mediu
+        #      (≤ 1,3× a área dos ambientes dela). Sem isso, um chute da IA
+        #      sobreviveria de carona.
+        # 🩸 11/09/2026: esta trava comparava com o teto do JOB (a maior prancha),
+        # e três linhas de 180 m² de uma capa SEM ESCALA passaram por causa de
+        # outra prancha que "mediu" 1.071,9 m² — ver `_medida_da_propria_prancha`.
         # 🚫 NUNCA vira 'confirmado': a escala do PDF veio de carimbo, e carimbo
         # é declaração, não prova. Segue laranja, com a procedência escrita.
         elif (q > 0 and float(pdfvec_m2 or 0) > 0
               and u in _FLOOR_M2_UNITS
               and _is_floor_surface(getattr(it, "description", ""))
-              and q <= 1.3 * _teto_m2):
+              and ((_m_pr := _medida_da_propria_prancha(it, q)) is not None
+                   or (not _exige_propria_prancha(it) and q <= 1.3 * _teto_m2))):
             try:
                 it.confidence = Confidence("estimado")
             except Exception:
@@ -8217,9 +8358,28 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
                 # 🪤 A procedência ("geometria do PDF") CONTINUA na frase: ela é
                 # verdadeira e é o que o produto promete entregar quando não dá
                 # pra provar a escala. O que saiu foi só o NÚMERO.
-                _o = (_o + " | Medido da GEOMETRIA do PDF, com escala lida do "
-                      "carimbo e NÃO confirmada por cota — confira a escala do "
-                      "seu PDF antes de orçar.").strip(" |")
+                if _m_pr:
+                    # agora dá pra dizer QUAL prancha mediu, QUANTO, e de onde
+                    # veio a escala DAQUELA prancha (não mais "carimbo" fixo).
+                    # 🪤 A RESSALVA VEM COLADA NA AFIRMAÇÃO, de propósito: a
+                    # observação é cortada em 1.000 chars na gravação (main.py
+                    # ~2074) e 11 linhas em 30 dias já batem nesse teto. Com a
+                    # ressalva no fim, o corte deixaria a afirmação sozinha — que
+                    # é exatamente o que a regra dura nº1 proíbe.
+                    _fonte_pr, _ressalva_pr = _frase_da_escala_sem_prova(
+                        _m_pr.get("scale_src"))
+                    try:
+                        _esc_pr = "1:%d" % int(round(float(_m_pr.get("scale"))))
+                    except (TypeError, ValueError):
+                        _esc_pr = "sem escala escrita"
+                    _o = (_o + " | Medido da GEOMETRIA do PDF (%s). Prancha %s: "
+                          "%.2f m², escala %s %s. Confira antes de orçar."
+                          % (_ressalva_pr, _m_pr.get("arquivo"),
+                             float(_m_pr.get("rooms_m2") or 0), _esc_pr, _fonte_pr)).strip(" |")
+                else:
+                    _o = (_o + " | Medido da GEOMETRIA do PDF, com escala lida do "
+                          "carimbo e NÃO confirmada por cota — confira a escala do "
+                          "seu PDF antes de orçar.").strip(" |")
             it.observations = _o
             preservados += 1
         elif id(it) in _medida_da_prancha and q == 0:
@@ -8313,7 +8473,16 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
             if (float(pdfvec_m2 or 0) > 0 and u in _FLOOR_M2_UNITS
                     and _is_floor_surface(getattr(it, "description", ""))
                     and q <= 1.3 * float(pdfvec_m2)):
-                apertou_teto += 1
+                # 🩸 11/09 (revisão): as DUAS populações contam separado. Quem
+                # passava no teto da maior prancha e só caiu pela prancha DO ITEM
+                # não pode entrar em `apertou_teto`: o aviso que o cliente lê diz
+                # "não cabe na maior prancha medida (X m²)" e diria isso de um item
+                # de 180 m² contra 1.072 m² — instrumento mentindo sobre o motor.
+                if (q <= 1.3 * _teto_m2 and _exige_propria_prancha(it)
+                        and _medida_da_propria_prancha(it, q) is None):
+                    zerados_sem_prancha += 1
+                else:
+                    apertou_teto += 1
             it.quantity = 0
             # 🪤 Zerar sem soltar o selo deixa a linha BRANCA ("medido do CAD")
             # com quantidade 0 — o ramo de cima rebaixa e este não rebaixava.
@@ -8419,6 +8588,11 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
         print(f"[honestidade-m2] teto por PRANCHA (maior={_teto_m2:.2f} m²) zerou "
               f"{apertou_teto} item(ns) que a SOMA das pranchas "
               f"({float(pdfvec_m2 or 0):.2f} m²) teria deixado passar")
+    if zerados_sem_prancha:
+        print(f"[honestidade-m2] {zerados_sem_prancha} item(ns) zerado(s) porque a "
+              f"PRÓPRIA prancha deles não mediu o bastante — a frase 'Medido da "
+              f"GEOMETRIA' não sai mais com a medição de outra prancha")
+    _apply_area_honesty.ultimo_zerados_sem_prancha = zerados_sem_prancha
     _apply_area_honesty.ultimo_apertou_teto = apertou_teto
     _apply_area_honesty.ultimo_teto_m2 = float(_teto_m2)
     _apply_area_honesty.ultimo_lineares_zerados = lineares_zerados
@@ -13245,6 +13419,29 @@ bloco — só cite os que estão no inventário deste arquivo."""
                            "não passam no da MAIOR prancha (%.2f m²)"
                            % (_apt, float(_pv_m2 or 0), _teto_log),
                            job_id, severity="warning")
+        except Exception:
+            pass
+        # 🩸 11/09 — QUEM CAIU PELA PRANCHA DO PRÓPRIO ITEM TEM AVISO PRÓPRIO.
+        # O aviso de cima fala em "não cabe na MAIOR prancha medida"; pra esta
+        # população isso é falso (o número cabia no teto do job — o que não cabe
+        # é na prancha de onde o item veio). Contador separado, frase separada.
+        try:
+            _zsp = int(getattr(_apply_area_honesty, "ultimo_zerados_sem_prancha", 0) or 0)
+            if _zsp:
+                try:
+                    _tem_cad_zsp = bool(cad_paths)
+                except NameError:
+                    _tem_cad_zsp = False
+                project_data.warnings = (getattr(project_data, "warnings", None) or []) + [
+                    ("⚠ %d item(ns) de área ficaram em branco porque a prancha de onde "
+                     "eles vieram não mediu essa área — a gente não usa a medição de "
+                     "OUTRA prancha pra preencher. " % _zsp)
+                    + ("Preencha a metragem na revisão." if _tem_cad_zsp
+                       else "Preencha a metragem ou envie o DXF pra medirmos.")]
+                _log_error("motor:geometria-de-outra-prancha",
+                           "zerei %d item(ns) de área: o número cabia no teto do job, "
+                           "mas a prancha do próprio item não mediu o bastante"
+                           % _zsp, job_id, severity="warning")
         except Exception:
             pass
         # 🩸 01/09 — 25 LINHAS EM BRANCO SEM EXPLICAÇÃO PARECEM MOTOR QUEBRADO.
