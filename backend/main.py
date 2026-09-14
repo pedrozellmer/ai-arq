@@ -8725,6 +8725,53 @@ _FONTE_DA_ESCALA = {
 }
 
 
+def _a_escala_sustenta_a_medicao(vm) -> tuple:
+    """(entrega a medição desta prancha?, motivo curto pro log).
+
+    🩸 14/09/2026 — ESCALA ADIVINHADA NÃO SUSTENTA MEDIÇÃO. A derivação por
+    votação (`scale_src="cotas"`) roda POR ÚLTIMO, só quando viewport, carimbo
+    e vista falharam — ou seja, só em folha que não declara escala nenhuma.
+    Ela vota cotas × vãos contra a tabela de escalas padrão; numa folha que não
+    é planta, os "tokens de cota" são números do carimbo (endereço, telefone,
+    área declarada) e os "vãos" são distâncias entre linhas de tabela. A
+    votação sempre acha ALGUMA escala padrão — e o que sai não é medição, é
+    adivinhação com procedência escrita na observação que o cliente lê.
+
+    📏 Medido na base (as 206 promoções desde 14/08, por `pdfvec:promo`): 6
+    pranchas em 3 arquivos vieram por votação — 2,9% das promoções carregando
+    1.852 m² e 4.846 m. Em 2 dos 3 arquivos a escala votada está FORA da faixa
+    do próprio documento: 1:1000 num arquivo cujas outras pranchas dizem 1:25,
+    1:50 e 1:75 (13× a maior), e 1:500 num cujas outras dizem 1:6 a 1:13 (38×).
+    No terceiro ela caiu em 1:50, que é uma das escalas do documento — chute
+    que acertou. Barrar os três tira ~1.635 m² falsos e ~217 m² que podiam
+    servir: 88% do que sai é invenção.
+
+    🔑 Por que agora e não antes: o passo 1 (`1a3fc1c`) fez a medição da
+    PRÓPRIA prancha virar a PROVA que autoriza o número do item. Uma prancha
+    que "mediu" 1.071,9 m² por escala inventada deixou de inflar só o teto do
+    job e passou a AUTORIZAR, sozinha, qualquer item que aponte pra ela.
+
+    🪤 Escala DECLARADA (carimbo, viewport, rótulo da vista) continua entrando,
+    como sempre — declaração não é prova, mas é leitura de algo escrito na
+    prancha, não invenção. A ressalva vai junto (`_frase_da_escala_sem_prova`).
+
+    ⏭️ O que a medição sugere e este conserto NÃO faz (fica pro próximo, com
+    número próprio): aceitar a escala votada quando ela CONCORDA com outra
+    prancha do mesmo documento. Nos 3 casos o sinal separa perfeitamente, mas
+    exige conhecer as escalas das outras pranchas ANTES de promover esta, e o
+    motor processa página a página.
+    """
+    _vm = vm or {}
+    if _vm.get("escala_validada"):
+        return True, "validada por cota da própria prancha"
+    _src = str(_vm.get("scale_src") or "").strip().lower()
+    if _src == "cotas":
+        return False, ("escala ADIVINHADA por votação de cotas e nenhum par "
+                       "cota×elemento a confirmou")
+    return True, ("escala declarada (%s), sem confirmação por medida"
+                  % (_src or "origem não identificada"))
+
+
 def _frase_da_escala_sem_prova(scale_src) -> tuple:
     """(como dizer a FONTE, RESSALVA) pra escala não confirmada por medida.
 
@@ -11440,7 +11487,24 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 # justamente o que trava e retoma, era o que MENOS avisava.
                 # 🔑 A medição agora viaja DENTRO do checkpoint e volta aqui.
                 _vm_ckpt = (result or {}).get("_pdfvec_medicao")
-                if _vm_ckpt:
+                # 🩸 14/09/2026 — A PORTA DO CHECKPOINT. O conserto da escala
+                # adivinhada mora no laço de medição, e um job RETOMADO não passa
+                # por lá: a medição volta pronta do checkpoint. Checkpoint gravado
+                # ANTES deste commit traz a prancha adivinhada inteira — inclusive
+                # como prova da própria prancha (passo 1). A mesma pergunta, aqui.
+                if _vm_ckpt and not _a_escala_sustenta_a_medicao(_vm_ckpt)[0]:
+                    _log_error("pdfvec:escala-adivinhada",
+                               "%s (%s): medição do checkpoint veio de escala ADIVINHADA "
+                               "(1:%s por votação) — descartada na retomada "
+                               "(m2=%s paredes_m=%s)"
+                               % (_stem, filename, _vm_ckpt.get("scale"),
+                                  _vm_ckpt.get("rooms_m2"), _vm_ckpt.get("walls_m") or 0),
+                               job_id, severity="warning")
+                    _vm_ckpt = None
+                # 🪤 A pergunta aparece AQUI de novo, e não só no `if` de cima:
+                # é o que deixa o guarda `test_TODA_porta_que_grava_a_prova...`
+                # enxergar que esta porta está fechada. Função pura, custo zero.
+                if _vm_ckpt and _a_escala_sustenta_a_medicao(_vm_ckpt)[0]:
                     try:
                         _pdfvec_por_prancha[_stem] = dict(_vm_ckpt)
                         _pdfvec_area_m2 += float(_vm_ckpt.get("rooms_m2") or 0)
@@ -11657,6 +11721,28 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                    f"paredes_m={_vm.get('walls_m') or 0} "
                                    f"n_paredes={_vm.get('n_walls') or 0})",
                                    job_id)
+                    elif ((_vm.get("n_rooms") or _vm.get("walls_m")) and _vm.get("scale")
+                          and not _a_escala_sustenta_a_medicao(_vm)[0]):
+                        # 🩸 14/09/2026 — ADIVINHAÇÃO NÃO ENTRA. Ver
+                        # `_a_escala_sustenta_a_medicao`: a medição desta prancha
+                        # não vira seção no prompt, não soma no job e NÃO entra em
+                        # `_pdfvec_por_prancha` — que desde o passo 1 é a PROVA que
+                        # autoriza o número do item. Deixar entrar "só na soma"
+                        # seria o pior dos dois mundos: número inventado sem nem
+                        # dizer de onde veio.
+                        # 🪤 Fica FORA de `_STAGES_DIAGNOSTICO` de propósito, pelo
+                        # critério de hoje: não é bookkeeping de caminho normal —
+                        # é a única pista de que o cliente recebeu MENOS do que o
+                        # motor achou que tinha medido. São ~6 linhas por mês.
+                        _log_error("pdfvec:escala-adivinhada",
+                                   "%s (%s): escala 1:%s vinha de VOTAÇÃO de cotas "
+                                   "sem confirmação — nao entreguei a medição "
+                                   "(ambientes=%s m2=%s paredes_m=%s n_paredes=%s)"
+                                   % (_stem, filename, _vm.get("scale"),
+                                      _vm.get("n_rooms"), _vm.get("rooms_m2"),
+                                      _vm.get("walls_m") or 0, _vm.get("n_walls") or 0),
+                                   job_id, severity="warning")
+                        print(f"[pdfvec-promo] {_stem}: escala adivinhada por votação — sem promoção")
                     elif (_vm.get("n_rooms") or _vm.get("walls_m")) and _vm.get("scale"):
                         # 🎯 ESCALA SEM PROVA (12/08/2026) — entrega como ESTIMADO.
                         #
