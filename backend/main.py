@@ -596,6 +596,15 @@ _STAGES_DIAGNOSTICO = frozenset({
     # 06/09: avisa que o Stripe passou a aceitar PIX — a copy do site precisa
     # acompanhar. Diagnóstico, não erro.
     "checkout:pix-liberado",
+    # 🩸 14/09/2026: A FAMÍLIA DAS TRAVAS DA HONESTIDADE DE ÁREA. Os quatro
+    # nascem no mesmo bloco do `process_job` que conta o que
+    # `_apply_area_honesty` deixou nos `ultimo_*`, e dizem a mesma coisa que o
+    # `motor:honestidade-area` (que já estava aqui): a trava fez o trabalho
+    # dela, a linha ficou vazia de propósito, o job seguiu. Ninguém age por
+    # linha dessas. Medido no painel antes do conserto: 13 das 40 linhas de
+    # "Avisos do motor no registro" eram estes três (o quarto é novo).
+    "motor:passo7-ambiguo", "motor:teto-por-prancha",
+    "motor:geometria-de-outra-prancha", "motor:linear-zerado",
 })
 
 
@@ -814,15 +823,22 @@ def _log_error(stage, message, job_id=None, severity="error"):
     lido via MCP/admin SEM precisar abrir o log do Render. Best-effort, NUNCA
     levanta (não pode atrapalhar quem já está num except).
 
-    `severity` só cai pra "info" sozinho quando o stage é de diagnóstico E quem
-    chamou não pediu outra coisa — assim ninguém precisa lembrar do parâmetro,
-    e um `severity="critical"` explícito continua valendo."""
-    # 🪤 24/08: só rebaixa quando quem chamou NÃO disse nada (severity é o
-    # padrão "error"). Um `severity="critical"` explícito — como o do bloco que
-    # avisa que a planilha não foi refeita com as correções do cliente — tem que
-    # aparecer no painel mesmo estando num stage de diagnóstico. Era o que este
-    # docstring já prometia e o código não cumpria.
-    if severity == "error" and str(stage) in _STAGES_DIAGNOSTICO:
+    Stage de diagnóstico entra como "info" — mesmo quando quem chamou pediu
+    "warning". Só `critical` (escalada deliberada) passa por cima da lista."""
+    # 🪤 24/08: não rebaixa ESCALADA. Um `severity="critical"` explícito — como
+    # o do bloco que avisa que a planilha não foi refeita com as correções do
+    # cliente — tem que aparecer no painel mesmo estando num stage de
+    # diagnóstico. Era o que este docstring já prometia e o código não cumpria.
+    # 🩸 14/09: "warning" também é rebaixado, e sem isso a lista não valia nada.
+    # O teste de 24/08 ("só rebaixa quem não disse nada") tratava warning como
+    # pedido a respeitar — só que warning é o CONTRÁRIO de escalada: quem
+    # escreve warning já está dizendo "isto não é erro". Resultado medido no
+    # painel: `cobranca:regua` está nesta lista desde 06/09, grava "warning", e
+    # mesmo assim ocupava 13 das 40 linhas de "Avisos do motor no registro" —
+    # a lista prometia diagnóstico e o parâmetro desligava a promessa. Pôr o
+    # nome aqui passa a ter efeito de verdade: é o que o guarda
+    # `test_a_familia_da_honestidade_de_area...` mede, chamando esta função.
+    if severity in ("error", "warning") and str(stage) in _STAGES_DIAGNOSTICO:
         severity = "info"
     try:
         _supabase_insert("error_log", {
