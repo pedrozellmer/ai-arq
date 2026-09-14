@@ -9071,6 +9071,67 @@ def voz_do_email_de_reprocesso(nome_escapado, nome_cru, n_itens, n_medidos,
     return abertura, assunto, titulo, selo, pre
 
 
+def existente_nao_leva_quantidade(all_items) -> int:
+    """Item marcado `[EXISTENTE ...]` sai SEM quantidade. Devolve quantos mudou.
+
+    🩸 14/09/2026 — a planilha de um cliente de hoje (coordenador de orçamento,
+    prancha de elétrica) trouxe duas linhas assim, com 414,16 m e 341,48 m em
+    `ml` e selo CONFIRMADO: eletrocalha que já está instalada e não será
+    comprada. Numa planilha de orçamento, linha com quantidade entra na soma —
+    o total linear do projeto saltou de 207 m para 970 m, e 755 m eram material
+    existente.
+
+    🔑 O MESMO arquivo, na passada anterior, tinha saído com quantidade ZERO e
+    unidade `vb`, com a medição escrita na observação. Quem decidia era a IA, e
+    ela decidiu diferente nas duas leituras — o não-determinismo de
+    [[project_mesmo_arquivo_resposta_diferente_20260909]]. Esta regra tira a
+    decisão da IA: o levantamento continua escrito, mas para de somar.
+
+    📏 Medido na base: 68 linhas com o marcador em 39 jobs; 26 delas (15 jobs)
+    vinham com quantidade, 11 com selo branco.
+
+    🪤 O gatilho é o PREFIXO `[EXISTENTE`, não a palavra "existente" no texto.
+    Medido antes de escrever: "Demolição de parede existente", "Pintura em forro
+    existente", "Restauro de piso existente" e "Proteção de áreas existentes"
+    são SERVIÇOS a orçar, e casar pela palavra zeraria todos eles.
+
+    🚫 Não apaga nada: a medição vai pra observação, que é onde o cliente lê a
+    procedência. Quem quiser o levantamento do que existe continua tendo.
+    """
+    _mudou = 0
+    for _it in all_items or []:
+        _desc = str(getattr(_it, "description", "") or "").lstrip()
+        if not _desc.upper().startswith("[EXISTENTE"):
+            continue
+        try:
+            _q = float(getattr(_it, "quantity", 0) or 0)
+        except (TypeError, ValueError):
+            _q = 0.0
+        if _q <= 0:
+            continue
+        _u = str(getattr(_it, "unit", "") or "").strip() or "un"
+        _obs = str(getattr(_it, "observations", "") or "").strip()
+        _nota = ("Levantado: %s %s do que JÁ EXISTE — fica fora da soma do "
+                 "orçamento (item a manter). Se for remanejar, o número está aqui."
+                 % (("%.2f" % _q).rstrip("0").rstrip("."), _u))
+        _it.observations = ((_nota + " | " + _obs) if _obs else _nota)[:1000]
+        _it.quantity = 0
+        _it.unit = "vb"
+        # Selo é procedência de NÚMERO: sem número a orçar, não há medição a
+        # carimbar — e linha branca com zero é o defeito que já consertamos em
+        # `_apply_area_honesty`.
+        try:
+            from models import Confidence as _CfEx
+            _it.confidence = _CfEx("estimado")
+        except Exception:
+            try:
+                _it.confidence = "estimado"
+            except Exception:
+                pass
+        _mudou += 1
+    return _mudou
+
+
 def rebaixar_itens_sem_identidade(all_items):
     """Item cuja identidade é o nome do bloco do CAD perde o selo BRANCO.
 
@@ -14097,6 +14158,20 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # "tudo que rebaixa selo já rodou". Eu só acrescentei a sexta e o
         # sintoma apareceu: o e-mail do job b5693ca6 afirmou "5 medidos" no
         # cabeçalho e "6 medidos" três linhas abaixo.
+        # 🩸 14/09: item marcado `[EXISTENTE ...]` não pode sair com quantidade —
+        # ninguém compra o que já está instalado, e linha com número entra na
+        # soma. Roda ANTES da recontagem do aviso pra que os selos que ela conta
+        # já sejam os finais. Ver `existente_nao_leva_quantidade`.
+        try:
+            _n_exist = existente_nao_leva_quantidade(all_items)
+            if _n_exist:
+                _log_error("motor:existente-sem-quantidade",
+                           "tirei a quantidade de %d item(ns) marcados [EXISTENTE] — "
+                           "levantamento fica na observação, fora da soma" % _n_exist,
+                           job_id, severity="warning")
+        except Exception as _eex:
+            print(f"[existente] nao-fatal: {_eex}")
+
         try:
             _recontar_aviso_planob()
         except Exception as _erp:
