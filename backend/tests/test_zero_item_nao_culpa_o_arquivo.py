@@ -30,6 +30,7 @@ import ast
 import io
 import json
 import os
+import re
 import sys
 from datetime import datetime, timedelta
 from urllib.parse import unquote
@@ -411,13 +412,41 @@ def test_TELA_reprocessar_de_projeto_estrutura_oferece_ler_como_arquitetura(tela
     assert ops[0] == ["", rotulo], ops
 
 
-def test_a_pagina_do_projeto_entrega_o_tipo_do_meta_ao_reprocessar():
+def _completa(tela, proj_js, meta_js):
+    return json.loads(tela.eval("JSON.stringify(_completarTipo(%s, %s) || null)"
+                                % (proj_js, meta_js)))
+
+
+def test_a_pagina_do_projeto_COPIA_o_tipo_do_meta_e_NUNCA_supoe(tela):
+    """🩸 14/09 — o guarda daqui só procurava o TEXTO da linha, e a revisão
+    adversarial provou 3 jeitos de trazer a armadilha de volta com ele verde
+    (supor 'arquitetura' depois da cópia, no renderHeader, ou no proj
+    sintetizado). Agora a decisão é uma função PURA e o teste CHAMA ela."""
+    from _jsbancada import funcao_js
+    tela.eval(funcao_js("_completarTipo", "projeto.html") + "\n1;")
+
+    # a forma real da lista by-user: sem project_type; o meta tem
+    assert _completa(tela, "{job_id:'j'}", "{project_type:'estrutura'}")["project_type"] == "estrutura"
+    # 🚨 sem meta, o tipo fica AUSENTE — supor 'arquitetura' esconde o
+    # "Ler como Arquitetura" justamente no projeto de Estrutura
+    assert not (_completa(tela, "{job_id:'j'}", "{}") or {}).get("project_type")
+    assert not (_completa(tela, "{job_id:'j'}", "null") or {}).get("project_type")
+    # o que já veio não é sobrescrito
+    assert _completa(tela, "{job_id:'j',project_type:'estrutura'}",
+                     "{project_type:'arquitetura'}")["project_type"] == "estrutura"
+    # projeto ausente não vira objeto do nada
+    assert _completa(tela, "null", "{project_type:'estrutura'}") is None
+
+
+def test_a_tela_do_projeto_nao_SUPOE_arquitetura_em_lugar_nenhum():
+    """🪤 Complemento do teste acima: dois dos três mutantes escrevem a suposição
+    FORA da função pura (renderHeader, proj sintetizado). Aqui a proibição é do
+    LITERAL, em qualquer forma."""
     src = io.open(os.path.join(_RAIZ, "projeto.html"), encoding="utf-8").read()
-    liga = "if (proj && !proj.project_type && pmeta.project_type) proj.project_type = pmeta.project_type;"
-    assert liga in src, "o tipo do meta não entra no proj"
-    assert src.index(liga) < src.index("renderHeader(proj)"), "o tipo entra DEPOIS de desenhar o cabeçalho"
+    achados = [a for a in re.findall(r"project_type[^\n]{0,40}?'arquitetura'", src)
+               if "===" not in a and "==" not in a]
+    assert not achados, "suposição de 'arquitetura' voltou: %r" % achados
     assert "_rotularTipoDoReprocesso(_selTipo, p.project_type)" in src
-    assert "(p.project_type || 'arquitetura')" not in src, "a suposição de 'arquitetura' voltou"
 
 
 def _botao(tela, msg, job):
@@ -453,13 +482,98 @@ def test_CONTROLE_PAINEL_outros_erros_mantem_enviar_outro_arquivo(tela, msg, job
     assert _botao(tela, msg, job) == {"rotulo": "Enviar outro arquivo", "href": ""}, msg
 
 
+def _sem_comentarios(arquivo):
+    src = io.open(os.path.join(_RAIZ, arquivo), encoding="utf-8").read()
+    sem = re.sub(r"/\*.*?\*/", "", src, flags=re.S)
+    return "\n".join(re.sub(r"//.*$", "", l) for l in sem.splitlines())
+
+
 def test_PAINEL_toda_tela_de_erro_passa_pelo_botao_do_erro():
-    src = io.open(os.path.join(_RAIZ, "dashboard.html"), encoding="utf-8").read()
-    linhas = src.splitlines()
-    sitios = [i for i, l in enumerate(linhas) if "showState(stateError)" in l]
-    assert sitios, "não achei tela de erro no painel"
-    for i in sitios:
-        assert any("_botaoDoErro(" in l for l in linhas[max(0, i - 3):i]), (
-            "tela de erro sem _botaoDoErro na linha %d — o rótulo do erro anterior fica" % (i + 1))
-    assert "_botaoDoErro(_txtErro, currentJobId)" in src
-    assert "if (btnRetry.dataset.abrir) { window.location.href = btnRetry.dataset.abrir; return; }" in src
+    """Regra de ORDEM, não janela de linhas.
+
+    🪤 14/09 — a janela de 3 linhas errava nos DOIS sentidos: aceitava a
+    navegação COMENTADA (a substring continua no comentário) e reprovava código
+    certo (telemetria ou comentário entre a chamada e o `showState`). O que
+    importa é: nenhuma tela de erro aparece sem passar pelo botão antes.
+    """
+    sem = _sem_comentarios("dashboard.html")
+    telas = [m.start() for m in re.finditer(r"showState\(stateError\)", sem)]
+    botoes = [m.start() for m in re.finditer(r"_botaoDoErro\(", sem)]
+    assert telas and botoes, "não achei tela de erro no painel"
+    anterior = 0
+    for t in telas:
+        assert any(anterior <= b < t for b in botoes), (
+            "tela de erro sem _botaoDoErro antes (posição %d) — o rótulo do erro "
+            "anterior fica grudado" % t)
+        anterior = t
+    assert "_botaoDoErro(_txtErro, currentJobId)" in sem
+
+
+def test_CONTROLE_a_regra_de_ordem_sabe_REPROVAR():
+    """🧪 Sem isto, o teste acima passaria com a chamada COMENTADA."""
+    sem = "\n".join(re.sub(r"//.*$", "", l) for l in
+                    ["// _botaoDoErro(txt, job);", "showState(stateError);"])
+    assert re.search(r"showState\(stateError\)", sem)
+    assert not re.search(r"_botaoDoErro\(", sem), (
+        "a limpeza de comentário não remove nada — a regra de ordem seria cega")
+
+
+def test_PAINEL_o_clique_do_botao_do_erro_NAVEGA_e_NAO_limpa(tela):
+    """O handler REAL do btn-retry rodando: com destino, navega e preserva; sem
+    destino, limpa a seleção e volta pra tela de envio (o caso do cliente-61,
+    que reenviou o mesmo DWG quebrado 2×)."""
+    from _jsbancada import handler_js
+    tela.eval("""
+      var navegou = null, telaFinal = null;
+      var selectedFiles = ['planta.dwg'], currentJobId = 'job-1';
+      var stateUpload = {id: 'upload'};
+      var btnRetry = {dataset: {}};
+      function renderFiles() {}
+      function showState(s) { telaFinal = s && s.id; }
+      window.location = {};
+      Object.defineProperty(window.location, 'href', {
+        set: function (v) { navegou = v; }, get: function () { return navegou; }});
+      1;
+    """)
+    tela.eval(handler_js("_cliqueRetry", "btnRetry.addEventListener('click', ",
+                         "dashboard.html") + "\n1;")
+
+    tela.eval("btnRetry.dataset.abrir = 'projeto.html?job_id=job-1#processamento';"
+              "_cliqueRetry(); 1;")
+    com_destino = json.loads(tela.eval(
+        "JSON.stringify([navegou, selectedFiles.length, currentJobId, telaFinal])"))
+    assert com_destino == ["projeto.html?job_id=job-1#processamento", 1, "job-1", None], com_destino
+
+    tela.eval("btnRetry.dataset.abrir = ''; _cliqueRetry(); 1;")
+    sem_destino = json.loads(tela.eval(
+        "JSON.stringify([selectedFiles.length, currentJobId, telaFinal])"))
+    assert sem_destino == [0, None, "upload"], sem_destino
+
+
+def test_os_NOMES_que_a_mensagem_cita_existem_na_tela():
+    """🪤 A mensagem manda abrir 'Processamento' e escolher 'Ler como
+    Arquitetura'. Renomear a vista ou a opção deixaria a instrução apontando pra
+    nada — e vista inexistente cai calada na Visão geral (já aconteceu quando
+    'dados' virou 'processamento')."""
+    proj = io.open(os.path.join(_RAIZ, "projeto.html"), encoding="utf-8").read()
+    menu = io.open(os.path.join(_RAIZ, "menu-lateral.js"), encoding="utf-8").read()
+    utils = io.open(os.path.join(_RAIZ, "aiarq-utils.js"), encoding="utf-8").read()
+    msg = main._mensagem_sem_itens(True, 3)
+
+    opcao = re.search(r'<option value="arquitetura"[^>]*>([^<]+)</option>', proj)
+    assert opcao, "sumiu a opção 'arquitetura' do seletor de reprocessamento"
+    # 🪤 entre ASPAS, como a mensagem cita: exigir só o pedaço deixa passar o
+    # rótulo encurtado ('Arquitetura'), que manda procurar opção inexistente.
+    assert ("'%s'" % opcao.group(1).strip()) in msg, (
+        "a mensagem cita um rótulo que não é o da opção: %r" % opcao.group(1))
+
+    vista = re.search(r"abrirVista:\s*'([a-z]+)'", utils)
+    assert vista, "a receita de Estrutura não manda abrir vista nenhuma"
+    assert ('data-vista="%s"' % vista.group(1)) in proj, (
+        "a vista %r não existe em projeto.html" % vista.group(1))
+
+    item = re.search(r"#%s'[^}]*rotulo:\s*'([^']+)'" % vista.group(1), menu)
+    assert item, "nenhum item de menu aponta pra #%s" % vista.group(1)
+    assert ("'%s'" % item.group(1)) in msg, (
+        "a mensagem manda abrir %r, mas o menu chama de %r"
+        % (vista.group(1), item.group(1)))

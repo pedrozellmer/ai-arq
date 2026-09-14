@@ -1368,7 +1368,11 @@ async function carregarStatsEntregas() {
   // 🩸 11/09/2026 — a lista by-user (RPC list_user_projects) não traz
   // `project_type`. O tipo vem do meta do /api/items; sem ele o Reprocessar não
   // sabe o que é "o mesmo tipo" (ver _rotularTipoDoReprocesso).
-  if (proj && !proj.project_type && pmeta.project_type) proj.project_type = pmeta.project_type;
+  // 🪤 14/09 — ISTO ERA UMA LINHA SOLTA, E O GUARDA SÓ PROCURAVA O TEXTO DELA.
+  // A revisão adversarial provou 3 jeitos de trazer a armadilha de volta com o
+  // teste verde (supor 'arquitetura' logo depois daqui, no renderHeader, ou no
+  // proj sintetizado). Função PURA porque é o que o guarda consegue CHAMAR.
+  _completarTipo(proj, pmeta);
 
   if (!proj) {
     document.querySelector('main').innerHTML = `
@@ -2589,6 +2593,18 @@ async function generateComparison() {
 // by-user): rotulava a 1ª opção "Mesmo tipo (Arquitetura)" — que reprocessa como
 // ESTRUTURA — e removia "Ler como Arquitetura", justamente a saída que a mensagem
 // de zero item passou a ensinar. Sem o tipo, nenhuma opção some.
+// O tipo do projeto vem do meta do /api/items (a lista by-user não traz). Aqui
+// ele é COPIADO, nunca SUPOSTO: sem meta, o tipo fica ausente e o Reprocessar
+// mostra "Mesmo tipo de antes" com as duas opções — que é o comportamento
+// honesto. Supor 'arquitetura' esconde o "Ler como Arquitetura" justamente no
+// projeto de Estrutura, que é o caso do cliente que motivou tudo (11/09).
+function _completarTipo(proj, pmeta) {
+  if (!proj) return proj;
+  const t = pmeta && pmeta.project_type;
+  if (!proj.project_type && t) proj.project_type = t;
+  return proj;
+}
+
 function _rotularTipoDoReprocesso(sel, tipoGravado) {
   if (!sel || !sel.options || !sel.options.length) return;
   const tipo = String(tipoGravado || '').toLowerCase();
