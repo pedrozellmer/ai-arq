@@ -818,6 +818,42 @@ def _descarte_de_pilares(extraction) -> str:
     return txt
 
 
+def _descarte_de_poligonos(extraction) -> str:
+    """Sufixo do log de geometria: QUAIS layers a allowlist de área recusou.
+
+    🩸 14/09/2026 — MEDIDO em 60 dias, 259 pranchas de 94 jobs: o motor aceita
+    **183 polígonos e recusa 3.158**, e **2.800 dessas recusas (88,7%) são
+    `fora_da_allowlist`** — ou seja, pelo NOME do layer, não pela geometria.
+    É 1 polígono aceito a cada 18 encontrados, e a área é justo onde a planilha
+    mais cala (3,1% das linhas em m² saem medidas, contra 42,2% das de peça).
+
+    🔑 `dwg_extractor` já coletava os nomes desde 09/09 — em
+    `poly_layers_recusados`, com o comentário "🚫 NÃO ampliar a lista antes de
+    ter o número". O campo viajava dentro do `DXFExtraction` e **ninguém lia**:
+    nem o motor, nem um teste. O número existia e era jogado fora a cada job.
+    Esta função só o publica; não muda uma vírgula do que é aceito.
+
+    🪤 Por que publicar em vez de já ampliar a allowlist: no acervo real o nome
+    engana. `arq-pis-hum` é piso de verdade (616 m² no job de 14/09), mas
+    `agn-hid-tub-pla-inc-pis` termina igual e é tubulação hidráulica — entrar
+    com "pis" na lista somaria cano como se fosse piso, que é o erro proibido
+    pela regra nº1. A lista só pode crescer token a token, cada um conferido
+    contra os nomes que aparecerem aqui.
+
+    Vazio quando não houve recusa por nome, pra não poluir o log de quem não
+    tem o que dizer.
+    """
+    try:
+        d = dict(getattr(extraction, "poly_layers_recusados", None) or {})
+    except Exception:
+        return ""
+    if not d:
+        return ""
+    itens = sorted(d.items(), key=lambda kv: -kv[1])[:5]
+    return " poly_layers_recusados=" + "|".join(
+        f"{str(k)[:28]}({v})" for k, v in itens)
+
+
 def _log_error(stage, message, job_id=None, severity="error"):
     """Grava um erro técnico do motor na tabela error_log do Supabase, pra ser
     lido via MCP/admin SEM precisar abrir o log do Render. Best-effort, NUNCA
@@ -10535,7 +10571,12 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                                 # Prancha de FÔRMA com 2.545 linhas e 198 cotas
                                 # devolvia `pilares=0` sem dizer se o desenho
                                 # não tem pilar ou se o NOME do layer não bateu.
-                                f"{_descarte_de_pilares(extraction)}",
+                                f"{_descarte_de_pilares(extraction)}"
+                                # 🩸 14/09: QUAIS layers a allowlist de área
+                                # recusou. 88,7% das recusas de polígono são
+                                # por NOME, e o nome já era coletado e jogado
+                                # fora. Ver `_descarte_de_poligonos`.
+                                f"{_descarte_de_poligonos(extraction)}",
                                 job_id)
                         except Exception as _eg:
                             print(f"[geometria] log falhou (nao-fatal): {_eg}")
