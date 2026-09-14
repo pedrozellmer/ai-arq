@@ -960,6 +960,54 @@ def grandeza_da_unidade(u):
     return _GRANDEZA_DA_UNIDADE.get(" ".join(str(u or "").split()).lower())
 
 
+def quantidade_apos_troca_de_unidade(qtd, de, para):
+    """A unidade da linha foi reescrita. O número sobrevive? Devolve (qtd, nota).
+
+    🩸 14/09/2026 — MEDIDO na base: o motor reescreveu a unidade de **550
+    linhas mudando a GRANDEZA FÍSICA**, e **235 delas saíram COM número** —
+    o mesmo número, agora medindo outra coisa:
+
+      · 1.200 m de cabo 3×2,5mm²  →  "1.200 **un**"
+      · 1.634 m² de rede de sprinkler → "1.634 **un**"
+      · 1.505 m de PERÍMETRO de parede → "1.505 **m²**" de revestimento
+      · 1.999 kg de aço CA-50 → "1.999 **un**"
+
+    Isto é pior que linha vazia: vazia o cliente preenche, com número ele
+    ORÇA. O próprio motor já chamava o efeito pelo nome desde 09/08, na
+    observação acima: *"~6.971 m² fabricados"*.
+
+    🔑 A reescrita em si está CERTA e fica: piso se orça em m², não em ml.
+    O que não pode é o número atravessar a troca. Metro não vira unidade, e
+    converter exigiria um dado que a planta não deu (largura, bitola, peso
+    por metro). Então a quantidade vai a ZERO — que é a pergunta honesta,
+    a mesma doutrina da derivação de pintura — e o número lido fica escrito
+    na observação, pra não perder o levantamento.
+
+    🪤 Troca que NÃO muda a grandeza passa intacta: `cj`→`un`, `m`→`ml`,
+    `kg`→`kg` são 138 linhas de puro rótulo e o número continua valendo.
+    Unidade incomparável (`vb`, `%`, `mês`) também passa: na dúvida, cala.
+
+    🪤 A nota vai na FRENTE: `revisao.html` mostra só os 110 primeiros
+    caracteres da observação e o resto fica num hover que não existe no
+    celular.
+    """
+    try:
+        q = float(qtd or 0)
+    except (TypeError, ValueError):
+        return qtd, ""
+    if q <= 0:
+        return qtd, ""
+    g_de, g_para = grandeza_da_unidade(de), grandeza_da_unidade(para)
+    if g_de is None or g_para is None or g_de == g_para:
+        return qtd, ""          # só rótulo, ou incomparável: o número vale
+    _n = ("%g" % q) if q == int(q) else ("%.2f" % q)
+    return 0, (
+        "⚠ QUANTIDADE EM BRANCO DE PROPÓSITO: a leitura levantou %s %s, e este "
+        "item se mede em %s — %s e %s são grandezas diferentes, e converter "
+        "exigiria um dado que a planta não dá. Preferimos deixar em branco a "
+        "entregar um número que mede outra coisa." % (_n, de, para, g_de, g_para))
+
+
 def unidade_conflita_com_sinapi(unidade_item, unidade_sinapi):
     """True quando as duas descrevem GRANDEZAS diferentes (área × comprimento,
     contagem × área...). False quando batem, quando são a mesma grandeza, ou

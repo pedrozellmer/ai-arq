@@ -11263,6 +11263,18 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                     conf = "estimado"
                                     obs_raw = (f"{obs_raw} | Unidade ajustada de {original_unit} "
                                                f"para {normalized_unit} (revisar quantidade)")
+                                    # 🩸 14/09: o NÚMERO não atravessa troca de
+                                    # GRANDEZA — 235 linhas saíam com o valor de
+                                    # metro carimbado em `un`. Régua ÚNICA em
+                                    # engine_rules: esta cópia e a do outro
+                                    # ponto de normalização já tinham divergido
+                                    # no texto, que é como a doença começa.
+                                    from engine_rules import (
+                                        quantidade_apos_troca_de_unidade as _qtd_troca)
+                                    qty, _nota_un = _qtd_troca(
+                                        qty, original_unit, normalized_unit)
+                                    if _nota_un:
+                                        obs_raw = f"{_nota_un} {obs_raw}"
                                 if item_data.get("_procedencia_rebaixada"):
                                     obs_raw = (f"{obs_raw} | Procedência: extração com ressalva "
                                                f"(estéril/unidade/xref) — quantidade não confirmada, revisar").strip(" |")
@@ -12303,6 +12315,15 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         conf = "estimado"
                         obs_raw = (f"{obs_raw} | Unidade ajustada de {original_unit} "
                                    f"para {normalized_unit}").strip(" |")
+                        # 🩸 14/09: mesma régua do outro ponto de normalização —
+                        # o número não atravessa troca de GRANDEZA. Ver
+                        # `quantidade_apos_troca_de_unidade`.
+                        from engine_rules import (
+                            quantidade_apos_troca_de_unidade as _qtd_troca2)
+                        qty, _nota_un2 = _qtd_troca2(
+                            qty, original_unit, normalized_unit)
+                        if _nota_un2:
+                            obs_raw = f"{_nota_un2} {obs_raw}"
                     if _pdf_downgrade:
                         obs_raw = (f"{obs_raw} | Estimativa: lido de PDF, não medido em "
                                    f"geometria — envie DWG/DXF pra medir").strip(" |")
