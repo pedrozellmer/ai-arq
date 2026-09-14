@@ -6659,6 +6659,44 @@ def _validate_quantity_for_unit(item) -> tuple[float, bool]:
     return qty, False
 
 
+# Onde o NOME do item acaba e o contexto começa: preposição, travessão,
+# vírgula, parêntese. 🪤 "e" e "ou" ficam de FORA — "Portas e janelas" é um
+# item só com dois nomes, e cortar ali perderia o segundo.
+_SEP_NUCLEO = _re.compile(
+    r"\s+(?:de|da|do|das|dos|para|em|no|na|nos|nas|com|sob|sobre|ao|à)\s+"
+    r"|\s+[—–-]\s+|[,(;/]", _re.I)
+
+# 🪤 Orçamento começa a linha pelo SERVIÇO, não pelo objeto: "Fornecimento e
+# instalação DE CAPACHO". Sem isto o núcleo seria "Fornecimento" e a régua
+# calaria justo nas linhas mais comuns da planilha. Só entram palavras que
+# NUNCA são o item — `impermeabilização` e `pintura` ficam de fora de
+# propósito: ali o serviço É o item, e tem unidade própria (m²).
+_ACAO_NAO_E_ITEM = _re.compile(
+    r"^(fornecimento|instala[çc][ãa]o|execu[çc][ãa]o|remo[çc][ãa]o|retirada|"
+    r"demoli[çc][ãa]o|nivelamento|regulariza[çc][ãa]o|aplica[çc][ãa]o|montagem|"
+    r"subida|descida|limpeza|preparo|revis[ãa]o|remanejamento|substitui[çc][ãa]o|"
+    r"refor[çc]o|tratamento|servi[çc]os?|fechamento|veda[çc][ãa]o|conjunto)\b",
+    _re.I)
+
+
+def _nucleo_do_item(description: str) -> str:
+    """O NOME do item, sem o contexto que vem depois.
+
+    "Sirene de alarme — instalada a 2,20 m do piso acabado" → "Sirene".
+    Pula até 3 verbos de serviço na frente: "Fornecimento e instalação de
+    capacho embutido" → "capacho embutido".
+    """
+    resto = description or ""
+    cabeca = resto
+    for _ in range(3):
+        partes = _SEP_NUCLEO.split(resto, 1)
+        cabeca = partes[0].strip()
+        if len(partes) == 1 or not _ACAO_NAO_E_ITEM.match(cabeca):
+            return cabeca
+        resto = partes[1]
+    return cabeca
+
+
 def _normalize_unit_for_item(description: str, current_unit: str) -> tuple[str, bool]:
     """Ajusta a unidade baseada na descrição do item.
     Retorna (unidade_nova, foi_corrigida).
@@ -6677,7 +6715,24 @@ def _normalize_unit_for_item(description: str, current_unit: str) -> tuple[str, 
     # Ex.: "MONITOR/TV 42\" (…visíveis na planta de forro)" NÃO é m² só porque a
     # observação cita "forro" — ali "forro" é LOCALIZAÇÃO, não o tipo do item.
     # Casa as palavras-chave só no trecho antes do 1º "(" (caso cliente-95 23/07).
-    head_lower = description.split("(", 1)[0].lower()
+    #
+    # 🩸 14/09/2026 — O CORTE NO PARÊNTESE ERA POUCO. O contexto também vem
+    # depois de PREPOSIÇÃO e de TRAVESSÃO, e ali ele estava decidindo a unidade
+    # de meio acervo. Medido em 119 trocas reais:
+    #   · "Sirene de alarme — instalada a 2,20 m DO PISO ACABADO"  un → m²
+    #   · "Interruptor simples — instalação a 120 cm DO PISO..."   un → m²
+    #   · "Curva vertical segmentada PARA ELETROCALHA"             un → ml
+    #   · "Vidro temperado — painéis de JANELAS e ESQUADRIAS"      m² → un
+    # "do piso acabado" é altura de instalação e virou ÁREA; "para eletrocalha"
+    # é o que o acessório serve e virou METRO. Agora a palavra-chave só vale se
+    # estiver no NÚCLEO — o que vem antes da primeira preposição/travessão.
+    #
+    # 📏 Efeito medido na amostra de 119 trocas: as que mudam de GRANDEZA (e que
+    # por isso perdem o número, ver `quantidade_apos_troca_de_unidade`) caem de
+    # **96 para 11 — 89% menos linha zerada**. E os 13 casos que motivaram esta
+    # normalização ("piso vinílico" em ml, "porta" em m²…) continuam todos
+    # passando: o conserto tira o falso positivo sem tirar o acerto.
+    head_lower = _nucleo_do_item(description).lower()
 
     # Ordem de precedência: contável > linear > superfície (senão piso vira superfície erroneamente)
     if _UNIT_COUNT_KEYWORDS.search(head_lower):
