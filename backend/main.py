@@ -13833,6 +13833,14 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 if "quantity" in _fix:
                     _it.quantity = _fix["quantity"]
                     _n_rec += 1
+                    # 🩸 14/09/2026 — A LINHA ACABOU DE GANHAR NÚMERO MEDIDO, e o
+                    # texto continuava mandando "informe a área no upload" — que é
+                    # o caminho que ZERA de volta (achado 7, 05/08). Medi na base:
+                    # 57 linhas em 30 dias diziam, ao mesmo tempo, "o motor mediu
+                    # 16,98 m neste layer" e "Área NÃO medida — informe a área".
+                    # A limpeza já existia desde 05/08; faltava chamá-la AQUI, que
+                    # é o único ponto onde uma linha zerada volta a ter número.
+                    _it.observations = _limpa_aviso_nao_medida(_it.observations or "")
                 else:
                     _n_uni += 1
                 if "unit" in _fix:
