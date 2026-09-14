@@ -650,3 +650,74 @@ def test_o_rotulo_do_botao_do_card_e_o_NOME_da_vista_no_menu():
     assert botao, "o card de erro não tem o botão da vista"
     assert rotulo_menu in botao.group(1), (
         "o botão do card diz %r e o menu chama de %r" % (botao.group(1), rotulo_menu))
+
+def test_o_botao_da_vista_chama_uma_funcao_que_EXISTE_na_tela():
+    """🪤 REVISÃO DO PRÓPRIO CONSERTO (14/09): o guarda de cima roda
+    `_ligaBotaoDaVista` com um `irPraVista` DE MENTIRA — ele prova a ligação,
+    não o destino. Renomear a função de navegação deixaria o botão mudo com a
+    bancada verde, que é a família dos 459 guardas cegos de 06/09.
+    Aqui o nome sai do que `mostrarErro` REALMENTE passa, e o extrator da casa
+    reprova se essa função não existir no arquivo."""
+    from _corpo import corpo_js
+    from _jsbancada import funcao_js
+    corpo = corpo_js("mostrarErro", "projeto.html")
+    m = re.search(r"_ligaBotaoDaVista\(.*?function\s*\([^)]*\)\s*\{\s*"
+                  r"([A-Za-z_$][\w$]*)\s*\(", corpo, re.S)
+    assert m, "`mostrarErro` não liga mais o botão da vista a função nenhuma"
+    nome = m.group(1)
+    corpo_do_destino = funcao_js(nome, "projeto.html")   # levanta se não existir
+    assert corpo_do_destino.strip(), nome
+
+
+def test_o_href_do_botao_aponta_pra_MESMA_vista_que_o_clique_abre():
+    """O clique dá `preventDefault` e usa a vista da receita — mas o `href` é o
+    que vale em "abrir em nova aba", e é o que sobra se o JS não carregar."""
+    proj = io.open(os.path.join(_RAIZ, "projeto.html"), encoding="utf-8").read()
+    m = re.search(r'id="erro-btn-vista"[^>]*href="([^"]+)"', proj)
+    assert m, "o botão da vista perdeu o href"
+    assert m.group(1) == "#" + _vista_da_receita(), (
+        "o href diz %r e a receita manda abrir %r" % (m.group(1), _vista_da_receita()))
+
+def test_mostrarErro_LIGA_o_botao_da_vista_DE_VERDADE(tela):
+    """🩸 14/09, mutante sobrevivente: `if (false) _ligaBotaoDaVista(...)`.
+
+    O guarda de cima chama `_ligaBotaoDaVista` na mão e o outro lê o texto da
+    chamada — os dois passam com a ligação DESLIGADA. Aqui o card de erro é
+    montado pelo `mostrarErro` de verdade, e quem responde é o botão."""
+    from _jsbancada import funcao_js
+    tela.eval(funcao_js("_ligaBotaoDaVista", "projeto.html") + "\n1;")
+    tela.eval(funcao_js("mostrarErro", "projeto.html") + "\n1;")
+    tela.eval("""
+      var foiPra = null, escondido = null;
+      function mostrarVista(v) { foiPra = v; }
+      function aplicarEstadoNasVistas() {}
+      var _btnV = document.getElementById('erro-btn-vista');
+      _btnV.classList.toggle = function (c, v) { if (c === 'hidden') escondido = !!v; };
+      1;
+    """)
+    tela.eval("mostrarErro(%s, null); 1;" % json.dumps(main._mensagem_sem_itens(True, 3)))
+    assert json.loads(tela.eval("JSON.stringify(escondido)")) is False, (
+        "o card de erro de ESTRUTURA não mostrou o botão da vista")
+    assert tela.eval("typeof _btnV.onclick") == "function", (
+        "o botão apareceu mas ninguém ligou o clique nele")
+    tela.eval("_btnV.onclick({preventDefault: function () {}}); 1;")
+    assert tela.eval("foiPra") == _vista_da_receita()
+
+
+def test_CONTROLE_erro_sem_receita_nao_mostra_o_botao_da_vista(tela):
+    """Prova que o de cima sabe reprovar: erro comum não ganha o botão."""
+    from _jsbancada import funcao_js
+    tela.eval(funcao_js("_ligaBotaoDaVista", "projeto.html") + "\n1;")
+    tela.eval(funcao_js("mostrarErro", "projeto.html") + "\n1;")
+    tela.eval("""
+      var foiPra = null, escondido = null;
+      function mostrarVista(v) { foiPra = v; }
+      function aplicarEstadoNasVistas() {}
+      var _btnV = document.getElementById('erro-btn-vista');
+      _btnV.onclick = null;
+      _btnV.classList.toggle = function (c, v) { if (c === 'hidden') escondido = !!v; };
+      1;
+    """)
+    tela.eval("mostrarErro('Erro de rede ao falar com o servidor.', null); 1;")
+    assert json.loads(tela.eval("JSON.stringify(escondido)")) is True
+    assert json.loads(tela.eval("JSON.stringify([foiPra, _btnV.onclick])")) == [None, None]
