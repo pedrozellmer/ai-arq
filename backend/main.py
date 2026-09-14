@@ -9132,6 +9132,63 @@ def existente_nao_leva_quantidade(all_items) -> int:
     return _mudou
 
 
+def aviso_do_projeto_so_pdf(all_items, tem_cad: bool) -> str:
+    """Projeto só-PDF: diz que NADA saiu medido do desenho, e quanto o CAD rende.
+
+    🩸 14/09/2026 — o convite ao CAD já existia, e existia DEMAIS: medido na
+    base (60 dias), 1.319 linhas em 29 de 32 projetos só-PDF pedem "envie o
+    DXF". Mil vezes a mesma frase, e nenhuma delas diz QUANTO se ganha. Um
+    orçamentista lê isso em 40 linhas e ignora.
+
+    📏 O número que faltava (60 dias, 112 projetos concluídos):
+      · só-PDF: **0,0%** das linhas medidas do desenho — em 32 de 32 projetos,
+        nenhuma. E 46,2% das linhas com algum número (leitura da IA);
+      · com DWG/DXF: 23,5% medidas do desenho e 72,5% com número.
+
+    🔑 O zero NÃO é falha do arquivo do cliente: é regra nossa. `_pdf_downgrade`
+    rebaixa todo `confirmado` que veio de PDF, porque a escala do PDF sai do
+    carimbo — declaração, não prova (regra dura nº1). Dizer isso na cara é mais
+    honesto que repetir "envie o DXF" sem explicar.
+
+    🪤 Só aparece quando o projeto NÃO tem CAD e não mediu nada: num job que
+    mediu, o aviso seria mentira. Devolve "" nos dois casos.
+    """
+    if tem_cad:
+        return ""
+    itens = list(all_items or [])
+    if not itens:
+        return ""
+    _total = len(itens)
+    _com_numero = 0
+    _medidas = 0
+    for _it in itens:
+        try:
+            if float(getattr(_it, "quantity", 0) or 0) > 0:
+                _com_numero += 1
+        except (TypeError, ValueError):
+            pass
+        _c = getattr(_it, "confidence", "")
+        if str(getattr(_c, "value", _c) or "") == "confirmado":
+            _medidas += 1
+    if _medidas:
+        return ""          # mediu alguma coisa: este aviso não se aplica
+    _pct = (100.0 * _com_numero / _total) if _total else 0.0
+    return (
+        "📐 Nenhuma linha deste projeto foi MEDIDA do desenho — e isso não é "
+        "defeito do seu arquivo. Em PDF a gente lê a planta e ESTIMA: a escala "
+        "vem do carimbo, que é declaração e não prova, então nunca carimbamos "
+        "um número de PDF como medido.\n"
+        "Este projeto saiu com %d de %d linhas preenchidas (%.0f%%), todas por "
+        "leitura.\n"
+        "📏 Na nossa base dos últimos 60 dias (112 projetos): com DWG ou DXF, "
+        "23,5%% das linhas saem MEDIDAS do desenho e o total preenchido sobe de "
+        "46%% para 73%%.\n"
+        "👉 Se você tiver o arquivo original das mesmas pranchas, anexe NESTE "
+        "mesmo projeto (não precisa criar outro) — o que mais muda é o "
+        "comprimento de parede, que o PDF não entrega."
+        % (_com_numero, _total, _pct))
+
+
 def rebaixar_itens_sem_identidade(all_items):
     """Item cuja identidade é o nome do bloco do CAD perde o selo BRANCO.
 
@@ -14166,6 +14223,25 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # "tudo que rebaixa selo já rodou". Eu só acrescentei a sexta e o
         # sintoma apareceu: o e-mail do job b5693ca6 afirmou "5 medidos" no
         # cabeçalho e "6 medidos" três linhas abaixo.
+        # 🩸 14/09: o cliente de PDF nunca soube que NADA saiu medido do
+        # desenho — e é a informação que muda a decisão dele. Ver
+        # `aviso_do_projeto_so_pdf`.
+        try:
+            _tem_cad_aviso = bool(cad_paths)
+        except NameError:
+            _tem_cad_aviso = False
+        try:
+            _av_pdf = aviso_do_projeto_so_pdf(all_items, _tem_cad_aviso)
+            if _av_pdf:
+                project_data.warnings = (
+                    (getattr(project_data, "warnings", None) or []) + [_av_pdf])
+                _log_error("motor:so-pdf-nada-medido",
+                           "projeto só-PDF sem nenhuma linha medida do desenho — "
+                           "aviso com o número do ganho do CAD entregue ao cliente",
+                           job_id, severity="info")
+        except Exception as _eap:
+            print(f"[so-pdf] aviso nao-fatal: {_eap}")
+
         # 🩸 14/09: item marcado `[EXISTENTE ...]` não pode sair com quantidade —
         # ninguém compra o que já está instalado, e linha com número entra na
         # soma. Roda ANTES da recontagem do aviso pra que os selos que ela conta
