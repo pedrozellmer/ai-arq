@@ -157,3 +157,58 @@ jobs:
             echo "erro de import estao engolindo ele."
             exit 1
           fi
+
+  # ══════════════════════════════════════════════════════════════════════════
+  # 🩸 14/09/2026 — O CI APROVAVA NUMA VERSÃO DE PYTHON QUE A PRODUÇÃO NÃO TEM.
+  # A bancada acima roda em 3.13. O Render roda a imagem do
+  # `backend/Dockerfile`, que é `python:3.11-slim`. Sintaxe de 3.12+ (f-string
+  # da PEP 701, `type X = int` da PEP 695) passa verde aqui e derruba o BOOT
+  # lá — a mesma família do NameError de 21/08, que o pyflakes passou a pegar,
+  # e do pin de 08/09, que quebrou no INSTALAR com a bancada verde.
+  # 🪤 A versão NÃO é decorada aqui: sai do Dockerfile. Se a produção subir de
+  # versão, este job sobe junto. Se a leitura falhar, o job PARA — versão vazia
+  # viraria setup-python no default e o guarda ficaria cego.
+  compila-no-python-da-producao:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Qual Python a producao roda (lido do Dockerfile)
+        id: prod
+        run: |
+          set -eu
+          linha=$(grep -F -m1 'FROM python:' backend/Dockerfile)
+          versao=$(printf '%s' "$linha" | cut -d: -f2 | cut -d- -f1)
+          case "$versao" in
+            3.*) ;;
+            *) echo "::error::nao consegui ler a versao do Python em backend/Dockerfile (li '"'"'$versao'"'"')"; exit 1 ;;
+          esac
+          echo "versao=$versao" >> "$GITHUB_OUTPUT"
+          echo "a producao roda Python $versao"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ steps.prod.outputs.versao }}
+
+      # 🧪 CONTROLE NEGATIVO, no molde da bancada: o passo tem que provar que
+      # sabe REPROVAR. Este arquivo só compila em 3.12+; se ele passar, o job
+      # não está na versão da producao e o passo de baixo nao prova nada.
+      - name: o passo sabe reprovar? (controle negativo)
+        run: |
+          set -u
+          arq="$RUNNER_TEMP/so_compila_no_3_12.py"
+          {
+            echo 'print(f"{"aspas iguais aninhadas: PEP 701, so 3.12+"}")'
+            echo 'type Apelido = int  # PEP 695, so 3.12+'
+          } > "$arq"
+          if python -m py_compile "$arq"; then
+            echo "::error::o controle negativo COMPILOU. Ou este job nao esta na versao da producao, ou a producao subiu pra 3.12+ e o controle precisa de sintaxe mais nova."
+            exit 1
+          fi
+          echo "ok: sintaxe de 3.12+ e recusada aqui, como seria no Render"
+
+      - name: Compilar o backend inteiro
+        run: |
+          python -VV
+          python -m compileall -q backend
