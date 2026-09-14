@@ -66,6 +66,27 @@ def test_a_nota_cabe_no_corte_da_tela():
         % nota[:110])
 
 
+def test_a_nota_nao_mostra_nome_interno_ao_cliente():
+    """🪤 As chaves de `_GRANDEZA_DA_UNIDADE` são identificadores internos e vêm
+    SEM acento ("area"). Esta linha é lida pelo cliente na planilha — peguei
+    isto lendo o SQL de correção antes de gravar em 230 linhas de 52 clientes.
+    """
+    _, nota = _troca(10, "ml", "m²")
+    assert "área" in nota, ("nome interno cru na cara do cliente: %s" % nota)
+    assert "area " not in nota and "area." not in nota, (
+        "sobrou 'area' sem acento: %s" % nota)
+    # 🪤 Os DOIS lados precisam de caso próprio: um mutante que estragava só o
+    # primeiro argumento SOBREVIVEU, porque nenhum caso meu tinha "área" como
+    # unidade de ORIGEM — todos a tinham no destino.
+    for qtd, de, para in ((10, "ml", "m²"), (10, "kg", "un"),
+                          (10, "m³", "m²"), (10, "un", "ml"),
+                          (10, "m²", "un"), (10, "m²", "ml"),
+                          (10, "m²", "kg")):
+        n = _troca(qtd, de, para)[1]
+        assert "area" not in n.replace("área", ""), (
+            "nome interno vazou em %s→%s: %s" % (de, para, n))
+
+
 def test_decimal_nao_vira_dizima():
     _, nota = _troca(1505.201234, "ml", "m²")
     assert "1505.20" in nota, nota

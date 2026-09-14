@@ -960,6 +960,15 @@ def grandeza_da_unidade(u):
     return _GRANDEZA_DA_UNIDADE.get(" ".join(str(u or "").split()).lower())
 
 
+# 🪤 As chaves de `_GRANDEZA_DA_UNIDADE` são identificadores internos e
+# aparecem SEM acento ("area"). Esta linha vai pra observação que o cliente lê
+# na planilha — nome interno na cara dele é desleixo visível.
+_NOME_DA_GRANDEZA = {
+    "area": "área", "volume": "volume", "comprimento": "comprimento",
+    "contagem": "contagem", "massa": "massa", "capacidade": "capacidade",
+}
+
+
 def quantidade_apos_troca_de_unidade(qtd, de, para):
     """A unidade da linha foi reescrita. O número sobrevive? Devolve (qtd, nota).
 
@@ -1005,7 +1014,9 @@ def quantidade_apos_troca_de_unidade(qtd, de, para):
         "⚠ QUANTIDADE EM BRANCO DE PROPÓSITO: a leitura levantou %s %s, e este "
         "item se mede em %s — %s e %s são grandezas diferentes, e converter "
         "exigiria um dado que a planta não dá. Preferimos deixar em branco a "
-        "entregar um número que mede outra coisa." % (_n, de, para, g_de, g_para))
+        "entregar um número que mede outra coisa."
+        % (_n, de, para, _NOME_DA_GRANDEZA.get(g_de, g_de),
+           _NOME_DA_GRANDEZA.get(g_para, g_para)))
 
 
 def unidade_conflita_com_sinapi(unidade_item, unidade_sinapi):
