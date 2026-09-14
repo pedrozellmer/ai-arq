@@ -2086,6 +2086,30 @@ _RE_NAO_IDENT = _re.compile(
 _RE_IDENT_POR = _re.compile(r"n[ãa]o\s+identificad[oa]s?\s+por\s", _re.I)
 _UNIDADES_DE_CONTAGEM = ("un", "pç", "pc", "und", "unid")
 
+# 🩸 14/09/2026 — SETA DE COTA VENDIDA COMO PORTA, COM SELO BRANCO.
+# Medido na base: **7 linhas em 5 projetos de cliente, 5 delas `confirmado`,
+# 40 unidades** entregues como MEDIDAS — de 17/07 até hoje. Num deles, os dois
+# itens sozinhos eram **52,6% de tudo que o projeto vendia como medido**:
+#   · "Pontos de conexão / sprinklers / derivações — bloco _DOT"     17 un ✓
+#   · "Esquadrias gerais — bloco _Open90 (portas com abertura 90°)"  13 un ✓
+#
+# 🔑 `_DOT` e `_OPEN90` NÃO são blocos do projetista: são os nomes reservados
+# que o próprio AutoCAD instala para as PONTAS DE SETA de cota. O desenho tinha
+# 59 cotas. A contagem de INSERTs está certa — o que é falso é a identidade, e
+# o selo branco diz ao cliente que aquilo foi medido do projeto.
+#
+# 🪤 Por que uma régua NOVA em vez de alargar a frase: a fronteira acima é
+# estreita de propósito e está certa — "Porta de abrir 90° — conforme bloco
+# 'j3'" tem item real e só falta o tipo. Aqui o item NÃO é real. Lista FECHADA
+# de nomes de sistema, com fronteira dos dois lados: um bloco de projetista
+# chamado `PORTA_OPEN90` ou `DOT-01` não pode ser pego junto.
+_RE_BLOCO_DE_SISTEMA = _re.compile(
+    r"(?<![A-Za-z0-9_])_("
+    r"archtick|box(?:blank|filled)|closed(?:blank|filled)?|"
+    r"datum(?:blank|filled)|dot(?:blank|small)?|integral|none|oblique|"
+    r"open(?:30|90)?|origin2?|small"
+    r")(?![A-Za-z0-9_])", _re.I)
+
 
 def item_e_bloco_sem_identidade(descricao, unidade) -> bool:
     """A identidade deste item é o nome de um bloco do CAD? Só APONTA.
@@ -2097,6 +2121,10 @@ def item_e_bloco_sem_identidade(descricao, unidade) -> bool:
         return False
     if not _RE_TEM_BLOCO.search(_d):
         return False
+    # 🪤 O corte do "identificados POR bloco" NÃO vale para bloco de sistema:
+    # ali o item é real e falta o bloco; aqui o "item" é uma ponta de cota.
+    if _RE_BLOCO_DE_SISTEMA.search(_d):
+        return True
     if _RE_IDENT_POR.search(_d):
         return False
     return bool(_RE_LIDERA_BLOCO.search(_d) or _RE_NAO_IDENT.search(_d))
