@@ -42,7 +42,13 @@ jobs:
           # silencioso, e guarda que pula não guarda. Eu tinha dukpy na minha
           # máquina e o CI não: medi com ferramenta que o outro lado não tem.
           # O guarda `test_dependencia_de_teste_declarada` impede a próxima.
-          pip install pytest pyflakes esprima dukpy
+          # 🪤 14/09/2026 — `pytest-xdist` e o `-n auto` do passo de baixo são
+          # PAR ACOPLADO: sem o pacote, o pytest morre em "unrecognized
+          # arguments: -n" ANTES de colher um teste — erro de 10s, igual ao do
+          # dukpy em 07/09. E o guarda de dependência não pega este: ele cobre
+          # o que a bancada IMPORTA, e xdist é opção de linha de comando.
+          # Por isso existe `test_o_ci_paralelo_tem_o_pacote`, que amarra os dois.
+          pip install pytest pyflakes esprima dukpy pytest-xdist
 
       # A regra que nasceu do deploy 8d597a6 (NameError no boot, 21/08):
       # nome indefinido não aparece no py_compile, só no pyflakes.
@@ -50,11 +56,24 @@ jobs:
         run: |
           python -m pyflakes backend/*.py | grep "undefined name" && exit 1 || true
 
+      # 🚨 14/09/2026 — A BANCADA RODAVA EM UM NÚCLEO SÓ.
+      # Medido na máquina do Pedro (12 núcleos): 3.710 testes em **22–28 min**
+      # sequencial contra **7 min 8 s** com `-n auto`, e os 3.710 passando nos
+      # dois. O tempo tinha triplicado ao longo do dia e a pergunta dele foi
+      # direta: "era tão mais rápido antes". Era — e a causa não era o número de
+      # testes (cresceu 1,5% no dia), era usar um núcleo de doze.
+      # 🔑 Por que isso importa MAIS que o relógio: bancada cara é bancada que a
+      # gente passa a pular, e foi ela que pegou hoje o defeito dos eventos de
+      # telemetria chegando sem número. Guarda que dói vira guarda ignorado.
+      # 🪤 `-n auto` não reordena o que cada teste faz, mas distribui em
+      # processos: teste que dependa de estado global de outro quebra aqui. Os
+      # 3.710 passaram na máquina local; se algum for Unix-only e sensível a
+      # isso, é no CI que aparece — e é pra isso que a anotação de falha existe.
       - name: pytest
         working-directory: backend
         run: |
           set -o pipefail
-          python -m pytest tests/ -q 2>&1 | tee "$RUNNER_TEMP/pytest.txt"
+          python -m pytest tests/ -q -n auto 2>&1 | tee "$RUNNER_TEMP/pytest.txt"
 
       # 🩸 09/09/2026 — EU NAO CONSEGUIA LER A PROPRIA FALHA.
       # O CI ficou vermelho num commit meu e o log da Action exige LOGIN: a API
