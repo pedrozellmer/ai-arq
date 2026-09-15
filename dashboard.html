@@ -3453,22 +3453,25 @@
       // esperava o processamento inteiro pra descobrir que o DWG era do
       // AutoCAD Architecture — 13 das 29 falhas de DWG eram isso. Agora ele
       // já sai daqui sabendo o que fazer, com o arquivo ainda aberto no CAD.
-      if (data.aviso_aec) mostrarAvisoAec(data.aviso_aec);
+      // 🎯 15/09: o 3º argumento é o TIPO do aviso — é por ele que a exibição
+      // vira evento. O guarda confere que cada chave da resposta chega aqui
+      // com o tipo de mesmo nome.
+      if (data.aviso_aec) mostrarAvisoAec(data.aviso_aec, null, 'aec');
       // Arquivos com cara de estrutural em modo arquitetura (01/08): só 3 de
       // 107 projetos acharam o modo Estrutura no dropdown — o aviso ensina.
-      if (data.aviso_estrutural) mostrarAvisoAec(data.aviso_estrutural, 'indigo');
+      if (data.aviso_estrutural) mostrarAvisoAec(data.aviso_estrutural, 'indigo', 'estrutural');
       // Mesmo caderno reenviado (01/09, caso cliente-42): ele recebeu uma
       // planilha com 25 de 25 linhas de metro em branco e remandou as mesmas
       // pranchas 11 minutos depois, achando que o problema era o arquivo dele.
       // O aviso não bloqueia — diz o que realmente muda o resultado.
-      if (data.aviso_repetido) mostrarAvisoAec(data.aviso_repetido, 'reenvio');
+      if (data.aviso_repetido) mostrarAvisoAec(data.aviso_repetido, 'reenvio', 'repetido');
       // 🩸 03/09 — o backend passou a devolver `aviso_area` quando a metragem
       // digitada é implausível (cliente-45 digitou 880.000 m², 269× a maior área
       // real já informada), e NENHUMA tela lia a chave. Eu tinha trocado
       // "zerar calado" por "avisar" e o aviso morria no JSON — a mesma falha
       // silenciosa, um degrau adiante. É aqui, na tela do envio, que ele ainda
       // dá pra corrigir.
-      if (data.aviso_area) mostrarAvisoAec(data.aviso_area, 'indigo');
+      if (data.aviso_area) mostrarAvisoAec(data.aviso_area, 'indigo', 'area');
 
       processingStep.textContent = 'Analisando pranchas...';
       // Não setar barra manualmente aqui — startPolling() cuida da progressão
@@ -3486,7 +3489,7 @@
   // ══════════════════════════════════════════════
   // AVISO DE ARQUIVO AEC/MEP — mostrado no envio, não depois do erro
   // ══════════════════════════════════════════════
-  function mostrarAvisoAec(av, cor) {
+  function mostrarAvisoAec(av, cor, tipo) {
     const box = document.getElementById('aviso-aec');
     if (!box) return;
     // cor: 'indigo' pro aviso estrutural (informativo), default âmbar (AEC).
@@ -3529,6 +3532,23 @@
         <div class="[&_li]:ml-4 [&_li]:list-decimal [&_li]:mb-1">${corpo}</div>
       </div>`;
     box.classList.remove('hidden');
+    // 🎯 15/09/2026 — ESTES QUATRO AVISOS NÃO DEIXAVAM RASTRO NENHUM.
+    // O estudo do tipo trocado mediu 0 de 5 trocas de tipo depois de aviso não
+    // bloqueante, e não havia como saber se o cliente sequer VIU o aviso.
+    // Conta a EXIBIÇÃO — só depois de achar a caixa e desenhar: aviso que não
+    // foi desenhado não pode entrar no denominador.
+    // 🪤 Um `trackEvent` por tipo, com o nome ESCRITO por extenso: nome montado
+    // com `+` fica invisível pro `test_track_allowlist`, e o /api/track
+    // descartaria calado. (Não confundir com o `aviso_dwg_aec`, que dispara ao
+    // ESCOLHER o arquivo, antes do envio.)
+    try {
+      if (window.trackEvent) {
+        if (tipo === 'estrutural') trackEvent('aviso-envio:estrutural', { job_id: currentJobId || '', tela: 'envio' });
+        else if (tipo === 'aec') trackEvent('aviso-envio:aec', { job_id: currentJobId || '', tela: 'envio' });
+        else if (tipo === 'repetido') trackEvent('aviso-envio:repetido', { job_id: currentJobId || '', tela: 'envio' });
+        else if (tipo === 'area') trackEvent('aviso-envio:area', { job_id: currentJobId || '', tela: 'envio' });
+      }
+    } catch (_) {}
   }
 
   // Habilita/desabilita o botão conforme o checkbox de termos

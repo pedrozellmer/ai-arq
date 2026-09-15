@@ -26218,6 +26218,19 @@ _TRACK_ALLOWED = {
     # inteiro. É o QUARTO ponto cego dele (raiz-só, `?.(`, e agora o alfabeto).
     "convite-area:exibido", "convite-area:submit-ok", "convite-area:submit-erro",
     "convite-area:submit-invalido", "convite-area:render-falhou",
+    # 🎯 15/09/2026 — OS AVISOS DO TIPO DE PROJETO NUNCA TIVERAM EVENTO.
+    # O estudo do tipo trocado mediu 0 de 5 trocas de tipo depois de aviso não
+    # bloqueante — e sem evento não dava pra separar "ninguém agiu" de
+    # "ninguém viu". Estes contam a EXIBIÇÃO (o denominador), não a leitura.
+    #   · aviso-envio:* — os 4 avisos que a resposta do envio desenha
+    #     (`mostrarAvisoAec`, dashboard). 🪤 NÃO confundir com `aviso_dwg_aec`
+    #     lá em cima: aquele dispara ao ESCOLHER o arquivo, antes de enviar.
+    #   · aviso-topo:* — os 2 avisos do topo do projeto que falam do TIPO
+    #     (`renderWarnings`, projeto.html), uma vez por carga da página.
+    # 🧪 test_o_aviso_do_tipo_deixa_rastro roda as duas telas e manda cada
+    # evento que elas disparam por esta rota de verdade.
+    "aviso-envio:estrutural", "aviso-envio:aec", "aviso-envio:repetido", "aviso-envio:area",
+    "aviso-topo:parece-arquitetura", "aviso-topo:estrutura-sem-medida",
 }
 _TRACK_CLIQUE_RX = _re.compile(r"^clique:[a-z0-9][a-z0-9-]{0,39}$")
 

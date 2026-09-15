@@ -1984,6 +1984,10 @@ function mostrarVista(nome) {
   document.querySelectorAll('.vista').forEach(function (v) {
     v.hidden = (v.getAttribute('data-vista') !== nome);
   });
+  // 🎯 15/09: o aviso do topo mora na Visão geral. Se ele foi desenhado com ela
+  // escondida (chegou por #quantitativo), conta agora que ela apareceu — uma
+  // vez por carga. Ver `_contarAvisoDoTopo`.
+  if (nome === 'visao') { try { _contarAvisoDoTopo(); } catch (_) {} }
   // 🪤 CORRIGIR A URL JUNTO. Quando a rede acima troca o nome (hash antigo,
   // favorito velho, ou o "#main" do "Pular pro conteúdo"), a tela ia pra Visão
   // geral mas o endereço continuava com o hash errado — e o menu, que se
@@ -3032,6 +3036,46 @@ function renderWarnings(warnings) {
     const txt = (pos ? w.slice(1) : String(w).replace(/^\s*⚠\s*/, '')).trim();   // texto antigo já vinha com ⚠ → ficava "⚠ ⚠"
     return `<li class="flex items-start gap-2"><span class="mt-0.5">${pos ? '✅' : '⚠'}</span><span>${esc(txt)}</span></li>`;
   }).join('');
+  // 🎯 15/09/2026 — OS AVISOS DO TIPO DE PROJETO NÃO DEIXAVAM RASTRO.
+  // O estudo do tipo trocado mediu 0 de 5 trocas de tipo depois de aviso não
+  // bloqueante, e não havia como separar "ninguém agiu" de "ninguém viu":
+  // estes dois avisos não tinham evento nenhum. Primeiro o número; mudar o
+  // texto ou travar o envio é decisão que vem depois dele.
+  // 🪤 Conta a EXIBIÇÃO (o aviso desenhado), não a leitura — é o denominador,
+  // como o convite do pé-direito. Uma vez por carga da página.
+  // 🪤 Lê o COMEÇO da frase que o motor escreve (main.py: `_warn_tipo` e os
+  // dois ramos de `_aviso_estrut`). Se o texto do motor mudar sozinho, o
+  // guarda `test_o_aviso_do_tipo_deixa_rastro` reprova.
+  try {
+    const _inicio = warnings.map(w => String(w == null ? '' : w).replace(/^[^A-Za-z]{0,4}/, ''));
+    renderWarnings._pendentes = [];
+    if (_inicio.some(t => t.startsWith('Este arquivo parece ser de ARQUITETURA'))) renderWarnings._pendentes.push('parece-arquitetura');
+    if (_inicio.some(t => t.startsWith('ESTRUTURA:'))) renderWarnings._pendentes.push('estrutura-sem-medida');
+    _contarAvisoDoTopo();
+  } catch (_) {}
+}
+
+// 🩸 15/09/2026 (revisão, antes de subir) — O AVISO CONTAVA ESCONDIDO.
+// O #proj-warnings mora dentro da vista "Visão geral". Quem chega por
+// projeto.html#quantitativo (menu vindo da revisão, botão de e-mail) carrega a
+// página com essa vista ESCONDIDA — e a primeira versão disparava o evento
+// assim mesmo, pondo no denominador um aviso que ninguém teve na tela.
+// 🔑 Guarda o que achou e só conta com a Visão geral à vista: na hora, ou
+// quando o `mostrarVista('visao')` a abrir depois. Uma vez por carga.
+// 🪤 Acha a vista pelo mesmo caminho do `mostrarVista` (`.vista` +
+// `data-vista`), não por seletor composto.
+function _contarAvisoDoTopo() {
+  try {
+    const pend = renderWarnings._pendentes || [];
+    if (!pend.length || renderWarnings._contado || !window.trackEvent) return;
+    const vistas = document.querySelectorAll('.vista');
+    for (let i = 0; i < vistas.length; i++) {
+      if (vistas[i].getAttribute('data-vista') === 'visao' && vistas[i].hidden) return;
+    }
+    renderWarnings._contado = true;
+    if (pend.indexOf('parece-arquitetura') !== -1) trackEvent('aviso-topo:parece-arquitetura', { job_id: jobId, tela: 'projeto' });
+    if (pend.indexOf('estrutura-sem-medida') !== -1) trackEvent('aviso-topo:estrutura-sem-medida', { job_id: jobId, tela: 'projeto' });
+  } catch (_) {}
 }
 
 // Área inteligente — o cliente informa a metragem pra completar piso/forro/laje
