@@ -7379,7 +7379,9 @@ def _derive_estrutura_pe_direito(items, pe_direito: float) -> int:
     'estimado' com procedência explícita, nunca 'confirmado'.
     """
     from models import Confidence   # 🪤 faltava: o selo "estimado" era pulado calado pelo except
+    _derive_estrutura_pe_direito.ultimo_motivo = ""
     if not items or not pe_direito or pe_direito <= 0:
+        _derive_estrutura_pe_direito.ultimo_motivo = "sem pé-direito informado"
         return 0
     h = float(pe_direito)
 
@@ -7405,6 +7407,7 @@ def _derive_estrutura_pe_direito(items, pe_direito: float) -> int:
         except Exception:
             continue
     if not secoes:
+        _derive_estrutura_pe_direito.ultimo_motivo = "nenhum pilar em un com seção 'AxB cm'"
         return 0
 
     vol_m3 = round(sum(a * h * n for a, _, n in secoes), 2)
@@ -7447,6 +7450,28 @@ def _derive_estrutura_pe_direito(items, pe_direito: float) -> int:
                 tocados += 1
         except Exception:
             continue
+    # 🩸 14/09/2026 — ESTA FUNÇÃO NUNCA PRODUZIU NADA: `motor:pd-estrutura` tem
+    # ZERO registros em toda a base, e não havia como saber por quê — o log de
+    # `motor:pe-direito` conta os derivados da PINTURA e as áreas anotadas, e
+    # cala sobre a estrutura. A lição de 03/08 ("trava que recusa em silêncio é
+    # indistinguível de trava que não existe") foi aplicada à pintura e não aqui.
+    #
+    # 📏 Medido antes de escrever isto, e o funil explica o zero:
+    #   31 projetos com pilar contado em `un` (507 pilares)
+    #   17 deles com a seção "AxB cm" na descrição
+    #    5 com pé-direito informado
+    #    1 com um item-ALVO (pilar + concreto em m³, ou pilar + fôrma em m²)
+    # O alvo é o gargalo, não a conta. 🚫 E não dá pra simplesmente criar a
+    # linha: o item de pilar em `un` JÁ é o mesmo pilar — linha nova viraria
+    # dupla contagem no orçamento. Nem dá pra anotar no item de pilar em vez do
+    # alvo sem antes mexer em `_derivacao_vai_repor`, que APOSTA nesta função
+    # pra decidir se preserva uma linha (24/08: a aposta errada zerou 540 m²).
+    # Por isso aqui só entra o MOTIVO. A decisão vem depois do número.
+    if not tocados:
+        _derive_estrutura_pe_direito.ultimo_motivo = (
+            "sem item-alvo (pilar+concreto em m³ ou pilar+fôrma em m²) — "
+            "%d seção(ões), %d pilares, teria dado %g m³ e %g m²"
+            % (len(secoes), n_pilares, vol_m3, forma_m2))
     return tocados
 
 
@@ -13920,6 +13945,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
             if _pd_inf:
                 _n_pd = _derive_pintura_pe_direito(all_items, _pd_inf,
                                                    float(getattr(project_data, "total_area", 0) or 0))
+                _n_est = 0
                 try:
                     _n_est = _derive_estrutura_pe_direito(all_items, _pd_inf)
                     if _n_est:
@@ -13941,9 +13967,16 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 # é indistinguível de trava que não existe — e foi assim que a
                 # feature passou 33 dias com 0 derivados sem ninguém saber se
                 # era falta de uso ou defeito.
+                # 🩸 14/09: a ESTRUTURA entra aqui. `motor:pd-estrutura` tem
+                # ZERO registros em toda a base porque só grava quando DERIVA —
+                # a recusa era muda, o mesmo defeito que esta linha conserta
+                # pra pintura desde 03/08. Sem o motivo não dá pra separar
+                # "ninguém informou o pé-direito" de "não achou o item-alvo".
                 _log_error("motor:pe-direito",
                            f"informado={_pd_inf} derivados={_n_pd} areas_anotadas={_n_ap} "
-                           f"motivo={getattr(_derive_pintura_pe_direito, 'ultimo_motivo', '')!r}",
+                           f"motivo={getattr(_derive_pintura_pe_direito, 'ultimo_motivo', '')!r} "
+                           f"| estrutura: tocados={_n_est} "
+                           f"motivo={getattr(_derive_estrutura_pe_direito, 'ultimo_motivo', '')!r}",
                            job_id)
         except Exception as _epd:
             print(f"[pe-direito] job={job_id}: derivação falhou: {_epd}")
