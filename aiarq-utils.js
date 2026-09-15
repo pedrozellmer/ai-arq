@@ -111,6 +111,17 @@
       // src = origem first-touch (de onde o visitante chegou) — pra atribuir o funil
       let _src = '';
       try { var _s0 = JSON.parse(localStorage.getItem('aiarq_src') || 'null'); _src = (_s0 && _s0.label) ? String(_s0.label).slice(0, 40) : ''; } catch (e) {}
+      // 🩸 15/09/2026 — ult = ÚLTIMO empurrão explícito, ao lado do first-touch.
+      // O `src` acima é first-touch e NUNCA se sobrescreve (é o que o funil
+      // precisa). Só que quem recebe e-mail transacional já tem conta, logo já
+      // tem o carimbo gravado: marcar o link do e-mail sem isto aqui não
+      // apareceria em lugar nenhum — o `src` seguiria dizendo "google" pra
+      // sempre, e a conversão do e-mail continuaria invisível. Foi assim que
+      // 537 envios ficaram sem uma única atribuição.
+      // 🔑 AO LADO, não no lugar: trocar o padrão do funil pra consertar o
+      // alcance é erro que esta casa já cometeu.
+      let _ult = '';
+      try { var _u0 = JSON.parse(localStorage.getItem('aiarq_ult') || 'null'); _ult = (_u0 && _u0.label) ? String(_u0.label).slice(0, 40) : ''; } catch (e) {}
       // 🚨 28/08/2026 — ESTA LINHA MATAVA A TELEMETRIA NO BLOG, EM SILÊNCIO.
       // Era `_sbClient.auth.getSession()` direto. Em página estática (o blog)
       // o `_sbClient` NÃO existe — o guarda lá em cima retorna antes de criar
@@ -144,7 +155,8 @@
           user_email: u ? (u.email || '') : '',
           job_id: (meta && meta.job_id) ? String(meta.job_id) : '',
           path: (location.pathname || '').slice(0, 200),
-          meta: Object.assign({ cid: _cid, src: _src }, meta || {}),
+          meta: Object.assign({ cid: _cid, src: _src },
+                              _ult ? { ult: _ult } : {}, meta || {}),
         });
         // 🚨 Manda o token quando há sessão (09/08). O backend passou a IGNORAR
         // user_id/user_email do corpo e só aceitar identidade que o token prove
@@ -267,6 +279,27 @@
         label: String(label).slice(0, 40),
         utm_source: utm_source, utm_medium: utm_medium, utm_campaign: utm_campaign,
         ref: refHost.slice(0, 80), landing: (location.pathname || '').slice(0, 80),
+      }));
+    } catch (e) { /* nunca quebra nada */ }
+  })();
+  // ─── ÚLTIMO EMPURRÃO EXPLÍCITO (15/09/2026) ──────────────────────────────
+  // 🔑 Este SOBRESCREVE de propósito — é o contrário do de cima, e os dois
+  // convivem: o first-touch responde "de onde essa pessoa veio da primeira
+  // vez", este responde "o que a trouxe HOJE".
+  // 🪤 Só grava quando o marcador é EXPLÍCITO (`utm_source`/`origem` na URL).
+  // Nunca do `document.referrer`: navegação interna sobrescreveria o carimbo a
+  // cada clique, e um dado que muda sozinho a cada página não atribui nada.
+  // 🪤 E não apaga o que já estava: sem marcador novo, o último vale — é o que
+  // permite ver a visita do e-mail que só vira projeto três dias depois.
+  (function _capturaUltimoEmpurrao() {
+    try {
+      var p = new URLSearchParams(location.search || '');
+      var fonte = (p.get('utm_source') || p.get('origem') || '').slice(0, 24);
+      if (!fonte) return;
+      var camp = (p.get('utm_campaign') || p.get('campanha') || '').slice(0, 30);
+      localStorage.setItem('aiarq_ult', JSON.stringify({
+        label: (camp ? (fonte + ':' + camp) : fonte).slice(0, 40),
+        em: new Date().toISOString().slice(0, 10),
       }));
     } catch (e) { /* nunca quebra nada */ }
   })();

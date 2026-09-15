@@ -595,6 +595,10 @@ _STAGES_DIAGNOSTICO = frozenset({
     # a linha mais frequente do registro. Diagnóstico, nunca erro.
     # 🪤 `cobranca:excecao` fica DE FORA: falha aberta é warning de verdade.
     "cobranca:trava",
+    # 15/09: uma linha por planilha que SAI de verdade pelo servidor. É o
+    # denominador honesto da entrega — o clique do navegador tem dois nomes,
+    # perde a tela de revisão e só existe direito desde 06/09. Diagnóstico.
+    "entrega:download",
     # 06/09: o e-mail do caso do meio (leu, identificou, não mediu). Diagnóstico
     # do que o cliente LEU, não erro do motor.
     "motor:leu-sem-medir",
@@ -3272,6 +3276,82 @@ def _email_suprimido(email: str):
     return _suprimidos().get(e)
 
 
+_NOSSOS_HOSTS = ("ai.arq.br", "www.ai.arq.br", "aiarq.com.br", "www.aiarq.com.br")
+
+
+def _marcar_url_do_email(url: str, kind: str) -> str:
+    """Acrescenta `utm_source=email&utm_campaign=<kind>` num link NOSSO.
+
+    🩸 15/09/2026 — 537 e-mails saíram e NADA media o que acontece depois: zero
+    marcador, zero evento, zero atribuição. O e-mail de calibração pede revisão
+    há 57 dias e não produziu uma; a esteira de resgate tem 0 conversões em 64
+    pessoas. Sem marcador não dá pra saber se o problema é o texto, o assunto,
+    ou se o e-mail simplesmente não chega — e "não sei" vira "não funciona".
+
+    🔑 O LINK MÁGICO É O CASO QUE DECIDE. O CTA dos e-mails de resgate aponta
+    pro host do GoTrue (`.../auth/v1/verify?...&redirect_to=https://ai.arq.br/...`),
+    não pro nosso: marcar só o host de fora deixaria de fora justamente os
+    e-mails de 0%. Por isso, quando a URL não é nossa mas carrega um
+    `redirect_to` que é, o marcador entra no endereço DE DENTRO.
+
+    🪤 Nunca toca em `mailto:`, `tel:` nem em host de terceiro (o link do
+    WhatsApp é `wa.me`). E entra ANTES do `#fragmento` — o GoTrue devolve o
+    token no fragmento, e parâmetro colado depois dele não é parâmetro.
+    """
+    from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode, quote, unquote
+    if not url or not kind:
+        return url
+    baixo = url.strip().lower()
+    if baixo.startswith(("mailto:", "tel:", "#")):
+        return url
+    try:
+        p = urlsplit(url)
+    except Exception:
+        return url
+    if p.scheme not in ("http", "https"):
+        return url
+    host = (p.hostname or "").lower()
+    if host in _NOSSOS_HOSTS:
+        q = parse_qsl(p.query, keep_blank_values=True)
+        if any(c == "utm_source" for c, _ in q):
+            return url                     # já marcado: não marca duas vezes
+        q += [("utm_source", "email"), ("utm_campaign", str(kind)[:60])]
+        return urlunsplit((p.scheme, p.netloc, p.path, urlencode(q), p.fragment))
+    # host de terceiro: só mexe se ele estiver LEVANDO alguém pra casa
+    q = parse_qsl(p.query, keep_blank_values=True)
+    mudou = False
+    for i, (chave, valor) in enumerate(q):
+        if chave != "redirect_to" or not valor:
+            continue
+        dentro = unquote(valor)
+        marcado = _marcar_url_do_email(dentro, kind)
+        if marcado != dentro:
+            q[i] = (chave, marcado)
+            mudou = True
+    if not mudou:
+        return url
+    return urlunsplit((p.scheme, p.netloc, p.path,
+                       urlencode(q, quote_via=quote), p.fragment))
+
+
+def _marcar_links_do_email(html: str, kind: str) -> str:
+    """Passa `_marcar_url_do_email` em todo `href="…"` do corpo do e-mail.
+
+    🔑 Aqui, e não no `_email_wrap`: o wrap teria que receber o tipo do e-mail
+    de CADA um dos 18 chamadores, e bastaria eu esquecer um pra ele ficar cego
+    pra sempre, em silêncio. `_send_email_smtp` é a porta por onde TODO e-mail
+    sai, e ela já recebe o `log_kind` — porque é o que grava na ficha de envio.
+    Tipo de e-mail novo entra marcado sem ninguém lembrar de nada.
+    """
+    if not html or not kind:
+        return html
+    import re as _re_mk
+
+    def _troca(m):
+        return 'href="%s"' % _marcar_url_do_email(m.group(1), kind)
+    return _re_mk.sub(r'href="([^"]*)"', _troca, html)
+
+
 def _send_email_smtp(to_email: str, subject: str, html_body: str, text_body: str = "", log_kind: str = "email") -> bool:
     # 🚫 Supressão vem ANTES de tudo — e só pra endereço de fora (interno nunca é calado:
     # alerta pro Pedro não pode morrer por um endereço posto na lista por engano).
@@ -3315,7 +3395,12 @@ def _send_email_smtp(to_email: str, subject: str, html_body: str, text_body: str
         msg["Reply-To"] = from_email
         if text_body:
             msg.attach(MIMEText(text_body, "plain", "utf-8"))
-        msg.attach(MIMEText(html_body, "html", "utf-8"))
+        # 🔑 15/09/2026 — a marcação mora AQUI, na porta única por onde todo
+        # e-mail sai, e usa o `log_kind` que esta função já recebe pra gravar a
+        # ficha de envio. Marcar no `_email_wrap` obrigaria os 18 chamadores a
+        # passar o tipo, e o que eu esquecesse ficaria cego pra sempre, calado.
+        msg.attach(MIMEText(_marcar_links_do_email(html_body, log_kind),
+                            "html", "utf-8"))
         with smtplib.SMTP(host, port, timeout=20) as server:
             server.ehlo()
             server.starttls()
@@ -16822,6 +16907,34 @@ async def download_file(job_id: str, request: Request):
         if not output_path:
             raise HTTPException(404, "Planilha não encontrada (nem em cache nem no Storage)")
 
+    # 🩸 15/09/2026 — O ARQUIVO SAÍA E NINGUÉM ANOTAVA. "Quantos clientes
+    # levaram a planilha embora?" só tinha resposta pelo CLIQUE do navegador, e
+    # o clique mente de três jeitos: tem DOIS nomes de evento e o painel conta
+    # um só; o download pela tela de revisão não conta em lugar nenhum; e o
+    # caminho principal — quem espera o processamento e baixa na hora — só
+    # passou a registrar em 06/09, o que enviesa toda série anterior.
+    #
+    # 🔑 Aqui é o único ponto por onde o arquivo REALMENTE passa. Um registro
+    # no servidor não depende de cookie, de bloqueador, nem de eu lembrar de
+    # instrumentar o terceiro botão.
+    #
+    # 🪤 `await run_in_threadpool`: esta rota é `async` e `_log_error` faz
+    # urllib bloqueante. Chamada direta, ela congelaria o laço de eventos a
+    # cada download — a mesma doença que a trava de cobrança tinha e que foi
+    # consertada hoje (dc3b47b). (O `_log_error` do caminho de regeneração, 20
+    # linhas acima, é síncrono e fica: roda só quando a retenção já apagou o
+    # arquivo, é raro, e mexer nele agora é escopo de outro conserto.)
+    try:
+        _tam = os.path.getsize(output_path)
+    except Exception:
+        _tam = -1
+    try:
+        await run_in_threadpool(
+            _log_error, "entrega:download",
+            f"planilha entregue ({_tam} bytes)", job_id, "info")
+    except Exception:
+        pass    # entrega nunca falha por causa do registro dela
+
     return FileResponse(
         output_path,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -26230,6 +26343,18 @@ async def track_event(payload: TrackPayload, request: Request):
             _meta["src"] = _src
         if _campo:
             _meta["campo"] = _campo
+        # 🚨 15/09/2026 — `ult`: o ÚLTIMO empurrão explícito ("email:calibracao"),
+        # ao lado do `src` de first-touch. Sem esta linha o marcador que o
+        # e-mail passou a carregar chegaria aqui e seria DESCARTADO CALADO —
+        # exatamente o que aconteceu com `campo` em 27/08 e com `chars`/`n`/
+        # `restam` ontem. O par (link marcado ↔ chave liberada) é invisível:
+        # as duas metades moram em arquivos diferentes e nada as liga.
+        # 🔒 Saneado ao mesmo alfabeto do `campo`: é rótulo NOSSO (fonte e
+        # campanha que a gente mesmo escreve no link), nunca texto de cliente.
+        _ult = _re_track.sub(r"[^a-z0-9_:-]", "",
+                             str(payload.meta.get("ult") or "").lower())[:40]
+        if _ult:
+            _meta["ult"] = _ult
         # 🚨 27/08/2026 — SETE MÉTRICAS DA TELA DE REVISÃO ERAM DESCARTADAS
         # AQUI, e o guarda novo (`test_track_meta_allowlist`) achou junto com o
         # `campo`. O `revisao.html` manda desde sempre:
