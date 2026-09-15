@@ -165,7 +165,31 @@ jobs:
           # bancada passar de 3733. Continua pegando qualquer queda maior que
           # 12,5% — que é o que o piso existe pra pegar (colheita quebrada,
           # arquivo que parou de ser coletado), não flutuação de rotina.
-          PISO: 2800
+          #
+          # 14/09/2026, OITAVA vez: 2800 -> 3400. A bancada colhe 3742 (os 26
+          # guardas da caixa registradora), e a previsão de 08/09 acertou o dia
+          # — "volta a cobrar quando passar de 3733". Passou por 9.
+          #
+          # 🩸 O QUE EU APRENDI NA OITAVA: este guarda NÃO dispara por defeito.
+          # Ele dispara por CRESCIMENTO — toda vez que a bancada engorda ~8%, a
+          # razão piso/colhido cai abaixo de 75% e o CI fica vermelho por eu ter
+          # escrito testes a mais. Alarme que toca quando o time acerta é alarme
+          # que se aprende a desligar.
+          #
+          # 🪤 E o buraco que o piso nasceu pra tapar (23/08: colheu 6 de 70 e
+          # abortou) já tem instrumento PRECISO desde então —
+          # `test_todo_arquivo_de_teste_realmente_EXECUTA` acusa arquivo que
+          # sumiu da colheita pelo NOME, não por contagem. O piso virou rede de
+          # segurança grossa de um buraco que já tem rede fina.
+          #
+          # 🔑 3400 é 90,9% dos 3742, aguenta até 4533 (~600 testes, o dobro da
+          # folga anterior) e ainda deixa remover 342 testes numa limpeza
+          # legítima sem pintar o CI de vermelho. Não subi pro máximo (3742)
+          # porque piso colado na realidade quebra na primeira remoção honesta.
+          # ⏭️ Se cobrar uma NONA vez, a conversa não é o número: é se a banda
+          # de 75% ainda é a régua certa. Decisão do Pedro, não minha, e não
+          # no meio de um push meu.
+          PISO: 3400
         run: |
           N=$(python -m pytest tests/ -q --collect-only 2>/dev/null | tail -1 | grep -oE '^[0-9]+' || echo 0)
           echo "testes colhidos: $N (piso: $PISO)"

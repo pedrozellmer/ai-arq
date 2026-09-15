@@ -25,8 +25,10 @@ import sys
 
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _BACKEND)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import main  # noqa: E402
+from _corpo import so_o_que_roda  # noqa: E402
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -118,6 +120,11 @@ def test_excecao_na_leitura_tambem_LIBERA(monkeypatch):
     def _explode(*a, **k):
         raise RuntimeError("rede caiu")
     monkeypatch.setattr(main, "_supa_rest_service", _explode)
+    # 🪤 14/09: desde que este caminho passou a AVISAR, o teste que não
+    # silencia `_log_error` manda uma linha pro error_log de PRODUÇÃO a cada
+    # execução da bancada. Hoje não vaza só porque a máquina de teste não tem
+    # credencial do Supabase e a gravação falha calada — sorte, não desenho.
+    monkeypatch.setattr(main, "_log_error", lambda *a, **k: None)
     liberado, motivo = main._entregavel_liberado("aaa111")
     assert liberado is True and motivo == "excecao"
 
@@ -145,6 +152,15 @@ _NAO_SAO_ENTREGAVEL = {
                                     "o cliente querer o cronograma; trancar seria "
                                     "esconder a vitrine",
 }
+
+
+# 🩸 14/09/2026 — a trava passou a ter DOIS invólucros (o síncrono e o
+# `_async`, que roda a mesma decisão fora do laço de eventos). O guarda de
+# cobertura procurava o literal `_require_entregavel_pago(` e, com o `_async`,
+# `pago` passa a ser seguido de `_` em vez de `(`: as 8 rotas async teriam
+# saído da varredura CALADAS — o guarda continuaria verde acusando ninguém.
+# Ancorar no FATO ("passa pela caixa"), não na forma de uma das chamadas.
+_CHAMA_A_CAIXA = re.compile(r"_require_entregavel_pago(?:_async)?\(")
 
 
 def _rotas_que_entregam_arquivo(src):
@@ -182,7 +198,7 @@ def test_toda_rota_de_entregavel_passa_pela_caixa():
         "a varredura achou só %d rotas de entregável — o padrão de busca "
         "parou de enxergar o código" % len(rotas))
     sem_trava = [n for n, corpo in rotas
-                 if "_require_entregavel_pago(" not in corpo
+                 if not _CHAMA_A_CAIXA.search(corpo)
                  and n not in _NAO_SAO_ENTREGAVEL]
     assert not sem_trava, (
         "estas rotas entregam arquivo do cliente sem passar pela caixa "
@@ -201,7 +217,7 @@ def test_CONTROLE_a_varredura_ACHA_uma_rota_sem_trava():
         '@app.get("/outra")\n')
     achadas = _rotas_que_entregam_arquivo(falso)
     assert [n for n, _ in achadas] == ["exporta_coisa"], achadas
-    assert "_require_entregavel_pago(" not in achadas[0][1], (
+    assert not _CHAMA_A_CAIXA.search(achadas[0][1]), (
         "a peneira parou de distinguir rota travada de rota aberta")
 
 
@@ -215,21 +231,46 @@ def test_CONTROLE_a_varredura_APROVA_uma_rota_travada():
         '    return FileResponse(caminho, media_type="x")\n'
         '@app.get("/outra")\n')
     achadas = _rotas_que_entregam_arquivo(ok)
-    assert "_require_entregavel_pago(" in achadas[0][1]
+    assert _CHAMA_A_CAIXA.search(achadas[0][1])
+
+
+def test_CONTROLE_a_peneira_ENXERGA_a_forma_async():
+    """🩸 O controle que faltava. Quando a trava ganhou o invólucro `_async`, a
+    peneira antiga (`"_require_entregavel_pago(" in corpo`) parava de casar —
+    porque em `..._pago_async(` o que vem depois de `pago` é `_`, não `(`. As 8
+    rotas async sairiam da cobertura sem uma linha vermelha."""
+    ok_async = (
+        '@app.get("/api/coisa/{job_id}/export/xlsx")\n'
+        'async def exporta_coisa(job_id: str, request: Request):\n'
+        '    _require_project_owner(request, job_id)\n'
+        '    await _require_entregavel_pago_async(job_id)\n'
+        '    return FileResponse(caminho, media_type="x")\n'
+        '@app.get("/outra")\n')
+    achadas = _rotas_que_entregam_arquivo(ok_async)
+    assert _CHAMA_A_CAIXA.search(achadas[0][1]), (
+        "a peneira não reconhece a forma async da trava — as rotas async "
+        "sairiam da cobertura caladas")
 
 
 def test_a_trava_vem_DEPOIS_do_guarda_de_dono():
     """🪤 Ordem importa: quem NÃO é dono tem que levar 401/403, não 402. Dizer
     "pague" pra alguém que nem é dono do projeto vaza a existência dele."""
     src = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
+    vistas = 0
     for nome, corpo in _rotas_que_entregam_arquivo(src):
-        if "_require_entregavel_pago(" not in corpo:
+        m = _CHAMA_A_CAIXA.search(corpo)
+        if not m:
             continue
+        vistas += 1
         i_dono = corpo.find("_require_project_owner(")
-        i_pago = corpo.find("_require_entregavel_pago(")
         assert i_dono >= 0, "%s trava pagamento mas não confere dono" % nome
-        assert i_dono < i_pago, (
+        assert i_dono < m.start(), (
             "%s pergunta o pagamento ANTES de saber se é o dono" % nome)
+    # 🪤 Sem esta linha o guarda vira verde-por-vazio: bastaria a peneira parar
+    # de casar a chamada pra ele aprovar zero rota e não dizer nada.
+    assert vistas >= 8, (
+        "o guarda da ORDEM olhou só %d rotas — a peneira deixou de enxergar "
+        "as chamadas da caixa" % vistas)
 
 
 def test_a_trava_devolve_402_e_nao_403(monkeypatch):
@@ -244,3 +285,168 @@ def test_a_trava_devolve_402_e_nao_403(monkeypatch):
         assert e.status_code == 402, e.status_code
         return
     raise AssertionError("a trava não levantou nada com projeto não pago")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  (5) A trava não pode CONGELAR O SERVIDOR — 14/09/2026
+# ─────────────────────────────────────────────────────────────────────────────
+
+def test_rota_async_nao_trava_o_laco():
+    """🩸 `_entregavel_liberado` lê o Supabase com `urllib` (timeout 15 s).
+    Chamada de dentro de um `async def`, essa leitura roda NO LAÇO DE EVENTOS:
+    enquanto não volta, o servidor (`--workers 1`) não atende mais ninguém —
+    nem quem está baixando, nem quem está subindo arquivo.
+
+    🪤 Hoje isso NÃO acontece, e é justamente o que torna o defeito traiçoeiro:
+    `_cobranca_ligada()` devolve False e a função sai na primeira linha, sem
+    tocar na rede. O congelamento nasce no INSTANTE em que o Pedro ligar a
+    cobrança — com a bancada verde e nenhum aviso.
+    """
+    src = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
+    culpadas = []
+    for nome, corpo in _rotas_que_entregam_arquivo(src):
+        if not corpo.lstrip().startswith("async def"):
+            continue
+        if not _CHAMA_A_CAIXA.search(corpo):
+            continue
+        if not re.search(r"await\s+_require_entregavel_pago_async\(", corpo):
+            culpadas.append(nome)
+    assert not culpadas, (
+        "estas rotas são `async` e chamam a trava SÍNCRONA — a leitura do "
+        "pagamento vai rodar no laço de eventos e congelar o servidor inteiro "
+        "quando a cobrança ligar: %s. Use "
+        "`await _require_entregavel_pago_async(job_id)`." % culpadas)
+
+
+def test_CONTROLE_o_guarda_do_laco_ACUSA_uma_rota_async_sincrona():
+    """O guarda acima só vale se souber acusar. Monto a rota errada e exijo
+    que a peneira a encontre — inclusive a armadilha do `_async` SEM `await`,
+    que devolve uma corrotina nunca esperada: a trava sairia DESLIGADA, e em
+    silêncio, que é o pior jeito de uma trava falhar."""
+    for corpo_errado, apelido in (
+        ('async def x(job_id: str, request: Request):\n'
+         '    _require_entregavel_pago(job_id)\n', "forma síncrona"),
+        ('async def x(job_id: str, request: Request):\n'
+         '    _require_entregavel_pago_async(job_id)\n', "sem await"),
+    ):
+        assert _CHAMA_A_CAIXA.search(corpo_errado), apelido
+        assert not re.search(r"await\s+_require_entregavel_pago_async\(",
+                             corpo_errado), (
+            "o guarda do laço aprovaria a rota errada (%s)" % apelido)
+
+
+def test_o_involucro_async_DELEGA_em_vez_de_repetir_a_regra():
+    """🔑 Duas cópias da mesma decisão é a receita repetida que já nos custou
+    caro: o dia em que uma das duas mudar, a outra fica mentindo. O invólucro
+    async não pode ter 402 próprio nem reimplementar os motivos."""
+    # 🪤 `so_o_que_roda` tira docstring E comentário. Sem isso o guarda leria a
+    # minha própria explicação — que cita "402" e o nome da função síncrona — e
+    # aprovaria um invólucro que duplicasse a regra. Terceira vez que caio nisso.
+    corpo = so_o_que_roda("_require_entregavel_pago_async")
+    assert "run_in_threadpool(_require_entregavel_pago," in corpo, (
+        "o invólucro async parou de delegar na trava síncrona: %r" % corpo)
+    assert "402" not in corpo, (
+        "o invólucro async escreveu um 402 próprio — a decisão tem que "
+        "continuar num lugar só: %r" % corpo)
+    assert "cobravel" not in corpo and "pagamento" not in corpo, (
+        "o invólucro async reimplementou os motivos: %r" % corpo)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  (6) A trava deixa RASTRO — 14/09/2026
+# ─────────────────────────────────────────────────────────────────────────────
+
+def test_a_trava_que_FECHA_deixa_rastro(monkeypatch):
+    """🩸 O motivo era calculado na linha de cima e jogado fora. No dia em que
+    a chave virar, "quantas pessoas bateram na trava?" não teria onde ser
+    respondida — nem no banco, nem no log do Render."""
+    rastro = []
+    monkeypatch.setenv("COBRANCA_LIGADA", "1")
+    monkeypatch.setattr(main, "_supa_rest_service",
+                        lambda *a, **k: (200, [{"pagamento": None, "cobravel": True}]))
+    monkeypatch.setattr(main, "_log_error",
+                        lambda stage, msg, *a, **k: rastro.append((stage, msg)))
+    try:
+        main._require_entregavel_pago("aaa111")
+    except main.HTTPException:
+        pass
+    assert [s for s, _ in rastro if s == "cobranca:trava"], rastro
+    assert any("aguardando_pagamento" in m for _, m in rastro), (
+        "o rastro saiu sem o MOTIVO — é o motivo que distingue "
+        "'não pagou' de 'a régua reprovou' quando a trava mudar: %s" % rastro)
+
+
+def test_CONTROLE_a_trava_que_ABRE_nao_polui_o_registro(monkeypatch):
+    """O outro lado: quem passa não pode gerar linha. Sem este controle, o
+    guarda de cima passaria com um log em TODA chamada — e o registro viraria
+    ruído no primeiro dia de cobrança."""
+    rastro = []
+    monkeypatch.setenv("COBRANCA_LIGADA", "1")
+    monkeypatch.setattr(main, "_supa_rest_service",
+                        lambda *a, **k: (200, [{"pagamento": "pago", "cobravel": True}]))
+    monkeypatch.setattr(main, "_log_error",
+                        lambda stage, msg, *a, **k: rastro.append((stage, msg)))
+    main._require_entregavel_pago("aaa111")
+    assert not [s for s, _ in rastro if s == "cobranca:trava"], rastro
+
+
+def test_a_EXCECAO_na_checagem_tambem_avisa(monkeypatch):
+    """🩸 A falha aberta por exceção só fazia `print`, que no Render morre no
+    stdout e some no restart. A IRMÃ dela — a leitura com status >= 400 — grava
+    no error_log desde o primeiro dia. Se o `_supa_rest_service` passar a
+    ESTOURAR em vez de devolver >= 400, a cobrança libera tudo, para sempre,
+    sem uma linha em lugar nenhum."""
+    rastro = []
+
+    def _explode(*a, **k):
+        raise RuntimeError("conexao caiu")
+
+    monkeypatch.setenv("COBRANCA_LIGADA", "1")
+    monkeypatch.setattr(main, "_supa_rest_service", _explode)
+    monkeypatch.setattr(main, "_log_error",
+                        lambda stage, msg, *a, **k: rastro.append((stage, msg)))
+    liberado, motivo = main._entregavel_liberado("aaa111")
+    assert (liberado, motivo) == (True, "excecao"), (liberado, motivo)
+    assert [s for s, _ in rastro if s == "cobranca:excecao"], rastro
+
+
+def test_a_excecao_NAO_e_rebaixada_a_diagnostico():
+    """🪤 `_log_error` rebaixa a `info` todo stage que estiver em
+    `_STAGES_DIAGNOSTICO` — foi assim que `cobranca:regua` ocupou 13 das 40
+    linhas do painel sem ninguém agir. Falha ABERTA é o contrário: tem que
+    aparecer. Já `cobranca:trava` é bookkeeping e PRECISA estar na lista, ou
+    entope o painel no primeiro dia de cobrança."""
+    assert "cobranca:excecao" not in main._STAGES_DIAGNOSTICO
+    assert "cobranca:leitura" not in main._STAGES_DIAGNOSTICO
+    assert "cobranca:trava" in main._STAGES_DIAGNOSTICO
+
+
+def test_o_involucro_async_AINDA_TRANCA(monkeypatch):
+    """🚨 O guarda funcional, e o mais importante dos três. Mover a decisão pra
+    um thread pode engolir a exceção no caminho — e uma trava que para de
+    trancar falha do jeito mais caro que existe: em silêncio, entregando de
+    graça, sem ninguém reclamar. Aqui a trava async é EXECUTADA de verdade,
+    dentro de um laço de eventos, e tem que levantar o mesmo 402."""
+    import asyncio
+    monkeypatch.setenv("COBRANCA_LIGADA", "1")
+    monkeypatch.setattr(main, "_supa_rest_service",
+                        lambda *a, **k: (200, [{"pagamento": None, "cobravel": True}]))
+    monkeypatch.setattr(main, "_log_error", lambda *a, **k: None)
+    try:
+        asyncio.run(main._require_entregavel_pago_async("aaa111"))
+    except main.HTTPException as e:
+        assert e.status_code == 402, e.status_code
+        return
+    raise AssertionError(
+        "a trava async NÃO levantou 402 — o invólucro está entregando de graça")
+
+
+def test_o_involucro_async_LIBERA_quem_pagou(monkeypatch):
+    """CONTROLE do de cima: o guarda só vale se a trava também souber ABRIR.
+    Senão 'sempre levanta 402' passaria — e ninguém baixaria nada."""
+    import asyncio
+    monkeypatch.setenv("COBRANCA_LIGADA", "1")
+    monkeypatch.setattr(main, "_supa_rest_service",
+                        lambda *a, **k: (200, [{"pagamento": "pago", "cobravel": True}]))
+    monkeypatch.setattr(main, "_log_error", lambda *a, **k: None)
+    asyncio.run(main._require_entregavel_pago_async("aaa111"))

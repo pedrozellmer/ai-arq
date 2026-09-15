@@ -590,6 +590,11 @@ _STAGES_DIAGNOSTICO = frozenset({
     # 06/09: a régua de cobrança grava aqui a entrega que NÃO faturaria. Não é
     # erro do motor — é o número que diz quantos projetos a régua está segurando.
     "cobranca:regua",
+    # 14/09: uma linha por entregável BARRADO pela caixa. É o comportamento
+    # esperado da trava, não defeito — e no primeiro mês de cobrança vai ser
+    # a linha mais frequente do registro. Diagnóstico, nunca erro.
+    # 🪤 `cobranca:excecao` fica DE FORA: falha aberta é warning de verdade.
+    "cobranca:trava",
     # 06/09: o e-mail do caso do meio (leu, identificou, não mediu). Diagnóstico
     # do que o cliente LEU, não erro do motor.
     "motor:leu-sem-medir",
@@ -1389,6 +1394,19 @@ def _entregavel_liberado(job_id: str) -> tuple:
             return True, "regua_reprovou"
         return False, "aguardando_pagamento"
     except Exception as _e:
+        # 🩸 14/09/2026: aqui só havia `print`, que no Render morre no stdout e
+        # some no restart. A IRMÃ desta falha — a leitura ruim, 20 linhas acima
+        # — grava no error_log desde o primeiro dia; esta passava batida. Se o
+        # `_supa_rest_service` começar a ESTOURAR em vez de devolver >=400, a
+        # cobrança libera tudo, para sempre, sem uma linha em lugar nenhum.
+        # Fica FORA de `_STAGES_DIAGNOSTICO` de propósito: falha aberta é
+        # warning de verdade, igual a `cobranca:leitura`.
+        try:
+            _log_error("cobranca:excecao",
+                       f"checagem de pagamento estourou — LIBERANDO: "
+                       f"{type(_e).__name__}: {_e}", job_id, severity="warning")
+        except Exception:
+            pass
         print(f"[cobranca] checagem falhou, liberando: {_e}")
         return True, "excecao"
 
@@ -1400,13 +1418,47 @@ def _require_entregavel_pago(job_id: str):
     `test_toda_rota_de_entregavel_passa_pela_caixa` reprova rota nova que
     esqueça — porta esquecida é a trava inteira perdida, e o vazamento seria
     silencioso: ninguém reclama de receber de graça.
+
+    🪤 EM ROTA `async`, CHAME `_require_entregavel_pago_async`. Esta aqui é
+    SÍNCRONA e `_entregavel_liberado` faz `urllib` com timeout de 15 s: no laço
+    de eventos, um soluço do Supabase congela o servidor inteiro (`--workers 1`)
+    — não só quem está baixando. Guarda: `test_rota_async_nao_trava_o_laco`.
     """
     _ok, _motivo = _entregavel_liberado(job_id)
     if not _ok:
+        # 🩸 14/09/2026: o motivo era calculado e JOGADO FORA — a trava fechava
+        # sem deixar um registro em lugar nenhum, nem no banco nem no log do
+        # Render. No dia em que a chave virar, "quantas pessoas bateram na
+        # trava?" não teria onde ser respondida. Uma linha por bloqueio, em
+        # `_STAGES_DIAGNOSTICO` pra não entupir o painel de erros do motor.
+        try:
+            _log_error("cobranca:trava",
+                       f"entregável barrado ({_motivo})", job_id,
+                       severity="info")
+        except Exception:
+            pass
         raise HTTPException(
             status_code=402,
             detail="Este projeto ainda não foi pago. Abra a página do projeto "
                    "para liberar os downloads.")
+
+
+async def _require_entregavel_pago_async(job_id: str):
+    """A MESMA trava, para rotas `async` — sem congelar o laço de eventos.
+
+    🩸 14/09/2026. `_entregavel_liberado` lê o Supabase com `urllib`
+    (`_supa_rest_service`, timeout 15 s). Chamada de dentro de um `async def`,
+    essa leitura roda NO LAÇO: enquanto ela não volta, o servidor não atende
+    mais ninguém. Hoje isso não acontece porque `_cobranca_ligada()` devolve
+    False e a função sai na primeira linha — ou seja, o defeito nasce
+    exatamente no dia em que o Pedro ligar a cobrança, nas 8 rotas `async` que
+    entregam arquivo. É a doença do caso cliente-18.
+
+    🔑 UMA decisão, dois invólucros: o 402, o texto e os 6 motivos continuam
+    morando em `_require_entregavel_pago`. Duplicar a regra aqui seria a
+    receita repetida que já nos custou caro.
+    """
+    await run_in_threadpool(_require_entregavel_pago, job_id)
 
 
 def _require_project_owner(request, job_id: str):
@@ -16697,7 +16749,7 @@ async def respostas_processamento(job_id: str, request: Request):
 @app.get("/api/download/{job_id}")
 async def download_file(job_id: str, request: Request):
     _require_project_owner(request, job_id)
-    _require_entregavel_pago(job_id)
+    await _require_entregavel_pago_async(job_id)
     """Baixa a planilha gerada. Tenta cache local primeiro; se sumiu
     (Render redeploy), busca no Supabase Storage."""
     # Suaviza a checagem de job — se o JSON foi limpo no restart mas o
@@ -21031,7 +21083,7 @@ def _quotes_download_path(job_id: str, ext: str) -> Optional[str]:
 @app.get("/api/projects/{job_id}/quotes/download/xlsx")
 async def download_quotes_xlsx(job_id: str, request: Request):
     _require_project_owner(request, job_id)
-    _require_entregavel_pago(job_id)
+    await _require_entregavel_pago_async(job_id)
     """Baixa o comparativo XLSX gerado (disco → fallback Storage)."""
     path = _quotes_download_path(job_id, "xlsx")
     if not path:
@@ -21049,7 +21101,7 @@ async def download_quotes_xlsx(job_id: str, request: Request):
 @app.get("/api/projects/{job_id}/quotes/download/pptx")
 async def download_quotes_pptx(job_id: str, request: Request):
     _require_project_owner(request, job_id)
-    _require_entregavel_pago(job_id)
+    await _require_entregavel_pago_async(job_id)
     """Baixa o comparativo PPT gerado (disco → fallback Storage)."""
     path = _quotes_download_path(job_id, "pptx")
     if not path:
@@ -22872,7 +22924,7 @@ async def memorial_docx(job_id: str, request: Request):
     da versão salva em project_memorial. Download exige downloadProtected no
     frontend (armadilha nº9: <a href> não manda Authorization)."""
     _require_project_owner(request, job_id)
-    _require_entregavel_pago(job_id)
+    await _require_entregavel_pago_async(job_id)
     import tempfile
     try:
         from memorial import estrutura_para_docx
@@ -23147,7 +23199,7 @@ async def memorial_pdf(job_id: str, request: Request):
     """Memorial em PDF (WeasyPrint, mesmo motor do cronograma). Prefere a
     versão editada/salva, igual ao .docx."""
     _require_project_owner(request, job_id)
-    _require_entregavel_pago(job_id)
+    await _require_entregavel_pago_async(job_id)
     import tempfile
     try:
         salvo = _memorial_carregar_salvo(job_id)
@@ -24154,7 +24206,7 @@ async def export_cronograma_pdf(job_id: str, request: Request,
     """Exporta cronograma como PDF co-branded. Usa os novos templates (WeasyPrint,
     5 direcoes, cor da marca); se falhar, cai no gerador antigo (reportlab)."""
     _require_project_owner(request, job_id)
-    _require_entregavel_pago(job_id)
+    await _require_entregavel_pago_async(job_id)
     import tempfile
     from fastapi.responses import FileResponse
     cron, branding = await run_in_threadpool(
@@ -24203,7 +24255,7 @@ async def export_cronograma_xlsx(job_id: str, request: Request):
     Vira "físico-FINANCEIRO" só quando o cliente informou valor; sem valor sai
     o cronograma físico de sempre, sem falar em dinheiro em lugar nenhum."""
     _require_project_owner(request, job_id)
-    _require_entregavel_pago(job_id)
+    await _require_entregavel_pago_async(job_id)
     import tempfile
     from fastapi.responses import FileResponse
     cron, branding = await run_in_threadpool(
@@ -24230,7 +24282,7 @@ async def export_cronograma_pptx(job_id: str, request: Request,
     """Exporta cronograma como PPTX (5 slides). Novo: renderiza o PDF dos templates
     e insere 1 imagem full-bleed por slide (A4 paisagem). Fallback: gerador antigo."""
     _require_project_owner(request, job_id)
-    _require_entregavel_pago(job_id)
+    await _require_entregavel_pago_async(job_id)
     import tempfile
     from fastapi.responses import FileResponse
     cron, branding = await run_in_threadpool(
