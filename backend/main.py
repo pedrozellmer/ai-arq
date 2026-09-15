@@ -2149,14 +2149,22 @@ def _juntar_admin_local(all_items) -> int:
     🔑 Não some nada da vista do arquiteto: fica UMA linha (1 vb, estimada) e a
     observação lista, NO COMEÇO (a observação é cortada em 1.000 caracteres),
     as redações que foram juntadas.
-    🚫 Nunca junta: linha editada pelo cliente (origem 'revisao_cliente', regra
-    nº7), linha com prazo "informado por você", linha confirmada, e linha que
-    não é verba. Essas seguem como vieram.
+    🚫 Nunca junta: linha que EMBALA outro serviço ou fora de Serviços
+    Preliminares (a revisão de 15/09 pegou a escolha "maior descrição" ficando
+    com a instalação de sprinkler do capítulo de incêndio e apagando a
+    administração pura), linha confirmada, linha fora de verba.
+    🪤 As travas de origem 'revisao_cliente' e de prazo "informado por você" são
+    DEFENSIVAS: no ponto de chamada nenhuma linha tem essas marcas ainda — a
+    fusão com as edições do cliente roda depois (~14733) e o prazo também.
+    🪤 Filhote de projeto revisado: se o cliente editou a administração local no
+    pai e a IA do filho devolver 2 redações, a junção pode apagar justo a que
+    casaria com a edição dele, e a fusão a acrescenta como linha NOVA. 0 casos
+    em 15/09 (os 6 filhos com edição têm 1 linha só) — está na fila.
     🪤 Roda DEPOIS de `_aplicar_admin_local`: antes dela as linhas em mês ainda
     não são verba e ficariam de fora.
     """
     try:
-        from engine_rules import e_administracao_local as _e_al
+        from engine_rules import e_administracao_local_pura as _e_al_pura
     except Exception as _eimp:
         print(f"[admin-local] regra indisponivel: {_eimp}")
         return 0
@@ -2168,7 +2176,9 @@ def _juntar_admin_local(all_items) -> int:
             return 0.0
 
     def _juntavel(_it):
-        if not _e_al(getattr(_it, "description", "")):
+        if not _e_al_pura(getattr(_it, "description", "")):
+            return False
+        if "preliminar" not in str(getattr(_it, "discipline", "") or "").lower():
             return False
         if str(getattr(_it, "unit", "") or "").strip().lower() != "vb":
             return False
@@ -2193,15 +2203,16 @@ def _juntar_admin_local(all_items) -> int:
     if not _saem and not _era_soma:
         return 0
     if _MARCA_ADMIN_JUNTADA not in _obs:
+        # 🪤 A instrução vem LOGO depois da marca: a lista da tela de revisão mostra
+        # só os primeiros 110 caracteres da observação (revisao.html ~781).
+        _nota = f"{_MARCA_ADMIN_JUNTADA} — se forem obras separadas, ajuste aqui."
         if _saem:
             _redacoes = " · ".join(str(getattr(_it, "description", "") or "")[:60]
                                    for _it in _saem)
-            _nota = (f"{_MARCA_ADMIN_JUNTADA}: juntei aqui {len(_saem)} linha(s) "
-                     f"repetida(s) que vieram de outras pranchas ({_redacoes}).")
+            _nota += (f" Juntei {len(_saem)} linha(s) repetida(s) que vieram de "
+                      f"outras pranchas: {_redacoes}.")
         else:
-            _nota = (f"{_MARCA_ADMIN_JUNTADA}: a soma de {_qtd(_fica):g} réplicas "
-                     f"virou 1 verba.")
-        _nota += " Se forem obras separadas, ajuste na revisão."
+            _nota += f" A soma de {_qtd(_fica):g} réplicas virou 1 verba."
         _fica.observations = (_nota + (" | " + _obs if _obs else ""))[:1000]
     _fica.quantity = 1.0
     if _saem:

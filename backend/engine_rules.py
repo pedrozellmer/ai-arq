@@ -2312,6 +2312,18 @@ def e_administracao_local(descricao):
     return bool(_RE_ADMIN_LOCAL.search(str(descricao or "")))
 
 
+def e_administracao_local_pura(descricao):
+    """A descrição COMEÇA com administração local — não embala outro serviço?
+
+    🩸 15/09/2026 (revisão da junção): o reconhecimento acima casa em qualquer
+    posição, então "Serviços preliminares — mobilização, canteiro e
+    administração local" e "Serviços de coordenação e administração local"
+    também passavam. Juntar essas levaria o escopo delas junto. Quem junta
+    linha repetida pergunta ESTA.
+    """
+    return bool(_RE_ADMIN_LOCAL.match(str(descricao or "").strip()))
+
+
 def administracao_local_com_prazo_chutado(descricao, unidade):
     """O item é administração local de obra cotada em unidade de TEMPO?
 
