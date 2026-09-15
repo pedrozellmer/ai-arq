@@ -146,6 +146,22 @@ def sem_comentarios(texto: str) -> str:
                     if not l.strip().startswith("#"))
 
 
+def sem_comentarios_js(texto: str) -> str:
+    """Igual à de cima, mas pro JS dos .html — tira linha que começa com `//`.
+
+    🪤 14/09/2026: usei `sem_comentarios` (que só conhece `#`) num recorte de
+    JavaScript e o guarda SOBREVIVEU à mutação que apagava o texto do aviso —
+    porque o COMENTÁRIO logo acima citava a frase que o teste procurava. O
+    guarda lia a minha própria anotação. `//` e `#` são a mesma armadilha em
+    linguagens diferentes.
+
+    🪤 Só linha que COMEÇA com `//`: cortar no meio levaria junto qualquer
+    `https://` dentro de uma string.
+    """
+    return _NL.join(l for l in texto.splitlines()
+                    if not l.strip().startswith("//"))
+
+
 def so_o_que_roda(nome: str, arquivo: str = "main.py") -> str:
     """Corpo da função sem docstring e sem comentário — só o que executa."""
     return sem_comentarios(sem_docstring(corpo_de(nome, arquivo)))

@@ -25911,6 +25911,21 @@ _TRACK_ALLOWED = {
     # havia como saber que eles tinham tentado. `meta.motivo` = termos |
     # sem-arquivo. Ver o envelope `#process-guard` em dashboard.html.
     "processar_bloqueado",
+    # 🚨 14/09/2026 — O BURACO ENTRE ESCOLHER O ARQUIVO E PROCESSAR.
+    # Medido nos **18 cadastros completos (com WhatsApp) que nunca subiram um
+    # projeto**: 12 chegaram ao painel, 4 ESCOLHERAM o arquivo e **nenhum**
+    # clicou em processar. Três reabriram o seletor 8 s e 27 s depois de já ter
+    # escolhido — gesto de quem foi trocar de arquivo.
+    # E `processar_bloqueado` registrou só 2 cliques em 20 dias, nenhum deles
+    # dessas pessoas: elas não chegaram sequer a clicar no botão. Ou seja, a
+    # desistência acontece ANTES, e o que existe ali são dois avisos que a tela
+    # dispara sozinha ao escolher o arquivo — e que nunca foram medidos:
+    #   · o do PDF diz "sai com quantidade em branco" e fica aberto até fechar;
+    #   · o do DWG manda voltar ao CAD e rodar EXPORTTOAUTOCAD.
+    # Nenhum dos dois muda de texto aqui: primeiro o número, depois a decisão.
+    "aviso_pdf_sem_texto",   # meta.chars = caracteres lidos do PDF
+    "aviso_dwg_aec",         # meta.n = quantos arquivos AEC no envio
+    "arquivo_removido",      # meta.type = extensão, meta.restam = quantos sobraram
     # 30/08/2026 — a AUDITORIA achou páginas inteiras sem NENHUM `view`, então
     # os cliques marcados nelas não tinham denominador (quantos viram × quantos
     # clicaram). O cronograma era o pior: 27 dias INVISÍVEL — página de 122 KB
@@ -26116,10 +26131,21 @@ async def track_event(payload: TrackPayload, request: Request):
         # o front manda NÚMERO, não texto — e `bruto`/`erro` (entrada digitada
         # e mensagem de exceção) NÃO são enviados. Texto livre de cliente não
         # vira linha de banco só porque seria conveniente pra depurar.
+        # 🚨 14/09/2026 — `chars`, `n` e `restam`: os números dos avisos que a
+        # tela dispara ao ESCOLHER o arquivo (ver `_TRACK_ALLOWED`). Eu tinha
+        # liberado o NOME dos três eventos e esquecido as CHAVES — e o
+        # `test_track_meta_allowlist` pegou na bancada, antes do push. Sem esta
+        # linha o evento chegaria vazio: `aviso_pdf_sem_texto` sem `chars` não
+        # separa "PDF escaneado" de "PDF com pouco texto", que é a única coisa
+        # que ele foi feito pra responder. Instrumento sem o número é pior que
+        # instrumento nenhum, porque parece estar medindo.
+        # 🔒 Os três são NÚMERO e entram no mesmo saneamento de sempre (int,
+        # teto, sem bool): `chars` = caracteres lidos, `n` = arquivos AEC no
+        # envio, `restam` = arquivos que sobraram após remover um.
         for _k in ("n_itens", "n_estimados", "ja_revisados", "pendentes",
                    "confirmados", "excluidos", "editados",
                    "linhas_vazias", "preenchidos", "area", "tem_area_capa",
-                   "status"):
+                   "status", "chars", "n", "restam"):
             try:
                 _v = payload.meta.get(_k)
                 if _v is None or isinstance(_v, bool):

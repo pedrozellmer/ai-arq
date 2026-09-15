@@ -2735,6 +2735,17 @@
     fileList.querySelectorAll('.btn-remove-file').forEach(btn => {
       btn.addEventListener('click', () => {
         const idx = parseInt(btn.getAttribute('data-idx'));
+        // 🚨 14/09/2026: tirar um arquivo já escolhido é o gesto de quem mudou
+        // de ideia — e era invisível. Entre `arquivo_escolhido` e
+        // `clique:processar-projeto` não havia NADA no rastro, e é ali que os
+        // 4 cadastros completos que escolheram arquivo desistiram.
+        try {
+          const _f = selectedFiles[idx];
+          trackEvent('arquivo_removido', {
+            type: ((_f?.name || '').split('.').pop() || '').toLowerCase().slice(0, 8),
+            restam: Math.max(0, selectedFiles.length - 1),
+          });
+        } catch (_) {}
         selectedFiles.splice(idx, 1);
         renderFiles();
       });
@@ -2872,6 +2883,15 @@
       // Acima do limite: PDF tem texto, tudo bem
       if (totalChars >= PDF_TEXT_THRESHOLD) return;
       // Abaixo: aviso amigável, daltônico-safe (cor + ícone + texto)
+      // 🚨 14/09/2026 — ESTE AVISO NÃO ERA REGISTRADO, e ele é o texto mais
+      // pesado da tela: diz que o quantitativo "sai com quantidade em branco" e
+      // fica aberto até a pessoa fechar. Medido nos 18 cadastros completos que
+      // nunca subiram projeto: 4 chegaram a ESCOLHER o arquivo, 3 deles PDF, e
+      // NENHUM clicou em processar — três reabriram o seletor logo depois (8 s,
+      // 27 s), como quem foi trocar de arquivo. Sem este evento não dá pra
+      // saber se foi este aviso que os mandou embora. Só REGISTRA; o texto
+      // continua igual até o número dizer o que fazer com ele.
+      try { trackEvent('aviso_pdf_sem_texto', { chars: totalChars }); } catch (_) {}
       const msg = `⚠ "${file.name}" parece ser PDF vetorial sem cotas extraíveis (${totalChars} caracteres lidos). Pra precisão nas divisórias, suba o DWG/DXF original. O quantitativo sai com itens identificados mas com quantidade em branco.`;
       if (window.toast) {
         window.toast.warn(msg, { duration: 0 });  // duration:0 = fica até user fechar
@@ -2947,6 +2967,10 @@
         const msg = `⚠ ${quais} ${n === 1 ? 'é' : 'são'} do AutoCAD MEP/Architecture — `
           + `pode não medir. Rode EXPORTTOAUTOCAD no CAD e mande o DXF. `
           + `Veja o passo a passo no guia de exportação abaixo.`;
+        // 🚨 14/09: irmão do `aviso_pdf_sem_texto`. Este manda a pessoa VOLTAR
+        // ao CAD e rodar um comando antes de continuar — é o pedido mais caro
+        // que a tela faz, e também não era registrado.
+        try { trackEvent('aviso_dwg_aec', { n: n }); } catch (_) {}
         if (window.toast) window.toast.warn(msg, { duration: 0 });
         else setTimeout(() => window.toast?.warn(msg, { duration: 0 }) || console.warn(msg), 500);
       }, 400);
