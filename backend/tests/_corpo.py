@@ -20,6 +20,7 @@ branco.
 """
 import io
 import os
+import re
 
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _RAIZ = os.path.dirname(_BACKEND)
@@ -141,6 +142,11 @@ def sem_docstring(texto: str) -> str:
     return texto if b < 0 else texto[:a] + texto[b + 3:]
 
 
+# Bloco /* ... */ do JS. Nao-guloso e atravessando linha: o guarda tem
+# que enxergar o mesmo que o navegador EXECUTA, nunca o que eu anotei.
+_re_bloco_js = re.compile(r"/\*.*?\*/", re.S)
+
+
 def sem_comentarios(texto: str) -> str:
     return _NL.join(l for l in texto.splitlines()
                     if not l.strip().startswith("#"))
@@ -157,9 +163,27 @@ def sem_comentarios_js(texto: str) -> str:
 
     🪤 Só linha que COMEÇA com `//`: cortar no meio levaria junto qualquer
     `https://` dentro de uma string.
+
+    🪤 15/09/2026 — e os blocos `/* … */` também saem. Eles são a MESMA
+    armadilha com outra sintaxe, e o meu próprio teste de controle caiu nela:
+    um `/* usa preco_base */` fazia o guarda de chave órfã aprovar uma tela
+    que não lia chave nenhuma.
+    """
+    limpo = _re_bloco_js.sub(" ", texto)
+    return _NL.join(l for l in limpo.splitlines()
+                    if not l.strip().startswith("//"))
+
+
+def sem_comentarios_sql(texto: str) -> str:
+    """Tira comentário de SQL (`--`). Mesma armadilha, terceira linguagem.
+
+    🩸 15/09/2026: o guarda que proíbe `DROP FUNCTION` no arquivo da régua
+    reprovou o arquivo CORRETO — porque o cabeçalho que eu tinha acabado de
+    escrever explica, em português, por que nunca se deve dropar aquela
+    função. O guarda estava lendo a minha anotação.
     """
     return _NL.join(l for l in texto.splitlines()
-                    if not l.strip().startswith("//"))
+                    if not l.strip().startswith("--"))
 
 
 def so_o_que_roda(nome: str, arquivo: str = "main.py") -> str:

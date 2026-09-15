@@ -1761,10 +1761,44 @@ function _blocoRegua(){
       + `<td class="py-1.5 text-right font-semibold text-emerald-700">${costFmt(Number(m.receita_a_97)||0)}</td></tr>`;
   }).join('');
   const tot = Number(d.total_cobraveis)||0, totEnt = Number(d.total_entregas)||0;
+  // ⚖️ ONDE CORTAR A RÉGUA — 15/09/2026, decisão do Pedro.
+  // A régua corta em ≥ 1 linha medida. O docstring dela diz que nasceu porque
+  // "a entrega é uma RIFA... os dois pagariam os mesmos R$97 e nenhum dos dois
+  // tinha como saber, antes de pagar, de que lado ia cair". Com corte em 1, ela
+  // tirou da rifa o bilhete ZERO e deixou o de 1 linha valendo o mesmo que o
+  // de 92 — que são os pedidos de reembolso mais prováveis do 1º mês.
+  // 🩸 E a mediana já vinha do banco desde 06/09: a tela lia 4 das 7 chaves e
+  // jogava as outras fora. O número pra decidir estava pronto e nunca chegou
+  // aqui — o mesmo padrão que a varredura de 14/09 achou em sete lugares.
+  const faixas = Array.isArray(d.faixas) ? d.faixas : [];
+  const medLin = d.mediana_linhas_cobravel, medPct = d.mediana_pct_cobravel;
+  const ate2 = Number(d.cobraveis_ate_2_linhas)||0;
+  let corte = '';
+  if (faixas.length && tot > 0){
+    const barras = faixas.map(f => {
+      const n = Number(f.n)||0, p = Math.round(100*n/tot);
+      // 🚨 Faixa vazia continua aparecendo: some da tela quem tem 0, e a
+      // distribuição passa a mentir por omissão sobre onde NÃO há caso.
+      return `<div class="flex items-center gap-2">
+        <div class="w-24 shrink-0 text-right text-gray-500">${f.rotulo}</div>
+        <div class="flex-1 bg-gray-100 rounded h-3 overflow-hidden"><div class="h-3 bg-indigo-400" style="width:${p}%"></div></div>
+        <div class="w-16 shrink-0 tabular-nums text-gray-700"><b>${n}</b> <span class="text-gray-400">${p}%</span></div>
+      </div>`;
+    }).join('');
+    const medTxt = (medLin == null || medPct == null)
+      ? 'sem medição (não consegui calcular)'
+      : `<b>${medLin}</b> linhas, <b>${medPct}%</b> do projeto`;
+    corte = `<div class="mt-4 pt-3 border-t">
+      <div class="text-xs font-semibold text-gray-900 mb-1">Onde cortar? — quanto de cada projeto foi medido, entre as ${tot} cobráveis</div>
+      <p class="text-xs text-gray-500 mb-2">Hoje o corte é <b>≥ 1 linha medida</b>. Mediana das cobráveis: ${medTxt}. Mediana de <i>todas</i> as entregas avaliadas: <b>${d.mediana_linhas_medidas != null ? d.mediana_linhas_medidas : '—'}</b> linhas.</p>
+      <div class="space-y-1 text-xs">${barras}</div>
+      ${ate2 > 0 ? `<p class="mt-2 text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">⚠ <b>${ate2}</b> projeto${ate2===1?'':'s'} cobrável${ate2===1?'':'eis'} mediu${ate2===1?'':'ram'} <b>2 linhas ou menos</b> — pagaria${ate2===1?'':'m'} os mesmos ${costFmt(preco)} de um projeto medido inteiro. Subir o corte tira ${ate2} da lista.</p>` : ''}
+    </div>`;
+  }
   return `<div class="col-span-2 md:col-span-3 rounded-lg border bg-white p-4">
     <div class="flex items-baseline justify-between mb-1">
       <div class="text-sm font-semibold text-gray-900">⚖️ Régua de cobrança — só cobra projeto que mediu ≥ 1 linha do CAD</div>
-      <div class="text-xs text-gray-500">${tot} de ${totEnt} entregas cobráveis</div>
+      <div class="text-xs text-gray-500">${tot} de ${totEnt} entregas cobráveis${Number(d.total_nao_avaliadas)>0?` <span class="text-amber-700">· ${Number(d.total_nao_avaliadas)} não avaliada${Number(d.total_nao_avaliadas)===1?'':'s'}</span>`:''}</div>
     </div>
     <p class="text-xs text-gray-500 mb-3">Entregas de cliente concluídas (sem avaliação nossa e sem filhote), a ${costFmt(preco)} por projeto. É simulação: <b>ninguém foi cobrado</b>.</p>
     <table class="w-full text-xs">
@@ -1773,7 +1807,7 @@ function _blocoRegua(){
         <th class="text-right pb-1 pr-3">Cobráveis</th><th class="text-right pb-1 pr-3">%</th>
         <th class="text-right pb-1">Receita</th></tr></thead>
       <tbody>${linhas}</tbody>
-    </table></div>`;
+    </table>${corte}</div>`;
 }
 function renderCostTotals(){
   const el = document.getElementById('cost-totals'); if (!el) return;
