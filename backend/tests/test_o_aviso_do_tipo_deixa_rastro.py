@@ -19,6 +19,12 @@ O que este arquivo cobra — sempre RODANDO as telas, nunca procurando palavra:
 🩸 A primeira versão contava o aviso com a vista escondida (quem chega por
 `#quantitativo`) e este guarda passava verde: ele montava só as duas caixas,
 sem a vista em volta. A revisão adversarial de 15/09 achou antes de subir.
+🩸 E a segunda revisão achou o irmão: tirar o `classList.remove('hidden')` da
+caixa deixava os testes do topo verdes com o evento saindo e a caixa
+escondida — eles só olhavam o texto da lista. Agora cobram a caixa VISÍVEL.
+🪤 `_navegador._oculta` enxerga a CLASSE `hidden` (é assim que a caixa se
+esconde), mas não a PROPRIEDADE `.hidden` (é assim que a vista se esconde) —
+por isso a visibilidade só é cobrada com a Visão geral aberta.
 """
 import asyncio
 import io
@@ -38,6 +44,7 @@ from _navegador import (atributos, bloco_a_partir_de, elementos,  # noqa: E402
 _RAIZ = os.path.dirname(os.path.dirname(_AQUI))
 _JOB_TOPO = "ab12cd34"
 _META_TOPO = {"job_id": _JOB_TOPO, "tela": "projeto"}
+_CAIXA_ESCONDIDA = "o evento saiu e a caixa do aviso continua escondida — denominador falso"
 
 
 def _site(nome):
@@ -92,7 +99,8 @@ def _topo(avisos, telemetria=True, vezes=1, visao_escondida=False, depois=""):
           "var __antes = __eventos.length;",
           depois]
     return rodar(js, "({ev: __eventos, antes: __antes,"
-                     " html: document.getElementById('proj-warnings-list').innerHTML})")
+                     " html: document.getElementById('proj-warnings-list').innerHTML,"
+                     " caixa: _visivel('proj-warnings')})")
 
 
 def test_o_aviso_PARECE_ARQUITETURA_do_motor_vira_evento():
@@ -100,6 +108,7 @@ def test_o_aviso_PARECE_ARQUITETURA_do_motor_vira_evento():
         r = _topo([frase], vezes=2)
         assert r["ev"] == [["aviso-topo:parece-arquitetura", _META_TOPO]], r["ev"]
         assert "ARQUITETURA" in r["html"], "o evento saiu e o aviso não foi desenhado"
+        assert r["caixa"], _CAIXA_ESCONDIDA
 
 
 def test_os_DOIS_ramos_do_aviso_de_ESTRUTURA_viram_evento():
@@ -110,6 +119,7 @@ def test_os_DOIS_ramos_do_aviso_de_ESTRUTURA_viram_evento():
         r = _topo(["Escala conferida pelo desenho", frase], vezes=2)
         assert r["ev"] == [["aviso-topo:estrutura-sem-medida", _META_TOPO]], (
             frase[:50], r["ev"])
+        assert r["caixa"], _CAIXA_ESCONDIDA
 
 
 def test_conta_UMA_vez_por_carga_mesmo_com_a_tela_redesenhando():
@@ -119,6 +129,7 @@ def test_conta_UMA_vez_por_carga_mesmo_com_a_tela_redesenhando():
     r = _topo([f["parece-arquitetura"][0], f["estrutura-sem-medida"][0]], vezes=3)
     assert sorted(r["ev"]) == sorted([["aviso-topo:parece-arquitetura", _META_TOPO],
                                       ["aviso-topo:estrutura-sem-medida", _META_TOPO]]), r["ev"]
+    assert r["caixa"], _CAIXA_ESCONDIDA
 
 
 def test_aberto_em_OUTRA_vista_so_conta_quando_a_Visao_geral_aparece():
@@ -133,6 +144,7 @@ def test_aberto_em_OUTRA_vista_so_conta_quando_a_Visao_geral_aparece():
         "contou o aviso com a Visão geral escondida — denominador falso: %r" % r["ev"])
     assert r["ev"] == [["aviso-topo:parece-arquitetura", _META_TOPO]], (
         "abrir a Visão geral devia contar o aviso UMA vez: %r" % r["ev"])
+    assert r["caixa"], _CAIXA_ESCONDIDA
 
 
 def test_CONTROLE_visao_escondida_e_nunca_aberta_nao_conta_nada():
@@ -164,6 +176,7 @@ def test_CONTROLE_sem_telemetria_a_lista_continua_na_tela():
               depois="mostrarVista('visao');")
     assert r["ev"] == [], r["ev"]
     assert "ARQUITETURA" in r["html"]
+    assert r["caixa"], "sem telemetria a caixa de avisos deixou de aparecer"
 
 
 # ── A resposta do envio ───────────────────────────────────────────────────
