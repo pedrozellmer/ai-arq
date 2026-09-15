@@ -7093,8 +7093,9 @@ def _process_job_throttled(*args, **kwargs):
         process_job(*args, **kwargs)
 
 
-def _carimbar_regua_de_cobranca(job_id: str, n_medidas: int, n_total: int) -> None:
-    """Carimba se este projeto PODE ser cobrado: mediu >= 1 linha do CAD?
+def _carimbar_regua_de_cobranca(job_id: str, n_medidas: int, n_total: int,
+                                n_cad: int) -> None:
+    """Carimba se este projeto PODE ser cobrado: mediu >= 1 linha, E veio CAD?
 
     🚨 06/09/2026 — a régua que o Pedro aprovou pra sair do beta. A auditoria de
     prontidão mediu que a entrega é uma RIFA: em setembro, 12 de 21 entregas
@@ -7107,6 +7108,21 @@ def _carimbar_regua_de_cobranca(job_id: str, n_medidas: int, n_total: int) -> No
     sozinha, sem tocar no motor: PDF-only nunca cobra (0,2% de medição na vida
     do produto), a entrega vazia não fatura, e quem brigou com o upload não paga
     9 vezes.
+
+    🩸 14/09/2026 — "PDF-only nunca cobra" era PREVISÃO, não regra. A frase
+    acima está aqui desde 06/09, mas o código só olhava `n_medidas`: nada no
+    corpo perguntava o tipo do arquivo. A previsão vinha de 0,89% das LINHAS
+    de só-PDF terem sido medidas — só que na unidade que decide dinheiro, o
+    PROJETO, são 11,2%: **11 projetos só-PDF entraram na lista de cobráveis**,
+    todos pelo backfill de 06/09. Por isso `n_cad` é OBRIGATÓRIO e sem valor
+    padrão: default aqui seria a promessa se desligando sozinha na próxima vez
+    que alguém chamasse a função sem pensar.
+
+    🔑 A pergunta é "veio CAD?", não "o CAD foi LIDO?". Medi as duas antes de
+    escolher: hoje elas dão o mesmo resultado (dos 50 cobráveis que mandaram só
+    DWG, 37 foram salvos pelo libredwg e nenhum ficou sem leitura). O caso
+    "mandou CAD, mediu só do PDF" é a pergunta do CORTE da régua — quanto é
+    pouco demais pra cobrar — e essa é decisão do Pedro, não deste guarda.
 
     🔑 É carimbo do MOMENTO DA ENTREGA, não consulta viva: se o cliente revisar
     e apagar itens depois, o que a gente entregou não muda.
@@ -7125,7 +7141,7 @@ def _carimbar_regua_de_cobranca(job_id: str, n_medidas: int, n_total: int) -> No
         # `planilha_gerada_em` e `desenho_assinatura` em agosto.
         # `_projeto_patch` faz PATCH direto na tabela.
         _ok = _projeto_patch(job_id, {
-            "cobravel": bool(n_medidas > 0),
+            "cobravel": bool(n_medidas > 0 and n_cad > 0),
             "cobravel_em": datetime.utcnow().isoformat() + "Z",
             "linhas_medidas": int(n_medidas),
             "linhas_total": int(n_total),
@@ -7140,6 +7156,15 @@ def _carimbar_regua_de_cobranca(job_id: str, n_medidas: int, n_total: int) -> No
             _log_error("cobranca:regua",
                        f"NAO cobravel: 0 linhas medidas de {n_total}", job_id,
                        severity="warning")
+        elif n_cad == 0:
+            # 🩸 O caso novo, e o que mais importa contar: MEDIU, mas veio só
+            # PDF. Antes de 14/09 este projeto entrava na lista de cobráveis
+            # contra a regra escrita no próprio docstring. Linha própria pra
+            # dar pra medir quanto a promessa custa — se um dia o motor passar
+            # a medir PDF de verdade, é aqui que vai aparecer primeiro.
+            _log_error("cobranca:regua",
+                       f"NAO cobravel: so PDF (mediu {n_medidas} de {n_total} "
+                       f"linhas, nenhum arquivo CAD)", job_id, severity="warning")
     except Exception as _e:
         print(f"[cobranca] regua nao carimbada (nao-fatal): {_e}")
 
@@ -14676,7 +14701,15 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 1 for it in all_items
                 if str(getattr(getattr(it, "confidence", None), "value",
                                getattr(it, "confidence", "")) or "") == "confirmado")
-            _carimbar_regua_de_cobranca(job_id, _n_med_regua, len(all_items))
+            # 🩸 14/09/2026 — a régua não recebia o TIPO do arquivo, e por isso
+            # a promessa do docstring ("PDF-only nunca cobra") nunca foi regra:
+            # 11 projetos só-PDF entraram na lista de cobráveis. A informação
+            # sempre esteve aqui, em `file_paths`; só nunca foi passada adiante.
+            _n_cad_regua = sum(
+                1 for _p in (file_paths or [])
+                if os.path.splitext(_p)[1].lower() in (".dwg", ".dxf"))
+            _carimbar_regua_de_cobranca(job_id, _n_med_regua, len(all_items),
+                                        _n_cad_regua)
         except Exception as _re:
             print(f"[cobranca] regua nao carimbada (nao-fatal): {_re}")
         jobs.update_field(job_id, current_step="Concluído!")

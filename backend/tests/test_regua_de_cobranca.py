@@ -33,6 +33,18 @@ sys.path.insert(0, _BACKEND)
 import main  # noqa: E402
 
 
+def _itens_para_o_fim_do_job(medidos, total):
+    """Itens de um job qualquer — `medidos` com selo branco, o resto laranja.
+    Mesmo formato usado pelos outros guardas que rodam a fatia real do fim."""
+    from models import BudgetItem, Confidence
+    return [BudgetItem(item_num="1.%d" % k, description="Servico %d" % k,
+                       unit="m2", quantity=10.0 + k,
+                       confidence=(Confidence.CONFIRMADO if k < medidos
+                                   else Confidence.ESTIMADO),
+                       origem="dxf_geom")
+            for k in range(total)]
+
+
 def _capturar(monkeypatch):
     """Troca a escrita no banco por um coletor. Devolve a lista de updates.
 
@@ -60,7 +72,7 @@ def _capturar(monkeypatch):
 def test_projeto_que_mediu_UMA_linha_e_cobravel(monkeypatch):
     """Uma linha basta. Não é 'mediu bem', é 'mediu alguma coisa do CAD'."""
     ch = _capturar(monkeypatch)
-    main._carimbar_regua_de_cobranca("aaa111", 1, 80)
+    main._carimbar_regua_de_cobranca("aaa111", 1, 80, 1)
     assert len(ch) == 1
     d = ch[0]["dados"]
     assert d["cobravel"] is True, d
@@ -70,7 +82,7 @@ def test_projeto_que_mediu_UMA_linha_e_cobravel(monkeypatch):
 def test_projeto_com_ZERO_medida_NAO_e_cobravel(monkeypatch):
     """O caso que a régua existe pra pegar: 161 linhas, nenhuma medida."""
     ch = _capturar(monkeypatch)
-    main._carimbar_regua_de_cobranca("bbb222", 0, 161)
+    main._carimbar_regua_de_cobranca("bbb222", 0, 161, 2)
     d = ch[0]["dados"]
     assert d["cobravel"] is False, d
     assert d["linhas_medidas"] == 0 and d["linhas_total"] == 161
@@ -80,7 +92,7 @@ def test_o_carimbo_grava_no_projeto_certo(monkeypatch):
     """🪤 Carimbar o projeto errado é pior que não carimbar: cobraria alguém
     por uma entrega que não foi dele."""
     ch = _capturar(monkeypatch)
-    main._carimbar_regua_de_cobranca("ccc333", 5, 40)
+    main._carimbar_regua_de_cobranca("ccc333", 5, 40, 1)
     assert ch[0]["valor"] == "ccc333"
 
 
@@ -88,7 +100,7 @@ def test_o_carimbo_guarda_QUANDO_foi_avaliado(monkeypatch):
     """Sem a data não dá pra saber se o carimbo é do momento da entrega ou de
     uma avaliação retroativa — e os dois convivem no banco."""
     ch = _capturar(monkeypatch)
-    main._carimbar_regua_de_cobranca("ddd444", 3, 30)
+    main._carimbar_regua_de_cobranca("ddd444", 3, 30, 1)
     assert "cobravel_em" in ch[0]["dados"], ch[0]["dados"]
 
 
@@ -110,7 +122,7 @@ def test_banco_fora_do_ar_NAO_derruba_a_entrega(monkeypatch):
         raise RuntimeError("banco fora do ar")
     monkeypatch.setattr(main, "_projeto_patch", _explode)
     monkeypatch.setattr(main, "_log_error", lambda *a, **k: None)
-    main._carimbar_regua_de_cobranca("eee555", 7, 50)   # não pode levantar
+    main._carimbar_regua_de_cobranca("eee555", 7, 50, 1)   # não pode levantar
 
 
 def test_gravacao_recusada_avisa_em_vez_de_passar_batido(monkeypatch):
@@ -120,7 +132,7 @@ def test_gravacao_recusada_avisa_em_vez_de_passar_batido(monkeypatch):
     monkeypatch.setattr(main, "_projeto_patch", lambda *a, **k: False)
     monkeypatch.setattr(main, "_log_error",
                         lambda stage, msg, *a, **k: avisos.append((stage, msg)))
-    main._carimbar_regua_de_cobranca("fff666", 4, 40)
+    main._carimbar_regua_de_cobranca("fff666", 4, 40, 1)
     assert any(s == "cobranca:regua" for s, _ in avisos), avisos
 
 
@@ -246,7 +258,11 @@ def test_a_coluna_do_banco_documenta_os_TRES_estados():
     src = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
     i = src.index("def _carimbar_regua_de_cobranca(")
     corpo = src[i:src.index("\ndef ", i + 10)]
-    assert 'bool(n_medidas > 0)' in corpo, (
+    # 🪤 14/09: este guarda prendia a EXPRESSÃO inteira (`bool(n_medidas > 0)`)
+    # e reprovou quando a régua ganhou a segunda condição (`and n_cad > 0`) —
+    # acusando um conserto correto. O fato que ele existe pra guardar é outro:
+    # a coluna recebe BOOLEANO. Ancorar no fato, não na forma.
+    assert re.search(r'"cobravel":\s*bool\(', corpo), (
         "o carimbo deixou de gravar booleano — 0/1/'' viram armadilha na "
         "leitura, porque só o booleano distingue os três estados")
 
@@ -256,3 +272,99 @@ def test_CONTROLE_o_recorte_do_bloco_da_tela_ACHA_o_alvo():
     i = falso.index("function _blocoRegua(")
     bloco = falso[i:falso.index("\nfunction ", i + 10)]
     assert "COSTS_REGUA" in bloco and "outra" not in bloco, bloco
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  (5) SÓ-PDF NUNCA COBRA — 14/09/2026
+#
+#  A frase está no docstring da régua desde 06/09 e NUNCA foi regra: o corpo
+#  só olhava `n_medidas`. A previsão vinha de 0,89% das LINHAS de só-PDF terem
+#  sido medidas — mas na unidade que decide dinheiro, o PROJETO, são 11,2%.
+#  Resultado medido: 11 projetos só-PDF na lista de cobráveis.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def test_so_PDF_que_MEDIU_nao_e_cobravel(monkeypatch):
+    """O caso exato dos 11 do banco: mediu de verdade, e mesmo assim não cobra
+    — porque a promessa não é 'mediu alguma coisa', é 'mediu do CAD'."""
+    ch = _capturar(monkeypatch)
+    main._carimbar_regua_de_cobranca("ggg777", 3, 40, 0)
+    d = ch[0]["dados"]
+    assert d["cobravel"] is False, (
+        "projeto só-PDF com 3 linhas medidas entrou como cobrável — é "
+        "exatamente o caso dos 11 que o backfill de 06/09 marcou: %s" % d)
+    assert d["linhas_medidas"] == 3, (
+        "a régua mentiu sobre a medição pra justificar o não-cobrável; o "
+        "número entregue continua sendo 3: %s" % d)
+
+
+def test_CONTROLE_o_MESMO_projeto_COM_CAD_e_cobravel(monkeypatch):
+    """🚨 O controle que prende a causa. Mesmos 3 de 40 — muda só o tipo do
+    arquivo. Sem ele, 'cobravel sempre False' passaria no guarda de cima e
+    ninguém faturaria nada."""
+    ch = _capturar(monkeypatch)
+    main._carimbar_regua_de_cobranca("hhh888", 3, 40, 1)
+    assert ch[0]["dados"]["cobravel"] is True, ch[0]["dados"]
+
+
+def test_so_PDF_deixa_rastro_PROPRIO_no_registro(monkeypatch):
+    """A entrega vazia e a entrega só-PDF não faturam pelo MESMO motivo, e o
+    registro tem que distinguir as duas — senão não dá pra saber quanto a
+    promessa custa no dia em que o motor passar a medir PDF de verdade."""
+    avisos = []
+    monkeypatch.setattr(main, "_projeto_patch", lambda *a, **k: True)
+    monkeypatch.setattr(main, "_log_error",
+                        lambda stage, msg, *a, **k: avisos.append((stage, msg)))
+    main._carimbar_regua_de_cobranca("iii999", 3, 40, 0)
+    assert any("so PDF" in m for _, m in avisos), avisos
+    assert not any("0 linhas medidas" in m for _, m in avisos), (
+        "o só-PDF foi registrado como entrega vazia — são causas diferentes "
+        "e a de cima é falsa: este projeto mediu 3 linhas. %s" % avisos)
+
+
+def test_o_tipo_de_arquivo_e_OBRIGATORIO_na_regua():
+    """🪤 PAR ACOPLADO. Um default aqui seria a promessa se desligando sozinha:
+    quem chamasse a régua sem pensar voltaria ao comportamento antigo, em
+    silêncio e com a bancada verde. Sem valor padrão, esquecer dá TypeError
+    alto — foi o que aconteceu com os 6 testes desta casa, e é o que eu quero
+    que aconteça com o próximo chamador."""
+    import inspect
+    sig = inspect.signature(main._carimbar_regua_de_cobranca)
+    p = sig.parameters.get("n_cad")
+    assert p is not None, (
+        "a régua voltou a decidir dinheiro sem olhar o tipo do arquivo: %s" % sig)
+    assert p.default is inspect.Parameter.empty, (
+        "`n_cad` ganhou valor padrão — a promessa 'PDF-only nunca cobra' "
+        "volta a se desligar sozinha no primeiro chamador distraído")
+
+
+def test_o_CHAMADOR_passa_o_tipo_de_arquivo_de_verdade(monkeypatch):
+    """🩸 O guarda que faltava e que teria pego o defeito em 06/09. Até hoje o
+    arreio do fim do job DESCARTAVA a régua (`lambda *a, **k: None`), então a
+    integração chamador→função nunca era executada: dava pra ter a função certa
+    e o chamador passando a informação errada, e a bancada ficaria verde.
+
+    Aqui o fim do `process_job` roda de verdade com DOIS PDFs e NENHUM CAD.
+    """
+    from _fim_do_job import roda_ate_o_email
+    itens = _itens_para_o_fim_do_job(medidos=2, total=3)
+    diario = roda_ate_o_email(itens, n_pdf=2, n_cad=0)
+    assert diario["regua"], (
+        "o fim do job não chamou a régua — o carimbo de dinheiro sumiu do "
+        "caminho do projeto")
+    args = diario["regua"][0]["args"]
+    assert len(args) >= 4, (
+        "o chamador voltou a carimbar sem dizer o tipo do arquivo: %r" % (args,))
+    assert args[3] == 0, (
+        "o job tinha 2 PDFs e ZERO CAD, e o chamador passou n_cad=%r — a "
+        "régua vai marcar cobrável um projeto só-PDF" % (args[3],))
+
+
+def test_CONTROLE_o_chamador_ENXERGA_o_CAD_quando_ele_existe():
+    """O outro lado: com CAD no job, o chamador tem que contar. Sem este
+    controle, `n_cad=0` fixo passaria no guarda de cima e nada faturaria."""
+    from _fim_do_job import roda_ate_o_email
+    itens = _itens_para_o_fim_do_job(medidos=2, total=3)
+    diario = roda_ate_o_email(itens, n_pdf=1, n_cad=2)
+    args = diario["regua"][0]["args"]
+    assert args[3] == 2, (
+        "o job tinha 2 arquivos CAD e o chamador contou %r" % (args[3],))

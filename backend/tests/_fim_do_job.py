@@ -150,7 +150,8 @@ def roda_ate_o_email(itens, cab_planob=None, medidos_antes=None, avisos=None,
                           "antes de fechar orçamento." % _n_antes))
         aviso_idx = len(proj.warnings) - 1
 
-    diario = {"emails": [], "logs": [], "planilhas": [], "subiu": None}
+    diario = {"emails": [], "logs": [], "planilhas": [], "subiu": None,
+              "regua": []}
     work_dir = tempfile.mkdtemp(prefix="fim_do_job_")
     caminhos = ([os.path.join(work_dir, "p%d.pdf" % k) for k in range(n_pdf)]
                 + [os.path.join(work_dir, "c%d.dxf" % k) for k in range(n_cad)])
@@ -191,7 +192,14 @@ def roda_ate_o_email(itens, cab_planob=None, medidos_antes=None, avisos=None,
         "generate_spreadsheet": _gen,
         "_carimbar_spec": lambda *a, **k: None,
         "_carimbar_planilha": lambda *a, **k: None,
-        "_carimbar_regua_de_cobranca": lambda *a, **k: None,
+        # 🩸 14/09/2026 — isto era `lambda *a, **k: None`, e por isso a
+        # integração chamador→régua NUNCA era executada por teste nenhum: a
+        # função sumia aqui e o guarda mais próximo lia o FONTE. Foi assim que
+        # "PDF-only nunca cobra" ficou 8 dias sendo só uma frase de docstring.
+        # Guardar a chamada neutraliza o efeito colateral do mesmo jeito (nada
+        # vai pro banco) e ainda deixa o argumento visível pro guarda.
+        "_carimbar_regua_de_cobranca":
+            lambda *a, **k: diario["regua"].append({"args": a, "kwargs": k}),
         "_supa_rest_service": lambda m, p, **k: (200, [{"parent_job_id": None}]),
         "_fundir_revisoes_do_cliente": lambda its, pai: (its, {}),
         "_persist_items_to_supabase": lambda j, its: len(its),
