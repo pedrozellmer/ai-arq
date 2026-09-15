@@ -2132,6 +2132,84 @@ def _aplicar_admin_local(all_items) -> int:
     return _n
 
 
+_MARCA_ADMIN_JUNTADA = "Uma obra tem uma administração local só"
+
+
+def _juntar_admin_local(all_items) -> int:
+    """Uma obra tem UMA administração local. Junta as repetidas; devolve quantas saíram.
+
+    🩸 15/09/2026 — estudo dos itens repetidos. A IA sugere "Administração local
+    de obra" como item de práxis EM CADA PRANCHA, cada vez com outra redação
+    ("encarregado/mestre", "equipe de gestão", "engenheiro residente"). A
+    consolidação não junta porque as descrições diferem, e a planilha saía com
+    até 6 linhas de 1 vb pra uma obra só. Medido em 70 projetos de cliente
+    (60 dias): 60 com uma linha, 10 repetindo. E com 4+ réplicas de mesma chave
+    a passada 1 SOMAVA: "Administração local (várias variantes) — 4 vb".
+
+    🔑 Não some nada da vista do arquiteto: fica UMA linha (1 vb, estimada) e a
+    observação lista, NO COMEÇO (a observação é cortada em 1.000 caracteres),
+    as redações que foram juntadas.
+    🚫 Nunca junta: linha editada pelo cliente (origem 'revisao_cliente', regra
+    nº7), linha com prazo "informado por você", linha confirmada, e linha que
+    não é verba. Essas seguem como vieram.
+    🪤 Roda DEPOIS de `_aplicar_admin_local`: antes dela as linhas em mês ainda
+    não são verba e ficariam de fora.
+    """
+    try:
+        from engine_rules import e_administracao_local as _e_al
+    except Exception as _eimp:
+        print(f"[admin-local] regra indisponivel: {_eimp}")
+        return 0
+
+    def _qtd(_it):
+        try:
+            return float(getattr(_it, "quantity", 0) or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    def _juntavel(_it):
+        if not _e_al(getattr(_it, "description", "")):
+            return False
+        if str(getattr(_it, "unit", "") or "").strip().lower() != "vb":
+            return False
+        if str(getattr(_it, "origem", "") or "") == "revisao_cliente":
+            return False
+        if getattr(_it, "confidence", None) == "confirmado":
+            return False
+        if "informado por você" in str(getattr(_it, "observations", "") or "").lower():
+            return False
+        return True
+
+    _alvo = [_it for _it in (all_items or []) if _juntavel(_it)]
+    if not _alvo:
+        return 0
+    _fica = max(_alvo, key=lambda x: (len(str(getattr(x, "description", "") or "")),
+                                      _desempate_estavel(x)))
+    _saem = [_it for _it in _alvo if _it is not _fica]
+    _obs = str(getattr(_fica, "observations", "") or "")
+    # Linha única que já é a SOMA de réplicas da passada 1 ("Consolidado de N
+    # entradas replicadas") também volta a 1 verba. Linha única comum não muda.
+    _era_soma = "consolidado de" in _obs.lower() and _qtd(_fica) > 1.0
+    if not _saem and not _era_soma:
+        return 0
+    if _MARCA_ADMIN_JUNTADA not in _obs:
+        if _saem:
+            _redacoes = " · ".join(str(getattr(_it, "description", "") or "")[:60]
+                                   for _it in _saem)
+            _nota = (f"{_MARCA_ADMIN_JUNTADA}: juntei aqui {len(_saem)} linha(s) "
+                     f"repetida(s) que vieram de outras pranchas ({_redacoes}).")
+        else:
+            _nota = (f"{_MARCA_ADMIN_JUNTADA}: a soma de {_qtd(_fica):g} réplicas "
+                     f"virou 1 verba.")
+        _nota += " Se forem obras separadas, ajuste na revisão."
+        _fica.observations = (_nota + (" | " + _obs if _obs else ""))[:1000]
+    _fica.quantity = 1.0
+    if _saem:
+        _ids = {id(_it) for _it in _saem}
+        all_items[:] = [_it for _it in all_items if id(_it) not in _ids]
+    return len(_saem)
+
+
 def _gritar_perda_total(job_id: str, n_montados: int, causa: str):
     """A gravação dos itens falhou INTEIRA — isso tem que sair do dyno.
 
@@ -13509,11 +13587,14 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # ── ADMINISTRAÇÃO LOCAL: o prazo não sai da planta (regra nº5) ──────
         try:
             _n_al = _aplicar_admin_local(all_items)
-            if _n_al:
+            # 15/09: depois de virar verba, as repetidas (uma por prancha) viram UMA.
+            _n_jal = _juntar_admin_local(all_items)
+            if _n_al or _n_jal:
                 _log_error("motor:admin-local-sem-prazo",
                            f"{_n_al} item(ns) de administração local saíram com "
                            f"unidade de TEMPO; normalizados pra verba. O prazo "
-                           f"vem do cronograma, não da planta.",
+                           f"vem do cronograma, não da planta. "
+                           f"{_n_jal} linha(s) repetida(s) juntada(s) numa só.",
                            job_id, severity="info")
         except Exception as _eal:
             print(f"[admin-local] nao-fatal: {_eal}")

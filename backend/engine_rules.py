@@ -2302,6 +2302,16 @@ _FRASE_SEM_PRAZO = (
 )
 
 
+def e_administracao_local(descricao):
+    """O item é administração local de obra, em qualquer unidade?
+
+    Régua ÚNICA do reconhecimento. Quem pergunta: o prazo chutado (logo abaixo)
+    e a junção das linhas repetidas (main.py `_juntar_admin_local`, 15/09). Duas
+    cópias do regex divergiriam na primeira redação nova da IA.
+    """
+    return bool(_RE_ADMIN_LOCAL.search(str(descricao or "")))
+
+
 def administracao_local_com_prazo_chutado(descricao, unidade):
     """O item é administração local de obra cotada em unidade de TEMPO?
 
@@ -2309,7 +2319,7 @@ def administracao_local_com_prazo_chutado(descricao, unidade):
     item com quantidade 3 e outro com 0 são o mesmo defeito — nos dois a
     unidade declara um prazo que ninguém mediu.
     """
-    if not _RE_ADMIN_LOCAL.search(str(descricao or "")):
+    if not e_administracao_local(descricao):
         return False
     return str(unidade or "").strip().lower() in _UNIDADES_DE_TEMPO
 
