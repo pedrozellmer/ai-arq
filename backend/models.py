@@ -26,6 +26,27 @@ class Confidence(str, Enum):
     VERIFICAR = "verificar"
 
 
+# 🚨 O SELO DA REGRA Nº1 MORA AQUI, NUM LUGAR SÓ (15/09/2026).
+# A pergunta "isto é medido?" tinha QUATRO respostas escritas à mão: os dois
+# laços da planilha, o placar do e-mail e o chat da página do projeto — e o
+# chat esquecia o `vision_pdf`. O chat da planilha (agent.py) nem recebia a
+# resposta: no job ba869938 pôs ✓ em ~20 linhas estimadas, na frente do
+# cliente, porque `list_items` só entregava número e descrição.
+# 🔑 Planilha, e-mail e os dois chats perguntam AQUI; o texto do selo que a
+# planilha escreve (e que o agente lê de volta) também sai daqui.
+SELO_MEDIDO = "✓ MEDIDO do CAD"
+SELO_ESTIMADO = "⚠ ESTIMADO — revisar"
+
+
+def e_medido(confidence, origem="") -> bool:
+    """FAIL-SAFE: só CONFIRMADO é medido — e o que a IA leu numa imagem de
+    PDF (`vision_pdf`) nunca é, porque Vision lê número, não mede geometria.
+    Aceita o enum ou o texto cru do banco ("confirmado")."""
+    _c = getattr(confidence, "value", confidence)
+    return (str(_c or "").strip().lower() == Confidence.CONFIRMADO.value
+            and str(origem or "").strip().lower() != "vision_pdf")
+
+
 class BudgetItem(BaseModel):
     item_num: str
     description: str

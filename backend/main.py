@@ -4014,18 +4014,15 @@ def _build_reading_diagnostic(all_items, n_pdf, n_cad, project_type, project_dat
     daltônico): ✓ medido / ⚠ estimado. Best-effort, nunca levanta."""
     import html as _hd
     try:
-        from models import Confidence as _Conf
-    except Exception:
-        _Conf = None
-    try:
         total = len(all_items or [])
         if not total:
             return ""
 
+        # 15/09: a regra mora em `models.e_medido` — esta era uma das 4 cópias.
+        from models import e_medido as _e_medido
+
         def _is_medido(it):
-            c = getattr(it, "confidence", None)
-            ok_conf = (c == _Conf.CONFIRMADO) if _Conf else str(c).endswith("confirmado")
-            return ok_conf and getattr(it, "origem", "") != "vision_pdf"
+            return _e_medido(getattr(it, "confidence", None), getattr(it, "origem", ""))
 
         medidos = sum(1 for it in all_items if _is_medido(it))
         estimados = total - medidos
@@ -20772,13 +20769,56 @@ async def public_chat(request: Request):
 # ═══════════════════════════════════════════════════════════════
 _PROJECT_CHAT_HITS: dict = {}
 
+# 🪤 15/09/2026 — os campos que o chat da página busca e a regra que marca cada
+# item moram JUNTOS. A marca "MEDIDO" olhava só `confidence` e esquecia o
+# `vision_pdf` que a planilha respeita — latente (0 linhas em 15/09), mas era a
+# mesma pergunta com duas respostas. E sem `origem` no SELECT a regra única
+# recebe vazio e volta a errar calada: por isso o campo fica ao lado dela.
+_CHAT_ITENS_CAMPOS = "description,unit,quantity,confidence,discipline,origem"
+
+
+def _linhas_de_itens_do_chat(items: list) -> list:
+    """As linhas de itens do contexto do chat da página do projeto, com a marca
+    MEDIDO/estimativa da MESMA regra da planilha (`models.e_medido`)."""
+    from models import e_medido as _e_medido
+    linhas = [f"Total de itens na planilha: {len(items)}"]
+    by_disc: dict = {}
+    for it in items:
+        by_disc.setdefault(it.get("discipline") or "Outros", []).append(it)
+    for _d, _lst in by_disc.items():
+        linhas.append(f"\n[{_d}] ({len(_lst)} itens)")
+        for it in _lst[:40]:
+            _marca = "MEDIDO" if _e_medido(it.get("confidence"), it.get("origem")) else "estimativa"
+            linhas.append(f"  - {str(it.get('description',''))[:80]}: {it.get('quantity',0)} {it.get('unit','')} ({_marca})")
+    return linhas
+
+
+def _cortar_contexto_do_chat(linhas: list, teto: int = 9000) -> str:
+    """Junta o contexto do chat da página sem cortar uma linha no meio.
+
+    🪤 15/09/2026: o `[:9000]` cortava a última linha antes da marca (MEDIDO)/
+    (estimativa) — o modelo via número sem selo, e sem saber que faltava o
+    resto. Agora corta na última linha inteira e diz quantos itens ficaram de
+    fora."""
+    saida, total = [], 0
+    for i, ln in enumerate(linhas):
+        if total + len(ln) + 1 > teto:
+            restam = sum(1 for x in linhas[i:] if x.lstrip().startswith("- "))
+            saida.append("(lista cortada por tamanho: %d item(ns) não couberam aqui — "
+                         "não conclua sobre eles)" % restam)
+            break
+        saida.append(ln)
+        total += len(ln) + 1
+    return "\n".join(saida)
+
+
 PROJECT_CHAT_SYSTEM = """Você é o assistente do AI.arq. Ajuda o cliente a ENTENDER o quantitativo dele — a planilha que a nossa IA gerou lendo o projeto CAD. Responda em português do Brasil, de forma clara, curta e cordial.
 
 REGRAS DURAS (nunca violar):
 1. Fale SÓ sobre ESTE projeto e os itens listados abaixo. Nunca invente um item que não está na lista.
 2. NUNCA dê preço, custo, valor em R$, ou BDI. O AI.arq entrega QUANTIDADE, não preço. Se perguntarem de preço/custo/orçamento, responda gentil: "O AI.arq gera o quantitativo (as quantidades) — a precificação é com você e seu orçamentista. Mas posso te ajudar a entender as quantidades e as referências SINAPI."
 3. Você NÃO substitui o profissional nem dá parecer técnico definitivo — você ajuda a LER e entender a planilha.
-4. Explique bem a diferença: um item MEDIDO foi extraído direto da geometria do CAD (confiável); uma ESTIMATIVA é quando o desenho não deixou claro e o cliente precisa revisar. Para ter MAIS itens medidos, oriente enviar o projeto em DWG ou DXF (PDF a IA lê, mas vira estimativa).
+4. Explique bem a diferença: um item MEDIDO foi extraído direto da geometria do CAD (confiável); uma ESTIMATIVA é quando o desenho não deixou claro e o cliente precisa revisar — ou um número que o próprio cliente digitou ou informou. A marca entre parênteses de cada item, (MEDIDO) ou (estimativa), é a ÚNICA fonte disso: nunca chame de medido um item marcado (estimativa), nem um item que ficou fora da lista. Para ter MAIS itens medidos, oriente enviar o projeto em DWG ou DXF (PDF a IA lê, mas vira estimativa).
 5. Se não souber, ou o dado não estiver na planilha, seja honesto e diga que não consta.
 6. FORMATO: texto corrido e curto, com listas de traços quando ajudar. NÃO use títulos markdown (#, ##) nem tabelas — sua resposta aparece num balão de chat simples.
 7. LINHA DE ÁREA EM BRANCO TEM CONSERTO NA HORA — ofereça isso ANTES de qualquer outra saída. Se o cliente perguntar pela metragem que faltou num item de m² com quantidade ZERO de superfície horizontal (piso, forro, laje, contrapiso, revestimento de piso), diga que na tela de revisão, logo acima da lista de itens, existe um campo "Área total": informando a metragem ali, a planilha é refeita NA HORA, sem reprocessar e sem custo nenhum, e as linhas saem marcadas como "estimado (informado por você)". Só depois disso mencione reenviar em DXF ou preencher item por item — esses dois são caros e demorados.
@@ -20843,7 +20883,7 @@ async def project_chat(job_id: str, request: Request):
     items = []
     try:
         q = (f"{SUPABASE_URL}/rest/v1/project_items?job_id=eq.{job_id}"
-             f"&select=description,unit,quantity,confidence,discipline&limit=400")
+             f"&select={_CHAT_ITENS_CAMPOS}&limit=400")
         rq = _u.Request(q, method="GET")
         rq.add_header("apikey", SUPABASE_KEY)
         rq.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
@@ -20851,16 +20891,8 @@ async def project_chat(job_id: str, request: Request):
     except Exception as e:
         print(f"[project_chat] itens erro: {e}")
 
-    by_disc: dict = {}
-    for it in items:
-        by_disc.setdefault(it.get("discipline") or "Outros", []).append(it)
-    ctx_lines.append(f"Total de itens na planilha: {len(items)}")
-    for _d, _lst in by_disc.items():
-        ctx_lines.append(f"\n[{_d}] ({len(_lst)} itens)")
-        for it in _lst[:40]:
-            _marca = "MEDIDO" if (it.get("confidence") == "confirmado") else "estimativa"
-            ctx_lines.append(f"  - {str(it.get('description',''))[:80]}: {it.get('quantity',0)} {it.get('unit','')} ({_marca})")
-    context = "\n".join(ctx_lines)[:9000]
+    ctx_lines.extend(_linhas_de_itens_do_chat(items))
+    context = _cortar_contexto_do_chat(ctx_lines)
 
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:

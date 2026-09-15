@@ -3,7 +3,7 @@
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
-from models import ProjectData, BudgetItem, Confidence
+from models import ProjectData, BudgetItem, e_medido, SELO_MEDIDO, SELO_ESTIMADO
 
 
 # Estilos — modernizado 16/07: fonte Calibri, paleta da marca (slate/indigo),
@@ -199,12 +199,9 @@ def _origem_da_medicao(item) -> str:
                 fim = min(fim, j + (1 if sep == ". " else 0))
         return trecho[:fim].strip().rstrip(".") or "—"
     # Sem "Fonte:" escrito: o texto vale mais que o silencio.
-    try:
-        from models import Confidence
-        medido = getattr(item, "confidence", None) == Confidence.CONFIRMADO
-    except Exception:
-        medido = str(getattr(item, "confidence", "")).lower().endswith("confirmado")
-    if medido:
+    # 15/09: mesma regra do selo — confirmado lido no PDF não é "medido sem
+    # procedência", é estimativa (models.e_medido).
+    if e_medido(getattr(item, "confidence", None), getattr(item, "origem", "")):
         return "⚠ sem procedência registrada — confira esta linha no CAD"
     return "não medido — a IA identificou o item; a quantidade é sua"
 
@@ -398,7 +395,7 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
     # Áreas aparecem na seção PREMISSAS (se extraídas) — não duplicar no subtítulo
     ws.cell(row=2, column=1, value=' | '.join(info_parts) if info_parts else 'Quantitativos de projeto').font = F_N
     ws.merge_cells('A3:I3')
-    ws.cell(row=3, column=1, value='Cada item traz na coluna OBSERVAÇÕES um selo de status: "✓ MEDIDO do CAD" (confiável) ou "⚠ ESTIMADO — revisar". A cor é só reforço — fundo BRANCO = medido · LARANJA = estimado · CINZA = metadado · ROXO = custo indireto/gestão. Coluna AMARELA = preencher preço. Itens ⚠ ESTIMADO e os roxos exigem revisão antes de fechar o orçamento.').font = F_NOTE
+    ws.cell(row=3, column=1, value=f'Cada item traz na coluna OBSERVAÇÕES um selo de status: "{SELO_MEDIDO}" (confiável) ou "{SELO_ESTIMADO}". A cor é só reforço — fundo BRANCO = medido · LARANJA = estimado · CINZA = metadado · ROXO = custo indireto/gestão. Coluna AMARELA = preencher preço. Itens ⚠ ESTIMADO e os roxos exigem revisão antes de fechar o orçamento.').font = F_NOTE
 
     ro = 5
     hdrs = ['ITEM', 'DESCRIÇÃO DO SERVIÇO', 'UN', 'QTDE', 'MAT (R$)', 'M.O. (R$)', 'TOTAL (R$)', 'OBSERVAÇÕES', 'ORIGEM DA MEDIÇÃO', 'ESPECIFICAÇÃO', 'REF.']
@@ -577,9 +574,10 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
             # FAIL-SAFE: só CONFIRMADO vira branco/MEDIDO; todo o resto laranja.
             # E item de origem 'vision_pdf' NUNCA é "medido do CAD" — Vision lê
             # número numa imagem, não mede geometria.
-            _medido = (item.confidence == Confidence.CONFIRMADO
-                       and getattr(item, 'origem', '') != 'vision_pdf')
-            _selo = ('✓ MEDIDO do CAD' if _medido else '⚠ ESTIMADO — revisar')
+            # 15/09: a regra e o texto do selo moram em models — o chat lê este
+            # selo de volta pra dizer ao cliente o que é medido.
+            _medido = e_medido(item.confidence, getattr(item, 'origem', ''))
+            _selo = (SELO_MEDIDO if _medido else SELO_ESTIMADO)
             _obs = f'{_selo}. {item.observations}' if item.observations else _selo
             ws.cell(row=ro, column=8, value=_obs).font = F_N
             # Enriquecer REF com código SINAPI (se houver match)
@@ -636,9 +634,8 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
             ws.cell(row=ro, column=7, value=f'=D{ro}*(E{ro}+F{ro})').font = F_N
             # Selo de status TEXTUAL na observação (cor + ícone + texto).
             # Fail-safe: só CONFIRMADO+geometria vira branco; resto laranja.
-            _medido = (item.confidence == Confidence.CONFIRMADO
-                       and getattr(item, 'origem', '') != 'vision_pdf')
-            _selo = ('✓ MEDIDO do CAD' if _medido else '⚠ ESTIMADO — revisar')
+            _medido = e_medido(item.confidence, getattr(item, 'origem', ''))
+            _selo = (SELO_MEDIDO if _medido else SELO_ESTIMADO)
             _obs = f'{_selo}. {item.observations}' if item.observations else _selo
             ws.cell(row=ro, column=8, value=_obs).font = F_N
             # Enriquecer REF com código SINAPI (se houver match)
@@ -651,7 +648,9 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
                 ws.cell(row=ro, column=c).alignment = AC if c in [1, 3, 4, 11] else AL
             for c in [4, 5, 6, 7]: ws.cell(row=ro, column=c).alignment = AR
             for c in [5, 6, 7]: ws.cell(row=ro, column=c).number_format = '#,##0.00'
-            if item.confidence in [Confidence.ESTIMADO, Confidence.VERIFICAR]:
+            # 🪤 15/09: a cor deste laço olhava a confiança crua e o texto olhava a
+            # regra — um confirmado lido no PDF sairia BRANCO com selo de ESTIMADO.
+            if not _medido:
                 for c in [1, 2, 3, 4]: ws.cell(row=ro, column=c).fill = P_ORANGE
             ro += 1
 

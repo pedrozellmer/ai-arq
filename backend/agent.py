@@ -20,6 +20,8 @@ from typing import Any, Optional
 
 from openpyxl import load_workbook
 
+from models import SELO_MEDIDO
+
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "https://kqjabzwgbfuivzlcfvvu.supabase.co")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY") or os.getenv("SUPABASE_ANON_KEY") or "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxamFiendnYmZ1aXZ6bGNmdnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMDg5NzcsImV4cCI6MjA5MTU4NDk3N30.48xSenZlDV0LfD94ZxwGvX41Kf9Je2n-ouZpJrrCSKI"
@@ -55,6 +57,26 @@ def _open_planilha(job_id: str):
     return load_workbook(path, read_only=True, data_only=True)
 
 
+def _selo_da_linha(item_num: str, observations: str) -> str:
+    """medido / estimado / metadado — o que a PLANILHA disse desta linha.
+
+    🩸 15/09/2026 (job ba869938): o resumo por disciplina pôs "✓ medidos do
+    CAD" em ~20 linhas ESTIMADAS — alvenaria, 7.314 m² de piso, 144 vagas — com
+    o cliente, orçamentista, lendo. O prompt manda dizer medido × estimado, e
+    `list_items` entregava só número, descrição, unidade e quantidade: o modelo
+    chutou ✓ em tudo que tinha número. Precisou de e-mail de correção.
+    🔑 O selo é lido do COMEÇO da observação, onde `generate_spreadsheet` o
+    escreve — nunca de um "MEDIDO" no meio do texto, que o motor pode ter
+    escrito falando de outra linha. Linha 0.x é a capa (área, "também gera"):
+    não é serviço, então não é medida nem estimativa.
+    FAIL-SAFE: o que não começa com o selo de medido é estimado."""
+    if str(item_num or "").strip().startswith("0."):
+        return "metadado"
+    if str(observations or "").lstrip().startswith(SELO_MEDIDO):
+        return "medido"
+    return "estimado"
+
+
 def _iter_orcamento_rows(wb):
     """Itera linhas da aba Orçamento, devolvendo dicts."""
     if not wb or "Orçamento" not in wb.sheetnames:
@@ -68,18 +90,21 @@ def _iter_orcamento_rows(wb):
             continue
         if not re.match(r"^\d+\.\d+", item_num.strip()):
             continue
+        _obs = str(row[7] or "").strip() if len(row) > 7 else ""
         yield {
             "item_num": item_num.strip(),
             "description": str(row[1] or "").strip(),
             "unit": str(row[2] or "").strip(),
             "quantity": row[3],
-            "observations": str(row[7] or "").strip() if len(row) > 7 else "",
+            "selo": _selo_da_linha(item_num, _obs),
+            "observations": _obs,
             "ref_sheet": str(row[8] or "").strip() if len(row) > 8 else "",
         }
 
 
 def tool_list_items(job_id: str, max_items: int = 200) -> dict:
-    """Lista itens da planilha — número, descrição (40 chars), unit, qty."""
+    """Lista itens da planilha — número, descrição (80 chars), unit, qty e o
+    SELO (medido/estimado/metadado). Sem o selo o resumo chutava ✓ (15/09)."""
     wb = _open_planilha(job_id)
     if wb is None:
         return {"error": f"planilha do job {job_id} não encontrada"}
@@ -90,6 +115,7 @@ def tool_list_items(job_id: str, max_items: int = 200) -> dict:
             "description": r["description"][:80],
             "unit": r["unit"],
             "quantity": r["quantity"],
+            "selo": r["selo"],
         })
         if len(items) >= max_items:
             break
@@ -120,7 +146,10 @@ def tool_get_item_details(job_id: str, item_num: str) -> dict:
             "capitulo": cls.get("capitulo_code"),
             "grupo": cls.get("grupo_code"),
             "familia": cls.get("familia_code"),
-            "confidence": round(cls.get("confidence", 0), 2),
+            # 15/09: é a confiança do CLASSIFICADOR (0 a 1), não da medição —
+            # com o nome "confidence" ao lado do `selo` o modelo lia "alta
+            # confiança" num item estimado.
+            "confianca_da_classificacao": round(cls.get("confidence", 0), 2),
         }
         found["atributos_folha"] = cls.get("attributes") or {}
     except Exception as e:
@@ -142,6 +171,7 @@ def tool_search_items(job_id: str, query: str, max_hits: int = 20) -> dict:
                 "description": r["description"][:120],
                 "unit": r["unit"],
                 "quantity": r["quantity"],
+                "selo": r["selo"],
                 "observation_preview": r["observations"][:120],
             })
             if len(hits) >= max_hits:
@@ -426,7 +456,7 @@ def _supabase_select_project(job_id: str) -> Optional[dict]:
 TOOLS = [
     {
         "name": "list_items",
-        "description": "Lista itens da planilha de quantitativos (número, descrição, unidade, quantidade). Use pra ter visão geral do que existe.",
+        "description": "Lista itens da planilha de quantitativos (número, descrição, unidade, quantidade e selo). O campo `selo` é o que a PLANILHA marcou em cada linha: 'medido' (branco, medido do CAD), 'estimado' (laranja, pra revisar) ou 'metadado' (linhas 0.x da capa, não é serviço). Use pra ter visão geral do que existe.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -447,7 +477,7 @@ TOOLS = [
     },
     {
         "name": "search_items",
-        "description": "Busca itens da planilha por palavra-chave na descrição. Use quando o usuário menciona um termo (LED, alvenaria, forro etc).",
+        "description": "Busca itens da planilha por palavra-chave na descrição, com o mesmo campo `selo` de list_items ('medido', 'estimado' ou 'metadado'). Use quando o usuário menciona um termo (LED, alvenaria, forro etc).",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -563,7 +593,10 @@ CONTEXTO DESTA CONVERSA:
 REGRAS:
 - Use as ferramentas pra investigar antes de responder. NUNCA invente número.
 - Se uma ferramenta retornar erro (ex.: {{"error": ...}} — a planilha pode ter sumido após um reinício do servidor), NÃO chute um valor: diga que não conseguiu acessar agora e que é só recarregar/reprocessar. Nunca preencha um número que você não leu de uma ferramenta.
-- MEDIDO vs ESTIMADO: ao citar uma quantidade, diga se o item está "✓ medido do CAD" (confirmado) ou "⚠ estimativa pra revisar" (estimado) — isso está na observação/selo do item. Nunca apresente uma estimativa como certeza; deixe claro o que é chão firme e o que o usuário precisa conferir.
+- MEDIDO vs ESTIMADO: ao citar uma quantidade, diga se o item está "✓ medido do CAD" ou "⚠ estimativa pra revisar" — e isso vem SÓ do campo `selo` que as ferramentas devolvem: ✓ apenas quando selo = "medido"; selo = "estimado" é ⚠; selo = "metadado" (linhas 0.x) não é quantidade de serviço. Ter número NÃO é ter medição. Num resumo, marque linha a linha pelo selo; se não tiver o selo de uma linha, não use ✓. Nunca apresente uma estimativa como certeza; deixe claro o que é chão firme e o que o usuário precisa conferir.
+- 🪤 Em 15/09/2026 um resumo por disciplina pôs ✓ em ~20 linhas estimadas (alvenaria, pisos, vagas) só porque tinham número — e o cliente, orçamentista, leu isso como medido.
+- As respostas ANTERIORES desta conversa (o histórico) podem ter marcado ✓ errado: antes de 15/09/2026 as ferramentas não entregavam o selo. Nunca repita um ✓ do histórico sem conferir o selo na ferramenta de novo.
+- Se o resultado de uma ferramenta terminar com [RESULTADO CORTADO ...], a lista veio INCOMPLETA: diga isso ao cliente e não resuma nem conte o que não veio.
 - O AI.arq NÃO precifica. Se pedirem preço, valor ou custo, explique que o quantitativo sai sem preço de propósito — quem precifica é o orçamentista, com o BDI e os fornecedores dele. Você ajuda com as quantidades, não com R$.
 - E o AI.arq NÃO REVISA PROJETO. Se pedirem para validar dimensionamento, apontar erro de projeto, dizer se um rack está subdimensionado, se uma rota de cabo é inadequada, se a distância excede norma, se falta reserva técnica — NÃO dê o veredito. Você lê o desenho; você não lê a norma, não conhece a obra e não assina o projeto. Opinar sobre o dimensionamento de outra pessoa é estimativa vestida de análise técnica, e é onde errar sai mais caro pro cliente.
 - O QUE FAZER NESSE CASO, em vez de recusar seco: entregue o que você TEM, que é muito. Diga o que está no desenho (quantidades, contagens, comprimentos por layer, o que o carimbo declara) e o que o desenho NÃO traz (falta cota, falta quadro, o item aparece sem especificação). Isso é insumo de verdade pro projetista decidir. Depois diga, numa frase e sem rodeio, que a validação do projeto é dele — a gente levanta, ele decide.
@@ -684,6 +717,26 @@ def _alerta_lacuna(job_id: str, question: str) -> None:
     )
     if _notify_admin(f"Chat: cliente diz que faltou medição — {job_id}", _corpo):
         _email_auto_registrar(NOTIFY_EMAIL, "alerta_chat_lacuna", ref=_ref)
+
+
+_TETO_RESULTADO_FERRAMENTA = 8000
+
+
+def _conteudo_da_ferramenta(result, teto: int = _TETO_RESULTADO_FERRAMENTA) -> str:
+    """JSON do resultado da ferramenta pro modelo — e, se passar do teto, AVISA.
+
+    🩸 15/09/2026: o corte em 8.000 caracteres era calado. Numa planilha de 182
+    linhas o `list_items` mostrava ~50 e o modelo resumia "por disciplina" como
+    se fosse a planilha inteira. O `selo` novo ainda somou ~20 caracteres por
+    linha (52 → 47 linhas vistas, medido pela revisão). Cortar continua
+    necessário; esconder que cortou, não."""
+    txt = json.dumps(result, default=str, ensure_ascii=False)
+    if len(txt) <= teto:
+        return txt
+    return (txt[:teto]
+            + "\n\n[RESULTADO CORTADO: passou de %d caracteres (%d no total) e o resto "
+              "NÃO veio. Não resuma nem conte o que não veio: diga que a lista está "
+              "incompleta e use search_items por termo pra ver o restante.]" % (teto, len(txt)))
 
 
 def ask(job_id: str, question: str, max_iterations: int = 8,
@@ -814,7 +867,7 @@ def ask(job_id: str, question: str, max_iterations: int = 8,
             tool_results.append({
                 "type": "tool_result",
                 "tool_use_id": tu.id,
-                "content": json.dumps(result, default=str, ensure_ascii=False)[:8000],
+                "content": _conteudo_da_ferramenta(result),
             })
         messages.append({"role": "user", "content": tool_results})
 
