@@ -3289,6 +3289,9 @@
   }
 
   async function startProcessing() {
+    // Os avisos do envio ANTERIOR saem antes de qualquer caminho abaixo abrir a
+    // tela de processamento — ver `_limparAvisosDoEnvio`.
+    _limparAvisosDoEnvio();
     // Pede permissão de notificação na 1ª vez (silencioso se já decidida)
     requestNotificationPermission();
 
@@ -3489,6 +3492,20 @@
   // ══════════════════════════════════════════════
   // AVISO DE ARQUIVO AEC/MEP — mostrado no envio, não depois do erro
   // ══════════════════════════════════════════════
+  // 🩸 15/09/2026 — A CAIXA NUNCA ERA LIMPA. `mostrarAvisoAec` escreve com `+=`
+  // (AEC e estrutural podem vir juntos no MESMO envio), e nada zerava a caixa
+  // entre um envio e outro: o segundo envio na mesma página reabria os avisos —
+  // e os NOMES DE ARQUIVO — do anterior, e o aviso novo entrava embaixo do
+  // velho. Achado pela revisão da telemetria dos avisos; 0 casos no banco.
+  // Chamada no COMEÇO do `startProcessing`, antes de qualquer caminho abrir a
+  // tela de processamento (o do anexo e o do projeto novo).
+  function _limparAvisosDoEnvio() {
+    const box = document.getElementById('aviso-aec');
+    if (!box) return;
+    box.innerHTML = '';
+    box.classList.add('hidden');
+  }
+
   function mostrarAvisoAec(av, cor, tipo) {
     const box = document.getElementById('aviso-aec');
     if (!box) return;
