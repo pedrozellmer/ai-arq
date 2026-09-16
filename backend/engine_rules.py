@@ -426,6 +426,52 @@ def is_floor_surface_para_criar(desc):
     return is_floor_surface(d) and not any(b in d for b in FLOOR_ATO_PARCIAL_KW)
 
 
+# ── Camada de base × ACABAMENTO (16/09/2026) ────────────────────────────────
+# O passo 7 do `_apply_area_honesty` dá a área medida da prancha pra UMA linha
+# zerada de cada família (piso, forro). A pergunta que faltava: quando OUTRA
+# linha da mesma prancha e da mesma família já tem número, a vaga está ocupada?
+#
+# ✅ DECIDIDO (Pedro, 15/09): CAMADA NÃO OCUPA A VAGA. Contrapiso com número não
+# impede o piso de acabamento vazio de receber a área — os dois cobrem o mesmo
+# chão, um embaixo do outro, e camada é a forma MAIS COMUM no banco (desde
+# 01/08: piso 16 grupos em 11 jobs, forro 8 em 6). Quem ocupa é só OUTRO
+# ACABAMENTO do mesmo tipo: dois pisos de acabamento, dois forros. Aí a linha
+# vazia fica em branco COM aviso — porque ali a área da prancha já foi falada.
+#
+# 🪤 A lista é NEGATIVA de propósito. Classificar errado como "camada" devolve o
+# comportamento de hoje (a linha vazia recebe a área, estimada); classificar
+# errado como "acabamento" APAGA um preenchimento que hoje acontece. Na dúvida,
+# camada. Por isso pintura/massa/verniz entram aqui: "pintura epóxi de piso" é
+# acabamento na vida real, mas tratá-la como camada não muda nada do que já sai.
+# 🩸 16/09, revisão adversarial: a 1ª lista deixava "LAJE" passar como
+# acabamento — e laje é a base por definição. "Laje de cobertura 120 m²" tomava
+# a vaga do piso vazio da mesma prancha, que é o "camada ocupando" que a decisão
+# proíbe. Junto vieram dois nomes de mercado que a lista não previa: "argamassa
+# COLANTE AC-III" (a lista só tinha "de assentamento") e "manta ACÚSTICA" (só
+# tinha asfáltica). Por isso as três entradas ficaram curtas: laje, argamassa,
+# manta. E "tátil", que é acabamento de faixa — cobre 8 m² de 102, não a vaga.
+CAMADA_DE_BASE_KW = (
+    "contrapiso", "contra-piso", "contra piso", "regulariza", "lastro",
+    "impermeabiliz", "nivelamento", "preparo de base", "camada de", "berço",
+    "berco", "argamassa", "manta", "laje", "isolamento", "barreira de vapor",
+    "pintura", "massa corrida", "massa pva", "emassamento", "selador",
+    "fundo preparador", "textura", "verniz", "tátil", "tatil",
+)
+
+
+def e_acabamento_de_superficie(desc):
+    """True quando a linha É o acabamento da superfície — o piso que se pisa, o
+    forro que se vê —, e não a camada que vai embaixo nem a pintura que vai em
+    cima.
+
+    Usada pra decidir quem OCUPA a vaga do passo 7. Só acabamento ocupa.
+    """
+    d = (desc or "").lower()
+    if any(k in d for k in CAMADA_DE_BASE_KW):
+        return False
+    return is_floor_surface_para_criar(d)
+
+
 # ── Coerência de unidade: item CONTÁVEL não sai em metro/m² ──────────────────
 # Caso cliente-40 (visto em 01/08/2026, job ed655532): "Condulete de dados —
 # 155,6 ml — CONFIRMADO". Condulete é caixa: conta-se em unidade. O motor mediu

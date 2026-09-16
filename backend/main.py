@@ -52,6 +52,7 @@ from engine_rules import (
     detectar_laco_repeticao as _detectar_laco,
     is_floor_surface as _is_floor_surface,
     is_floor_surface_para_criar as _is_floor_surface_criar,
+    e_acabamento_de_superficie as _e_acabamento_de_superficie,
     is_unit_mismatch_countable as _is_unit_mismatch_countable,
     corrigir_comprimento_medido as _corrigir_comprimento_medido,
     layer_is_carimbo as _layer_is_carimbo,
@@ -8640,6 +8641,9 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
         # cai no comportamento de antes em vez de virar teto 0, que zeraria tudo
         _teto_m2 = float(pdfvec_m2 or 0)
     _medida_da_prancha = {}
+    #: id(item) -> (arquivo, pagina, familia, obs_antes, qty_posta) — o passo 7
+    #: preencheu, e o passo de vaga abaixo decide se isso se sustenta
+    _p7_feitos = {}
     _ambiguos = []
     _por_arquivo = {}
     #: (arquivo, pagina) -> medição daquela prancha. Só pra multipágina.
@@ -9130,6 +9134,12 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
             # `preservados_por_pe_direito` que já custou um conserto em 26/08 —
             # instrumento mentindo sobre o que o motor fez.
             criados_prancha += 1
+            # quem recebeu a área, de qual prancha, e o texto ANTES — o passo
+            # abaixo pode desfazer isto se a vaga estiver ocupada
+            _p7_feitos[id(it)] = (
+                str(_m.get("arquivo") or "").strip().lower(), _m.get("pagina"),
+                _familia_da_superficie(getattr(it, "description", "") or ""),
+                _o2, it.quantity)
         elif (q > 0 and _pd_ok
               and (str(getattr(it, "origem", "") or "") == "deriv_pd"
                    or (_mediu_linear
@@ -9273,6 +9283,67 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
                         + ", ".join(_opcoes[:-1]) + " ou " + _opcoes[-1] + ".")
                 it.observations = (_obs + " | " + _frase).strip(" |")
             blanked += 1
+    # ── A VAGA DO PASSO 7: só OUTRO ACABAMENTO ocupa (16/09/2026) ───────────
+    # 🩸 O passo 7 disputava a vaga só entre linhas ZERADAS. Linha COM número da
+    # mesma prancha e família não contava — então "piso vinílico 45 m²" (com
+    # número) convivia com "piso cerâmico" recebendo os 102 m² da prancha
+    # inteira. Medido em 15/09: 4 linhas em 4 jobs de cliente, todas estimadas.
+    # ✅ Decisão do Pedro: CAMADA não ocupa (contrapiso, impermeabilização,
+    # pintura de forro seguem convivendo com o acabamento vazio — é a forma mais
+    # comum no banco). Só outro ACABAMENTO do mesmo tipo ocupa, e aí a linha
+    # vazia fica em branco com aviso próprio.
+    # 🪤 Roda DEPOIS do laço de propósito (caso S3 do estudo): um número que o
+    # próprio laço zera não pode ocupar vaga nenhuma — senão a prancha fica sem
+    # número algum. Aqui já se sabe quem sobreviveu.
+    p7_desfeitos = 0
+    if _p7_feitos:
+        _ocupadas = {}
+        for _it_o in items:
+            if id(_it_o) in _p7_feitos:
+                continue
+            try:
+                if float(getattr(_it_o, "quantity", 0) or 0) <= 0:
+                    continue
+            except (TypeError, ValueError):
+                continue
+            if (getattr(_it_o, "unit", "") or "").strip().lower() not in _FLOOR_M2_UNITS:
+                continue
+            _d_o = getattr(_it_o, "description", "") or ""
+            if not _e_acabamento_de_superficie(_d_o):
+                continue        # camada e pintura NÃO ocupam
+            _rs_o = (getattr(_it_o, "ref_sheet", "") or "").strip().lower()
+            _achou_o, _ = _prancha_do_ref_sheet(_rs_o, _por_arquivo, _por_arquivo_pagina)
+            if not _achou_o:
+                continue        # sem saber a prancha, não acusa (trava 3)
+            _chave_o = (str(_achou_o[0] or "").strip().lower(),
+                        (_achou_o[1] or {}).get("pagina"),
+                        _familia_da_superficie(_d_o))
+            _ocupadas.setdefault(_chave_o, _d_o)
+        for _it_p in items:
+            _feito = _p7_feitos.get(id(_it_p))
+            if not _feito:
+                continue
+            _arq_p, _pg_p, _fam_p, _obs_antes, _qty_posta = _feito
+            _dono = _ocupadas.get((_arq_p, _pg_p, _fam_p))
+            if not _dono:
+                continue
+            _it_p.quantity = 0
+            # 🪤 O texto de antes pode trazer "Medido do desenho ... 85,00 m²"
+            # escrito pela IA. Zerar e deixar a afirmação de medida é o defeito
+            # de 14/09 (`_limpa_afirmacao_de_medida`) voltando por outra porta.
+            _it_p.observations = (
+                _limpa_afirmacao_de_medida(_obs_antes)
+                + " | ⚠ Deixamos esta linha EM BRANCO de propósito: "
+                "outra linha de acabamento desta mesma prancha (%s) já traz "
+                "quantidade, então atribuir a ela os %.2f m² medidos da prancha "
+                "seria contar a mesma área duas vezes. Preencha na revisão."
+                % (str(_dono)[:60], float(_qty_posta or 0))).strip(" |")
+            criados_prancha -= 1
+            p7_desfeitos += 1
+    _apply_area_honesty.ultimo_p7_desfeitos = p7_desfeitos
+    if p7_desfeitos:
+        print(f"[honestidade-m2] passo 7: DESFIZ {p7_desfeitos} preenchimento(s) "
+              f"— a vaga da prancha já tinha outro acabamento com número")
     if preservados:
         # 🪤 Esta linha dizia SEMPRE "derivados do pé-direito informado" — e com
         # a preservação do PDF vetorial (26/08) ela passou a imprimir
@@ -14474,7 +14545,12 @@ bloco — só cite os que estão no inventário deste arquivo."""
                            # `resgate_pdf` acima é o do laço de páginas, que só
                            # vê item que a IA já devolveu zerado — deu 0 em 28
                            # de 28 jobs. Dois números, dois momentos.
-                           f"resgate_tardio={_resg_log}", job_id)
+                           f"resgate_tardio={_resg_log} "
+                           # 16/09: quantos preenchimentos do passo 7 foram
+                           # DESFEITOS porque a prancha já tinha outro
+                           # acabamento com número (a vaga estava ocupada)
+                           f"p7_desfeitos={getattr(_apply_area_honesty, 'ultimo_p7_desfeitos', 0)}",
+                           job_id)
         except Exception:
             pass
         # Pintura derivada do pé-direito informado (01/08/2026) — só quando a
