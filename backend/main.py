@@ -561,6 +561,9 @@ _STAGES_DIAGNOSTICO = frozenset({
     "motor:prancha-itens", "motor:sinapi-unidade", "motor:area-regra",
     "motor:pe-direito", "motor:escala-aviso", "motor:concordancia-rotulo",
     "motor:parede-medida",
+    # 15/09: os trechos de perfil e escala H/V que a prancha escreve. Só
+    # registro, não muda selo — ver `_textos_de_vista`.
+    "motor:vista-texto",
     # 🩸 09/09/2026: os três nasceram de perguntas que o log de hoje não
     # respondia — "42 hachuras de quê?", "quem levou os 5 itens?" e "a
     # calibração rodou ou foi pulada?".
@@ -861,6 +864,211 @@ def _descarte_de_poligonos(extraction) -> str:
     itens = sorted(d.items(), key=lambda kv: -kv[1])[:5]
     return " poly_layers_recusados=" + "|".join(
         f"{str(k)[:28]}({v})" for k, v in itens)
+
+
+def _textos_de_vista(extraction) -> str:
+    """Log `motor:vista-texto`: a FORMA do que a prancha diz sobre ser perfil.
+
+    🛣️ 15/09/2026 — job b445916a: duas linhas "confirmado" de 221 ml saíram do
+    comprimento de layer de um PERFIL LONGITUDINAL, onde o greide é desenhado
+    com escala H/V própria e não mede a extensão da rua. Dois detectores foram
+    propostos e os dois caíram no estudo: o formato real do cliente era
+    "ESCALA : H=250.000 / V=25.000", que nenhum regex feito de cabeça lia, e
+    os dois rebaixariam caso legítimo (planta e perfil na mesma folha, nota das
+    escalas dos perfis, esgoto em escala única).
+    🔑 O acervo NÃO guarda os textos das pranchas — sem eles, qualquer trava é
+    palpite. Este log só PUBLICA; não muda selo nem quantidade.
+    🩸 A 1ª versão (15/09, não subiu) publicava uma janela de texto em volta do
+    que casou. A revisão rodou carimbos fictícios realistas e 12 de 13 vazaram
+    nome, CPF, telefone ou e-mail: o nome costuma vir COLADO na escala.
+    🩸 A 2ª versão (15/09, não subiu) mascarava palavra e número "com cara" de
+    documento — e a rerrevisão fez passar telefone sem DDD, RG, CEP e CPF com
+    espaço no vão entre H e V: pelo process_job real gravou
+    «ESC. H=1:1000 ~ 99999-0000 V=1:100». Máscara por lista de formato sempre
+    esquece um formato. E ela perdia "H=1000.000 / V=100.000" e escala empilhada.
+    🔒 Agora: literal SÓ os tokens que casaram (H=…, V=…, "ESCALA HORIZONTAL
+    1:1000", título de perfil — regex fechados, sem texto livre). O vão entre H e
+    V vira ESQUELETO: toda letra e todo dígito viram "~". Denominador com cara
+    de documento não é escala: escala é número redondo (até 3 algarismos antes
+    dos zeros — 250, 1000, 2500), e "12.345.678-9", "01310-100" e "123.456" não
+    são. "ESCALA : H=250.000 / V=25.000" sobrevive inteiro.
+    🪤 Zero linhas NÃO prova "não é perfil": só lê TEXT/MTEXT e ATTRIB do
+    modelspace — carimbo de layout (paperspace), texto dentro de bloco sem
+    ATTRIB e H/V em TEXTs separados ou em atributos ESC_H/ESC_V ficam de fora
+    (ou saem como token solto `escala_h_ou_v`). E `perfil` sozinho é contexto,
+    não prova: pega também rampa e tubulação. Pra trava, só `escala_hv`/`exagero`.
+    🪤 Sem teto de fontes: 250 mil valores de atributo custam ~5 s dentro do job
+    (medido 15/09) — preço aceito pra não perder o carimbo de arquivo grande.
+
+    Vazio quando nada casou.
+    """
+    import re as _re
+
+    _i = _re.IGNORECASE
+    _num = r"\d{1,6}(?:[.,]\d{3}){0,2}(?:[.,]\d{1,3})?"
+    # (?!…-\d) e (?!\d): "12.345.678-9", "01310-100" e "999990000" não viram escala
+    _den = r"(1\s{0,2}[:/]\s{0,2})?(" + _num + r")(?![\d.,]*-\d)(?![.,]?\d)"
+    # para o trecho que sai literal sem passar por _redondo
+    _den_redondo = r"[1-9]\d{0,2}(?:0{1,4}|(?:[.,]000){1,2})?(?![\d.,]*-\d)(?![.,]?\d)"
+    _sep = r"\s{0,3}\)?\s{0,3}\.?\s{0,3}[:=\-–]?\s{0,3}"
+    # letra solta exige separador depois: "V10" é viga, não escala.
+    # "VER" só com ponto: sem ele é o verbo ("VER 1:20 - DETALHE H=1:50")
+    _h = _re.compile(r"(?<![a-z0-9])(?:e\.?\s?h|horizontal|horiz|hor|h)(?![a-z0-9])" + _sep + _den, _i)
+    _v = _re.compile(r"(?<![a-z0-9])(?:e\.?\s?v|vertical|vert|ver(?=\.)|v)(?![a-z0-9])" + _sep + _den, _i)
+    # "1:1000 (H) / 1:100 (V)" — o número vem antes da letra
+    _nb = _re.compile(r"(1\s{0,2}[:/]\s{0,2})(" + _num + r")(?![.,]?\d)\s{0,3}\(\s{0,2}"
+                      r"(horizontal|horiz|hor|h|vertical|vert|ver|v)\.?\s{0,2}\)", _i)
+    _esc = _re.compile(r"\besc(?:ala)?s?\b", _i)
+    _so_separador = _re.compile(r"[\s.:=\-–(]*")
+    _esc_hv = _re.compile(r"\besc(?:ala)?s?\.?:?\s{0,3}(?:horizontal|horiz\.?|vertical|vert\.?)"
+                          r"(?![a-z])(?:\s{0,3}1\s{0,2}[:/]\s{0,2}" + _den_redondo + r")?", _i)
+    _esc_um = _re.compile(r"\besc(?:ala)?s?\.?\s{0,3}(?:e\.?\s?)?(?:horiz|hor|h|vert|ver(?=\.)|v)(?![a-z0-9])"
+                          + _sep + r"1\s{0,2}[:/]\s{0,2}" + _den_redondo, _i)
+    _exagero = _re.compile(r"\bexag(?:ero|\.)?\s{0,3}vert(?:ical|\.)?(?![a-z])"
+                           r"(?:\s{0,3}\d{1,3}\s?x\b)?", _i)
+    _perfil = _re.compile(
+        r"\bperf(?:il|is)?\.?\s{0,3}[-–:]?\s{0,3}(?:"
+        r"long(?:it(?:udina(?:l|is))?)?\b\.?|"
+        r"d[aoe]s?\s{1,3}(?:eixo|rede|coletor|galeria|terreno|rua|via|avenida|estrada|rodovia|"
+        r"tubula\w{0,4}|adutora|linha\s{1,3}de\s{1,3}recalque|pavimenta\w{0,4}|drenagem|ramal|"
+        r"trecho|canal|emiss[aá]rio|interceptor|terraplenagem)(?:e?s)?\b|"
+        r"eixo\b|rua\b|trecho\b|coletor\b|pv[\s-]?\d|transversa(?:l|is)\b|geol[oó]gico\b|"
+        r"hidr[aá]ulico\b|topogr[aá]fico\b)"
+        r"|\bp\.\s{0,2}long(?:itudinal)?\b|\bgreide\b", _i)
+
+    def _limpo(t):
+        # teto por texto: MTEXT gigante não pode travar o job
+        t = str(t or "")[:4000]
+        t = _re.sub(r"%%[uUoOkK]", "", t)
+        t = _re.sub(r"%%[dDcCpP]", " ", t)
+        return t.replace("\\~", " ")
+
+    def _redondo(val):
+        # escala de desenho é 1, 2, 2,5, 5 × 10ⁿ; "H=123.456" é matrícula, não escala
+        return val is not None and val == int(val) and len(str(int(val)).rstrip("0")) <= 3
+
+    def _valores(nh, nv):
+        def _f(s, milhar):
+            s = s.replace(".", "").replace(",", ".") if milhar else s.replace(",", ".")
+            try:
+                return float(s)
+            except ValueError:
+                return None
+        # a MESMA leitura nos dois lados: "H=1000.000 / V=100.000" e
+        # "H=250.000 / V=25.000" são decimais; "H=1.000 / V=100" é milhar no H.
+        # Decimal só se os dois saírem redondos: "H=1:2.500 V=1:1.000" daria 2,5 e 1
+        if _re.fullmatch(r"\d+\.\d{3}", nh) and _re.fullmatch(r"\d+\.\d{3}", nv) \
+                and _redondo(_f(nh, False)) and _redondo(_f(nv, False)):
+            return _f(nh, False), _f(nv, False)
+        _mil = r"\d{1,3}(?:\.\d{3})+(?:,\d+)?"
+        return _f(nh, bool(_re.fullmatch(_mil, nh))), _f(nv, bool(_re.fullmatch(_mil, nv)))
+
+    def _primeiros(rx, t):
+        # teto de 50 candidatos: sem ele, MTEXT com H= e V= repetidos vira
+        # laço quadrático. 🪤 escala depois do 50º "H=" do mesmo texto se perde
+        out = []
+        for m in rx.finditer(t):
+            out.append((m.start(), m.end(), m.group(1), m.group(2), m.lastindex and m.group(m.lastindex)))
+            if len(out) >= 50:
+                break
+        return out
+
+    def _esc_colado(t, ini):
+        # "escala" logo antes do token, só com separador no meio:
+        # "ESCALA 1:100 - CAIXA H=60 V=30" não conta
+        antes = t[max(0, ini - 30):ini]
+        escs = list(_esc.finditer(antes))
+        if escs and _so_separador.fullmatch(antes[escs[-1].end():]):
+            return ini - (len(antes) - escs[-1].start())
+        return None
+
+    def _esqueleto(s):
+        # sobra só separador: "fulano@x.com" e "(11) 99999-0000" viram "~" e "(~) ~-~".
+        # Sem "|": é o separador entre trechos da linha gravada
+        return _re.sub(r"[^\s/\-–.:;,=()]+", "~", s)
+
+    def _par_hv(t):
+        hs = [x[:4] for x in _primeiros(_h, t)]
+        vs = [x[:4] for x in _primeiros(_v, t)]
+        for x in _primeiros(_nb, t):
+            (hs if str(x[4]).lower().startswith("h") else vs).append(x[:4])
+        hs.sort()
+        vs.sort()
+        tem_esc = bool(_esc.search(t))
+        for h in hs:
+            for v in vs:
+                if v[0] > h[1] + 25:
+                    break
+                if v[1] < h[0] - 25:
+                    continue
+                a, b = (h, v) if h[0] <= v[0] else (v, h)
+                if b[0] < a[1] or b[0] - a[1] > 25:
+                    continue
+                if (not h[2] or not v[2]) and not tem_esc:
+                    continue
+                vao = t[a[1]:b[0]]
+                # quebra de linha só vale com separador puro: "ESCALAS:\PH=1:1000\PV=1:100"
+                if "\n" in vao and _re.search(r"[^\W_]", vao):
+                    continue
+                esc_ini = _esc_colado(t, a[0])
+                dh, dv = _valores(h[3], v[3])
+                ok = True
+                for pref, val in ((h[2], dh), (v[2], dv)):
+                    if val is None or not _redondo(val) or (pref and val < 1) or \
+                            (not pref and (val < 10 or esc_ini is None)):
+                        ok = False
+                if not ok:
+                    continue
+                if dh > dv:
+                    tipo = "escala_hv"
+                elif dh == dv and h[2] and v[2]:
+                    tipo = "escala_hv_igual"
+                else:
+                    continue
+                ini = esc_ini if esc_ini is not None else a[0]
+                return tipo, t[ini:a[1]] + _esqueleto(vao) + t[b[0]:b[1]]
+        return None
+
+    fontes = []
+    try:
+        for _t in (getattr(extraction, "texts", None) or []):
+            fontes.append(("txt", getattr(_t, "text", "")))
+        for _ba in (getattr(extraction, "block_attributes", None) or []):
+            for _val in ((_ba or {}).get("campos") or {}).values():
+                fontes.append(("attr", _val))
+    except Exception:
+        return ""
+    achados = []
+    for origem, bruto in fontes:
+        try:
+            t = _limpo(bruto)
+        except Exception:
+            # valor que nem vira texto não apaga o que as outras fontes acharam
+            continue
+        if not t.strip():
+            continue
+        par = _par_hv(t)
+        if par:
+            tipo, trecho = par
+        elif (m := _esc_hv.search(t)):
+            tipo, trecho = "escala_hv", m.group(0)
+        elif (m := _esc_um.search(t)):
+            tipo, trecho = "escala_h_ou_v", m.group(0)
+        elif (m := _exagero.search(t)):
+            tipo, trecho = "exagero", m.group(0)
+        elif (m := _perfil.search(t)):
+            tipo, trecho = "perfil", m.group(0)
+        else:
+            continue
+        achados.append((tipo, origem, " ".join(trecho.split())[:80]))
+    if not achados:
+        return ""
+    unicos, vistos = [], set()
+    for tipo, origem, forma in achados:
+        if forma not in vistos:
+            vistos.add(forma)
+            unicos.append(f"{tipo}:{origem}«{forma}»")
+    return f" vista_textos={len(achados)} " + " | ".join(unicos[:3])
 
 
 def _log_error(stage, message, job_id=None, severity="error"):
@@ -10911,6 +11119,18 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                             _log_error("motor:geometria",
                                        f"arq={os.path.basename(dxf_path)} FALHOU: {_eg}",
                                        job_id)
+                        # 🛣️ 15/09: o que a prancha diz sobre ser perfil ou vista
+                        # (escala H/V, título). Só registro — a trava que rebaixa
+                        # comprimento de perfil espera os formatos reais daqui.
+                        # Try próprio: falha aqui não pode apagar a linha acima.
+                        try:
+                            _vt = _textos_de_vista(extraction)
+                            if _vt:
+                                _log_error("motor:vista-texto",
+                                           f"arq={os.path.basename(dxf_path)}{_vt}",
+                                           job_id)
+                        except Exception as _evt:
+                            print(f"[vista-texto] log falhou (nao-fatal): {_evt}")
                     except Exception as _eu:
                         print(f"[unidade] log falhou (nao-fatal): {_eu}")
                     # Aviso ao usuário (não só rebaixar a cor): xref não-resolvido é a
