@@ -1457,7 +1457,7 @@ function switchTab(tabName, interno) {
 
   // Load data for tab
   if (tabName === 'usuarios') loadUsers();
-  if (tabName === 'projetos') loadProjects();
+  if (tabName === 'projetos') { _filtroPadraoAoEntrar(); loadProjects(); }
   if (tabName === 'filhotes') loadFilhotes();
   if (tabName === 'dashboard') { loadDashboardStats(); loadOrigem(); loadFilhotes(); carregarBadgeMensagens(); }
   if (tabName === 'calibracao') loadCalibrationFactors();
@@ -4603,8 +4603,23 @@ function irParaProjetos() {
 }
 
 function irParaProjetosComErro() {
+  _filtroVeioDeCartao = true;   // este clique PEDIU o filtro de erro: respeita
   setProjectsFilter('erros', true);
   switchTab('projetos');
+}
+
+// 🩸 16/09/2026 (Pedro: "sempre entro e acho que tá tudo errado"): `_projectsFilter`
+// é estado global e GRUDAVA. Quem clicasse uma vez no cartão "Taxa de Sucesso"
+// via a aba Projetos filtrada por erro pra sempre — e a lista de erro mostra o
+// histórico inteiro, então o painel parecia um incêndio todos os dias. Os 11
+// erros de 45 dias são 5 avaliações nossas e 6 de cliente, 5 deles já resolvidos.
+// 🔑 O clique no cartão continua valendo (é explícito); o que não pode é ele
+// virar o padrão de quem entra pelo menu.
+let _filtroVeioDeCartao = false;
+
+function _filtroPadraoAoEntrar() {
+  if (_filtroVeioDeCartao) { _filtroVeioDeCartao = false; return; }
+  setProjectsFilter('tudo', true);
 }
 
 // `soMarcar`: pinta o botão e guarda o filtro sem consultar o banco — quem
