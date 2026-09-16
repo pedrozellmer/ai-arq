@@ -108,6 +108,23 @@ def _mem_kb() -> dict:
     return m
 
 
+def soma_perimetros(rooms: list) -> float:
+    """Σ dos perímetros dos ambientes, em metros.
+
+    🔑 Função de módulo — e não uma linha solta lá dentro — pra o guarda CHAMAR
+    em vez de ler o fonte. Um erro aqui (somar errado, ler a chave errada,
+    pegar o MAIOR em vez da soma) não quebra nada e não aparece: só produz um
+    número plausível e errado no log `pdfvec:por-prancha`, que é justamente o
+    número em cima do qual a decisão da pintura de parede vai ser tomada.
+
+    🪤 Soma mesmo, não média nem máximo: parede de cômodo é pintada cômodo a
+    cômodo. E cada perímetro já conta a face que dá pro seu próprio cômodo, de
+    modo que duas faces de uma parede compartilhada entram uma em cada — é por
+    isso que NÃO existe "×2" nesta conta.
+    """
+    return round(sum(float(r.get("perimetro_m") or 0) for r in rooms or []), 1)
+
+
 def _grupos_por_proximidade_pdf(rooms: list, den: float, gap_m: float = 1.0) -> dict:
     """Agrupa cômodos que se tocam — cada grupo ≈ uma VISTA da folha.
 
@@ -438,6 +455,11 @@ def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
         areas = sorted((r["area_m2"] for r in rooms), reverse=True)
         out["n_rooms"] = len(areas)
         out["rooms_m2"] = round(sum(areas), 1)
+        # 16/09: passo 1 do conserto da pintura de parede — só REGISTRAR. A
+        # soma dos perímetros dos ambientes é a base honesta pra
+        # Σ(perímetro) × pé-direito; fica duas semanas sendo lida antes de
+        # qualquer conta mudar de valor na planilha do cliente.
+        out["rooms_perim_m"] = soma_perimetros(rooms)
         out["top_rooms"] = [round(a, 1) for a in areas[:5]]
         # Maior grupo conectado — mesma regra que resolveu a área total no DXF
         # em 31/07. A soma de TODOS os cômodos conta o prédio várias vezes
@@ -709,7 +731,8 @@ def _run(page_units: list, job_id: str, api_key: str, log_fn, pular=None) -> Non
             # Sem `walls_m` no log não dá pra saber se falta MEDIR ou falta
             # ENTREGAR — e são consertos completamente diferentes.
             keep = ("file", "page", "scale", "scale_src", "n_rooms",
-                    "rooms_m2", "n_grupos", "grupo_maior_m2", "grupo_maior_comodos",
+                    "rooms_m2", "rooms_perim_m",
+                    "n_grupos", "grupo_maior_m2", "grupo_maior_comodos",
                     "envelope_m2", "envelope_m2_150", "envelope_top",
                     "cotas_derivacao", "err_cotas_derive", "err_cotas",
                     "scale_derivada_por_cota", "skip", "err",

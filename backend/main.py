@@ -12717,6 +12717,9 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                 "pagina": page_index,
                                 "rooms_m2": float(_vm.get("rooms_m2") or 0),
                                 "n_rooms": int(_vm.get("n_rooms") or 0),
+                                # 16/09: perimetro dos ambientes - so REGISTRO
+                                # por enquanto (ver o log pdfvec:por-prancha).
+                                "rooms_perim_m": float(_vm.get("rooms_perim_m") or 0),
                                 "walls_m": float(_vm.get("walls_m") or 0),
                                 "n_walls": int(_vm.get("n_walls") or 0),
                                 "grupo_maior_m2": float(_vm.get("grupo_maior_m2") or 0),
@@ -12856,6 +12859,9 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                 "pagina": page_index,
                                 "rooms_m2": float(_vm.get("rooms_m2") or 0),
                                 "n_rooms": int(_vm.get("n_rooms") or 0),
+                                # 16/09: perimetro dos ambientes - so REGISTRO
+                                # por enquanto (ver o log pdfvec:por-prancha).
+                                "rooms_perim_m": float(_vm.get("rooms_perim_m") or 0),
                                 "walls_m": float(_vm.get("walls_m") or 0),
                                 "n_walls": int(_vm.get("n_walls") or 0),
                                 "grupo_maior_m2": float(_vm.get("grupo_maior_m2") or 0),
@@ -14431,9 +14437,17 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     "é a mesma planta contada em cada disciplina) · maior prancha=%.1f m² · %s"
                     % (len(_res), _pdfvec_area_m2,
                        (_res[0].get("rooms_m2") or 0) if _res else 0,
-                       "; ".join("%s=%.1f m²/%.1f m" % (r["arquivo"][:26],
-                                                        r.get("rooms_m2") or 0,
-                                                        r.get("walls_m") or 0)
+                       # 🩸 16/09 — o 3º número é o PERÍMETRO dos ambientes, que
+                       # até hoje era medido e jogado fora. Ele é a base honesta
+                       # da pintura de parede (Σ perímetro × pé-direito); o
+                       # `walls_m` ao lado NÃO é — medido em 45 dias, chega a 84×
+                       # o perímetro mínimo da área. Os dois juntos na mesma linha
+                       # de propósito: é a comparação que decide o passo 2.
+                       "; ".join("%s=%.1f m²/%.1f m/perim %.1f m" % (
+                           r["arquivo"][:26],
+                           r.get("rooms_m2") or 0,
+                           r.get("walls_m") or 0,
+                           r.get("rooms_perim_m") or 0)
                                  for r in _res[:6])),
                     job_id, severity="info")
                 # 🔬 PASSO 3 (05/09) — a MEMÓRIA de cada medição, em MB, numa linha

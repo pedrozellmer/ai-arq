@@ -633,6 +633,22 @@ def _middle_layer(
         x0, y0, x1, y1 = shell.bounds
         rooms.append({
             "area_m2": round(a, 2),
+            # 🩸 16/09/2026 — O PERÍMETRO ERA MEDIDO E JOGADO FORA. Ele já é
+            # calculado nesta função (`ring.length`, na fração de ponte) e
+            # morria aqui, junto com o polígono. É ele que fecha a pintura de
+            # parede: Σ(perímetro dos ambientes) × pé-direito é como o
+            # orçamentista faz à mão.
+            #
+            # 🔑 E é o número CERTO, não um substituto do `walls_m`. Medido em
+            # 45 dias: `walls_m` chega a 84× o perímetro mínimo da área (3.213 m
+            # num imóvel de 90 m²) — é a soma de todo traço de parede, as duas
+            # faces e provavelmente hachura. Jogar aquilo na fórmula da pintura
+            # recriaria o desastre de 58× que a trava de `_derive_pintura_
+            # pe_direito` existe pra impedir. Já o perímetro do cômodo conta a
+            # face que dá PRA ELE: dois cômodos que dividem uma parede contam
+            # uma face cada, então as duas faces saem sozinhas — sem o "×2" que
+            # era metade daquele erro.
+            "perimetro_m": round(shell.exterior.length * m_per_pt, 2),
             "centroid": (round(cx, 1), round(cy, 1)),
             "bbox": (round(x0, 1), round(y0, 1), round(x1, 1), round(y1, 1)),
         })
