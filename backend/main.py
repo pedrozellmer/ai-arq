@@ -21170,19 +21170,66 @@ _PROJECT_CHAT_HITS: dict = {}
 _CHAT_ITENS_CAMPOS = "description,unit,quantity,confidence,discipline,origem"
 
 
-def _linhas_de_itens_do_chat(items: list) -> list:
+def _palavras_da_pergunta(pergunta: str) -> list:
+    """As palavras da pergunta do cliente que servem pra procurar item.
+
+    Fora: palavra curta e as genéricas do próprio assunto ("quanto", "item",
+    "planilha"…), que casariam com tudo e não ordenariam nada.
+    """
+    import re as _re
+    _vazias = {"quanto", "quantos", "quanta", "quantas", "tem", "temos", "qual",
+               "quais", "item", "itens", "planilha", "projeto", "obra", "medido",
+               "estimado", "estimativa", "total", "valor", "para", "pra", "com",
+               "sem", "dos", "das", "meu", "minha", "esse", "essa", "esta",
+               "este", "sobre", "mais", "menos", "linha", "linhas", "onde",
+               "por", "que", "como", "foi", "sao", "são"}
+    _p = str(pergunta or "").lower()
+    return [w for w in _re.findall(r"[a-zà-ú0-9²³/\.]{4,}", _p) if w not in _vazias][:12]
+
+
+def _linhas_de_itens_do_chat(items: list, pergunta: str = "",
+                             teto_por_disciplina: int = 40) -> list:
     """As linhas de itens do contexto do chat da página do projeto, com a marca
-    MEDIDO/estimativa da MESMA regra da planilha (`models.e_medido`)."""
+    MEDIDO/estimativa da MESMA regra da planilha (`models.e_medido`).
+
+    🩸 16/09/2026: o corte em 40 por disciplina era CALADO. O cabeçalho dizia
+    "[Elétrica] (314 itens)" e só 40 iam junto — e a regra 5 do prompt manda
+    dizer "não consta" quando o dado não está na lista. Ou seja: o chat NEGAVA
+    item que existe na planilha do próprio cliente. Medido hoje: 22 de 170 jobs
+    têm disciplina acima de 40, 1.488 linhas ficavam fora, a maior disciplina
+    tem 314 itens.
+
+    Duas mudanças, as duas pequenas:
+      · o corte passa a APARECER, dizendo que os itens de fora EXISTEM;
+      · a seleção olha a PERGUNTA: item que casa com o que o cliente escreveu
+        vem primeiro, então perguntar pelo nome traz a linha mesmo que ela seja
+        a 300ª da disciplina.
+    """
     from models import e_medido as _e_medido
+    _palavras = _palavras_da_pergunta(pergunta)
     linhas = [f"Total de itens na planilha: {len(items)}"]
     by_disc: dict = {}
     for it in items:
         by_disc.setdefault(it.get("discipline") or "Outros", []).append(it)
     for _d, _lst in by_disc.items():
         linhas.append(f"\n[{_d}] ({len(_lst)} itens)")
-        for it in _lst[:40]:
+        _ordem = _lst
+        if _palavras and len(_lst) > teto_por_disciplina:
+            # ordenação ESTÁVEL: só promove quem casa com a pergunta; o resto
+            # mantém a ordem da planilha (sem palavra, nada muda — é o controle)
+            def _casa(_it):
+                _t = str(_it.get("description", "") or "").lower()
+                return -sum(1 for w in _palavras if w in _t)
+            _ordem = sorted(_lst, key=_casa)
+        for it in _ordem[:teto_por_disciplina]:
             _marca = "MEDIDO" if _e_medido(it.get("confidence"), it.get("origem")) else "estimativa"
             linhas.append(f"  - {str(it.get('description',''))[:80]}: {it.get('quantity',0)} {it.get('unit','')} ({_marca})")
+        _fora = len(_lst) - teto_por_disciplina
+        if _fora > 0:
+            linhas.append(
+                f"  (+{_fora} item(ns) desta disciplina não couberam nesta lista — "
+                f"eles EXISTEM na planilha do cliente. NÃO diga que não constam: "
+                f"peça o nome do item que ele procura.)")
     return linhas
 
 
@@ -21212,7 +21259,7 @@ REGRAS DURAS (nunca violar):
 2. NUNCA dê preço, custo, valor em R$, ou BDI. O AI.arq entrega QUANTIDADE, não preço. Se perguntarem de preço/custo/orçamento, responda gentil: "O AI.arq gera o quantitativo (as quantidades) — a precificação é com você e seu orçamentista. Mas posso te ajudar a entender as quantidades e as referências SINAPI."
 3. Você NÃO substitui o profissional nem dá parecer técnico definitivo — você ajuda a LER e entender a planilha.
 4. Explique bem a diferença: um item MEDIDO foi extraído direto da geometria do CAD (confiável); uma ESTIMATIVA é quando o desenho não deixou claro e o cliente precisa revisar — ou um número que o próprio cliente digitou ou informou. A marca entre parênteses de cada item, (MEDIDO) ou (estimativa), é a ÚNICA fonte disso: nunca chame de medido um item marcado (estimativa), nem um item que ficou fora da lista. Para ter MAIS itens medidos, oriente enviar o projeto em DWG ou DXF (PDF a IA lê, mas vira estimativa).
-5. Se não souber, ou o dado não estiver na planilha, seja honesto e diga que não consta.
+5. Se não souber, ou o dado não estiver na planilha, seja honesto e diga que não consta. ⚠ EXCEÇÃO: quando a lista de uma disciplina terminar com "(+N item(ns) desta disciplina não couberam...)", NUNCA responda "não consta" sobre essa disciplina — ali a planilha TEM mais itens do que você está vendo. Diga que a planilha tem mais itens dessa disciplina do que cabe aqui e peça o nome ou parte da descrição do item; na próxima pergunta ele aparece.
 6. FORMATO: texto corrido e curto, com listas de traços quando ajudar. NÃO use títulos markdown (#, ##) nem tabelas — sua resposta aparece num balão de chat simples.
 7. LINHA DE ÁREA EM BRANCO TEM CONSERTO NA HORA — ofereça isso ANTES de qualquer outra saída. Se o cliente perguntar pela metragem que faltou num item de m² com quantidade ZERO de superfície horizontal (piso, forro, laje, contrapiso, revestimento de piso), diga que na tela de revisão, logo acima da lista de itens, existe um campo "Área total": informando a metragem ali, a planilha é refeita NA HORA, sem reprocessar e sem custo nenhum, e as linhas saem marcadas como "estimado (informado por você)". Só depois disso mencione reenviar em DXF ou preencher item por item — esses dois são caros e demorados.
 8. NÃO ofereça esse campo pra pintura de PAREDE, alvenaria, chapisco/reboco ou qualquer item que dependa da ALTURA: a área total não preenche esses. Ali o que falta é o pé-direito, e ele só fecha a conta se houver parede medida em metro linear. E NUNCA prometa QUANTAS linhas serão preenchidas — quem decide item a item é o motor.
@@ -21275,8 +21322,11 @@ async def project_chat(job_id: str, request: Request):
 
     items = []
     try:
+        # 🪤 16/09: era 400, e 2 jobs da base passam disso — a linha nem chegava
+        # a ser buscada. 1000 é o teto do PostgREST; acima dele o corte volta a
+        # existir, e por isso a lista avisa quantos itens ficaram de fora.
         q = (f"{SUPABASE_URL}/rest/v1/project_items?job_id=eq.{job_id}"
-             f"&select={_CHAT_ITENS_CAMPOS}&limit=400")
+             f"&select={_CHAT_ITENS_CAMPOS}&limit=1000")
         rq = _u.Request(q, method="GET")
         rq.add_header("apikey", SUPABASE_KEY)
         rq.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
@@ -21284,7 +21334,14 @@ async def project_chat(job_id: str, request: Request):
     except Exception as e:
         print(f"[project_chat] itens erro: {e}")
 
-    ctx_lines.extend(_linhas_de_itens_do_chat(items))
+    # a ÚLTIMA pergunta do cliente ordena quem entra na lista (o corte por
+    # disciplina continua existindo; o que muda é quem fica de fora dele)
+    _ultima = ""
+    for _m in reversed(messages or []):
+        if isinstance(_m, dict) and _m.get("role") == "user":
+            _ultima = str(_m.get("content") or "")[:400]
+            break
+    ctx_lines.extend(_linhas_de_itens_do_chat(items, pergunta=_ultima))
     context = _cortar_contexto_do_chat(ctx_lines)
 
     api_key = os.getenv("ANTHROPIC_API_KEY")
