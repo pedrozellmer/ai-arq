@@ -305,36 +305,50 @@ def _is_bad_request(exc: Exception) -> bool:
 
 
 def _is_retryable(exc: Exception) -> bool:
-    """True se a exceção é transitória e vale retentar."""
+    """True se a exceção é transitória e vale retentar.
+
+    🩸 16/09/2026 — DUAS RÉGUAS QUE DISCORDAVAM, e o cliente pagou a conta.
+    Cliente novo (1º projeto, chegou por indicação): a conexão caiu no MEIO da
+    leitura da resposta do PDF — `httpx.RemoteProtocolError: peer closed
+    connection without sending complete message body`. O que aconteceu:
+      · esta função tinha uma lista PRÓPRIA e curta (429/529/overloaded/timeout).
+        `RemoteProtocolError` não casava com nada → `call_with_retry_stream`, com
+        teto de 8 tentativas, usou ZERO e desistiu na primeira;
+      · `_TRANSIENT_TOKENS` — a régua que escreve o texto pro cliente — JÁ
+        reconhecia o caso ("remoteprotocolerror", "connection", "reset by peer").
+        Então a tela dizia "o provedor estava sobrecarregado, o sistema já tentou
+        várias vezes, é só reprocessar" — prometendo uma tentativa que não houve.
+        O cliente reprocessou 4× em 5 minutos, sempre na mesma parede.
+
+    🔑 Uma pergunta, uma régua: quem decide se vale retentar é o MESMO
+    classificador que decide como contar a falha (`classify_error_text`), que já
+    põe permanente na frente de transitório.
+    """
     if _is_bad_request(exc):
         return False  # 400 é nosso; retentar só empurra o mesmo lixo de novo
-    if not _HAS_ANTHROPIC:
-        return False
 
-    # Rate limit clássico
-    if isinstance(exc, anthropic.RateLimitError):
-        return True
-
-    # APIStatusError: verificar status_code
-    if isinstance(exc, anthropic.APIStatusError):
-        status = getattr(exc, "status_code", None)
-        # 429 (rate limit, caso não venha como RateLimitError)
-        # 529 (Anthropic overloaded)
-        # 5xx em geral — tentar de novo uma vez, pode ser blip
-        if status in (429, 529) or (isinstance(status, int) and 500 <= status < 600):
+    if _HAS_ANTHROPIC:
+        # Rate limit clássico
+        if isinstance(exc, anthropic.RateLimitError):
             return True
 
-    # Timeouts e problemas de conexão
-    if isinstance(exc, (anthropic.APITimeoutError, anthropic.APIConnectionError)):
-        return True
+        # APIStatusError: verificar status_code
+        if isinstance(exc, anthropic.APIStatusError):
+            status = getattr(exc, "status_code", None)
+            # 429 (rate limit, caso não venha como RateLimitError)
+            # 529 (Anthropic overloaded)
+            # 5xx em geral — tentar de novo uma vez, pode ser blip
+            if status in (429, 529) or (isinstance(status, int) and 500 <= status < 600):
+                return True
 
-    # Fallback genérico: mensagem contém 429/529/overloaded/rate_limit/timeout
-    msg = str(exc).lower()
-    if any(tok in msg for tok in ("rate_limit", "rate limit", "429", "529",
-                                   "overloaded", "timeout", "timed out")):
-        return True
+        # Timeouts e problemas de conexão tipados pelo SDK
+        if isinstance(exc, (anthropic.APITimeoutError, anthropic.APIConnectionError)):
+            return True
 
-    return False
+    # 🪤 O NOME DA CLASSE entra junto: a mensagem crua do httpx não contém
+    # "RemoteProtocolError" — só o tipo traz essa palavra, e é por ele que o
+    # marcador da lista pega.
+    return classify_error_text(f"{type(exc).__name__}: {exc}") == "transient"
 
 
 # ── Classificação de erro por TEXTO (pra quem só tem a string já achatada) ──
