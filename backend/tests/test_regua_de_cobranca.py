@@ -196,7 +196,13 @@ def test_a_regua_NAO_mora_dentro_do_bloco_de_EMAIL():
     # (main.py:12666 cita a condição para contar a história) e reprovava o
     # código correto. Guarda que lê o fonte tem que separar código de comentário
     # — é o mesmo erro que o guarda da allowlist já cometeu em 03/09.
-    m_email = re.search(r"^\s+if _pe and not is_complement", src, re.M)
+    # 🪤 16/09/2026: a âncora era a linha LITERAL `if _pe and not is_complement`.
+    # Bastou o gate da família entrar no meio (`if _pe and not _ja_avisado and
+    # not is_complement...`) pra ela não casar — e o guarda reprovou dizendo "o
+    # bloco sumiu", quando o bloco estava lá e a régua, no lugar certo. Guarda
+    # que lê o fonte se prende ao FATO ("o primeiro ramo de e-mail do fim do
+    # job"), não à forma exata da condição.
+    m_email = re.search(r"^\s+if _pe and .*\bis_complement\b", src, re.M)
     assert m_email, "o bloco de e-mail do process_job sumiu; ajuste este guarda"
     pos_email = m_email.start()
     assert pos_regua < pos_email, (

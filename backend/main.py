@@ -5274,6 +5274,34 @@ _TRANSIENT_ERR_RX = _re_auto.compile(
     _re_auto.IGNORECASE)
 
 
+def _filhote_do_projeto(job_id: str) -> str:
+    """O reprocesso deste projeto: 'rodando' | 'pronto' | '' (não há) | '?'.
+
+    🔑 '?' é resposta de primeira classe, não sinônimo de nenhuma das outras: as
+    duas decisões que dependem dela querem lados OPOSTOS da dúvida.
+      · re-tentar é caro (motor rodando duas vezes no mesmo arquivo, IA paga
+        duas vezes) → na dúvida, NÃO retenta;
+      · alertar o Pedro é barato → na dúvida, alerta assim mesmo.
+    Devolver 'rodando' aqui resolvia a primeira e estragava a segunda: um
+    projeto morto ficava sem aviso nenhum por causa de uma leitura que falhou.
+    """
+    try:
+        _st, _rows = _supa_rest_service(
+            "GET", f"projects?parent_job_id=eq.{job_id}&select=status&limit=20")
+        if not (_st and 200 <= _st < 300 and isinstance(_rows, list)):
+            print(f"[auto-retry] filhote de {job_id}: HTTP {_st} — não sei dizer")
+            return "?"
+        _sts = {(r.get("status") or "") for r in _rows}
+        if _sts & {"queued", "processing"}:
+            return "rodando"
+        if "done" in _sts:
+            return "pronto"
+        return ""
+    except Exception as _e:
+        print(f"[auto-retry] leitura de filhote falhou ({job_id}): {_e} — não sei dizer")
+        return "?"
+
+
 def _auto_retry_erros_transitorios():
     """REVISÃO AUTOMÁTICA (decisão Pedro 07/07): projeto que caiu por causa
     passageira re-tenta SOZINHO na varredura de 5min — o que antes era resgate
@@ -5306,7 +5334,39 @@ def _auto_retry_erros_transitorios():
         count = int(row.get("auto_resume_count") or 0)
         transitorio = bool(_TRANSIENT_ERR_RX.search(msg))
 
-        if transitorio and count < 2:
+        # 🩸 16/09/2026 — DOIS MOTORES NO MESMO PROJETO. Cliente NOVO, primeiro
+        # projeto, quatro quedas de conexão seguidas. Às 14:58 esta varredura
+        # agendou a re-tentativa 1/2; às 15:02 um reprocesso foi disparado pela
+        # mão (que cria um FILHOTE, outro job_id); às 15:03 a varredura subiu a
+        # 2/2 — em PARALELO. O filhote fechou 15:09 com 46 itens e o original
+        # 15:14 com 67. Dois resultados diferentes do mesmo arquivo, IA paga
+        # duas vezes, e o cliente recebeu DOIS e-mails em cinco minutos, um
+        # dizendo "sem quantidade medida" e o outro "planilha atualizada".
+        #
+        # 🔑 Reprocesso é resposta HUMANA; esta varredura é o plano B. Havendo
+        # reprocesso vivo — ou já concluído —, o plano B sai de cena. Se o
+        # filhote também morreu, ela continua entrando: é aí que ela salva.
+        _fil = _filhote_do_projeto(job_id)
+
+        if _fil in ("rodando", "pronto"):
+            # O projeto está nas mãos de quem clicou reprocessar. Nem re-tenta,
+            # nem alerta — não há o que o Pedro faça aqui.
+            if _fil == "rodando":
+                # Só enquanto roda (minutos). Filhote 'pronto' é silêncio de
+                # propósito: o cliente já tem a planilha, e a linha de erro do
+                # pai continua sendo varrida por 24h — logar viraria spam.
+                _log_error("auto-retry:reprocesso-na-frente",
+                           "re-tentativa automática cancelada: já existe "
+                           "reprocesso deste projeto em andamento",
+                           job_id, severity="info")
+            continue
+
+        # 🔑 Na dúvida ('?'), NÃO re-tenta — mas segue pro alerta lá embaixo.
+        # As duas decisões têm preços diferentes: motor em dobro é caro, aviso a
+        # mais é barato.
+        _pulei_por_duvida = (_fil == "?" and transitorio and count < 2)
+
+        if transitorio and count < 2 and _fil == "":
             typ = row.get("typology") or "office"
             ptype = row.get("project_type") or "arquitetura"
             if _retomar_job_do_storage(job_id, typ, ptype):
@@ -5323,7 +5383,10 @@ def _auto_retry_erros_transitorios():
             # 🩸 11/09/2026: "problema no arquivo do cliente" era rótulo de TODO erro
             # não passageiro — inclusive tipo errado e defeito nosso. O rótulo diz só
             # o que se sabe; a causa técnica vem logo abaixo.
-            _causa = ("esgotou as 2 re-tentativas automáticas" if transitorio
+            _causa = ("não consegui conferir se já existe um reprocesso deste projeto "
+                      "e por isso NÃO re-tentei — evitar dois motores no mesmo arquivo "
+                      "vale mais que a tentativa" if _pulei_por_duvida
+                      else "esgotou as 2 re-tentativas automáticas" if transitorio
                       else "não é erro passageiro — reprocessar o mesmo arquivo do mesmo "
                            "jeito não resolve (veja a causa técnica)")
             # QW3 (20/07): a causa TÉCNICA real (error_log) ao lado do rótulo que
@@ -15401,7 +15464,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
         try:
             import html as _html, urllib.request as _ur2
             _q = (f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}"
-                  f"&select=user_email,user_name,project_name,reprocess_count")
+                  f"&select=user_email,user_name,project_name,reprocess_count,parent_job_id")
             _rq = _ur2.Request(_q, method="GET")
             _rq.add_header("apikey", SUPABASE_KEY)
             _rq.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
@@ -15414,7 +15477,16 @@ bloco — só cite os que estão no inventário deste arquivo."""
             # Nome do cliente pra saudação personalizada (regra do Pedro 19/07):
             # se o projeto não trouxe user_name, busca em profiles/auth.
             _nm = _resolve_client_name(_pe, hint=(_rows[0].get("user_name") if _rows else "") or "")
-            if _pe and is_complement:
+            # 🔑 16/09 — A FAMÍLIA, não o job. Reprocesso cria outro `job_id`,
+            # então o dedup por job nunca via o irmão e o cliente levava dois
+            # avisos do MESMO projeto. Pai e filhote compartilham a raiz.
+            _raiz = ((_rows[0].get("parent_job_id") if _rows else None) or job_id)
+            _ja_avisado = bool(_pe) and _aviso_de_fim_recente(_pe, _raiz)
+            if _ja_avisado:
+                _log_error("email:aviso-de-fim-ja-saiu",
+                           f"pulei o aviso de fim: a família {_raiz} já avisou "
+                           f"este cliente há menos de 30 min", job_id, severity="info")
+            if _pe and not _ja_avisado and is_complement:
                 # add-file: refizemos o projeto medindo pelo CAD que o cliente anexou.
                 # Email PRÓPRIO (não cai no dedup dos outros), 1x por job — garante que
                 # a conclusão do "complementar" SEMPRE notifica, independente de
@@ -15470,8 +15542,9 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         log_kind="complemento_pronto")
                     if _ok_c:
                         _email_auto_registrar(_pe, "complemento_pronto", ref=job_id)
+                        _email_auto_registrar(_pe, "fim_de_job", ref=_raiz)
                     print(f"[email] complemento-pronto -> enviado={_ok_c}")
-            if _pe and not is_complement and _is_reproc:
+            if _pe and not _ja_avisado and not is_complement and _is_reproc:
                 # Antes: mudo (anti-spam). Agora: email PRÓPRIO de reprocesso, 1x por
                 # job (dedup em email_auto_log). Fecha o buraco onde o cliente
                 # reprocessava (ou a gente resgatava) e ninguém avisava — caso
@@ -15505,8 +15578,9 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         log_kind="reprocesso_pronto")
                     if _ok_r:
                         _email_auto_registrar(_pe, "reprocesso_pronto", ref=job_id)
+                        _email_auto_registrar(_pe, "fim_de_job", ref=_raiz)
                     print(f"[email] reprocesso-pronto -> enviado={_ok_r}")
-            if _pe and not is_complement and not _is_reproc:
+            if _pe and not _ja_avisado and not is_complement and not _is_reproc:
                 _aviso_html = ""
                 if partial_failure:
                     # 🩸 03/09 — A TELA E O E-MAIL DIZIAM O CONTRÁRIO UM DO OUTRO,
@@ -15639,11 +15713,13 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         _rows[0].get("project_name") or "seu projeto",
                         job_id, len(all_items), f"{_aviso_html}{_diag}{_proximos}",
                         email=_pe)
-                _send_email_smtp(
+                _ok_pp = _send_email_smtp(
                     _pe, _subj_pp, _html_pp,
                     log_kind=("sem_medida" if _nada_medido
                               else "leu_sem_medir" if (_n_med == 0 and len(all_items) > 0)
                               else "planilha_pronta"))
+                if _ok_pp:
+                    _email_auto_registrar(_pe, "fim_de_job", ref=_raiz)
         except Exception as _ee:
             print(f"[email] planilha-pronta nao enviada (nao-fatal): {_ee}")
 
@@ -17683,6 +17759,39 @@ def _email_auto_ja_enviado(email: str, kind: str, ref: str = "") -> bool:
     except Exception as e:
         print(f"[emails-auto] dedup check falhou ({kind}/{email}): {e} — NÃO enviando por segurança")
         return True
+
+
+def _aviso_de_fim_recente(email: str, raiz: str, minutos: int = 30) -> bool:
+    """True se este cliente JÁ foi avisado do fim DESTE projeto há pouco.
+
+    🩸 16/09/2026 — o projeto e o reprocesso dele são DOIS `job_id`, e o dedup
+    de e-mail era por job. Quando os dois terminaram (a varredura automática e
+    o reprocesso disparado pela mão), o cliente levou dois avisos em cinco
+    minutos: um dizendo "sem quantidade medida do CAD" e o outro "planilha
+    atualizada". A chave certa é a FAMÍLIA — pai e filhote têm a mesma raiz.
+
+    🪤 Erro de leitura devolve **False**, ao contrário do resto desta casa: aqui
+    a dúvida ENVIA. O duplo já morre na origem (`_filhote_do_projeto` tira a
+    varredura da frente do reprocesso); se este cinto falhasse calado, o cliente
+    ficaria sem o único aviso de que a planilha ficou pronta — bem pior que um
+    e-mail a mais. Ver [[feedback_escrita_que_falha_calada]].
+    """
+    import urllib.request as _u, urllib.parse as _up, json as _j
+    from datetime import timedelta as _td
+    if not (email and raiz):
+        return False
+    try:
+        _desde = (datetime.utcnow() - _td(minutes=minutos)).isoformat() + "Z"
+        q = (f"{SUPABASE_URL}/rest/v1/email_auto_log?select=id"
+             f"&email=eq.{_up.quote(email)}&kind=eq.fim_de_job"
+             f"&ref=eq.{_up.quote(raiz)}&sent_at=gte.{_up.quote(_desde)}&limit=1")
+        req = _u.Request(q, method="GET")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        return bool(_j.loads(_u.urlopen(req, timeout=10).read().decode("utf-8")))
+    except Exception as e:
+        print(f"[emails-auto] janela de fim-de-job falhou ({raiz}): {e} — ENVIANDO")
+        return False
 
 
 def _ja_recebeu_kind(email: str, kind: str) -> bool:

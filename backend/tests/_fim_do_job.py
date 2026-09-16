@@ -119,7 +119,7 @@ def roda_ate_o_email(itens, cab_planob=None, medidos_antes=None, avisos=None,
                      nome_projeto="projeto de teste", job_id="job-teste",
                      antes_do_email=None, is_complement=False,
                      partial_failure=False, partial_errors=None,
-                     dwg_failed=None):
+                     dwg_failed=None, reprocess_count=0, parent_job_id=None):
     """Executa a fatia real e devolve o diário do que o cliente receberia.
 
     `cab_planob` — planta o aviso do plano B como o motor o escreve, lá em cima
@@ -211,6 +211,9 @@ def roda_ate_o_email(itens, cab_planob=None, medidos_antes=None, avisos=None,
         "_resolve_client_name": lambda mail, hint="": (hint or "cliente-nn"),
         "_email_auto_ja_enviado": lambda *a, **k: False,
         "_email_auto_registrar": lambda *a, **k: None,
+        # 16/09: o gate da FAMÍLIA (pai + filhote). Padrão "ninguém foi avisado",
+        # pra os guardas antigos seguirem medindo o e-mail que sai.
+        "_aviso_de_fim_recente": lambda *a, **k: False,
         "_send_email_smtp": _envia,
         "_log_error": lambda *a, **k: diario["logs"].append(
             " ".join(str(x) for x in a)),
@@ -231,7 +234,8 @@ def roda_ate_o_email(itens, cab_planob=None, medidos_antes=None, avisos=None,
     _urlopen_real = urllib.request.urlopen
     urllib.request.urlopen = lambda req, **k: _resposta_fake([{
         "user_email": email, "user_name": "cliente-nn",
-        "project_name": nome_projeto, "reprocess_count": 0}])
+        "project_name": nome_projeto, "reprocess_count": reprocess_count,
+        "parent_job_id": parent_job_id}])
     try:
         exec(compile(fatia_do_fim_do_process_job(), "fim_do_job", "exec"), ns)
     finally:
