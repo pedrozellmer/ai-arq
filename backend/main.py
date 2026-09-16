@@ -869,6 +869,34 @@ def _descarte_de_poligonos(extraction) -> str:
         f"{str(k)[:28]}({v})" for k, v in itens)
 
 
+def _porques_da_conversao(dwg_path: str) -> str:
+    """Por que os DOIS conversores recusaram este DWG — pro log `dwg:convert-fail`.
+
+    🩸 16/09/2026: esse log registrava só o NOME do arquivo. E é o caso pior, o
+    único em que o cliente não recebe medição nenhuma: 28 jobs em 60 dias. O
+    motivo do ODA já era guardado desde 14/09, mas só aparecia no ramo em que o
+    plano B DÁ CERTO; o motivo do plano B morria num `logger.warning`, que o
+    Render descarta. A leitura de ~21/09 ("vale trocar de conversor?") estava
+    cega justamente nos arquivos que decidem a resposta.
+
+    Nunca levanta: telemetria não pode derrubar um job que já está falhando.
+    """
+    try:
+        from dwg_extractor import dwg_failure_detail, libredwg_failure_detail
+        _partes = []
+        _oda = (dwg_failure_detail(dwg_path) or "").strip()
+        _lib = (libredwg_failure_detail(dwg_path) or "").strip()
+        if _oda:
+            _partes.append("ODA: " + _oda[:240])
+        if _lib:
+            _partes.append("plano B: " + _lib[:240])
+    except Exception as _e:
+        return f" | motivo não lido ({type(_e).__name__})"
+    if not _partes:
+        return " | nenhum dos dois conversores registrou motivo"
+    return " | " + " | ".join(_partes)
+
+
 def _textos_de_vista(extraction) -> str:
     """Log `motor:vista-texto`: a FORMA do que a prancha diz sobre ser perfil.
 
@@ -10545,7 +10573,8 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                             _log_error("dwg:convert-fail",
                                        f"DWG não converteu pra DXF: {os.path.basename(cad_path)}"
                                        + (" — objetos AEC/MEP (conversor livre não abre)" if _is_aec
-                                          else " — cliente ganharia a medição mandando DXF direto"),
+                                          else " — cliente ganharia a medição mandando DXF direto")
+                                       + _porques_da_conversao(cad_path),
                                        job_id, severity="warning")
                             jobs.update_field(job_id, current_step=f"Falha ao converter DWG: {os.path.basename(cad_path)} (seguindo sem)")
                     else:

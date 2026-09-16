@@ -1734,6 +1734,30 @@ def dwg_failure_detail(dwg_path: str) -> str:
     return _FALHA_DETALHE.get(os.path.basename(str(dwg_path)), "")
 
 
+#: basename do DWG -> por que o libredwg (plano B) não converteu
+#: 🩸 16/09/2026: quando os DOIS conversores falham, o `dwg:convert-fail` do
+#: motor registra só o nome do arquivo. O motivo do ODA já era guardado
+#: (`_FALHA_DETALHE`), mas o do libredwg só existia num `logger.warning` — e o
+#: log do Render é descartado. É justamente o caso PIOR (o cliente não recebe
+#: medição nenhuma) e o único em que a gente ficava sem saber por quê. Em 60
+#: dias foram 28 jobs assim.
+_FALHA_LIBREDWG: dict = {}
+
+
+def _anotar_falha_libredwg(dwg_path: str, motivo: str) -> None:
+    """Guarda, em UMA linha, por que o plano B não converteu este DWG."""
+    try:
+        _linha = " · ".join(l.strip() for l in str(motivo or "").splitlines() if l.strip())
+        _FALHA_LIBREDWG[os.path.basename(str(dwg_path))] = _linha[:240]
+    except Exception:
+        pass
+
+
+def libredwg_failure_detail(dwg_path: str) -> str:
+    """Por que o libredwg não converteu este DWG, em UMA linha (ou "")."""
+    return _FALHA_LIBREDWG.get(os.path.basename(str(dwg_path)), "")
+
+
 def dwg_failure_reason(dwg_path: str) -> str:
     """Por que este DWG não converteu: 'truncado' ou '' (não classificado).
 
@@ -1920,6 +1944,7 @@ def _try_libredwg_convert(dwg_path: str, output_dir: str) -> Optional[str]:
     dwg2dxf = shutil.which("dwg2dxf")
     if not dwg2dxf:
         logger.info("libredwg (dwg2dxf) não instalado — pulando fallback")
+        _anotar_falha_libredwg(dwg_path, "dwg2dxf não instalado no servidor")
         return None
 
     # 🚨 TRAVA DE QUALIDADE (29/07/2026) — regra dura nº1.
@@ -1932,6 +1957,7 @@ def _try_libredwg_convert(dwg_path: str, output_dir: str) -> Optional[str]:
     if os.getenv("LIBREDWG_FALLBACK", "0").strip().lower() not in ("1", "true", "on", "sim"):
         logger.info("libredwg instalado mas DESLIGADO (LIBREDWG_FALLBACK != 1) — "
                     "aguardando validação de qualidade antes de virar fallback real")
+        _anotar_falha_libredwg(dwg_path, "plano B desligado (LIBREDWG_FALLBACK != 1)")
         return None
 
     stem = Path(dwg_path).stem
@@ -1966,10 +1992,20 @@ def _try_libredwg_convert(dwg_path: str, output_dir: str) -> Optional[str]:
             return out_path
         logger.warning("libredwg dwg2dxf retornou %d: %s",
                        result.returncode, result.stderr[:300])
+        # 🪤 rc=0 sem arquivo é caso diferente de rc≠0: um é "converteu e sumiu",
+        # o outro é "recusou". Quem lê o log em 21/09 precisa distinguir.
+        _anotar_falha_libredwg(
+            dwg_path,
+            ("dwg2dxf saiu 0 mas não gerou arquivo"
+             if result.returncode == 0 else
+             "dwg2dxf saiu %d: %s" % (result.returncode,
+                                      (result.stderr or result.stdout or "sem mensagem")[:180])))
     except subprocess.TimeoutExpired:
         logger.warning("libredwg dwg2dxf excedeu timeout 300s")
+        _anotar_falha_libredwg(dwg_path, "dwg2dxf excedeu o tempo (300 s)")
     except Exception as e:
         logger.warning("libredwg dwg2dxf erro: %s", e)
+        _anotar_falha_libredwg(dwg_path, "dwg2dxf quebrou: %s: %s" % (type(e).__name__, e))
     return None
 
 
