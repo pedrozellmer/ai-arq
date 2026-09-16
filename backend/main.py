@@ -9792,7 +9792,8 @@ def _regua_da_sombra(user_total_area, total_area_ia):
 
 
 def voz_do_email_de_reprocesso(nome_escapado, nome_cru, n_itens, n_medidos,
-                               n_geo, frase_piora="", frase_origem=""):
+                               n_geo, frase_piora="", frase_origem="",
+                               anexo="arquivo"):
     """As CINCO vozes do e-mail de reprocesso, decididas num lugar só.
 
     Devolve (abertura, assunto, titulo, selo, preheader).
@@ -9815,9 +9816,34 @@ def voz_do_email_de_reprocesso(nome_escapado, nome_cru, n_itens, n_medidos,
     🪤 `n_geo` separa "o desenho foi lido mas nada ganhou selo" de "nada saiu
     da geometria" — a distinção de 03/09, quando o preheader contradizia o
     corpo do próprio e-mail.
+
+    🩸 16/09/2026 — A MESMA DOENÇA, NO SUBSTANTIVO. O conserto acima tirou o
+    "medimos" de quem não mediu, mas todos os ramos continuaram dizendo
+    **"o CAD que você anexou"**, com a palavra fixa. Cliente novo anexou um
+    PDF e recebeu "Refizemos o projeto com o CAD que você anexou" — o sistema
+    tinha o registro (`dwg=0 dxf=0 pdf=1`) e afirmou o contrário assim mesmo.
+    O estrago não é a imprecisão: a frase CONFIRMA pra ele que mandou o arquivo
+    certo, então a conclusão dele vira "mandei o CAD e não mediu, esse produto
+    não mede" — e ele reenvia PDF de novo. `anexo` é o que REALMENTE entrou.
+
+    🪤 O padrão é "arquivo", não "CAD": quem esquecer de passar fica vago, nunca
+    mentindo. Afirmação sem prova é o defeito que esta função existe pra barrar.
     """
     piorou = bool(frase_piora)
     mediu = n_medidos > 0
+    _e_cad = (anexo or "").upper() == "CAD"
+    _nome_anexo = anexo or "arquivo"
+    # Sem CAD no projeto, este é o momento de pedir — depois de dizer a verdade
+    # sobre o que entrou, nunca antes.
+    if _e_cad:
+        _pedido = ""
+    elif _nome_anexo.upper() == "PDF":
+        _pedido = ("<br><br>PDF é a impressão da prancha: as medidas não viajam "
+                   "dentro dele. Pra sair quantidade medida, mande o mesmo "
+                   "desenho em <b>DWG</b> ou <b>DXF</b>.")
+    else:
+        _pedido = ("<br><br>Pra sair quantidade medida, o que vale é o desenho "
+                   "em <b>DWG</b> ou <b>DXF</b>.")
     if piorou:
         abertura = (f"Refizemos o projeto <b>{nome_escapado}</b> com os arquivos que você "
                     f"anexou, e preciso ser direto sobre o resultado.<br><br>"
@@ -9827,26 +9853,27 @@ def voz_do_email_de_reprocesso(nome_escapado, nome_cru, n_itens, n_medidos,
         titulo, selo = "Leitura refeita — compare as duas", "&#9888; Mudou"
         pre = "As duas versões ficam no painel — compare antes de orçar."
     elif mediu:
-        abertura = (f"Refizemos o projeto <b>{nome_escapado}</b> medindo pelo <b>CAD</b> "
-                    f"que você anexou — a planilha foi atualizada, agora com "
-                    f"<b>{n_itens} itens</b>, "
+        abertura = (f"Refizemos o projeto <b>{nome_escapado}</b> medindo pelo "
+                    f"<b>{_nome_anexo}</b> que você anexou — a planilha foi "
+                    f"atualizada, agora com <b>{n_itens} itens</b>, "
                     f"<b>{n_medidos}</b> medidos do desenho.")
-        assunto = (f"{nome_cru} — medimos com o CAD, planilha atualizada"
-                   if nome_cru else "Medimos seu projeto com o CAD — planilha atualizada")
-        titulo, selo = "Planilha atualizada com o CAD", "&#10003; Medido"
-        pre = "O arquivo CAD que você mandou depois entrou na conta."
+        assunto = (f"{nome_cru} — medimos com o {_nome_anexo}, planilha atualizada"
+                   if nome_cru else f"Medimos seu projeto com o {_nome_anexo} — planilha atualizada")
+        titulo = f"Planilha atualizada com o {_nome_anexo}"
+        selo = "&#10003; Medido"
+        pre = f"O {_nome_anexo} que você mandou depois entrou na conta."
     else:
         # 🚨 nem abertura, nem assunto, nem selo, nem preheader podem afirmar
         # medição quando `n_medidos == 0`
-        abertura = (f"Refizemos o projeto <b>{nome_escapado}</b> com o <b>CAD</b> que você "
-                    f"anexou — a planilha foi atualizada, agora com "
-                    f"<b>{n_itens} itens</b>.<br><br>"
-                    f"<b>Nenhum item saiu com o selo ✓ MEDIDO do CAD desta "
+        abertura = (f"Refizemos o projeto <b>{nome_escapado}</b> com o "
+                    f"<b>{_nome_anexo}</b> que você anexou — a planilha foi "
+                    f"atualizada, agora com <b>{n_itens} itens</b>.<br><br>"
+                    f"<b>Nenhum item saiu com o selo ✓ MEDIDO do desenho desta "
                     f"vez.</b> {frase_origem} Trate como mapa do que "
-                    f"existe, não como levantamento fechado.")
-        assunto = (f"{nome_cru} — planilha atualizada com o CAD"
-                   if nome_cru else "Planilha atualizada com o CAD")
-        titulo = "Planilha atualizada com o CAD"
+                    f"existe, não como levantamento fechado.{_pedido}")
+        assunto = (f"{nome_cru} — planilha atualizada com o {_nome_anexo}"
+                   if nome_cru else f"Planilha atualizada com o {_nome_anexo}")
+        titulo = f"Planilha atualizada com o {_nome_anexo}"
         # 🩸 03/09 — O PREHEADER CONTRADIZIA O PRÓPRIO CORPO. Ele dizia
         # "nenhuma quantidade saiu da geometria" e o corpo, três linhas
         # abaixo, dizia "parte das quantidades foi tirada da geometria". O
@@ -15525,6 +15552,11 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     (_abre_c, _subj_c, _titulo_c,
                      _badge_c, _pre_c) = voz_do_email_de_reprocesso(
                         _pn_c, _pn_c_raw, len(all_items), _n_med_c, _n_geo_c,
+                        # 🩸 16/09: sem isto o texto dizia "o CAD que você
+                        # anexou" pra quem tinha anexado PDF — e confirmava pro
+                        # cliente que ele mandara o arquivo certo.
+                        anexo=("CAD" if _n_cad_c > 0 else
+                               "PDF" if _n_pdf_c > 0 else "arquivo"),
                         frase_piora=(_cmp_c.get("frase") or ""),
                         frase_origem=_frase_origem_c)
                     _body_c = f"{_greet_c}<br><br>{_abre_c}{_diag_c}{_proximos_c}"
@@ -29739,6 +29771,128 @@ async def admin_eval_combine(job_id: str, request: Request):
     }
 
 
+def _sha256_do_arquivo(caminho: str) -> str:
+    """Impressão digital do CONTEÚDO, em pedaços (arquivo de cliente é grande)."""
+    import hashlib
+    h = hashlib.sha256()
+    with open(caminho, "rb") as fh:
+        while True:
+            pedaco = fh.read(65536)
+            if not pedaco:
+                break
+            h.update(pedaco)
+    return h.hexdigest()
+
+
+def _pranchas_com_tamanho(job_id: str):
+    """[(nome, tamanho)] do que já está no Storage deste projeto, ou None.
+
+    🪤 `None` é "não consegui listar", diferente de `[]` = "projeto sem arquivo".
+    Quem confunde os dois deixa passar um anexo repetido justo quando o banco
+    tossiu — ver `_supabase_storage_list_ou_falha`, mesma lição de 07/09.
+    """
+    import urllib.request, json as _j
+    try:
+        url = f"{SUPABASE_URL}/storage/v1/object/list/{PRANCHAS_BUCKET}"
+        body = _j.dumps({"prefix": f"{job_id}/", "limit": 200}).encode("utf-8")
+        req = urllib.request.Request(url, data=body, method="POST")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        req.add_header("Content-Type", "application/json")
+        itens = _j.loads(urllib.request.urlopen(req, timeout=15).read().decode("utf-8"))
+        fora = []
+        for it in itens or []:
+            nome = it.get("name") or ""
+            if not nome:
+                continue
+            try:
+                tam = int(((it.get("metadata") or {}).get("size")) or 0)
+            except (TypeError, ValueError):
+                tam = 0
+            fora.append((nome, tam))
+        return fora
+    except Exception as e:
+        print(f"[add-file] não consegui listar as pranchas de {job_id}: {e}")
+        return None
+
+
+def _anexos_ja_no_projeto(job_id: str, recebidos: list):
+    """Quais dos arquivos anexados AGORA já estão no projeto, byte a byte.
+
+    🩸 16/09/2026 — cliente NOVO, 1º projeto: leu o PDF, não saiu linha medida
+    (PDF é impressão da prancha, a medida não viaja dentro dele), e ele anexou
+    O MESMO PDF de novo pela tela de anexar. O sistema aceitou sem conferir,
+    ARQUIVOU a versão de 67 linhas e entregou 52 — ainda com zero medida. Ele
+    pagou com tempo e a gente pagou com IA, pra piorar a planilha dele.
+
+    🔑 Identidade de arquivo é o CONTEÚDO, não o nome: o navegador dele mandou
+    `... (1).pdf`, nome diferente do que estava no Storage. O tamanho serve de
+    pré-filtro barato (a listagem já traz), e só os candidatos são baixados pra
+    conferir o sha256 — ver a skill `content-hash-cache-pattern`.
+
+    Devolve `(repetidos, projeto_tem_cad)`, onde `repetidos` é
+    `{nome_local: nome_gêmeo_no_storage}`. Listagem que falha devolve `({}, ...)`:
+    na dúvida DEIXA subir — bloquear um anexo legítimo é pior que refazer.
+    """
+    lista = _pranchas_com_tamanho(job_id)
+    if not lista:
+        return {}, False
+    tem_cad = any(n.lower().endswith((".dwg", ".dxf")) for n, _t in lista)
+    por_tamanho = {}
+    for nome, tam in lista:
+        if tam:
+            por_tamanho.setdefault(tam, []).append(nome)
+    import hashlib
+    repetidos = {}
+    _sem_conferir = []
+    for safe_local, caminho, tamanho in recebidos:
+        candidatos = por_tamanho.get(tamanho) or []
+        meu = ""
+        if candidatos:
+            try:
+                meu = _sha256_do_arquivo(caminho)
+            except OSError as e:
+                print(f"[add-file] não consegui ler {safe_local} pra conferir: {e}")
+        # 🪤 Nada de `continue` calado aqui. Um gêmeo que não baixa NÃO é
+        # prancha perdida — o arquivo segue no Storage e a leitura do cliente
+        # não depende deste download, que só serviria pra COMPARAR. Então não
+        # cabe o alarme de `_alerta_pranchas_perdidas` (alarme sem perda é como
+        # se perde um instrumento), mas cabe o rastro: sem a comparação eu não
+        # SEI que é repetido, trato como novo, e digo que não soube.
+        for nome in (candidatos if meu else []):
+            alvo = nome.split("/")[-1]
+            try:
+                bruto = _supabase_storage_download_prancha(job_id, alvo)
+                if not bruto:
+                    _sem_conferir.append(alvo)
+                elif hashlib.sha256(bruto).hexdigest() == meu:
+                    repetidos[safe_local] = alvo
+                    break
+            except Exception as e:
+                _sem_conferir.append(alvo)
+                print(f"[add-file] comparação com {alvo} falhou: {e}")
+    if _sem_conferir:
+        print(f"[add-file] {job_id}: não consegui comparar com {_sem_conferir} "
+              f"— na dúvida, deixando subir")
+    return repetidos, tem_cad
+
+
+def _recado_do_anexo_repetido(repetidos: dict, tem_cad: bool) -> str:
+    """O que a tela mostra quando o anexo é o arquivo que já está lá."""
+    nomes = ", ".join(sorted(set(repetidos.values())))[:200]
+    base = (f"Esse arquivo já está no projeto ({nomes}) — é o mesmo conteúdo, "
+            f"não uma versão nova. Reenviar refaria a leitura do zero sem "
+            f"informação nova, e o resultado pode até sair diferente do que "
+            f"você já tem.")
+    if tem_cad:
+        return base + (" Se quiser refazer mesmo assim, use o botão "
+                       "'Reprocessar' na página do projeto.")
+    return base + (" Pra sair quantidade MEDIDA, o que falta é o desenho em "
+                   "DWG ou DXF — o mesmo projeto exportado do CAD, em vez de "
+                   "impresso em PDF. O PDF é uma imagem da prancha: as medidas "
+                   "não viajam dentro dele.")
+
+
 @app.post("/api/project/{job_id}/add-file")
 async def add_file_and_reprocess(job_id: str, request: Request, files: list[UploadFile] = File(...)):
     """Anexa UM OU MAIS arquivos (DWG/DXF/PDF) a um projeto EXISTENTE e reprocessa NO
@@ -29805,10 +29959,13 @@ async def add_file_and_reprocess(job_id: str, request: Request, files: list[Uplo
 
     work_dir = os.path.join(WORK_DIR, job_id)
     os.makedirs(work_dir, exist_ok=True)
-    saved = 0
-    _enviados = []  # o que a pessoa anexou AGORA (pro alerta dizer a verdade)
+    # 1) Grava TODOS em disco antes de subir qualquer um: a conferência do
+    #    repetido precisa do arquivo na mão, e subir antes sobrescreveria o
+    #    gêmeo que está no Storage (mesmo nome = upsert) — apagando justamente
+    #    a prova de que é o mesmo.
+    _recebidos = []  # (safe_local, caminho, tamanho)
     for _f in files:
-        safe_local = _safe_local_filename(_f.filename or f"arquivo_{saved}")
+        safe_local = _safe_local_filename(_f.filename or f"arquivo_{len(_recebidos)}")
         new_local = os.path.join(work_dir, safe_local)
         # Grava em pedaços (não bufferiza o arquivo inteiro na RAM — mesmo padrão
         # anti-OOM do /api/process; este arquivo alimenta o ezdxf logo em seguida).
@@ -29821,6 +29978,34 @@ async def add_file_and_reprocess(job_id: str, request: Request, files: list[Uplo
             try: os.remove(new_local)
             except OSError: pass
             raise HTTPException(413, f"'{_f.filename}' passa de 150 MB. Exporte só a prancha necessária.")
+        _recebidos.append((safe_local, new_local, n_written))
+    if not _recebidos:
+        raise HTTPException(400, "Arquivo(s) vazio(s).")
+
+    # 2) 🩸 16/09/2026 — LER ANTES DE RODAR (pedido do Pedro). Anexo que é o
+    #    arquivo que já está lá não vira leitura nova: vira a versão anterior
+    #    do cliente arquivada e uma planilha diferente, ainda sem medida. Custa
+    #    IA, custa o tempo dele e piora o que ele tinha. A trava é aqui, antes
+    #    de subir pro Storage e antes de disparar o motor.
+    _repetidos, _tem_cad = await run_in_threadpool(
+        _anexos_ja_no_projeto, job_id, _recebidos)
+    if _repetidos and len(_repetidos) == len(_recebidos):
+        for _sl, _cl, _t in _recebidos:
+            try: os.remove(_cl)
+            except OSError: pass
+        _log_error("add-file:mesmo-arquivo",
+                   f"anexo barrado: {sorted(_repetidos.values())} já está(ão) no "
+                   f"projeto (mesmo sha256) · projeto_tem_cad={_tem_cad}",
+                   job_id, severity="info")
+        raise HTTPException(409, _recado_do_anexo_repetido(_repetidos, _tem_cad))
+
+    # 3) Sobe só o que é novo de verdade.
+    saved = 0
+    _enviados = []  # o que a pessoa anexou AGORA (pro alerta dizer a verdade)
+    for safe_local, new_local, _t in _recebidos:
+        if safe_local in _repetidos:
+            print(f"[add-file] {safe_local} é igual a {_repetidos[safe_local]} — não subi de novo")
+            continue
         if not await run_in_threadpool(
                 _supabase_storage_upload_prancha, new_local, job_id, safe_local):
             raise HTTPException(500, "Não consegui guardar um dos arquivos. Tenta de novo.")
