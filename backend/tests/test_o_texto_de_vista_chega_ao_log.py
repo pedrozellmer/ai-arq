@@ -395,7 +395,10 @@ def _rodar_motor(monkeypatch, tmp_path, textos, nome, carimbo=None):
             content=[types.SimpleNamespace(text=corpo)], stop_reason="end_turn",
             usage=types.SimpleNamespace(output_tokens=10, input_tokens=10))
 
-    def _freia(itens):
+    def _freia(itens, *a, **k):
+        # `*a, **k`: o freio não pode cair quando a função real ganha parâmetro
+        # novo — foi o que aconteceu em 16/09 com `registro=` (o job inteiro
+        # passou a rodar e o guarda seguiu verde, sem freio nenhum)
         raise _Parou()
 
     monkeypatch.setattr(socket.socket, "connect", _sem_rede)

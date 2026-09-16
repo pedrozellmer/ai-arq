@@ -564,6 +564,8 @@ _STAGES_DIAGNOSTICO = frozenset({
     # 15/09: os trechos de perfil e escala H/V que a prancha escreve. Só
     # registro, não muda selo — ver `_textos_de_vista`.
     "motor:vista-texto",
+    # 16/09: QUAIS linhas a consolidação fundiu (o itens-removidos só diz quantas)
+    "motor:fusao-calada",
     # 🩸 09/09/2026: os três nasceram de perguntas que o log de hoje não
     # respondia — "42 hachuras de quê?", "quem levou os 5 itens?" e "a
     # calibração rodou ou foi pulada?".
@@ -6110,8 +6112,62 @@ def _resumo_do_grupo(group, teto: int = 4) -> str:
     return " · ".join(partes)
 
 
-def _consolidate_items(items: list) -> list:
+def _anota_fusao(registro, passada: str, grupo: list, ficou) -> None:
+    """Guarda o que uma passada de fusão comeu, pro log `motor:fusao-calada`.
+
+    🩸 16/09/2026: a passada 1, quando o grupo tem a MESMA quantidade, mantém uma
+    linha e descarta as outras — sem escrever nada na observação e sem registro.
+    O `motor:itens-removidos` diz QUANTAS sumiram; nunca disse QUAIS. No estudo de
+    15/09, 45 dobros reais em 11 jobs, e a linha que some pode ser a que o cliente
+    usaria pra preencher.
+    🔒 Sem nome de prancha: `ref_sheet` é nome de arquivo do cliente e pode trazer
+    nome de pessoa. Vai só a CONTAGEM de pranchas distintas.
+    """
+    if registro is None or len(grupo) < 2:
+        return
+    try:
+        from models import e_medido
+        registro.append({
+            "passada": passada,
+            "n": len(grupo),
+            "coisa": (_primary_noun(getattr(ficou, "description", "") or "") or "")[:24],
+            "disciplina": (getattr(ficou, "discipline", "") or "")[:20],
+            "unidade": (getattr(ficou, "unit", "") or "")[:8],
+            "qty": round(float(getattr(ficou, "quantity", 0) or 0), 2),
+            "pranchas": len({(getattr(_it, "ref_sheet", "") or "") for _it in grupo}),
+            "medidas": sum(1 for _it in grupo
+                           if e_medido(getattr(_it, "confidence", ""),
+                                       getattr(_it, "origem", "") or "")),
+        })
+    except Exception as _e:           # registro NUNCA pode derrubar a consolidação
+        print(f"[fusao-calada] registro falhou (nao-fatal): {_e}")
+
+
+def _resumo_de_fusoes(registro) -> str:
+    """Uma linha pro log: quanto cada passada comeu e os cinco maiores grupos."""
+    if not registro:
+        return ""
+    a_menos = sum(max(0, int(r.get("n", 1)) - 1) for r in registro)
+    medidas = sum(int(r.get("medidas", 0)) for r in registro)
+    por_passada: dict = {}
+    for r in registro:
+        por_passada[r.get("passada", "?")] = por_passada.get(r.get("passada", "?"), 0) + 1
+    cabeca = " ".join(f"{k}={v}" for k, v in sorted(por_passada.items()))
+    piores = sorted(registro, key=lambda r: (-int(r.get("n", 0)), str(r.get("coisa", ""))))[:5]
+    detalhe = " · ".join(
+        f"{r.get('coisa') or '?'}[{r.get('disciplina') or '?'}] "
+        f"{r.get('qty', 0):g} {r.get('unidade') or '?'} n={r.get('n')} "
+        f"pranchas={r.get('pranchas')}" + (" 🚩MEDIDA" if r.get("medidas") else "")
+        for r in piores)
+    return (f"grupos={len(registro)} linhas_a_menos={a_menos} "
+            f"medidas_no_grupo={medidas} | {cabeca} | {detalhe}")
+
+
+def _consolidate_items(items: list, registro: list | None = None) -> list:
     """Consolida itens redundantes em múltiplas passadas:
+
+    `registro`, quando é uma lista, recebe o que cada passada fundiu — é o que
+    alimenta o log `motor:fusao-calada`. Não muda nada do que o cliente recebe.
 
     PASSADA 1 — por (chave_normalizada, unidade):
     - Mesma chave + mesma qty + mesma unidade → mantém 1 (desc mais completa).
@@ -6227,6 +6283,8 @@ def _consolidate_items(items: list) -> list:
                     if getattr(x, _f, "")),
                 len(x.description or ""), _desempate_estavel(x)))
             pass1.append(best)
+            # a única fusão que não escreve nada na linha que fica — só aqui há rastro
+            _anota_fusao(registro, "p1-igual", group, best)
         else:
             pass1.extend(group)
 
@@ -6323,6 +6381,7 @@ def _consolidate_items(items: list) -> list:
                 spec_origem=getattr(best, "spec_origem", "") or "",
             )
             pass2.append(merged_item)
+            _anota_fusao(registro, "p2-familia", fam, merged_item)
 
     # ═══════════════════════════════════════════════════════════════
     #  PASSADA 3 — Famílias em qty pequena (un/ml/vb com qty<=2)
@@ -12979,7 +13038,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # lê") — o conserto tinha pegado um quinto do problema.
         # 🔑 Agora cada passo registra QUANTO tirou, no error_log, com nome.
         _n0 = len(all_items)
-        all_items = _consolidate_items(all_items)
+        _fusoes: list = []
+        all_items = _consolidate_items(all_items, registro=_fusoes)
         _n1 = len(all_items)
         all_items, _fund_bloco = _dedupe_by_block(all_items)  # mesmo bloco CAD, MESMA prancha
         _n2 = len(all_items)
@@ -12991,6 +13051,14 @@ bloco — só cite os que estão no inventário deste arquivo."""
                        f"consolidacao={_n0 - _n1} bloco={_n1 - _n2} "
                        f"sem-sentido={_n2 - _n3}",
                        job_id, severity="info")
+        # 🔁 16/09: QUAIS linhas a consolidação comeu — o de cima só diz quantas.
+        # Try próprio: falha aqui não pode apagar a linha de cima nem o job.
+        try:
+            if _fusoes:
+                _log_error("motor:fusao-calada", _resumo_de_fusoes(_fusoes),
+                           job_id, severity="info")
+        except Exception as _efu:
+            print(f"[fusao-calada] log falhou (nao-fatal): {_efu}")
         # ── SELO BRANCO NÃO VAI EM ITEM QUE A GENTE NÃO SABE O QUE É ────────
         # 🩸 04/09/2026, olhando o 1º projeto da cliente-22: a planilha
         # dela trazia "Equipamento não identificado — bloco CAD '1258C37_v'",

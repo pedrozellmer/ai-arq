@@ -218,7 +218,12 @@ def _motor_de_pdf(paginas):
         return _Resposta(json.dumps(
             [{"auto_resume_count": 1, "reprocess_count": 0}]).encode("utf-8"))
 
-    def _freia(itens):
+    def _freia(itens, *a, **k):
+        # 🪤 16/09: `*a, **k` de propósito. O dublê tinha a assinatura EXATA de
+        # `_consolidate_items(items)`; quando a função real ganhou o parâmetro
+        # `registro=`, a chamada virou TypeError, o `except Exception` do motor
+        # engoliu, o freio nunca disparou — e este guarda parou de medir
+        # qualquer coisa (a bancada pegou, o teste não).
         raise _ParouNaConsolidacao(itens)
 
     _velhos = {}
