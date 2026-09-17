@@ -43,13 +43,34 @@
     </button>
     <span class="text-gray-500">·</span>
     <span id="filename" class="font-medium truncate flex-1">Carregando...</span>
-    <button onclick="downloadPdf()" title="Baixar o PDF original"
+    <button onclick="downloadPdf()" id="btn-baixar" title="Baixar o arquivo que está sendo exibido"
       class="text-gray-300 hover:text-indigo-300 flex items-center gap-1">
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
       Baixar
     </button>
   </div>
-  <iframe id="pdf-frame" class="viewer-frame" title="Prancha PDF"></iframe>
+  <!-- 🚨 REGRA DURA Nº1 (17/09/2026). Quando o que chega é a IMAGEM que a
+       gente renderizou do CAD, o cliente precisa saber disso. O botão que o
+       trouxe aqui fala em conferir a prancha; entregar um desenho gerado por
+       nós sem dizer que é gerado por nós é apresentar desenho como se fosse o
+       original. Fica escondido quando o que chega é o PDF do próprio cliente. -->
+  <!-- 🩸 17/09 — `hidden` SOZINHO NÃO ESCONDE: nesta folha `[hidden]` (byte
+       4699) empata em especificidade com `.flex` (7203) e perde por vir antes.
+       Sem o estilo em linha, este selo aparecia SEMPRE — inclusive em cima do
+       PDF que o próprio cliente mandou, dizendo que fomos nós que geramos.
+       Regra dura nº1 ao contrário. Estilo em linha ganha de qualquer regra da
+       folha, sem depender da ordem do build (que é estático).
+       🪤 E a classe é `text-sm`, não `text-[13px]`: valor arbitrário de
+       Tailwind NÃO existe neste CSS pré-compilado — sairia em 16px calado. -->
+  <div id="selo-render" hidden style="display:none"
+       class="flex items-start gap-2 bg-amber-50 border-b border-amber-200 px-4 py-2 text-sm text-amber-900">
+    <span aria-hidden="true">🖼️</span>
+    <span>Esta imagem foi <strong>gerada pelo AI.arq a partir do seu CAD</strong>, só
+      para você ver o desenho. Ela mostra <strong>um layout</strong> do arquivo, pode
+      trocar fontes, e <strong>não é a medição</strong> — para conferir de verdade,
+      abra o arquivo original no seu CAD.</span>
+  </div>
+  <iframe id="pdf-frame" class="viewer-frame" title="Prancha"></iframe>
 </div>
 
 <script>
@@ -62,6 +83,17 @@ const jobId = urlParams.get('job_id');
 const ref = urlParams.get('ref');
 
 let currentBlobUrl = null;  // referência pra revogar no unload
+
+// 🩸 17/09/2026 — o nome do que o servidor ENTREGOU, que não é o mesmo que a
+// tela PEDIU. O `ref` nomeia o CAD ("planta.dxf"); o que volta pode ser a
+// imagem renderizada dele ("planta.png"). Enquanto isso não era separado, o
+// botão Baixar salvava a imagem com extensão .dxf — um arquivo que não abre em
+// lugar nenhum. O servidor diz o nome verdadeiro no cabeçalho X-Filename.
+let nomeEntregue = null;
+
+function ehRender(nome) {
+  return /\.(png|jpe?g)$/i.test(String(nome || ''));
+}
 
 // Exibe erro fatal SEM jogar dado do servidor em innerHTML (fix XSS 2026-07-22):
 // o texto entra por textContent, imune a payload tipo <img src=x onerror=...>
@@ -111,6 +143,20 @@ if (!jobId || !ref) {
         showFatal('Não consegui abrir a prancha: ' + detail);
         return;
       }
+      // O nome VERDADEIRO do que veio — e, com ele, o selo de honestidade.
+      nomeEntregue = resp.headers.get('X-Filename') || decodeURIComponent(ref);
+      // 🩸 A barra SEMPRE mostra o que CHEGOU, não o que foi pedido. Esta linha
+      // vivia dentro do `if` de baixo: quando o servidor entregava a prancha de
+      // OUTRO arquivo (o casamento aproximado do backend faz isso), o cliente
+      // via um desenho em tela cheia rotulado com o nome que ele clicou.
+      document.getElementById('filename').textContent = nomeEntregue;
+      if (ehRender(nomeEntregue)) {
+        const selo = document.getElementById('selo-render');
+        selo.hidden = false;
+        selo.style.display = '';   // o atributo sozinho não esconde nesta folha
+        document.getElementById('btn-baixar').title =
+          'Baixar a imagem gerada (não é o arquivo original)';
+      }
       const blob = await resp.blob();
       currentBlobUrl = URL.createObjectURL(blob);
       document.getElementById('pdf-frame').src = currentBlobUrl;
@@ -125,7 +171,7 @@ if (!jobId || !ref) {
     if (currentBlobUrl) {
       const a = document.createElement('a');
       a.href = currentBlobUrl;
-      a.download = decodeURIComponent(ref);
+      a.download = nomeEntregue || decodeURIComponent(ref);
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -137,11 +183,12 @@ if (!jobId || !ref) {
       headers: { 'Authorization': `Bearer ${session.access_token}` }
     });
     if (!resp.ok) return;
+    nomeEntregue = resp.headers.get('X-Filename') || nomeEntregue;
     const blob = await resp.blob();
     const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = blobUrl;
-    a.download = decodeURIComponent(ref);
+    a.download = nomeEntregue || decodeURIComponent(ref);
     document.body.appendChild(a);
     a.click();
     a.remove();

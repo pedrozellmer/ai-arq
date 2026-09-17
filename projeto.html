@@ -3315,6 +3315,25 @@ function collectCadFiles(items) {
   return filesSet;
 }
 
+// 🖼️ 17/09/2026 — o que o botão de cada arquivo faz, e como ele se chama.
+//
+// Isto era um ternário dentro de um `.map()`, sem nome, e por isso sem guarda
+// possível. Virou função porque tem uma REGRA DURA dentro: o arquivo de CAD
+// abre o VISUALIZADOR, nunca o arquivo cru.
+//
+// 🚨 Por quê: o que o /api/sheet devolve pra um DWG/DXF é um desenho que NÓS
+// renderizamos, e quem diz isso ao cliente é a página `visualizar-prancha`,
+// no selo. Mandar o blob direto pra uma aba mostra o render sem o aviso — é
+// apresentar desenho nosso como se fosse a planta do cliente (regra dura nº1).
+// O rótulo "Ver desenho" e o destino têm que casar: botão que diz ver e baixa
+// arquivo é a mesma mentira, só menor.
+function botaoDaPrancha(ext) {
+  const e = String(ext || '').toLowerCase();
+  if (e === 'pdf') return { rotulo: 'Abrir', modo: 'abrir' };
+  if (e === 'dwg' || e === 'dxf') return { rotulo: 'Ver desenho', modo: 'visualizador' };
+  return { rotulo: 'Baixar', modo: 'baixar' };
+}
+
 function renderFiles(proj, items) {
   const filesSet = collectCadFiles(items);
 
@@ -3329,26 +3348,49 @@ function renderFiles(proj, items) {
     .map(([fname, st]) => {
       const count = st.itens;
       const ext = fname.toLowerCase().split('.').pop();
-      // URL direta do arquivo (sem página intermediária visualizar-prancha).
-      // target="_blank" abre o PDF em nova aba; DWG/DXF baixam direto porque
-      // o browser não tem viewer nativo pra eles.
       const directUrl = `${API_BASE}/api/sheet/${proj.job_id}?ref=${encodeURIComponent(fname)}`;
       const icon = ext === 'pdf' ? '📄' : (ext === 'dwg' || ext === 'dxf') ? '📐' : '📎';
-      // PDF → abrir (browser tem viewer); DWG/DXF → baixar direto
-      const isPdf = ext === 'pdf';
-      const btnLabel = isPdf ? 'Abrir' : 'Baixar';
-      const btnIcon = isPdf
-        ? '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 3h6v6M14 10l7-7M10 21H5a2 2 0 01-2-2v-5m0-4V5a2 2 0 012-2h4"/>'
-        : '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>';
+      const acao = botaoDaPrancha(ext);
+      const btnLabel = acao.rotulo;
+      const viewerUrl = `visualizar-prancha.html?job_id=${encodeURIComponent(proj.job_id)}&ref=${encodeURIComponent(fname)}`;
+      const ICONE_ABRIR = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 3h6v6M14 10l7-7M10 21H5a2 2 0 01-2-2v-5m0-4V5a2 2 0 012-2h4"/>';
+      const ICONE_OLHO = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>';
+      const ICONE_BAIXAR = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>';
+      const btnIcon = acao.modo === 'abrir' ? ICONE_ABRIR
+                    : (acao.modo === 'visualizador' ? ICONE_OLHO : ICONE_BAIXAR);
       // FIX bug cliente-38 2026-06-02: endpoint protegido /api/sheet exige Bearer
-      // token. <a href target="_blank"> NÃO envia Authorization → 401. Usamos
-      // os helpers via onclick: PDF → openPdfProtected (abre em nova aba),
-      // DWG/DXF → downloadProtected (força download).
+      // token. <a href target="_blank"> NÃO envia Authorization → 401. Por isso
+      // PDF vai por `openPdfProtected` e o resto por `downloadProtected` — os
+      // dois usam fetch. O CAD vai pro visualizador, que faz o fetch com token
+      // por conta própria (e é lá que mora o selo do render).
+      // 🖼️ O botão do CAD nasce ESCONDIDO e carrega o nome da prancha: quem o
+      // revela é `revelarPranchasComImagem`, depois de o backend dizer quais
+      // têm desenho. Esconder por padrão é falhar fechado — se a resposta não
+      // vier, o cliente não recebe promessa que a gente não pode cumprir.
+      //
+      // 🩸 17/09/2026 — O ATRIBUTO `hidden` SOZINHO NÃO ESCONDE ESTE BOTÃO.
+      // A revisão adversarial provou em navegador: nesta folha, `[hidden]`
+      // (offset 4699) e `.inline-flex` (offset 7222) têm a MESMA
+      // especificidade, e quem vem depois vence — o botão tem
+      // `class="inline-flex …"`, então ele aparecia com `el.hidden === true`.
+      // A trava que o Pedro pediu ficava INERTE e os 277 botões apareciam,
+      // 81% deles abrindo aba com erro.
+      // 🔑 `style="display:none"` é estilo EM LINHA: ganha de qualquer regra
+      // da folha, sem depender da ordem em que o Tailwind foi gerado (o build
+      // é estático — ver [[reference_tailwind_build_estatico]]). Conferido:
+      // a única regra `display:…!important` da folha é `.!grid`, que este
+      // botão não usa. O `hidden` fica junto pelo leitor de tela.
+      const escondeAteSaber = acao.modo === 'visualizador'
+        ? `hidden style="display:none" data-prancha="${esc(fname)}"`
+        : '';
       const safeUrl = directUrl.replace(/'/g, "\\'");
+      const safeViewer = viewerUrl.replace(/'/g, "\\'");
       const safeFname = String(fname).replace(/'/g, "\\'");
-      const onclickAttr = isPdf
+      const onclickAttr = acao.modo === 'abrir'
         ? `onclick="openPdfProtected('${safeUrl}'); return false;"`
-        : `onclick="downloadProtected('${safeUrl}', '${safeFname}'); return false;"`;
+        : (acao.modo === 'visualizador'
+            ? `onclick="window.open('${safeViewer}', '_blank'); return false;"`
+            : `onclick="downloadProtected('${safeUrl}', '${safeFname}'); return false;"`);
       return `
         <div class="flex items-center gap-3 px-5 py-3 hover:bg-gray-50">
           <span class="text-xl shrink-0">${icon}</span>
@@ -3360,7 +3402,7 @@ function renderFiles(proj, items) {
                 : ` · <span class="text-amber-700 font-medium">lida, mas nada medido do CAD</span>`
             }</p>
           </div>
-          <a href="#" ${onclickAttr} class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 no-underline cursor-pointer">
+          <a href="#" ${onclickAttr} ${escondeAteSaber} class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 no-underline cursor-pointer">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">${btnIcon}</svg>
             ${btnLabel}
           </a>
@@ -3368,6 +3410,58 @@ function renderFiles(proj, items) {
       `;
     }).join('');
   container.innerHTML = rows;
+  revelarPranchasComImagem(proj, filesSet);
+}
+
+// 🖼️ 17/09/2026 (Pedro: "só mostra o botão quando tiver imagem").
+//
+// O botão "Ver desenho" do CAD nasce ESCONDIDO e só aparece nas pranchas que
+// realmente têm desenho renderizado. Medido hoje: só ~36% dos arquivos CAD de
+// projetos recentes têm imagem — o teto de entidades pula o desenho denso.
+// Oferecer pra todos e dar erro em 2 de 3 cliques é promessa quebrada em escala.
+//
+// 🔑 Quem responde "tem imagem?" é o BACKEND. A tentação era o JavaScript
+// derivar o nome do PNG sozinho — e isso reimplantaria, em outra linguagem,
+// exatamente a divergência que deixou a miniatura 5 meses sem chegar em
+// ninguém. A tela manda os nomes que ela tem e recebe de volta os mesmos nomes;
+// a receita nunca atravessa a fronteira.
+//
+// 🪤 Falha FECHADA: rede fora, resposta estranha ou projeto sem imagem nenhuma
+// deixam o botão escondido. Falhar aberto aqui é voltar a prometer o que a
+// gente não tem.
+async function revelarPranchasComImagem(proj, filesSet) {
+  const cads = Array.from(filesSet.keys()).filter(
+    n => botaoDaPrancha(String(n).toLowerCase().split('.').pop()).modo === 'visualizador');
+  if (!cads.length) return;
+  let comImagem = [];
+  try {
+    const r = await authFetch(`${API_BASE}/api/projeto/${proj.job_id}/pranchas-com-imagem`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refs: cads })
+    });
+    if (!r.ok) return;
+    const j = await r.json();
+    comImagem = Array.isArray(j && j.com_imagem) ? j.com_imagem : [];
+  } catch (e) {
+    return;                      // fecha calado: sem promessa é melhor que promessa falsa
+  }
+  comImagem.forEach(nome => {
+    const el = document.querySelector(
+      `#proj-files a[data-prancha="${cssEscape(String(nome))}"]`);
+    // 🔑 Os DOIS: o atributo (leitor de tela) e o estilo em linha (que é o que
+    // de fato esconde nesta folha). Soltar só o `hidden` deixaria o botão
+    // escondido pra sempre; soltar só o estilo deixaria o leitor de tela
+    // achando que ele não existe.
+    if (el) { el.hidden = false; el.style.display = ''; }
+  });
+}
+
+// Escapa um valor pra usar dentro de um seletor CSS. Nome de arquivo de cliente
+// tem espaço, ponto, parêntese e acento — tudo com significado em seletor.
+function cssEscape(s) {
+  if (window.CSS && CSS.escape) return CSS.escape(s);
+  return String(s).replace(/["\\\]\[\.\#\:\(\)\s,>+~*^$|=']/g, '\\$&');
 }
 
 function esc(s) {

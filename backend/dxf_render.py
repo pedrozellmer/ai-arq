@@ -6,8 +6,15 @@ Fluxo:
        → PNG (via ezdxf.addons.drawing + matplotlib) — ESTE módulo.
 
 Uso do PNG:
-- Preview de prancha na revisão inline (visualizar-prancha.html detecta
-  extensão e renderiza <img> ao invés de <iframe>).
+- Preview de prancha na revisão inline: o cliente clica em "Prancha" e o
+  /api/sheet entrega ESTA imagem.
+  🩸 Esta linha dizia que "visualizar-prancha.html detecta extensão e renderiza
+  <img> ao invés de <iframe>". Era falso duas vezes: não há nenhum <img>
+  naquela página (só <iframe>), e — pior — de 22/04 a 17/09/2026 a imagem NUNCA
+  chegou lá, porque quem a procurava filtrava só `.pdf`. 52 dos 56 PNGs deste
+  módulo ficaram guardados, prontos, sem nunca serem vistos por ninguém.
+  O que exibe é o próprio visualizador de imagem do navegador, dentro do
+  iframe. Consertado em 17/09/2026 (ver `_stem_da_prancha` no main.py).
 - Thumbnail opcional futuro.
 
 Limitações conhecidas:

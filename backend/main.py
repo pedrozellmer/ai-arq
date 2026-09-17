@@ -2831,6 +2831,33 @@ _PRANCHA_MIME = {
 }
 
 
+def _stem_da_prancha(nome: str) -> str:
+    """O nome da prancha SEM extensão e SEM o sufixo do conversor.
+
+    🩸 17/09/2026 — a miniatura da prancha NUNCA chegou na tela em 5 meses, e
+    este era o SEGUNDO dos dois cortes. Quem batiza o PNG tira o `_libredwg`
+    (sufixo que o conversor cola no DXF que ele mesmo gera), mas o `ref_sheet`
+    que a tela manda de volta GUARDA o sufixo. Duas cópias da mesma receita
+    divergindo por construção: `planta_libredwg.dxf` virava a imagem
+    `planta.png`, e a busca ia procurar `planta_libredwg.png`, que não existe.
+
+    📏 Medido antes de mexer: casando o nome CRU, **8 dos 56 PNGs** do balde
+    são alcançáveis. Tirando o sufixo, **52 de 56** — 33 projetos, 19 clientes.
+    Consertar um corte só entregaria 8; por isso os dois entraram no mesmo
+    commit.
+
+    🔑 Existe UMA função porque duas divergem — é a lição de
+    [[feedback_a_receita_repetida_e_a_doenca]]. Quem grava o nome
+    (`process_job`, no fim do preview) e quem procura (`_find_prancha_file`)
+    chamam esta aqui, e o guarda prende justamente a igualdade entre as duas
+    pontas, não a forma de cada uma.
+    """
+    base = os.path.splitext(os.path.basename(nome or ""))[0]
+    if base.endswith("_libredwg"):
+        base = base[: -len("_libredwg")]
+    return base
+
+
 def _sanitize_filename_for_storage(filename: str) -> str:
     """Remove acentos e caracteres especiais que quebram upload pro Supabase Storage.
 
@@ -10300,11 +10327,20 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                         continue
                     # Nome do PNG pelo arquivo do CLIENTE, sem o sufixo do
                     # conversor — "planta_libredwg.png" não diz nada pra ele.
-                    _fname = os.path.basename(_dxf_path)
-                    if _fname.endswith("_libredwg.dxf"):
-                        _fname = _fname[: -len("_libredwg.dxf")] + ".dxf"
+                    # 🔑 17/09/2026: a regra do nome mora em `_stem_da_prancha`,
+                    # UMA função, porque quem PROCURA esta imagem depois
+                    # (`_find_prancha_file`) tem que derivar exatamente o mesmo
+                    # nome a partir do `ref_sheet`. Enquanto eram duas cópias, a
+                    # de lá não tirava o `_libredwg` — e a imagem que este laço
+                    # grava não era achada por ninguém, em 5 meses.
+                    # 🪤 `_stem_img`, não `_stem`: já existe um `_stem` neste
+                    # arquivo, pra chave de checkpoint de página de PDF. Nome
+                    # colidindo faz o guarda da receita única mirar no alvo
+                    # errado.
+                    _stem_img = _stem_da_prancha(_dxf_path)
+                    _fname = _stem_img + os.path.splitext(_dxf_path)[1]
                     # Render
-                    _png_path = os.path.join(work_dir, os.path.splitext(_fname)[0] + '.png')
+                    _png_path = os.path.join(work_dir, _stem_img + '.png')
                     try:
                         _t_r0 = time.time()
                         _motivo: list = []
@@ -10319,7 +10355,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                     if _deu:
                         _prev["ok"] += 1
                         # Upload PNG pro Storage
-                        _png_fname = os.path.splitext(_fname)[0] + '.png'
+                        _png_fname = _stem_img + '.png'
                         _supabase_storage_upload_prancha(_png_path, job_id, _png_fname)
                     else:
                         # 🪤 O tempo é o que separa "estourou os 60s" de "abriu e
@@ -27386,25 +27422,155 @@ def admin_activity(request: Request, days: int = 30, limit: int = 200):
 #  SERVIR PRANCHA (pra revisão inline abrir em nova aba)
 # ═══════════════════════════════════════════════════════════════
 
+def _ref_sem_hint(ref: str) -> str:
+    """O `ref_sheet` sem o sufixo "(hint da IA)" — a receita ÚNICA.
+
+    🩸 17/09/2026, achado pela revisão adversarial DO MEU PRÓPRIO CONSERTO.
+    Eu estava consertando um defeito causado por duas receitas divergentes de
+    nome de arquivo... e criei uma QUARTA no mesmo commit: `_refs_com_imagem`
+    cortava em "(" seco, enquanto esta função aqui só corta quando a string
+    TERMINA em ")".
+
+    O caso medido: `prancha (1)_libredwg.dxf`. A busca acha
+    `prancha (1).png` (certo, porque o "(1)" é parte do nome do arquivo,
+    não um hint); a minha lista procurava `prancha.png` e devolvia vazio.
+    Resultado: 41 itens, 13 medidos, imagem pronta no balde — e o cliente sem
+    botão nenhum.
+
+    🔑 Por isso ela existe, e por isso os dois lados a chamam. A regra é
+    conservadora de propósito: só corta quando o parêntese fecha no fim, senão
+    um "(1)" legítimo no meio do nome seria comido.
+    """
+    s = (ref or "").strip()
+    if "(" in s and s.endswith(")"):
+        s = s.split("(")[0].strip()
+    return s
+
+
+def _arquivos_do_job(job_id: str):
+    """Os arquivos visíveis daquele job: (PDFs, imagens renderizadas).
+
+    UMA listagem — disco local + Storage — devolvendo os dois conjuntos
+    SEPARADOS. Separado é o ponto: a imagem tem que poder ser achada, mas não
+    pode entrar no desempate por pontuação dos PDFs, senão um `ref` que nomeia
+    um PDF poderia passar a receber a imagem de outra prancha.
+
+    🔑 Existe como função porque DOIS lugares precisam da mesma listagem: quem
+    resolve o arquivo de UMA prancha (`_find_prancha_file`) e quem responde
+    "quais pranchas deste projeto têm imagem?" (a rota que a tela chama antes de
+    desenhar os botões). Fazer a segunda chamar a primeira N vezes custaria N
+    listagens de rede pra responder uma pergunta só.
+
+    🪤 `limit: 200` — projeto com mais de 200 objetos perde o resto da página, e
+    a imagem some sem aviso. Medido em 17/09: o maior job tem bem menos que
+    isso; quando encostar, o conserto é paginar, não aumentar o número.
+    """
+    pdfs, pngs = set(), set()
+    local_dir = os.path.join(WORK_DIR, job_id)
+    if os.path.isdir(local_dir):
+        for fn in os.listdir(local_dir):
+            if fn.lower().endswith(".pdf"):
+                pdfs.add(fn)
+            elif fn.lower().endswith(".png"):
+                pngs.add(fn)
+    try:
+        import urllib.request
+        from urllib.parse import unquote
+        url = f"{SUPABASE_URL}/storage/v1/object/list/{PRANCHAS_BUCKET}"
+        import json as _j2
+        body = _j2.dumps({"prefix": f"{job_id}/", "limit": 200}).encode("utf-8")
+        req = urllib.request.Request(url, data=body, method="POST")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        req.add_header("Content-Type", "application/json")
+        resp = urllib.request.urlopen(req, timeout=10)
+        for f in _j2.loads(resp.read().decode("utf-8")):
+            n = unquote(f.get("name", ""))
+            if n.lower().endswith(".pdf"):
+                pdfs.add(n)
+            elif n.lower().endswith(".png"):
+                pngs.add(n)
+    except Exception:
+        pass
+    return pdfs, pngs
+
+
+def _refs_com_imagem(job_id: str, refs) -> list:
+    """Quais desses `ref_sheet` têm imagem renderizada — UMA listagem só.
+
+    🚨 17/09/2026 — POR QUE ISTO MORA NO BACKEND. A tela precisa saber quais
+    pranchas têm imagem pra não oferecer "Ver desenho" no que não tem. A
+    tentação era o JavaScript derivar o nome do PNG sozinho — e isso
+    reimplantaria, em outra linguagem, exatamente a divergência que deixou a
+    miniatura 5 meses sem chegar em ninguém (quem grava tira o `_libredwg`,
+    quem procura não tirava).
+    A regra do nome mora em `_stem_da_prancha`, aqui, e só aqui. A tela recebe
+    a RESPOSTA, nunca a receita.
+
+    📏 Por que a tela precisa disso: medido em 17/09, só **36%** dos arquivos
+    CAD de projetos recentes têm imagem (o teto de entidades pula os desenhos
+    densos). Um botão que promete "Ver desenho" e falha em 2 de 3 cliques é
+    promessa quebrada em escala — não oferecer é mais honesto que oferecer e
+    dar erro.
+
+    🪤 E ela DEVOLVE O NOME QUE RECEBEU, sem reformatar. Já existem três
+    receitas diferentes de "limpar o ref_sheet" neste sistema
+    (`_nome_limpo_da_prancha` corta em " (" e baixa a caixa;
+    `_find_prancha_file` só corta se terminar em ")"; o `collectCadFiles` da
+    tela corta em "(" seco). Se eu devolvesse o nome na MINHA forma, a tela não
+    reconheceria o próprio arquivo e o botão sumiria de tudo. Ecoar o que veio
+    é imune às três.
+    """
+    _, pngs = _arquivos_do_job(job_id)
+    if not pngs:
+        return []
+    tem = {n.lower() for n in pngs}
+    fora = []
+    for ref in (refs or []):
+        limpo = _ref_sem_hint(ref)          # a MESMA receita da busca
+        if not limpo.lower().endswith((".dwg", ".dxf")):
+            continue
+        if (_stem_da_prancha(limpo) + ".png").lower() in tem:
+            fora.append(ref)          # o nome COMO VEIO, não o meu
+    return fora
+
+
 def _find_prancha_file(job_id: str, ref: str) -> Optional[str]:
     """Dado um ref_sheet (que pode vir como nome exato, descrição da IA, ou
-    concatenação 'filename (hint)'), encontra o filename real do PDF:
+    concatenação 'filename (hint)'), encontra o filename real pra VER:
 
     1. Se `ref` termina em .pdf e existe no hot cache → usa direto.
     2. Se `ref` tem formato "filename.pdf (hint)" → extrai o filename antes do "(".
-    3. Fuzzy match: lista PDFs do job no /tmp OU no Storage, escolhe o que
+    3. 🖼️ Se `ref` NÃO é PDF (nomeia um DWG/DXF): procura a IMAGEM renderizada
+       daquela prancha, por igualdade exata de nome via `_stem_da_prancha`.
+    4. Fuzzy match: lista PDFs do job no /tmp OU no Storage, escolhe o que
        tem maior substring overlap com `ref`.
 
-    Retorna o filename encontrado ou None.
+    Retorna o filename encontrado (.pdf ou .png) ou None.
+
+    🩸 17/09/2026 — o passo 3 não existia, e por isso a miniatura nunca chegou
+    na tela: esta função só juntava candidatos `.pdf`, então nunca devolvia um
+    nome `.dwg/.dxf`, e o ramo do `/api/sheet` que servia o PNG era código
+    INALCANÇÁVEL desde que nasceu (22/04/2026). 52 dos 56 PNGs do balde estavam
+    prontos, guardados, esperando — 33 projetos de 19 clientes.
+
+    🔑 A ORDEM É O CONSERTO. O passo 1 (PDF exato) continua PRIMEIRO e
+    intocado, e os PNG moram num conjunto SEPARADO que nunca entra no desempate
+    por pontuação do passo 4. Quem nomeia um PDF continua recebendo o MESMO PDF,
+    byte a byte.
+
+    🪤 Este parágrafo já disse "nunca troca uma entrega que já funcionava", e
+    era uma promessa grande demais — a revisão adversarial mediu 2 refs de um
+    job real que trocavam o PDF vetorial do cliente pelo nosso render. Agora é
+    verdade, mas porque o passo 3 foi CONSERTADO pra isso: dentro dele, um PDF
+    de mesmo nome vence a imagem. O que o passo 3 muda de propósito é o ref de
+    CAD que antes caía no desempate por pontuação e recebia, calado, o PDF de
+    OUTRA prancha do mesmo projeto.
     """
     import urllib.request
-    ref_clean = (ref or "").strip()
+    ref_clean = _ref_sem_hint(ref)
     if not ref_clean:
         return None
-
-    # Remover sufixo "(hint da IA)" se houver
-    if "(" in ref_clean and ref_clean.endswith(")"):
-        ref_clean = ref_clean.split("(")[0].strip()
 
     # Caso direto: já é um filename .pdf válido
     if ref_clean.lower().endswith(".pdf"):
@@ -27432,29 +27598,41 @@ def _find_prancha_file(job_id: str, ref: str) -> Optional[str]:
         except Exception:
             pass
 
-    # Fuzzy match: lista PDFs locais + Storage, acha melhor match
-    candidates = set()
-    local_dir = os.path.join(WORK_DIR, job_id)
-    if os.path.isdir(local_dir):
-        for fn in os.listdir(local_dir):
-            if fn.lower().endswith(".pdf"):
-                candidates.add(fn)
-    try:
-        from urllib.parse import unquote
-        url = f"{SUPABASE_URL}/storage/v1/object/list/{PRANCHAS_BUCKET}"
-        import json as _j2
-        body = _j2.dumps({"prefix": f"{job_id}/", "limit": 200}).encode("utf-8")
-        req = urllib.request.Request(url, data=body, method="POST")
-        req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
-        req.add_header("Content-Type", "application/json")
-        resp = urllib.request.urlopen(req, timeout=10)
-        for f in _j2.loads(resp.read().decode("utf-8")):
-            n = unquote(f.get("name", ""))
-            if n.lower().endswith(".pdf"):
-                candidates.add(n)
-    except Exception:
-        pass
+    # Fuzzy match: lista PDFs locais + Storage, acha melhor match.
+    candidates, pngs = _arquivos_do_job(job_id)
+
+    # 🖼️ PASSO 3 — a imagem renderizada da prancha (17/09/2026).
+    # Só entra quando o `ref` NÃO nomeia um PDF, e casa por IGUALDADE EXATA de
+    # nome: nada de pontuação, nada de `set` desempatando. Igualdade exata é
+    # determinística — a mesma pergunta devolve a mesma resposta depois de um
+    # restart do Render, coisa que o desempate por pontuação lá embaixo não
+    # garante (a ordem de iteração do `set` depende do PYTHONHASHSEED).
+    # `_stem_da_prancha` faz `basename`, então `../outro-job/x.png` não sai
+    # daqui — e o nome devolvido veio de uma listagem presa ao `{job_id}/`,
+    # que é a regra dura nº2 (isolamento) de pé.
+    #
+    # 🪤 A porta é ESTREITA de propósito: só quando o `ref` termina mesmo em
+    # .dwg/.dxf. O `ref_sheet` às vezes traz descrição da IA em vez de nome de
+    # arquivo, e `splitext("PLANTA 1.5 - TÉRREO")` devolve "PLANTA 1" — que
+    # poderia casar por ACIDENTE com uma imagem de outra prancha do mesmo
+    # projeto. Medido: dos itens com `ref_sheet`, 1.814 nomeiam .dwg/.dxf e só
+    # 76 são texto solto — esses 76 não casariam por nome exato de qualquer
+    # jeito. Fechar a porta não custa alcance e remove o falso positivo.
+    if ref_clean.lower().endswith((".dwg", ".dxf")):
+        _stem_ref = _stem_da_prancha(ref_clean)
+        # 🥇 O PDF DE MESMO NOME VENCE A NOSSA IMAGEM.
+        # Achado pela revisão adversarial (17/09): sem isto, um projeto que
+        # mandou "planta.dwg" E "planta.pdf" passava a receber o nosso render
+        # no lugar do PDF vetorial do próprio cliente — desenho aproximado
+        # substituindo a prancha de verdade. Medido em 2 refs de um job real.
+        _alvo_pdf = (_stem_ref + ".pdf").lower()
+        for n in candidates:
+            if n.lower() == _alvo_pdf:
+                return n
+        _alvo_png = (_stem_ref + ".png").lower()
+        for n in pngs:
+            if n.lower() == _alvo_png:
+                return n
 
     if not candidates:
         return None
@@ -27483,8 +27661,11 @@ async def admin_baixar_arquivo(job_id: str, request: Request, nome: str = ""):
     Por que existe (16/08/2026): investigar o motor exige o arquivo real do
     cliente (caso cliente-20: ver o que os 504 ATTRIBs contêm; caso cliente-81:
     143 hachuras somando 0,00 m²). O caminho era o painel do Supabase à mão —
-    a UI virtualizada resiste à automação e o /api/sheet só entende PDF
-    (`_find_prancha_file` filtra .pdf). Sem `nome`, lista os arquivos do job.
+    a UI virtualizada resiste à automação e o /api/sheet **não serve CAD cru**
+    (ele entrega a prancha PRA VER: PDF ou a imagem renderizada — e recusa o
+    resto de propósito, pra não despejar 232 MB de DWG na memória do servidor).
+    Esta rota aqui é a que traz o arquivo ORIGINAL, e por isso é só de admin.
+    Sem `nome`, lista os arquivos do job.
     Uso legítimo: depuração interna pelo Pedro/admin (LGPD: operador)."""
     _require_admin(request)
     from fastapi.responses import Response
@@ -27510,8 +27691,13 @@ async def admin_baixar_arquivo(job_id: str, request: Request, nome: str = ""):
 
 @app.get("/api/sheet/{job_id}")
 async def get_sheet_pdf(job_id: str, request: Request, ref: str = ""):
-    """Serve a prancha (PDF, PNG, etc) inline pro viewer. Pra DWG/DXF
-    tenta servir o PNG renderizado (render server-side) antes.
+    """Serve a prancha PRA VER, inline: o PDF, ou a imagem renderizada dela.
+
+    🩸 Este docstring mentiu por 5 meses. Ele dizia "pra DWG/DXF tenta servir o
+    PNG renderizado antes" — e o ramo que fazia isso era inalcançável, porque
+    `_find_prancha_file` nunca devolvia um nome `.dwg/.dxf`. Quem achava a
+    imagem não existia. Consertado em 17/09/2026: a busca ganhou o passo do PNG
+    e esta rota ganhou uma recusa explícita a servir CAD cru.
 
     Segurança: exige que quem chama seja dono do projeto (ou admin).
     Antes (até 2026-06-02) o endpoint era público — qualquer um com job_id
@@ -27533,28 +27719,28 @@ async def get_sheet_pdf(job_id: str, request: Request, ref: str = ""):
     preview_filename = filename
     mime = _PRANCHA_MIME.get(ext, "application/octet-stream")
 
-    # DWG/DXF: preferir PNG renderizado se existe
-    if ext in ('.dwg', '.dxf'):
-        _png_name = os.path.splitext(filename)[0] + '.png'
-        _png_local = os.path.join(WORK_DIR, job_id, _png_name)
-        if os.path.exists(_png_local):
-            preview_filename = _png_name
-            mime = "image/png"
-        else:
-            # 🧊 03/09 — este download roda em rota `async`. Ele agora tem
-            # timeout de 120 s e 3 tentativas (conserto do truncamento), o
-            # que no laço de eventos vira até 6 min de site congelado. Sai.
-            _png_data = await run_in_threadpool(
-                _supabase_storage_download_prancha, job_id, _png_name)
-            if _png_data:
-                return Response(
-                    content=_png_data, media_type="image/png",
-                    headers={
-                        "Content-Disposition": "inline",
-                        "X-Filename": _png_name,
-                        "Cache-Control": "private, max-age=3600",
-                    }
-                )
+    # 🚨 17/09/2026 — O QUE ESTA ROTA PODE ENTREGAR É FECHADO: a prancha em PDF
+    # ou a imagem renderizada dela. NUNCA o CAD cru.
+    #
+    # Aqui morava um ramo `if ext in ('.dwg', '.dxf')` que buscava o PNG — e
+    # que era INALCANÇÁVEL desde que nasceu (22/04/2026), porque
+    # `_find_prancha_file` nunca devolveu nada que não fosse `.pdf`. Quem passou
+    # a achar a imagem foi o passo 3 de lá; este ramo virou o guarda do avesso.
+    #
+    # 🪤 Por que uma RECUSA e não só apagar o ramo morto: sem ela, o dia em que
+    # alguém alargar a busca lá em cima, esta rota passa a despejar CAD cru
+    # inline, em memória, sem streaming — medido: os PNG têm 0,04 MB em média e
+    # 0,11 MB no maior, enquanto os CAD do mesmo balde têm média de 11,3 MB e
+    # chegam a 232 MB. Num servidor pequeno isso é a diferença entre servir uma
+    # imagem e derrubar o site. A trava é estrutural, não confiança.
+    if ext not in (".pdf", ".png", ".jpg", ".jpeg"):
+        raise HTTPException(404, "Prancha não encontrada")
+
+    # O nome do que está sendo ENTREGUE vai no cabeçalho. Sem isso o
+    # `downloadProtected` (aiarq-utils.js) não acha `filename=`, cai no nome que
+    # a tela pediu, e salva uma IMAGEM com extensão `.dxf` — arquivo que não
+    # abre em lugar nenhum. Aspas saem do nome pra não quebrar o cabeçalho.
+    _cd = 'inline; filename="%s"' % (preview_filename or "").replace('"', "")
 
     # Hot cache local
     local_path = os.path.join(WORK_DIR, job_id, preview_filename)
@@ -27565,7 +27751,7 @@ async def get_sheet_pdf(job_id: str, request: Request, ref: str = ""):
             return Response(
                 content=data, media_type=mime,
                 headers={
-                    "Content-Disposition": "inline",
+                    "Content-Disposition": _cd,
                     "X-Filename": preview_filename,
                     "Cache-Control": "private, max-age=3600",
                 }
@@ -27580,13 +27766,57 @@ async def get_sheet_pdf(job_id: str, request: Request, ref: str = ""):
         return Response(
             content=data, media_type=mime,
             headers={
-                "Content-Disposition": "inline",
+                "Content-Disposition": _cd,
                 "X-Filename": preview_filename,
                 "Cache-Control": "private, max-age=3600",
             }
         )
 
     raise HTTPException(404, f"Prancha '{preview_filename}' não encontrada no Storage")
+
+
+@app.post("/api/projeto/{job_id}/pranchas-com-imagem")
+async def pranchas_com_imagem(job_id: str, request: Request):
+    """Quais destas pranchas têm desenho renderizado pra ver.
+
+    🚨 17/09/2026 — POR QUE EXISTE (Pedro: *"só mostra o botão quando tiver
+    imagem"*). O botão de DWG/DXF passou a dizer "Ver desenho", e medindo eu
+    achei que só **36%** dos arquivos CAD de projetos recentes têm imagem: o
+    teto de entidades pula o desenho denso. Um botão que promete ver e falha em
+    2 de 3 cliques é promessa quebrada em escala. A tela pergunta antes.
+
+    🔑 A PERGUNTA VEM PRA CÁ, e não é a tela que calcula. O JavaScript derivar o
+    nome do PNG sozinho reimplantaria, em outra linguagem, a divergência que
+    deixou a miniatura 5 meses sem chegar em ninguém. A receita do nome mora em
+    `_stem_da_prancha`, aqui, e só aqui.
+
+    Custo: UMA listagem do Storage por projeto, não uma por prancha.
+    Falha ABERTA: erro de rede devolve lista vazia, a tela não mostra o botão, e
+    ninguém recebe promessa que a gente não pode cumprir. O contrário — mostrar
+    tudo quando não sei — é justamente a promessa quebrada que isto evita.
+    """
+    _require_project_owner(request, job_id)
+    try:
+        _corpo = await request.json()
+    except Exception:
+        _corpo = {}
+    _refs = (_corpo or {}).get("refs")
+    if not isinstance(_refs, list):
+        raise HTTPException(400, "manda uma lista em 'refs'")
+    # Teto de sanidade: projeto real tem dezenas de pranchas, não milhares.
+    _refs = [r for r in _refs if isinstance(r, str)][:300]
+    try:
+        # 🧊 FORA DO LAÇO DE EVENTOS. `_refs_com_imagem` lista o Storage por
+        # `urlopen` com timeout de 10 s, e a tela chama esta rota em TODA
+        # abertura de projeto. Com `--workers 1`, chamá-la direto de uma rota
+        # `async` congela o site inteiro enquanto a rede não responde — é a
+        # mesma doença de 03/09 (o download de prancha no laço), agora por uma
+        # porta que nasceu hoje. Achado pela revisão adversarial.
+        _lista = await run_in_threadpool(_refs_com_imagem, job_id, _refs)
+        return {"com_imagem": _lista}
+    except Exception as e:
+        print(f"[pranchas-com-imagem] {job_id}: {type(e).__name__}: {e}")
+        return {"com_imagem": []}
 
 
 # ═══════════════════════════════════════════════════════════════
