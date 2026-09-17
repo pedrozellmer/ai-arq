@@ -119,7 +119,8 @@ def roda_ate_o_email(itens, cab_planob=None, medidos_antes=None, avisos=None,
                      nome_projeto="projeto de teste", job_id="job-teste",
                      antes_do_email=None, is_complement=False,
                      partial_failure=False, partial_errors=None,
-                     dwg_failed=None, reprocess_count=0, parent_job_id=None):
+                     dwg_failed=None, reprocess_count=0, parent_job_id=None,
+                     pdfvec_por_prancha=None):
     """Executa a fatia real e devolve o diário do que o cliente receberia.
 
     `cab_planob` — planta o aviso do plano B como o motor o escreve, lá em cima
@@ -183,6 +184,8 @@ def roda_ate_o_email(itens, cab_planob=None, medidos_antes=None, avisos=None,
         "dwg_failed": list(dwg_failed or []),
         "_aec_failed": False, "_dwg_sem_irmao": [],
         "_aviso_lw_idx": aviso_idx, "_aviso_lw_cab": cab_planob or "",
+        # 17/09: a medição por prancha, pro bloco "o que medimos no seu PDF".
+        "_pdfvec_por_prancha": dict(pdfvec_por_prancha or {}),
         "jobs": _Jobs(),
         # ── credenciais de mentira (a rede está patchada) ────────────────
         "SUPABASE_URL": "https://exemplo.invalid",

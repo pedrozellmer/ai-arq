@@ -15665,6 +15665,32 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 # e sumir com o passo "complemente com o CAD", que era a saída dele.
                 _n_cad = len(dxf_paths)
                 _diag = _build_reading_diagnostic(all_items, _n_pdf, _n_cad, project_type, project_data)
+                # 🩸 17/09/2026 — O QUE MEDIMOS NO PDF, DITO AO CLIENTE.
+                # Medido: 34 de 34 projetos só-PDF saíram sem uma linha marcada
+                # como medida (31 clientes), e em 19 deles a gente mediu a
+                # geometria e conferiu a escala contra as cotas do desenho. O
+                # cliente concluía "não mede o meu arquivo" sem nunca saber
+                # disso. Aqui ele fica sabendo — no nível da PRANCHA, que é
+                # onde a afirmação se sustenta, e com o porquê de nada virar
+                # selo logo em seguida (as duas metades, nunca só a primeira).
+                # 🚫 Não tentar dizer isto por ITEM: reprovado em revisão
+                # adversarial em 17/09, mesmo furo que aposentou o promotor
+                # automático em 15/07 (a demolição pegava a área do piso novo).
+                try:
+                    from engine_rules import (o_que_medimos_na_prancha,
+                                              porque_nada_saiu_medido_no_pdf)
+                    _medimos = (o_que_medimos_na_prancha(_pdfvec_por_prancha)
+                                if _n_cad == 0 and _n_pdf > 0 else "")
+                    if _medimos:
+                        _linhas_medimos = "".join(
+                            f"<li>{_html.escape(l)}</li>" for l in _medimos.split("\n") if l)
+                        _diag += (
+                            "<br><br><b>&#128207; O que a gente mediu no seu PDF</b>"
+                            f"<ul style='margin:6px 0 0 18px;padding:0'>{_linhas_medimos}</ul>"
+                            f"<div style='margin-top:8px'>"
+                            f"{_html.escape(porque_nada_saiu_medido_no_pdf())}</div>")
+                except Exception as _qm:
+                    print(f"[email] bloco 'o que medimos' nao saiu (nao-fatal): {_qm}")
                 # Próximos passos PERSONALIZADOS: PDF sem nada medido → puxa o CAD;
                 # senão lidera com revisão (citando quantos ficaram em laranja).
                 _n_med = sum(1 for it in all_items

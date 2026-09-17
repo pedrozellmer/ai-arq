@@ -2661,3 +2661,82 @@ def mesclar_project_data(destino, pd, area_readings=None, reg_area=None,
     if pd.get("departments"):
         destino.departments = pd["departments"]
     return destino
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  O QUE MEDIMOS NO PDF — dito ao cliente, sem atribuir a item nenhum
+# ══════════════════════════════════════════════════════════════════════════
+# 🩸 17/09/2026. Medido na janela 19/07–16/09: **34 de 34** projetos só-PDF
+# saíram sem UMA linha marcada como medida (31 clientes). O cliente conclui
+# "esse produto não mede o meu arquivo" — e em 19 desses 34 a gente MEDIU a
+# geometria e provou a escala contra as cotas do próprio desenho.
+#
+# 🚫 A tentativa óbvia — marcar a linha como medida — foi REPROVADA em revisão
+# adversarial no mesmo dia, e pelo mesmo furo que aposentou o promotor
+# automático em 15/07: a prova disponível é "o número desta linha é igual ao
+# total desta prancha", e como só existe UM total de área por prancha, QUALQUER
+# linha que cite esse número casa. Demolição pegaria a área do piso novo.
+#
+# 🔑 A saída é dizer a verdade no nível em que ela é defensável: a PRANCHA.
+# "Medimos 22 ambientes, 90,9 m²" é um fato sobre o desenho e não afirma nada
+# sobre linha nenhuma da planilha. Impossível virar falso-medido, porque não
+# rotula item.
+#
+# 🪤 O comprimento de parede fica FORA de propósito. Medido em 45 dias, o
+# `walls_m` chega a 84× o perímetro mínimo da área (3.213 m num imóvel de
+# 90 m²): é a soma de todo traço classificado como parede, as duas faces e
+# provavelmente hachura. Mostrar isso ao cliente seria impressionar com um
+# número que a gente sabe que está errado.
+
+def o_que_medimos_na_prancha(por_prancha) -> str:
+    """Frase honesta sobre a medição do PDF, pro cliente. "" quando não há o que dizer.
+
+    Entra só o que se defende: quantos ambientes e quantos m². A escala é dita
+    com a PROCEDÊNCIA dela — conferida contra cota, ou lida do carimbo sem
+    conferência — porque as duas coisas valem coisas diferentes.
+    """
+    linhas = []
+    for _k, r in sorted((por_prancha or {}).items(),
+                        key=lambda kv: -(float((kv[1] or {}).get("rooms_m2") or 0))):
+        try:
+            m2 = float(r.get("rooms_m2") or 0)
+            n = int(r.get("n_rooms") or 0)
+        except (TypeError, ValueError):
+            continue
+        if m2 <= 0 or n <= 0:
+            continue
+        nome = str(r.get("arquivo") or "").strip() or "prancha"
+        esc = r.get("scale")
+        cotas = int(r.get("cotas_batem") or 0)
+        if r.get("escala_validada") and cotas > 0 and esc:
+            # 🪤 "bate com N cotas" é uma AFIRMAÇÃO DE CONCORDÂNCIA, não uma
+            # garantia: a validação exige 2 pares e não confere o eixo. Dizer o
+            # que foi conferido deixa o cliente julgar; dizer "escala provada"
+            # prometeria mais do que a régua entrega.
+            comoescala = (f"na escala 1:{esc}, que bate com {cotas} cota(s) "
+                          f"escritas no próprio desenho")
+        elif esc:
+            comoescala = (f"na escala 1:{esc} lida do carimbo da prancha "
+                          f"(sem conferência contra cota)")
+        else:
+            comoescala = "sem escala confirmada"
+        linhas.append(f"{nome}: {n} ambiente(s), {m2:.1f} m², {comoescala}.")
+    if not linhas:
+        return ""
+    return "\n".join(linhas)
+
+
+def porque_nada_saiu_medido_no_pdf() -> str:
+    """A segunda metade da verdade: por que a medição acima não vira selo.
+
+    🔑 Sem esta frase a primeira engana ao contrário — o cliente leria "mediram
+    90 m²" e perguntaria por que a planilha está toda laranja.
+    """
+    return ("Nenhuma linha da planilha saiu marcada como MEDIDA. O motivo é "
+            "honesto: a gente mede a geometria da prancha inteira, mas não "
+            "consegue afirmar com segurança qual linha da planilha corresponde "
+            "a qual pedaço dessa medição — e marcar por semelhança de número já "
+            "nos fez atribuir a área do piso novo a uma linha de demolição. "
+            "Enquanto não der pra provar a correspondência, a quantidade fica "
+            "como estimativa pra você conferir. Com o desenho em DWG ou DXF a "
+            "medição sai por item, com selo.")
