@@ -113,7 +113,7 @@
 
         <!-- Nome completo -->
         <div>
-          <label for="nome" class="block text-sm font-medium text-gray-700 mb-1">Nome completo</label>
+          <label for="nome" class="block text-sm font-medium text-gray-700 mb-1">Nome completo <span class="text-red-500">*</span></label>
           <input type="text" id="nome" name="nome" required
             class="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none transition"
             placeholder="Seu nome completo">
@@ -164,7 +164,13 @@
 
         <!-- Area de atuacao -->
         <div>
-          <label for="area" class="block text-sm font-medium text-gray-700 mb-1">&#193;rea de atua&#231;&#227;o</label>
+          <!-- 🩸 17/09/2026 — o asterisco não é enfeite: este campo é `required`
+               e a tela não dizia. Medido em `usage_events`: `signup_bloqueado`
+               com motivo=area barrou 10 pessoas (14 tentativas); o de origem,
+               8. O WhatsApp, que JÁ tinha o asterisco, barrou 2. Um cliente
+               clicou em "Criar conta" 5 vezes em 17 segundos até descobrir
+               sozinho o que faltava. Regra: campo `required` leva a marca. -->
+          <label for="area" class="block text-sm font-medium text-gray-700 mb-1">&#193;rea de atua&#231;&#227;o <span class="text-red-500">*</span></label>
           <select id="area" name="area" required
             class="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm text-gray-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none transition bg-white appearance-none"
             style="background-image: url('data:image/svg+xml;charset=UTF-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%239ca3af%22 stroke-width=%222%22%3E%3Cpath stroke-linecap=%22round%22 stroke-linejoin=%22round%22 d=%22M19 9l-7 7-7-7%22/%3E%3C/svg%3E'); background-repeat: no-repeat; background-position: right 12px center; background-size: 18px;">
@@ -197,7 +203,7 @@
 
         <!-- Onde nos conheceu? -->
         <div>
-          <label for="referral_source" class="block text-sm font-medium text-gray-700 mb-1">Como nos conheceu?</label>
+          <label for="referral_source" class="block text-sm font-medium text-gray-700 mb-1">Como nos conheceu? <span class="text-red-500">*</span></label>
           <select id="referral_source" name="referral_source" required
             class="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm text-gray-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none transition bg-white appearance-none"
             style="background-image: url('data:image/svg+xml;charset=UTF-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%239ca3af%22 stroke-width=%222%22%3E%3Cpath stroke-linecap=%22round%22 stroke-linejoin=%22round%22 d=%22M19 9l-7 7-7-7%22/%3E%3C/svg%3E'); background-repeat: no-repeat; background-position: right 12px center; background-size: 18px;">
