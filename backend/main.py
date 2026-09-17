@@ -27593,7 +27593,25 @@ async def get_sheet_pdf(job_id: str, request: Request, ref: str = ""):
 #  REPROCESSAR PROJETO (motor atualizado)
 # ═══════════════════════════════════════════════════════════════
 
-REPROCESS_FREE_LIMIT = 1  # 1 reprocessamento grátis por projeto
+# 🩸 17/09/2026 — A TRAVA CONTRADIZIA A PROMESSA PÚBLICA, E JÁ COBRAVA DE QUEM
+# NÃO DEVIA. Pedro, hoje: *"a gente está em beta, é grátis sempre, então não faz
+# nenhum sentido"*. O site promete beta ilimitado (ver a própria confirmação do
+# botão, que manda "criar um projeto novo — grátis e ilimitado no beta"), e aqui
+# a segunda tentativa levava 402 Payment Required.
+#
+# 📏 O que a trava custou, medido em 17/09: **16 projetos de 12 clientes** viam
+# "você já usou seu reprocesso grátis" **sem nunca terem reprocessado** — o
+# contador subia por caminhos que não são o botão (retomada automática, filhote
+# de avaliação). E **6 desses 16 não receberam nada**: 4 fecharam com zero linha
+# medida e 2 deram erro. A porta de conserto estava trancada exatamente para
+# quem mais precisava dela.
+#
+# 🔑 `None` = sem limite. O freio que sobra é o de ABUSO, não o de cota:
+# `_rate_limit_ok("reprocess:{job}", limit=6, window_s=600)` logo no começo da
+# rota — ele barra laço/robô sem barrar gente. Cota e anti-abuso são coisas
+# diferentes, e só a primeira contradiz o beta.
+# ⏭️ Quando a cobrança ligar (NÃO decidida), é aqui que o número volta.
+REPROCESS_FREE_LIMIT = None  # beta: ilimitado (ver o bloco acima)
 
 
 @app.post("/api/project/{job_id}/reprocess")
@@ -27686,9 +27704,11 @@ async def reprocess_project(job_id: str, request: Request):
         print(f"[reprocess] /projects HTTP {e.code}: {body}")
         raise HTTPException(500, f"Erro ao buscar projeto: HTTP {e.code}")
 
-    # Política: 1 reprocessamento grátis por projeto
+    # Política de cota. No beta é ilimitado (REPROCESS_FREE_LIMIT = None) —
+    # ver o bloco de comentário na definição da constante. O freio de ABUSO
+    # (rate limit por projeto) já rodou lá em cima e continua valendo.
     current_count = int(orig.get("reprocess_count") or 0)
-    if current_count >= REPROCESS_FREE_LIMIT:
+    if REPROCESS_FREE_LIMIT is not None and current_count >= REPROCESS_FREE_LIMIT:
         raise HTTPException(
             402,  # Payment Required
             f"Este projeto já foi reprocessado {current_count}× — o limite "
