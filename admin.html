@@ -5299,9 +5299,27 @@ async function carregarMovimentoDoSite() {
       saude.className = 'text-lg font-bold text-gray-400';
       saude.title = 'Nenhum dia da série tem essa medição gravada ainda.';
     } else if (caiu) {
+      // 🩸 17/09/2026 — "6 DIAS COM ERRO" NÃO RESPONDIA A PERGUNTA SEGUINTE.
+      // A série guardava só sim/não, então um único 5xx em 800 requisições
+      // pintava o dia igual a uma queda de uma hora. O Pedro olhou o vermelho e
+      // a resposta honesta era "não dá pra saber" — o número existia e era
+      // jogado fora ao gravar. Agora vem junto: total e pior dia.
+      // 🪤 Dia sem a contagem (as linhas antigas) NÃO entra na soma nem vira
+      // zero: fica de fora e o texto diz de quantos dias ele está falando.
+      const comConta = medidos.filter(x => typeof x.erros_5xx === 'number');
+      const totalErros = comConta.reduce((a, x) => a + x.erros_5xx, 0);
+      const pior = comConta.reduce((m, x) => Math.max(m, x.erros_5xx), 0);
       saude.textContent = caiu + (caiu > 1 ? ' dias com erro' : ' dia com erro');
       saude.className = 'text-lg font-bold text-red-600';
-      saude.title = 'Dias em que o site devolveu erro de servidor (5xx).';
+      saude.title = comConta.length
+        ? ('Dias em que o site devolveu erro de servidor (5xx). '
+           + totalErros + ' erro(s) no total, pior dia com ' + pior
+           + ', contados em ' + comConta.length + ' de ' + medidos.length + ' dia(s) medido(s).')
+        : 'Dias em que o site devolveu erro de servidor (5xx). A contagem por dia '
+          + 'só começou a ser gravada em 17/09 — destes dias eu só sei que houve erro, não quantos.';
+      if (comConta.length && pior > 0) {
+        saude.textContent += ' · pior: ' + pior;
+      }
     } else {
       saude.textContent = 'sim';
       saude.className = 'text-lg font-bold text-emerald-600';

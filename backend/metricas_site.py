@@ -97,6 +97,64 @@ def bordas_do_dia_br(dia: date) -> tuple:
             (dia + timedelta(days=1)).isoformat() + _FIM_DIA_BR)
 
 
+def erros_5xx_do_dia(ini: str, fim: str):
+    """Quantos 5xx o site devolveu na janela. `None` = NAO CONSEGUI MEDIR.
+
+    🚨 02/09/2026 — O FAROL "SITE NO AR" NUNCA MEDIU NADA. A coluna `site_ok`
+    era LIDA pelo painel e NUNCA escrita: 11 de 11 dias NULL, e o teste na tela
+    era `=== false`, entao NULL nao era false e o farol dizia "sim" em verde,
+    todo dia. Afirmacao verde com zero medicao atras e pior que farol nenhum.
+
+    🩸 17/09/2026 — E A MESMA DOENCA AINDA ESTAVA AQUI, POR OUTRA PORTA. So
+    EXCECAO virava `None`. O GraphQL reporta falha com **HTTP 200 e um campo
+    `errors`** — isso caia no `.get("data") or {}`, virava lista vazia, somava
+    zero e acendia o farol VERDE sem ter medido nada. Agora resposta sem `data`
+    utilizavel e "nao sei", que e uma resposta; "esta tudo bem" nao e.
+
+    🔑 E devolve o NUMERO, nao um sim/nao. O painel dizia "6 dias com erro" e
+    nao dava pra saber se eram seis solucos de um segundo ou seis quedas de uma
+    hora — um unico 5xx em 800 requisicoes pintava o dia igual. O dado pra
+    decidir existia e era jogado fora na hora de gravar.
+    🪤 `0` e resposta ("medi e nao houve"); `None` e ausencia de resposta. Os
+    dois nunca podem virar a mesma coisa — foi confundi-los que criou o farol
+    mentiroso de 02/09.
+    """
+    try:
+        q = ("""query { viewer { zones(filter: {zoneTag: "%s"}) {
+          httpRequestsAdaptiveGroups(limit: 1,
+            filter: {datetime_geq: "%s", datetime_leq: "%s",
+                     clientRequestHTTPHost: "ai.arq.br", edgeResponseStatus_geq: 500}) {
+            count } } } }""" % (_ZONA, ini, fim))
+        r = _graphql(q)
+    except Exception as e:
+        print("[metricas] 5xx do dia: %s" % e)
+        return None
+    if not isinstance(r, dict) or r.get("errors"):
+        return None
+    zonas = (((r.get("data") or {}).get("viewer") or {}).get("zones"))
+    if not zonas:
+        return None
+    grupos = (zonas[0] or {}).get("httpRequestsAdaptiveGroups")
+    if grupos is None:
+        return None
+    try:
+        return sum(int(x.get("count") or 0) for x in grupos)
+    except (TypeError, ValueError, AttributeError):
+        return None
+
+
+def site_ok_da_contagem(erros):
+    """O farol DERIVADO da contagem — nunca medido em paralelo.
+
+    🔑 Dois campos independentes sobre o mesmo fato divergem; foi assim que o
+    motor retentava de um jeito e contava a falha de outro (caso de 16/09, as
+    duas reguas do retry). Aqui `site_ok` e so uma leitura de `erros_5xx`.
+    """
+    if erros is None:
+        return None
+    return int(erros) == 0
+
+
 def coletar(dia: date, ips_da_casa=None) -> dict:
     """Números de UM dia (de Brasília), já separados. Levanta se não der — quem chama decide.
 
@@ -172,19 +230,8 @@ def coletar(dia: date, ips_da_casa=None) -> dict:
     #
     # 🪤 Se a consulta falhar, fica None de propósito: "não consegui medir" é
     # uma resposta, "está tudo bem" não é.
-    site_ok = None
-    try:
-        q3 = ("""query { viewer { zones(filter: {zoneTag: "%s"}) {
-          httpRequestsAdaptiveGroups(limit: 1,
-            filter: {datetime_geq: "%s", datetime_leq: "%s",
-                     clientRequestHTTPHost: "ai.arq.br", edgeResponseStatus_geq: 500}) {
-            count } } } }""" % (_ZONA, ini, fim))
-        _g5 = ((((_graphql(q3).get("data") or {}).get("viewer") or {})
-                .get("zones") or [{}])[0].get("httpRequestsAdaptiveGroups") or [])
-        erros_5xx = sum(int(x.get("count") or 0) for x in _g5)
-        site_ok = (erros_5xx == 0)
-    except Exception:
-        pass
+    erros_5xx = erros_5xx_do_dia(ini, fim)
+    site_ok = site_ok_da_contagem(erros_5xx)
 
     topo = sorted(({"pagina": k, "enderecos": len(v)} for k, v in por_pagina.items()),
                   key=lambda x: -x["enderecos"])[:12]
@@ -195,6 +242,7 @@ def coletar(dia: date, ips_da_casa=None) -> dict:
             "req_total": gente + robo + nosso, "req_robo": robo,
             "req_nosso": nosso, "req_gente": gente, "ips_gente": len(ips_gente),
             "unicos_cloudflare": unicos, "paginas": paginas, "site_ok": site_ok,
+            "erros_5xx": erros_5xx,
             "top_paginas": topo, "fonte": "tick"}
 
 

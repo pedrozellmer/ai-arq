@@ -95,38 +95,63 @@ def test_o_coletor_MEDE_o_site_no_ar_em_vez_de_deixar_nulo():
     """🚨 `site_ok` era LIDA pelo painel e escrita por ninguém: 11 de 11 dias
     NULL. E o teste na tela era `=== false`, então NULL virava "sim" em verde.
     Farol verde sem medição atrás é pior que farol nenhum — é a primeira coisa
-    que o Pedro olha."""
+    que o Pedro olha.
+
+    🔑 17/09: este guarda LIA O FONTE procurando `"site_ok": site_ok`. A medição
+    virou função de módulo (`erros_5xx_do_dia` / `site_ok_da_contagem`), então
+    agora ele CHAMA em vez de ler texto — ver
+    [[feedback_guarda_que_le_fonte]]. O que ele prende é o FATO: o farol não
+    acende sem medição atrás.
+    """
     i = _MS.find("def coletar")
-    fim = _MS.find("\ndef ", i + 10)
+    fim = _MS.find(chr(10) + "def ", i + 10)
     corpo = _MS[i:fim if fim > 0 else len(_MS)]
     assert '"site_ok": site_ok' in corpo, (
         "o coletor voltou a nao devolver site_ok - a coluna fica NULL e o farol "
         "volta a dizer 'sim' sem ter medido nada")
-    assert "edgeResponseStatus_geq: 500" in corpo, (
-        "sumiu a pergunta de erro 5xx; sem ela `site_ok` seria um chute")
+    assert '"erros_5xx": erros_5xx' in corpo, (
+        "a CONTAGEM parou de ir junto: o painel volta a nao saber se foram 6 "
+        "solucos ou 6 quedas")
+    assert "edgeResponseStatus_geq: 500" in _MS, (
+        "sumiu a pergunta de erro 5xx; sem ela o farol seria um chute")
 
 
 def test_a_medida_do_site_e_uma_consulta_PROPRIA_e_nao_o_topo_de_400():
     """🪤 A consulta principal tem `limit: 400` ordenado por contagem. Um 5xx
     raro ficaria FORA do topo e o dia passaria por "site ok" — teto não serve
     de prova de ausência. Por isso a pergunta de erro é uma consulta separada."""
-    i = _MS.find("def coletar")
-    corpo = _MS[i:_MS.find("\ndef ", i + 10)]
-    assert corpo.count("_graphql(") >= 3, (
+    i = _MS.find("def erros_5xx_do_dia")
+    assert i > 0, "a pergunta de 5xx deixou de ter função própria"
+    corpo = _MS[i:_MS.find(chr(10) + "def ", i + 10)]
+    assert "_graphql(" in corpo and "edgeResponseStatus_geq: 500" in corpo, (
         "a medicao de 5xx voltou a depender da consulta com limite - 5xx fora "
         "do top 400 viraria 'site ok'")
+    assert "limit: 400" not in corpo, "a pergunta de 5xx pegou carona no teto de 400"
 
 
-def test_CONTROLE_se_a_pergunta_do_5xx_falhar_o_farol_fica_SEM_RESPOSTA():
-    """🧪 O outro lado. "Não consegui medir" é uma resposta; "está tudo bem"
-    não é. Se a consulta explodir, site_ok tem que ficar None — nunca True."""
-    i = _MS.find("site_ok = None")
-    assert i > 0, "o padrao do site_ok deixou de ser 'nao sei'"
-    corpo = _MS[i:i + 900]
-    assert "except Exception:" in corpo and "pass" in corpo, (
-        "a falha da consulta de 5xx deixou de virar None - vai virar 'site ok'")
-    assert "site_ok = (erros_5xx == 0)" in corpo, (
-        "o veredito do farol saiu do lugar")
+def test_CONTROLE_se_a_pergunta_do_5xx_falhar_o_farol_fica_SEM_RESPOSTA(monkeypatch):
+    """🧪 O outro lado, agora EXECUTADO. "Não consegui medir" é uma resposta;
+    "está tudo bem" não é.
+
+    🩸 17/09: a versão de fonte deste guarda passava com um buraco aberto — só
+    EXCEÇÃO virava None, e um erro do GraphQL (que chega com HTTP 200 e um campo
+    `errors`) acendia o farol VERDE sem medição. Lendo texto não dava pra ver;
+    chamando, dá.
+    """
+    import metricas_site as _m
+
+    monkeypatch.setattr(_m, "_graphql", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("caiu")))
+    assert _m.erros_5xx_do_dia("a", "b") is None
+    assert _m.site_ok_da_contagem(None) is None, "falha virou 'site ok'"
+
+    monkeypatch.setattr(_m, "_graphql", lambda *a, **k: {"errors": [{"message": "x"}], "data": None})
+    assert _m.erros_5xx_do_dia("a", "b") is None, (
+        "erro do GraphQL dentro de um 200 voltou a virar 'nenhum erro'")
+
+    monkeypatch.setattr(_m, "_graphql", lambda *a, **k: {
+        "data": {"viewer": {"zones": [{"httpRequestsAdaptiveGroups": [{"count": 9}]}]}}})
+    assert _m.erros_5xx_do_dia("a", "b") == 9
+    assert _m.site_ok_da_contagem(9) is False, "farol verde com 9 erros contados"
 
 
 # ─────────── 3) o aviso de coleta olha a DATA, não a configuração ───────────
