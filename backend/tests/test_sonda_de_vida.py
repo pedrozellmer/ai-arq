@@ -148,9 +148,23 @@ def _minar_todas_as_saidas(monkeypatch):
     # minha máquina é Windows, e o defeito só aparecia lá). Mina que não diz o
     # nome da vítima obriga quem lê a teorizar — e teoria não conserta bancada.
     # Agora ela grava o CAMINHO.
+    # 🩸 18/09 — e o CAMINHO sozinho ainda não bastou. A mina disse
+    # "/proc/stat" (arquivo que só existe no Linux) e eu queimei QUATRO
+    # hipóteses erradas tentando descobrir QUEM lia: o cgroup do commit da
+    # manhã, o `startup` rodando dentro do request, o aquecimento da biblioteca
+    # HTTP, o `psutil` do `/api/health`. Todas caíram contra os dados, e nenhuma
+    # era reproduzível na minha máquina (Windows não tem /proc). Guarda que
+    # falha em OUTRO sistema operacional precisa dizer quem chamou — senão quem
+    # conserta adivinha de longe, que foi o que eu fiz a tarde inteira.
+    import traceback as _tb
+
     def _mina_de_disco(nome):
         def _explode(arquivo, *a, **k):
-            pisadas.append("%s (%s)" % (nome, str(arquivo)[:90]))
+            _quem = [l.strip().replace("\n", " ")
+                     for l in _tb.format_stack()[:-1]
+                     if "test_sonda_de_vida" not in l][-3:]
+            pisadas.append("%s (%s) <- %s"
+                           % (nome, str(arquivo)[:70], " | ".join(_quem)[:300]))
             raise AssertionError("a sonda de vida abriu %s" % (arquivo,))
         return _explode
 
