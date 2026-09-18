@@ -4340,9 +4340,20 @@ def _build_reading_diagnostic(all_items, n_pdf, n_cad, project_type, project_dat
                       "medido um número que não veio da geometria). Pra medição exata, mande o "
                       "mesmo projeto em <b>DWG ou DXF</b> que a gente mede de verdade.")
         elif n_cad > 0 and medidos > 0:
-            porque = ("Seu arquivo veio em <b>CAD (DWG/DXF)</b>, então medimos boa parte direto "
-                      "da geometria do desenho (os itens em branco). Os em laranja dependem da "
-                      "sua conferência.")
+            # 🩸 18/09/2026 — aqui dizia "medimos boa parte direto da geometria"
+            # sempre que houvesse UM medido. A condição olhava se existia algum;
+            # o texto afirmava PROPORÇÃO. Medido no acervo: das 72 entregas que
+            # recebem esta frase, 63 têm menos da METADE das linhas medidas e 32
+            # têm menos de um quarto — e o placar logo acima já imprime os dois
+            # números, então o e-mail se desmentia em duas linhas.
+            # A régua mora em engine_rules pra que o guarda possa EXECUTÁ-LA.
+            from engine_rules import frase_do_quanto_mediu as _frase_mediu
+            _quanto = _frase_mediu(medidos, total)
+            porque = ((f"Seu arquivo veio em <b>CAD (DWG/DXF)</b>, então {_quanto}. "
+                       f"Os em laranja dependem da sua conferência.")
+                      if _quanto else
+                      "Seu arquivo veio em <b>CAD (DWG/DXF)</b>. Os em laranja "
+                      "dependem da sua conferência.")
         elif n_cad > 0:
             # 🩸 03/09/2026 — duas afirmações aqui, e as duas sem dado por trás.
             # (1) "a IA não conseguiu medir a geometria": isso é `medidos == 0`,

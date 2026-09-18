@@ -2875,3 +2875,65 @@ def porque_nada_saiu_medido_no_pdf() -> str:
             "Enquanto não der pra provar a correspondência, a quantidade fica "
             "como estimativa pra você conferir. Com o desenho em DWG ou DXF a "
             "medição sai por item, com selo.")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 🩸 18/09/2026 — O E-MAIL SE CONTRADIZIA EM DUAS LINHAS
+#
+# O e-mail de "planilha pronta" imprime o placar exato logo acima:
+#     "✓ 7 medido(s) direto do CAD e ⚠ 30 pra você confirmar"
+# e a frase seguinte dizia, para QUALQUER job de CAD com `medidos > 0`:
+#     "medimos boa parte direto da geometria do desenho"
+#
+# A condição olhava só se havia ALGUM medido; o texto afirmava PROPORÇÃO.
+# Medido no acervo em 18/09 (jobs de cliente concluídos com DWG/DXF que
+# recebem a frase): 72 entregas, e em **63 delas menos da metade das linhas
+# está medida** — 32 com menos de um quarto. A frase só é verdadeira em 9.
+#
+# 🔑 Regra dura nº1 é sobre não vender estimativa como medição. Dizer "boa
+# parte" com 6,7% medido é a mesma mentira, em prosa, no canal que o cliente
+# mais lê — e ainda por cima desmentida pelo número duas linhas acima.
+#
+# A régua mora aqui, fora do `main.py`, porque guarda tem que EXECUTAR a
+# decisão, não ler o fonte dela.
+# ─────────────────────────────────────────────────────────────────────────────
+
+#: "Maior parte" quer dizer MAIS DA METADE — o corte não é gosto meu, é o
+#: significado da palavra. Em metade exata a frase não ganha adjetivo: sai só
+#: o número, que é verdadeiro em qualquer proporção.
+_PISO_MAIOR_PARTE = 0.5
+
+
+def frase_do_quanto_mediu(medidos, total):
+    """Como dizer ao cliente o quanto foi medido, sem afirmar proporção falsa.
+
+    Devolve o trecho de frase (texto puro, sem HTML) que descreve a medição.
+    Sempre carrega os DOIS números — é o que torna a frase conferível contra o
+    placar do próprio e-mail.
+
+    🪤 Nunca chama de "maior parte" o que não PASSA de metade. Em metade exata,
+    e abaixo dela, a frase não ganha adjetivo nenhum: diz o número e para.
+    🪤 `total` zero ou inválido devolve texto vazio — quem chama decide o que
+    fazer, e ninguém afirma nada sobre uma planilha que não existe.
+    🪤 NÃO existe ramo para "mediu tudo". Cheguei a escrever um ("medimos todas
+    as N") e fui medir antes de defendê-lo: em 101 jobs de CAD de cliente,
+    **zero** saíram 100% medidos, e o máximo já visto foi 86,3%. Ramo que a
+    produção nunca alcança é código morto com guarda decorativo em cima — o
+    erro que a revisão de 18/09 já tinha me mostrado uma vez no mesmo dia.
+    ⏭️ Se um dia isso acontecer, o placar do e-mail vai dizer "⚠ 0 pra você
+    confirmar (em laranja)", que é a mesma contradição pelo avesso.
+    """
+    try:
+        _m, _t = int(medidos), int(total)
+    except (TypeError, ValueError):
+        return ""
+    if _t <= 0 or _m < 0:
+        return ""
+    _m = min(_m, _t)
+    if _m == 0:
+        return ""
+    if (_m / float(_t)) > _PISO_MAIOR_PARTE:
+        return (f"medimos a maior parte direto da geometria do desenho "
+                f"({_m} de {_t} linhas, as em branco)")
+    return (f"medimos {_m} de {_t} linhas direto da geometria do desenho "
+            f"(as em branco)")
