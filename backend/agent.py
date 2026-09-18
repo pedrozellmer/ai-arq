@@ -425,9 +425,7 @@ def tool_check_market_heuristics(description: str, typology: str = "office") -> 
     """
     try:
         from market_heuristics import (
-            categorize_item, check_item_anomaly,
-            get_dispersion_for_category, get_mat_mo_share_for_category,
-            get_coverage_pattern_for_category,
+            categorize_item, check_item_anomaly, metricas_para_mostrar,
         )
     except ImportError:
         return {"error": "market_heuristics indisponível"}
@@ -439,16 +437,28 @@ def tool_check_market_heuristics(description: str, typology: str = "office") -> 
     alertas = check_item_anomaly({"description": description, "unit": ""},
                                    typology=typology)
 
+    # 🩸 18/09/2026 — este dicionário dizia "agregado de orçamentos reais" no
+    # plural e entregava "±X%" ao modelo com a base de UM comparativo. Agora os
+    # números só vêm com lastro (regra única em `metricas_para_mostrar`), e a
+    # base vem SEMPRE, pra o modelo dizer ao cliente o tamanho dela.
+    m = metricas_para_mostrar(cat, typology)
+    _n = max((b.get("n_fontes", 0) for b in m["base"].values()), default=0)
+    _lastro = any(b.get("lastro") for b in m["base"].values())
     return {
         "categoria": cat,
         "tipologia": typology,
         "alertas": alertas,
-        "dispersao_mercado": get_dispersion_for_category(cat, typology),
-        "share_mat_mo_tipico": get_mat_mo_share_for_category(cat, typology),
-        "cobertura_tipica": get_coverage_pattern_for_category(cat, typology),
-        "obs": "Heurísticas de mercado anônimas — agregado de orçamentos reais. "
-                "Use pra orientar o cliente sobre variação esperada, NÃO "
-                "como valor de referência pra esse projeto específico.",
+        "base": m["base"],
+        "dispersao_mercado": m["dispersao"],
+        "share_mat_mo_tipico": m["share_mat_mo"],
+        "cobertura_tipica": m["cobertura"],
+        "obs": (f"Base: {_n} projeto(s)-fonte. Números só aparecem com pelo menos "
+                f"{m['base']['dispersao']['minimo']} — SEM lastro, diga ao cliente "
+                f"que ainda não há base pra estimar variação, e NÃO invente intervalo."
+                if not _lastro else
+                f"Base: {_n} projeto(s)-fonte, anônima. Use pra orientar sobre "
+                f"variação esperada, NÃO como valor de referência deste projeto — "
+                f"e cite o tamanho da base."),
     }
 
 
@@ -555,7 +565,7 @@ TOOLS = [
     },
     {
         "name": "check_market_heuristics",
-        "description": "Checa heurísticas agregadas de mercado (dispersão de preço entre fornecedores, share típico de material vs mão de obra, padrão de cobertura) pra uma categoria de item. Use quando o cliente perguntar 'quanto varia o preço disso?', 'é normal esse item ser 80% material?', 'esse serviço costuma ser esquecido?'. Responde SEM valores absolutos — só ratios e percentuais. Úteis pra orientar a revisão e pra explicar intervalo esperado de cotações. A base é anônima (agregada de orçamentos reais, sem identificar projetos).",
+        "description": "Checa heurísticas agregadas de mercado (dispersão de preço entre fornecedores, share típico de material vs mão de obra, padrão de cobertura) pra uma categoria de item. Use quando o cliente perguntar 'quanto varia o preço disso?', 'é normal esse item ser 80% material?', 'esse serviço costuma ser esquecido?'. Responde SEM valores absolutos — só ratios e percentuais, e SÓ quando a base tem lastro: a resposta traz `base` (nº de projetos-fonte por métrica). Sem lastro os números vêm nulos — diga ao cliente que ainda não há base pra estimar variação e não invente intervalo.",
         "input_schema": {
             "type": "object",
             "properties": {

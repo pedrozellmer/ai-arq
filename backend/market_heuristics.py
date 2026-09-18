@@ -95,6 +95,62 @@ def _fetch(heuristic_type: str, typology: str = "office") -> List[Dict]:
         return []
 
 
+#: quantos projetos-fonte DISTINTOS a base precisa ter pra uma heurística
+#: virar FRASE na planilha do cliente.
+#:
+#: 🩸 18/09/2026. A base inteira era UM comparativo (3 fornecedores de um
+#: escritório corporativo, ingerido em 23/04). O "±X%" de cada categoria era a
+#: média do coeficiente de variação de 1 a 5 itens com 2-3 cotações cada —
+#: "piso" era 1 item com 2 cotações — e saía como fato de mercado em **3.873
+#: linhas (36,7%) de 66 jobs, 50 contas**, inclusive projetos de ESTRUTURA
+#: categorizados por palavra de fit-out. E só disparava em `office`, que é a
+#: PRIMEIRA opção do select, ou seja, o default de quem não escolhe.
+#:
+#: 🔑 Dois é o mínimo pra "mais de um projeto" — não é garantia estatística, e a
+#: frase carrega o nº de fontes exatamente por isso: com N pequeno, o cliente
+#: lê o N. Decisão do Pedro (18/09): desligar até ter base, código fica.
+#: 🚫 NÃO baixe este piso pra fazer a frase voltar: a frase volta sozinha
+#: quando o SEGUNDO comparativo for ingerido.
+_MINIMO_DE_FONTES = 2
+#: a categoria pega-tudo do `categorize_item`: "itens dessa categoria" não
+#: quer dizer nada quando a categoria é "o que não casou palavra nenhuma".
+_CATEGORIA_SEM_IDENTIDADE = "outros"
+
+
+def base_da_tipologia(typology: str = "office",
+                      heuristic_type: str = "dispersion") -> Dict:
+    """Quantos projetos-fonte DISTINTOS sustentam este tipo de heurística.
+
+    Conta `source_anonimo` distinto — linhas da MESMA fonte contam uma vez.
+    Devolve {n_fontes, lastro, minimo}. `lastro` é o que libera a frase.
+    """
+    rows = _fetch(heuristic_type, typology) or []
+    fontes = {str(r.get("source_anonimo") or "").strip() for r in rows}
+    fontes.discard("")
+    return {"n_fontes": len(fontes),
+            "lastro": len(fontes) >= _MINIMO_DE_FONTES,
+            "minimo": _MINIMO_DE_FONTES}
+
+
+def metricas_para_mostrar(category: str, typology: str = "office") -> Dict:
+    """O que o chat e a API podem MOSTRAR de uma categoria: a base sempre; os
+    números só com lastro, e nunca pra categoria sem identidade.
+
+    Uma regra pros dois chamadores (agent.py e /api/heuristics/check) — antes
+    cada um montava a resposta por conta própria e os dois exibiam "±X%" de
+    uma base de um projeto só.
+    """
+    saida = {"categoria": category, "tipologia": typology, "base": {}}
+    _sem_identidade = (category == _CATEGORIA_SEM_IDENTIDADE)
+    for tipo, fn, chave in (("dispersion", get_dispersion_for_category, "dispersao"),
+                            ("coverage_pattern", get_coverage_pattern_for_category, "cobertura"),
+                            ("mat_mo_share", get_mat_mo_share_for_category, "share_mat_mo")):
+        b = base_da_tipologia(typology, tipo)
+        saida["base"][chave] = b
+        saida[chave] = fn(category, typology) if (b["lastro"] and not _sem_identidade) else None
+    return saida
+
+
 def get_dispersion_for_category(category: str,
                                   typology: str = "office") -> Optional[Dict]:
     """Retorna estatísticas de dispersão de preço pra uma categoria.
@@ -182,21 +238,30 @@ def check_item_anomaly(item, typology: str = "office") -> List[str]:
     category = categorize_item(desc)
     alertas = []
 
-    # 1. DISPERSÃO — se categoria tem variação alta entre fornecedores
-    disp = get_dispersion_for_category(category, typology)
+    # 🚫 "itens dessa categoria" pra quem caiu no pega-tudo é frase sem
+    # sujeito: 2.283 das 3.873 linhas afetadas eram exatamente "outros".
+    if category == _CATEGORIA_SEM_IDENTIDADE:
+        return []
+
+    # 1. DISPERSÃO — só com LASTRO (ver `_MINIMO_DE_FONTES`), e a frase diz o
+    # tamanho da base, pra nunca mais soar como estatística de mercado quando
+    # é a média de meia dúzia de cotações.
+    _b_disp = base_da_tipologia(typology, "dispersion")
+    disp = get_dispersion_for_category(category, typology) if _b_disp["lastro"] else None
     if disp and disp["cv_medio"] > 0.5:  # variação > 50%
         pct = int(disp["cv_medio"] * 100)
         alertas.append(
-            f"💡 Itens dessa categoria variam ±{pct}% entre fornecedores — "
-            f"pedir 3 orçamentos."
+            f"💡 Em {_b_disp['n_fontes']} comparativos, itens de {category} "
+            f"variaram ±{pct}% entre fornecedores — vale pedir 3 orçamentos."
         )
 
-    # 2. COBERTURA — se categoria é frequentemente esquecida
-    cov = get_coverage_pattern_for_category(category, typology)
+    # 2. COBERTURA — mesma régua, mesma base.
+    _b_cov = base_da_tipologia(typology, "coverage_pattern")
+    cov = get_coverage_pattern_for_category(category, typology) if _b_cov["lastro"] else None
     if cov and cov.get("raramente_cotada"):
         alertas.append(
-            f"⚠ Categoria '{category}' costuma ser omitida em orçamentos — "
-            f"confirmar se está no escopo."
+            f"⚠ Em {_b_cov['n_fontes']} comparativos, '{category}' costumou ficar "
+            f"de fora dos orçamentos — confirmar se está no escopo."
         )
 
     return alertas
@@ -210,6 +275,9 @@ def get_summary() -> Dict:
         summary[htype] = {
             "n_rows": len(rows),
             "categorias": sorted(set(r["category"] for r in rows)),
+            # 18/09: quantos projetos-fonte sustentam isto — é o que decide se
+            # alguma frase sai pro cliente.
+            "base": base_da_tipologia("office", htype),
         }
     return summary
 

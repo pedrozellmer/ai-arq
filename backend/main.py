@@ -21443,9 +21443,7 @@ async def heuristics_check(description: str, unit: str = "",
     """
     try:
         from market_heuristics import (
-            categorize_item, check_item_anomaly,
-            get_dispersion_for_category, get_mat_mo_share_for_category,
-            get_coverage_pattern_for_category,
+            categorize_item, check_item_anomaly, metricas_para_mostrar,
         )
     except ImportError:
         return {"error": "market_heuristics indisponível"}
@@ -21457,14 +21455,18 @@ async def heuristics_check(description: str, unit: str = "",
     item_dict = {"description": description.strip(), "unit": unit.strip()}
     alertas = check_item_anomaly(item_dict, typology=typology)
 
+    # 18/09: mesma régua do chat — números só com lastro, base sempre.
+    # Ver `market_heuristics.metricas_para_mostrar`.
+    m = metricas_para_mostrar(category, typology)
     return {
         "category": category,
         "typology": typology,
         "alertas": alertas,
+        "base": m["base"],
         "metrics": {
-            "dispersion": get_dispersion_for_category(category, typology),
-            "mat_mo_share": get_mat_mo_share_for_category(category, typology),
-            "coverage": get_coverage_pattern_for_category(category, typology),
+            "dispersion": m["dispersao"],
+            "mat_mo_share": m["share_mat_mo"],
+            "coverage": m["cobertura"],
         },
     }
 
