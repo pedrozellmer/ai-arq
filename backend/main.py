@@ -32954,6 +32954,32 @@ def _origem_das_visitas(dias: int = 30):
     return _dados
 
 
+def _funil_do_site(dias: int = 7):
+    """O caminho até o projeto, medido com UMA RÉGUA SÓ. `None` se não der.
+
+    🚨 18/09/2026 — o painel mostrava *"criaram conta: 18 · 180% de quem abriu o
+    cadastro"*. Não era conversão: o numerador vinha do NOSSO BANCO (toda conta
+    criada) e o denominador do CLOUDFLARE (endereços de IP na página, só das 12
+    páginas do topo, só do que ele viu). Duas populações, dois instrumentos, uma
+    divisão. Num funil cada etapa é subconjunto da anterior — **180% é a prova
+    aritmética de que não era**, e ficou meses no ar sendo lida toda manhã.
+
+    🪤 A régua de "pessoa" mora na RPC e é a MESMA de `admin_origem_visitas`
+    (`user_id` quando logado, senão o `cid`). Reimplementar aqui seria criar a
+    segunda cópia de uma régua — o defeito que a casa já pagou duas vezes.
+
+    🪤 `None`, nunca zeros: a RPC falhar não é "ninguém veio".
+    """
+    try:
+        _st, _dados = _supa_rest_service("POST", "rpc/admin_funil_do_site",
+                                         body={"p_dias": int(dias)}, timeout=20)
+    except Exception:
+        return None
+    if _st != 200 or not isinstance(_dados, dict):
+        return None
+    return _dados
+
+
 def _saude_da_coleta(serie: list, tem_token: bool) -> dict:
     """A coleta está viva? Responde pela DATA do último dia medido.
 
@@ -33374,11 +33400,23 @@ def admin_metricas(request: Request, dias: int = 30):
         # 🔑 De onde veio quem aceitou o cookie (30 dias) — None se a RPC falhar.
         "origem_30d": _origem_das_visitas(30),
         "inflacao_7d": _infl,
-        "funil_7d": {
-            "home": _home, "cadastro": _cad,
+        # 🚨 18/09/2026 — O FUNIL PASSOU A TER UMA RÉGUA SÓ. Ver `_funil_do_site`:
+        # o que estava aqui dividia contas do BANCO por endereços do CLOUDFLARE e
+        # exibia "180% de quem abriu o cadastro". As duas fontes continuam vivas,
+        # mas em campos SEPARADOS e com nome que diz o que cada uma é — nunca
+        # mais uma dividindo a outra.
+        "funil_7d": _funil_do_site(7),
+        # Os absolutos do banco: a verdade de negócio ("quantas contas nasceram
+        # esta semana"), que NÃO é a mesma pergunta que "quantos que chegaram
+        # viraram conta". Vão para a tela como número, jamais como porcentagem
+        # de uma etapa medida por outro instrumento.
+        "totais_no_banco_7d": {
             "contas": sum(int(l.get("cadastros") or 0) for l in _ult7),
             "projetos": sum(int(l.get("projetos") or 0) for l in _ult7),
         },
+        # Endereços do Cloudflare nas duas páginas do topo do funil. Ficam porque
+        # comparam bem ENTRE SI (mesma fonte, mesma inflação) — e só entre si.
+        "enderecos_cloudflare_7d": {"home": _home, "cadastro": _cad},
         # 🚨 O painel PRECISA saber se a coleta está viva. Sem isto, série
         # parada e site sem movimento têm exatamente a mesma cara.
         # 🚨 O painel PRECISA saber se a coleta está viva. Sem isto, série

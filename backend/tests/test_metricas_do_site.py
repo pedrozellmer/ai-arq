@@ -377,7 +377,12 @@ def test_a_tela_do_painel_tem_TODOS_os_campos_que_o_JS_procura():
 def test_a_tela_avisa_quando_a_coleta_esta_desligada():
     raiz = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     html = io.open(os.path.join(raiz, "admin.html"), encoding="utf-8").read()
-    i = html.find("carregarMovimentoDoSite")
+    # 🪤 18/09/2026 — a âncora era `find("carregarMovimentoDoSite")`, a PRIMEIRA
+    # menção do nome. Bastou um COMENTÁRIO novo citar a função pra janela dos
+    # 3.000 caracteres deslizar e o guarda reprovar sem nada ter mudado no
+    # comportamento. Âncora tem que ser a DEFINIÇÃO, não qualquer citação.
+    i = html.find("async function carregarMovimentoDoSite")
+    assert i >= 0, "a função que desenha o card de movimento sumiu"
     bloco = html[i:i + 3000]
     assert "coleta" in bloco and "aviso" in bloco, (
         "a tela não mostra o aviso de coleta desligada — série parada ficaria "

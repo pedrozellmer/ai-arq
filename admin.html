@@ -5173,6 +5173,47 @@ async function adminDownloadXlsx(jobId) {
 // caído do Google. Cada resposta custava meia hora de consulta na mão, e nas
 // duas primeiras saiu ERRADA: o contador de "únicos" do Cloudflare conta robô
 // e chegou a inflar um dia em 76%.
+// ── o caminho até o projeto ────────────────────────────────────────────────
+// 🚨 18/09/2026 — AQUI MORAVA UM "180% DE QUEM ABRIU O CADASTRO".
+// A linha dividia as contas do NOSSO BANCO (todas) pelos endereços de IP do
+// CLOUDFLARE naquela página. Duas populações, dois instrumentos, uma divisão —
+// e num funil cada etapa tem que ser subconjunto da anterior, então **180% era
+// a prova aritmética de que aquilo não era conversão**. Ficou meses no ar sendo
+// lido toda manhã. Agora as quatro etapas saem da MESMA régua (pessoa distinta
+// nos nossos eventos, via `admin_funil_do_site`).
+//
+// 🔑 É função PRÓPRIA pra o guarda poder CHAMAR. Enquanto isto morava dentro de
+// `carregarMovimentoDoSite` — 160 linhas e um `fetch` no meio — o único teste
+// possível era ler o fonte, e guarda que lê fonte já nos traiu três vezes este
+// mês.
+function linhasDoFunil(f, tot) {
+  const t = tot || {};
+  const linha = (rot, n, obs) =>
+    '<div class="flex items-baseline justify-between gap-3">' +
+    '<span class="text-gray-600">' + rot + '</span>' +
+    '<span class="font-semibold tabular-nums">' + (n == null ? '--' : n) +
+    (obs ? ' <span class="text-xs font-normal text-gray-400">' + obs + '</span>' : '') +
+    '</span></div>';
+  const pct = (a, b) => (b > 0 && a != null ? Math.round((a / b) * 100) + '%' : '--');
+  // 🪤 Sem medição NÃO é funil zerado: mostrar "0" aqui seria a mesma doença do
+  // farol que acendia verde sem ter medido nada.
+  if (!f) return '<div class="text-gray-400">não consegui medir o funil agora</div>';
+  return linha('abriram a home', f.home) +
+    linha('abriram o cadastro', f.cadastro, pct(f.cadastro, f.home) + ' da home') +
+    linha('criaram conta', f.conta, pct(f.conta, f.cadastro) + ' de quem abriu') +
+    // 🪤 SEM porcentagem: "subiu projeto" não é subconjunto de "criou conta" —
+    // cliente antigo sobe sem se cadastrar de novo. Pôr % aqui seria repetir o
+    // mesmo erro com outro número.
+    linha('subiram projeto', f.projeto) +
+    '<div class="mt-2 pt-2 border-t text-xs text-gray-400 leading-snug">' +
+    'as quatro linhas contam PESSOA distinta nos nossos eventos (só quem aceitou ' +
+    'cookie), por isso são menores que o total do banco: ' +
+    (t.contas == null ? '--' : t.contas) + ' conta(s) e ' +
+    (t.projetos == null ? '--' : t.projetos) + ' projeto(s) em 7 dias.' +
+    '</div>';
+}
+
+
 async function carregarMovimentoDoSite() {
   const frase = document.getElementById('mov-frase');
   const farol = document.getElementById('mov-farol');
@@ -5333,19 +5374,7 @@ async function carregarMovimentoDoSite() {
   // rótulo diz isso, senão vira o erro do "21 downloads".
   const fun = document.getElementById('mov-funil');
   if (fun) {
-    const f = d.funil_7d || {};
-    const linha = (rot, n, obs) =>
-      '<div class="flex items-baseline justify-between gap-3">' +
-      '<span class="text-gray-600">' + rot + '</span>' +
-      '<span class="font-semibold tabular-nums">' + (n || 0) +
-      (obs ? ' <span class="text-xs font-normal text-gray-400">' + obs + '</span>' : '') +
-      '</span></div>';
-    const pct = (a, b) => (b > 0 ? Math.round((a / b) * 100) + '%' : '--');
-    fun.innerHTML =
-      linha('abriram a home', f.home) +
-      linha('abriram o cadastro', f.cadastro, pct(f.cadastro, f.home) + ' da home') +
-      linha('criaram conta', f.contas, pct(f.contas, f.cadastro) + ' de quem abriu') +
-      linha('subiram projeto', f.projetos);
+    fun.innerHTML = linhasDoFunil(d.funil_7d, d.totais_no_banco_7d);
   }
 
   // ── páginas que trouxeram gente ────────────────────────────────────────
