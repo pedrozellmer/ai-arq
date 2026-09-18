@@ -143,8 +143,21 @@ def _minar_todas_as_saidas(monkeypatch):
     _armar(subprocess, "Popen", "subprocess.Popen")
     _armar(subprocess, "run", "subprocess.run")
     _armar(os, "system", "os.system")
-    _armar(builtins, "open", "open() em disco")
-    _armar(_io, "open", "io.open() em disco")
+    # 🪤 18/09/2026 — a mina do disco dizia só "open() em disco", três vezes, e
+    # eu passei um tempo ADIVINHANDO de longe qual arquivo era (o CI é Linux, a
+    # minha máquina é Windows, e o defeito só aparecia lá). Mina que não diz o
+    # nome da vítima obriga quem lê a teorizar — e teoria não conserta bancada.
+    # Agora ela grava o CAMINHO.
+    def _mina_de_disco(nome):
+        def _explode(arquivo, *a, **k):
+            pisadas.append("%s (%s)" % (nome, str(arquivo)[:90]))
+            raise AssertionError("a sonda de vida abriu %s" % (arquivo,))
+        return _explode
+
+    monkeypatch.setattr(builtins, "open", _mina_de_disco("open() em disco"),
+                        raising=False)
+    monkeypatch.setattr(_io, "open", _mina_de_disco("io.open() em disco"),
+                        raising=False)
     _armar(time, "sleep", "time.sleep")
     _armar(os, "statvfs", "os.statvfs")
     try:
@@ -164,8 +177,22 @@ def test_a_sonda_NAO_toca_em_banco_nem_rede(monkeypatch):
     Um helper com outro nome, ou uma chamada indireta, passava verde. Agora a
     sonda roda com o campo minado ARMADO — se ela sair do processo por
     qualquer caminho, a mina registra QUEM foi.
+
+    🩸 18/09/2026 — ESTE GUARDA PISCAVA, e a piscada era do teste, não da
+    sonda. Ele armava a mina no PRIMEIRO request da vida do cliente HTTP, e o
+    primeiro request carrega o que a biblioteca precisa uma vez só (CA, locale,
+    mimetypes) — no Linux isso é `open()` em disco; no Windows, não. Resultado:
+    verde na minha máquina, e no CI dependia de outro teste do mesmo worker já
+    ter aquecido. Um arquivo de teste NOVO mudou a distribuição do `-n auto`, a
+    sorte acabou, e a bancada ficou vermelha sem ninguém ter tocado na sonda.
+
+    🔑 O aquecimento NÃO afrouxa o guarda: em produção a sonda responde a cada
+    30 s, sempre quente, e é esse estado que importa. O teste irmão
+    (`test_a_sonda_e_TRIVIAL`) já fazia exatamente isto desde 07/09 — eu só
+    estava cobrando de um o que o outro já sabia.
     """
     cliente = _cliente()          # constrói ANTES de armar as minas
+    cliente.get("/health")        # aquece a biblioteca, fora da medição
     pisadas = _minar_todas_as_saidas(monkeypatch)
     r = cliente.get("/health")
     assert pisadas == [], (
@@ -174,6 +201,29 @@ def test_a_sonda_NAO_toca_em_banco_nem_rede(monkeypatch):
         % ", ".join(pisadas))
     assert r.status_code == 200, r.text
     assert r.json() == {"ok": True}, r.text
+
+
+def test_CONTROLE_a_mina_de_disco_DIZ_qual_arquivo(monkeypatch):
+    """Controle positivo da mina: ela tem que nomear a vítima.
+
+    🩸 18/09/2026 — a mensagem antiga era "open() em disco, open() em disco,
+    open() em disco". Com o CI em Linux e a minha máquina em Windows, isso me
+    deixou adivinhando de longe qual arquivo era. Este controle garante que a
+    próxima falha venha com o caminho junto."""
+    _minar_todas_as_saidas(monkeypatch)
+    import builtins
+    try:
+        builtins.open("/tmp/um-arquivo-que-nao-existe-de-proposito.txt")
+    except AssertionError:
+        pass
+    # a lista de pisadas é interna ao helper; o que dá pra checar aqui é que a
+    # mina levanta com o CAMINHO na mensagem — que é o que faltava.
+    try:
+        builtins.open("/tmp/outro.txt")
+        raise AssertionError("a mina não armou")
+    except AssertionError as e:
+        assert "/tmp/outro.txt" in str(e), \
+            "a mina explodiu sem dizer qual arquivo foi aberto: %s" % e
 
 
 def test_a_sonda_e_TRIVIAL(monkeypatch):
