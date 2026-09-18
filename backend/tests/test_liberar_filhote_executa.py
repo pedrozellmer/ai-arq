@@ -119,9 +119,14 @@ def bancada(monkeypatch):
     monkeypatch.setattr(main, "_log_error", _log)
 
     # o SMTP e o registro do cooldown
-    def _smtp(to_email, subject, html_body, text_body="", log_kind="email"):
+    # 🪤 `**k` é FREIO, não descuido: dublê com assinatura EXATA vira
+    # TypeError engolido quando a produção ganha um parâmetro novo, e o
+    # guarda fica verde medindo zero e-mail. Foi o que aconteceu em
+    # 18/09 quando `_send_email_smtp` ganhou `job_id`.
+    def _smtp(to_email, subject, html_body, text_body="", log_kind="email", **k):
         estado["emails"].append({"para": to_email, "assunto": subject,
-                                 "html": html_body, "kind": log_kind})
+                                 "html": html_body, "kind": log_kind,
+                                 "job_id": k.get("job_id", "")})
         return True
     monkeypatch.setattr(main, "_send_email_smtp", _smtp)
 

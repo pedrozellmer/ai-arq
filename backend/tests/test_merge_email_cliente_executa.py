@@ -56,9 +56,13 @@ def smtp(monkeypatch):
     """
     b = _Bancada()
 
-    def _envia(to_email, subject, html_body, text_body="", log_kind="email"):
+    # 🪤 `**k` é FREIO, não descuido: dublê com assinatura EXATA vira
+    # TypeError engolido quando a produção ganha um parâmetro novo, e o
+    # guarda fica verde medindo zero e-mail. Foi o que aconteceu em
+    # 18/09 quando `_send_email_smtp` ganhou `job_id`.
+    def _envia(to_email, subject, html_body, text_body="", log_kind="email", **k):
         b.saiu.append({"para": to_email, "assunto": subject, "html": html_body,
-                       "kind": log_kind})
+                       "kind": log_kind, "job_id": k.get("job_id", "")})
         return b.smtp_responde
 
     def _registra(email, kind, ref=""):

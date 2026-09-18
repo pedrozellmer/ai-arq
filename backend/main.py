@@ -3726,7 +3726,21 @@ def _marcar_links_do_email(html: str, kind: str) -> str:
     return _re_mk.sub(r'href="([^"]*)"', _troca, html)
 
 
-def _send_email_smtp(to_email: str, subject: str, html_body: str, text_body: str = "", log_kind: str = "email") -> bool:
+def _send_email_smtp(to_email: str, subject: str, html_body: str, text_body: str = "",
+                     log_kind: str = "email", job_id: str = "") -> bool:
+    """Porta única de saída de e-mail. `job_id` é opcional e vai pro registro.
+
+    🩸 18/09/2026 — `email_sent_log` não guardava a qual JOB o e-mail
+    pertencia. Pra auditar "o que o cliente recebeu quando a entrega não mediu
+    nada" só restava cruzar por e-mail + janela de tempo, e **6 dos 7
+    'e-mails duplicados' que esse cruzamento acusou eram artefato**: o cliente
+    tinha dois jobs terminando na mesma janela e cada e-mail casava com os
+    dois. Um método que erra 6 de 7 não mede nada.
+
+    🪤 Continua OPCIONAL: e-mail que não nasce de job (boas-vindas, resposta de
+    contato, alerta interno) entra com `job_id` vazio, e vazio grava NULO —
+    nunca string vazia, que ia sujar o índice e fingir vínculo.
+    """
     # 🚫 Supressão vem ANTES de tudo — e só pra endereço de fora (interno nunca é calado:
     # alerta pro Pedro não pode morrer por um endereço posto na lista por engano).
     if to_email and not _email_eh_interno(to_email):
@@ -3786,11 +3800,17 @@ def _send_email_smtp(to_email: str, subject: str, html_body: str, text_body: str
         try:
             _to = (to_email or "").lower()
             if not _email_eh_interno(_to) and _to != (NOTIFY_EMAIL or "").lower():
-                _supabase_insert("email_sent_log", {
+                _linha_log = {
                     "email": to_email,
                     "kind": (log_kind or "email"),
                     "subject": (subject or "")[:200],
-                })
+                }
+                # 🪤 Só grava a chave quando há job — string vazia viraria um
+                # vínculo falso e entraria no índice como se fosse um job.
+                _jid_log = str(job_id or "").strip()
+                if _jid_log:
+                    _linha_log["job_id"] = _jid_log
+                _supabase_insert("email_sent_log", _linha_log)
         except Exception as _e:
             print(f"[email] log de envio falhou (nao critico): {_e}")
         return True
@@ -4301,7 +4321,8 @@ def _email_falha_cliente(job_id: str, reprocessavel: bool = True) -> bool:
             error_hint=(_rows[0].get("error_message") or ""),
             job_id=job_id)
         ok = _send_email_smtp(_email, _subject, _html,
-                              log_kind="erro_reprocessar" if reprocessavel else "erro_trocar")
+                              log_kind="erro_reprocessar" if reprocessavel else "erro_trocar",
+                              job_id=job_id)
         _falha_emailed.add(job_id)
         return ok
     except Exception as _e:
@@ -16045,7 +16066,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         # 05/09: sem etiqueta este e-mail caía no balde "email" da
                         # Central. Mesmo nome do gate em email_auto_log, pra os
                         # dois logs contarem a mesma coisa.
-                        log_kind="complemento_pronto")
+                        log_kind="complemento_pronto", job_id=job_id)
                     if _ok_c:
                         _email_auto_registrar(_pe, "complemento_pronto", ref=job_id)
                         _email_auto_registrar(_pe, "fim_de_job", ref=_raiz)
@@ -16081,7 +16102,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                     badge="&#10003; Atualizado",
                                     preheader="Rodamos os mesmos arquivos no motor de hoje. "
                                               "A versão anterior continua no painel."),
-                        log_kind="reprocesso_pronto")
+                        log_kind="reprocesso_pronto", job_id=job_id)
                     if _ok_r:
                         _email_auto_registrar(_pe, "reprocesso_pronto", ref=job_id)
                         _email_auto_registrar(_pe, "fim_de_job", ref=_raiz)
@@ -16249,7 +16270,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     _pe, _subj_pp, _html_pp,
                     log_kind=("sem_medida" if _nada_medido
                               else "leu_sem_medir" if (_n_med == 0 and len(all_items) > 0)
-                              else "planilha_pronta"))
+                              else "planilha_pronta"),
+                    job_id=job_id)
                 if _ok_pp:
                     _email_auto_registrar(_pe, "fim_de_job", ref=_raiz)
         except Exception as _ee:
@@ -28961,7 +28983,8 @@ def _email_leitura_combinada(pai: dict, filho: dict, merge_job: str,
     # nps_relacional pra mesma pessoa — dois automáticos na mesma semana.
     # 🪤 NÃO fazer `_email_auto_recente` ler `email_sent_log`: aquela tabela tem
     # os transacionais também, e isso calaria a esteira inteira.
-    _ok = _send_email_smtp(email, subject, html, log_kind="leitura_combinada")
+    _ok = _send_email_smtp(email, subject, html, log_kind="leitura_combinada",
+                           job_id=(merge_job or ""))
     if _ok:
         _email_auto_registrar(email, "leitura_combinada", ref=merge_job or "")
     return _ok
@@ -29115,7 +29138,8 @@ def _email_leitura_nova(pai: dict, filho_job: str, antes: dict, depois: dict) ->
     # nps_relacional pra mesma pessoa — dois automáticos na mesma semana.
     # 🪤 NÃO fazer `_email_auto_recente` ler `email_sent_log`: aquela tabela tem
     # os transacionais também, e isso calaria a esteira inteira.
-    _ok = _send_email_smtp(email, subject, html, log_kind="leitura_nova")
+    _ok = _send_email_smtp(email, subject, html, log_kind="leitura_nova",
+                           job_id=(filho_job or ""))
     if _ok:
         _email_auto_registrar(email, "leitura_nova", ref=filho_job or "")
     return _ok
