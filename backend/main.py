@@ -9386,6 +9386,33 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
     # 🪤 Índice PRÓPRIO, e não o `_por_arquivo` do passo 7: aquele exige
     # `rooms_m2 > 0` e deixaria de fora a prancha que mediu SÓ PAREDE — que é
     # justamente o alvo do resgate linear.
+    # 📏 18/09/2026 — O ALCANCE DESTE RESGATE, MEDIDO. Leia antes de mexer.
+    #
+    # Ele existe desde 26/08 e NUNCA disparou: `resgate_pdf=0` e
+    # `resgate_tardio=0` em 28 de 28 jobs. Em 07/09 a resposta a esse zero foi
+    # construir um SEGUNDO mecanismo — que também dá zero. Dois mecanismos, a
+    # mesma premissa, ninguém mediu a premissa.
+    #
+    # A premissa é: "a IA escreve a medição NOSSA na observação e deixa a
+    # quantidade em zero" (caso cliente-41, 26/08 — era verdade lá). Medido no
+    # acervo inteiro em 18/09:
+    #
+    #   . 442 itens de área zerados em job com medição vetorial
+    #   . 313 (71%) estão numa prancha que o pdfvec MEDIU — o casamento de
+    #     nome funciona, não é ele que barra
+    #   . dos 204 conferíveis, só **16** citam o NOSSO número (±1%)
+    #   . tirando avaliação, trial, parede e os barrados pela trava do "um por
+    #     prancha": **5 itens, em 3 jobs**, em toda a história do produto
+    #
+    # 🔑 O resgate está CALADO PORQUE NÃO HÁ O QUE RESGATAR: a IA escreve a
+    # aritmética DELA ("Sala 1 (13,43) + Sala 2 (13,20) + … = 58,71"), não a
+    # nossa medição de ambientes. A régua de igualdade (±1%) está certa.
+    #
+    # 🚫 NÃO construa um terceiro mecanismo sobre esta premissa. Se o objetivo
+    # for tirar item de área do zero, o caminho é ATRIBUIR a nossa medição por
+    # prancha (o passo 7, `criados_prancha`) — e aí a conversa é sobre a trava
+    # do "um por prancha", que existe por causa do cliente-75 (6 itens com
+    # 400 m² cada, incluindo "Rasgo em laje para nova escada").
     _resg_alvo = {}
     if _pp:
         _pp_arq = {}
@@ -9883,6 +9910,11 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
     _apply_area_honesty.ultimo_teto_m2 = float(_teto_m2)
     _apply_area_honesty.ultimo_lineares_zerados = lineares_zerados
     _apply_area_honesty.ultimo_resgatados = resgatados
+    # 📏 18/09: SEM este número, `resgate_tardio=0` tem DUAS leituras que
+    # ninguém consegue separar — "não havia alvo nenhum" e "havia alvo e o
+    # número citado não era o nosso". Foi essa ambiguidade que fez a casa
+    # construir um segundo mecanismo em cima do zero do primeiro.
+    _apply_area_honesty.ultimo_resg_alvos = len(_resg_alvo)
     _apply_area_honesty.ultimo_ambiguos = list(_ambiguos)
     return filled, blanked
 
@@ -15160,6 +15192,9 @@ bloco — só cite os que estão no inventário deste arquivo."""
                            # vê item que a IA já devolveu zerado — deu 0 em 28
                            # de 28 jobs. Dois números, dois momentos.
                            f"resgate_tardio={_resg_log} "
+                           # 18/09: quantos itens TINHAM alvo resolvido. Se
+                           # vier 0, o resgate nem chegou a ser perguntado.
+                           f"resg_alvos={getattr(_apply_area_honesty, 'ultimo_resg_alvos', 0)} "
                            # 16/09: quantos preenchimentos do passo 7 foram
                            # DESFEITOS porque a prancha já tinha outro
                            # acabamento com número (a vaga estava ocupada)
