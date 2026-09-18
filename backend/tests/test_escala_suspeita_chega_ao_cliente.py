@@ -68,7 +68,12 @@ _MD_CLIENTE_80 = {
                        "escala pode estar errada; tratar quantidades como "
                        "estimado. | o cabeçalho declara Polegadas"),
 }
-_ARQ = "/tmp/SBRRJCCGD05-EXE-ARC-000-PROJ-R03_libredwg.slim.dxf"
+# 🔒 18/09/2026 — aqui havia o nome REAL do arquivo da cliente-80, num
+# repositório PÚBLICO (regra dura nº6: nem nome de ARQUIVO de cliente). O
+# guarda `test_repo_publico_nao_expoe_cliente.py` não pega nome de arquivo —
+# só nome, e-mail e apelido. Este é fictício, com a MESMA forma (sufixos do
+# conversor e do emagrecimento), que é o que o teste precisa.
+_ARQ = "/tmp/PRANCHA-EXE-ARC-000-R03_libredwg.slim.dxf"
 
 
 def test_a_prancha_suspeita_GERA_linha_pro_cliente():
@@ -80,7 +85,7 @@ def test_a_prancha_suspeita_GERA_linha_pro_cliente():
     assert out, "a prancha com escala SUSPEITA não gerou aviso nenhum — foi o bug"
     txt = " ".join(out)
     assert "ESCALA SUSPEITA" in txt, txt
-    assert "SBRRJCCGD05" in txt, "não diz QUAL prancha:\n" + txt
+    assert "PRANCHA-EXE-ARC-000" in txt, "não diz QUAL prancha:\n" + txt
 
 
 def test_o_aviso_diz_o_MOTIVO_que_o_motor_calculou():
@@ -156,7 +161,7 @@ def test_CONTROLE_o_guarda_REPROVA_a_versao_ANTIGA():
     devolvia só nome+status e a montagem ignorava a lista) e confere que ele
     NÃO avisa. Sem isto, os testes acima passariam com o conserto desligado."""
     _, linhas = _fns()
-    antigo = {"nome": "SBRRJCCGD05", "status": "alerta"}   # sem 'declarada'/'alerta'
+    antigo = {"nome": "PRANCHA-EXE-ARC-000", "status": "alerta"}   # sem 'declarada'/'alerta'
     out = linhas([antigo], n_medidos=88)
     # o conserto novo AINDA avisa (só perde o motivo) — é o mínimo aceitável
     assert out, "com o dict antigo o aviso sumiu de novo"

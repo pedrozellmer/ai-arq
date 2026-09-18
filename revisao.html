@@ -777,7 +777,7 @@ function renderItem(it, localIndex) {
             <span class="chip ${isOrange ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}">
               ${provLabel}
             </span>${stateChip}
-            ${it.ref_sheet ? `<span class="ml-2 text-indigo-500">📄 ${escapeHtml(it.ref_sheet).slice(0,50)}</span>` : ''}
+            ${it.ref_sheet ? `<span class="ml-2 text-indigo-500">📄 ${escapeHtml(it.prancha_exibida || it.ref_sheet).slice(0,50)}</span>` : ''}
             ${it.observations ? `<span class="ml-2 text-gray-500" title="${escapeHtml(it.observations)}">· ${escapeHtml(it.observations.slice(0,110))}${it.observations.length > 110 ? '…' : ''}</span>` : ''}
           </p>
         </div>

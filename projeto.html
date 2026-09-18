@@ -3305,7 +3305,13 @@ function collectCadFiles(items) {
     const cleanName = raw.split('(')[0].trim();
     const low = cleanName.toLowerCase();
     if (low.endsWith('.pdf') || low.endsWith('.dwg') || low.endsWith('.dxf')) {
-      const s = filesSet.get(cleanName) || { itens: 0, medidos: 0, zerados: 0 };
+      // 🩸 18/09/2026 — a CHAVE do mapa continua sendo o ref_sheet cru, porque
+      // é ele que o botão "Ver desenho" manda de volta em /api/sheet?ref=. O
+      // que o cliente LÊ é `prancha_exibida`, que o /api/items calcula com a
+      // regra única do backend: "planta_libredwg.dxf" vira "planta.dwg", o
+      // nome que ele enviou. Sem cópia da regra em JS — só o rótulo.
+      const s = filesSet.get(cleanName) || { itens: 0, medidos: 0, zerados: 0,
+        exibida: String(it.prancha_exibida || '').split('(')[0].trim() || cleanName };
       s.itens++;
       if (String(it.confidence || '') === 'confirmado') s.medidos++;
       if (!(Number(it.quantity) > 0)) s.zerados++;
@@ -3395,7 +3401,7 @@ function renderFiles(proj, items) {
         <div class="flex items-center gap-3 px-5 py-3 hover:bg-gray-50">
           <span class="text-xl shrink-0">${icon}</span>
           <div class="flex-1 min-w-0">
-            <p class="text-sm font-medium text-gray-800 truncate">${esc(fname)}</p>
+            <p class="text-sm font-medium text-gray-800 truncate">${esc(st.exibida || fname)}</p>
             <p class="text-xs text-gray-500">${count} ${count === 1 ? 'item extraído' : 'itens extraídos'}${
               st.medidos > 0
                 ? ` · <span class="text-emerald-700 font-medium">${st.medidos} medido${st.medidos === 1 ? '' : 's'} do CAD</span>`

@@ -161,8 +161,16 @@ def _build_ref_text(item) -> str:
 
     # Referência da prancha original (sempre por último)
     if item.ref_sheet:
+        # 🩸 18/09/2026 — o nome aqui era o do DXF que NÓS geramos, com o
+        # sufixo do conversor colado: "planta_libredwg.dxf" pra quem mandou
+        # "planta.dwg". Medido: 1.682 linhas de 27 clientes MOSTRAVAM o sufixo
+        # na coluna REF. (as outras 1.136 só não mostravam porque o corte de 35
+        # caracteres comia o fim). A regra mora em engine_rules, e é a MESMA
+        # que a tela e o aviso de "caderno repetido" usam.
+        from engine_rules import nome_que_o_cliente_enviou
+        _nome = nome_que_o_cliente_enviou(item.ref_sheet)
         # Encurta nome se muito longo
-        ref = item.ref_sheet[:35] + '...' if len(item.ref_sheet) > 35 else item.ref_sheet
+        ref = _nome[:35] + '...' if len(_nome) > 35 else _nome
         parts.append(ref)
 
     return ' · '.join(parts) if parts else ''

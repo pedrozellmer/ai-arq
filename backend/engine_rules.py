@@ -2937,3 +2937,45 @@ def frase_do_quanto_mediu(medidos, total):
                 f"({_m} de {_t} linhas, as em branco)")
     return (f"medimos {_m} de {_t} linhas direto da geometria do desenho "
             f"(as em branco)")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  O nome da prancha como o CLIENTE a enviou
+# ─────────────────────────────────────────────────────────────────────────────
+_SUFIXO_DO_CONVERSOR = _re.compile(r"_libredwg\.dxf(?=$|\s*\()", _re.IGNORECASE)
+
+
+def nome_que_o_cliente_enviou(ref_sheet) -> str:
+    """"planta_libredwg.dxf" → "planta.dwg": o nome que o cliente reconhece.
+
+    🩸 18/09/2026. Quando o ODA recusa um .dwg, o plano B (libredwg) gera
+    "<nome>_libredwg.dxf" e o motor gravava ESSE nome em `ref_sheet`. Medido
+    no banco: **2.818 linhas de 43 contas** (26,7% das linhas de cliente) com
+    um nome de arquivo que ninguém enviou — e o cliente que se cadastrou hoje
+    tinha 77 de 77 assim. Pior: o aviso "você já mandou esse caderno" compara
+    o nome ENVIADO com o gravado, e por isso era cego pra todos eles.
+
+    🔑 A volta é DETERMINÍSTICA: só o nosso conversor cola "_libredwg", e só
+    em DXF gerado a partir de um DWG. Então "X_libredwg.dxf" veio de "X.dwg",
+    sempre. Conferido antes de escrever: das 5.010 linhas com o sufixo, 5.010
+    o têm exatamente no fim do nome, 0 antes do "(hint da IA)", 0 com
+    "_libredwg_min". Por isso a regex ancora no fim ou no " (".
+
+    🔑 POR QUE LIMPAR NA SAÍDA e não no que se grava: `ref_sheet` é também a
+    CHAVE que a tela manda de volta em `/api/sheet?ref=` e que o checkpoint
+    usa; a busca já compara radicais (`_stem_da_prancha`), mas as 2.818 linhas
+    gravadas só se consertam se a limpeza acontecer na exibição. Uma regra,
+    aplicada onde o nome CHEGA ao cliente (planilha, tela, chat) e onde ele é
+    COMPARADO (caderno repetido). Nada muda no banco.
+
+    🚫 O que esta regra NÃO sabe: um .dwg que o ODA converteu SEM sufixo sai
+    como "X.dxf", indistinguível de um DXF enviado pelo cliente — medido em
+    18/09: 9 linhas, 1 job, 1 conta. Fica documentado, não consertado.
+
+    🪤 A extensão volta em minúsculas ("planta.dwg") mesmo se o cliente mandou
+    "PLANTA.DWG": o conversor preserva o radical, não a caixa da extensão.
+    """
+    s = str(ref_sheet or "")
+    if not s:
+        return ""
+    return _SUFIXO_DO_CONVERSOR.sub(".dwg", s)

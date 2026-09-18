@@ -37,6 +37,17 @@ WORK_DIR = os.path.join(os.environ.get("TMPDIR", "/tmp"), "aiarq_jobs")
 #  Tools — funções Python que o agente pode chamar
 # ════════════════════════════════════════════════════════════════
 
+def _nome_da_prancha_para_o_cliente(valor) -> str:
+    """O nome da prancha como o cliente a enviou — regra única de engine_rules.
+
+    18/09/2026: a planilha antiga guardava "planta_libredwg.dxf" (o DXF que o
+    conversor gerou) e o chat repetia isso pro cliente. Limpa aqui também, pra
+    planilha antiga no Storage não fazer o chat divergir da tela.
+    """
+    from engine_rules import nome_que_o_cliente_enviou
+    return nome_que_o_cliente_enviou(str(valor or "").strip())
+
+
 def _planilha_path(job_id: str) -> Optional[str]:
     """Path local da planilha. Se sumiu (Render restart), tenta baixar
     do Supabase Storage via helper do main.py."""
@@ -82,7 +93,11 @@ def _iter_orcamento_rows(wb):
     if not wb or "Orçamento" not in wb.sheetnames:
         return
     ws = wb["Orçamento"]
-    for row in ws.iter_rows(min_row=1, max_col=9, values_only=True):
+    # 🩸 18/09/2026 — lia até a 9ª coluna e chamava a 9ª de `ref_sheet`. A 9ª
+    # é ORIGEM DA MEDIÇÃO (desde 24/08); a referência da prancha é a 11ª,
+    # REF. O chat vinha entregando a origem da medição como se fosse o nome
+    # da prancha. Achado da revisão adversarial deste commit.
+    for row in ws.iter_rows(min_row=1, max_col=11, values_only=True):
         if not row or len(row) < 4:
             continue
         item_num = row[0]
@@ -98,7 +113,9 @@ def _iter_orcamento_rows(wb):
             "quantity": row[3],
             "selo": _selo_da_linha(item_num, _obs),
             "observations": _obs,
-            "ref_sheet": str(row[8] or "").strip() if len(row) > 8 else "",
+            # 18/09: o chat lê a planilha; o nome da prancha sai como o cliente
+            # enviou ("planta.dwg"), nunca como o DXF do conversor. Regra única.
+            "ref_sheet": _nome_da_prancha_para_o_cliente(row[10] if len(row) > 10 else ""),
         }
 
 

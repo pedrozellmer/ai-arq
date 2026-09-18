@@ -647,7 +647,43 @@ def _nome_limpo_da_prancha(ref_sheet: str) -> str:
     i = s.find(" (")
     if i > 0:
         s = s[:i]
-    return s.strip().lower()
+    # 🩸 18/09/2026 — ESTA COMPARAÇÃO ERA CEGA PRA TODO DWG CONVERTIDO. Quem
+    # chama passa os nomes que o cliente ENVIOU ("planta.dwg"); o que está
+    # gravado é o nome do DXF que o plano B gerou ("planta_libredwg.dxf").
+    # Nunca casavam: o aviso "você já mandou esse caderno" não saía pra 56
+    # jobs de 43 contas — e o cliente que reenvia é justamente quem achou que
+    # o problema era o arquivo dele. A mesma regra que a planilha e a tela
+    # usam desfaz o sufixo aqui, ANTES de comparar.
+    from engine_rules import nome_que_o_cliente_enviou
+    return nome_que_o_cliente_enviou(s).strip().lower()
+
+
+def _chave_de_prancha_para_comparar(nome) -> str:
+    """Nome ENVIADO ou nome GRAVADO → a mesma chave, pra "caderno repetido".
+
+    🩸 18/09/2026, revisão adversarial. A comparação de `_projeto_ja_enviado`
+    punha de um lado o nome cru do navegador ("Galpão.dwg") e do outro o que
+    o motor gravou — que nasce SANITIZADO (`_safe_local_filename`: sem acento,
+    ASCII), pode ter trocado de EXTENSÃO (o ODA converte .dwg em .dxf; o
+    `_normalizar_extensao_cad` renomeia pelo conteúdo) e pode carregar o
+    sufixo do plano B ("_libredwg"). Três razões pra nunca casar, e o aviso
+    "você já mandou esse caderno" era cego pra **todo** DWG — não só pros do
+    libredwg, como eu tinha medido primeiro.
+
+    A chave: sem hint, sem sufixo do conversor, sanitizada do MESMO jeito que o
+    upload sanitiza, em minúsculas, e com a extensão reduzida à FAMÍLIA — .dwg
+    e .dxf são o mesmo desenho; .pdf não é. Isso é de propósito: quem mandou o
+    PDF e agora manda o DWG do mesmo nome NÃO está repetindo — está fazendo
+    exatamente o que o aviso pede. Chave diferente, sem aviso.
+    """
+    s = _nome_limpo_da_prancha(nome)
+    if not s:
+        return ""
+    s = _safe_local_filename(s).lower()
+    stem, ext = os.path.splitext(s)
+    ext = ext.lstrip(".")
+    familia = "cad" if ext in ("dwg", "dxf") else ext
+    return f"{stem}|{familia}"
 
 
 #: quantos arquivos, no mínimo, precisam bater pra eu chamar de "mesmo projeto".
@@ -679,7 +715,11 @@ def _projeto_ja_enviado(user_id, nomes_novos, pe_direito_agora, area_agora):
 
     Devolve None (sem aviso) ou o dicionário do projeto anterior mais parecido.
     """
-    nomes_novos = {n for n in (nomes_novos or []) if n}
+    # 🔑 Os DOIS lados passam pela mesma chave (ver `_chave_de_prancha_para_
+    # comparar`): o nome cru do navegador de um lado e o gravado do outro
+    # nunca casavam por três razões diferentes.
+    nomes_novos = {_chave_de_prancha_para_comparar(n) for n in (nomes_novos or []) if n}
+    nomes_novos.discard("")
     if len(nomes_novos) < _REPETIDO_MIN_ARQUIVOS or not user_id:
         return None
 
@@ -704,7 +744,7 @@ def _projeto_ja_enviado(user_id, nomes_novos, pe_direito_agora, area_agora):
         # nome, sobram menos coincidências e o aviso não sai) — nunca um aviso
         # falso. Errar pro lado de calar é o lado certo neste caso.
         _rows = _supa_rows("GET", "/project_items?job_id=eq.%s&select=ref_sheet&limit=400" % _jid)
-        _antigos = {_nome_limpo_da_prancha(r.get("ref_sheet")) for r in _rows}
+        _antigos = {_chave_de_prancha_para_comparar(r.get("ref_sheet")) for r in _rows}
         _antigos.discard("")
         if not _antigos:
             continue
@@ -24445,6 +24485,19 @@ def get_project_items(job_id: str, request: Request):
                 _meta = _mrows[0]
         except Exception as _me:
             print(f"[items] meta do projeto falhou (não crítico): {_me}")
+        # 🩸 18/09/2026 — `ref_sheet` é DUAS coisas pra tela: o RÓTULO que o
+        # cliente lê e a CHAVE que o botão "Ver desenho" manda de volta em
+        # `/api/sheet?ref=`. Trocar o campo gravado quebraria a chave (e não
+        # alcançaria as 2.818 linhas já no banco). Por isso o nome limpo vai
+        # num campo PRÓPRIO: a tela mostra `prancha_exibida` e continua
+        # mandando `ref_sheet` de volta, intacto. Regra única em engine_rules.
+        try:
+            from engine_rules import nome_que_o_cliente_enviou as _nome_cli
+            for _it in items:
+                if isinstance(_it, dict):
+                    _it["prancha_exibida"] = _nome_cli(_it.get("ref_sheet"))
+        except Exception as _pe_:
+            print(f"[items] prancha_exibida falhou (não crítico): {_pe_}")
         return {"status": "ok", "job_id": job_id, "items": items,
                 "count": len(items), "project": _meta}
     except Exception as e:
