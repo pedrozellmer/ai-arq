@@ -620,7 +620,14 @@
                 <span class="font-semibold text-gray-900">Raio-X da leitura</span>
                 <span class="text-xs text-gray-500">&mdash; no que d&aacute; pra confiar</span>
               </div>
-              <div class="grid grid-cols-2 gap-3">
+              <!-- 🩸 18/09/2026 — eram DUAS caixas, e a segunda somava coisas
+                   diferentes: estimativa COM número (que o cliente revisa) e
+                   linha EM BRANCO (que ele tem que ir medir). O botão então
+                   dizia "Confirmar as 30 estimativas agora" contando buraco
+                   como estimativa. Medido no acervo: 59,7% das linhas de área
+                   saem em branco, contra 9,4% que são estimativa de verdade.
+                   São três populações, e agora são três caixas. -->
+              <div class="grid grid-cols-3 gap-3">
                 <div class="rounded-lg bg-emerald-50 p-3">
                   <div class="flex items-center gap-1.5">
                     <svg class="w-4 h-4 text-emerald-700 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
@@ -633,12 +640,20 @@
                     <svg class="w-4 h-4 text-amber-700 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M5 19h14a2 2 0 001.84-2.75L13.74 4a2 2 0 00-3.48 0l-7.1 12.25A2 2 0 004.99 19z"/></svg>
                     <span id="dn-rx-confirmar" class="text-2xl font-bold text-amber-800">0</span>
                   </div>
-                  <p class="text-xs text-amber-700 mt-1">a confirmar &mdash; voc&ecirc; revisa, em laranja</p>
+                  <p class="text-xs text-amber-700 mt-1">a confirmar &mdash; tem n&uacute;mero, voc&ecirc; revisa</p>
+                </div>
+                <div class="rounded-lg bg-gray-50 p-3">
+                  <div class="flex items-center gap-1.5">
+                    <svg class="w-4 h-4 text-gray-700 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"/></svg>
+                    <span id="dn-rx-branco" class="text-2xl font-bold text-gray-800">0</span>
+                  </div>
+                  <p class="text-xs text-gray-700 mt-1">em branco &mdash; o desenho n&atilde;o deu o n&uacute;mero</p>
                 </div>
               </div>
               <div class="flex h-2 rounded-full overflow-hidden mt-3 bg-gray-100">
                 <div id="dn-rx-bar-medido" class="bg-emerald-500" style="width:0%"></div>
                 <div id="dn-rx-bar-confirmar" class="bg-amber-400" style="width:0%"></div>
+                <div id="dn-rx-bar-branco" class="bg-gray-400" style="width:0%"></div>
               </div>
               <p id="dn-rx-pct" class="text-xs text-gray-500 mt-2 text-center"></p>
               <!-- CTA da revisão (01/08 — Pedro: deixar BEM claro, ao terminar de rodar,
@@ -4104,6 +4119,60 @@
   // ══════════════════════════════════════════════
   //  RAIO-X na tela "Planilha pronta!" — medido (confirmado) vs a confirmar.
   // ══════════════════════════════════════════════
+  // 🩸 18/09/2026 — A RÉGUA DO RAIO-X, fora do renderizador de propósito.
+  //
+  // Antes daqui a tela fazia `total - medido` e chamava tudo de "a confirmar".
+  // Isso junta duas populações que não se parecem: a estimativa TEM número e o
+  // cliente a revisa; a linha em branco NÃO tem, e ele precisa ir medir. O
+  // botão chegava a dizer "Confirmar as 30 estimativas agora" contando buraco
+  // como estimativa.
+  //
+  // Medido no acervo (projetos de cliente com CAD): das linhas de área, 59,7%
+  // saem EM BRANCO e só 9,4% são estimativa com número. A caixa laranja estava
+  // seis vezes maior do que o que ela dizia ser.
+  //
+  // 🔑 O percentual também mudou de denominador: "medido" agora é sobre as
+  // linhas QUE TÊM NÚMERO, porque linha em branco nunca foi candidata a ser
+  // medida — dividir por ela é se punir por uma pergunta honesta. Na mesma
+  // base isso vira 2,1% → 5,1% em área e 20,6% → 52,9% em comprimento.
+  //
+  // 🪤 Mora aqui fora porque `renderDoneRaiox` é `async` e toca o DOM inteiro:
+  // guarda tem que EXECUTAR a decisão, e uma função pura é o que dá pra rodar.
+  function raioXDasLinhas(items) {
+    const lista = (items || []).filter(i => i);
+    const total = lista.length;
+    const temNumero = i => Number(i.quantity) > 0;
+    const medido = lista.filter(i => i.confidence === 'confirmado').length;
+    const emBranco = lista.filter(i => i.confidence !== 'confirmado' && !temNumero(i)).length;
+    const aConfirmar = total - medido - emBranco;
+    // 🪤 Percentuais das BARRAS somam 100 por construção (o resto vai pro
+    // último), senão o arredondamento deixa um fio branco ou estoura a barra.
+    const pctMedido = total ? Math.round((medido / total) * 100) : 0;
+    const pctConfirmar = total ? Math.round((aConfirmar / total) * 100) : 0;
+    const pctBranco = Math.max(0, 100 - pctMedido - pctConfirmar);
+    const comNumero = medido + aConfirmar;
+    let frase = `${medido} medido · ${aConfirmar} pra conferir · ${emBranco} em branco`;
+    if (comNumero > 0) {
+      frase += ` — ${Math.round((medido / comNumero) * 100)}% do que tem número saiu medido`;
+    }
+    // 🪤 O botão dizia "Confirmar as N estimativas" com N = tudo que não era
+    // medido. Linha em branco não é estimativa pra confirmar: é lacuna pra
+    // preencher, e mandar "confirmar" o que está vazio é pedir o passo errado.
+    let ctaLabel = '';
+    if (aConfirmar > 0 && emBranco > 0) {
+      ctaLabel = `Revisar ${aConfirmar} e preencher ${emBranco} em branco`;
+    } else if (aConfirmar > 0) {
+      ctaLabel = aConfirmar === 1 ? 'Confirmar a 1 estimativa agora'
+                                  : `Confirmar as ${aConfirmar} estimativas agora`;
+    } else if (emBranco > 0) {
+      ctaLabel = emBranco === 1 ? 'Preencher a 1 linha em branco'
+                                : `Preencher as ${emBranco} linhas em branco`;
+    }
+    return { total, medido, aConfirmar, emBranco, comNumero,
+             pctMedido, pctConfirmar, pctBranco, frase,
+             ctaLabel, temOQueFazer: (aConfirmar + emBranco) > 0 };
+  }
+
   async function renderDoneRaiox(jobId) {
     const card = document.getElementById('dn-raiox');
     if (!card || !jobId) return;
@@ -4113,23 +4182,22 @@
       const items = d.items || [];
       const total = items.length;
       if (!total) { card.classList.add('hidden'); return; }
-      const medido = items.filter(i => i && i.confidence === 'confirmado').length;
-      const pctM = Math.round((medido / total) * 100);
-      document.getElementById('dn-rx-medido').textContent = medido;
-      document.getElementById('dn-rx-confirmar').textContent = total - medido;
-      document.getElementById('dn-rx-bar-medido').style.width = pctM + '%';
-      document.getElementById('dn-rx-bar-confirmar').style.width = (100 - pctM) + '%';
-      document.getElementById('dn-rx-pct').textContent = `${pctM}% medido · ${100 - pctM}% a confirmar`;
+      const rx = raioXDasLinhas(items);
+      document.getElementById('dn-rx-medido').textContent = rx.medido;
+      document.getElementById('dn-rx-confirmar').textContent = rx.aConfirmar;
+      document.getElementById('dn-rx-branco').textContent = rx.emBranco;
+      document.getElementById('dn-rx-bar-medido').style.width = rx.pctMedido + '%';
+      document.getElementById('dn-rx-bar-confirmar').style.width = rx.pctConfirmar + '%';
+      document.getElementById('dn-rx-bar-branco').style.width = rx.pctBranco + '%';
+      document.getElementById('dn-rx-pct').textContent = rx.frase;
       // CTA da revisão: com estimativa pendente, o botão âmbar vira o próximo
       // passo óbvio. 100% medido (raro) esconde o CTA — nada a confirmar.
       const cta = document.getElementById('dn-rx-cta');
       const ctaSub = document.getElementById('dn-rx-cta-sub');
-      const aConfirmar = total - medido;
       if (cta && ctaSub) {
-        if (aConfirmar > 0) {
+        if (rx.temOQueFazer) {
           cta.href = `revisao.html?job_id=${jobId}`;
-          document.getElementById('dn-rx-cta-label').textContent =
-            aConfirmar === 1 ? 'Confirmar a 1 estimativa agora' : `Confirmar as ${aConfirmar} estimativas agora`;
+          document.getElementById('dn-rx-cta-label').textContent = rx.ctaLabel;
           cta.classList.remove('hidden');
           ctaSub.classList.remove('hidden');
         } else {
