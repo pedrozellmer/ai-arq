@@ -492,10 +492,10 @@
                parede e pintura só fecham em m² com a altura. -->
           <div class="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4">
             <label for="project-pe-direito" class="block text-sm font-medium text-gray-700 mb-2">P&eacute;-direito (m) <span class="text-gray-400 font-normal">&mdash; opcional</span></label>
-            <p class="text-xs text-amber-800 mb-2"><b>É o campo que mais muda a sua planilha.</b> Nos projetos que informam o p&eacute;-direito, as linhas que saem em branco caem quase pela metade &mdash; porque parede e pintura s&oacute; fecham em m&sup2; com a altura.</p>
-            <p class="text-xs text-gray-500 mb-2">Sem ele a parede sai s&oacute; em metro corrido, e a pintura fica sem base.</p>
+            <p id="pd-destaque" class="text-xs text-amber-800 mb-2"><b>É o campo que mais muda a sua planilha.</b> Nos projetos que informam o p&eacute;-direito, as linhas que saem em branco caem quase pela metade &mdash; porque parede e pintura s&oacute; fecham em m&sup2; com a altura.</p>
+            <p id="pd-reforco" class="text-xs text-gray-500 mb-2">Sem ele a parede sai s&oacute; em metro corrido, e a pintura fica sem base.</p>
             <input type="number" id="project-pe-direito" min="1.8" max="8" step="0.01" inputmode="decimal" placeholder="Ex: 2,70" class="w-full px-4 py-3 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none">
-            <p class="text-xs text-gray-500 mt-1.5">Quando a planta s&oacute; d&aacute; o <b>comprimento</b> das paredes, o p&eacute;-direito permite calcular a <b>&aacute;rea de pintura</b> (comprimento &times; altura &times; 2 faces). Entra como <b>estimativa rotulada</b>, nunca como medi&ccedil;&atilde;o &mdash; e s&oacute; &eacute; usado se a planilha ficaria sem pintura sem ele.</p>
+            <p id="pd-mecanismo" class="text-xs text-gray-500 mt-1.5">Quando a planta s&oacute; d&aacute; o <b>comprimento</b> das paredes, o p&eacute;-direito permite calcular a <b>&aacute;rea de pintura</b> (comprimento &times; altura &times; 2 faces). Entra como <b>estimativa rotulada</b>, nunca como medi&ccedil;&atilde;o &mdash; e s&oacute; &eacute; usado se a planilha ficaria sem pintura sem ele.</p>
           </div>
           <!-- Drop Zone -->
           <label for="file-input" data-track="abrir-seletor-arquivo" class="block cursor-pointer">
@@ -4119,6 +4119,70 @@
   // ══════════════════════════════════════════════
   //  RAIO-X na tela "Planilha pronta!" — medido (confirmado) vs a confirmar.
   // ══════════════════════════════════════════════
+  // 🩸 18/09/2026 — O CAMPO DO PÉ-DIREITO FALAVA SÓ A LÍNGUA DA ARQUITETURA.
+  //
+  // Ele é o campo que mais muda a planilha e ganhou destaque em 26/08. Mas a
+  // explicação inteira fala de PAREDE e PINTURA — e quem sobe projeto de
+  // ESTRUTURA não está pensando em pintura: está pensando em fôrma, concreto
+  // e aço.
+  //
+  // Medido em 18/09, sobre projetos de cliente concluídos:
+  //   . estrutura: 19 entregas, 13 clientes, mediana de 12 itens (arquitetura
+  //     entrega 43), 68,4% sem NENHUMA linha medida
+  //   . pé-direito informado: 1 de 19 (5,3%) contra 19 de 129 (14,7%)
+  //   . o motor já diagnostica e nomeia a causa: `motor:estrutura-sem-medida`
+  //     com `ramo=falta-altura`, em 6 jobs — leu a estrutura, não tem a altura
+  //
+  // 🪤 A diferença 5,3% × 14,7% NÃO é afirmada em lugar nenhum: com n=19 ela
+  // cabe no acaso. O que é fato é que em 18 de 19 o motor não tem a altura.
+  //
+  // 🚨 E o texto de estrutura NÃO herda a proporção medida em arquitetura
+  // ("as linhas em branco caem quase pela metade"): aquele número veio de uma
+  // base onde estrutura é 13% das entregas. Repetir a proporção aqui seria
+  // afirmar sobre estrutura uma medição que não é de estrutura — o mesmo
+  // defeito que o e-mail tinha hoje de manhã. Este texto diz o MECANISMO, que
+  // é verdade por construção, e nenhum percentual.
+  function textoDoPeDireito(tipo) {
+    if (String(tipo || '').toLowerCase().indexOf('estrut') >= 0) {
+      return {
+        destaque: '<b>Em estrutura, é o campo que destrava a planilha.</b> '
+                + 'A prancha dá a seção do pilar (20×60 cm) e quantos são — mas '
+                + 'o <b>volume de concreto</b> e a <b>área de fôrma</b> só fecham '
+                + 'com a altura.',
+        reforco: 'Sem ele, pilar e viga saem contados em peça, e o m³ e o m² '
+               + 'ficam pra você preencher.',
+        mecanismo: 'Com a altura, a seção lida na prancha vira m³ de concreto e '
+                 + 'm² de fôrma. Entra como <b>estimativa rotulada</b>, nunca '
+                 + 'como medição — a altura é sua declaração, não a nossa leitura.'
+      };
+    }
+    return {
+      destaque: '<b>É o campo que mais muda a sua planilha.</b> Nos projetos que '
+              + 'informam o pé-direito, as linhas que saem em branco caem quase '
+              + 'pela metade — porque parede e pintura só fecham em m² com a altura.',
+      reforco: 'Sem ele a parede sai só em metro corrido, e a pintura fica sem base.',
+      mecanismo: 'Quando a planta só dá o <b>comprimento</b> das paredes, o '
+               + 'pé-direito permite calcular a <b>área de pintura</b> '
+               + '(comprimento × altura × 2 faces). Entra como <b>estimativa '
+               + 'rotulada</b>, nunca como medição — e só é usado se a planilha '
+               + 'ficaria sem pintura sem ele.'
+    };
+  }
+
+  function aplicarTextoDoPeDireito() {
+    const tipo = document.getElementById('project-type')?.value || '';
+    const t = textoDoPeDireito(tipo);
+    const alvos = { 'pd-destaque': t.destaque, 'pd-reforco': t.reforco,
+                    'pd-mecanismo': t.mecanismo };
+    for (const id in alvos) {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = alvos[id];
+    }
+  }
+
+  document.getElementById('project-type')
+    ?.addEventListener('change', aplicarTextoDoPeDireito);
+
   // 🩸 18/09/2026 — A RÉGUA DO RAIO-X, fora do renderizador de propósito.
   //
   // Antes daqui a tela fazia `total - medido` e chamava tudo de "a confirmar".
