@@ -12541,6 +12541,33 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                                "foi medido, mas do desenho da anotação. Confirme o "
                                                "serviço e a quantidade. " + obs_raw)
 
+                                # 🚨 18/09/2026 — SOMA NÃO É LEITURA DIRETA (regra dura nº1).
+                                # O prompt (~11713) manda: "se você multiplicou, somou ou fez
+                                # qualquer cálculo além de copiar o valor, NÃO é confirmado".
+                                # Medido no acervo: o modelo obedece 93 vezes e desobedece 89 —
+                                # **49%, cara ou coroa**. Sobraram 75 linhas em 10 projetos de
+                                # CLIENTE carimbadas "✓ MEDIDO" com a própria observação dizendo
+                                # "Fonte: soma dos INSERTs: tipo1=5 + tipo2=1 = 6 un".
+                                # 🔑 Insistir no prompt não conserta sorteio; esta trava é
+                                # determinística e só REBAIXA. Não soma, não junta peça, não
+                                # toca quantidade — por isso não colide com o guarda da bitola.
+                                # 🪤 `_rebaixado_pela_fonte` tem que ser marcado aqui também,
+                                # senão o cross-check abaixo re-promove justamente este item.
+                                # ⏭️ Decisão do Pedro (18/09): vale DAQUI PRA FRENTE. As linhas
+                                # já entregues ficam como estão.
+                                # 🪤 A decisão INTEIRA mora em `engine_rules`, e isto aqui é
+                                # uma linha só, de propósito. A 1ª versão tinha o `if`, o
+                                # rebaixamento e o texto soltos aqui dentro — e por isso
+                                # NENHUM guarda conseguia executá-los: `process_job` tem
+                                # 3.000 linhas e não roda em teste. Os seis testes que eu
+                                # tinha escrito liam o fonte ou a AST, e a revisão
+                                # adversarial provou o buraco movendo o bloco pra depois de
+                                # o item ser montado: código morto, 19 guardas verdes.
+                                from engine_rules import selo_apos_regra_da_soma as _regra_soma
+                                conf, obs_raw, _somou = _regra_soma(conf, obs_raw)
+                                if _somou:
+                                    _rebaixado_pela_fonte = True
+
                                 # CROSS-CHECK determinístico (opt-in via env DXF_CONFIRM_CROSSCHECK):
                                 # promove 'estimado' → 'confirmado' SÓ quando TODAS batem:
                                 #  (a) o item cai numa categoria física clara (piso/forro/parede/...);

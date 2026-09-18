@@ -598,6 +598,141 @@ def medida_e_base_de_calculo(obs):
     return bool(obs) and bool(_RE_BASE_DE_CALCULO.search(str(obs)))
 
 
+#: A ORAÇÃO DA FONTE: de "Fonte:" até o primeiro ponto final.
+#: 🪤 O recorte é o conserto de um erro meu. A palavra "soma" solta aparece
+#: quase sempre em RESSALVA, não como procedência — medido no acervo:
+#:   "Verificar sobreposição com demais layers antes de somar ao total."
+#:   "...não somado para evitar dupla contagem"
+#: Essas são contagens diretas, e rebaixá-las seria roubar selo legítimo.
+#: Dentro da oração da fonte, a mesma palavra é a procedência.
+_RE_ORACAO_DA_FONTE = _re.compile(r"[Ff]onte\s*:[^.]{0,200}")
+_RE_PALAVRA_DE_SOMA = _re.compile(r"\bsoma\w*\b|somat[óo]rio", _re.IGNORECASE)
+
+#: 🪤 A palavra de soma NEGADA não é procedência — é ressalva. Medido no acervo:
+#: "não somado para evitar dupla contagem", "verificar sobreposição antes de
+#: somar", "os blocos de corte não somam ao total". Todas são contagem DIRETA,
+#: e rebaixá-las seria roubar selo legítimo.
+_RE_NEGACAO = _re.compile(r"\b(?:n[ãa]o|sem|evitar|antes\s+de)\b[^.]{0,22}$",
+                          _re.IGNORECASE)
+
+#: Um "+" com número dos DOIS lados, tolerando só unidade/rótulo curto no meio
+#: ("2 un) + tipo 2", "18,65 + 20,10", "(40+10", "544699(4) + 547524(3)").
+_RE_PARCELA_ESQ = _re.compile(r"\d[\s\w²º°)\-]{0,8}$")
+#: 🪤 O lado direito tolera aspas e pontuação de NOME DE BLOCO, e olha mais
+#: longe: "…(1 un) + 'PORTA - PADRÃO-2100514-FACHADA'" é um caso REAL que estava
+#: em `confirmado` e a janela curta deixava passar. Formato de observação tem
+#: cauda longa — cada rodada de medição contra o acervo achou um jeito novo de o
+#: modelo escrever a mesma soma.
+_RE_PARCELA_DIR = _re.compile(r"[\s\w²º°()'\"\-]{0,20}\d")
+#: "tomada 2P+T": nome de produto, não adição.
+_RE_PRODUTO_P_MAIS_T = (_re.compile(r"\dP\s*$", _re.IGNORECASE),
+                        _re.compile(r"\s*T\b", _re.IGNORECASE))
+#: 🪤 Aqui havia uma exceção pra "cotas +792.63, +795.57" — e a SABOTAGEM provou
+#: que ela era INALCANÇÁVEL: a vírgula colada antes do "+" já reprova no lado
+#: ESQUERDO, que exige dígito seguido só de letra/espaço/parêntese. Código que
+#: nunca roda não é cinto de segurança: é peso morto que engana quem lê depois.
+#: Foi removida, e o caso das cotas segue coberto — com teste que prova.
+
+
+def _tem_aritmetica_de_parcelas(texto: str) -> bool:
+    """Varre CADA "+" com o contexto dele.
+
+    🩸 A 1ª versão casava um padrão grande e perdia soma de verdade: num item que
+    citava "tomada 2P+T" e somava tipos logo depois, o casamento do nome do
+    produto ENGOLIA o trecho onde a soma estava, e a linha escapava. Varrer sinal
+    a sinal é o que faz a exceção valer por OCORRÊNCIA, como ela promete.
+    """
+    for i, ch in enumerate(texto):
+        if ch != "+":
+            continue
+        # 🪤 A JANELA e o REGEX têm que crescer JUNTOS. Alarguei o padrão da
+        # direita pra 20 e esqueci a fatia, que continuava em 10 — o caso real
+        # "…(1 un) + 'PORTA - PADRÃO-…'" seguiu escapando com o regex "certo".
+        esq, dir_ = texto[max(0, i - 12):i], texto[i + 1:i + 25]
+        if not _RE_PARCELA_ESQ.search(esq):
+            continue                      # sem número à esquerda: não é adição
+        if not _RE_PARCELA_DIR.match(dir_):
+            continue                      # sem número à direita
+        if _RE_PRODUTO_P_MAIS_T[0].search(esq) and _RE_PRODUTO_P_MAIS_T[1].match(dir_):
+            continue                      # "2P+T"
+        return True
+    return False
+
+
+def a_fonte_declarada_e_uma_soma(obs) -> bool:
+    """A observação diz, ela mesma, que o número veio de somar parcelas?
+
+    🚨 18/09/2026 — REGRA DURA Nº1, medida. O prompt manda, com todas as letras:
+    *"se você multiplicou, somou ou fez qualquer cálculo além de copiar o valor,
+    NÃO é confirmado"*. E o modelo, a temperature 0.7, obedece mais ou menos
+    metade das vezes. Sobraram linhas dizendo "✓ MEDIDO" com a própria
+    observação declarando "tipo1=5 + tipo2=1 = 6 un".
+
+    🩸 A 1ª versão desta régua exigia a palavra GRUDADA no "Fonte:" — e a
+    revisão adversarial mostrou que eu não tinha matado o sorteio, só mudado ele
+    de lugar. Quem escolhe a ordem das palavras é o mesmo modelo:
+
+        "Fonte: soma de todos os tipos de 'Montante retangular'..."     → pegava
+        "Fonte: CONTAGEM DE BLOCOS — soma de todos os tipos..."         → ESCAPAVA
+
+    Mesma peça, mesmo desenho, duas rodadas: o que decidia o selo era o modelo
+    ter enfiado sete palavras entre "Fonte:" e "soma". Medido: a régua estreita
+    pegava 89 e deixava passar 57 — 39% da população real, incluindo aritmética
+    pura sem a palavra ("ESTAR 18,65 + 20,10 + ... = 172,10 m²", em branco).
+    A régua nova pega 161. 🪤 E eu havia justificado o estreitamento com uma
+    amostra de 12 que superestimou o risco em ~4× — amostra pequena não decide
+    régua de produção.
+
+    🔑 Ela olha o FATO por dois caminhos independentes: a palavra de soma dentro
+    da ORAÇÃO DA FONTE, ou aritmética de parcelas em qualquer lugar. Continua
+    andando só pra um lado: rebaixa, nunca promove. Não soma nada e não toca
+    quantidade — por isso não esbarra no guarda da bitola, que existe pra
+    impedir SOMAR.
+
+    🪤 O que ela NÃO faz: julgar se a soma está certa. "soma de 4 INSERTs = 6 un"
+    pode estar aritmeticamente perfeita — e continua não sendo leitura direta,
+    que é o que o selo branco promete ao cliente.
+    """
+    if not obs:
+        return False
+    texto = str(obs)
+    oracao = _RE_ORACAO_DA_FONTE.search(texto)
+    if oracao:
+        _o = oracao.group(0)
+        for m in _RE_PALAVRA_DE_SOMA.finditer(_o):
+            # 🪤 A palavra NEGADA é ressalva, não procedência — e a oração da
+            # fonte nem sempre termina antes dela: quando a observação inteira é
+            # uma frase só, "não somado para evitar dupla contagem" cai DENTRO
+            # do recorte. Sem esta checagem a régua rebaixava contagem direta.
+            if _RE_NEGACAO.search(_o[:m.start()]):
+                continue
+            return True
+    return _tem_aritmetica_de_parcelas(texto)
+
+
+def selo_apos_regra_da_soma(conf, obs):
+    """Aplica a regra ao par (selo, observação). Devolve `(conf, obs, rebaixou)`.
+
+    🚨 18/09/2026 — esta função existe por causa do SEGUNDO achado da revisão
+    adversarial, e ele é de método, não de regra. A decisão morava solta dentro
+    de `process_job` (3.000 linhas), e por isso NENHUM guarda conseguia
+    executá-la: os seis testes do lado do motor liam o `main.py` como texto ou
+    como AST. A revisão provou o buraco movendo o bloco pra DEPOIS de o item ser
+    montado — código morto, e os 19 guardas seguiram verdes. É a doença da
+    miniatura: cinco meses de código inalcançável atrás de um docstring que
+    jurava funcionar.
+
+    🔑 Agora o rebaixamento é uma função que o guarda CHAMA, e o que sobra no
+    `main.py` é uma linha só — cuja POSIÇÃO ainda importa e é cobrada à parte.
+    """
+    if conf == "confirmado" and a_fonte_declarada_e_uma_soma(obs):
+        aviso = ("⚠ SOMA, não leitura direta — a quantidade veio de somar "
+                 "parcelas, então não sai como medida. Confira o total antes "
+                 "de orçar. ")
+        return "estimado", aviso + str(obs or ""), True
+    return conf, obs, False
+
+
 def num_br_para_float(bruto):
     """'12.642,38' → 12642.38. O parser pt-BR ÚNICO do motor.
 
