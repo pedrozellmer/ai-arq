@@ -120,7 +120,7 @@ def roda_ate_o_email(itens, cab_planob=None, medidos_antes=None, avisos=None,
                      antes_do_email=None, is_complement=False,
                      partial_failure=False, partial_errors=None,
                      dwg_failed=None, reprocess_count=0, parent_job_id=None,
-                     pdfvec_por_prancha=None):
+                     pdfvec_por_prancha=None, exige_email=True):
     """Executa a fatia real e devolve o diário do que o cliente receberia.
 
     `cab_planob` — planta o aviso do plano B como o motor o escreve, lá em cima
@@ -230,6 +230,9 @@ def roda_ate_o_email(itens, cab_planob=None, medidos_antes=None, avisos=None,
         "_email_wrap": main._email_wrap,
         "_greeting_line": main._greeting_line,
         "voz_do_email_de_reprocesso": main.voz_do_email_de_reprocesso,
+        # 18/09: a cor do selo é decisão de conteúdo (aviso × boa notícia), não
+        # enfeite — entra REAL, como as vozes.
+        "cor_do_selo": main.cor_do_selo,
     }
     ns.update(antes_do_email or {})
     exec(compile(_recontagem_real(), "recontagem", "exec"), ns)
@@ -247,9 +250,13 @@ def roda_ate_o_email(itens, cab_planob=None, medidos_antes=None, avisos=None,
     # 🪤 A fatia inteira mora dentro de `try/except` que engolem e seguem. Se o
     # harness estiver quebrado, o teste veria "nenhum e-mail" e chamaria isso de
     # defeito do produto. Denuncia aqui.
-    assert diario["emails"], (
-        "nenhum e-mail foi montado — o harness quebrou antes de chegar lá. "
-        "logs=%r" % (diario["logs"],))
+    # 18/09: `exige_email=False` é pra UM caso legítimo — o guarda que derruba
+    # o envio de propósito pra provar que a falha deixa rastro no `error_log`.
+    # O padrão continua sendo denunciar, que é o que protege os outros ~15.
+    if exige_email:
+        assert diario["emails"], (
+            "nenhum e-mail foi montado — o harness quebrou antes de chegar lá. "
+            "logs=%r" % (diario["logs"],))
     diario["project_data"] = proj
     diario["ns"] = ns
     return diario

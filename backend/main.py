@@ -10239,7 +10239,7 @@ def _regua_da_sombra(user_total_area, total_area_ia):
 
 def voz_do_email_de_reprocesso(nome_escapado, nome_cru, n_itens, n_medidos,
                                n_geo, frase_piora="", frase_origem="",
-                               anexo="arquivo"):
+                               anexo="arquivo", houve_anexo=True):
     """As CINCO vozes do e-mail de reprocesso, decididas num lugar só.
 
     Devolve (abertura, assunto, titulo, selo, preheader).
@@ -10290,9 +10290,27 @@ def voz_do_email_de_reprocesso(nome_escapado, nome_cru, n_itens, n_medidos,
     else:
         _pedido = ("<br><br>Pra sair quantidade medida, o que vale é o desenho "
                    "em <b>DWG</b> ou <b>DXF</b>.")
+    # 🩸 18/09/2026 — "QUE VOCÊ ANEXOU" NÃO VALE PARA TODO MUNDO.
+    # Esta função nasceu no COMPLEMENTO, que é literalmente "o cliente anexou um
+    # arquivo novo" — e por isso as três vozes afirmavam anexo. Ao ligar o
+    # REPROCESSO nela eu ia trocar uma frase falsa ("medimos") por outra ("você
+    # anexou"): o ramo do reprocesso só roda quando `not is_complement`, ou
+    # seja, é EXATAMENTE o caminho de quem não anexou nada. Quem clicou
+    # "reprocessar" leria que mandou um arquivo que nunca mandou.
+    # 🔑 O padrão é `True` de propósito: o complemento sai daqui byte a byte
+    # igual, e quem precisa declarar é o caminho novo.
+    _de_onde = (f"<b>{_nome_anexo}</b> que você anexou" if houve_anexo
+                else f"<b>{_nome_anexo}</b> do projeto")
+    # O texto antigo do reprocesso dizia isto, e é verdade e útil: as versões
+    # ficam no painel. Só o ramo de piora avisava; agora quem não anexou
+    # também ouve, porque para ele SEMPRE existe uma versão anterior.
+    _versao = ("" if houve_anexo else
+               "<br><br>A versão anterior continua no painel, pra você comparar.")
     if piorou:
-        abertura = (f"Refizemos o projeto <b>{nome_escapado}</b> com os arquivos que você "
-                    f"anexou, e preciso ser direto sobre o resultado.<br><br>"
+        _com_o_que = ("com os arquivos que você anexou" if houve_anexo
+                      else "com os mesmos arquivos, no motor mais recente")
+        abertura = (f"Refizemos o projeto <b>{nome_escapado}</b> {_com_o_que}, "
+                    f"e preciso ser direto sobre o resultado.<br><br>"
                     f"<b>&#9888; {frase_piora}</b>")
         assunto = (f"{nome_cru} — refizemos, e a leitura mudou bastante"
                    if nome_cru else "Refizemos seu projeto — a leitura mudou bastante")
@@ -10300,23 +10318,25 @@ def voz_do_email_de_reprocesso(nome_escapado, nome_cru, n_itens, n_medidos,
         pre = "As duas versões ficam no painel — compare antes de orçar."
     elif mediu:
         abertura = (f"Refizemos o projeto <b>{nome_escapado}</b> medindo pelo "
-                    f"<b>{_nome_anexo}</b> que você anexou — a planilha foi "
+                    f"{_de_onde} — a planilha foi "
                     f"atualizada, agora com <b>{n_itens} itens</b>, "
-                    f"<b>{n_medidos}</b> medidos do desenho.")
+                    f"<b>{n_medidos}</b> medidos do desenho.{_versao}")
         assunto = (f"{nome_cru} — medimos com o {_nome_anexo}, planilha atualizada"
                    if nome_cru else f"Medimos seu projeto com o {_nome_anexo} — planilha atualizada")
         titulo = f"Planilha atualizada com o {_nome_anexo}"
         selo = "&#10003; Medido"
-        pre = f"O {_nome_anexo} que você mandou depois entrou na conta."
+        pre = (f"O {_nome_anexo} que você mandou depois entrou na conta."
+               if houve_anexo else
+               f"Rodamos o {_nome_anexo} do projeto no motor mais recente.")
     else:
         # 🚨 nem abertura, nem assunto, nem selo, nem preheader podem afirmar
         # medição quando `n_medidos == 0`
         abertura = (f"Refizemos o projeto <b>{nome_escapado}</b> com o "
-                    f"<b>{_nome_anexo}</b> que você anexou — a planilha foi "
+                    f"{_de_onde} — a planilha foi "
                     f"atualizada, agora com <b>{n_itens} itens</b>.<br><br>"
                     f"<b>Nenhum item saiu com o selo ✓ MEDIDO do desenho desta "
                     f"vez.</b> {frase_origem} Trate como mapa do que "
-                    f"existe, não como levantamento fechado.{_pedido}")
+                    f"existe, não como levantamento fechado.{_pedido}{_versao}")
         assunto = (f"{nome_cru} — planilha atualizada com o {_nome_anexo}"
                    if nome_cru else f"Planilha atualizada com o {_nome_anexo}")
         titulo = f"Planilha atualizada com o {_nome_anexo}"
@@ -10325,16 +10345,44 @@ def voz_do_email_de_reprocesso(nome_escapado, nome_cru, n_itens, n_medidos,
         # abaixo, dizia "parte das quantidades foi tirada da geometria". O
         # preheader é o que aparece na CAIXA DE ENTRADA: o cliente lê a
         # negação antes de abrir e a afirmação depois de abrir.
+        # 🩸 18/09/2026 — o conserto de 16/09 tirou o "CAD" fixo da abertura, do
+        # assunto e do título, e ESQUECEU os dois preheaders daqui. Quem manda
+        # PDF lia, na caixa de entrada, "O CAD entrou na conta" — a mesma frase
+        # que confirma pro cliente que ele mandou o arquivo certo e o faz
+        # reenviar PDF de novo. Estava vivo no caminho do complemento.
+        # 🔑 O padrão de `anexo` é "arquivo": quem não passar fica vago, nunca
+        # mentindo. Ver [[feedback_consertar_o_alcance_nao_o_padrao]].
         if n_geo > 0:
             selo = "&#9888; Sem selo de medido"
-            pre = ("O CAD entrou na conta e parte das quantidades "
-                   "saiu do desenho — mas nada ganhou o selo de "
-                   "medido.")
+            pre = (f"O {_nome_anexo} entrou na conta e parte das quantidades "
+                   f"saiu do desenho — mas nada ganhou o selo de "
+                   f"medido.")
         else:
             selo = "&#9888; Sem medida do desenho"
-            pre = ("O CAD entrou na conta, mas nenhuma quantidade "
-                   "saiu da geometria.")
+            pre = (f"O {_nome_anexo} entrou na conta, mas nenhuma quantidade "
+                   f"saiu da geometria.")
     return abertura, assunto, titulo, selo, pre
+
+
+def cor_do_selo(selo: str) -> str:
+    """"amber" quando o selo é um AVISO; "green" quando é boa notícia.
+
+    🩸 18/09/2026. `_email_wrap` tem `badge_color="green"` por padrão, e nenhum
+    dos dois chamadores das vozes passava a cor. Resultado: o selo
+    **"⚠ Sem medida do desenho"** — e o "⚠ Mudou" da releitura pior — saíam
+    pintados na pílula VERDE de sucesso, ao lado de um corpo dizendo que nada
+    foi medido. A cor desmentia o texto na primeira olhada, que é a única que
+    muita gente dá.
+
+    🔑 A regra mora aqui, num lugar só, porque são DOIS chamadores (complemento
+    e reprocesso) e a próxima voz que nascer não pode ter que lembrar disso.
+    Ver [[feedback_a_receita_repetida_e_a_doenca]].
+
+    🪤 O critério é o CARACTERE de aviso que as vozes já usam (`&#9888;`, ⚠),
+    não a redação do selo — guarda de copy não prende palavra.
+    """
+    _s = str(selo or "")
+    return "amber" if ("&#9888;" in _s or "⚠" in _s) else "green"
 
 
 def existente_nao_leva_quantidade(all_items) -> int:
@@ -16097,6 +16145,9 @@ bloco — só cite os que estão no inventário deste arquivo."""
                             _body_c,
                             "Abrir meu projeto", f"https://ai.arq.br/projeto.html?job_id={job_id}",
                             badge=_badge_c,
+                            # 🩸 18/09: o complemento também mandava o selo de
+                            # AVISO na pílula verde. Mesma regra, mesmo lugar.
+                            badge_color=cor_do_selo(_badge_c),
                             preheader=_pre_c),
                         # 05/09: sem etiqueta este e-mail caía no balde "email" da
                         # Central. Mesmo nome do gate em email_auto_log, pra os
@@ -16116,27 +16167,74 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 else:
                     _pn_r = _html.escape(_rows[0].get("project_name") or "seu projeto")
                     _greet_r = _greeting_line(_html.escape(_nm))
-                    _body_r = (f"{_greet_r}<br><br>Reprocessamos o projeto <b>{_pn_r}</b> com o motor "
-                               f"mais recente e a planilha atualizada ficou pronta, com "
-                               f"<b>{len(all_items)} itens</b> de quantitativo.<br><br>"
-                               f"Ela substitui a versão anterior — abra pra revisar e baixar. "
-                               f"Cada item vem marcado como <b>medido</b> (direto do CAD) ou "
-                               f"<b>estimativa</b> (pra você conferir).")
+                    # 🩸 18/09/2026 — ESTE RAMO ESCREVIA O TEXTO NA MÃO, e o
+                    # texto era o de boa notícia SEMPRE: "a planilha atualizada
+                    # ficou pronta, com N itens (...) Cada item vem marcado como
+                    # medido (direto do CAD) ou estimativa". Sem nunca perguntar
+                    # se algo foi medido.
+                    # Medido no banco: dos 8 reprocessos avisados a cliente,
+                    # **4 (3 contas) saíram com ZERO medida** — e no job
+                    # 788d0270 (17/09) o próprio motor tinha registrado
+                    # `motor:leitura-pior: v1: medidos 4 -> 0 (itens 13 -> 37)`.
+                    # A gente sabia, no mesmo processamento, e mandou a frase boa.
+                    # 🔑 NÃO é régua nova: `voz_do_email_de_reprocesso` existe
+                    # desde 06/09, leva o nome DESTE caminho e nasceu deste
+                    # mesmo defeito — mas quem a chamava era só o complemento.
+                    # Aqui vão os MESMOS ingredientes que ele passa.
+                    # Ver [[feedback_consertar_o_alcance_nao_o_padrao]].
+                    _exts_r = [os.path.splitext(p)[1].lower() for p in file_paths]
+                    _n_pdf_r = sum(1 for e in _exts_r if e == ".pdf")
+                    _n_cad_r = sum(1 for e in _exts_r if e in (".dwg", ".dxf"))
+                    _diag_r = _build_reading_diagnostic(all_items, _n_pdf_r, _n_cad_r,
+                                                        project_type, project_data)
+                    _n_med_r = sum(1 for it in all_items
+                                   if str(getattr(getattr(it, "confidence", None), "value",
+                                                  getattr(it, "confidence", "")) or "") == "confirmado")
+                    _n_geo_r, _frase_origem_r = _origem_das_quantidades(all_items)
+                    _proximos_r = _next_steps_html(job_id, _n_med_r, len(all_items),
+                                                   _n_cad_r == 0 and _n_pdf_r > 0)
+                    _cmp_r = _comparar_com_versao_anterior(job_id, _n_med_r, len(all_items))
                     _pn_r_raw = (_rows[0].get("project_name") or "").strip()
-                    _subj_r = (f"{_pn_r_raw} — reprocessamos, planilha atualizada"
-                               if _pn_r_raw else "Reprocessamos seu projeto no AI.arq — planilha atualizada")
+                    (_abre_r, _subj_r, _titulo_r,
+                     _badge_r, _pre_r) = voz_do_email_de_reprocesso(
+                        _pn_r, _pn_r_raw, len(all_items), _n_med_r, _n_geo_r,
+                        anexo=("CAD" if _n_cad_r > 0 else
+                               "PDF" if _n_pdf_r > 0 else "arquivo"),
+                        # 🚨 O ramo só roda com `not is_complement`: aqui NINGUÉM
+                        # anexou nada — o cliente clicou "reprocessar", ou fomos
+                        # nós. Sem isto o e-mail afirmaria um anexo que não
+                        # existiu, que é o mesmo defeito na direção contrária.
+                        houve_anexo=False,
+                        frase_piora=(_cmp_r.get("frase") or ""),
+                        frase_origem=_frase_origem_r)
+                    _body_r = f"{_greet_r}<br><br>{_abre_r}{_diag_r}{_proximos_r}"
+                    # 🔬 Qual voz saiu, pra a próxima leitura não depender de eu
+                    # reconstruir a decisão de fora. Foi log de estágio que
+                    # deixou este defeito visível.
+                    _log_error("motor:voz-do-reprocesso",
+                               f"itens={len(all_items)} medidos={_n_med_r} "
+                               f"geo={_n_geo_r} piora={'sim' if _cmp_r.get('frase') else 'nao'} "
+                               f"anexo={'CAD' if _n_cad_r > 0 else ('PDF' if _n_pdf_r > 0 else 'arquivo')}",
+                               job_id, severity="info")
                     _ok_r = _send_email_smtp(
                         _pe, _subj_r,
                         # 🪤 O e-mail fala de UM projeto e o botão abria o painel
                         # genérico: o cliente caía numa lista e tinha que
                         # procurar de qual projeto era a mensagem. Agora vai
                         # direto na vista onde o XLSX mora.
-                        _email_wrap("Planilha atualizada", _body_r,
+                        # 🩸 O título, o selo e o preheader eram fixos aqui. O
+                        # preheader é o que o cliente lê na CAIXA DE ENTRADA,
+                        # antes de abrir: "Rodamos os mesmos arquivos no motor
+                        # de hoje" ia junto com um corpo que podia estar
+                        # dizendo "nenhum item saiu medido". Os quatro saem da
+                        # MESMA voz agora — foi preheader contradizendo o
+                        # próprio corpo o defeito de 03/09.
+                        _email_wrap(_titulo_r, _body_r,
                                     "Ver minha planilha",
                                     f"https://ai.arq.br/projeto.html?job_id={job_id}#quantitativo",
-                                    badge="&#10003; Atualizado",
-                                    preheader="Rodamos os mesmos arquivos no motor de hoje. "
-                                              "A versão anterior continua no painel."),
+                                    badge=_badge_r,
+                                    badge_color=cor_do_selo(_badge_r),
+                                    preheader=_pre_r),
                         log_kind="reprocesso_pronto", job_id=job_id)
                     if _ok_r:
                         _email_auto_registrar(_pe, "reprocesso_pronto", ref=job_id)
@@ -16310,6 +16408,26 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 if _ok_pp:
                     _email_auto_registrar(_pe, "fim_de_job", ref=_raiz)
         except Exception as _ee:
+            # 🩸 18/09/2026 — ESTE `except` ERA SÓ UM `print`. Quem falhasse
+            # aqui deixava o cliente SEM aviso nenhum de que a planilha ficou
+            # pronta, e o rastro morria dentro do Render: nada no `error_log`,
+            # nada no admin, nada pra consulta depois. "Não recebi e-mail"
+            # viraria investigação do zero.
+            # Descoberto do jeito mais barato possível: um `NameError` meu
+            # neste bloco derrubou o e-mail na bancada, e o ÚNICO sinal foi um
+            # teste reclamando que não havia e-mail — em produção não haveria
+            # nem isso. Ver [[feedback_escrita_que_falha_calada]].
+            # 🪤 `_log_error` é best-effort e NUNCA levanta; mesmo assim vai em
+            # try próprio, porque este except é o último anteparo do job.
+            # 🪤 E vai ANTES do print de propósito: o print é a âncora que
+            # `tests/_fim_do_job.py` usa pra fechar a fatia executável. Posto
+            # depois dele, o rastro ficaria fora do alcance de qualquer guarda
+            # — foi exatamente o que aconteceu na 1ª tentativa.
+            try:
+                _log_error("email:fim-de-job-falhou",
+                           f"{type(_ee).__name__}: {_ee}", job_id)
+            except Exception:
+                pass
             print(f"[email] planilha-pronta nao enviada (nao-fatal): {_ee}")
 
     except Exception as e:
