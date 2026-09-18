@@ -128,7 +128,7 @@ def test_CONTROLE_arquivo_que_converteu_nao_tem_rastro_de_falha():
 # ── a linha que vai pro log do motor ───────────────────────────────────────
 def test_a_linha_do_log_traz_os_DOIS_motivos():
     _limpa()
-    dx._FALHA_DETALHE[os.path.basename(_DWG)] = "OdError: Object improperly read <AcDbTextStyleTableRecord>"
+    dx._FALHA_DETALHE[dx._chave_da_falha(_DWG)] = "OdError: Object improperly read <AcDbTextStyleTableRecord>"
     dx._anotar_falha_libredwg(_DWG, "dwg2dxf saiu 1: ERROR: Failed to decode header")
     _linha = main._porques_da_conversao(_DWG)
     assert "ODA:" in _linha and "Object improperly read" in _linha, _linha
@@ -138,7 +138,7 @@ def test_a_linha_do_log_traz_os_DOIS_motivos():
 
 def test_CONTROLE_so_um_motivo_registrado_nao_inventa_o_outro():
     _limpa()
-    dx._FALHA_DETALHE[os.path.basename(_DWG)] = "OdError: Unexpected end of file"
+    dx._FALHA_DETALHE[dx._chave_da_falha(_DWG)] = "OdError: Unexpected end of file"
     _linha = main._porques_da_conversao(_DWG)
     assert "ODA: OdError: Unexpected end of file" in _linha, _linha
     assert "plano B" not in _linha, _linha
@@ -169,9 +169,11 @@ def test_o_MOTOR_grava_os_motivos_quando_o_DWG_nao_converte(monkeypatch, tmp_pat
     import llm_retry
 
     _limpa()
-    _dwg = tmp_path / "MD-ARQ-EXECUTIVO-R03.dwg"
+    # 🔒 Nome NEUTRO: o repo é público e regra nº6 vale também em teste —
+    # o que o guarda precisa é de um .dwg qualquer, não do arquivo de alguém.
+    _dwg = tmp_path / "prancha-de-teste-R03.dwg"
     _dwg.write_bytes(b"AC1032" + b"\x00" * 64)     # cabeçalho de DWG, corpo inútil
-    dx._FALHA_DETALHE[_dwg.name] = "OdError: Object improperly read <AcDbTextStyleTableRecord>"
+    dx._FALHA_DETALHE[dx._chave_da_falha(_dwg)] = "OdError: Object improperly read <AcDbTextStyleTableRecord>"
     dx._anotar_falha_libredwg(str(_dwg), "dwg2dxf saiu 1: ERROR: Failed to decode header")
     logs = []
 

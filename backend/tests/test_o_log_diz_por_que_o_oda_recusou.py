@@ -62,16 +62,27 @@ def test_arquivo_sem_erro_registrado_devolve_vazio():
 
 
 def test_o_detalhe_fica_guardado_POR_ARQUIVO():
-    """O job tem vários DWG; o motivo de um não pode vazar pro outro."""
-    dx._FALHA_DETALHE["A.dwg"] = dx.detalhe_do_err(_ERR_REAL)
+    """O job tem vários DWG; o motivo de um não pode vazar pro outro.
+
+    🔁 18/09/2026 — a chave destes mapas era o `basename`, e passou a ser o
+    CAMINHO COMPLETO (`_chave_da_falha`). O que este guarda defende continua
+    idêntico; o alcance é que cresceu. Com dois projetos processando ao mesmo
+    tempo, "PRANCHA 01 - ARQUITETURA.dwg" de clientes diferentes dividia a mesma
+    entrada — e o texto do ODA carrega o caminho do arquivo dentro da mensagem,
+    então vazava nome de arquivo de um cliente pro outro. Ver
+    `test_a_segunda_vaga_nao_acusa_o_cliente_errado`."""
+    dx._FALHA_DETALHE[dx._chave_da_falha("/tmp/qualquer/A.dwg")] = \
+        dx.detalhe_do_err(_ERR_REAL)
     assert "Unexpected end of file" in dx.dwg_failure_detail("/tmp/qualquer/A.dwg")
     assert dx.dwg_failure_detail("/tmp/qualquer/B.dwg") == ""
+    # e o alcance novo: mesmo NOME, pastas diferentes (dois jobs) não se misturam
+    assert dx.dwg_failure_detail("/tmp/outro-job/A.dwg") == ""
 
 
 def test_a_classificacao_ANTIGA_continua_funcionando():
     """`dwg_failure_reason` decide o CONSELHO que o cliente lê ('truncado' manda
     reabrir no CAD, não exportar DXF). O detalhe novo não pode ter roubado isso."""
-    dx._FALHA_MOTIVO["PRANCHA-CLIENTE-NN.dwg"] = "truncado"
+    dx._FALHA_MOTIVO[dx._chave_da_falha("/x/PRANCHA-CLIENTE-NN.dwg")] = "truncado"
     assert dx.dwg_failure_reason("/x/PRANCHA-CLIENTE-NN.dwg") == "truncado"
     assert dx.dwg_failure_reason("/x/outro.dwg") == ""
 

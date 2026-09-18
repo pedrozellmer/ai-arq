@@ -10,6 +10,8 @@ import shutil
 import asyncio
 import tempfile
 import threading
+import contextvars   # 17/09: estado POR JOB (vaga extra, falha de upload) — com
+                     # dois projetos no ar, global vira contaminação (regra nº2).
 import asyncio as _asyncio
 from starlette.concurrency import run_in_threadpool
 from pathlib import Path
@@ -2903,7 +2905,22 @@ def _safe_local_filename(filename: str) -> str:
 
 # Motivo da última falha de upload de prancha, pra sobreviver até o _log_error
 # do chamador (ver docstring de _supabase_storage_upload_prancha).
+#
+# 🚨 17/09/2026 — a MESMA informação em dois alcances, e a duplicação é de
+# propósito. Com um projeto por vez, o global bastava. Abrindo a 2ª vaga ele
+# vira contaminação entre projetos (regra dura nº2): o projeto A falha, o
+# projeto B sobe com sucesso e ZERA o global, e o `_log_error` de A vai dizer
+# "não registrado"; pior, se os dois falharem, A grava no registro dele o
+# motivo da falha DE OUTRO CLIENTE.
+#   • `_FALHA_UPLOAD_DO_JOB` (ContextVar) é o que o MOTOR lê — cada job só
+#     enxerga a própria falha, mesmo com dois no ar.
+#   • o global continua porque a rota de diagnóstico do admin
+#     (`/api/debug/storage-limit`) faz o upload num worker de threadpool e lê de
+#     OUTRO contexto; trocar por ContextVar puro faria ela dizer "não
+#     registrado" pra sempre, calada. 🪤 ali ainda é global de verdade — é
+#     diagnóstico de admin com arquivo sintético, não dado de cliente.
 _ULTIMA_FALHA_UPLOAD_PRANCHA = ""
+_FALHA_UPLOAD_DO_JOB = contextvars.ContextVar("falha_upload_do_job", default="")
 
 
 def _supabase_storage_upload_prancha(local_path: str, job_id: str, filename: str) -> bool:
@@ -2945,6 +2962,7 @@ def _supabase_storage_upload_prancha(local_path: str, job_id: str, filename: str
         if safe_name != filename:
             _supa_log(f"STORAGE upload prancha OK (saneado: '{filename}' → '{safe_name}')")
         _ULTIMA_FALHA_UPLOAD_PRANCHA = ""
+        _FALHA_UPLOAD_DO_JOB.set("")
         return True
     except Exception as e:
         _detalhe = ""
@@ -2957,6 +2975,7 @@ def _supabase_storage_upload_prancha(local_path: str, job_id: str, filename: str
         else:
             _detalhe = f"{type(e).__name__}: {e}"
         _ULTIMA_FALHA_UPLOAD_PRANCHA = f"{_detalhe} — arquivo de {_tam_mb:.1f} MB"
+        _FALHA_UPLOAD_DO_JOB.set(_ULTIMA_FALHA_UPLOAD_PRANCHA)
         _supa_log(f"STORAGE upload prancha {filename} ERR {_ULTIMA_FALHA_UPLOAD_PRANCHA}")
         print(f"[storage pranchas] upload {filename} error: {_ULTIMA_FALHA_UPLOAD_PRANCHA}")
         return False
@@ -4195,6 +4214,33 @@ def _build_falha_email(name: str, project_name: str, reprocessavel: bool,
     return subject, html
 
 
+def _url_de_falha_recente(email: str, desde_iso: str, job_id: str) -> str:
+    """Consulta do freio anti-spam: JÁ existe outra falha deste cliente na janela?
+
+    🚨 18/09/2026, 2ª revisão adversarial da 2ª vaga. Esta consulta tinha um
+    `created_at=lt.<este projeto>` e o comentário dizia por quê: *"Como o
+    semáforo processa 1 por vez na ORDEM, basta avisar a falha MAIS ANTIGA do
+    usuário na janela"*. Essa premissa MORREU neste commit.
+
+    Com duas vagas, ordem de criação deixou de ser ordem de falha. Dois projetos
+    do mesmo cliente rodam juntos; o mais NOVO é justamente quem o freio de
+    memória manda parar primeiro (é ele quem pegou a vaga extra). Aí:
+      · o mais novo falha, procura falha anterior, não acha → manda o e-mail;
+      · o mais velho falha, e o `lt.` esconde o mais novo dele → manda o segundo.
+    Dois avisos no mesmo incidente — exatamente o que o caso cliente-88 fechou.
+
+    🔑 O conserto é tirar a ORDEM da conta: quem falhar PRIMEIRO avisa, e o
+    segundo encontra o registro e cala. Independe de quem foi criado antes.
+    Separada em função porque assim o guarda CHAMA em vez de ler o fonte.
+    """
+    from urllib.parse import quote as _q
+    return (f"{SUPABASE_URL}/rest/v1/projects"
+            f"?user_email=eq.{_q(email, safe='')}"
+            f"&status=eq.error"
+            f"&created_at=gte.{_q(desde_iso, safe='')}"
+            f"&job_id=neq.{job_id}&select=job_id&limit=1")
+
+
 def _email_falha_cliente(job_id: str, reprocessavel: bool = True) -> bool:
     """Avisa o cliente que o projeto falhou. Best-effort, NUNCA levanta.
 
@@ -4231,22 +4277,13 @@ def _email_falha_cliente(job_id: str, reprocessavel: bool = True) -> bool:
             return False
         # Freio anti-spam PERSISTENTE (sobrevive a restart — o dedup em memoria
         # furava quando um deploy reiniciava o processo e o cliente levava varios
-        # "falhou" no mesmo incidente, caso cliente-88). Como o semaforo processa 1
-        # por vez na ORDEM, basta avisar a falha MAIS ANTIGA do usuario na janela:
-        # se ja existe um projeto DESTE usuario que falhou ANTES deste (criado
-        # antes) nos ultimos 15 min, aquele ja avisou -> nao manda de novo.
+        # "falhou" no mesmo incidente, caso cliente-88).
         try:
-            from urllib.parse import quote as _quote
             from datetime import datetime as _dt, timedelta as _td, timezone as _tz
             _self_created = _rows[0].get("created_at") or ""
             _since = (_dt.now(_tz.utc) - _td(minutes=15)).isoformat()
             if _self_created:
-                _tq = (f"{SUPABASE_URL}/rest/v1/projects"
-                       f"?user_email=eq.{_quote(_email, safe='')}"
-                       f"&status=eq.error"
-                       f"&created_at=lt.{_quote(_self_created, safe='')}"
-                       f"&created_at=gte.{_quote(_since, safe='')}"
-                       f"&job_id=neq.{job_id}&select=job_id&limit=1")
+                _tq = _url_de_falha_recente(_email, _since, job_id)
                 _tr = _urf.Request(_tq, method="GET")
                 _tr.add_header("apikey", SUPABASE_KEY)
                 _tr.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
@@ -7422,12 +7459,33 @@ def _mem_pressure(threshold: float = 0.85) -> bool:
     return frac is not None and frac >= threshold
 
 
-def _abort_job_mem(job_id: str, done: int, total: int):
+def _abort_job_mem(job_id: str, done: int, total: int, motivo: str = "projeto"):
     """Aborta um job por pressão de memória, de forma LIMPA — mantém o servidor de
-    pé pra todos os outros. Marca erro com orientação de dividir em lotes + alerta."""
-    _msg = ("Seu projeto é grande demais pra processar de uma vez e chegou perto do "
-            "limite de memória do servidor. Divida em 2-3 envios menores (ex.: "
-            "metade das pranchas por vez) que processa tranquilo.")
+    pé pra todos os outros. Marca erro com orientação + alerta.
+
+    `motivo` decide O QUE se diz ao cliente, e isso não é cosmética:
+
+    - "projeto": o job estava sozinho no servidor, então a memória era toda dele
+      e "seu projeto é grande demais" é uma afirmação VERDADEIRA.
+    - "concorrencia": havia outro projeto rodando junto. Culpar o arquivo do
+      cliente aqui seria mentir — o arquivo dele pode estar perfeito. Quem paga
+      a conta é a nossa decisão de rodar dois de uma vez, e é isso que a
+      mensagem diz. Ver `_decisao_do_freio`.
+    """
+    if motivo == "concorrencia":
+        # 🪤 O que esta frase afirma é só o que a gente MEDIU: faltou memória, e
+        # havia mais de um projeto rodando. NÃO afirma que o arquivo do cliente
+        # está bom (ninguém mediu isso) nem que está grande demais (idem). A
+        # orientação de dividir continua, mas como plano B condicional — não
+        # como diagnóstico. É a regra nº1 aplicada a texto de erro.
+        _msg = ("O servidor ficou sem memória enquanto processava mais de um projeto "
+                "ao mesmo tempo. Isso é do nosso lado, não uma avaliação do seu "
+                "arquivo. Pode reenviar; se repetir, aí vale dividir em 2-3 envios "
+                "menores.")
+    else:
+        _msg = ("Seu projeto é grande demais pra processar de uma vez e chegou perto do "
+                "limite de memória do servidor. Divida em 2-3 envios menores (ex.: "
+                "metade das pranchas por vez) que processa tranquilo.")
     try:
         jobs.update_field(job_id, status="error")
         jobs.update_field(job_id, error_message=_msg)
@@ -7442,8 +7500,9 @@ def _abort_job_mem(job_id: str, done: int, total: int):
         pass
     try:
         _log_error("mem:freio",
-                   f"Freio de memória: abortado em {done}/{total} pranchas "
-                   f"(uso={_container_mem_frac()})", job_id, severity="error")
+                   f"Freio de memória ({motivo}): abortado em {done}/{total} pranchas "
+                   f"(uso={_container_mem_frac()}, rodando={_JOBS_RODANDO})",
+                   job_id, severity="error")
     except Exception:
         pass
     try:
@@ -7451,13 +7510,27 @@ def _abort_job_mem(job_id: str, done: int, total: int):
         _thm.Thread(target=_notify_admin, args=(
             "🛡️ Freio de memória disparou",
             f"O job <b>{job_id}</b> chegou perto do limite de RAM em {done}/{total} "
-            f"pranchas e foi abortado ANTES de derrubar o servidor. O cliente foi "
-            f"orientado a dividir em lotes menores. (Servidor seguiu de pé.)"),
+            f"pranchas e foi abortado ANTES de derrubar o servidor "
+            f"(motivo: {motivo}). O cliente foi orientado a "
+            + ("reprocessar — a culpa foi da concorrência, não do arquivo dele."
+               if motivo == "concorrencia" else
+               "dividir em lotes menores.")
+            + " (Servidor seguiu de pé.)"),
             daemon=True).start()
     except Exception:
         pass
     try:
-        _email_falha_cliente(job_id, reprocessavel=False)
+        # 🚨 18/09/2026, revisão adversarial: o e-mail DESMENTIA a tela. Ele escolhe
+        # o texto por palavra-chave do `error_message` (`_build_falha_email`), e a
+        # frase de concorrência não casa com nenhum ramo — caía no genérico de "PDF
+        # escaneado", dizendo *"Reprocessar não resolve este caso: reenvie a planta
+        # exportada direto do CAD"* enquanto a tela dizia "pode reenviar". Duas
+        # mentiras numa: contradiz a tela, e AFIRMA uma causa sobre o arquivo do
+        # cliente que ninguém mediu (regra nº1).
+        # 🔑 O conserto não é um ramo novo: pra falta de memória por concorrência,
+        # reprocessar É a resposta certa — o servidor estava ocupado, o arquivo não
+        # tem nada. Então o e-mail usa o ramo que já existe e já diz a verdade.
+        _email_falha_cliente(job_id, reprocessavel=(motivo == "concorrencia"))
     except Exception:
         pass
 
@@ -7610,12 +7683,276 @@ def _measure_unambiguous(value: float, cat: str, by_cat: dict) -> bool:
 # ─── Throttle de processamento concorrente ──────────────────────────
 # Cada upload dispara process_job() numa thread daemon. SEM limite, 2-3
 # projetos processando ao mesmo tempo somam picos de RAM (render PDF +
-# Vision + listas de itens + XLSX) e estouram os 2GB do Render → OOM +
-# restart → derruba quem está processando. Foi o que pegou o cliente-29 em
-# 16/06/2026. O semáforo força 1 job por vez: quem chega depois espera na
-# fila em vez de competir por memória. Reduz o pico de ~2GB pra 400-600MB.
+# Vision + listas de itens + XLSX) e estouravam os 2GB que o Render tinha em
+# 16/06/2026 → OOM + restart → derrubava quem estava processando (cliente-29).
+# O semáforo forçou 1 job por vez: quem chega depois espera na fila.
+#
+# 🔁 17/09/2026 — a fila de UM POR VEZ virou custo visível pro cliente. Medido
+# no banco (chegada × primeiro sinal do motor), nos 3 projetos do dia:
+#   · o grande: 1 min de fila, 61 min rodando;
+#   · o 2º: **58 min de fila — e 2 min de processamento**;
+#   · o 3º: 26 min de fila, 5 min de processamento.
+# Ou seja: dois clientes passaram quase uma hora parados atrás de um job que não
+# tinha nada a ver com eles, pra usar 2 e 5 minutos de máquina. O
+# plano hoje é 4 GB (Pro) e a medição na fonte (métricas do Render, 17/09) diz:
+# servidor ocioso em 130 MB (3%), e o pior job do dia — 24 pranchas de PDF —
+# ocupou 1,13 GB, 26% do container. Dois desses cabem com folga. A 2ª vaga
+# entra com três travas, cada uma respondendo a um jeito conhecido de quebrar:
+#
+#   1. teto de 2, e o env só serve pra DESLIGAR (voltar pra 1) sem deploy;
+#   2. a 2ª vaga só abre com MEDIÇÃO de verdade abaixo de 55% — falha FECHADA,
+#      ver `_cabe_um_segundo_job`;
+#   3. o freio de memória de 85% nunca mata o job do vizinho — ver
+#      `_decisao_do_freio`.
 import threading as _threading_sem
-_JOB_SEMAPHORE = _threading_sem.Semaphore(1)
+import time as _time_sem
+
+
+def _quantos_jobs_simultaneos() -> int:
+    """Quantos projetos podem rodar ao mesmo tempo. Entre 1 e 2, nunca mais.
+
+    🪤 O env existe pra DESLIGAR a concorrência sem deploy, não pra apostar mais
+    alto: o número que a medição sustenta é 2, e um `JOBS_SIMULTANEOS=4` digitado
+    às pressas viraria OOM sem passar por revisão nenhuma. Daí o teto no código.
+    """
+    try:
+        n = int(os.getenv("JOBS_SIMULTANEOS", "2"))
+    except (TypeError, ValueError):
+        n = 2
+    return max(1, min(2, n))
+
+
+#: Fração do container acima da qual o SEGUNDO job não entra. 0,55 porque o pior
+#: job medido ocupa 26% e o ocioso 3%: dois piores casos dariam ~55%, e a folga
+#: que sobra até o freio de 85% tem que caber o servidor web de todo mundo.
+_MEM_TETO_2O_JOB = 0.55
+
+_JOBS_SIMULTANEOS = _quantos_jobs_simultaneos()
+#: 🪤 `_VAGAS_LOCK`, e NÃO `_JOBS_LOCK`: esse nome já existe lá em cima (3309),
+#: como o RLock REENTRANTE do store de jobs. A primeira versão disto reusou o
+#: nome e, como o módulo executa de cima pra baixo, os 8 usos do store passaram a
+#: apontar pra uma trava NÃO-reentrante — `update_field` pegava a trava, chamava
+#: `_load_jobs`, tentava pegar de novo e pendurava PRA SEMPRE. O produto inteiro
+#: parava de processar, sem exceção e sem log. A bancada pegou travando em 91%.
+#: 2ª vez que dois nomes iguais custam caro nesta casa (ver o incidente do smoke).
+_VAGAS_LOCK = _threading_sem.Lock()
+_JOBS_RODANDO = 0
+#: Fila de senhas: devolve a ORDEM DE CHEGADA que o `Semaphore(1)` dava de graça.
+_FILA_DE_SENHAS = __import__("collections").deque()
+_ULTIMA_SENHA = 0
+#: Verdadeiro só na thread do job que entrou na vaga EXTRA (o que furou a fila).
+_VAGA_EXTRA = contextvars.ContextVar("vaga_extra", default=False)
+#: Quantas vezes o freio poupa quem JÁ ESTAVA rodando antes de desistir. Uma
+#: chance: o suficiente pro vizinho da vaga extra ceder o lugar no checkpoint
+#: dele. Poupar pra sempre trocaria uma acusação falsa por um OOM de todo mundo
+#: — ver `_decisao_do_freio`.
+_FREIO_CHANCES = 1
+_FREIO_POUPOU = contextvars.ContextVar("freio_poupou", default=0)
+#: Este job DIVIDIU o contêiner com outro em ALGUM momento da vida dele. É marca
+#: de vida, não do instante — e a diferença é o defeito inteiro: o contador cai
+#: quando o vizinho sai, mas a memória dele não some junto. Ver `_decisao_do_freio`.
+_DIVIDIU_O_SERVIDOR = contextvars.ContextVar("dividiu_o_servidor", default=False)
+
+
+def _anotar_vaga(o_que: str, rodando: int) -> None:
+    """Deixa no error_log a leitura de memória do MOMENTO da decisão.
+
+    🔑 Existe porque a fração nunca foi registrada em lugar nenhum: o freio de
+    85% nunca disparou na história do produto (0 linhas em `error_log`), e por
+    isso não havia como saber se ele consegue medir o container ou se é código
+    morto. Sem esta linha, ligar a 2ª vaga seria apostar num instrumento que
+    ninguém nunca viu funcionar. Com ela, a primeira fila real responde sozinha.
+    """
+    try:
+        _log_error("fila:vaga",
+                   f"{o_que}: rodando={rodando} teto_de_vagas={_JOBS_SIMULTANEOS} "
+                   f"memoria_do_container={_container_mem_frac()} "
+                   f"teto_da_2a_vaga={_MEM_TETO_2O_JOB}",
+                   severity="info")
+    except Exception:
+        pass
+
+
+def _cabe_um_segundo_job() -> bool:
+    """A 2ª vaga só abre com leitura REAL de memória abaixo do teto.
+
+    🔑 Falha FECHADA — e é exatamente por isso que NÃO usa `_mem_pressure`.
+    Aquela função devolve False quando não consegue medir, de propósito: lá a
+    ignorância não pode travar o produto. Aqui ela tem que fazer o contrário.
+    `not _mem_pressure(0.55)` num container sem cgroup legível daria True e
+    abriria a 2ª vaga ÀS CEGAS; sem leitura, a resposta certa é continuar em um
+    por vez, que é o comportamento de hoje e não tem risco novo nenhum.
+    """
+    fracao = _container_mem_frac()
+    if fracao is None:
+        return False
+    return fracao < _MEM_TETO_2O_JOB
+
+
+def _tem_vaga_agora(rodando: int) -> bool:
+    """Decide UMA vez se cabe mais um job. Separada pro guarda poder CHAMAR.
+
+    O primeiro entra SEMPRE — senão um pico de memória de outra coisa (backup,
+    varredura, deploy) travaria o produto inteiro, e a trava viraria a queda que
+    ela deveria evitar.
+    """
+    if rodando <= 0:
+        return True
+    if rodando >= _JOBS_SIMULTANEOS:
+        return False
+    return _cabe_um_segundo_job()
+
+
+def _esperar_vaga(_espera_s: float = 2.0) -> None:
+    """Bloqueia até haver vaga; devolve quando o job pode começar.
+
+    🔑 Marca a thread com `_VAGA_EXTRA` quando a vaga conquistada é a segunda —
+    é essa marca que o freio de memória usa depois pra não matar o job errado.
+
+    🚨 18/09/2026, revisão adversarial: a 1ª versão disto era um `while True:
+    sleep()` puro, e isso PERDEU uma propriedade que o `Semaphore(1)` antigo
+    tinha de graça — **ordem de chegada**. O CPython serve quem espera num
+    semáforo em FIFO; num laço de poll, ganha quem acorda no instante certo.
+    Reproduzido: um job que chegou 0,9 s DEPOIS começou 1,1 s ANTES, porque o
+    primeiro tinha acabado de checar e ainda dormia os 2 s. Com fila movimentada
+    o azarado é ultrapassado repetidamente e não há teto de espera — ou seja,
+    inanição de verdade, não teórica.
+
+    Por isso a fila tem SENHA: cada job pega a sua na chegada e só entra quando a
+    senha dele é a da vez. Continua sendo poll (é o poll que reavalia a memória),
+    mas a ordem voltou a ser garantida — e é isso que deixa a tela dizer "por
+    ordem de chegada" sem mentir.
+    """
+    global _JOBS_RODANDO, _ULTIMA_SENHA
+    _ja_anotou_espera = False
+    with _VAGAS_LOCK:
+        _ULTIMA_SENHA += 1
+        _minha_senha = _ULTIMA_SENHA
+        _FILA_DE_SENHAS.append(_minha_senha)
+    try:
+        while True:
+            with _VAGAS_LOCK:
+                _antes = _JOBS_RODANDO
+                _minha_vez = bool(_FILA_DE_SENHAS) and _FILA_DE_SENHAS[0] == _minha_senha
+                _cabe = _minha_vez and _tem_vaga_agora(_antes)
+                if _cabe:
+                    _JOBS_RODANDO = _antes + 1
+                    _FILA_DE_SENHAS.popleft()
+            if _cabe:
+                _VAGA_EXTRA.set(_antes > 0)
+                if _antes > 0:
+                    # Quem entra na 2ª vaga dividiu o contêiner desde o primeiro
+                    # segundo — a marca nasce aqui, não só quando o freio bate.
+                    _DIVIDIU_O_SERVIDOR.set(True)
+                    _anotar_vaga("2a-vaga-aberta", _antes)
+                return
+            if not _ja_anotou_espera:
+                _ja_anotou_espera = True
+                _anotar_vaga("esperando-na-fila", _antes)
+            _time_sem.sleep(_espera_s)
+    finally:
+        # 🪤 Senha que fica na fila sem dono TRAVA todo mundo atrás dela — é a
+        # cabeça da fila que libera a vez. Se a thread sair daqui por qualquer
+        # caminho que não seja "peguei a vaga" (exceção, encerramento), a senha
+        # tem que sumir junto. O `popleft` do caminho feliz já tirou a dela, e
+        # `remove` de senha ausente levantaria, daí o try.
+        with _VAGAS_LOCK:
+            try:
+                _FILA_DE_SENHAS.remove(_minha_senha)
+            except ValueError:
+                pass
+
+
+def _liberar_vaga() -> None:
+    global _JOBS_RODANDO
+    with _VAGAS_LOCK:
+        _JOBS_RODANDO = max(0, _JOBS_RODANDO - 1)
+    # 🪤 Higiene, NÃO carga: `_esperar_vaga` já sobrescreve a marca toda vez que
+    # pega vaga, e os 6 disparos usam `threading.Thread` nova, que morre aqui.
+    # Ou seja: não há caminho hoje em que apagar esta linha mude comportamento
+    # (a sabotagem confirmou — mutante equivalente). Ela fica porque um 7º
+    # disparo via `run_in_threadpool` reusaria a thread, e aí a marca velha
+    # viajaria pro job seguinte. Não escrever guarda pra ela: guarda de caminho
+    # inalcançável passa verde sem provar nada.
+    _VAGA_EXTRA.set(False)
+
+
+def _por_que_faltou_espaco() -> str:
+    """De quem era o espaço em disco que faltou — só o que dá pra AFIRMAR.
+
+    Com um projeto por vez, o espaço temporário só podia ter sido ocupado pelas
+    pranchas anteriores do MESMO envio, e dizer isso era útil: o cliente reenvia
+    em lotes menores e passa. Com dois projetos no ar a frase vira palpite — pode
+    ter sido o vizinho — e a orientação "mande sozinha que ela passa" vira uma
+    promessa que a gente não controla.
+
+    🔑 Mesma doença do freio de memória, terceira aparição: afirmar uma causa que
+    a gente parou de conseguir medir. Ver `_decisao_do_freio` e `_abort_job_mem`.
+    """
+    with _VAGAS_LOCK:
+        rodando = _JOBS_RODANDO
+    if rodando > 1:
+        return ("o servidor estava processando mais de um projeto ao mesmo tempo "
+                "e o espaço temporário acabou")
+    return "as pranchas anteriores deste mesmo envio ocuparam o espaço"
+
+
+def _decisao_do_freio():
+    """Quem o freio de memória de 85% pode parar AGORA. `None` = ninguém.
+
+    🚨 17/09/2026, revisão adversarial da 2ª vaga. `_mem_pressure` lê a fração do
+    CONTAINER, não a do job. Com dois projetos no ar, o job A podia ser abortado
+    pela memória do job B — e o cliente A recebia *"Seu projeto é grande demais
+    pra processar de uma vez. Divida em 2-3 envios menores"*, uma ACUSAÇÃO FALSA
+    sobre um arquivo que não tinha nada de errado, no meio do processamento. Com
+    uma vaga só isso era impossível: a memória era toda dele, então a frase era
+    verdade.
+
+    A regra, então: **um job que NUNCA dividiu o servidor** leva a acusação de
+    sempre, que nesse caso é honesta. **Um job que dividiu, em qualquer momento
+    da vida dele, nunca é acusado do tamanho do próprio arquivo.**
+
+    🚨 18/09/2026, SEGUNDA revisão adversarial — e ela pegou o defeito voltando
+    pela porta dos fundos. A 1ª versão decidia lendo `_JOBS_RODANDO` **do
+    instante**, e o contador cai no segundo em que o vizinho sai. Só que a
+    memória do contêiner NÃO cai junto: o job que saiu devolve objetos ao
+    alocador, e as conversões dele foram MOVIDAS pro work_dir. Então:
+
+        A e B rodando · pico de 85% · B cede a vaga · contador vira 1
+        → na batida seguinte, A lê "estou sozinho" e recebe
+          *"Seu projeto é grande demais. Divida em 2-3 envios menores"*
+
+    O sobrevivente levava exatamente a acusação falsa que este commit existe pra
+    matar. Pior: o código JÁ TINHA a prova de que aquela thread fora julgada
+    vítima de concorrência (`_FREIO_POUPOU` em 1) e não consultava. E os 54
+    guardas não viam porque todos fixavam o contador na mão e **nenhum simulava
+    o vizinho SAINDO**.
+
+    🔑 Por isso a marca é da VIDA do job (`_DIVIDIU_O_SERVIDOR`), não do
+    instante. Uma vez que dois projetos se encontraram no contêiner, a gente
+    perdeu pra sempre a capacidade de atribuir aquela memória — e afirmar assim
+    mesmo é a regra nº1 ao contrário.
+
+    🪤 O poupar continua valendo UMA vez, e só enquanto o vizinho está lá. Poupar
+    sem limite abre um buraco pior: se o vizinho já saiu do laço de pranchas (a
+    fase de IA e planilha não tem ponto de freio), ninguém aborta, a memória fica
+    em 85% e o servidor cai pra TODO MUNDO. Então a segunda batida para o job
+    mesmo — com o rótulo honesto, nunca com a acusação.
+    """
+    with _VAGAS_LOCK:
+        rodando = _JOBS_RODANDO
+    if rodando > 1:
+        _DIVIDIU_O_SERVIDOR.set(True)
+    if not _DIVIDIU_O_SERVIDOR.get():
+        return "projeto"          # rodou sozinho a vida toda: a frase é verdade
+    if _VAGA_EXTRA.get():
+        return "concorrencia"     # furou a fila: cede o lugar na hora
+    _poupado = _FREIO_POUPOU.get()
+    if rodando > 1 and _poupado < _FREIO_CHANCES:
+        _FREIO_POUPOU.set(_poupado + 1)
+        _anotar_vaga("freio-poupou-quem-ja-estava-rodando", rodando)
+        return None
+    return "concorrencia"
 
 # Régua do job_id, pro carimbo de custo não aceitar qualquer coisa como dono.
 # 🪤 job_id NÃO é UUID: nasce como `str(uuid.uuid4())[:8]` (main.py:13604), e as
@@ -7626,7 +7963,7 @@ _JOB_ID_RE = __import__("re").compile(r"^[0-9a-zA-Z]{6,16}$")
 
 
 def _process_job_throttled(*args, **kwargs):
-    """Wrapper que serializa process_job via semáforo (1 por vez).
+    """Wrapper que limita quantos process_job rodam ao mesmo tempo.
 
     🔑 06/09/2026 — é também a PORTA ÚNICA por onde todo projeto entra, então é
     aqui que o dono do gasto de IA é carimbado. Os 6 disparos (main.py:4187
@@ -7646,8 +7983,15 @@ def _process_job_throttled(*args, **kwargs):
                        severity="warning")
         _dono = None
     from llm_retry import escopo_job
-    with _JOB_SEMAPHORE, escopo_job(_dono):
-        process_job(*args, **kwargs)
+    # 🪤 `try/finally` e não `with`: se a vaga não voltar numa exceção, o contador
+    # vaza pra cima e o produto trava sozinho — a fila entupida seria PIOR que a
+    # fila de um por vez que isto veio destravar.
+    _esperar_vaga()
+    try:
+        with escopo_job(_dono):
+            process_job(*args, **kwargs)
+    finally:
+        _liberar_vaga()
 
 
 def _carimbar_regua_de_cobranca(job_id: str, n_medidas: int, n_total: int,
@@ -10271,7 +10615,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                     _log_error("storage:cad-nao-guardado",
                                f"CAD não subiu pro Storage: {_fname} — complemento ou "
                                f"reprocesso deste projeto não vai conseguir medir de novo. "
-                               f"Motivo: {_ULTIMA_FALHA_UPLOAD_PRANCHA or 'não registrado'}",
+                               f"Motivo: {_FALHA_UPLOAD_DO_JOB.get() or 'não registrado'}",
                                job_id, severity="warning")
             except Exception as _e:
                 print(f"[upload-pranchas] erro {os.path.basename(_p)}: {_e}")
@@ -10451,6 +10795,12 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
         _escala_por_prancha: list = []
         _compr_paredes: list = []   # 04/09: quanto de parede a EXTRAÇÃO achou, por prancha
         dwg_failed = []  # DWGs que não converteram — reportar mesmo quando outros deram certo (escopo garantido)
+        # 🪤 Os nomes acima vão pra TELA; estes caminhos vão pra CONSULTA do
+        # motivo da falha. Desde 18/09 os mapas de `dwg_extractor` são
+        # indexados por caminho completo (dois clientes podem ter o mesmo
+        # nome de prancha), então consultar por basename devolveria "" —
+        # calado, e o cliente voltaria a ler a hipótese genérica.
+        dwg_failed_paths = []
         dwg_via_libredwg = []  # convertidos pelo plano B — aviso pro cliente conferir (escopo garantido)
         # Pranchas cujo DXF nasceu acima da trava dura e foram APAGADAS na hora.
         # Ver o bloco "DESCARTA NA CONVERSÃO" logo abaixo.
@@ -10464,6 +10814,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                 n_cad = len(cad_paths)
                 conv_span = conv_end_pct - 5  # ex.: 15 ou 10 pts
                 dwg_failed = []  # acumular DWGs que falharam pra reportar erro real depois
+                dwg_failed_paths = []   # os mesmos, com caminho — ver acima
                 for ci, cad_path in enumerate(cad_paths):
                     base = 5 + int((ci / max(n_cad, 1)) * conv_span)
                     ext = cad_path.lower().rsplit('.', 1)[-1]
@@ -10586,10 +10937,13 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                                 _tam_conv = 0     # desliga a recusa abaixo
                             if _tam_conv > _TETO_DXF:
                                 # 🩸 04/09 — POR QUE recusou muda o que o cliente
-                                # tem que fazer. "disco" quer dizer que as
-                                # pranchas ANTERIORES deste mesmo envio encheram
-                                # o espaço: o arquivo dele não tem nada de
-                                # errado, e mandar em lotes menores resolve.
+                                # tem que fazer. "disco" quer dizer que o espaço
+                                # temporário acabou: o arquivo dele não tem nada
+                                # de errado, e mandar em lotes menores resolve.
+                                # 🪤 17/09: DE QUEM era o espaço deixou de ser
+                                # certeza quando a 2ª vaga entrou — quem afirma
+                                # isso agora é `_por_que_faltou_espaco()`, que só
+                                # aponta o próprio envio quando o job está só.
                                 # Dizer "grande demais, faça um PURGE" nesse caso
                                 # é mandar o cliente mexer no desenho por causa
                                 # de um limite nosso, e ele nem consegue
@@ -10619,14 +10973,29 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                                 except Exception:
                                     pass
                                 if _motivo_rec == "disco":
+                                    # 🪤 A causa sai pra uma VARIÁVEL antes da
+                                    # mensagem, e não como chamada dentro da
+                                    # f-string. O guarda `test_avisos_de_falha_
+                                    # parcial_dizem_a_verdade` renderiza estas
+                                    # mensagens de verdade, trocando cada nome
+                                    # livre por um valor plausível — uma CHAMADA
+                                    # ali dentro vira "float object is not
+                                    # callable" e derruba a coleta do arquivo
+                                    # inteiro. Produtor de texto que o guarda
+                                    # avalia tem que ser interpolação simples.
+                                    _de_quem_era_o_espaco = _por_que_faltou_espaco()
                                     _dxf_grandes_msgs.append(
                                         f"{_bn_conv}: não sobrou espaço temporário "
                                         f"pra converter essa prancha ({_mb_conv} MB) "
-                                        f"— as pranchas anteriores deste mesmo envio "
-                                        f"ocuparam o espaço. Não é defeito do seu "
-                                        f"arquivo e um PURGE não muda isso: mande "
-                                        f"essa prancha sozinha, ou em lotes menores, "
-                                        f"que ela passa")
+                                        f"— {_de_quem_era_o_espaco}. Não é defeito "
+                                        f"do seu arquivo e um PURGE não muda isso: "
+                                        # 🪤 "lotes menores" fica INTEIRO nesta
+                                        # linha: o guarda de 04/09 procura essa
+                                        # expressão no fonte, e quebrá-la entre
+                                        # dois pedaços da f-string reprova sem
+                                        # que o texto entregue tenha mudado.
+                                        f"mande sozinha, ou em lotes menores, "
+                                        f"que costuma passar")
                                     _passo_rec = (f"{_bn_conv}: sem espaço temporário "
                                                   f"pra esta prancha — seguindo com "
                                                   f"as outras")
@@ -10687,6 +11056,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                             pass
                         else:
                             dwg_failed.append(os.path.basename(cad_path))
+                            dwg_failed_paths.append(cad_path)
                             # É arquivo AutoCAD MEP/Architecture (objetos AEC)? Aí a falha
                             # é esperada (conversor livre não abre proxy) e o aviso é preciso.
                             _is_aec = dwg_has_aec_markers(cad_path)
@@ -10721,7 +11091,8 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                         from dwg_extractor import dwg_failure_reason as _motivo_falha
                     except Exception:
                         _motivo_falha = lambda _p: ""
-                    _truncados = [n for n in dwg_failed if _motivo_falha(n) == "truncado"]
+                    _truncados = [os.path.basename(_p) for _p in dwg_failed_paths
+                                  if _motivo_falha(_p) == "truncado"]
 
                     if _aec_failed:
                         msg = (
@@ -10938,8 +11309,10 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                     # pesado falha sozinho (com orientação de dividir em lotes) e o
                     # servidor fica de pé pra todos os outros. Só depois da 1ª prancha
                     # (idx>0) — se estourar já na 1ª, é caso de prancha única densa.
-                    if idx > 0 and _mem_pressure(0.85):
-                        _abort_job_mem(job_id, idx, n_dxf)
+                    _motivo_freio = (_decisao_do_freio()
+                                     if idx > 0 and _mem_pressure(0.85) else None)
+                    if _motivo_freio:
+                        _abort_job_mem(job_id, idx, n_dxf, motivo=_motivo_freio)
                         # 🩸 03/09, varredura adversarial: esta é a QUARTA saída
                         # antecipada do laço, e a única que não é `continue` —
                         # por isso escapou do conserto de mais cedo, que só
@@ -11046,7 +11419,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                         #
                         # TIMEOUT DE EXTRAÇÃO (21/07, incidente cliente-72): um DXF gigante
                         # de hospital pendurava extract_from_file por ~20min — o job travava
-                        # e segurava o _JOB_SEMAPHORE (próximo upload ficava preso atrás).
+                        # e segurava a vaga (próximo upload ficava preso atrás).
                         # Agora emagrecimento + parse + prompt rodam num worker com teto de
                         # 900s (15min); estourou → pula ESTA prancha (job segue) em vez de
                         # pendurar. Teto GENEROSO de propósito (servidor 25GB, 21/07): só
@@ -12493,8 +12866,10 @@ bloco — só cite os que estão no inventário deste arquivo."""
         for i, (pdf_path, filename, sheet_type, page_index, page_count) in enumerate(page_units):
             # 🛡️ Freio de MEMÓRIA (idem loop DXF): aborta limpo antes do OOM,
             # mantendo o servidor de pé pros outros clientes.
-            if i > 0 and _mem_pressure(0.85):
-                _abort_job_mem(job_id, i, total)
+            _motivo_freio = (_decisao_do_freio()
+                             if i > 0 and _mem_pressure(0.85) else None)
+            if _motivo_freio:
+                _abort_job_mem(job_id, i, total, motivo=_motivo_freio)
                 return
             _disp = filename if page_count <= 1 else f"{filename} · pág {page_index+1}/{page_count}"
             step_pct = pdf_start_pct + int((i / max(total, 1)) * pdf_span)
@@ -16853,8 +17228,8 @@ async def process_files(
         print(f"[credits] job={job_id} user={user_id} consumed={consumed}/{credits_to_consume_cents}")
 
     # Iniciar processamento em thread separada (não bloqueia HTTP).
-    # Usa _process_job_throttled (semáforo 1-por-vez) pra não estourar RAM
-    # com jobs concorrentes — ver _JOB_SEMAPHORE acima.
+    # Usa _process_job_throttled (fila de vagas) pra não estourar RAM com jobs
+    # concorrentes — ver _tem_vaga_agora / _esperar_vaga acima.
     import threading
     t = threading.Thread(
         target=_process_job_throttled,

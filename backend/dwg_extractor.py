@@ -1713,6 +1713,28 @@ _FALHA_MOTIVO: dict = {}
 _FALHA_DETALHE: dict = {}
 
 
+def _chave_da_falha(dwg_path) -> str:
+    """Chave dos mapas de falha: o CAMINHO COMPLETO, nunca o nome do arquivo.
+
+    🚨 18/09/2026, revisão adversarial da 2ª vaga. Estes mapas eram indexados por
+    `os.path.basename`, e isso só era seguro enquanto UM projeto processava por
+    vez. Com dois no ar, dois clientes dividem a mesma entrada — e "PRANCHA 01 -
+    ARQUITETURA.dwg" é dos nomes mais banais que existem em arquitetura. O
+    segundo sobrescreve, e o primeiro passa a ler o motivo da falha DO OUTRO.
+    Não é só diagnóstico trocado: a mensagem do ODA começa com "OdError thrown
+    during readFile of drawing <caminho>", então o CAMINHO do arquivo alheio
+    entraria no texto que este cliente lê. Isolamento entre projetos é regra
+    dura nº2, e nome de arquivo de cliente é LGPD (nº6).
+
+    O caminho completo já carrega o diretório de trabalho do job, que é único —
+    então o isolamento sai de graça, sem passar job_id por seis assinaturas.
+    """
+    try:
+        return os.path.normcase(os.path.abspath(str(dwg_path)))
+    except Exception:
+        return str(dwg_path)
+
+
 def detalhe_do_err(err_content: str) -> str:
     """Texto do `.dxf.err` em UMA linha, com o motivo REAL preservado.
 
@@ -1731,7 +1753,7 @@ def detalhe_do_err(err_content: str) -> str:
 
 def dwg_failure_detail(dwg_path: str) -> str:
     """O que o ODA disse ao recusar este DWG, em UMA linha (ou "")."""
-    return _FALHA_DETALHE.get(os.path.basename(str(dwg_path)), "")
+    return _FALHA_DETALHE.get(_chave_da_falha(dwg_path), "")
 
 
 #: basename do DWG -> por que o libredwg (plano B) não converteu
@@ -1748,14 +1770,14 @@ def _anotar_falha_libredwg(dwg_path: str, motivo: str) -> None:
     """Guarda, em UMA linha, por que o plano B não converteu este DWG."""
     try:
         _linha = " · ".join(l.strip() for l in str(motivo or "").splitlines() if l.strip())
-        _FALHA_LIBREDWG[os.path.basename(str(dwg_path))] = _linha[:240]
+        _FALHA_LIBREDWG[_chave_da_falha(dwg_path)] = _linha[:240]
     except Exception:
         pass
 
 
 def libredwg_failure_detail(dwg_path: str) -> str:
     """Por que o libredwg não converteu este DWG, em UMA linha (ou "")."""
-    return _FALHA_LIBREDWG.get(os.path.basename(str(dwg_path)), "")
+    return _FALHA_LIBREDWG.get(_chave_da_falha(dwg_path), "")
 
 
 def dwg_failure_reason(dwg_path: str) -> str:
@@ -1765,7 +1787,7 @@ def dwg_failure_reason(dwg_path: str) -> str:
     arquivo antes do esperado). O conselho certo é reabrir no CAD e salvar de
     novo — NÃO é 'exporte pra DXF', que não resolve arquivo quebrado.
     """
-    return _FALHA_MOTIVO.get(os.path.basename(str(dwg_path)), "")
+    return _FALHA_MOTIVO.get(_chave_da_falha(dwg_path), "")
 
 
 def convert_dwg_to_dxf(dwg_path: str) -> Optional[str]:
@@ -1887,7 +1909,7 @@ def convert_dwg_to_dxf(dwg_path: str) -> Optional[str]:
         # quebra de linha vira ` · `, e o que interessa deixa de morrer no
         # tempdir.
         try:
-            _FALHA_DETALHE[os.path.basename(dwg_path)] = detalhe_do_err(err_content)
+            _FALHA_DETALHE[_chave_da_falha(dwg_path)] = detalhe_do_err(err_content)
         except Exception:
             pass
         # Classifica a causa pra main.py dar o conselho CERTO em vez de chutar
@@ -1899,7 +1921,7 @@ def convert_dwg_to_dxf(dwg_path: str) -> Optional[str]:
         if ("unexpected end of file" in _low_err
                 or "invalid system section page map" in _low_err
                 or "premature end" in _low_err):
-            _FALHA_MOTIVO[os.path.basename(dwg_path)] = "truncado"
+            _FALHA_MOTIVO[_chave_da_falha(dwg_path)] = "truncado"
         # 🪤 Sem isto a CAUSA se perde: o .err mora num tempdir que o Render apaga,
         # e o _oda_log.txt (o que /api/debug/oda-log devolve) é escrito ANTES desta
         # checagem. Resultado: "DWG não converteu" sem nunca dizer por quê — caso

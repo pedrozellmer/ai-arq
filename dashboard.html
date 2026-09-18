@@ -3893,9 +3893,22 @@
       const secs = Math.floor(etaSec % 60);
       const themed = pickMessageForProgress(displayProgress);
       if (plTotal === 0 && !inFinal && elapsed < 120) {
-        // Ainda sem prancha: provavelmente na FILA (1 projeto por vez). Render é
-        // PAGO — não dorme; nunca dizer "standby/free tier" (regra do Pedro).
-        timeEstimate.textContent = 'Seu projeto entrou na fila — processamos um de cada vez pra garantir qualidade. Já começa. Pode fechar a aba: te avisamos por email quando a planilha ficar pronta.';
+        // Ainda sem prancha: provavelmente na FILA. Render é PAGO — não dorme;
+        // nunca dizer "standby/free tier" (regra do Pedro).
+        // 🩸 17/09: esta frase dizia "processamos um de cada vez" e "Já começa".
+        // A primeira virou MENTIRA no dia em que a 2ª vaga entrou (main.py,
+        // _JOBS_SIMULTANEOS); a segunda já era falsa antes — com fila, não
+        // começa já. Copy que afirma o funcionamento interno envelhece junto com
+        // ele.
+        // 🩸 18/09, revisão adversarial: minha 1ª correção trocou uma promessa
+        // falsa por outra — "quem chegou antes TERMINA primeiro". Termina, não:
+        // com duas vagas, o projeto de 2 min que entrou depois acaba muito antes
+        // do de 61 min. Isso é o OBJETIVO da mudança, não um desvio.
+        // 🔑 O que dá pra afirmar é a ordem de COMEÇAR, e só porque a fila de
+        // senhas em `_esperar_vaga` voltou a garantir isso. Se alguém tirar a
+        // fila, o guarda `test_a_fila_entrega_por_ORDEM_DE_CHEGADA` reprova —
+        // frase na tela amarrada ao código que a sustenta.
+        timeEstimate.textContent = 'Seu projeto entrou na fila e começa por ordem de chegada. Pode fechar a aba: te avisamos por email quando a planilha ficar pronta.';
       } else if (!inFinal && estimatedTotalSeconds > 0 && elapsed > estimatedTotalSeconds * 1.5 + 60) {
         // 23/08 (board): a estimativa vencia e o texto ficava "~5s" pra sempre.
         timeEstimate.textContent = `${themed}  ·  est\u00e1 demorando mais que o previsto, mas continua rodando. Pode fechar a aba: a planilha chega por e-mail.`;
@@ -3978,7 +3991,7 @@
       // mediana é 8 min, mas os dois jobs de hoje levaram 23 e 14. O que ele
       // precisa saber é uma coisa só: não quebrou, está esperando a vez.
       processingStep.textContent = (status === 'queued')
-        ? 'Na fila — a gente processa um projeto por vez pra cada leitura sair inteira. O seu começa assim que o da frente terminar.'
+        ? 'Na fila — o seu começa assim que abrir uma vaga no servidor. Não quebrou nada: está esperando a vez.'
         : cleanStep;
 
       // Update per-file progress
