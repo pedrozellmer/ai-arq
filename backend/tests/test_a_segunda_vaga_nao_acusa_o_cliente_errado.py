@@ -695,6 +695,22 @@ def test_o_motor_le_a_copia_DO_JOB_nao_o_global():
     assert achou, "ninguém lê `_FALHA_UPLOAD_DO_JOB` — a cópia por job virou enfeite"
 
 
+def test_TODO_boot_registra_se_consegue_medir_a_memoria():
+    """Sem isto, o banco não sabe distinguir duas coisas MUITO diferentes:
+    "a 2ª vaga nunca abriu porque não houve fila" e "a 2ª vaga nunca abriu
+    porque não sabemos ler o cgroup". A admissão falha FECHADA, então o segundo
+    caso deixa o produto em um job por vez — seguro e MUDO, e a mudança inteira
+    não entrega nada sem ninguém perceber.
+
+    🪤 É a lição do "0 evento ≠ recusou cookie": medição que não distingue
+    ausência de causa de ausência de oportunidade não responde nada."""
+    fn = next(n for n in ast.walk(_arvore())
+              if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+              and n.name == "_on_startup_recover_jobs")
+    assert "_container_mem_frac" in _chamadas(fn), \
+        "o boot parou de registrar se a memória do contêiner é legível"
+
+
 def test_NENHUM_nome_de_modulo_e_declarado_DUAS_vezes():
     """🚨 18/09 — o defeito mais caro deste commit, e o mais bobo.
 

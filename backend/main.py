@@ -5748,7 +5748,18 @@ async def _on_startup_recover_jobs():
     crash_loop = False
     deploy_restart = False
     try:
-        _log_error("boot", f"Servidor iniciou (v {_versao_build()})", severity="info")
+        # 🔑 18/09/2026 — a leitura de memória viaja JUNTO com o boot, e isso não
+        # é enfeite: sem ela, "a 2ª vaga nunca abriu" e "nunca houve fila" ficam
+        # indistinguíveis no banco. `_cabe_um_segundo_job` falha FECHADA, então um
+        # cgroup ilegível deixa o produto em um job por vez — seguro, e MUDO. O
+        # freio de memória de 85% nunca disparou na história do produto e a fração
+        # nunca foi registrada em lugar nenhum: ninguém nunca viu esse instrumento
+        # funcionar. Agora toda subida responde. `None` aqui = não sabemos medir.
+        _log_error("boot",
+                   f"Servidor iniciou (v {_versao_build()}) · "
+                   f"memoria_do_container={_container_mem_frac()} · "
+                   f"vagas={_JOBS_SIMULTANEOS} · teto_2a_vaga={_MEM_TETO_2O_JOB}",
+                   severity="info")
         deploy_restart = _restart_foi_deploy()
         n_boots = _boots_recentes(15)
         crash_loop = n_boots >= 2
