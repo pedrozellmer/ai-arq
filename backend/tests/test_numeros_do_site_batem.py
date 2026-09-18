@@ -30,10 +30,21 @@ import re
 # que e onde moram index.html, faq.html e exemplo.html.
 SITE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# medido em 31/08/2026, projetos concluídos em agosto: 79 em CAD, 11 só PDF
-PREENCHIDO_CAD = "73,8%"
-PREENCHIDO_PDF = "70,0%"
-MEDIDO_CAD = "23,9%"
+# 🔄 REMEDIDO EM 18/09/2026 sobre TODOS os projetos de cliente concluídos:
+#     CAD  101 projetos · 5.682 linhas · 68,4% preenchidas · 25,0% medidas
+#     PDF   53 projetos · 5.222 linhas · 52,3% preenchidas ·     3 medidas
+#
+# 🩸 O que estava publicado era de 31/08, sobre agosto, e o lado do PDF se
+# apoiava em **387 linhas de 11 projetos**. Em 18 dias o PDF foi a 5.222 linhas
+# de 53 projetos e o preenchimento caiu de 70,0% para 52,3% — a copy pública
+# prometia uma planilha 18 pontos mais cheia do que a que chega hoje.
+# Conferido em 5 janelas (120/90/60/30/14 dias): a queda aparece em todas, e
+# nos últimos 30 dias é 47,0% contra 77,2% do CAD. Não é ruído de recorte.
+#
+# ⏭️ ESTES NÚMEROS ENVELHECEM. Remedir junto com o post de 18/10.
+PREENCHIDO_CAD = "68,4%"
+PREENCHIDO_PDF = "52,3%"
+MEDIDO_CAD = "25,0%"
 
 # páginas que falam de cobertura → o que cada uma TEM que dizer
 ESPERADO = {
@@ -56,7 +67,9 @@ ESPERADO = {
 _TELA_DE_DECISAO = "dashboard.html"
 
 # números que a gente APOSENTOU — não podem reaparecer em copy viva
-APOSENTADOS = ("21,6%", "4,7%", "25,5%", "2,0%", "4,6&times;", "4,6×")
+APOSENTADOS = ("21,6%", "4,7%", "25,5%", "2,0%", "4,6&times;", "4,6×",
+               # aposentados em 18/09/2026 — eram a medição de agosto
+               "73,8%", "70,0%", "23,9%")
 
 
 def _texto(nome):
@@ -85,6 +98,24 @@ def test_numero_APOSENTADO_nao_volta_na_copy_viva():
                 problemas.append("%s ainda tem %s" % (pagina, velho))
     assert not problemas, (
         "número aposentado voltou pra copy viva: " + " | ".join(problemas))
+
+
+def test_o_FAQ_diz_a_MESMA_coisa_no_schema_e_na_tela():
+    """🪤 Achado pela sabotagem de 18/09: a resposta do FAQ vive em DOIS
+    lugares — o JSON-LD do schema.org e o texto visível — e nenhum guarda
+    cobrava os dois divergirem.
+
+    Isso importa mais do que parece: o JSON-LD é o que o Google lê e mostra no
+    resultado da busca. Atualizar só o visível deixaria a busca anunciando um
+    número que a página não diz mais, sem nada ficar vermelho.
+    """
+    t = _texto("faq.html")
+    for numero in (PREENCHIDO_CAD, PREENCHIDO_PDF, MEDIDO_CAD):
+        n = t.count(numero)
+        assert n >= 2, (
+            "o faq.html cita %s só %d vez — o schema.org e a resposta visível "
+            "têm que dizer o mesmo, senão a busca anuncia outro número"
+            % (numero, n))
 
 
 def test_o_ZERO_do_PDF_nunca_aparece_sozinho():
@@ -122,20 +153,38 @@ def test_CONTROLE_o_guarda_REPROVA_numero_divergente():
 def test_a_caixa_do_SO_PDF_no_dashboard_nao_diz_sem_quantidade():
     """🚨 A tela onde a pessoa decide, e que escapava da regra de cima.
 
-    A afirmação "os itens saem sem quantidade" é FALSA: 71% das linhas do
-    só-PDF vêm preenchidas — mais que as do CAD (69,6%). O que falta é o SELO,
-    não o número. Dizer o contrário empurra pra fora quem só tem PDF, com base
-    numa frase que os nossos próprios dados desmentem.
+    A afirmação "os itens saem sem quantidade" é FALSA: metade das linhas do
+    só-PDF vem preenchida. O que falta é o SELO, não o número. Dizer o
+    contrário empurra pra fora quem só tem PDF, com base numa frase que os
+    nossos próprios dados desmentem.
+
+    🩸 18/09/2026 — A 1ª VERSÃO DESTE GUARDA PINAVA O VALOR: cobrava
+    literalmente `"71%" in caixa`. Quando a realidade se moveu (o PDF caiu de
+    71% para 52% e deixou de ser "igual ao CAD"), o guarda seguiu VERDE
+    segurando a frase falsa no ar — ele estava defendendo o número, não a
+    afirmação. Guarda que fixa um valor que não consegue conferir congela a
+    copy no dia em que foi escrito.
+
+    Agora ele cobra a FORMA da afirmação: que a caixa diga um percentual de
+    preenchimento do PDF e o compare com o do CAD. O valor certo é
+    responsabilidade de quem remede — e mora nas constantes do topo, com data.
     """
     t = _texto(_TELA_DE_DECISAO)
     i = t.index("S&oacute; PDF")
     caixa = t[i:i + 900]
     assert "sem quantidade" not in caixa.lower(), (
         "a caixa do só-PDF voltou a dizer que os itens saem SEM QUANTIDADE — "
-        "medido: 71% das linhas vêm com quantidade, mais que no CAD")
-    assert "71%" in caixa, (
-        "a caixa fala do PDF sem dizer quanto da planilha volta preenchida — "
-        "é a metade que evita o mal-entendido")
+        "medido: metade das linhas vem com quantidade")
+    pcts = re.findall(r"(\d{1,3})%", caixa)
+    assert len(pcts) >= 2, (
+        "a caixa precisa de DOIS percentuais — o do PDF e o do CAD pra "
+        "comparar. Achei %r" % pcts)
+    assert "cad" in caixa.lower(), (
+        "a caixa dá um número de preenchimento sem dizer contra o quê — "
+        "sozinho ele não informa nada")
+    assert "igual ao cad" not in caixa.lower(), (
+        "a caixa voltou a dizer que o PDF preenche IGUAL ao CAD. Medido em "
+        "18/09: 52,3%% contra 68,4%%, e nos últimos 30 dias 47%% contra 77%%")
     assert "selo" in caixa.lower(), (
         "sumiu a explicação do que REALMENTE muda (o selo, não a quantidade)")
 
