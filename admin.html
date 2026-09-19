@@ -3608,6 +3608,45 @@ const ACT_LABELS = {
   export_financeiro: '📥 Exportou o financeiro',
 };
 function actLabel(ev) { return ACT_LABELS[ev] || ('• ' + ev); }
+
+// 18/09/2026 — item 8: o DETALHE do evento (o `meta`) e os ZEROS.
+// Funções PURAS (devolvem string) de propósito: a bancada roda elas no dukpy.
+// `cid` é o visitante, não detalhe — nunca aparece.
+function resumoDoMeta(meta) {
+  if (!meta || typeof meta !== 'object') return '';
+  return Object.keys(meta)
+    .filter(k => k !== 'cid' && meta[k] !== null && meta[k] !== '')
+    .slice(0, 4)
+    .map(k => {
+      const v = meta[k];
+      const txt = (typeof v === 'object') ? JSON.stringify(v) : String(v);
+      return escapeHtml(k) + '=' + escapeHtml(txt.slice(0, 40));
+    })
+    .join(' · ');
+}
+function htmlDetalheDoEvento(chaves) {
+  if (!chaves || typeof chaves !== 'object' || !Object.keys(chaves).length) return '';
+  return Object.keys(chaves).map(k => {
+    const d = chaves[k];
+    let corpo;
+    if (d && !Array.isArray(d) && typeof d === 'object') {
+      corpo = `min ${escapeHtml(String(d.min))} · mediana ${escapeHtml(String(d.mediana))} · max ${escapeHtml(String(d.max))} (n=${escapeHtml(String(d.n))})`;
+    } else {
+      corpo = (d || []).map(par => `${escapeHtml(String(par[0]))} <span class="text-gray-400">${escapeHtml(String(par[1]))}</span>`).join(' · ');
+    }
+    return `<div class="pl-4 text-xs text-gray-600"><span class="font-medium">${escapeHtml(k)}</span>: ${corpo}</div>`;
+  }).join('');
+}
+function htmlSilencio(lista, baseDias) {
+  const itens = Array.isArray(lista) ? lista : [];
+  if (!itens.length) {
+    return `<p class="text-xs text-gray-400 mt-3">Nenhum nome ficou em silêncio: tudo que registrou nos últimos ${escapeHtml(String(baseDias))} dias também registrou nesta janela.</p>`;
+  }
+  return `<details class="mt-3"><summary class="text-xs text-amber-700 cursor-pointer">🔇 ${itens.length} nome${itens.length === 1 ? '' : 's'} sem registro nesta janela (registraram nos últimos ${escapeHtml(String(baseDias))} dias)</summary>
+    <div class="mt-1 space-y-0.5">${itens.map(z =>
+      `<div class="flex items-center justify-between text-xs text-gray-500"><span>${escapeHtml(actLabel(z.event))}</span><span>${escapeHtml(String(z.n_periodo))} · último ${escapeHtml(actFmtTime(z.ultimo))}</span></div>`
+    ).join('')}</div></details>`;
+}
 function actFmtTime(iso) {
   try {
     return window.fmtBR(iso, { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
@@ -3658,9 +3697,13 @@ async function loadActivity() {
       ${vL === 0 ? '<p class="text-xs text-gray-400 mt-3">Sem visitas anônimas registradas ainda — começa a encher agora que o rastreio subiu.</p>' : ''}`;
 
     const evs = Object.entries(d.by_event || {}).sort((a, b) => b[1] - a[1]);
-    byEvent.innerHTML = evs.length ? evs.map(([ev, n]) =>
-      `<div class="flex items-center justify-between"><span>${escapeHtml(actLabel(ev))}</span><span class="font-semibold text-gray-700">${n}</span></div>`
-    ).join('') : '<p class="text-gray-400">Sem eventos ainda.</p>';
+    const metaPor = d.meta_por_evento || {};
+    byEvent.innerHTML = (evs.length ? evs.map(([ev, n]) => {
+      const det = htmlDetalheDoEvento(metaPor[ev]);
+      const linha = `<div class="flex items-center justify-between"><span>${escapeHtml(actLabel(ev))}</span><span class="font-semibold text-gray-700">${n}</span></div>`;
+      return det ? `<details><summary class="cursor-pointer list-none">${linha}</summary>${det}</details>` : linha;
+    }).join('') : '<p class="text-gray-400">Sem eventos ainda.</p>')
+      + htmlSilencio(d.sem_registro_na_janela, d.silencio_base_dias || 365);
 
     const us = d.users || [];
     byUser.innerHTML = us.length ? us.map(u => {
@@ -3678,10 +3721,11 @@ async function loadActivity() {
     recent.innerHTML = rs.length ? rs.map(r => {
       const who = r.user_email || r.user_id || 'anônimo';
       const job = r.job_id ? ` <span class="text-gray-400">· ${escapeHtml(String(r.job_id).slice(0, 8))}</span>` : '';
+      const det = resumoDoMeta(r.meta);
       return `<div class="flex items-center gap-2 border-b border-gray-50 py-1">
         <span class="text-gray-400 text-xs w-24 shrink-0">${actFmtTime(r.created_at)}</span>
         <span class="text-gray-700 shrink-0">${escapeHtml(actLabel(r.event))}</span>
-        <span class="text-gray-400 text-xs truncate">${escapeHtml(who)}${job}</span>
+        <span class="text-gray-400 text-xs truncate">${escapeHtml(who)}${job}${det ? ' <span class="text-gray-300">·</span> ' + det : ''}</span>
       </div>`;
     }).join('') : '<p class="text-gray-400">Sem atividade no período.</p>';
 

@@ -27924,6 +27924,94 @@ async def track_event(payload: TrackPayload, request: Request):
     return {"status": "ok"}
 
 
+#: chaves do `meta` que são IDENTIFICADOR, não detalhe — nunca viram "valor".
+_META_CHAVES_IGNORADAS = ("cid",)
+_META_TOPO_VALORES = 6
+_META_TOPO_CHAVES = 5
+
+
+def _meta_por_evento(rows, topo_valores: int = _META_TOPO_VALORES,
+                     topo_chaves: int = _META_TOPO_CHAVES) -> dict:
+    """{evento: {chave: [[valor, n], …] | {"min","mediana","max","n"}}}.
+
+    🩸 18/09/2026 — item 8 da fila. **2.522 de 2.522** eventos dos últimos 30
+    dias carregam `meta` (type=dwg, tela=revisao, motivo=origem, campo=nenhum,
+    n_itens, pendentes…) e o painel jogava TUDO fora: contava por nome e
+    listava "quem/quando". A telemetria dos avisos de 15/09 nasceu pra ser lida
+    aqui e não dava pra ler.
+
+    Chave numérica (n_itens, pendentes) vira min/mediana/max — lista de "38: 1,
+    12: 1, 7: 1" não é leitura, é ruído. Chave de texto vira os valores mais
+    frequentes, com teto. `cid` fica de fora: é o visitante, não o detalhe.
+    """
+    import json as _js
+    bruto = {}
+    for r in rows or []:
+        ev = (r.get("event") or "?")
+        m = r.get("meta")
+        if not isinstance(m, dict):
+            continue
+        for k, v in m.items():
+            if k in _META_CHAVES_IGNORADAS or v is None or v == "":
+                continue
+            bruto.setdefault(ev, {}).setdefault(str(k), []).append(v)
+    saida = {}
+    for ev, chaves in bruto.items():
+        ordem = sorted(chaves.items(), key=lambda kv: -len(kv[1]))[:topo_chaves]
+        fim = {}
+        for k, vals in ordem:
+            nums = [v for v in vals if isinstance(v, (int, float)) and not isinstance(v, bool)]
+            if nums and len(nums) == len(vals):
+                _o = sorted(nums)
+                fim[k] = {"min": _o[0], "mediana": _o[len(_o) // 2], "max": _o[-1], "n": len(_o)}
+                continue
+            cont = {}
+            for v in vals:
+                if isinstance(v, (dict, list)):
+                    v = _js.dumps(v, ensure_ascii=False)
+                sv = str(v)[:60]
+                cont[sv] = cont.get(sv, 0) + 1
+            fim[k] = [[sv, n] for sv, n in sorted(cont.items(), key=lambda x: (-x[1], x[0]))[:topo_valores]]
+        saida[ev] = fim
+    return saida
+
+
+def _nomes_em_silencio(por_nome, by_event: dict) -> list:
+    """Os ZEROS: nomes que registraram no período longo e NÃO na janela.
+
+    Antes eles simplesmente não apareciam — silêncio com cara de "nunca
+    existiu". Um aviso que parou de disparar é exatamente o que este painel
+    existe pra mostrar.
+    """
+    vistos = set((by_event or {}).keys())
+    fora = []
+    for r in por_nome or []:
+        ev = (r.get("event") or "").strip()
+        if not ev or ev in vistos:
+            continue
+        fora.append({"event": ev, "n_periodo": int(r.get("n") or 0),
+                     "ultimo": r.get("ultimo") or ""})
+    fora.sort(key=lambda x: x["ultimo"], reverse=True)
+    return fora
+
+
+def _usage_events_por_nome(dias: int = 365) -> list:
+    """RPC `usage_events_por_nome` (agregado no banco). Best-effort: o painel
+    nunca cai por causa dos zeros — sem resposta, a seção fica vazia e DIZ."""
+    import urllib.request, json as _js
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/rpc/usage_events_por_nome"
+        body = _js.dumps({"dias": int(dias)}).encode("utf-8")
+        req = urllib.request.Request(url, data=body, method="POST")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        req.add_header("Content-Type", "application/json")
+        return _js.loads(urllib.request.urlopen(req, timeout=15).read().decode("utf-8")) or []
+    except Exception as e:
+        print(f"[activity] usage_events_por_nome falhou (não crítico): {e}")
+        return []
+
+
 @app.get("/api/admin/activity")
 def admin_activity(request: Request, days: int = 30, limit: int = 200):
     """Painel de Atividade: eventos recentes + agregados (por evento, por usuário,
@@ -28066,6 +28154,10 @@ def admin_activity(request: Request, days: int = 30, limit: int = 200):
         # e o nome mentia a janela. Ver contrato em test_painel_admin_nao_mente.
         "active_window": len(seen_janela),
         "by_event": by_event,
+        # 18/09: o DETALHE que a telemetria grava, por evento — e os ZEROS.
+        "meta_por_evento": _meta_por_evento(rows),
+        "silencio_base_dias": 365,
+        "sem_registro_na_janela": _nomes_em_silencio(_usage_events_por_nome(365), by_event),
         "funnel": {k: len(funnel_cids[k]) for k in _FUNNEL},
         "users": users,
         "recent": rows[:limit],
