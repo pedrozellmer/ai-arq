@@ -4115,15 +4115,60 @@ def _linha_do_email_ao_cliente(email: str, criado_em: str) -> str:
 
 
 def _build_falha_email(name: str, project_name: str, reprocessavel: bool,
-                       error_hint: str = "", job_id: str = ""):
+                       error_hint: str = "", job_id: str = "",
+                       culpa_nossa: bool = False, ja_entregou: bool = False):
     """Monta (subject, html) do email de falha. Separado pra reuso no preview.
     error_hint = mensagem do erro; usada pra dar orientação ESPECÍFICA quando
-    reprocessavel=False (DWG não abre vs arquivo grande vs sem cotas)."""
+    reprocessavel=False (DWG não abre vs arquivo grande vs sem cotas).
+
+    🩸 19/09/2026 — ATÉ HOJE ESTE E-MAIL SÓ TINHA DOIS ESTADOS: "coisa
+    passageira, reprocesse" e "o problema é o seu arquivo, troque". Falta de
+    estado não é neutra: quem decide é um regex de oito palavras de erro
+    passageiro (`_TRANSIENT_ERR_RX`), e **tudo que não casa cai no balde do
+    arquivo ruim** — inclusive um `AttributeError` do nosso próprio código.
+    Foi o que aconteceu com um cliente de UM DIA de conta: o motor leu as duas
+    pranchas dele inteiras, 139 itens, quebrou ao escrever a capa da planilha,
+    e o sistema mandou ele trocar um arquivo que estava certo.
+    🔑 O terceiro estado é `culpa_nossa`: não pede nada ao cliente, não fala do
+    arquivo dele, e diz que o problema é nosso — porque é.
+    `ja_entregou` existe porque no mesmo caso o cliente JÁ tinha a planilha na
+    mão (baixou 19 minutos antes): falar "não conseguimos processar" pra quem
+    está olhando o resultado é a casa contradizendo o que ela mesma entregou.
+    """
     import html as _hf
     from urllib.parse import quote as _quote_cta
     pn = _hf.escape(project_name or "seu projeto")
     _pn_raw = (project_name or "").strip()
     greet = _greeting_line(_hf.escape(name or ""))
+    if culpa_nossa:
+        _cta_txt = "Abrir o projeto" if job_id else "Abrir meu painel"
+        _cta_url = ("https://ai.arq.br/projeto.html?job_id=%s"
+                    % _quote_cta(str(job_id), safe="")) if job_id \
+            else "https://ai.arq.br/dashboard.html"
+        if ja_entregou:
+            _meio = (f"A planilha que você já recebeu do <b>{pn}</b> continua "
+                     f"valendo — o que falhou foi uma segunda leitura que a gente "
+                     f"estava terminando por cima dela.")
+        else:
+            _meio = (f"Tivemos uma falha do nosso lado ao finalizar o "
+                     f"<b>{pn}</b>, depois de já ter lido as suas pranchas.")
+        body = (f"{greet}<br><br>"
+                f"{_meio}<br><br>"
+                f"<b>Não é problema do seu arquivo, e você não precisa fazer "
+                f"nada.</b> O defeito é nosso, já estamos em cima dele, e "
+                f"avisamos você assim que o resultado estiver completo no painel."
+                f"<br><br>Desculpa pelo transtorno — se quiser falar com a gente, "
+                f"é só responder este e-mail. 🙂")
+        # 🪤 O assunto tem teto de 52 caracteres (o celular corta e o cliente lê
+        # pela metade) — o guarda vizinho `test_nenhum_assunto_estoura_a_tela_do_celular`
+        # reprovou a 1ª versão desta frase, com 61.
+        subject = (f"{_pn_raw} — o problema foi nosso"
+                   if _pn_raw else "O problema foi nosso, não do seu arquivo")
+        html = _email_wrap("O problema foi nosso", body, _cta_txt, _cta_url,
+                           badge="⚠ Falha nossa", badge_color="amber",
+                           preheader="Não é o seu arquivo e você não precisa fazer nada.",
+                           reason="Você está recebendo este e-mail porque enviou um projeto ao AI.arq.")
+        return subject, html
     if reprocessavel:
         body = (f"{greet}<br><br>"
                 f"Tivemos um problema ao processar o projeto <b>{pn}</b> e ele não "
@@ -4301,9 +4346,14 @@ def _url_de_falha_recente(email: str, desde_iso: str, job_id: str) -> str:
             f"&job_id=neq.{job_id}&select=job_id&limit=1")
 
 
-def _email_falha_cliente(job_id: str, reprocessavel: bool = True) -> bool:
+def _email_falha_cliente(job_id: str, reprocessavel: bool = True,
+                         culpa_nossa: bool = False) -> bool:
     """Avisa o cliente que o projeto falhou. Best-effort, NUNCA levanta.
 
+    - culpa_nossa=True    -> defeito do NOSSO código (exceção de programação).
+      Não pede nada ao cliente e não fala do arquivo dele. Tem que vir antes
+      dos outros dois: sem este estado, erro nosso caía no balde do arquivo
+      ruim e o cliente levava a culpa (19/09/2026).
     - reprocessavel=True  -> falha passageira (IA sobrecarregada / reinício do
       servidor / erro técnico): "reprocessar resolve, é grátis".
     - reprocessavel=False -> arquivo não-quantificável (PDF escaneado, prancha
@@ -4317,7 +4367,7 @@ def _email_falha_cliente(job_id: str, reprocessavel: bool = True) -> bool:
             return False
         import html as _hf, urllib.request as _urf
         _qf = (f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}"
-               f"&select=user_email,user_name,project_name,parent_job_id,reprocess_count,created_at,error_message")
+               f"&select=user_email,user_name,project_name,parent_job_id,reprocess_count,created_at,error_message,items_count")
         _rf = _urf.Request(_qf, method="GET")
         _rf.add_header("apikey", SUPABASE_KEY)
         _rf.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
@@ -4354,14 +4404,21 @@ def _email_falha_cliente(job_id: str, reprocessavel: bool = True) -> bool:
         except Exception as _te:
             print(f"[email] checagem de freio falhou (segue e manda): {_te}")
         _nm = _resolve_client_name(_email, hint=_rows[0].get("user_name") or "")
+        # 🩸 Este job já entregou planilha? No caso de 19/09 o cliente tinha
+        # BAIXADO o arquivo 19 minutos antes de receber "tivemos um problema" —
+        # o aviso contradizia o que a casa tinha acabado de entregar.
+        _ja_entregou = (int(_rows[0].get("items_count") or 0) > 0)
         _subject, _html = _build_falha_email(
             _nm,
             _rows[0].get("project_name") or "seu projeto",
             reprocessavel,
             error_hint=(_rows[0].get("error_message") or ""),
-            job_id=job_id)
+            job_id=job_id,
+            culpa_nossa=culpa_nossa,
+            ja_entregou=_ja_entregou)
         ok = _send_email_smtp(_email, _subject, _html,
-                              log_kind="erro_reprocessar" if reprocessavel else "erro_trocar",
+                              log_kind=("erro_nosso" if culpa_nossa else
+                                        ("erro_reprocessar" if reprocessavel else "erro_trocar")),
                               job_id=job_id)
         _falha_emailed.add(job_id)
         return ok
@@ -5408,6 +5465,44 @@ import re as _re_auto
 _TRANSIENT_ERR_RX = _re_auto.compile(
     r"reinici|interrompid|sobrecarregad|timeout|tempo\s+limite|excedeu|conex|momentane",
     _re_auto.IGNORECASE)
+
+# Erro do NOSSO CÓDIGO — nem passageiro, nem culpa do arquivo.
+# 🩸 19/09/2026: faltava este terceiro estado, e a falta não era neutra. Quem
+# decide o e-mail de falha é o regex de cima; tudo que não casa cai no balde
+# "o problema é o seu arquivo". Um `AttributeError` nosso mandou um cliente de
+# UM DIA de conta trocar um arquivo que estava perfeito — o motor tinha lido as
+# duas pranchas dele inteiras e quebrado ao escrever a capa da planilha.
+# 🪤 Casa no NOME da exceção, que é o que `str(e)` carrega quando ninguém
+# escreveu mensagem pra gente: mensagem nossa pro cliente sempre começa com
+# texto em português (e com ⚠ ou letra), nunca com "AttributeError:".
+_ERRO_DE_PROGRAMACAO_RX = _re_auto.compile(
+    r"\b(AttributeError|TypeError|KeyError|IndexError|NameError|ValueError"
+    r"|UnboundLocalError|ZeroDivisionError|AssertionError|RecursionError)\b"
+    r"|object has no attribute|not subscriptable|unsupported operand"
+    r"|takes \d+ positional argument|missing \d+ required",
+    _re_auto.IGNORECASE)
+
+
+def como_classificar_a_falha(mensagem) -> str:
+    """"nosso" | "passageiro" | "arquivo" — quem decide o tom do aviso.
+
+    🪤 Isto era duas linhas soltas dentro do `except` de 5.800 linhas do
+    `process_job`, e por isso guarda nenhum conseguia provar a DECISÃO: dava
+    pra testar que o ramo "a culpa foi nossa" existe, não que a casa escolhe
+    ele na hora certa. A sabotagem provou — trocar a decisão por `False`
+    deixava os dez guardas verdes. Separado, o guarda CHAMA em vez de ler o
+    fonte (é a lição de `feedback_nao_reimplemente_a_regua_pergunte_ao_guarda`).
+
+    A ordem importa: "nosso" vem primeiro porque o cliente não pode levar a
+    culpa por defeito nosso, e o balde final é "arquivo" — que é justamente o
+    que acusa o cliente. Default que acusa precisa ser o último a ser checado.
+    """
+    _m = str(mensagem or "")
+    if _ERRO_DE_PROGRAMACAO_RX.search(_m):
+        return "nosso"
+    if _TRANSIENT_ERR_RX.search(_m):
+        return "passageiro"
+    return "arquivo"
 
 
 def _filhote_do_projeto(job_id: str) -> str:
@@ -16525,8 +16620,19 @@ bloco — só cite os que estão no inventário deste arquivo."""
             # do alerta interno (_TRANSIENT_ERR_RX). DWG que não abre, DXF grande
             # demais, 0 itens = problema de arquivo: reprocessar o mesmo NÃO resolve,
             # o email orienta a trocar/corrigir o arquivo. (bug eletrivan/cliente-88 14/07)
-            _reproc = bool(_TRANSIENT_ERR_RX.search(str(e)))
-            _email_falha_cliente(job_id, reprocessavel=_reproc)
+            # 🩸 19/09: o mesmo regex decidia DUAS coisas e errou nas duas —
+            # mandou "troque o arquivo" e ainda classificou um defeito nosso
+            # como problema do desenho. Erro de programação tem estado próprio:
+            # não é passageiro (retentar repete o mesmo bug) e não é do
+            # arquivo. O cliente não leva culpa pelo que é nosso.
+            _classe = como_classificar_a_falha(e)
+            _nosso = (_classe == "nosso")
+            _reproc = (_classe == "passageiro")
+            if _nosso:
+                _log_error("erro:defeito-nosso",
+                           f"exceção de programação derrubou o job: {str(e)[:200]}",
+                           job_id, severity="error")
+            _email_falha_cliente(job_id, reprocessavel=_reproc, culpa_nossa=_nosso)
         except Exception as _ee3:
             print(f"[email] erro-cliente nao enviado (nao-fatal): {_ee3}")
 
@@ -20868,6 +20974,9 @@ _EMAIL_CATALOG = [
      "gatilho": "auto: falha passageira (reprocessar resolve)"},
     {"key": "erro_trocar", "nome": "Erro — trocar arquivo", "grupo": "auto",
      "gatilho": "auto: arquivo não-quantificável (precisa de outro arquivo)"},
+    {"key": "erro_nosso", "nome": "Erro — a culpa foi nossa", "grupo": "auto",
+     "gatilho": "auto: exceção do nosso código derrubou o job — não pede nada "
+                "ao cliente e não fala do arquivo dele"},
     {"key": "proximo_projeto", "nome": "Convite pro 2º projeto (dias 3-10)", "grupo": "auto",
      "gatilho": "auto: 1º projeto done há 3-10 dias, sem 2º projeto (tick horário, 1x por pessoa)"},
     {"key": "cronograma_checkin", "nome": "Check-in de obra (cronograma)", "grupo": "auto",
@@ -20972,6 +21081,9 @@ def _render_email_by_type_raw(key: str):
         return _build_falha_email(nome, projeto, True)
     if key == "erro_trocar":
         return _build_falha_email(nome, projeto, False)
+    if key == "erro_nosso":
+        return _build_falha_email(nome, projeto, False, culpa_nossa=True,
+                                  ja_entregou=True, job_id=fake_job)
     if key == "nudge_cadastro":
         return _build_nudge_email(nome, "cadastro", fake_link)
     if key == "nudge_onboarding":

@@ -87,13 +87,22 @@ def test_avisos_de_PRANCHAS_diferentes_ACUMULAM():
 
 def test_workstations_e_departments_chegam():
     """🪤 O prompt do DXF PEDE os dois e o laço descartava. A capa da planilha
-    tem campo pra eles — o mesmo projeto saía com em PDF e sem em DWG."""
+    tem campo pra eles — o mesmo projeto saía com em PDF e sem em DWG.
+
+    🔄 19/09/2026: este guarda comparava com o dicionário CRU que a IA mandou,
+    e agora `departments` é normalizado na porta de entrada pro formato que
+    `models.py` declara. O propósito segue idêntico — os dois campos CHEGAM, e
+    o número não se perde no caminho; só a forma de conferir mudou.
+    O porquê da normalização: a IA mandou uma lista de STRINGS num job real e
+    a planilha inteira morreu ao escrever a capa (`dept.get('name')`), com 139
+    itens prontos. Ver test_a_capa_nao_derruba_a_planilha.py."""
     p = _Projeto()
     mesclar_project_data(p, {"workstations": "12 un",
                              "departments": [{"nome": "Marketing", "n": 8}]},
                          sf=_sf)
     assert p.workstations == 12
-    assert p.departments == [{"nome": "Marketing", "n": 8}]
+    assert p.departments == [{"name": "Marketing", "positions": 8}], (
+        "o departamento não chegou, ou chegou perdendo o número: %r" % p.departments)
 
 
 def test_CONTROLE_campo_ausente_NAO_zera_o_que_ja_havia():

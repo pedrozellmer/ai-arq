@@ -339,8 +339,21 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
         _header_deps = 'DEPARTAMENTOS' if typology in ("office", "educational") else 'AMBIENTES'
         add_title(_header_deps)
         for dept in project.departments:
-            name = dept.get('name', '')
-            positions = dept.get('positions', 0)
+            # 🩸 19/09/2026: aqui era `dept.get('name')` direto, e a IA mandou
+            # uma lista de STRINGS. O AttributeError derrubou a planilha INTEIRA
+            # — 139 itens, 16 medidos — e o cliente recebeu "troque o arquivo".
+            # A normalização agora acontece na entrada
+            # (`engine_rules.departamentos_no_formato_do_modelo`), mas esta
+            # função escreve a ENTREGA: um cabeçalho decorativo não pode
+            # derrubá-la de novo, venha o dado por onde vier. O vizinho
+            # `new_rooms`, dez linhas abaixo, já fazia isso desde sempre.
+            if isinstance(dept, dict):
+                name = str(dept.get('name', '') or '')
+                positions = dept.get('positions', 0)
+            else:
+                name, positions = str(dept or ''), 0
+            if not name:
+                continue
             if typology in ("office", "educational") and positions:
                 add_line(f'  {name}: {positions} posições')
             else:

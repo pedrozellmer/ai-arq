@@ -425,8 +425,11 @@ def test_o_aborto_ENTREGA_ao_email_o_que_a_tela_disse(monkeypatch, motivo,
     capturado = {}
     monkeypatch.setattr(main.jobs, "update_field",
                         lambda job_id, **c: capturado.update(c))
+    # 🪤 `**k` de propósito: dublê com assinatura EXATA desarma calado quando o
+    # original ganha parâmetro (aconteceu 2× em 3 dias; em 18/09 derrubou 12
+    # guardas de uma vez). `culpa_nossa` entrou em 19/09.
     monkeypatch.setattr(main, "_email_falha_cliente",
-                        lambda job_id, reprocessavel=True: capturado.update(
+                        lambda job_id, reprocessavel=True, **k: capturado.update(
                             {"reprocessavel": reprocessavel}))
     main._abort_job_mem("jobteste1", 2, 7, motivo=motivo)
     assert capturado.get("reprocessavel") is espera_reprocessavel, (

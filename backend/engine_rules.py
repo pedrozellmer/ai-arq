@@ -2721,6 +2721,48 @@ def aviso_de_leitura_cortada(nome_prancha, n_itens_lidos=None):
 
 # ── A MESCLAGEM DO `project_data` QUE A IA DEVOLVE (uma só) ────────────────
 
+def departamentos_no_formato_do_modelo(bruto):
+    """A lista de departamentos no formato que `ProjectData` declara.
+
+    🩸 19/09/2026 — a planilha de um cliente MORREU por causa disto. O motor
+    tinha acabado de ler 2 pranchas, 139 itens, 16 medidos, 25 minutos de
+    máquina; ao escrever a CAPA, `dept.get('name')` estourou
+    `AttributeError: 'str' object has no attribute 'get'`, o job virou `error`
+    e o cliente recebeu um e-mail pedindo pra TROCAR O ARQUIVO — por um defeito
+    que era nosso. Nada disso tinha a ver com o desenho dele.
+
+    A causa: `models.py` declara `departments: list[dict]`, o prompt pede
+    objetos com `name`/`positions`, e a mesclagem copiava o que a IA mandasse.
+    Naquele job a IA devolveu uma lista de STRINGS. O tipo declarado não é
+    contrato enquanto ninguém o aplica na porta de entrada.
+
+    🔑 Aqui é a porta: o que entra sai no formato do modelo, e o resto do
+    sistema pode confiar. Cada item vira `{"name": ..., "positions": int}`;
+    string vira o nome; o que não dá pra entender é descartado em vez de
+    virar uma linha `None` na capa.
+    """
+    if isinstance(bruto, (str, bytes)) or not isinstance(bruto, (list, tuple)):
+        bruto = [bruto]
+    saida = []
+    for item in bruto:
+        if isinstance(item, dict):
+            nome = str(item.get("name") or item.get("nome") or "").strip()
+            # Sinônimos porque a IA já devolveu cada um deles: o prompt pede
+            # `positions`, e normalizar sem aceitá-los jogaria fora o número
+            # que ela mandou — o oposto do que esta função existe pra fazer.
+            _p = next((item[k] for k in ("positions", "posicoes", "n", "qtd",
+                                         "quantidade") if item.get(k) is not None), 0)
+            try:
+                postos = int(float(_p))
+            except (TypeError, ValueError):
+                postos = 0
+        else:
+            nome, postos = str(item or "").strip(), 0
+        if nome:
+            saida.append({"name": nome, "positions": postos})
+    return saida
+
+
 def mesclar_project_data(destino, pd, area_readings=None, reg_area=None,
                          origem="ia", sf=None):
     """Junta o `project_data` que a IA devolveu de UMA prancha no acumulado.
@@ -2794,7 +2836,7 @@ def mesclar_project_data(destino, pd, area_readings=None, reg_area=None,
         except (TypeError, ValueError):
             pass
     if pd.get("departments"):
-        destino.departments = pd["departments"]
+        destino.departments = departamentos_no_formato_do_modelo(pd["departments"])
     return destino
 
 
