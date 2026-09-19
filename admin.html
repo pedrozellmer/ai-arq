@@ -3185,6 +3185,11 @@ function renderRevisionFeedback(d){
   const esc = s => String(s==null?'':s).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
   const num = (v, suf='') => (v==null || v==='' ? '—' : `${v}${suf}`);
   // Revisão INLINE (item_reviews): a fonte que os clientes DE FATO usam.
+  // 🩸 19/09/2026 — o painel lia no máximo 500 registros e, com 624 no banco,
+  // jogava 124 fora em silêncio: as contagens saíam MENORES que a verdade. A
+  // conta passou a ser feita no banco; `total_no_banco` é o confronto — se ele
+  // não bater com a soma das ações, é sinal de que alguma ação nova apareceu e
+  // ninguém somou (é o defeito de hoje pelo avesso).
   // Descoberto em 01/08: 24 sinais acumulados enquanto o painel olhava só
   // a tabela de planilhas reenviadas (que ninguém usa — 0 em 3 meses).
   const ri = d.revisao_inline || {};
@@ -3241,7 +3246,7 @@ function renderRevisionFeedback(d){
       <p class="text-xs text-gray-600 mb-2">
         <b class="text-green-700">${ri.aprovacoes || 0} aprovações</b> (cliente confirmou o número)
         · <b class="text-amber-700">${ri.edicoes || 0} edições</b>
-        · ${ri.projetos || 0} projetos</p>
+        · ${ri.projetos || 0} projetos${linhaDoAcervoDeRevisoes(ri)}</p>
       ${(ri.ultimos_edits || []).map(e => `
         <div class="text-xs text-gray-600 border-t border-gray-100 pt-2 mt-2">
           <span class="font-mono">${esc(e.job_id)}</span> · ${esc(window.fmtBR(e.quando))}
@@ -3941,6 +3946,26 @@ async function loadNewsletterPreview() {
 // ══════════════════════════════════════════════
 // CENTRAL DE EMAILS — catálogo + preview (não envia nada)
 // ══════════════════════════════════════════════
+// ── O acervo de revisões cabe todo na conta? (item 13 da fila, 19/09/2026) ──
+// 🩸 O painel lia no máximo 500 registros de `item_reviews`. Quando a fila
+// registrou o risco eram 433; em 19/09 eram 624, e 124 (20%) ficavam fora em
+// silêncio — as contagens diziam menos do que a verdade, e ninguém tinha como
+// perceber. Agora a soma vem do banco e esta linha mostra o total de frente.
+// 🔑 Ela também vigia o defeito pelo avesso: se as ações somadas não fecharem
+// com o total, é porque nasceu uma ação nova (um botão novo na tela de
+// revisão) e ninguém a somou aqui. Vazio ≠ conferido.
+function linhaDoAcervoDeRevisoes(ri) {
+  if (!ri || typeof ri !== 'object') return '';
+  const total = Number(ri.total_no_banco);
+  if (!Number.isFinite(total) || total <= 0) return '';
+  const somadas = ['aprovacoes', 'edicoes', 'exclusoes', 'faltou']
+    .reduce((s, k) => s + (Number(ri[k]) || 0), 0);
+  const sobra = total - somadas;
+  const base = ` · <span class="text-gray-500">${total} revisões no total</span>`;
+  if (sobra <= 0) return base;
+  return base + ` <span class="text-amber-700" title="Alguma ação da tela de revisão não está sendo contada neste painel — provavelmente nasceu um botão novo e o resumo não acompanhou.">(${sobra} não ${sobra === 1 ? 'somada' : 'somadas'} aqui)</span>`;
+}
+
 function _emailBadge(grupo) {
   // Cor + ícone + texto (dono é daltônico — nunca cor sozinha).
   if (grupo === 'manual') {

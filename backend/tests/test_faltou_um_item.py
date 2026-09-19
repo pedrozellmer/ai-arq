@@ -240,7 +240,29 @@ def test_o_resumo_do_admin_TRAZ_os_recados():
         mp.setattr(_m, "_require_admin", lambda r: {"email": _m.ADMIN_EMAIL})
         mp.setattr(_m, "_log_error", lambda *a, **k: None)
         mp.setattr(_m, "_supa_rows", lambda *a, **k: [])
-        mp.setattr(_m, "_supa_rest_service", lambda *a, **k: (200, []))
+        # 🪤 19/09: a revisão inline vem da RPC `admin_revisao_inline` — o teto
+        # de 500 da leitura HTTP já cortava 124 de 624 registros. O dublê tem
+        # que responder como ela: contagens + as raras CRUAS. `(200, [])`
+        # derrubaria a rota inteira no "não consegui ler".
+        def _rpc_de_mentira(metodo, rota, body=None, *a, **k):
+            if "admin_revisao_inline" not in str(rota):
+                return (200, [])
+            _faltou = [r for r in linhas if (r or {}).get("action") == "faltou"]
+            return (200, {
+                "total_no_banco": len(linhas),
+                "aprovacoes": sum(1 for r in linhas if r.get("action") == "approve"),
+                "edicoes": sum(1 for r in linhas if r.get("action") == "edit"),
+                "exclusoes": sum(1 for r in linhas if r.get("action") == "reject"),
+                "faltou": len(_faltou),
+                "projetos": len({r.get("job_id") for r in linhas if r.get("job_id")}),
+                "exclusoes_cruas": [r for r in linhas if r.get("action") == "reject"],
+                "faltou_cruas": _faltou,
+                "edits_crus": [r for r in linhas if r.get("action") == "edit"],
+                "candidatos_a_recado": [r for r in linhas
+                                        if str(r.get("comment") or "").strip()],
+            })
+
+        mp.setattr(_m, "_supa_rest_service", _rpc_de_mentira)
         out = _m.admin_revision_feedback(type("R", (), {"headers": {}})())
     finally:
         mp.undo()

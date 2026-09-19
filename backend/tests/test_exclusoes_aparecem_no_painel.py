@@ -90,11 +90,47 @@ class _RespT:
     def read(self):
         return self._b
 
+    # 🪤 19/09: `_supa_rest_service` chama `resp.getcode()`. Sem este método o
+    # AttributeError era engolido pelo `except` dele e a rota recebia
+    # `(0, None)` — o guarda reprovava com "não consegui ler" em vez de testar
+    # o que queria. Dublê tem que ter a cara do original.
+    def getcode(self):
+        return 200
+
     def __enter__(self):
         return self
 
     def __exit__(self, *a):
         return False
+
+
+def _como_a_rpc(linhas, limite=20):
+    """Responde como `admin_revisao_inline` responderia: CONTA tudo (sem teto) e
+    devolve as linhas raras CRUAS, na ordem do banco.
+
+    🩸 19/09/2026 — a rota parou de ler `item_reviews` por HTTP com
+    `limit=500`, porque com 624 no banco ela jogava 124 fora em silêncio. A
+    conta virou RPC; a MONTAGEM do retrato continua no Python, de propósito,
+    pra este guarda poder executá-la (a bancada não roda SQL).
+    """
+    def _por(acao):
+        return [dict(r) for r in linhas if (r or {}).get("action") == acao]
+
+    ordenado = sorted([dict(r) for r in linhas],
+                      key=lambda r: str(r.get("reviewed_at") or ""), reverse=True)
+    return {
+        "total_no_banco": len(linhas),
+        "aprovacoes": len(_por("approve")),
+        "edicoes": len(_por("edit")),
+        "exclusoes": len(_por("reject")),
+        "faltou": len(_por("faltou")),
+        "projetos": len({(r or {}).get("job_id") for r in linhas if (r or {}).get("job_id")}),
+        "exclusoes_cruas": [r for r in ordenado if r.get("action") == "reject"][:limite],
+        "faltou_cruas": [r for r in ordenado if r.get("action") == "faltou"][:limite],
+        "edits_crus": [r for r in ordenado if r.get("action") == "edit"][:max(limite // 2, 1)],
+        "candidatos_a_recado": [r for r in ordenado
+                                if str(r.get("comment") or "").strip()],
+    }
 
 
 def _como_o_postgrest(linhas, url):
@@ -133,6 +169,11 @@ def painel(monkeypatch):
     def _fake(req, timeout=None):
         url = getattr(req, "full_url", str(req))
         ctl["urls"].append(url)
+        # A revisão inline agora vem da RPC (item 13, 19/09) — o banco de
+        # mentira responde como ela: conta tudo, devolve as raras cruas.
+        if "rpc/admin_revisao_inline" in url:
+            ctl["url_item_reviews"] = url
+            return _RespT(_como_a_rpc(ctl["linhas"]))
         if "item_reviews" in url:
             ctl["url_item_reviews"] = url
             return _RespT(_como_o_postgrest(ctl["linhas"], url))
@@ -204,25 +245,42 @@ def test_a_exclusao_SEM_retrato_nao_derruba_o_painel_inteiro(painel):
 
 def test_a_consulta_PEDE_o_que_o_resumo_usa(painel):
     """🪤 O fake de antes ignorava `select`, `order` e `limit`, e a fixture
-    guardava as URLs sem que ninguem afirmasse nada. Agora o banco de mentira
-    responde SO o que foi pedido — entao esta afirmacao e sobre a requisicao que
-    a rota fez de verdade, nao sobre o texto do fonte."""
+    guardava as URLs sem que ninguem afirmasse nada.
+
+    🔄 19/09/2026 — a rota parou de ler `item_reviews` por HTTP: o teto de 500
+    já cortava 124 de 624 registros em silêncio, e a conta foi para a RPC
+    `admin_revisao_inline`. O PROPÓSITO deste guarda não mudou — a leitura tem
+    que trazer as colunas que o resumo usa, na ordem certa, sem teto pequeno —,
+    mas o lugar onde isso se afirma mudou de lugar junto: a URL virou chamada
+    de RPC, e o `select` mora no SQL que o repositório registra. A bancada não
+    roda SQL, então aqui se confere o ARQUIVO que é a fonte da verdade dele.
+    """
     painel["chamar"]([_LINHA_EXCLUSAO, _LINHA_APROVACAO])
     url = painel["url_item_reviews"]
-    assert url, "a rota nem consultou item_reviews"
-    from urllib.parse import parse_qs, urlparse
-    q = parse_qs(urlparse(url).query)
-    cols = [c.strip() for c in q["select"][0].split(",")]
+    assert url and "rpc/admin_revisao_inline" in url, (
+        "a rota nem chamou a RPC da revisão inline (url=%r)" % url)
+
+    import io as _io
+    import os as _os
+    sql_path = _os.path.join(_os.path.dirname(_os.path.dirname(
+        _os.path.abspath(__file__))), "migrations_pendentes",
+        "admin_revisao_inline_sem_teto_de_500.sql")
+    assert _os.path.exists(sql_path), (
+        "a definição da RPC sumiu do repositório — quem quiser saber o que o "
+        "painel de revisões lê vai ter que perguntar ao Postgres")
+    sql = _io.open(sql_path, encoding="utf-8").read()
+    from _corpo import sem_comentarios_sql
+    corpo = sem_comentarios_sql(sql)
     for col in ("job_id", "action", "edits", "comment", "reviewed_at"):
-        assert col in cols, (
-            "a consulta parou de pedir a coluna `%s` — sem ela o resumo lê None "
-            "e o sinal desaparece calado (select=%r)" % (col, q["select"][0]))
-    assert q["order"][0] == "reviewed_at.desc", (
-        "a ordem saiu de `reviewed_at.desc`: o corte em 500/20 passaria a "
-        "descartar as revisoes MAIS NOVAS (order=%r)" % q.get("order"))
-    assert int(q["limit"][0]) >= 500, (
-        "o teto da consulta caiu para %r — as exclusoes antigas somem do "
-        "painel sem ninguem avisar" % q.get("limit"))
+        assert col in corpo, (
+            "a RPC parou de trazer a coluna `%s` — sem ela o resumo lê None e "
+            "o sinal desaparece calado" % col)
+    assert "order by reviewed_at desc" in corpo.lower(), (
+        "a ordem saiu de `reviewed_at desc`: o corte das listas passaria a "
+        "descartar as revisões MAIS NOVAS")
+    assert "from item_reviews" in corpo.lower() and "limit 500" not in corpo.lower(), (
+        "o teto voltou pra dentro da RPC — as revisões antigas somem da conta "
+        "sem ninguém avisar, que é exatamente o defeito de 19/09")
 
 
 def test_CONTROLE_a_rota_responde_e_o_bloco_da_revisao_inline_existe(painel):

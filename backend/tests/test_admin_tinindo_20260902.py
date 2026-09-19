@@ -44,11 +44,42 @@ class _Resp:
     def read(self):
         return self._b
 
+    # 🪤 19/09: `_supa_rest_service` chama `resp.getcode()`. Sem isto o
+    # AttributeError era engolido por ele e a rota recebia `(0, None)` — o
+    # guarda reprovava por falta de dublê, não por defeito. Dublê tem que ter
+    # a cara do original.
+    def getcode(self):
+        return 200
+
     def __enter__(self):
         return self
 
     def __exit__(self, *a):
         return False
+
+
+def _como_a_rpc(linhas, limite=20):
+    """Responde como a RPC `admin_revisao_inline`: CONTA tudo (sem teto) e
+    devolve as linhas raras CRUAS. A montagem do `quando` continua no Python —
+    é o que este arquivo guarda."""
+    def _acao(r):
+        return (r or {}).get("action")
+
+    ordenado = sorted([dict(r) for r in linhas],
+                      key=lambda r: str(r.get("reviewed_at") or ""), reverse=True)
+    return {
+        "total_no_banco": len(linhas),
+        "aprovacoes": sum(1 for r in linhas if _acao(r) == "approve"),
+        "edicoes": sum(1 for r in linhas if _acao(r) == "edit"),
+        "exclusoes": sum(1 for r in linhas if _acao(r) == "reject"),
+        "faltou": sum(1 for r in linhas if _acao(r) == "faltou"),
+        "projetos": len({(r or {}).get("job_id") for r in linhas if (r or {}).get("job_id")}),
+        "exclusoes_cruas": [r for r in ordenado if _acao(r) == "reject"][:limite],
+        "faltou_cruas": [r for r in ordenado if _acao(r) == "faltou"][:limite],
+        "edits_crus": [r for r in ordenado if _acao(r) == "edit"][:max(limite // 2, 1)],
+        "candidatos_a_recado": [r for r in ordenado
+                                if str(r.get("comment") or "").strip()],
+    }
 
 
 # ═══════════════════ FUSO: o dia é o de Brasília ═══════════════════════════
@@ -176,6 +207,11 @@ def _revisao_inline(monkeypatch, linhas):
 
     def _fake(req, timeout=None):
         url = getattr(req, "full_url", str(req))
+        # 19/09: a revisao inline vem da RPC `admin_revisao_inline` (o teto de
+        # 500 da leitura HTTP ja cortava 124 de 624). O banco de mentira
+        # responde como ela: conta tudo e manda as raras CRUAS.
+        if "rpc/admin_revisao_inline" in url:
+            return _Resp(_como_a_rpc(list(linhas)))
         return _Resp(list(linhas) if "item_reviews" in url else [])
     monkeypatch.setattr(_ureq, "urlopen", _fake)
     return _m.admin_revision_feedback(request=None)["revisao_inline"]

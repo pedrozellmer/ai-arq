@@ -23194,95 +23194,82 @@ def admin_revision_feedback(request: Request):
     # Enquanto isso a revisão INLINE gravava em item_reviews (24 sinais em 5
     # projetos) e ninguém olhava. Agora as duas fontes aparecem juntas:
     # approve = "o número está certo" (valida a medição); edit = correção real.
+    # 🩸 19/09/2026 — O TETO DE 500 JÁ ESTAVA CORTANDO. Esta leitura era
+    # `?order=reviewed_at.desc&limit=500`, e quando a fila registrou o risco o
+    # acervo tinha 433 registros. Medido hoje: **624** — o painel jogava fora
+    # **124 (20%)** em silêncio e as contagens saíam menores do que a verdade.
+    # Dos 124 fora da janela, 75 eram `approve` e 49 `edit`; nenhum `reject`,
+    # nenhum `faltou`, nenhum recado humano — os sinais RAROS ainda estavam
+    # dentro. Em uma semana (cresce ~193/sem) não estariam.
+    # 🔑 A CONTA é feita no BANCO, sem teto. A MONTAGEM e as réguas continuam
+    # aqui — e isso é decisão, não preguiça: a 1ª versão deste conserto montava
+    # o retrato do item apagado dentro do SQL, e a revisão mostrou que isso
+    # APAGAVA a cobertura de dois guardas (05/09 e 31/08) que exigem os campos
+    # do `_antes` neste bloco, porque a bancada não roda SQL. As linhas raras
+    # vêm CRUAS; quem as transforma é o Python, onde o guarda alcança.
+    # 🪤 O que interessa numa exclusão é O QUE foi apagado, e isso NÃO está mais
+    # em `project_items`: a FK é ON DELETE CASCADE e o item some junto. O
+    # retrato vive em `edits._antes`, gravado de propósito em 31/08 justamente
+    # porque a exclusão se autodestruía. Ver
+    # [[project_exclusao_se_autodestruia_20260831]].
+    def _antes_do_item(r):
+        _e = r.get("edits") or {}
+        _a = _e.get("_antes") if isinstance(_e, dict) else None
+        return _a if isinstance(_a, dict) else {}
+
     try:
-        url2 = (f"{SUPABASE_URL}/rest/v1/item_reviews"
-                f"?select=job_id,item_id,action,edits,comment,reviewed_at"
-                f"&order=reviewed_at.desc&limit=500")
-        req2 = _url_rf.Request(url2, method="GET")
-        req2.add_header("apikey", SUPABASE_KEY)
-        req2.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
-        rows2 = _json_rf.loads(_url_rf.urlopen(req2, timeout=10).read().decode("utf-8"))
-        if isinstance(rows2, list):
-            aprov = [r for r in rows2 if r.get("action") == "approve"]
-            edits = [r for r in rows2 if r.get("action") == "edit"]
-            # 🩸 05/09/2026 — O "FALTOU UM ITEM" NASCEU NO MESMO DIA E ESTE
-            # PAINEL NÃO O MOSTRAVA. Botão cujo recado ninguém lê é poço: o
-            # cliente escreve, sai achando que avisou, e o sinal morre no banco.
-            # É a mesma doença do parágrafo acima (a revisão inline gravou 24
-            # sinais por meses enquanto o painel olhava outra tabela).
-            # 🔑 Vai INTEIRO e no topo: são poucos, e cada um é o cliente
-            # dizendo o que o motor NEM VIU — a única pergunta de cobertura que
-            # existe. Ver [[feedback_o_aviso_tem_que_chegar]].
-            faltou = [r for r in rows2 if r.get("action") == "faltou"]
-            # 🩸 05/09/2026 — AS EXCLUSÕES ERAM INVISÍVEIS, e são 48 de 6
-            # projetos. Pelo comentário do próprio `submit_item_review`:
-            # "exclusão é o sinal MAIS direto de erro do motor — o cliente
-            # dizendo 'isto não existe na minha obra'". Ficaram fora do painel
-            # desde sempre porque este resumo só separava approve e edit.
-            # 🪤 O que interessa é O QUE foi apagado, e isso NÃO está mais em
-            # `project_items`: a FK é ON DELETE CASCADE e o item some. O retrato
-            # vive em `edits._antes`, gravado de propósito em 31/08 justamente
-            # porque a exclusão se autodestruía. Ver
-            # [[project_exclusao_se_autodestruia_20260831]].
-            rejeicoes = [r for r in rows2 if r.get("action") == "reject"]
-
-            def _antes_do_item(r):
-                _e = r.get("edits") or {}
-                _a = _e.get("_antes") if isinstance(_e, dict) else None
-                return _a if isinstance(_a, dict) else {}
-
-            # 🩸 06/09/2026 — O RECADO DIGITADO CAÍA NO VÃO. Este resumo separa
-            # por `action` (approve/edit/reject/faltou) e o modal "Comentar"
-            # grava `action='approve'`: o texto ia pro balde das aprovações e
-            # sumia, porque aprovação só vira NÚMERO aqui. Um recado de 02/09
-            # ficou 4 dias invisível assim.
-            # 🔑 Filtra pelo FATO (tem texto de gente), atravessando as quatro
-            # ações — é o que faz ver o que já está gravado, não só o futuro.
-            recados = [r for r in rows2 if recado_digitado(r.get("comment"))]
-            resumo["revisao_inline"] = {
-                "aprovacoes": len(aprov),
-                "edicoes": len(edits),
-                "recados": len(recados),
-                # Vai INTEIRO como os "faltou": recado digitado é o sinal mais
-                # raro do produto — em toda a história foram pouquíssimos.
-                "recados_itens": [
-                    {"job_id": r.get("job_id"),
-                     "quando": r.get("reviewed_at"),
-                     "acao": r.get("action"),
-                     "texto": recado_digitado(r.get("comment"))}
-                    for r in recados[:20]
-                ],
-                "exclusoes": len(rejeicoes),
-                "exclusoes_itens": [
-                    {"job_id": r.get("job_id"),
-                     "quando": r.get("reviewed_at"),
-                     "descricao": _antes_do_item(r).get("description"),
-                     "unidade": _antes_do_item(r).get("unit"),
-                     "quantidade": _antes_do_item(r).get("quantity"),
-                     "disciplina": _antes_do_item(r).get("discipline"),
-                     "selo": _antes_do_item(r).get("confidence")}
-                    for r in rejeicoes[:20]
-                ],
-                "faltou": len(faltou),
-                "faltou_recados": [
-                    {"job_id": r.get("job_id"),
-                     "quando": r.get("reviewed_at"),
-                     "texto": r.get("comment")}
-                    for r in faltou[:20]
-                ],
-                "projetos": len({r.get("job_id") for r in rows2 if r.get("job_id")}),
-                "ultimos_edits": [
-                    {"job_id": r.get("job_id"),
-                     # 🪤 02/09/2026: `[:10]` cortava a DATA EM UTC antes da tela
-                     # poder aplicar o fuso — edição às 21h30 de Brasília
-                     # apareceria como "amanhã". Vai o timestamp inteiro; quem
-                     # formata é window.fmtBR na tela.
-                     "quando": r.get("reviewed_at"),
-                     "edits": r.get("edits"),
-                     "comment": r.get("comment")}
-                    for r in edits[:10]
-                ],
-            }
+        _st_ri, _ri = _supa_rest_service("POST", "rpc/admin_revisao_inline",
+                                         {"limite_listas": 20}, timeout=8)
+        if _st_ri >= 400 or not isinstance(_ri, dict):
+            raise RuntimeError(f"rpc admin_revisao_inline devolveu HTTP {_st_ri}")
+        rejeicoes = _ri.get("exclusoes_cruas") or []
+        faltou = _ri.get("faltou_cruas") or []
+        edits = _ri.get("edits_crus") or []
+        # A régua do recado é UMA só e mora em `recado_digitado`: a RPC manda
+        # todos os registros com texto (8 em 624) e quem separa o que o cliente
+        # escreveu do que a NOSSA tela escreve é aqui.
+        recados = [c for c in (_ri.get("candidatos_a_recado") or [])
+                   if recado_digitado(c.get("comment"))]
+        resumo["revisao_inline"] = {
+            "aprovacoes": int(_ri.get("aprovacoes") or 0),
+            "edicoes": int(_ri.get("edicoes") or 0),
+            "recados": len(recados),
+            "recados_itens": [
+                {"job_id": r.get("job_id"),
+                 "quando": r.get("reviewed_at"),
+                 "acao": r.get("action"),
+                 "texto": recado_digitado(r.get("comment"))}
+                for r in recados[:20]
+            ],
+            "exclusoes": int(_ri.get("exclusoes") or 0),
+            "exclusoes_itens": [
+                {"job_id": r.get("job_id"),
+                 "quando": r.get("reviewed_at"),
+                 "descricao": _antes_do_item(r).get("description"),
+                 "unidade": _antes_do_item(r).get("unit"),
+                 "quantidade": _antes_do_item(r).get("quantity"),
+                 "disciplina": _antes_do_item(r).get("discipline"),
+                 "selo": _antes_do_item(r).get("confidence")}
+                for r in rejeicoes[:20]
+            ],
+            "faltou": int(_ri.get("faltou") or 0),
+            "faltou_recados": [
+                {"job_id": r.get("job_id"),
+                 "quando": r.get("reviewed_at"),
+                 "texto": r.get("comment")}
+                for r in faltou[:20]
+            ],
+            "projetos": int(_ri.get("projetos") or 0),
+            "ultimos_edits": [
+                {"job_id": r.get("job_id"),
+                 "quando": r.get("reviewed_at"),
+                 "edits": r.get("edits"),
+                 "comment": r.get("comment")}
+                for r in edits[:10]
+            ],
+            # 🔑 O número que o teto escondia: quantos existem DE VERDADE.
+            "total_no_banco": int(_ri.get("total_no_banco") or 0),
+        }
     except Exception as _e2:
         print(f"[revision-feedback] item_reviews erro: {_e2}")
         resumo["revisao_inline"] = {"erro": "não consegui ler item_reviews"}
