@@ -21145,38 +21145,112 @@ def admin_email_liberar(payload: SuprimirPayload, request: Request):
     return {"status": "ok", "email": e}
 
 
+_AVISOS_COM_TETO: dict = {}
+
+
+def _avisar_com_teto(stage: str, msg: str, minutos: int = 15) -> None:
+    """Registra um aviso de leitura no máximo uma vez a cada `minutos`.
+
+    🪤 Sem teto, uma leitura que falha grava uma linha NOVA em `error_log` a
+    cada vez que o Pedro abre a tela — e como estes stages ficam fora de
+    `_STAGES_DIAGNOSTICO`, entopem justamente o painel de 40 linhas que ele usa
+    pra achar erro de verdade. A falha continua visível; só não se repete.
+    """
+    try:
+        # 🪤 A chave leva a MENSAGEM junto: com o teto só por stage, uma
+        # segunda falha de causa DIFERENTE dentro dos 15 min nunca chegaria ao
+        # log, e o docstring estaria prometendo o que não entrega.
+        _chave = "%s|%s" % (stage, (msg or "")[:120])
+        _agora = time.time()
+        if _agora - float(_AVISOS_COM_TETO.get(_chave) or 0) < minutos * 60:
+            return
+        if len(_AVISOS_COM_TETO) > 200:      # não vira vazamento de memória
+            _AVISOS_COM_TETO.clear()
+        _AVISOS_COM_TETO[_chave] = _agora
+        _log_error(stage, msg, severity="warning")
+    except Exception:
+        pass
+
+
+def _email_retorno_por_tipo(dias: int = 90):
+    """O que voltou depois de cada tipo de e-mail. None quando ilegível.
+
+    🩸 Item 12 da fila (19/09/2026). A Central dizia quantos e-mails SAÍRAM e
+    parava aí: em 90 dias foram 303 de reativação para 125 pessoas, e ninguém
+    sabia o que tinha voltado. Medido antes de escrever esta função: das ~184
+    pessoas com a janela já fechada nos tipos que falam com quem sumiu
+    (retorno_30d, newsletter, calibracao, nudge_*, nps_relacional), NENHUMA
+    abriu projeto novo.
+
+    O número é `projeto novo`, e só ele — de propósito:
+      · não depende de cookie. O rastro de site é cego pra 50 das 125 pessoas
+        (no `retorno_30d`, 25 de 39 nunca tiveram um usage_event sequer), e
+        "não vi" não pode ser servido como "não voltou";
+      · a RPC conta por PESSOA (quem recebeu 3 newsletters não vale 3) e só
+        com a janela FECHADA — quem recebeu ontem vai em `aguardando_7d`.
+
+    🚫 Não é prova de causa: quem abriria o projeto de qualquer jeito entra na
+    conta igual. Por isso vêm junto duas coisas: `projeto_antes_7d`, a MESMA
+    janela antes do envio, e `mediana_horas_ate_o_projeto`.
+    🩸 A mediana entrou porque a revisão derrubou a 1ª versão desta tela: o
+    único número positivo dela era CO-PRESENÇA. `boas_vindas` marcava 72 de 95,
+    e os 72 abriram o projeto 2,4 minutos depois do envio — o e-mail sai porque
+    a pessoa acabou de entrar no site. "Mediana 2 min" desmente o placar
+    sozinha, sem limiar inventado e sem jogar dado fora.
+    🪤 E é a régua de UM objetivo: `calibracao` pede planilha revisada e
+    `nps_relacional` pede resposta — nesses dois a tela não acende alarme e diz
+    o motivo.
+    """
+    try:
+        # timeout curto: é painel admin, e a ficha já sabe dizer "não sei".
+        # Esperar 15 s pra descobrir que não dá é pior que cortar em 5.
+        _st, _r = _supa_rest_service("POST", "rpc/admin_email_retorno",
+                                     {"dias": int(dias)}, timeout=5)
+        if _st >= 400 or not isinstance(_r, dict):
+            _avisar_com_teto("admin:email-retorno",
+                             f"não consegui ler o retorno dos e-mails (HTTP {_st}) — "
+                             f"a Central vai dizer 'não sei', não zero")
+            return None
+        return _r
+    except Exception as _e:
+        _avisar_com_teto("admin:email-retorno", f"exceção lendo o retorno: {_e}")
+        return None
+
+
 @app.get("/api/admin/email-catalog")
 def admin_email_catalog(request: Request):
     """Lista os tipos de email da Central de Emails com {key, nome, grupo,
     gatilho, volume}. `volume` = quantos já saíram (email_sent_log por kind).
+    Cada ficha leva também `retorno`: o que voltou depois daquele tipo.
     Admin-only."""
     _require_admin(request)
-    # Agrega volume por kind num único fetch (baixo volume no beta).
+    # O que voltou depois de cada tipo — e, no mesmo pacote, o volume.
+    # 🪤 A contagem do volume puxava a tabela `email_sent_log` INTEIRA pela
+    # rede, sem filtro nem limite, pra contar em Python. A RPC já lê essa
+    # tabela: agora devolve `volume_total` por tipo e a rota faz UMA ida ao
+    # banco em vez de duas.
+    # 🪤 31/08 continua valendo: leitura falhada vira `None`, nunca 0 — "0
+    # e-mails" é indistinguível de "nunca saiu nenhum".
+    _retorno = _email_retorno_por_tipo(90)
+    # 🪤 Ter respondido um objeto não é ter contado: um 200 com dict sem
+    # `por_tipo` faria toda ficha imprimir "0 e-mails enviados" — o defeito de
+    # 31/08 entrando por outra porta. Chave ausente é falha; lista vazia é
+    # medição legítima.
+    _leu_volume = (isinstance(_retorno, dict)
+                   and isinstance(_retorno.get("por_tipo"), list))
+    _por_tipo = {}
     volumes = {}
-    _leu_volume = False
-    try:
-        _st, _rows = _supa_rest_service("GET", "/rest/v1/email_sent_log?select=kind")
-        # 🪤 31/08 (auditoria): o `except` daqui era INALCANÇÁVEL pro caso que
-        # importa — falha de HTTP não levanta, devolve status != 200 com corpo
-        # vazio. Aí `volumes` ficava {} e a tela mostrava "0" pra TODO tipo de
-        # e-mail, indistinguível de "nunca saiu nenhum". Vazio ≠ falhou, de novo.
-        _leu_volume = int(_st or 0) == 200
-        if not _leu_volume:
-            _log_error("admin:email-catalog",
-                       f"não consegui ler o volume (HTTP {_st}) — a coluna vai "
-                       f"marcada como desconhecida, não como zero", severity="warning")
-        for _r in (_rows or []):
-            _k = (_r or {}).get("kind") or ""
+    if _leu_volume:
+        for _t in (_retorno.get("por_tipo") or []):
+            _k = (_t or {}).get("kind") or ""
             if _k:
-                volumes[_k] = volumes.get(_k, 0) + 1
-    except Exception as _e:
-        print(f"[email-catalog] volume falhou (nao critico): {_e}")
-        _log_error("admin:email-catalog", f"exceção lendo volume: {_e}",
-                   severity="warning")
+                _por_tipo[_k] = _t
+                volumes[_k] = int((_t or {}).get("volume_total") or 0)
     items = []
     for c in _EMAIL_CATALOG:
         items.append({**c, "volume": (int(volumes.get(c["key"], 0))
-                                      if _leu_volume else None)})
+                                      if _leu_volume else None),
+                      "retorno": _por_tipo.get(c["key"])})
     # 🚨 31/08 (auditoria): a Central listava só o que está no _EMAIL_CATALOG, e
     # o motor manda tipos que não estão nele — inclusive a variante que é a
     # MAIORIA das entregas. Um catálogo que esconde o que mais sai não é
@@ -21187,8 +21261,15 @@ def admin_email_catalog(request: Request):
         if _k and _k not in _conhecidos:
             items.append({"key": _k, "nome": _k, "grupo": "Fora do catálogo",
                           "gatilho": "sai pelo motor, sem ficha no catálogo",
-                          "volume": _v, "orfao": True})
-    return {"items": items, "volume_lido": _leu_volume}
+                          "volume": _v, "orfao": True,
+                          "retorno": _por_tipo.get(_k)})
+    # 🪤 `orfaos_lidos`: quando a leitura cai, os tipos que o motor manda e o
+    # catálogo não conhece DESAPARECEM da Central — e some justamente a lista
+    # que existe pra mostrar o que ninguém curou. A tela avisa em vez de
+    # deixar a ausência passar por "não há nenhum".
+    return {"items": items, "volume_lido": _leu_volume,
+            "retorno_lido": _leu_volume, "orfaos_lidos": _leu_volume,
+            "retorno_dias": (_retorno or {}).get("dias")}
 
 
 _BOOT_EM = datetime.utcnow()

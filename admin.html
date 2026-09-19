@@ -3949,7 +3949,123 @@ function _emailBadge(grupo) {
   return '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 text-xs font-semibold">&#129302; Autom&aacute;tico</span>';
 }
 
-function _emailCard(item) {
+// ── O e-mail trouxe alguém? (item 12 da fila, 19/09/2026) ──
+// 🩸 A Central dizia quanto SAIU e parava aí. Em 90 dias saíram 303 e-mails de
+// reativação pra 125 pessoas e ninguém sabia o que voltou — medido antes de
+// escrever: das ~184 com a janela fechada nos tipos que falam com quem sumiu,
+// ZERO abriu projeto novo.
+// 🩸 E a revisão derrubou a primeira versão desta linha: o único número
+// positivo dela ("72 de 95" no Boas-vindas) era CO-PRESENÇA, não retorno — os
+// 72 abriram o projeto 2,4 minutos depois do envio, porque o e-mail sai quando
+// a pessoa acabou de entrar no site.
+// 🩸 E o SEGUNDO passe derrubou o primeiro conserto: eu tinha resolvido isso
+// só com a MEDIANA, que é um escalar sem dispersão. Simulado no banco: 36
+// pessoas na mesma visita + 36 uma semana depois dá mediana de 60 h, e o aviso
+// sumia com 36 casos de co-presença dentro. Agora quem conta é
+// `projeto_7d_mesma_visita`, pessoa por pessoa, com o MESMO corte de 1 h.
+// `projeto_antes_7d` é a MESMA janela ANTES do envio, e sai SEMPRE, inclusive
+// zero: é o que transforma "0 de 39" de acusação em taxa-base.
+const _EMAIL_PEDE_OUTRA_COISA = {
+  calibracao: 'este e-mail pede planilha revisada, não projeto novo',
+  nps_relacional: 'este e-mail pede uma resposta, não projeto novo',
+  feedback: 'este e-mail pede uma resposta, não projeto novo',
+  cronograma_checkin: 'este e-mail pede atualizar a obra, não projeto novo'
+};
+// Campo ausente ≠ campo zero. `Number(null)||0` afirmaria um zero que ninguém
+// mediu — o mesmo defeito do `volume` em 31/08.
+function _numOuNulo(v) {
+  if (v === null || v === undefined || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+function _intervaloEmPalavra(h) {
+  if (h === null) return '';
+  if (h < 1 / 60) return '<1 min';
+  if (h < 1) return `${Math.round(h * 60)} min`;
+  if (h < 48) return `${Math.round(h)} h`;
+  return `${(h / 24).toFixed(1).replace('.', ',')} dias`;
+}
+function linhaRetornoDoEmail(r, lido, dias) {
+  const janela = _numOuNulo(dias) || 90;
+  if (!r || typeof r !== 'object' || Array.isArray(r)) {
+    // Duas ausências diferentes, e a tela não pode confundi-las: a leitura
+    // falhou, ou a leitura foi bem e este tipo nunca saiu.
+    return lido === true
+      ? `<span class="text-xs text-gray-400" title="A leitura funcionou; este tipo simplesmente não tem envio nenhum no registro.">&#128231; nunca saiu — nada pra medir</span>`
+      : `<span class="text-xs text-gray-400" title="Não consegui ler o retorno agora (backend velho ou leitura falhada). Zero seria mentira.">&#128064; não sei se trouxe alguém</span>`;
+  }
+  const fech = _numOuNulo(r.janela_7d_fechada);
+  const veio = _numOuNulo(r.projeto_7d);
+  if (fech === null || veio === null) {
+    return `<span class="text-xs text-gray-400" title="A resposta veio sem os campos da conta. Zero seria um número que ninguém mediu.">&#128064; não sei se trouxe alguém</span>`;
+  }
+  // 🪤 `|| 0` aqui reintroduziria, cinco linhas abaixo, o defeito que
+  // `_numOuNulo` existe pra impedir: `projeto_antes_7d` ausente viraria a
+  // FRASE "nenhum tinha aberto na semana anterior", que é afirmação, não
+  // silêncio. Os dois campos que viram frase ficam com o mesmo rigor.
+  const antes = _numOuNulo(r.projeto_antes_7d);
+  const pessoas = _numOuNulo(r.pessoas);
+  const aguard = _numOuNulo(r.aguardando_7d) || 0;
+  const cegos = _numOuNulo(r.sem_rastro_de_site) || 0;
+  const fech14 = _numOuNulo(r.janela_14d_fechada) || 0;
+  const veio14 = _numOuNulo(r.projeto_14d) || 0;
+  const mediana = _numOuNulo(r.mediana_horas_ate_o_projeto);
+  const mesmos = _numOuNulo(r.projeto_7d_mesma_visita);
+  const extras = [];
+  // 🚨 Sai sempre, inclusive zero: se só aparecesse quando > 0, sumiria
+  // justamente das fichas onde a linha acusa.
+  extras.push(antes === null
+    ? 'semana anterior: não medida'
+    : (antes === 0 ? 'nenhum tinha aberto na semana anterior'
+                   : `${antes} já ${antes === 1 ? 'tinha' : 'tinham'} aberto na semana anterior`));
+  if (aguard > 0) extras.push(`${aguard} ainda dentro dos 7 dias`);
+  if (cegos > 0) extras.push(cegos === 1 ? `1 das ${fech} sem rastro de site`
+                                         : `${cegos} das ${fech} sem rastro de site`);
+  if (fech14 > 0) extras.push(`em 14 dias: ${veio14} de ${fech14}`);
+  const cauda = ` <span class="text-gray-400">(${extras.join(' · ')})</span>`;
+  if (pessoas === 0) {
+    return `<span class="text-xs text-gray-400" title="Este tipo já saiu alguma vez, mas não na janela medida.">&#128231; nenhum envio nos últimos ${janela} dias</span>`;
+  }
+  if (fech === 0) {
+    // Ninguém completou 7 dias ainda: janela aberta não é fracasso.
+    return `<span class="text-xs text-gray-500" title="Todo mundo que recebeu este tipo recebeu há menos de 7 dias — ainda dá tempo de voltar.">&#8987; janela ainda aberta (${aguard} ${aguard === 1 ? 'pessoa' : 'pessoas'})</span>`;
+  }
+  // 🪤 `hasOwnProperty`: sem ele, um kind chamado `constructor` ou `toString`
+  // acharia uma função na cadeia de protótipo, desligaria o alarme e
+  // despejaria o código dela no HTML.
+  const chave = String(r.kind || '');
+  const ressalva = Object.prototype.hasOwnProperty.call(_EMAIL_PEDE_OUTRA_COISA, chave)
+    ? _EMAIL_PEDE_OUTRA_COISA[chave] : '';
+  // Alarme só com amostra que sustenta decisão, e só quando projeto novo é o
+  // que este e-mail pede.
+  const seco = (veio === 0 && fech >= 10 && !ressalva);
+  // 🚨 Quem decide "mesma visita" é a CONTAGEM por pessoa, não a mediana: numa
+  // mistura meio-a-meio a mediana cai no vão entre as duas populações e o
+  // aviso sumiria com metade do grupo sendo co-presença.
+  const todosMesmaVisita = (mesmos !== null && veio > 0 && mesmos === veio);
+  const algunsMesmaVisita = (mesmos !== null && mesmos > 0);
+  const cor = seco ? 'text-amber-700' : 'text-gray-600';
+  // Seta de alta só quando houve retorno DE VERDADE; zero e co-presença não
+  // sobem gráfico nenhum.
+  const icone = seco ? '&#9888; '
+    : (algunsMesmaVisita ? '&#9201; ' : (veio > 0 ? '&#128200; ' : '&#128231; '));
+  const txt = `${veio} de ${fech} ${veio === 1 ? 'abriu' : 'abriram'} projeto novo em 7 dias`;
+  const visita = !algunsMesmaVisita ? ''
+    : (todosMesmaVisita
+        ? ` — <b>${veio === 1 ? 'na mesma visita' : 'todos na mesma visita'}</b>, não é retorno`
+        : ` — <b>${mesmos} ${mesmos === 1 ? 'desse' : 'desses'} na mesma visita</b>`);
+  // 🪤 O aviso de mesma visita não pode depender da mediana existir: ele vem
+  // da contagem, e some junto se ficar pendurado no outro campo.
+  const quando = mediana === null ? visita
+    : ` · mediana ${_intervaloEmPalavra(mediana)} depois do envio${visita}`;
+  const nota = ressalva ? ` <span class="text-gray-400">— ${ressalva}</span>` : '';
+  return `<span class="text-xs ${cor}" title="Projeto novo criado na semana seguinte ao último envio deste tipo, nos últimos ${janela} dias, contado por pessoa e só com a janela fechada. Não é prova de causa: quem abriria de qualquer jeito entra igual — por isso vêm junto a semana anterior e a mediana do intervalo. Mediana de minutos quer dizer que a pessoa já estava no site quando o e-mail saiu.">${icone}${txt}${quando}${nota}${cauda}</span>`;
+}
+
+// 🪤 `lido` e `dias` são parâmetros nomeados de propósito: esta função era
+// passada direto pro .map(), que injeta o ÍNDICE no 2º argumento — o primeiro
+// cartão receberia lido=0 e o segundo lido=1. Quem chama usa arrow.
+function _emailCard(item, lido, dias) {
   // 🪤 31/08 (auditoria): aqui era `Number(item.volume || 0)`, entao volume
   // null (a leitura FALHOU) virava 0 — indistinguivel de "nunca saiu nenhum".
   // O backend agora manda null quando nao conseguiu contar; a tela tem que
@@ -3981,8 +4097,9 @@ function _emailCard(item) {
         ${item.orfao ? '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-xs font-semibold" title="Este tipo SAI pelo motor mas nao tem ficha no catalogo — sem nome amigavel, sem preview e sem botao de teste">&#9888; fora do cat&aacute;logo</span>' : _emailBadge(item.grupo)}
       </div>
       <p class="text-xs text-gray-500 leading-relaxed">${esc(item.gatilho || '')}</p>
+      <div class="pt-1">${linhaRetornoDoEmail(item.retorno, lido, dias)}</div>
       <div class="flex items-center justify-between mt-auto pt-1">
-        <span class="inline-flex items-center gap-1 text-xs text-gray-600" title="Total enviado pra usuários reais (email_sent_log)">&#128231; ${volTxt}</span>
+        <span class="inline-flex items-center gap-1 text-xs text-gray-600" title="Tudo que já saiu deste tipo, desde o início — inclusive os testes da casa. A linha de retorno acima é dos últimos 90 dias e conta só cliente.">&#128231; ${volTxt}</span>
         ${acoes}
       </div>
     </div>`;
@@ -4005,8 +4122,15 @@ async function loadEmailCatalog() {
     const items = data.items || [];
     const autos = items.filter(i => i.grupo !== 'manual');
     const mans  = items.filter(i => i.grupo === 'manual');
-    autoBox.innerHTML = autos.length ? autos.map(_emailCard).join('') : '<p class="text-sm text-gray-400">Nenhum.</p>';
-    manBox.innerHTML  = mans.length  ? mans.map(_emailCard).join('')  : '<p class="text-sm text-gray-400">Nenhum.</p>';
+    // 🪤 arrow, nunca `.map(_emailCard)`: o map injetaria o índice no lugar de `lido`.
+    const lido = (data.retorno_lido === true), dias = data.retorno_dias;
+    // 🚨 Com a leitura caída, os tipos "Fora do catálogo" somem da lista — e a
+    // ausência passaria por "não existe nenhum". A Central diz o que não sabe.
+    const avisoOrfaos = (data.orfaos_lidos === false)
+      ? '<p class="text-xs text-amber-700 mb-2">&#9888; Não consegui listar os tipos que saem fora do catálogo — esta lista pode estar incompleta.</p>'
+      : '';
+    autoBox.innerHTML = avisoOrfaos + (autos.length ? autos.map(i => _emailCard(i, lido, dias)).join('') : '<p class="text-sm text-gray-400">Nenhum.</p>');
+    manBox.innerHTML  = mans.length  ? mans.map(i => _emailCard(i, lido, dias)).join('')  : '<p class="text-sm text-gray-400">Nenhum.</p>';
     loading.classList.add('hidden');
     groups.classList.remove('hidden');
     loadSuprimidos();
