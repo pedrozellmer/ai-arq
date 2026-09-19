@@ -1,0 +1,34 @@
+-- APLICADA em 18/09/2026 (Supabase, migration `admin_filhotes_conta_download_do_servidor`).
+-- Fica aqui como registro do que mudou na RPC — a bancada não roda SQL.
+--
+-- Item 9 da fila: "baixou a planilha" contava só o clique do navegador
+-- (`usage_events.download_xlsx`, opt-in de cookie). O servidor registra
+-- `entrega:download` desde 15/09 e, desde 18/09, marca `por=cliente|interno|
+-- desconhecido`. O download do filhote passa a valer o MAIOR dos dois caminhos
+-- (o servidor enxerga tudo que o navegador enxerga; somar contaria duas vezes).
+-- Só a CTE `volta` mudou: virou `volta_nav` (a antiga) + `volta_srv` (nova) +
+-- `volta` (o greatest das duas).
+--
+--   volta_srv as (
+--     select e.job_id, count(*) as downloads, max(e.created_at) as ultima
+--     from error_log e
+--     join projects fp3 on fp3.job_id = e.job_id
+--     join projects pp3 on pp3.job_id = fp3.parent_job_id
+--     where e.stage = 'entrega:download'
+--       and (e.message like '% por=cliente'
+--            or (e.message not like '% por=%'
+--                and coalesce(pp3.user_email,'') not ilike '%zarelalopes%'))
+--     group by e.job_id
+--   ),
+--   volta as (
+--     select coalesce(n.job_id, s.job_id) as job_id,
+--            coalesce(n.visitas, 0) as visitas,
+--            greatest(n.ultima_visita, s.ultima) as ultima_visita,
+--            greatest(coalesce(n.downloads, 0), coalesce(s.downloads, 0)) as downloads
+--     from volta_nav n full join volta_srv s on s.job_id = n.job_id
+--   )
+--
+-- Conferido no dia, antes de aplicar: 87 filhotes, 2 com download pelo
+-- navegador, 0 pelo servidor (nenhum filhote foi baixado desde 15/09) — a
+-- mudança não altera nada de imediato; muda o que a tela vai dizer daqui pra
+-- frente. A definição completa está no banco (`pg_get_functiondef`).

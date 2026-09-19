@@ -18233,10 +18233,18 @@ async def download_file(job_id: str, request: Request):
         _tam = os.path.getsize(output_path)
     except Exception:
         _tam = -1
+    # 18/09: QUEM levou — cliente, interno (smoke/Pedro) ou desconhecido. Sem
+    # isto a contagem no servidor era 78 smoke : 11 cliente e ninguém separava.
+    # `run_in_threadpool` pelo mesmo motivo do registro abaixo: valida sessão
+    # com urllib bloqueante. Ver `_rotulo_de_quem_baixou`.
+    try:
+        _quem = await run_in_threadpool(_rotulo_de_quem_baixou, request)
+    except Exception:
+        _quem = "desconhecido"
     try:
         await run_in_threadpool(
             _log_error, "entrega:download",
-            f"planilha entregue ({_tam} bytes)", job_id, "info")
+            f"planilha entregue ({_tam} bytes) por={_quem}", job_id, "info")
     except Exception:
         pass    # entrega nunca falha por causa do registro dela
 
@@ -18737,6 +18745,30 @@ def _email_eh_interno(email: str) -> bool:
         return dom == a_dom and local.split("+")[0] == a_local.split("+")[0]
     except ValueError:
         return False
+
+
+def _rotulo_de_quem_baixou(request) -> str:
+    """"cliente" | "interno" | "desconhecido" — quem está levando a planilha.
+
+    🩸 18/09/2026 — item 9 da fila. O registro `entrega:download` (15/09) é o
+    único ponto por onde o arquivo passa, mas nascia SEM dizer quem baixou: 78
+    dos 89 registros eram o smoke test, e nenhuma consulta conseguia separar
+    cliente de casa sem juntar com o dono do projeto — que também erra, porque
+    o Pedro baixando um filhote pelo admin não é o cliente baixando.
+
+    🔑 Vai um RÓTULO, não o e-mail: é o único bit que a métrica precisa, e não
+    põe dado pessoal no `error_log`. "desconhecido" quando não há sessão que
+    confirme — nunca vira "cliente" por padrão (inflaria a métrica que este
+    conserto existe pra corrigir).
+    """
+    try:
+        u = _get_user_from_request(request, tolerante=True) or {}
+        email = str(u.get("email") or "").strip()
+    except Exception:
+        email = ""
+    if not email:
+        return "desconhecido"
+    return "interno" if _email_eh_interno(email) else "cliente"
 
 
 TICK_SECRET = os.getenv("TICK_SECRET", "")
@@ -27995,6 +28027,77 @@ def _nomes_em_silencio(por_nome, by_event: dict) -> list:
     return fora
 
 
+#: dia em que `/api/download` passou a registrar `entrega:download`. Antes dele
+#: só existe o clique do navegador; depois, o clique é DESCARTADO e o registro
+#: do servidor entra no lugar — contar os dois seria contar o mesmo download
+#: duas vezes.
+_DOWNLOAD_NO_SERVIDOR_DESDE = "2026-09-15"
+
+
+def _com_downloads_do_servidor(rows, since_url: str, projetos_da_janela) -> tuple:
+    """Troca o clique pelo registro do servidor a partir da costura.
+
+    Só entra registro marcado `por=cliente` (ver `_rotulo_de_quem_baixou`) — ou,
+    nos 3 dias anteriores à marcação, registro sem rótulo cujo DONO não é conta
+    interna. `por=interno` e `por=desconhecido` nunca viram "baixou".
+    Devolve (rows, quantos registros do servidor entraram).
+    """
+    try:
+        _st, dls = _supa_rest_tudo(
+            "error_log",
+            params={"stage": "eq.entrega:download",
+                    "created_at": f"gte.{since_url}",
+                    "select": "job_id,message,created_at",
+                    "order": "created_at.desc,id.asc"}, timeout=20)
+    except Exception as _e:
+        print(f"[activity] downloads do servidor falharam (não crítico): {_e}")
+        _st, dls = 500, []
+    # 🪤 Sabotagem U06 (18/09): isto devolvia cedo também quando a leitura deu
+    # 200 com ZERO linhas — e aí o filtro da costura nunca rodava: clique
+    # pós-costura contava mesmo sem registro do servidor. Só a FALHA da leitura
+    # mantém o clique como fallback; leitura vazia é resposta ("ninguém
+    # baixou"), não ausência de resposta.
+    if _st != 200:
+        return rows, 0
+    dls = dls or []
+    dono = {p.get("job_id"): p for p in (projetos_da_janela or []) if p.get("job_id")}
+    faltam = sorted({d.get("job_id") for d in dls if d.get("job_id") and d.get("job_id") not in dono})
+    if faltam:
+        try:
+            _st2, _extra = _supa_rest_tudo(
+                "projects",
+                params={"job_id": "in.(%s)" % ",".join(faltam),
+                        "select": "job_id,user_email,user_id"}, timeout=20)
+            if _st2 == 200:
+                for p in _extra or []:
+                    dono[p.get("job_id")] = p
+        except Exception as _e:
+            print(f"[activity] donos dos downloads falharam (não crítico): {_e}")
+    novos = []
+    for d in dls:
+        jid = d.get("job_id") or ""
+        msg = str(d.get("message") or "")
+        p = dono.get(jid) or {}
+        email = (p.get("user_email") or "").strip()
+        if " por=cliente" in msg:
+            ok = True
+        elif " por=" in msg:
+            ok = False
+        else:
+            ok = bool(email) and not _email_eh_interno(email)
+        if not ok:
+            continue
+        novos.append({"event": "download_xlsx", "user_email": email,
+                      "user_id": p.get("user_id") or "", "job_id": jid,
+                      "path": "", "meta": {"fonte": "servidor"},
+                      "created_at": d.get("created_at") or ""})
+    rows = [r for r in rows
+            if not ((r.get("event") or "") == "download_xlsx"
+                    and (r.get("meta") or {}).get("fonte") != "servidor"
+                    and (r.get("created_at") or "") >= _DOWNLOAD_NO_SERVIDOR_DESDE)]
+    return rows + novos, len(novos)
+
+
 def _usage_events_por_nome(dias: int = 365) -> list:
     """RPC `usage_events_por_nome` (agregado no banco). Best-effort: o painel
     nunca cai por causa dos zeros — sem resposta, a seção fica vazia e DIZ."""
@@ -28105,6 +28208,15 @@ def admin_activity(request: Request, days: int = 30, limit: int = 200):
             "job_id": "", "path": "", "meta": {},
             "created_at": _acreated,
         })
+
+    # ── Downloads contados no SERVIDOR (4ª fonte) ─────────────────────────
+    # 🩸 18/09/2026 — item 9 da fila. "Baixou planilha" vinha do clique do
+    # navegador (`download_xlsx`), que é opt-in de cookie: desde que o servidor
+    # registra (15/09), em 16 jobs concluídos o navegador viu 6 e o servidor 8
+    # — 0 só-navegador, 2 só-servidor. O servidor enxerga tudo que o navegador
+    # enxerga, e mais. A partir da COSTURA, o clique deixa de contar e o
+    # registro do servidor entra no lugar; antes dela, só o clique existe.
+    rows, _n_dl_srv = _com_downloads_do_servidor(rows, since_url, _projects)
 
     rows.sort(key=lambda r: r.get("created_at") or "", reverse=True)
 
