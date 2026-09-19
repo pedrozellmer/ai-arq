@@ -1,0 +1,22 @@
+-- APLICADA em 18/09/2026 (Supabase, migration `admin_qualidade_semanal_recorte_cad_e_refeito`).
+-- Fica aqui como registro do que mudou na RPC — a bancada não roda SQL.
+--
+-- Item 10 da fila: "indicador de falha do painel: CAD com zero medido". O painel
+-- já mostrava "mediu × entregou sem medir"; faltavam (a) o RECORTE de CAD (PDF
+-- sem medida é regra, não defeito) e (b) o desconto do REFEITO que mediu — só
+-- conta quando o filhote foi LIBERADO ao cliente (user_id do filhote = dono).
+-- Também `plano_b` {total, mediu}: a tela afirmava "o reserva lê texto mas não
+-- mede" e o libredwg mediu em 40 de 56.
+--
+-- O que mudou na função (o resto é idêntico):
+--   base ..... + p.user_id, + tem_cad (dwg+dxf > 0)
+--   refeito .. filhote is_eval com parent_job_id, user_id = dono, medidos > 0
+--   j ........ + refeito_mediu
+--   agg ...... + cad_finalizados, cad_sem_medir, cad_refeito_mediu (por semana)
+--   cad_60d .. {finalizados, sem_medir, refeito_mediu, sem_medir_liquido, dias: 60}
+--   plano_b .. {total, mediu} (done, tem_cad, warnings com "plano B"/"leitor alternativo")
+--
+-- Conferido no dia, depois de aplicar: cad_60d = 84 / 26 / 3 / 23; plano_b = 43 / 61;
+-- 20 semanas. (A RPC não exclui contas de trial; a medição manual excluía, e dava
+-- 79 / 23 / 3 / 20 — a diferença é o universo, não a conta.)
+-- A definição completa está no banco (`pg_get_functiondef`).

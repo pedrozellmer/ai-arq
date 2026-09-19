@@ -2663,6 +2663,32 @@ async function loadQualidadeSemanal(){
     box.innerHTML = `<p class="text-red-600 text-sm">Não consegui carregar: ${(e && e.message) || e}</p>`;
   }
 }
+// 18/09/2026 — item 10 da fila: o INDICADOR DE FALHA que interessa.
+// "Deu erro" é 5%; CAD que concluiu sem UMA linha medida era 23 de 79 em 60
+// dias (29%) e não aparecia como falha em lugar nenhum. PDF sem medida é
+// regra (não carrega geometria) — por isso o recorte é só CAD. E o refeito só
+// desconta quando o filhote foi LIBERADO ao cliente: filhote que mediu e ficou
+// guardado não mudou o que ele recebeu. Funções puras: a bancada roda no dukpy.
+function linhaCad60d(c) {
+  if (!c || typeof c !== 'object' || !(c.finalizados > 0)) {
+    return '<p class="text-xs text-gray-400 mt-3">CAD sem medida nos últimos 60 dias: sem dado (a RPC não devolveu <code>cad_60d</code>).</p>';
+  }
+  const fin = c.finalizados|0, sm = c.sem_medir|0, ref = c.refeito_mediu|0, liq = c.sem_medir_liquido|0;
+  const pct = n => fin ? Math.round(100*n/fin) : 0;
+  const cor = pct(liq) >= 25 ? 'text-red-700' : (pct(liq) >= 10 ? 'text-amber-700' : 'text-emerald-700');
+  return `<div class="mt-3 pt-3 border-t">
+    <p class="text-xs font-medium text-gray-600">🎯 CAD sem medida &mdash; últimos ${c.dias||60} dias</p>
+    <p class="text-sm text-gray-700 mt-0.5"><b class="${cor}">${liq} de ${fin}</b> <span class="text-gray-500">(${pct(liq)}%)</span> concluíram sem uma linha medida e continuam assim${ref ? ` &mdash; outros <b>${ref}</b> foram refeitos e o filhote <b>liberado</b> mediu (bruto: ${sm} de ${fin}, ${pct(sm)}%)` : (sm ? ` (bruto ${sm}; nenhum refeito liberado mediu)` : '')}.</p>
+    <p class="text-xs text-gray-400 mt-0.5">É este o indicador de falha que importa: "deu erro" é outro número, bem menor.</p>
+  </div>`;
+}
+function notaPlanoB(pb) {
+  if (!pb || typeof pb !== 'object' || !(pb.total > 0)) {
+    return 'O conversor principal recusou e o reserva (libredwg) leu.';
+  }
+  const t = pb.total|0, m = pb.mediu|0, p = t ? Math.round(100*m/t) : 0;
+  return `O conversor principal recusou e o reserva (libredwg) leu &mdash; e mede: <b>${m} de ${t}</b> (${p}%) dos projetos que passaram por ele tiraram medida do desenho.`;
+}
 function renderQualidadeSemanal(d){
   const S = (d.semanas || []).filter(w => w && w.semana);
   if (!S.length) return '<p class="text-gray-400 text-sm">Sem dados ainda.</p>';
@@ -2812,11 +2838,11 @@ function renderQualidadeSemanal(d){
       <p class="text-xs text-gray-400 mb-3">Os ${nmTot} projetos que <b>concluíram sem medir nada</b></p>
       ${linhaNm('PDF &mdash; não tem geometria', nm.pdf, '#94A3B8',
                 'Esperado, não é defeito: PDF não carrega a geometria pra medir.')}
-      ${linhaNm('CAD abriu só no leitor reserva', nm.pb, '#F59E0B',
-                'O conversor principal recusou; o reserva lê texto mas não mede.')}
+      ${linhaNm('CAD abriu só no leitor reserva', nm.pb, '#F59E0B', notaPlanoB(d.plano_b))}
       ${linhaNm('CAD abriu e não mediu', nm.out, '#EF4444',
                 '🎯 Estes são defeito de verdade &mdash; é onde mexer no motor rende.')}
       ${nmTot ? '' : '<p class="text-sm text-gray-400">Nenhum. Todos os concluídos mediram algo.</p>'}
+      ${linhaCad60d(d.cad_60d)}
     </div>
 
     ${fmt ? `<div class="rounded-2xl border bg-white p-5">
