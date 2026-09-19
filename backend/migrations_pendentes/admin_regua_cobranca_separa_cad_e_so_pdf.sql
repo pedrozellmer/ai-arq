@@ -1,0 +1,23 @@
+-- APLICADA em 18/09/2026 (Supabase, migration `admin_regua_cobranca_separa_cad_e_so_pdf`).
+-- Fica aqui como registro do que mudou na RPC — a bancada não roda SQL.
+--
+-- Item 11 da fila: "régua separada CAD × só-PDF". A régua misturada "caiu" em
+-- setembro sem o motor piorar: só-PDF é 0% cobrável POR REGRA (70f98a2) e
+-- passou de 9 pra 21 entregas no mês; dentro do CAD, cobráveis/dia subiram
+-- 52% (ago R$81,35/dia → set R$123,94/dia, em 18 dias).
+--
+-- O que mudou (o resto é idêntico a admin_regua_cobranca.sql):
+--   base ..... + so_pdf (pdf > 0 e dwg = dxf = 0)
+--   dias ..... dias corridos do mês (mês em curso: até hoje em Brasília)
+--   por_mes .. + dias, receita_por_dia,
+--              + com_cad {entregas, cobraveis, receita_a_97, receita_por_dia},
+--              + so_pdf  {entregas, cobraveis}
+--   chaves antigas: todas intactas (a tela velha continua lendo).
+--
+-- 🪤 NUNCA `DROP FUNCTION` aqui — ver o cabeçalho de admin_regua_cobranca.sql.
+--
+-- Conferido no dia, na base da própria RPC (últimos 3 meses):
+--   2026-07  com CAD 21 ent / 15 cob / R$46,94 por dia · só-PDF 16 / 0
+--   2026-08  com CAD 38 / 26 / R$81,35 · só-PDF 9 / 0
+--   2026-09  com CAD 32 / 23 / R$123,94 (18 d) · só-PDF 21 / 0
+-- A definição completa está no banco (`pg_get_functiondef`).

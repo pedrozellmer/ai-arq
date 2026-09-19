@@ -133,7 +133,12 @@ function costFmt(v){ return 'R$ ' + Number(v).toFixed(2); }
 
 def _html_da_regua(regua_js=_REGUA_FALSA):
     from _jsbancada import funcao_js, motor
-    js = motor(regua_js + funcao_js("_blocoRegua", "admin.html"))
+    # 🪤 18/09: `_blocoRegua` passou a delegar a sub-linha "com CAD × só-PDF" a
+    # `subLinhaPopulacoes` (item 11). A página define as duas; o harness que
+    # carregava UMA função só quebrou com ReferenceError — não era defeito da
+    # tela, era o recorte do guarda menor que a tela. Carrega as duas.
+    js = motor(regua_js + funcao_js("subLinhaPopulacoes", "admin.html")
+               + funcao_js("_blocoRegua", "admin.html"))
     return js.evaljs("_blocoRegua()")
 
 

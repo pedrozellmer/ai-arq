@@ -1740,6 +1740,27 @@ function _kpiCustoIA(custoFixoPorProjeto){
 // de um lado o que SAI (custo medido), do outro o que ENTRARIA.
 // A regra: "só cobra o projeto que mediu pelo menos UMA linha do CAD". Ela
 // converte o pior risco de reembolso em NÃO-COBRANÇA automática.
+// 18/09/2026 — item 11 da fila: a RÉGUA SEPARADA em "com CAD" e "só-PDF".
+// Só-PDF é 0% cobrável POR REGRA (70f98a2); quando ele cresce, a régua
+// misturada "cai" sem o motor ter piorado — em setembro só-PDF foi de 9 pra 21
+// entregas e, dentro do CAD, a receita por dia SUBIU 52%. Esta sub-linha é o
+// que impede ler mudança de mistura como queda. Função pura: a bancada roda
+// no dukpy. Sem os campos (RPC velha) devolve vazio — nunca inventa.
+function subLinhaPopulacoes(m) {
+  if (!m || typeof m !== 'object' || !m.com_cad || typeof m.com_cad !== 'object') return '';
+  const c = m.com_cad, p = m.so_pdf || {};
+  const cEnt = Number(c.entregas)||0, cCob = Number(c.cobraveis)||0;
+  const pEnt = Number(p.entregas)||0, pCob = Number(p.cobraveis)||0;
+  const cPct = cEnt ? Math.round(100*cCob/cEnt) : 0;
+  const dia = (m.dias && c.receita_por_dia != null) ? ` · <b>${costFmt(Number(c.receita_por_dia)||0)}</b>/dia` : '';
+  // 🚨 só-PDF cobrável > 0 é resquício de antes de 15/09 (11 projetos) — a
+  // sub-linha DIZ, em vez de somar calada com o CAD.
+  const pdfTxt = pCob > 0
+    ? `só-PDF: ${pEnt} entregas, <span class="text-amber-700">${pCob} ${pCob===1?'cobrável':'cobráveis'} de antes da regra de 15/09</span>`
+    : `só-PDF: ${pEnt} entrega${pEnt===1?'':'s'}, 0 cobráveis <span class="text-gray-400">(regra: PDF não mede)</span>`;
+  return `<tr><td></td><td colspan="5" class="pb-1.5 text-[11px] text-gray-500">`
+    + `com CAD: <b>${cEnt}</b> entregas, <b>${cCob}</b> cobráveis (${cPct}%)${dia} &nbsp;·&nbsp; ${pdfTxt}</td></tr>`;
+}
 function _blocoRegua(){
   const d = COSTS_REGUA;
   if (!d) return '';
@@ -1758,7 +1779,9 @@ function _blocoRegua(){
       + `<td class="py-1.5 pr-3 text-right text-gray-600">${ent}</td>`
       + `<td class="py-1.5 pr-3 text-right font-semibold text-gray-900">${cob}</td>`
       + `<td class="py-1.5 pr-3 text-right text-gray-500">${pct}%${aviso}</td>`
-      + `<td class="py-1.5 text-right font-semibold text-emerald-700">${costFmt(Number(m.receita_a_97)||0)}</td></tr>`;
+      + `<td class="py-1.5 pr-3 text-right font-semibold text-emerald-700">${costFmt(Number(m.receita_a_97)||0)}</td>`
+      + `<td class="py-1.5 text-right text-gray-600">${m.dias ? costFmt(Number(m.receita_por_dia)||0) : '—'}</td></tr>`
+      + subLinhaPopulacoes(m);
   }).join('');
   const tot = Number(d.total_cobraveis)||0, totEnt = Number(d.total_entregas)||0;
   // ⚖️ ONDE CORTAR A RÉGUA — 15/09/2026, decisão do Pedro.
@@ -1805,7 +1828,7 @@ function _blocoRegua(){
       <thead><tr class="text-gray-400 uppercase tracking-wider">
         <th class="text-left pb-1">Mês</th><th class="text-right pb-1 pr-3">Entregas</th>
         <th class="text-right pb-1 pr-3">Cobráveis</th><th class="text-right pb-1 pr-3">%</th>
-        <th class="text-right pb-1">Receita</th></tr></thead>
+        <th class="text-right pb-1 pr-3">Receita</th><th class="text-right pb-1" title="receita simulada dividida pelos dias corridos do mês (o mês em curso conta até hoje)">R$/dia</th></tr></thead>
       <tbody>${linhas}</tbody>
     </table>${corte}</div>`;
 }
