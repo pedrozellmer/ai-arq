@@ -2763,6 +2763,9 @@
         } catch (_) {}
         selectedFiles.splice(idx, 1);
         renderFiles();
+        // Tirou arquivo: o envio pode ter voltado pra dentro do teto de páginas
+        // (e, se voltar a estourar depois, o aviso precisa poder aparecer de novo).
+        avisaSeOEnvioTemPaginasDemais();
       });
     });
   }
@@ -2797,6 +2800,9 @@
     // 23/08 (auditoria): passava a lista CRUA, então um .zip ignorado ainda
     // disparava o aviso de 'arquivo grande' — dois toasts se contradizendo.
     checkBigFilesAndWarn(Array.from(newFiles).filter(f => /\.(pdf|dwg|dxf)$/i.test(f.name || '')));
+    // DWG/DXF não passam pelo contador de páginas do pdf.js — ainda assim cada
+    // um conta como uma prancha na soma do envio.
+    avisaSeOEnvioTemPaginasDemais();
     if (_ignorados.length) {
       const _z = _ignorados.some(n => /\.zip$/i.test(n));
       try { trackEvent('arquivo_ignorado', { type: _z ? 'zip' : 'outro' }); } catch (_) {}
@@ -2849,6 +2855,67 @@
   }
 
   // ══════════════════════════════════════════════
+  //  AVISO PREVENTIVO: ENVIO COM PÁGINAS DEMAIS
+  // ══════════════════════════════════════════════
+  // 🚨 19/09/2026. Um cliente de primeira viagem subiu o pacote de licitação
+  // inteiro — edital de 31 páginas, memorial, termo de referência, memórias de
+  // cálculo, cronograma e BDI, com as pranchas no meio. O motor passou 69 min
+  // lendo documento de texto e entregou zero item. O servidor agora para o
+  // processamento acima de AIARQ_TETO_PAGINAS; este aviso existe para a pessoa
+  // saber ANTES de enviar, enquanto ainda está na tela e pode tirar o que não
+  // é desenho.
+  // 🔑 Este número NÃO é o teto do servidor, e não deve ser. O caso que
+  // originou isto terminou: 131 páginas, 93 min, US$ 6,96 e **500 itens
+  // entregues** — 61% deles vindos dos próprios documentos. Recusar teria
+  // custado a planilha inteira a um cliente novo. Então o servidor só para num
+  // absurdo (AIARQ_TETO_PAGINAS, hoje 200) e o que existe aqui é AVISO: a
+  // partir daqui o envio já demora o bastante para valer a pena a pessoa tirar
+  // o que não é desenho, se quiser. Ninguém é impedido de nada.
+  // 🪤 O guarda cobra que este número seja MENOR que o teto do motor — avisar
+  // depois de o motor já ter parado não avisa nada.
+  // 🪤 E o aviso NÃO diz "edital não é lido": seria falso. Hoje não há triagem
+  // nenhuma — a gente lê tudo como prancha. O que ele diz é o que acontece.
+  const TETO_PAGINAS_ENVIO = 60;
+  const _paginasDoArquivo = new Map();   // nome do arquivo PDF -> nº de páginas
+  let _ultimaSomaAvisada = 0;
+  const _ehPdf = f => /\.pdf$/i.test(f && f.name || '');
+
+  // 🪤 Só PDF entra na conta, igual ao servidor. Contar DWG/DXF como "1 página"
+  // fazia a tela somar um número que o motor não usa — e era esse número que ia
+  // pro evento de telemetria, virando medição errada lá na frente.
+  function _somaDasPaginasDoEnvio() {
+    let soma = 0, faltam = 0;
+    for (const f of selectedFiles) {
+      if (!_ehPdf(f)) continue;
+      const n = _paginasDoArquivo.get(f.name);
+      if (Number.isFinite(n) && n > 0) soma += n; else faltam++;
+    }
+    return { soma, faltam };
+  }
+
+  function avisaSeOEnvioTemPaginasDemais() {
+    try {
+      const { soma, faltam } = _somaDasPaginasDoEnvio();
+      if (soma <= TETO_PAGINAS_ENVIO) { _ultimaSomaAvisada = 0; return; }
+      // 🪤 A contagem é assíncrona (pdf.js abre um arquivo de cada vez). Avisar
+      // com arquivo ainda por contar mostra um número menor que o real, e era
+      // esse número parcial que ficava congelado na tela.
+      if (faltam) return;
+      if (soma <= _ultimaSomaAvisada) return;
+      _ultimaSomaAvisada = soma;
+      const gordos = selectedFiles
+        .filter(_ehPdf)
+        .map(f => [f.name, _paginasDoArquivo.get(f.name) || 1])
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([n, p]) => `${n} (${p} págs.)`)
+        .join(', ');
+      try { trackEvent('aviso_envio_paginas_demais', { paginas: soma }); } catch (_) {}
+      _warnToast(`⏱ Este envio soma ${soma} páginas de PDF. Pode rodar assim — mas acima de ${TETO_PAGINAS_ENVIO} páginas costuma passar de uma hora. A gente lê todo PDF como se fosse prancha, inclusive edital, memorial e cronograma: eles viram linha na planilha, só que sem medida do desenho. Se quiser o resultado mais rápido, mande só as pranchas. Os maiores aqui são ${gordos}.`);
+    } catch (e) { console.warn('aviso de páginas falhou:', e); }
+  }
+
+  // ══════════════════════════════════════════════
   //  AVISO PREVENTIVO: PDF SEM TEXTO EXTRAÍVEL
   // ══════════════════════════════════════════════
   // Carrega pdf.js (Mozilla) sob demanda na primeira vez que o user adiciona PDF.
@@ -2887,6 +2954,12 @@
       const pdfjs = await loadPdfJs();
       const buffer = await file.arrayBuffer();
       const pdf = await pdfjs.getDocument({ data: buffer }).promise;
+      // O envio inteiro tem teto de páginas (ver avisaSeOEnvioTemPaginasDemais).
+      // Aproveita que o arquivo já está aberto aqui para contar sem abrir de novo.
+      try {
+        _paginasDoArquivo.set(file.name, pdf.numPages || 1);
+        avisaSeOEnvioTemPaginasDemais();
+      } catch (_) {}
       const maxPages = Math.min(pdf.numPages, 3);
       let totalChars = 0;
       for (let i = 1; i <= maxPages; i++) {
@@ -2917,6 +2990,12 @@
     } catch (e) {
       // Falha de leitura do PDF (corrompido / criptografado / pdf.js offline) →
       // não opina. User continua o fluxo normal.
+      // 🪤 Mas registra 1 página: sem isso o arquivo fica "por contar" pra
+      // sempre e o aviso do tamanho do envio nunca dispara, nem pros outros.
+      try {
+        if (!_paginasDoArquivo.has(file.name)) _paginasDoArquivo.set(file.name, 1);
+        avisaSeOEnvioTemPaginasDemais();
+      } catch (_) {}
       console.warn('Não consegui avaliar texto do PDF:', e);
     }
   }

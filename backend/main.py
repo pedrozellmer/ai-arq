@@ -4254,6 +4254,31 @@ def _build_falha_email(name: str, project_name: str, reprocessavel: bool,
             alt_img = "Um ajuste no arquivo resolve — reenvie exportado do CAD"
             pre_txt = ("Reprocessar não resolve este caso: reenvie a planta completa "
                        "exportada do CAD.")
+        elif "páginas de leitura" in _eh:
+            # 🩸 19/09/2026. Sem este ramo, a mensagem do teto de páginas cai no
+            # `else` logo abaixo e o cliente recebe "seu PDF é uma imagem
+            # escaneada, reenvie em DXF" — conselho falso E acusando o arquivo
+            # dele, no mesmo dia em que a casa já fez isso uma vez.
+            # 🪤 `error_hint` é o `error_message` do banco (4433), NÃO o
+            # `current_step`. A âncora tem que ser uma frase que está na
+            # mensagem gravada — "páginas de leitura" — e o guarda
+            # `test_o_email_do_teto_nao_cai_no_balde_do_arquivo` prova o
+            # casamento executando os dois lados juntos. Ele já pegou uma
+            # quebra: quando a mensagem foi reescrita, a âncora antiga deixou
+            # de existir e o e-mail voltou a cair no balde genérico.
+            # 🪤 Sem prometer que edital e memorial não geram item: o caso que
+            # originou a régua mediu 61% dos itens vindo justamente deles.
+            motivo = ("ele precisa de mais páginas de leitura do que a gente "
+                      "processa de uma vez. A gente lê todo PDF como se fosse "
+                      "prancha — inclusive edital, memorial descritivo, memória de "
+                      "cálculo, cronograma, BDI e matriz de riscos — e é isso que "
+                      "costuma estourar o tamanho do envio.")
+            fix = ("O caminho que não perde nada é mandar em <b>dois projetos "
+                   "separados</b> — saem duas planilhas. Se preferir um só, deixe "
+                   "no envio só as pranchas de desenho.")
+            alt_img = "Um ajuste no envio resolve — divida em dois projetos"
+            pre_txt = ("Reprocessar não resolve: divida o envio em dois projetos, "
+                       "ou mande só as pranchas.")
         else:
             motivo = ("não conseguimos ler as quantidades nesse arquivo. Quase sempre é "
                       "porque o PDF é uma imagem escaneada/fotografada, ou a prancha tem só "
@@ -8140,6 +8165,221 @@ def _decisao_do_freio():
 _JOB_ID_RE = __import__("re").compile(r"^[0-9a-zA-Z]{6,16}$")
 
 
+# ── RÉGUA DE PÁGINAS DO ENVIO ────────────────────────────────────────────
+# 🚨 19/09/2026. Um cliente de primeira viagem subiu o PACOTE DE LICITAÇÃO
+# inteiro — 27 PDFs, nenhum CAD: edital assinado de 31 páginas, termo de
+# referência, memorial descritivo, duas memórias de cálculo, cronograma, BDI e
+# matriz de riscos, com as pranchas no meio disso. Em 69 minutos o motor tinha
+# aberto 114 unidades de página, gasto US$ 4,40 de IA e entregue ZERO item.
+# 74% do tempo de leitura vetorial foi gasto em documento de texto, que não
+# tem escala nem desenho para medir.
+#
+# 🪤 A ARMADILHA QUE QUASE ESCOLHEU O NÚMERO ERRADO. Medindo o acervo, a
+# conclusão foi "o maior envio que já deu certo tem 40 páginas". Era
+# TAUTOLOGIA: o log de páginas nasce de `page_units`, que o `process_job`
+# monta com `range(min(_npg, MAX_PAGES_PER_PDF))` — nenhum job pode registrar
+# mais de 40 páginas POR ARQUIVO, porque 40 é a régua da própria casa. As duas
+# fontes que pareciam independentes (o log da leitura vetorial e as chamadas
+# de IA por prancha) nascem as duas dali. O número verdadeiro só sobrevive no
+# TEXTO do aviso de truncagem, guardado em `projects.warnings`.
+#
+# 📏 Remedido na fonte não contaminada:
+#   · 47 páginas — maior envio de CLIENTE entregue com sucesso (08/09, um PDF
+#     só, 1.044 itens). Na conta viciada aparecia como 40.
+#   · 58 páginas — aparece duas vezes em 21/08, mas as duas são avaliação
+#     NOSSA (`is_eval`) e o arquivo grande NÃO entrou na planilha: o próprio
+#     aviso do job diz que faltou justamente ele. Não conta como entregue.
+#   · 131 páginas — o caso de hoje, contado depois que ele terminou.
+#
+# 🩸 E O CASO DE HOJE NÃO FRACASSOU. Esta régua ia nascer em 80 para barrá-lo.
+# Ele terminou em 93 min, custou US$ 6,96 e entregou **500 itens** — dos quais
+# **305 (61%) saíram justamente dos documentos** que a régua ia recusar: o
+# termo de referência e a memória de cálculo trazem quadros de quantitativos, e
+# a IA leu. Um teto em 80 teria trocado 500 linhas por uma tela de erro, no
+# primeiro envio de um cliente novo.
+#
+# 🔑 Daí o desenho: em 189 jobs medidos, NENHUM envio grande fracassou por ser
+# grande. O que envio grande custa é TEMPO e DINHEIRO, não entrega — e para
+# isso o remédio é avisar quem está na tela, não recusar. Este teto ficou como
+# proteção de última instância contra um envio absurdo (memória do Render,
+# custo de IA fora de escala), calibrado 50% acima do maior envio REAL que já
+# passou por aqui. Ele não morde nenhum caso conhecido, e é isso mesmo.
+# ⏭️ O que resolve de verdade é triagem — separar desenho de documento antes de
+# gastar IA. Não entra aqui: descartar por engano uma prancha legítima seria
+# pior que ler um edital, e a reforma do motor já está agendada.
+#
+# 🪤 O teto NÃO é o número de arquivos, que era o palpite natural. O segundo
+# maior projeto da casa chegou com 24 ARQUIVOS (609 itens, 17/09) e o maior de
+# todos chegou com UM. Contar arquivo barraria os dois e deixaria passar o
+# pacote de licitação, que tem 27.
+TETO_PAGINAS_DO_ENVIO = int(os.environ.get("AIARQ_TETO_PAGINAS", "200"))
+
+# Quantas páginas de UM PDF o motor chega a ler. Vive aqui porque a régua
+# abaixo tem que contar o trabalho REAL: um caderno único de 190 páginas custa
+# 40, não 190. Quem consome é o `process_job` (MAX_PAGES_PER_PDF).
+PAGINAS_LIDAS_POR_PDF = 40
+
+
+def _paginas_do_envio(file_paths):
+    """(a ler, [(nome, a_ler, no_arquivo)...]) dos PDFs do run. CAD não conta.
+
+    🔑 Conta o que o motor VAI LER, não o que veio no arquivo: o `process_job`
+    lê no máximo `PAGINAS_LIDAS_POR_PDF` páginas de cada PDF. Contar o bruto
+    faria a régua recusar por 190 páginas um envio de que o motor leria 40 — e
+    justamente o formato que mais entrega aqui é o caderno único (o projeto com
+    mais itens da casa veio assim, 47 páginas num arquivo só).
+
+    🪤 `pdf_page_count` nunca levanta: já devolve 1 quando o arquivo não abre.
+    Um PDF ilegível conta como uma página e NUNCA barra o envio por engano — o
+    que não pode é isso acontecer em silêncio, e por isso quem chama registra o
+    detalhamento por arquivo em todo run.
+    """
+    try:
+        from processor import pdf_page_count
+    except Exception:
+        return 0, []
+    por_arquivo = []
+    for _p in (file_paths or []):
+        _s = str(_p)
+        if not _s.lower().endswith(".pdf"):
+            continue
+        # 🪤 Este `except` é INALCANÇÁVEL hoje, e está aqui de propósito:
+        # `pdf_page_count` já devolve 1 em qualquer erro, nunca levanta. Fica
+        # como cinto de segurança para o dia em que o contrato do `processor`
+        # mudar: uma exceção aqui derrubaria TODO job, não só o arquivo ruim.
+        try:
+            _no_arquivo = max(1, int(pdf_page_count(_s)))
+        except Exception:
+            _no_arquivo = 1
+        por_arquivo.append((os.path.basename(_s),
+                            min(_no_arquivo, PAGINAS_LIDAS_POR_PDF),
+                            _no_arquivo))
+    por_arquivo.sort(key=lambda _t: (-_t[1], -_t[2]))
+    return sum(_t[1] for _t in por_arquivo), por_arquivo
+
+
+def _mensagem_de_teto_de_paginas(soma, por_arquivo):
+    """O texto que o cliente lê. 🔑 O sujeito é sempre a casa, nunca "você".
+
+    🩸 19/09/2026, no mesmo dia: um e-mail automático mandou um cliente trocar
+    um arquivo que estava certo, porque o default do aviso de falha acusava
+    ele. Aqui a frase diz o que A GENTE faz, não o que ele mandou de errado.
+
+    🪤 DUAS FRASES QUE A REVISÃO DERRUBOU, as duas por serem FALSAS:
+    · "edital e memorial não geram item" — o caso que originou esta régua mediu
+      o contrário no mesmo dia: 305 dos 500 itens (61%) saíram justamente do
+      termo de referência e da memória de cálculo, que trazem quadros de
+      quantitativos. Mandar o cliente tirá-los custaria linhas a ele.
+    · "seus arquivos continuam guardados aqui" — a régua roda ANTES de o motor
+      subir qualquer coisa pro Storage. Nada fica guardado; prometer isso faria
+      o cliente esperar por um projeto que não existe.
+    A saída honesta é dividir em dois projetos, e é ela que vem primeiro.
+    """
+    _top = "; ".join("%s (%d página%s)" % (_n, _bruto, "" if _bruto == 1 else "s")
+                     for _n, _lidas, _bruto in por_arquivo[:5]) or "—"
+    return (
+        "Este envio precisa de %d páginas de leitura e a gente processa até %d "
+        "por projeto, então ele não chegou a rodar.\n\n"
+        "O caminho que não perde nada é mandar em dois projetos separados — "
+        "saem duas planilhas. Se preferir um só, tire o que não for desenho: a "
+        "gente lê todo PDF como se fosse prancha, inclusive edital, memorial "
+        "descritivo, memória de cálculo, cronograma, BDI e matriz de riscos. "
+        "Eles viram linha na planilha, tiradas dos quadros que tiverem dentro, "
+        "mas sem medida do desenho — e são eles que costumam estourar o "
+        "tamanho do envio.\n\n"
+        "Os maiores arquivos deste envio: %s."
+        % (soma, TETO_PAGINAS_DO_ENVIO, _top))
+
+
+def _recusa_por_paginas(job_id, file_paths) -> bool:
+    """True = recusado (já marcou erro e avisou). False = pode rodar.
+
+    🔑 Registra a contagem REAL de TODO envio, passando ou não. Até hoje o
+    número verdadeiro só existia para quem estourava o corte de 40 (no texto do
+    aviso de truncagem): abaixo disso a casa nunca soube quantas páginas o
+    cliente mandou, e foi essa cegueira que produziu o "recorde de 40 páginas"
+    que quase virou o teto.
+    """
+    soma, por_arquivo = _paginas_do_envio(file_paths)
+    if not por_arquivo:
+        return False
+    # 🔑 A CONTAGEM entra como diagnóstico, em TODO envio: é ela que a casa
+    # nunca teve, e foi a falta dela que produziu o "recorde de 40 páginas".
+    _log_error("motor:paginas-do-envio",
+               "a_ler=%d teto=%d | %s"
+               % (soma, TETO_PAGINAS_DO_ENVIO,
+                  "; ".join("%s=%d/%d" % _t for _t in por_arquivo[:12])),
+               job_id, severity="info")
+    if soma <= TETO_PAGINAS_DO_ENVIO:
+        return False
+    # 🪤 A RECUSA tem stage PRÓPRIO, e fora de `_STAGES_DIAGNOSTICO`. Com um
+    # stage só para as duas coisas, bastava alguém pôr o nome na lista de
+    # diagnóstico — coisa que a casa faz sempre que um stage fala demais — para
+    # a recusa ser rebaixada a "info" e sumir do painel junto com a contagem.
+    _log_error("motor:paginas-acima-do-teto",
+               "a_ler=%d teto=%d — projeto recusado antes de gastar IA | %s"
+               % (soma, TETO_PAGINAS_DO_ENVIO,
+                  "; ".join("%s=%d/%d" % _t for _t in por_arquivo[:12])),
+               job_id, severity="warning")
+
+    # 🚨 PROJETO QUE JÁ ENTREGOU NÃO VIRA ERRO AQUI. O `/add-file` monta
+    # `file_paths` com o acervo INTEIRO do projeto (os novos mais os antigos),
+    # então um anexo pequeno pode empurrar a soma acima do teto. Marcar erro
+    # nesse caso sumiria a planilha da tela (o selo do quantitativo vira "NÃO
+    # GERADA") e mandaria e-mail de falha pra quem não perdeu nada — o mesmo
+    # padrão que custou o caso de 19/09. A casa já tinha decidido isso dentro
+    # do `process_job`; esta régua está a montante e passaria por cima.
+    # 🪤 A âncora é o FATO (já tem itens), não a flag `is_complement`: a
+    # retomada depois de um restart perde a flag e manteria o fato.
+    try:
+        _ja_entregou = _complement_base_has_items(job_id)
+    except Exception:
+        _ja_entregou = False
+    if _ja_entregou:
+        _log_error("motor:paginas-acima-do-teto",
+                   "a_ler=%d acima do teto %d, mas o projeto JÁ tem planilha — "
+                   "deixei rodar e não marquei erro (até hoje o complemento não "
+                   "tinha teto nenhum; barrar aqui seria tirar o que já foi "
+                   "entregue)" % (soma, TETO_PAGINAS_DO_ENVIO),
+                   job_id, severity="warning")
+        return False
+
+    _msg = _mensagem_de_teto_de_paginas(soma, por_arquivo)
+    # 🪤 `_supabase_update` não levanta quando falha: devolve False (inclusive
+    # em zero linhas afetadas). Engolir o retorno num try/except deixaria o
+    # projeto preso em "processando" pra sempre, e o e-mail sem a âncora que
+    # escolhe o texto certo — as duas coisas em silêncio.
+    _gravou = False
+    try:
+        _gravou = bool(_supabase_update(
+            "projects", "job_id", job_id,
+            {"status": "error", "error_message": _msg,
+             "completed_at": datetime.utcnow().isoformat()}))
+    except Exception as _e_up:
+        _gravou = False
+        _log_error("motor:paginas-gravacao-perdida",
+                   "exceção ao gravar o erro de teto de páginas: %s: %s"
+                   % (type(_e_up).__name__, _e_up), job_id, severity="error")
+    if not _gravou:
+        _log_error("motor:paginas-gravacao-perdida",
+                   "não gravei o erro de teto de páginas no banco — o projeto "
+                   "fica preso em processando e o e-mail perde a âncora do "
+                   "texto", job_id, severity="error")
+    try:
+        if job_id in jobs:
+            jobs.update_field(job_id, status="error", error_message=_msg,
+                              current_step="Erro: páginas neste envio")
+    except Exception:
+        pass
+    # 🪤 reprocessável=False: reprocessar roda o MESMO envio e bate no mesmo
+    # teto. O que resolve é dividir o envio, e é isso que o texto pede.
+    try:
+        _email_falha_cliente(job_id, reprocessavel=False)
+    except Exception:
+        pass
+    return True
+
+
 def _process_job_throttled(*args, **kwargs):
     """Wrapper que limita quantos process_job rodam ao mesmo tempo.
 
@@ -8160,6 +8400,16 @@ def _process_job_throttled(*args, **kwargs):
             _log_error("llm:dono", f"disparo de process_job fora do contrato: {str(_dono)[:60]!r}",
                        severity="warning")
         _dono = None
+    # 🔑 A régua de páginas mora AQUI, antes de `_esperar_vaga()`, por dois
+    # motivos. Primeiro: esta é a porta única — uma linha cobre os seis
+    # disparos (retomada, upload, reprocesso, filhote, combine e add-file), e
+    # o `/add-file` não tem teto de contagem nenhum por conta própria.
+    # Segundo: com `JOBS_SIMULTANEOS=1` um job já esperou 58 min por 2 min de
+    # máquina (18/09). Recusar depois da fila faria o cliente esperar uma hora
+    # para descobrir que não ia rodar.
+    _fps = args[1] if len(args) > 1 else kwargs.get("file_paths")
+    if _dono and isinstance(_fps, list) and _recusa_por_paginas(_dono, _fps):
+        return
     from llm_retry import escopo_job
     # 🪤 `try/finally` e não `with`: se a vaga não voltar numa exceção, o contador
     # vaza pra cima e o produto trava sozinho — a fila entupida seria PIOR que a
@@ -13096,7 +13346,11 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # uma prancha, processada uma de cada vez com memória limitada. Caso real
         # cliente-100/lia (06/07): PDF de 13 MB derrubava o Render de 2 GB toda tentativa.
         from processor import pdf_page_count as _pdf_pages
-        MAX_PAGES_PER_PDF = 40
+        # 🪤 19/09/2026: o valor mora no módulo (PAGINAS_LIDAS_POR_PDF) porque a
+        # régua do teto de páginas precisa contar O QUE ESTE LAÇO VAI LER, e não
+        # o que o cliente mandou. Duas cópias divergiriam em silêncio: a régua
+        # recusaria por 190 páginas um envio de que o motor leria 40.
+        MAX_PAGES_PER_PDF = PAGINAS_LIDAS_POR_PDF
         page_units = []  # (pdf_path, filename, sheet_type, page_index, page_count)
         for _p, _fn, _st in pdf_infos:
             _npg = _pdf_pages(_p)
@@ -27814,6 +28068,12 @@ _TRACK_ALLOWED = {
     "aviso_pdf_sem_texto",   # meta.chars = caracteres lidos do PDF
     "aviso_dwg_aec",         # meta.n = quantos arquivos AEC no envio
     "arquivo_removido",      # meta.type = extensão, meta.restam = quantos sobraram
+    # 19/09/2026 — o terceiro aviso que a tela dispara sozinha ao escolher o
+    # arquivo, e o único que anuncia uma RECUSA: o envio passou do teto de
+    # páginas. Sem este evento não dá pra saber se quem viu o aviso tirou o
+    # edital e seguiu, ou fechou a aba. 🔒 vai o NÚMERO de páginas, nunca o
+    # nome do arquivo.
+    "aviso_envio_paginas_demais",   # meta.paginas = páginas somadas do envio
     # 30/08/2026 — a AUDITORIA achou páginas inteiras sem NENHUM `view`, então
     # os cliques marcados nelas não tinham denominador (quantos viram × quantos
     # clicaram). O cronograma era o pior: 27 dias INVISÍVEL — página de 122 KB
@@ -28055,10 +28315,16 @@ async def track_event(payload: TrackPayload, request: Request):
         # 🔒 Os três são NÚMERO e entram no mesmo saneamento de sempre (int,
         # teto, sem bool): `chars` = caracteres lidos, `n` = arquivos AEC no
         # envio, `restam` = arquivos que sobraram após remover um.
+        # 🚨 19/09/2026 — `paginas`: o quarto aviso que a tela dispara ao
+        # escolher arquivo (tamanho do envio em páginas de PDF). Caí na MESMA
+        # armadilha de 14/09 — liberei o nome do evento e esqueci a chave — e
+        # de novo foi o `test_track_meta_allowlist` que pegou, na bancada,
+        # antes do push. Sem o número não dá pra saber se quem viu o aviso
+        # tirou o edital e seguiu, ou fechou a aba.
         for _k in ("n_itens", "n_estimados", "ja_revisados", "pendentes",
                    "confirmados", "excluidos", "editados",
                    "linhas_vazias", "preenchidos", "area", "tem_area_capa",
-                   "status", "chars", "n", "restam"):
+                   "status", "chars", "n", "restam", "paginas"):
             try:
                 _v = payload.meta.get(_k)
                 if _v is None or isinstance(_v, bool):
