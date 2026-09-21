@@ -962,16 +962,24 @@ _RE_AREA_QUADRO = _re.compile(
 _AREA_ROTULO_IGNORAR = ("terreno", "do terreno")
 
 
-def areas_do_texto_da_prancha(textos):
-    """Extrai candidatos a ÁREA TOTAL do texto da prancha, sem IA.
+def areas_do_texto_da_prancha_rotuladas(textos):
+    """Como `areas_do_texto_da_prancha`, mas devolve (rótulo, valor).
 
-    Recebe uma lista de strings (os TEXT/MTEXT do DXF) e devolve lista de
-    floats em m², já com o parser pt-BR único (`num_br_para_float`).
+    🚨 20/09/2026 — POR QUE O RÓTULO PRECISA SAIR DAQUI. O regex captura de
+    propósito `total`, `construída`, `útil` e `privativa` (só o terreno é
+    descartado), então a lista de valores mistura os AMBIENTES com as linhas de
+    TOTAL do próprio quadro. Enquanto o único consumidor era o consenso de área
+    total, tanto fazia. Passou a não dar: a régua do recorte de ambientes
+    compara essa lista com o que a geometria recortou, e uma linha "ÁREA TOTAL
+    2.350 m²" entrando como ambiente faz a soma do autor dar quase o dobro do
+    próprio total — e vira "ambiente acima do teto de 500" que não existe.
 
-    🪤 Descarta 'área do terreno' de propósito: é o lote, não a obra — usar isso
-    como área do projeto infla tudo que depende dela.
-    🪤 Descarta valores absurdos (>1.000.000 m²), que em prancha normalmente são
-    número de cota ou coordenada capturados por engano.
+    🪤 É a regra dos 100% logo abaixo, de novo: numa lista PLANA o pai não pode
+    ser irmão do filho. Aqui o pai vinha sem crachá.
+
+    Rótulo normalizado e CURTO ('', 'total', 'construida', 'util',
+    'privativa'); nunca o texto que o autor escreveu — o repositório é público
+    e esta lista vai pro log.
     """
     achados = []
     for t in (textos or []):
@@ -984,8 +992,35 @@ def areas_do_texto_da_prancha(textos):
                 continue
             v = num_br_para_float(m.group(2))
             if v and 1.0 <= v <= 1_000_000.0:
-                achados.append(v)
+                if rotulo.startswith("constr"):
+                    rotulo = "construida"
+                elif rotulo.startswith(("util", "útil")):
+                    rotulo = "util"
+                elif rotulo.startswith("privativa"):
+                    rotulo = "privativa"
+                elif rotulo.startswith("total"):
+                    rotulo = "total"
+                else:
+                    rotulo = ""
+                achados.append((rotulo, v))
     return achados
+
+
+def areas_do_texto_da_prancha(textos):
+    """Extrai candidatos a ÁREA TOTAL do texto da prancha, sem IA.
+
+    Recebe uma lista de strings (os TEXT/MTEXT do DXF) e devolve lista de
+    floats em m², já com o parser pt-BR único (`num_br_para_float`).
+
+    🪤 Descarta 'área do terreno' de propósito: é o lote, não a obra — usar isso
+    como área do projeto infla tudo que depende dela.
+    🪤 Descarta valores absurdos (>1.000.000 m²), que em prancha normalmente são
+    número de cota ou coordenada capturados por engano.
+    🔑 Assinatura e retorno INALTERADOS de propósito: o consenso de área e o
+    ramo `len(_ar)==1` do `process_job` dependem exatamente disto. Quem precisa
+    saber o que é ambiente e o que é total usa a versão rotulada acima.
+    """
+    return [v for _rotulo, v in areas_do_texto_da_prancha_rotuladas(textos)]
 
 
 # ── Regra dos 100%: numa lista PLANA, o pai não pode ser irmão do filho ──────

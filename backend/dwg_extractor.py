@@ -3666,10 +3666,18 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
     # main.py (`_pick_area_consensus`, que agrupa por ±5% e tira a moda). Se o
     # quadro não existir, nada muda.
     try:
-        from engine_rules import areas_do_texto_da_prancha as _areas_regra
-        _cand = _areas_regra([getattr(t, "text", "") for t in texts])
+        from engine_rules import (areas_do_texto_da_prancha_rotuladas
+                                  as _areas_regra_rot)
+        _pares = _areas_regra_rot([getattr(t, "text", "") for t in texts])
+        _cand = [_v for _r, _v in _pares]
         if _cand:
             metadata["areas_do_quadro_texto"] = _cand
+            # 🚨 20/09/2026 — os RÓTULOS, alinhados em ordem e tamanho com a
+            # lista acima. Sem eles não dá pra separar AMBIENTE de linha de
+            # TOTAL do quadro, e a régua do recorte lê o total do autor como se
+            # fosse um ambiente gigante (ver `linha_do_quadro_de_areas`).
+            # 🔒 Rótulo normalizado e curto, nunca o texto do autor.
+            metadata["areas_do_quadro_rotulos"] = [_r for _r, _v in _pares]
             logger.info("[area-regra] %d candidato(s) de área lidos do texto: %s",
                         len(_cand), _cand[:6])
     except Exception as _ea:

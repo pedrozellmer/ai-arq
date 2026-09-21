@@ -150,6 +150,23 @@ def medir_um(dxf_path: str, fator: float) -> dict:
         out["n_rooms"] = len(areas)
         out["rooms_m2"] = round(sum(areas), 1)
         out["top"] = [round(a, 1) for a in areas[:5]]
+        # 🚨 20/09/2026 — O QUE O TETO DE 500 m² JOGA FORA, medido em silêncio.
+        # `MAX_ROOM_M2` existe pra excluir envoltória/pavimento, e é uma
+        # hipótese que nunca foi conferida: no primeiro job com os dois lados,
+        # o quadro do AUTOR lista um ambiente de 525,05 m² e a geometria não
+        # tem nada acima de 204 — o 525 cai fora por 25 m² de margem. Um fórum,
+        # um ginásio ou um pátio coberto passam de 500 sem deixar de ser
+        # ambiente. 🪤 Aqui NÃO se muda o recorte: só se registra o que ficou de
+        # fora, pra decidir com número se o teto corta legítimo. Sem isso a
+        # pergunta segue cega — o log de hoje não distingue "não existe
+        # ambiente grande" de "existe e eu descartei".
+        _acima = sorted((f.area for f in faces if f.area > MAX_ROOM_M2),
+                        reverse=True)
+        out["acima_do_teto_n"] = len(_acima)
+        out["acima_do_teto_m2"] = round(sum(_acima), 1)
+        out["acima_do_teto_top"] = [round(a, 1) for a in _acima[:5]]
+        out["abaixo_do_piso_n"] = sum(1 for f in faces if f.area < MIN_ROOM_M2)
+        out["teto_m2"] = MAX_ROOM_M2
         # 🪤 SOMA DE AMBIENTES ≠ ÁREA TOTAL. O caminho do PDF descarta
         # envoltórias de propósito (_middle_layer) pra achar AMBIENTE — por isso
         # soma ~1/3 do pavimento, e isso está certo. A área TOTAL é outra coisa:

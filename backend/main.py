@@ -6119,6 +6119,65 @@ def _pick_best_unit(units: list[str], description: str) -> str:
     return units[0] if units else "vb"
 
 
+def linha_do_quadro_de_areas(arq: str, areas: list, rotulos=None) -> str:
+    """A linha de log do quadro de áreas do autor — a RÉGUA da inversão.
+
+    🚨 20/09/2026. Esta linha existia desde agosto e não servia pra comparar
+    nada: ela imprimia `primeiros=` (os 8 primeiros EM ORDEM DE LEITURA) e em
+    19/09 eles foram lidos como se fossem os MAIORES. A conclusão "o recorte de
+    ambientes não corresponde ao projeto" — o pré-requisito que segurou a
+    inversão do motor — saiu de comparar os maiores de uma amostra de 8 do
+    autor contra os 5 maiores de 142 da geometria. Duas listas diferentes.
+    🪤 O próprio código do chamador já registrava um dia perdido pela mesma
+    armadilha do `[:8]`. Foi a segunda vez.
+
+    🩸 E A PRIMEIRA VERSÃO DESTE CONSERTO REPETIU A DOENÇA que veio matar. O
+    regex do quadro captura de propósito `total`, `construída`, `útil` e
+    `privativa`, então a lista mistura AMBIENTE com as linhas de TOTAL do
+    próprio quadro — e eu somava tudo como se fosse ambiente. Num quadro comum
+    (3 ambientes de 25,4 · 18,6 · 12,0 mais "construída 56", "total 2.350" e
+    "útil 1.980"), o log dizia `soma=4442` para 56 m² de ambientes, e os dois
+    "maiores ambientes" eram o total e a área útil. A régua mediria a NOSSA
+    regex e seria lida como o quadro do autor. É a regra dos 100% de
+    `engine_rules`: numa lista plana o pai não pode ser irmão do filho.
+
+    🔑 Por isso o rótulo é obrigatório para as contas. `rotulos=None` é job
+    antigo, cuja metadata não tem a chave: aí NÃO se imprime soma, maiores nem
+    `acima_de_500`, porque falta de estado não é neutra — o default não pode
+    acusar o quadro do autor de ter ambiente que ele não tem.
+
+    ⏭️ Enquanto o quadro de 19/09 não for relido com rótulo, o 525,05 daquele
+    job NÃO pode ser chamado de ambiente: pode ser subtotal de pavimento, o que
+    inverteria a leitura sobre o teto de 500.
+
+    🔒 Vai NÚMERO e rótulo normalizado, nunca o texto do quadro.
+    """
+    _vals = list(areas or [])
+    _base = "arq=%s n=%d candidatos (quadro de ÁREAS, não área total) — NÃO " \
+            "entram no consenso: primeiros=%s" % (arq, len(_vals), _vals[:8])
+    if rotulos is None or len(rotulos) != len(_vals):
+        # 🪤 Sem rótulo alinhado não dá pra separar ambiente de somatório, e
+        # somar tudo seria pior que não somar: o número sairia com cara de
+        # medida do autor.
+        return _base + " rotulos=ausentes (sem eles não dá pra separar " \
+                       "ambiente de total — nada somado)"
+
+    _amb, _tot = [], []
+    for _v, _r in zip(_vals, rotulos):
+        if not isinstance(_v, (int, float)):
+            continue
+        (_tot if str(_r or "").strip() else _amb).append(float(_v))
+    _amb.sort(reverse=True)
+    _tot.sort(reverse=True)
+    return (_base
+            + " | AMBIENTES: n=%d soma=%s maiores=%s acima_de_500=%d"
+              % (len(_amb), round(sum(_amb), 1),
+                 [round(_x, 1) for _x in _amb[:8]],
+                 sum(1 for _x in _amb if _x > 500))
+            + " | SOMATORIOS do quadro: n=%d valores=%s"
+              % (len(_tot), [round(_x, 1) for _x in _tot[:5]]))
+
+
 def _pick_area_consensus(readings: list) -> float:
     """Consenso de área entre leituras de várias pranchas.
 
@@ -12181,11 +12240,20 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                                            f"n=1 candidato ÚNICO={_ar[0]} — entra no consenso",
                                            job_id)
                             elif _ar:
-                                _log_error("motor:area-regra",
-                                           f"arq={os.path.basename(dxf_path)} "
-                                           f"n={len(_ar)} candidatos (quadro de AMBIENTES, "
-                                           f"não área total) — NÃO entram no consenso: "
-                                           f"primeiros={_ar[:8]}", job_id)
+                                # 🚨 20/09/2026 — ESTA LINHA É A RÉGUA DA INVERSÃO.
+                                # A montagem mora em `linha_do_quadro_de_areas`
+                                # (nível de módulo) para o guarda poder EXECUTAR
+                                # a régua; aqui dentro do `process_job` nenhum
+                                # teste alcança. Alcance medido antes de
+                                # escrever: 22 jobs/mês têm quadro do autor,
+                                # contra 14 que informam a área no upload (9%
+                                # dos 262 jobs com CAD).
+                                _log_error(
+                                    "motor:area-regra",
+                                    linha_do_quadro_de_areas(
+                                        os.path.basename(dxf_path), _ar,
+                                        _md_u.get("areas_do_quadro_rotulos")),
+                                    job_id)
                         except Exception as _eaq:
                             print(f"[area-regra] nao-fatal: {_eaq}")
                         _log_error(
