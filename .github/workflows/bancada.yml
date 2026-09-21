@@ -186,10 +186,18 @@ jobs:
           # folga anterior) e ainda deixa remover 342 testes numa limpeza
           # legítima sem pintar o CI de vermelho. Não subi pro máximo (3742)
           # porque piso colado na realidade quebra na primeira remoção honesta.
-          # ⏭️ Se cobrar uma NONA vez, a conversa não é o número: é se a banda
-          # de 75% ainda é a régua certa. Decisão do Pedro, não minha, e não
-          # no meio de um push meu.
-          PISO: 3400
+          # 21/09/2026, NONA vez: 3400 -> 3900. A bancada colhe 4540, e o piso
+          # anterior morria em 4533 — foi cobrado por 7 testes de diferença.
+          # 🔑 A conversa que o comentário anterior mandou ter foi tida: levei
+          # ao Pedro as três saídas (subir o número, aposentar o piso porque
+          # `test_todo_arquivo_de_teste_realmente_EXECUTA` já cobre o buraco
+          # original com precisão, ou trocar a régua por comparação com o
+          # último commit verde). Ele escolheu subir o número. Decisão dele,
+          # registrada aqui para a décima vez não recomeçar do zero.
+          # 🔑 3900 é 85,9% dos 4540 e aguenta até 5.200 — cerca de 660 testes
+          # de folga, o dobro da vez anterior — e ainda pega qualquer queda
+          # maior que 14%, que é o que o piso existe pra pegar.
+          PISO: 3900
         run: |
           N=$(python -m pytest tests/ -q --collect-only 2>/dev/null | tail -1 | grep -oE '^[0-9]+' || echo 0)
           echo "testes colhidos: $N (piso: $PISO)"

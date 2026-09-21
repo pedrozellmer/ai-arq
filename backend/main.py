@@ -34347,8 +34347,17 @@ def admin_metricas(request: Request, dias: int = 30):
     # 🪤 Soma de "endereços por dia" NÃO é gente única na semana: quem volta
     # três dias conta três vezes. É comparação entre páginas, não headcount —
     # e o rótulo na tela precisa dizer isso.
+    # 🚨 21/09/2026 — DIA TRUNCADO NÃO ENTRA NESTA SOMA. O `top_paginas` de um
+    # dia em que a coleta bateu no teto só tem as páginas que sobraram dentro
+    # dos grupos que passaram: em 17–19/09 a página mais vista caiu de 16
+    # endereços para 3, por truncamento. Somar isso publicaria "o blog morreu"
+    # no mesmo painel em que a frase de cima diz que o dia não presta.
+    # 🪤 `is True`: NULL é dia antigo, "não sei", e continua entrando — tirá-lo
+    # esvaziaria o cartão inteiro por causa de uma coluna que nasceu hoje.
+    _dias7 = serie[-7:]
+    _limpos7 = [_l for _l in _dias7 if _l.get("coleta_truncada") is not True]
     _tp = {}
-    for _l in serie[-7:]:
+    for _l in _limpos7:
         for _p in (_l.get("top_paginas") or []):
             _cam = str(_p.get("pagina") or "")
             if _e_pagina_de_area_logada(_cam):
@@ -34356,6 +34365,8 @@ def admin_metricas(request: Request, dias: int = 30):
             _tp[_cam] = _tp.get(_cam, 0) + int(_p.get("enderecos") or 0)
     _topo = sorted(({"pagina": k, "enderecos": v} for k, v in _tp.items()),
                    key=lambda x: -x["enderecos"])[:8]
+    _topo_meta = {"dias_somados": len(_limpos7),
+                  "dias_truncados_fora": len(_dias7) - len(_limpos7)}
 
     # o funil, calculado de uma vez em vez de eu montar na mão toda semana
     _ult7 = serie[-7:]
@@ -34370,13 +34381,21 @@ def admin_metricas(request: Request, dias: int = 30):
     # 🪤 Só entra dia em que os DOIS lados foram medidos. Dia sem
     # `unicos_cloudflare` fica fora da conta e é dito em `dias_sem_medida` —
     # não vira zero, porque zero mudaria o fator calado.
+    # 🚨 21/09/2026 — e dia TRUNCADO também fica fora. O fator divide
+    # `unicos_cloudflare` (que conta robô e explode numa onda) por um
+    # `ips_gente` que veio cortado pelo teto: em 19/09 daria 10,5× contra os
+    # ~3× dos dias limpos, e o painel publicaria isso como medida da inflação
+    # do Cloudflare. Seria inventar uma piora que é da nossa coleta.
     _com_medida = [l for l in _ult7
                    if l.get("unicos_cloudflare") is not None
-                   and l.get("ips_gente") is not None]
+                   and l.get("ips_gente") is not None
+                   and l.get("coleta_truncada") is not True]
     _u = sum(int(l["unicos_cloudflare"]) for l in _com_medida)
     _g = sum(int(l["ips_gente"]) for l in _com_medida)
     _infl = {"dias_medidos": len(_com_medida),
              "dias_sem_medida": len(_ult7) - len(_com_medida),
+             "dias_truncados_fora": sum(1 for l in _ult7
+                                        if l.get("coleta_truncada") is True),
              "unicos_cloudflare": _u if _com_medida else None,
              "ips_gente": _g if _com_medida else None,
              "fator": (round(_u / _g, 1) if (_com_medida and _g > 0) else None)}
@@ -34385,6 +34404,11 @@ def admin_metricas(request: Request, dias: int = 30):
         "serie": serie,
         "veredito": _ms.veredito(serie),
         "top_paginas_7d": _topo,
+        # 🔑 Quantos dias entraram na soma e quantos ficaram de fora por
+        # truncamento — o mesmo padrão de honestidade que `inflacao_7d` já usa
+        # com `dias_sem_medida`. Sem isso o cartão afirma sobre 7 dias quando
+        # somou 4.
+        "top_paginas_7d_meta": _topo_meta,
         # 🔑 De onde veio quem aceitou o cookie (30 dias) — None se a RPC falhar.
         "origem_30d": _origem_das_visitas(30),
         "inflacao_7d": _infl,

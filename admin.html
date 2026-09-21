@@ -5480,8 +5480,15 @@ async function carregarMovimentoDoSite() {
 
   const v = d.veredito || {};
   frase.textContent = v.frase || '--';
+  // 🪤 `coleta_truncada` é CINZA de propósito, junto com `nao_sei`: a contagem
+  // do dia veio no teto do Cloudflare (robô empurrou gente pra fora da janela),
+  // então não há veredito sobre o público — nem bom nem ruim. Pintar de âmbar
+  // seria repetir o erro que isto veio corrigir, que era mandar o Pedro olhar
+  // o movimento quando o que quebrou foi a régua. Está no mapa e não no
+  // default para ficar escrito que a escolha foi feita.
   const cor = { normal: 'bg-emerald-500', abaixo: 'bg-amber-500',
                 acima: 'bg-indigo-400', nao_sei: 'bg-gray-300',
+                coleta_truncada: 'bg-gray-300',
                 sem_dados: 'bg-gray-300' }[v.status] || 'bg-gray-300';
   if (farol) farol.className = 'inline-block h-3 w-3 rounded-full shrink-0 ' + cor;
 
@@ -5632,11 +5639,30 @@ async function carregarMovimentoDoSite() {
       : '<span class="text-gray-400">sem dados ainda</span>';
   }
 
-  if (barras) {
+  if (barras) barras.innerHTML = barrasDoMovimento(serie);
+}
+
+// 🔑 EXTRAÍDA do `carregarMovimentoDoSite` em 21/09/2026 para o guarda poder
+// EXECUTAR o desenho (mesmo motivo de `linhasDoFunil`): dentro daquela função
+// há `fetch` no meio, e o único teste possível seria ler o fonte.
+function barrasDoMovimento(serie) {
+  {
     const semIps = x => (x.ips_gente === null || x.ips_gente === undefined);
-    const vals = serie.map(x => semIps(x) ? 0 : (Number(x.ips_gente) || 0));
+    // 🚨 21/09/2026 — A FRASE SE CALAVA E O DESENHO CONTINUAVA MENTINDO.
+    // O veredito passou a recusar julgamento em dia com a coleta no teto, mas
+    // as barras deste mesmo cartão desenhavam 63 → 38 → 19 em cor de dia
+    // medido, com "19 endereços" no hover, três centímetros abaixo da frase
+    // que dizia "não dá pra comparar". O cartão se contradizia — e o que se lê
+    // primeiro é o desenho. Foi o gráfico, não a frase, que o Pedro mandou.
+    // 🪤 `=== true` de propósito: linha antiga tem NULL, que é "não sei", e
+    // não-sei não apaga o dia nem o acusa.
+    const truncado = x => (x.coleta_truncada === true);
+    const semMedida = x => semIps(x) || truncado(x);
+    // 🔑 Dia truncado sai da conta do TETO também: senão ele continua
+    // comprimindo a escala das barras boas com um número que não é medida.
+    const vals = serie.map(x => semMedida(x) ? 0 : (Number(x.ips_gente) || 0));
     const teto = Math.max(1, ...vals);
-    barras.innerHTML = serie.map((x, i) => {
+    return serie.map((x, i) => {
       const h = Math.max(3, Math.round((vals[i] / teto) * 96));
       const dia = String(x.dia || '').slice(5).split('-').reverse().join('/');
       const dow = new Date(x.dia + 'T12:00:00').getDay();
@@ -5658,14 +5684,22 @@ async function carregarMovimentoDoSite() {
       const faixa = temPartes
         ? '<div style="display:flex;height:6px;margin-top:1px">' + seg(ge, '#34d399') + seg(rb, '#f59e0b') + seg(ns, '#94a3b8') + '</div>'
         : '<div style="height:6px;margin-top:1px;background:#e5e7eb"></div>';
-      const corBarra = semIps(x) ? 'bg-gray-200' : (fds ? 'bg-indigo-100' : 'bg-indigo-500');
+      // 🪤 `bg-gray-200` já existe no build estático (é a cor do dia sem
+      // medição desde 02/09) — classe nova nasceria inerte.
+      const corBarra = semMedida(x) ? 'bg-gray-200' : (fds ? 'bg-indigo-100' : 'bg-indigo-500');
       // 🪤 02/09/2026: as linhas antigas foram contadas no relógio de Greenwich
       // (o dia virava às 21h de Brasília). Ficam na série, mas com cara de
       // "outro relógio" — misturar calado seria comparar dias de tamanhos
       // diferentes. Opacidade INLINE: `.opacity-40` não existe no Tailwind
       // estático deste site (conferido no build), a classe seria inerte.
       const velho = (x.fuso !== 'America/Sao_Paulo');
-      const rotulo = dia + ': ' + (semIps(x) ? 'sem medição de endereços' : vals[i] + ' endereços') + partes +
+      // 🔑 O dia truncado diz POR QUE não tem número, em vez de mostrar a
+      // sobra do que passou pelo teto como se fosse o público do dia.
+      const quanto = truncado(x)
+        ? 'contagem incompleta — a coleta bateu no teto de ' +
+          (x.grupos_recebidos || '?') + ' grupos do Cloudflare; não é queda de movimento'
+        : (semIps(x) ? 'sem medição de endereços' : vals[i] + ' endereços');
+      const rotulo = dia + ': ' + quanto + partes +
                      (velho ? ' · dia contado no relógio de Greenwich (virava às 21h) — série antiga' : '');
       return '<div class="flex-1" title="' + rotulo + '">' +
              '<div class="rounded-t ' + corBarra + '" style="height:' + h + 'px' + (velho ? ';opacity:.4' : '') + '"></div>' +
