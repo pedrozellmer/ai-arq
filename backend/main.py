@@ -7214,18 +7214,31 @@ def _consolidate_items(items: list, registro: list | None = None) -> list:
         # um erro que ele não tem como ver. Entre os dois, fica o visível.
         #
         # 🔑 Por que o selo NÃO é rebaixado: cada linha FOI medida de verdade na
-        # prancha dela. O que não se sabe é se somar. Rebaixar tudo pra estimado
+        # prancha dela. O que não se sabe é se somar.
+        # 🪤 21/09: isso vale pra linha de CAD. Em PDF a linha é LEITURA — e o
+        # selo daqui ainda muda depois (passo 7, rebaixamentos). Por isso a
+        # frase que o cliente lê, logo abaixo, fala só da ORIGEM da linha. Rebaixar tudo pra estimado
         # jogaria fora medição legítima — trocaria um erro por outro (regra nº1
         # protege contra afirmar o que não se mediu, não manda esquecer o que se
         # mediu).
         _pranchas_txt = ", ".join(sorted(
             (it.ref_sheet or "sem referência")[:40] for it in group))
+        # 🩸 21/09/2026 — "Cada linha é a MEDIÇÃO da prancha dela" saía também
+        # em linha que a IA LEU (selo estimado), e passou a dividir a célula com
+        # "Quantidade atribuída pela IA a esta linha — não conferimos item a
+        # item" (`_frase_do_numero_que_cabe_na_geometria`): uma frase desmentia
+        # a outra.
+        # 🪤 Decidir pelo selo DAQUI não serve (3ª revisão): este passo roda
+        # ANTES da honestidade de área, do passo 7 (que põe a NOSSA medição em
+        # linha que aqui estava zerada) e dos rebaixamentos de selo. O selo de
+        # agora é provisório. A frase fala só da ORIGEM da linha, que é
+        # verdadeira com qualquer desfecho.
         for _it in group:
             _obs = (_it.observations or "").rstrip(". ")
             _obs += (". " if _obs else "")
             _obs += (
                 f"⚠ Este serviço aparece em {len(ref_sheets)} pranchas do "
-                f"projeto ({_pranchas_txt}). Cada linha é a medição da prancha "
+                f"projeto ({_pranchas_txt}). Esta linha vem da prancha "
                 f"dela — confira se são trechos diferentes da obra (pavimentos, "
                 f"fases, blocos), que somam, ou o mesmo trecho desenhado mais de "
                 f"uma vez, que não soma."
@@ -9331,6 +9344,220 @@ def _tem_derivacao_deterministica(descricao: str, unidade: str) -> bool:
     return False
 
 
+#: Como CONTAR ao cliente de onde veio a escala quando ela NÃO foi confirmada
+#: por medida. A chave é o `scale_src` que o pdfvec devolve.
+#:
+#: 🩸 08/09/2026 — a frase saía quebrada e, num dos casos, contraditória. O
+#: texto antigo era `f"lida do {_fonte}"`, com `_fonte` sendo um substantivo que
+#: varia: dava "lida do carimbo" (certo), "lida do viewport" (passa) e
+#: **"lida do cotas"** (errado). E quando a fonte era `cotas`, a frase seguinte
+#: dizia *"a escala veio de cotas e não foi provada por cota"* — negando a
+#: própria fonte, na mesma linha.
+#:
+#: 🚨 Não é texto de log: isto entra no PROMPT como instrução pra IA escrever a
+#: procedência na observação que o CLIENTE lê.
+#:
+#: 🔑 A confusão que gerou o texto: são dois mecanismos de nome parecido.
+#:   · DERIVAR — votar cotas × vãos pra DESCOBRIR a escala (`scale_src="cotas"`;
+#:     exige 4 votos E o dobro do 2º colocado);
+#:   · VALIDAR — cruzar uma escala já conhecida com elemento medido na view
+#:     principal (`escala_validada`; exige 2 pares a ±2%).
+#: Passar no primeiro e não no segundo é NORMAL — a validação só olha a view
+#: principal. A frase tem que dizer isso em vez de desmentir a fonte.
+#:
+#: 📏 Medido na base em 08/09: 66 pranchas vieram de carimbo (22 jobs), 14 de
+#: viewport (4 jobs) e 5 de cotas (3 jobs), desde 14/08.
+_FONTE_DA_ESCALA = {
+    "carimbo": ("do carimbo da prancha",
+                "o carimbo DECLARA a escala — declaração não é medida"),
+    "viewport": ("da caixa de recorte do PDF",
+                 "o recorte do PDF sugere a escala — não é medida"),
+    "cotas": ("das cotas escritas na prancha (por votação)",
+              "a votação encontrou a escala nas cotas, mas nenhum par "
+              "cota×elemento medido a confirmou na view principal"),
+    # 🔑 09/09/2026 — fonte nova. Entra JUNTO com a fonte, no mesmo commit: sem
+    # frase aqui o cliente leria um vazio no lugar da procedência, que é
+    # exatamente o defeito que o `_frase_da_escala_sem_prova` existe pra evitar.
+    "vista": ("do rótulo escrito ao lado do próprio desenho",
+              "o rótulo da vista DECLARA a escala — declaração não é medida, e "
+              "nesta prancha o carimbo dizia 'escalas indicadas', ou seja, cada "
+              "desenho tem a sua"),
+}
+
+
+def _frase_da_escala_sem_prova(scale_src) -> tuple:
+    """(como dizer a FONTE, RESSALVA) pra escala não confirmada por medida.
+
+    Fica fora do `process_job` de propósito: a decisão precisa ser CHAMÁVEL por
+    um teste. Enquanto era um `f"lida do {fonte}"` solto lá dentro, nenhum
+    guarda conseguia ler a frase que o cliente recebe.
+
+    🚫 NÃO decide nada sobre o número: sem confirmação continua estimado (regra
+    dura nº1). Só muda o que a gente CONTA.
+    """
+    _f = str(scale_src or "").strip().lower()
+    if _f in _FONTE_DA_ESCALA:
+        return _FONTE_DA_ESCALA[_f]
+    # Fonte nova ou vazia: dizer que não sabe é melhor que montar frase torta.
+    return ("de origem não identificada",
+            "não foi possível confirmar de onde veio a escala")
+
+
+#: começo da frase de procedência do número da IA que o ramo do pdfvec
+#: PRESERVA. `_limpa_afirmacao_de_medida` tira o segmento que começa assim —
+#: as duas pontas leem ESTA constante, pra não divergirem.
+#: 🪤 Mora AQUI, dentro da fatia que 4 arquivos de teste executam (de
+#: `_RX_SECAO_PILAR` até `_dedupe_revisoes`), junto com `_FONTE_DA_ESCALA` e
+#: `_frase_da_escala_sem_prova`, que ela chama. Fora da fatia, a honestidade
+#: de área dá NameError nesses testes — foi onde eu a escrevi primeiro.
+_PREFIXO_CABE_NA_GEOMETRIA = "Quantidade atribuída pela IA a esta linha"
+
+
+def _escala_de_uma_prancha(registro, de_quem: str) -> str:
+    """Como dizer a escala de UMA prancha medida, com a ressalva junto.
+
+    `de_quem`: "desta prancha" / "da prancha desta linha" — o sujeito da frase.
+    """
+    _r = registro or {}
+    try:
+        _esc = "1:%d" % int(round(float(_r.get("scale"))))
+    except (TypeError, ValueError):
+        _esc = None
+    if _r.get("escala_validada"):
+        return ("escala %s %s conferida por cota" % (de_quem, _esc) if _esc
+                else "escala %s conferida por cota" % de_quem)
+    if not _esc:
+        return "escala %s não identificada — confira a escala do seu PDF" % de_quem
+    _fonte, _ressalva = _frase_da_escala_sem_prova(_r.get("scale_src"))
+    return "escala %s %s, %s: %s" % (de_quem, _esc, _fonte, _ressalva)
+
+
+def _prancha_da_linha_pelo_nome(ref_sheet, pranchas):
+    """O registro da prancha de onde a linha veio, pelo NOME EXATO do arquivo.
+
+    Serve só pra frase dizer a escala DELA. PDF de uma página não ganha "(pN)"
+    no `ref_sheet` (`analyzer.monta_ref_sheet`), então a régua da própria
+    prancha nunca existe pra ele — em projetos de cliente, 0 linhas com prancha
+    contra 253 genéricas em 60 dias (conferido em 21/09).
+
+    🩸 21/09 (2ª revisão): a 1ª versão usava `_prancha_do_ref_sheet`, que casa
+    por PREFIXO/substring e sem olhar a página — feito pra atribuir área, com
+    a trava 4 em volta. Aqui ela emprestava "escala conferida por cota" de
+    OUTRA folha: `planta.pdf` casava com `planta - cortes.pdf`; a dica da IA
+    ("cortes.pdf (conforme planta baixa)") levava à planta; e com medição
+    incompleta a linha da p2, que nem foi medida, herdava a escala da p1.
+    🔑 Casamento ESTRITO, no formato que o motor escreve: `arquivo.pdf` ou
+    `arquivo.pdf (…`. Com "(pN)" na linha, o registro tem que ser DAQUELA
+    página. Sem "(pN)", só registro de página única (pagina 0 ou ausente) —
+    registro de página > 0 é arquivo de várias páginas, e aí não se sabe
+    qual. Mais de um candidato: nenhum. Na dúvida a frase cai no genérico.
+    """
+    from analyzer import _pagina_do_ref_sheet
+    _rs = (ref_sheet or "").strip().lower()
+    if not _rs:
+        return None
+    _pg = _pagina_do_ref_sheet(_rs)
+    _cands = []
+    for _r in (pranchas or []):
+        try:
+            if float((_r or {}).get("rooms_m2") or 0) <= 0:
+                continue
+        except (TypeError, ValueError, AttributeError):
+            continue
+        _arq = str(_r.get("arquivo") or "").strip().lower()
+        if not _arq or not (_rs == _arq or _rs.startswith(_arq + " (")):
+            continue
+        try:
+            _pr = None if _r.get("pagina") is None else int(_r.get("pagina"))
+        except (TypeError, ValueError):
+            _pr = None
+        if _pg is not None:
+            if _pr != _pg:
+                continue
+        elif _pr not in (None, 0):
+            continue
+        _cands.append(_r)
+    return _cands[0] if len(_cands) == 1 else None
+
+
+def _frase_do_numero_que_cabe_na_geometria(medicao_da_prancha=None,
+                                           pranchas=None,
+                                           prancha_pelo_nome=None,
+                                           medicao_incompleta=False) -> str:
+    """A procedência do número da IA que o ramo do pdfvec PRESERVA.
+
+    🩸 21/09/2026 — A FRASE DIZIA "MEDIDO" DE NÚMERO QUE A GENTE NÃO MEDIU.
+    Job a3366fbb (reforma de clínica, só PDF, nota "👎 Não muito" 2 minutos
+    depois de abrir a página): 8 linhas diziam "Medido da GEOMETRIA do PDF" —
+    uma delas 480 m² de pintura, outra 200 m² de porcelanato cuja observação,
+    na MESMA linha, começava com "Área estimada para consultórios". O ramo que
+    escreve a frase não mede o item: só confere se o número da IA não passa de
+    1,3× a área dos ambientes que o motor mediu. Às vezes a IA usou mesmo um
+    ambiente medido (48 m², "segundo maior ambiente medido"); às vezes chutou
+    um número redondo que só coube.
+    📏 Medido na base (30 dias, projetos de cliente): 253 linhas em 24
+    projetos com a frase genérica; em 86 o texto da própria IA diz "estimada".
+    🩸 E a escala: a frase genérica dizia "escala lida do carimbo e NÃO
+    confirmada por cota" sem olhar prancha nenhuma. No mesmo job as DUAS
+    pranchas medidas tinham a escala PROVADA por cota (a planta por 15, o
+    corte por 2). 62 das 253 linhas eram de projeto assim.
+    🩸 21/09 (2ª revisão): a 1ª redação, "não é medição desta linha", era
+    falsa nas linhas em que a IA usou mesmo um ambiente medido. A redação que
+    vale nos DOIS casos diz QUEM pôs o número na linha e O QUE conferimos — a
+    mesma língua do passo 7 ("medimos a planta, não conferimos item a item").
+    🔑 A ressalva vem colada no começo — a observação é cortada em 1.000
+    caracteres na gravação, e o corte não pode deixar a afirmação sem ela.
+    🚫 Não mexe em número nem em selo: continua estimado (regra dura nº1).
+
+    `medicao_da_prancha`: o registro da PRÓPRIA prancha do item, quando a régua
+    foi conferida contra ela (o item diz a página). `prancha_pelo_nome`: o
+    registro da prancha de onde a linha veio (`_prancha_da_linha_pelo_nome`) —
+    só pra dizer a escala dela; a régua, nesse caso, foi o teto do job.
+    `pranchas`: todos os registros, pra quando não se sabe a prancha.
+    `medicao_incompleta`: alguma prancha não foi medida — aí "têm escala
+    conferida" seria sobre um conjunto que não é o todo.
+    """
+    _m = medicao_da_prancha or None
+    if _m:
+        # a régua foi conferida contra ESTA prancha: dá pra dizer qual e quanto
+        return ("%s — não conferimos item a item (%s). Única checagem, na "
+                "geometria do PDF: não passa de 30%% acima da área dos "
+                "ambientes medidos na Prancha %s (%.2f m²). Confira antes de "
+                "orçar."
+                % (_PREFIXO_CABE_NA_GEOMETRIA,
+                   _escala_de_uma_prancha(_m, "desta prancha"),
+                   _m.get("arquivo"), float(_m.get("rooms_m2") or 0)))
+    if prancha_pelo_nome:
+        _escala = _escala_de_uma_prancha(prancha_pelo_nome, "da prancha desta linha")
+    else:
+        _medidas = []
+        for _r in (pranchas or []):
+            try:
+                if float((_r or {}).get("rooms_m2") or 0) > 0:
+                    _medidas.append(bool(_r.get("escala_validada")))
+            except (TypeError, ValueError, AttributeError):
+                continue
+        if medicao_incompleta:
+            _escala = ("nem todas as pranchas foram medidas — confira a escala "
+                       "do seu PDF")
+        elif _medidas and all(_medidas):
+            _escala = ("as pranchas em que medimos ambientes têm escala "
+                       "conferida por cota")
+        elif _medidas and not any(_medidas):
+            _escala = ("nenhuma prancha medida teve a escala conferida por cota "
+                       "— confira a escala do seu PDF")
+        elif _medidas:
+            _escala = ("só parte das pranchas medidas teve a escala conferida "
+                       "por cota — confira a escala do seu PDF")
+        else:
+            # sem registro por prancha: não se afirma nada da escala
+            _escala = "confira a escala do seu PDF"
+    return ("%s — não conferimos item a item (%s). Única checagem, na geometria "
+            "do PDF: não passa de 30%% acima da área dos ambientes que medimos "
+            "nas pranchas. Confira antes de orçar."
+            % (_PREFIXO_CABE_NA_GEOMETRIA, _escala))
+
+
 def _limpa_afirmacao_de_medida(obs: str) -> str:
     """Tira do texto a AFIRMAÇÃO de que esta linha foi medida na geometria.
 
@@ -9357,7 +9584,14 @@ def _limpa_afirmacao_de_medida(obs: str) -> str:
     não levar embora "Código PA09 identificado na legenda. Área estimada."
     🚫 Não mexe em número nenhum: zerar continua certo. Muda o que o texto diz.
     """
-    _NOSSA = "medido da geometria do pdf"
+    # 🪤 21/09: a frase nossa mudou (`_PREFIXO_CABE_NA_GEOMETRIA`); a antiga
+    # fica reconhecida por DEFESA. A revisão de 21/09 não achou caminho que
+    # traga observação gravada de volta ao motor (o checkpoint é de antes da
+    # honestidade, e a fusão só traz `revisao_cliente`, que é pulada) — mas a
+    # IA pode copiar a frase de um exemplo, e reconhecer custa nada.
+    # 🔑 Desde 21/09 esta limpeza roda também na linha PRESERVADA pelo pdfvec
+    # (não só na zerada): lá ela tira o "medido" da IA antes da frase nova.
+    _NOSSA = ("medido da geometria do pdf", _PREFIXO_CABE_NA_GEOMETRIA.lower())
     _DA_IA = ("medido do desenho com escala", "medido da geometria do pdf")
     segs = []
     for seg in str(obs or "").split("|"):
@@ -10034,40 +10268,59 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
             except Exception:
                 pass
             _o = _limpa_aviso_nao_medida(it.observations or "")
-            if "geometria do pdf" not in _o.lower():
-                # 🩸 31/08: aqui ia `%.2f m² de ambientes` com `pdfvec_m2`, que é
-                # a SOMA de TODAS as páginas do job — num projeto de 16 pranchas
-                # do mesmo imóvel, a mesma casa contada várias vezes (741,8 m²
-                # num imóvel de 400). O item de 18 m² recebia a observação
-                # "Medido da GEOMETRIA do PDF (741.80 m² de ambientes)", que é
-                # falso sobre ele. Enquanto a medição não for guardada POR
-                # PRANCHA, a frase vai sem número — dizer menos é melhor que
-                # dizer errado.
-                # 🪤 A procedência ("geometria do PDF") CONTINUA na frase: ela é
-                # verdadeira e é o que o produto promete entregar quando não dá
-                # pra provar a escala. O que saiu foi só o NÚMERO.
-                if _m_pr:
-                    # agora dá pra dizer QUAL prancha mediu, QUANTO, e de onde
-                    # veio a escala DAQUELA prancha (não mais "carimbo" fixo).
-                    # 🪤 A RESSALVA VEM COLADA NA AFIRMAÇÃO, de propósito: a
-                    # observação é cortada em 1.000 chars na gravação (main.py
-                    # ~2074) e 11 linhas em 30 dias já batem nesse teto. Com a
-                    # ressalva no fim, o corte deixaria a afirmação sozinha — que
-                    # é exatamente o que a regra dura nº1 proíbe.
-                    _fonte_pr, _ressalva_pr = _frase_da_escala_sem_prova(
-                        _m_pr.get("scale_src"))
-                    try:
-                        _esc_pr = "1:%d" % int(round(float(_m_pr.get("scale"))))
-                    except (TypeError, ValueError):
-                        _esc_pr = "sem escala escrita"
-                    _o = (_o + " | Medido da GEOMETRIA do PDF (%s). Prancha %s: "
-                          "%.2f m², escala %s %s. Confira antes de orçar."
-                          % (_ressalva_pr, _m_pr.get("arquivo"),
-                             float(_m_pr.get("rooms_m2") or 0), _esc_pr, _fonte_pr)).strip(" |")
-                else:
-                    _o = (_o + " | Medido da GEOMETRIA do PDF, com escala lida do "
-                          "carimbo e NÃO confirmada por cota — confira a escala do "
-                          "seu PDF antes de orçar.").strip(" |")
+            # 🩸 31/08: aqui ia `%.2f m² de ambientes` com `pdfvec_m2`, que é a
+            # SOMA de TODAS as páginas do job — num projeto de 16 pranchas do
+            # mesmo imóvel, a mesma casa contada várias vezes (741,8 m² num
+            # imóvel de 400). O item de 18 m² recebia a observação "Medido da
+            # GEOMETRIA do PDF (741.80 m² de ambientes)", que é falso sobre ele.
+            # 🩸 21/09: as duas frases daqui diziam "Medido da GEOMETRIA do PDF"
+            # de um número que este ramo só CONFERE (não passa de 1,3×), e a
+            # genérica afirmava escala "NÃO confirmada por cota" sem olhar
+            # prancha nenhuma. Ver `_frase_do_numero_que_cabe_na_geometria`.
+            # 🩸 21/09 (revisão): e a IA escreve SOZINHA "Medido do desenho com
+            # escala 1:X lida do carimbo…" — o NOSSO prompt manda (procure
+            # "medido do desenho com escala" no prompt). Sem tirar essa
+            # sentença, a linha diria "medido" e "atribuída pela IA, não
+            # conferimos item a item" ao mesmo tempo: 62 das 248 linhas preservadas em
+            # projetos de cliente em 30 dias (15 projetos; 26 delas também dizem
+            # "estimad"). A limpeza é a mesma da linha zerada (14/09), e
+            # também tira a nossa frase de uma rodada anterior — por isso não
+            # há mais o `if "geometria do pdf" not in _o`, que além de evitar a
+            # duplicata engolia a ressalva quando a IA escrevia "geometria do
+            # PDF" no texto dela.
+            _o = _limpa_afirmacao_de_medida(_o)
+            # A prancha de onde a linha veio, pelo NOME EXATO do arquivo — só
+            # pra dizer a escala DELA (ver `_prancha_da_linha_pelo_nome`). No
+            # job do caso, a planta e o corte eram PDFs de uma página, os dois
+            # com a escala provada por cota.
+            # 🪤 Se o número passa de 1,3× o que ESTA prancha mediu, ele só
+            # entrou pelo teto do job (outra prancha maior): citar a escala
+            # "da prancha desta linha" soaria como se ela endossasse o número.
+            # Aí a frase fala das pranchas em geral. Só texto — a régua do
+            # número não muda aqui.
+            # 🪤 `_m_pr` vem de `_prancha_do_ref_sheet`, que casa por PREFIXO —
+            # serve pra régua do número (decisão antiga, não mexida aqui). Pra
+            # a FRASE dizer "desta prancha" e a escala dela, o casamento
+            # estrito tem que achar o MESMO registro (3ª revisão: `planta -
+            # cortes.pdf (p1)` levava a escala de `planta.pdf`). Discordando,
+            # a frase segue pelo caminho sem prancha própria.
+            _pp_lista = list(_pp.values())
+            _m_frase = _m_pr
+            if _m_pr is not None and _prancha_da_linha_pelo_nome(
+                    getattr(it, "ref_sheet", ""), _pp_lista) is not _m_pr:
+                _m_frase = None
+            _pelo_nome = None
+            if _m_frase is None:
+                _pelo_nome = _prancha_da_linha_pelo_nome(
+                    getattr(it, "ref_sheet", ""), _pp_lista)
+                try:
+                    if _pelo_nome and q > 1.3 * float(_pelo_nome.get("rooms_m2") or 0):
+                        _pelo_nome = None
+                except (TypeError, ValueError):
+                    _pelo_nome = None
+            _o = (_o + " | " + _frase_do_numero_que_cabe_na_geometria(
+                _m_frase, _pp_lista, prancha_pelo_nome=_pelo_nome,
+                medicao_incompleta=medicao_incompleta)).strip(" |")
             it.observations = _o
             preservados += 1
         elif id(it) in _medida_da_prancha and q == 0:
@@ -10418,47 +10671,9 @@ def _dedupe_revisoes(file_paths: list) -> tuple:
 _PREVIEW_MOVE_MAX_MB = float(os.getenv("PREVIEW_MOVE_MAX_MB", "50"))
 
 
-#: Como CONTAR ao cliente de onde veio a escala quando ela NÃO foi confirmada
-#: por medida. A chave é o `scale_src` que o pdfvec devolve.
-#:
-#: 🩸 08/09/2026 — a frase saía quebrada e, num dos casos, contraditória. O
-#: texto antigo era `f"lida do {_fonte}"`, com `_fonte` sendo um substantivo que
-#: varia: dava "lida do carimbo" (certo), "lida do viewport" (passa) e
-#: **"lida do cotas"** (errado). E quando a fonte era `cotas`, a frase seguinte
-#: dizia *"a escala veio de cotas e não foi provada por cota"* — negando a
-#: própria fonte, na mesma linha.
-#:
-#: 🚨 Não é texto de log: isto entra no PROMPT como instrução pra IA escrever a
-#: procedência na observação que o CLIENTE lê.
-#:
-#: 🔑 A confusão que gerou o texto: são dois mecanismos de nome parecido.
-#:   · DERIVAR — votar cotas × vãos pra DESCOBRIR a escala (`scale_src="cotas"`;
-#:     exige 4 votos E o dobro do 2º colocado);
-#:   · VALIDAR — cruzar uma escala já conhecida com elemento medido na view
-#:     principal (`escala_validada`; exige 2 pares a ±2%).
-#: Passar no primeiro e não no segundo é NORMAL — a validação só olha a view
-#: principal. A frase tem que dizer isso em vez de desmentir a fonte.
-#:
-#: 📏 Medido na base em 08/09: 66 pranchas vieram de carimbo (22 jobs), 14 de
-#: viewport (4 jobs) e 5 de cotas (3 jobs), desde 14/08.
-_FONTE_DA_ESCALA = {
-    "carimbo": ("do carimbo da prancha",
-                "o carimbo DECLARA a escala — declaração não é medida"),
-    "viewport": ("da caixa de recorte do PDF",
-                 "o recorte do PDF sugere a escala — não é medida"),
-    "cotas": ("das cotas escritas na prancha (por votação)",
-              "a votação encontrou a escala nas cotas, mas nenhum par "
-              "cota×elemento medido a confirmou na view principal"),
-    # 🔑 09/09/2026 — fonte nova. Entra JUNTO com a fonte, no mesmo commit: sem
-    # frase aqui o cliente leria um vazio no lugar da procedência, que é
-    # exatamente o defeito que o `_frase_da_escala_sem_prova` existe pra evitar.
-    "vista": ("do rótulo escrito ao lado do próprio desenho",
-              "o rótulo da vista DECLARA a escala — declaração não é medida, e "
-              "nesta prancha o carimbo dizia 'escalas indicadas', ou seja, cada "
-              "desenho tem a sua"),
-}
-
-
+# 🪤 21/09: `_FONTE_DA_ESCALA` e `_frase_da_escala_sem_prova` moravam aqui.
+# Subiram pra dentro da fatia que os testes de honestidade executam (perto de
+# `_PREFIXO_CABE_NA_GEOMETRIA`): a frase do número preservado chama as duas.
 def _a_escala_sustenta_a_medicao(vm) -> tuple:
     """(entrega a medição desta prancha?, motivo curto pro log).
 
@@ -10504,24 +10719,6 @@ def _a_escala_sustenta_a_medicao(vm) -> tuple:
                        "cota×elemento a confirmou")
     return True, ("escala declarada (%s), sem confirmação por medida"
                   % (_src or "origem não identificada"))
-
-
-def _frase_da_escala_sem_prova(scale_src) -> tuple:
-    """(como dizer a FONTE, RESSALVA) pra escala não confirmada por medida.
-
-    Fica fora do `process_job` de propósito: a decisão precisa ser CHAMÁVEL por
-    um teste. Enquanto era um `f"lida do {fonte}"` solto lá dentro, nenhum
-    guarda conseguia ler a frase que o cliente recebe.
-
-    🚫 NÃO decide nada sobre o número: sem confirmação continua estimado (regra
-    dura nº1). Só muda o que a gente CONTA.
-    """
-    _f = str(scale_src or "").strip().lower()
-    if _f in _FONTE_DA_ESCALA:
-        return _FONTE_DA_ESCALA[_f]
-    # Fonte nova ou vazia: dizer que não sabe é melhor que montar frase torta.
-    return ("de origem não identificada",
-            "não foi possível confirmar de onde veio a escala")
 
 
 import re as _re_escala   # 🪤 `re` NÃO está importado no topo deste módulo (só aliases); sem isto o deploy 8d597a6 morreu na partida
@@ -10934,8 +11131,10 @@ def aviso_do_projeto_so_pdf(all_items, tem_cad: bool) -> str:
     return (
         "📐 Nenhuma linha deste projeto foi MEDIDA do desenho — e isso não é "
         "defeito do seu arquivo. Em PDF a gente lê a planta e ESTIMA: a escala "
-        "vem do carimbo, que é declaração e não prova, então nunca carimbamos "
-        "um número de PDF como medido.\n"
+        "de um PDF quase sempre vem de uma declaração (do carimbo, do rótulo da "
+        "vista ou do recorte do arquivo), que não prova nada — e, mesmo quando "
+        "as cotas da prancha conferem a escala, nunca carimbamos um número de "
+        "PDF como medido.\n"
         "Este projeto saiu com %d de %d linhas preenchidas (%.0f%%), todas por "
         "leitura.\n"
         "📏 Na nossa base dos últimos 60 dias (112 projetos): com DWG ou DXF, "
@@ -14782,6 +14981,12 @@ bloco — só cite os que estão no inventário deste arquivo."""
             # 🔑 Aqui o aviso só CONSTATA o que já é fato. O resultado (usou ou
             # não usou) vira aviso depois, quando existir — ver o bloco que lê
             # `_n_fill` no fim do `_apply_area_honesty`.
+            # ⏭️ 21/09/2026 — "a planta não trazia cota" é falso quando a planta
+            # tinha cota (job a3366fbb: escala provada por 15 cotas). NÃO mexer
+            # sozinho: "não trazia" é a MARCA pela qual o /inform-area apaga este
+            # aviso (filtro `"não trazia" not in str(w)`) — tirar a frase deixa
+            # duas áreas totais na mesma página (4ª revisão de 21/09, rodando a
+            # rota). Vai junto com o filtro da rota e o convite do projeto.html.
             project_data.warnings = (project_data.warnings or []) + [
                 f"Área total de {_uta:.0f} m² informada por você no upload — a planta não trazia "
                 f"cota nem quadro de áreas pra medir."
@@ -15545,10 +15750,30 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         "A área que você informou preencheu %d item(ns) de piso, forro ou laje, "
                         "como ESTIMATIVA a conferir — não é medição nossa." % _n_fill]
                 else:
+                    # 🩸 21/09: dizia "a gente conseguiu medir a geometria das
+                    # pranchas, e medição sempre vence declaração" — e as linhas
+                    # de piso/forro dizem "atribuída pela IA, não conferimos
+                    # item a item". No job a3366fbb as duas frases estavam na
+                    # mesma página (a nota veio 2 min depois, sem comentário — o
+                    # porquê da nota a gente não sabe).
+                    # 🩸 21/09 (3ª revisão): e dizia "medimos" SEMPRE que a área
+                    # não era usada — inclusive em PDF sem escala, sem medição
+                    # nenhuma (jobs 9c367ab8 e 3eb748e3: 2 dos 8 com este
+                    # aviso). Sem medição de PDF, fica só o fato.
+                    # 🪤 A regra é do JOB inteiro (`_area_informada_alcancaria`
+                    # exige `pdfvec_m2 <= 0`), não por linha: bastou medir UMA
+                    # prancha pra área não entrar em linha nenhuma (4ª revisão).
+                    if float(_pv_m2 or 0) > 0:
+                        _motivo_nao_usou = (
+                            "medimos a geometria de pelo menos uma prancha deste projeto e, "
+                            "quando há medição, a área digitada não vira número em nenhuma "
+                            "linha")
+                    else:
+                        _motivo_nao_usou = (
+                            "nenhuma linha de piso, forro ou laje pôde recebê-la")
                     project_data.warnings = (getattr(project_data, "warnings", None) or []) + [
-                        "A área que você informou NÃO foi usada nos itens: a gente conseguiu medir "
-                        "a geometria das pranchas, e medição sempre vence declaração. Ela fica só "
-                        "como referência pra você conferir o total."]
+                        "A área que você informou NÃO foi usada nos itens: %s. Ela fica só "
+                        "como referência pra você conferir o total." % _motivo_nao_usou]
             except Exception:
                 pass
         if _n_fill:

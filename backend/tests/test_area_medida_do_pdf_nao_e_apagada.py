@@ -257,7 +257,15 @@ def test_a_procedencia_vai_escrita_na_linha():
     obs = (piso.observations or "").lower()
     assert "geometria do pdf" in obs, (
         "a linha não diz de onde veio o número: %r" % piso.observations)
-    assert "carimbo" in obs, "não avisa que a escala veio do carimbo"
+    # 🩸 21/09/2026: aqui se exigia a palavra "carimbo" — e esta chamada NÃO passa
+    # registro de prancha nenhum. A frase antiga dizia "escala lida do carimbo e
+    # NÃO confirmada por cota" sem olhar prancha; num job real (a3366fbb) a
+    # planta tinha a escala PROVADA por 15 cotas. Sem registro, não se afirma a
+    # fonte: o que este guarda protege é o AVISO pra conferir a escala.
+    # A fonte, quando há registro, é cobrada em
+    # test_o_numero_que_so_cabe_nao_diz_medido.py.
+    assert "confira a escala do seu pdf" in obs, (
+        "a linha não manda conferir a escala: %r" % piso.observations)
     assert "não medida" not in obs and "nao medida" not in obs, (
         "sobrou o aviso ANTIGO dizendo que não foi medida — era justamente a "
         "frase falsa que o cliente-41 recebeu")

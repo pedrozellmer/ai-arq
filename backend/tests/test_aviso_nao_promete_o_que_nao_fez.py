@@ -95,16 +95,38 @@ def _aviso_do_upload(area_informada=150.0):
     return avisos[0], pd
 
 
-def _aviso_do_destino(n_fill, source="informado", pd=None):
+def _aviso_do_destino(n_fill, source="informado", pd=None, pv_m2=583.6):
     """EXECUTA o bloco que roda DEPOIS de `_apply_area_honesty` decidir.
 
     `n_fill` é o que a função devolveu: 0 = não usou a área informada (o caso da
     cliente-31, geometria medida), >0 = usou em N itens.
+    `pv_m2` — a área que a geometria do PDF mediu no job. 🩸 21/09: o texto do
+    "não usou" passou a depender dela (dizia "medimos" até sem medição nenhuma).
+    O padrão é o caso da cliente-31: 10 pranchas, 583,6 m² medidos.
     """
     pd = pd if pd is not None else _ProjectDataFake(total_area=150.0, total_area_source=source)
     antes = len(list(pd.warnings or []))
-    avisos, _ = _rodar(_ANCORA_DESTINO, pd, _n_fill=int(n_fill))
+    avisos, _ = _rodar(_ANCORA_DESTINO, pd, _n_fill=int(n_fill), _pv_m2=pv_m2)
     return avisos[antes:]
+
+
+def test_sem_medicao_o_NAO_USOU_nao_diz_que_mediu():
+    """🩸 21/09 (3ª revisão): o aviso dizia "a gente mediu a geometria" sempre
+    que a área informada não era usada — inclusive em PDF sem escala, sem
+    medição nenhuma (2 dos 8 projetos com este aviso)."""
+    sem = _aviso_do_destino(0, pv_m2=0.0)
+    assert len(sem) == 1, sem
+    assert "NÃO foi usada nos itens" in sem[0], sem[0]
+    assert "medi" not in sem[0].lower(), (
+        "sem medição nenhuma, o aviso afirma que mediu: %r" % sem[0])
+
+
+def test_CONTROLE_com_medicao_o_NAO_USOU_diz_o_motivo():
+    com = _aviso_do_destino(0, pv_m2=583.6)
+    assert len(com) == 1, com
+    assert "medimos a geometria de pelo menos uma prancha" in com[0], com[0]
+    # 🪤 a regra é do JOB (4ª revisão): não pode soar como regra por linha
+    assert "em nenhuma linha" in com[0], com[0]
 
 
 # 🔑 ALLOWLIST, não lista negra. O que o upload SABE é um punhado de fatos: a

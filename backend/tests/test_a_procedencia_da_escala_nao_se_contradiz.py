@@ -54,7 +54,12 @@ def _funcao():
     """Executa só o trecho da decisão — importar main.py conecta em Supabase."""
     src = io.open(_MAIN, encoding="utf-8").read()
     ini = "_FONTE_DA_ESCALA = {"
-    fim = "\nimport re as _re_escala"
+    # 🪤 21/09: o dicionário e a frase subiram pra dentro da fatia dos testes de
+    # honestidade de área (a frase do número preservado chama os dois). A borda
+    # antiga, `import re as _re_escala`, passou a engolir mil linhas no meio —
+    # inclusive `os.getenv`, que aqui não existe. A 1ª linha de CÓDIGO depois
+    # dos dois é a constante da frase nova.
+    fim = "\n_PREFIXO_CABE_NA_GEOMETRIA = "
     assert src.count(ini) == 1, "a âncora de início mudou"
     i = src.index(ini)
     ns = {"__name__": "escala_fonte_ns"}
