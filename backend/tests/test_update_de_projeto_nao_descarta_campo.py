@@ -277,13 +277,23 @@ def test_a_rota_meta_grava_pelo_patch_direto():
 
 
 def test_o_add_file_separa_status_da_COMPOSICAO():
-    """O status continua pela RPC (é pra isso que ela existe); a composição do
-    projeto vai pelo patch direto."""
-    src = sem_comentarios(_SRC)
-    assert '_projeto_patch(job_id, {"file_types": _comp,' in src, (
+    """A composição do projeto vai pelo patch direto.
+
+    🩸 21/09/2026 — e o status do anexo DEIXOU de ir pela RPC, de propósito:
+    ela grava sem olhar o status anterior (dois motores no mesmo projeto) e
+    descarta calada a coluna `anexo_em_curso`. Ele vai pela gravação
+    condicional `_tomar_o_projeto`, com a marca junto. Este guarda dizia o
+    contrário ("o status deixou de ir pela RPC" era a reprovação)."""
+    corpo = sem_comentarios(corpo_de("add_file_and_reprocess"))
+    assert '_projeto_patch(job_id, {"file_types": _comp,' in corpo, (
         "files_count/file_types voltaram a ir pelo caminho que os descarta")
-    assert '{"status": "queued", "error_message": None})' in src, (
-        "o status deixou de ir pela RPC")
+    assert '_tomar_o_projeto(' in corpo and '"not.in.(queued,processing)"' in corpo, (
+        "o status do anexo voltou a ser gravado sem a trava de um motor por projeto")
+    assert '"anexo_em_curso": _anexo_id' in corpo, (
+        "a marca do anexo saiu da gravação condicional")
+    assert corpo.count('"status": "queued"') == 1, (
+        "o status queued do anexo é gravado em mais de um lugar — sobrou a "
+        "gravação incondicional ao lado da trava")
 
 
 def test_CONTROLE_a_checagem_sabe_REPROVAR():

@@ -119,3 +119,28 @@ def test_controle_positivo_a_versao_ANTIGA_liberaria(monkeypatch):
     assert _antiga() == 0, "controle positivo furado"
     with pytest.raises(AssertionError):
         assert _antiga() == 1, "a versão antiga TEM que falhar aqui"
+
+
+def test_anexo_em_projeto_ANTIGO_tambem_trava_o_deploy(monkeypatch):
+    """🩸 revisão final (21/09): anexo acontece em projeto ANTIGO — o
+    `created_at` é de dias atrás, a janela de 120 min não o via, e a trava
+    dizia 0 com o anexo rodando (o deploy mataria o motor, e a recuperação de
+    um anexo sem marca apaga a base). A marca `anexo_em_curso` entra no OR."""
+    vistos = []
+    antigo = {"job_id": "velho1", "created_at": _iso(3 * 24 * 60)}
+
+    def _fake(metodo, caminho, *a, **k):
+        vistos.append(caminho)
+        if caminho.startswith("projects?"):
+            # o dublê avalia o que importa: só devolve o antigo se o OR pedir a marca
+            return 200, ([antigo] if "anexo_em_curso.not.is.null" in caminho else [])
+        if caminho.startswith("error_log?"):
+            return 200, [{"job_id": "velho1"}]
+        return 200, []
+
+    monkeypatch.setattr(main, "_supa_rest_service", _fake)
+    monkeypatch.setattr(main, "_load_jobs", lambda: {})
+    assert main.jobs.em_curso() == 1, "a trava liberaria o deploy com um anexo rodando"
+    q = [c for c in vistos if c.startswith("projects?")][0]
+    # o horário tem ":" e "." — reservados dentro do `or` do PostgREST: vai entre aspas
+    assert "or=(created_at.gte.%22" in q and "%22,anexo_em_curso.not.is.null)" in q, q

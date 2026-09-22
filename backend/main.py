@@ -4376,8 +4376,18 @@ def _url_de_falha_recente(email: str, desde_iso: str, job_id: str) -> str:
             f"&job_id=neq.{job_id}&select=job_id&limit=1")
 
 
+def _ref_do_anexo_que_falhou(job_id: str) -> str:
+    """A marca do pedido de anexo, pra chave do aviso de falha; sem leitura,
+    "sem-marca" (na dúvida, avisa)."""
+    try:
+        _leu, _m = _ler_marca_do_anexo(job_id)
+        return (_m if _leu and _m else "sem-marca")
+    except Exception:
+        return "sem-marca"
+
+
 def _email_falha_cliente(job_id: str, reprocessavel: bool = True,
-                         culpa_nossa: bool = False) -> bool:
+                         culpa_nossa: bool = False, anexo_ref: str = "") -> bool:
     """Avisa o cliente que o projeto falhou. Best-effort, NUNCA levanta.
 
     - culpa_nossa=True    -> defeito do NOSSO código (exceção de programação).
@@ -4391,9 +4401,16 @@ def _email_falha_cliente(job_id: str, reprocessavel: bool = True,
       resolve -> orienta a reenviar a planta completa exportada do CAD.
 
     Dedup: pula se já avisou este job_id neste processo, ou se o job é fruto de
-    reprocessamento (parent_job_id setado -> o job-pai já avisou)."""
+    reprocessamento (parent_job_id setado -> o job-pai já avisou).
+
+    🩸 revisão final (21/09) — `anexo_ref`: ANEXO que falha num projeto SEM
+    planilha (ex.: o upload deu erro, o cliente seguiu o conselho e anexou o
+    DXF, e o DXF também falhou) caía no dedup POR JOB — o job já tinha avisado
+    a 1ª falha — e terminava calado. Regra do Pedro: "tem que receber e-mail
+    em todos". Com `anexo_ref`, a chave é o PEDIDO de anexo (`job:marca`,
+    janela de 30 min) e as travas do job (pai, reprocesso, 15 min) não valem."""
     try:
-        if job_id in _falha_emailed:
+        if job_id in _falha_emailed and not anexo_ref:
             return False
         import html as _hf, urllib.request as _urf
         _qf = (f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}"
@@ -4407,10 +4424,13 @@ def _email_falha_cliente(job_id: str, reprocessavel: bool = True,
         _email = _rows[0].get("user_email") or ""
         if not _email:
             return False
-        if _rows[0].get("parent_job_id"):
+        _ref_af = "%s:%s" % (job_id, anexo_ref) if anexo_ref else ""
+        if _ref_af and _aviso_de_fim_recente(_email, _ref_af, kind="complemento_falhou"):
+            return False
+        if _rows[0].get("parent_job_id") and not anexo_ref:
             _falha_emailed.add(job_id)  # filho de reprocessamento: pai já avisou
             return False
-        if (_rows[0].get("reprocess_count") or 0) > 0:
+        if (_rows[0].get("reprocess_count") or 0) > 0 and not anexo_ref:
             # reprocesso (usuário clicou reprocessar e acompanha, OU revisão interna):
             # não re-emailar falha — só o 1º processamento notifica o cliente.
             _falha_emailed.add(job_id)
@@ -4422,7 +4442,7 @@ def _email_falha_cliente(job_id: str, reprocessavel: bool = True,
             from datetime import datetime as _dt, timedelta as _td, timezone as _tz
             _self_created = _rows[0].get("created_at") or ""
             _since = (_dt.now(_tz.utc) - _td(minutes=15)).isoformat()
-            if _self_created:
+            if _self_created and not anexo_ref:
                 _tq = _url_de_falha_recente(_email, _since, job_id)
                 _tr = _urf.Request(_tq, method="GET")
                 _tr.add_header("apikey", SUPABASE_KEY)
@@ -4451,6 +4471,8 @@ def _email_falha_cliente(job_id: str, reprocessavel: bool = True,
                                         ("erro_reprocessar" if reprocessavel else "erro_trocar")),
                               job_id=job_id)
         _falha_emailed.add(job_id)
+        if ok and _ref_af:
+            _email_auto_registrar(_email, "complemento_falhou", ref=_ref_af)
         return ok
     except Exception as _e:
         print(f"[email] falha-cliente nao enviado (nao-fatal): {_e}")
@@ -5287,7 +5309,12 @@ class JobsStore:
             _st, _rows = _supa_rest_service(
                 "GET",
                 "projects?select=job_id,created_at&status=in.(queued,processing)"
-                f"&created_at=gte.{_corte_janela}")
+                # 🩸 revisão final (21/09): anexo acontece em projeto ANTIGO — o
+                # `created_at` dele é de dias atrás e a trava dizia 0 com o
+                # anexo rodando. A marca `anexo_em_curso` entra na janela.
+                # (o valor vai entre aspas — %22 — porque o horário tem ":" e ".",
+                # que são reservados dentro do `or` do PostgREST)
+                f"&or=(created_at.gte.%22{_corte_janela}%22,anexo_em_curso.not.is.null)")
             if _st and 200 <= _st < 300 and isinstance(_rows, list):
                 if not _rows:
                     return 0
@@ -5357,7 +5384,8 @@ RECOVERY_SWEEP_MIN = 5  # minutos: intervalo da varredura periódica de recovery
 
 def _retomar_job_do_storage(job_id: str, typology: str = "office",
                             project_type: str = "arquitetura",
-                            conta_retomada: bool = True) -> bool:
+                            conta_retomada: bool = True,
+                            status_esperado: str = None) -> bool:
     """RESILIÊNCIA (16/06): RETOMA um job interrompido por restart.
 
     Baixa os arquivos originais do Storage (que agora sobem no upload, antes
@@ -5366,10 +5394,24 @@ def _retomar_job_do_storage(job_id: str, typology: str = "office",
     arquivos no Storage (job antigo, pré-resiliência) — aí o caller marca erro.
 
     Antes (bug que derrubou o cliente-29 2x): qualquer restart no meio do
-    processamento matava o job pra sempre — 92% dos erros históricos."""
+    processamento matava o job pra sempre — 92% dos erros históricos.
+
+    🩸 21/09/2026 — TERCEIRO RESULTADO: "ocupado". Outro motor pegou o projeto
+    (a rota do anexo venceu a trava), ou não deu pra confirmar — não retomar e
+    NÃO marcar erro. É truthy de propósito: os dois chamadores leem False como
+    "não há arquivo" e marcam erro + e-mail de falha, o que aqui seria mandar
+    "deu erro" por cima de um motor vivo."""
     import urllib.request, json as _j
     from urllib.parse import unquote
     try:
+        # Motor vivo NESTE processo (workers=1): não baixar por cima dos
+        # arquivos que ele está lendo — `open(lp, "wb")` abaixo os trunca.
+        try:
+            if job_id in jobs and getattr(jobs[job_id], "status", None) in ("queued", "processing"):
+                print(f"[recovery-retomar] {job_id}: já tem motor vivo aqui — não retomo")
+                return "ocupado"
+        except Exception:
+            pass
         list_url = f"{SUPABASE_URL}/storage/v1/object/list/{PRANCHAS_BUCKET}"
         body = _j.dumps({"prefix": f"{job_id}/", "limit": 200}).encode("utf-8")
         req = urllib.request.Request(list_url, data=body, method="POST")
@@ -5409,17 +5451,122 @@ def _retomar_job_do_storage(job_id: str, typology: str = "office",
                                  {"warnings": _avisos_com(job_id, _av_perda)})
             except Exception as _ape:
                 print(f"[recovery-retomar] aviso de perda {job_id}: {_ape}")
-        # Idempotência: limpa itens parciais antes de reprocessar (DELETE REST)
+        # 🩸 21/09/2026 — ERA ANEXO? A resposta decide se a planilha que o
+        # cliente já tinha SOBREVIVE. Esta função apagava todos os itens (logo
+        # abaixo) e relançava como upload normal, sem `is_complement`: um anexo
+        # interrompido por reinício destruía a planilha-base — sem arquivar,
+        # sem resgatar o caderno, e as revisões do cliente iam junto pelo
+        # CASCADE — e as guardas "base preservada" (teto de páginas, CAD que não
+        # abre, 0 item) paravam de valer, porque dependem de a base existir.
+        # 🔑 A rota grava `anexo_em_curso` junto com o status (`_tomar_o_projeto`).
+        # 🪤 Leitura ESTRITA, e falhou = não retomar: seguir "no escuro" é
+        # tratar como upload e apagar a base justamente no soluço do banco. A
+        # próxima volta da varredura (5 min) tenta de novo. (A área e o
+        # pé-direito informados vêm nesta mesma leitura — a de 03/08.)
+        _st_p, _js_p = _supa_rest_service(
+            "GET", "projects",
+            params={"job_id": f"eq.{job_id}", "limit": "1",
+                    "select": "status,error_message,anexo_em_curso,user_total_area,user_pe_direito"})
+        if not (_st_p == 200 and isinstance(_js_p, list) and _js_p):
+            _log_error("recovery:retomada-sem-leitura",
+                       f"não consegui ler o projeto antes de retomar (HTTP {_st_p}) — "
+                       f"não retomo às cegas: se for anexo, retomar como upload apaga "
+                       f"a planilha do cliente", job_id, severity="warning")
+            return "ocupado"
+        _proj = _js_p[0] or {}
+        _status_visto = (_proj.get("status") or "").strip()
+        # 🩸 revisão dos consertos (21/09): a trava zera `error_message`; o
+        # recuo que devolvia só o status deixava "error" SEM texto, e a
+        # re-tentativa seguinte lia "não é passageiro" e desistia do anexo.
+        # O que se toma, se devolve inteiro.
+        _devolve = {"status": _status_visto, "error_message": _proj.get("error_message")}
+        _anexo = (_proj.get("anexo_em_curso") or "").strip()
+        if _status_visto not in ("queued", "processing", "error"):
+            print(f"[recovery-retomar] {job_id}: status '{_status_visto}' — nada a retomar")
+            return "ocupado"
+        # 🩸 21/09 (revisão dos guardas, reproduzido): quem chama sabe de que
+        # status partiu. A re-tentativa automática listou `status=eq.error`; se
+        # agora está "queued", foi a rota do anexo que tomou o projeto DURANTE
+        # os downloads acima — e travar com `eq.queued` casava com a gravação
+        # dela: segundo motor no mesmo projeto. "queued" só é aceito de quem
+        # procura projeto TRAVADO (a recuperação), e sem status esperado.
+        if status_esperado and _status_visto != status_esperado:
+            print(f"[recovery-retomar] {job_id}: esperava '{status_esperado}', "
+                  f"achei '{_status_visto}' — outro motor pegou")
+            return "ocupado"
+        # Motor vivo NESTE processo, de novo: a rota semeia o store local logo
+        # depois de ganhar a trava, e os downloads acima levam segundos.
         try:
-            del_url = f"{SUPABASE_URL}/rest/v1/project_items?job_id=eq.{job_id}"
-            del_req = urllib.request.Request(del_url, method="DELETE")
-            del_req.add_header("apikey", SUPABASE_KEY)
-            del_req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
-            urllib.request.urlopen(del_req, timeout=15)
-        except Exception as _de:
-            print(f"[recovery-retomar] limpeza itens {job_id}: {_de}")
-        _supabase_update("projects", "job_id", job_id,
-                         {"status": "queued", "error_message": None})
+            if job_id in jobs and getattr(jobs[job_id], "status", None) in ("queued", "processing"):
+                print(f"[recovery-retomar] {job_id}: motor vivo apareceu aqui durante "
+                      f"o download — não retomo")
+                return "ocupado"
+        except Exception:
+            pass
+        # A TRAVA: só relança se o status ainda for o que foi visto agora. Vem
+        # ANTES de qualquer decisão que grave (inclusive o "mantém a base" do
+        # anexo sem CAD logo abaixo): quem perde não escreve nada.
+        _tomada_r = _tomar_o_projeto(job_id, f"eq.{_status_visto}",
+                                     {"status": "queued", "error_message": None})
+        if _tomada_r != "ganhou":
+            _log_error("recovery:retomada-ocupada",
+                       f"não retomei: a trava deu '{_tomada_r}' (status visto: "
+                       f"{_status_visto}) — outro motor pegou ou a gravação não "
+                       f"confirmou", job_id, severity="info")
+            return "ocupado"
+        if _anexo:
+            # A MESMA seleção da rota: havendo CAD, o motor recebe só os CADs
+            # (misturar PDF e CAD duplica a quantidade).
+            _cads_r = [p for p in file_paths if p.lower().endswith((".dwg", ".dxf"))]
+            if _cads_r:
+                _cads_r, _av_ext_r = _escolher_cads_do_anexo(_cads_r, job_id)
+                file_paths = _cads_r
+                if _av_ext_r:
+                    try:
+                        _supabase_update("projects", "job_id", job_id,
+                                         {"warnings": _avisos_com(job_id, _av_ext_r)})
+                    except Exception as _axr:
+                        print(f"[recovery-retomar] aviso de extensão {job_id}: {_axr}")
+            else:
+                # A MESMA trava anti-perda da rota: sem CAD no Storage, rodar só
+                # com PDF trocaria medição por estimativa (regra dura nº1).
+                # 🪤 `_job_medidos_count` devolve -1 quando a LEITURA falha; "> 0"
+                # deixava o -1 passar e o anexo rodava só com PDF sobre uma base
+                # medida (reproduzido na revisão de 21/09). Aqui só "0" segue.
+                _med_r = _job_medidos_count(job_id)
+                if _med_r < 0:
+                    # 🩸 revisão final: a leitura caiu — não sabemos se há
+                    # medição a perder. Nem roda só com PDF, nem ABANDONA o
+                    # anexo por um soluço: devolve o status e a próxima volta
+                    # confere de novo.
+                    _log_error("recovery:anexo-medidos-ilegivel",
+                               "não consegui contar os itens medidos — o anexo fica "
+                               "pra próxima volta", job_id, severity="warning")
+                    _tomar_o_projeto(job_id, "eq.queued", _devolve)
+                    return "ocupado"
+                if _med_r > 0:
+                    if not _anexo_falhou_mantem_a_base(
+                            job_id, "interrompido",
+                            "⚠ O processamento do arquivo anexado foi interrompido por um "
+                            "reinício do servidor, e retomá-lo agora trocaria linhas medidas "
+                            "por estimativas — a planilha anterior foi mantida. Se quiser, "
+                            "anexe de novo junto com o DXF (ou DWG)."):
+                        # não deu pra manter (base ilegível): devolve o status que
+                        # a trava tomou, pra próxima volta tentar de novo
+                        _tomar_o_projeto(job_id, "eq.queued", _devolve)
+                    return "ocupado"
+        # Idempotência: limpa itens parciais antes de reprocessar (DELETE REST).
+        # 🚫 NUNCA no anexo: ali os itens são a planilha que o cliente já tem, e
+        # quem troca a versão (arquivando antes) é o `_persist`, só no sucesso.
+        if not _anexo:
+            try:
+                del_url = f"{SUPABASE_URL}/rest/v1/project_items?job_id=eq.{job_id}"
+                del_req = urllib.request.Request(del_url, method="DELETE")
+                del_req.add_header("apikey", SUPABASE_KEY)
+                del_req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+                urllib.request.urlopen(del_req, timeout=15)
+            except Exception as _de:
+                print(f"[recovery-retomar] limpeza itens {job_id}: {_de}")
         # Anti-loop: incrementa AUTO_RESUME_COUNT ANTES de disparar (contador
         # PRÓPRIO da auto-retomada, separado do reprocess_count do reprocesso
         # manual). Por que separado: assim a auto-retomada (a) NÃO gasta a cota de
@@ -5457,32 +5604,31 @@ def _retomar_job_do_storage(job_id: str, typology: str = "office",
         # 03/08/2026: `user_total_area` e `user_pe_direito` não eram relidos, e
         # todo job retomado por reinício de servidor perdia calado a metragem
         # informada — as áreas que dependiam dela sumiam da planilha.
-        _u_area, _u_pd = 0.0, 0.0
+        # 21/09: vêm da leitura estrita lá de cima (mesma consulta que decide
+        # se é anexo) — uma ida ao banco a menos, e sem o "seguir com 0" de
+        # quando esta leitura era separada e best-effort.
         try:
-            _qi = (f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}"
-                   f"&select=user_total_area,user_pe_direito&limit=1")
-            _ri = urllib.request.Request(_qi, method="GET")
-            _ri.add_header("apikey", SUPABASE_KEY)
-            _ri.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
-            _pi = _j.loads(urllib.request.urlopen(_ri, timeout=10).read().decode("utf-8"))
-            if _pi:
-                _u_area = float(_pi[0].get("user_total_area") or 0)
-                _u_pd = float(_pi[0].get("user_pe_direito") or 0)
-        except Exception as _ei:
-            # Não é fatal: sem o valor o motor mede o que der. Mas registrar,
-            # senão a perda volta a ser silenciosa — que é o bug original.
-            _log_error("recovery:informados",
-                       f"não consegui reler área/pé-direito informados: {_ei}", job_id)
+            _u_area = float(_proj.get("user_total_area") or 0)
+        except (TypeError, ValueError):
+            _u_area = 0.0
+        try:
+            _u_pd = float(_proj.get("user_pe_direito") or 0)
+        except (TypeError, ValueError):
+            _u_pd = 0.0
         if _u_area or _u_pd:
             print(f"[recovery-retomar] {job_id}: preservando informados — "
                   f"area={_u_area} pe_direito={_u_pd}")
+        _kw_retomada = {"typology": typology, "project_type": project_type,
+                        "user_total_area": _u_area, "user_pe_direito": _u_pd}
+        if _anexo:
+            _kw_retomada["is_complement"] = True
         import threading as _t
         _t.Thread(target=_process_job_throttled,
                   args=(job_id, file_paths, work_dir),
-                  kwargs={"typology": typology, "project_type": project_type,
-                          "user_total_area": _u_area, "user_pe_direito": _u_pd},
+                  kwargs=_kw_retomada,
                   daemon=True).start()
-        print(f"[recovery-retomar] {job_id}: RETOMADO com {len(file_paths)} arquivo(s)")
+        print(f"[recovery-retomar] {job_id}: RETOMADO com {len(file_paths)} arquivo(s)"
+              + (" — como ANEXO (planilha-base preservada)" if _anexo else ""))
         return True
     except Exception as e:
         print(f"[recovery-retomar] {job_id} falhou: {e}")
@@ -5630,7 +5776,12 @@ def _auto_retry_erros_transitorios():
         if transitorio and count < 2 and _fil == "":
             typ = row.get("typology") or "office"
             ptype = row.get("project_type") or "arquitetura"
-            if _retomar_job_do_storage(job_id, typ, ptype):
+            _ret = _retomar_job_do_storage(job_id, typ, ptype, status_esperado="error")
+            if _ret == "ocupado":
+                # 21/09: outro motor pegou (ex.: o cliente anexou no meio) ou
+                # não deu pra confirmar — nem re-tentativa, nem alerta terminal.
+                continue
+            if _ret:
                 print(f"[auto-retry] {job_id}: erro passageiro → re-tentando sozinho "
                       f"(tentativa {count + 1}/2)")
                 _log_error("auto-retry", f"re-tentativa automática {count + 1}/2 "
@@ -5809,6 +5960,7 @@ def _recover_stuck_jobs_on_startup(skip_local_active: bool = False,
         prev_count = None   # sentinela: None = leitura FALHOU → fail-closed (não retoma)
         typ = "office"
         ptype = "arquitetura"
+        _anexo_rec = ""
         try:
             # 🪤 O que NÃO for lido aqui o cliente PERDE na retomada. Achado em
             # 03/08: `user_total_area` e `user_pe_direito` ficavam de fora, então
@@ -5818,7 +5970,7 @@ def _recover_stuck_jobs_on_startup(skip_local_active: bool = False,
             # tem que entrar NESTA lista também.
             q = (f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}"
                  f"&select=auto_resume_count,typology,project_type"
-                 f",user_total_area,user_pe_direito")
+                 f",user_total_area,user_pe_direito,anexo_em_curso")
             qreq = urllib.request.Request(q, method="GET")
             qreq.add_header("apikey", SUPABASE_KEY)
             qreq.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
@@ -5827,6 +5979,9 @@ def _recover_stuck_jobs_on_startup(skip_local_active: bool = False,
             if prow:
                 typ = prow[0].get("typology") or "office"
                 ptype = prow[0].get("project_type") or "arquitetura"
+                # 21/09: anexo que não pode ser retomado NÃO vira erro — a
+                # planilha que o cliente já tinha volta a valer (ver abaixo).
+                _anexo_rec = (prow[0].get("anexo_em_curso") or "").strip()
         except Exception:
             # Fail-CLOSED (fix 2026-07-22): antes o default 0 anulava OS DOIS freios
             # (quarentena exige >=1, retomada exige <2) — uma única falha de leitura
@@ -5859,6 +6014,20 @@ def _recover_stuck_jobs_on_startup(skip_local_active: bool = False,
         quarentenado = (crash_loop and not deploy_restart
                         and row.get("status") == "processing"
                         and prev_count >= 1)
+        # 🩸 21/09/2026 — anexo em quarentena: a planilha que o cliente já tinha
+        # volta a valer (done + aviso + e-mail curto) em vez de virar erro com
+        # "deu erro" por cima de quem não perdeu nada. Sem base, segue o erro.
+        if quarentenado and _anexo_rec and _anexo_falhou_mantem_a_base(
+                job_id, "interrompido",
+                "⚠ O arquivo anexado derrubou o processamento mais de uma vez e foi "
+                "deixado de lado — a planilha anterior foi mantida. Tente um arquivo "
+                "menor (só a prancha necessária)."):
+            _log_error("recovery:quarentena",
+                       f"Crash-loop detectado — ANEXO em quarentena após "
+                       f"{prev_count} retomada(s); planilha-base mantida",
+                       job_id, severity="error")
+            recovered += 1
+            continue
         if quarentenado:
             _supabase_update("projects", "job_id", job_id, {
                 "status": "error",
@@ -5872,7 +6041,9 @@ def _recover_stuck_jobs_on_startup(skip_local_active: bool = False,
                        f"Crash-loop detectado — job em quarentena após "
                        f"{prev_count} retomada(s)", job_id, severity="error")
             try:
-                _email_falha_cliente(job_id, reprocessavel=False)
+                # revisão dos consertos (21/09): anexo sem base em quarentena
+                # avisa pela chave do pedido (o dedup por job o calava)
+                _email_falha_cliente(job_id, reprocessavel=False, anexo_ref=_anexo_rec or "")
             except Exception:
                 pass
             try:
@@ -5891,10 +6062,24 @@ def _recover_stuck_jobs_on_startup(skip_local_active: bool = False,
 
         # Restart por DEPLOY não gasta o orçamento de retomada (o job não tem
         # culpa da atualização); crash real (OOM/plataforma) conta como antes.
-        if prev_count < 2 and _retomar_job_do_storage(
-                job_id, typ, ptype, conta_retomada=not deploy_restart):
+        _ret_rec = (_retomar_job_do_storage(job_id, typ, ptype,
+                                            conta_retomada=not deploy_restart)
+                    if prev_count < 2 else False)
+        if _ret_rec == "ocupado":
+            # 21/09: outro motor pegou, ou não deu pra confirmar — não marca
+            # erro por cima; a próxima volta confere de novo.
+            continue
+        if _ret_rec:
             # _retomar incrementou auto_resume_count (quando conta_retomada)
             # e re-disparou o processamento.
+            recovered += 1
+            continue
+
+        # 21/09: anexo que não pôde ser retomado — a base volta a valer.
+        if _anexo_rec and _anexo_falhou_mantem_a_base(
+                job_id, "interrompido",
+                "⚠ O processamento do arquivo anexado foi interrompido por um reinício "
+                "do servidor e não pôde ser retomado — a planilha anterior foi mantida."):
             recovered += 1
             continue
 
@@ -7739,7 +7924,8 @@ def _mem_pressure(threshold: float = 0.85) -> bool:
     return frac is not None and frac >= threshold
 
 
-def _abort_job_mem(job_id: str, done: int, total: int, motivo: str = "projeto"):
+def _abort_job_mem(job_id: str, done: int, total: int, motivo: str = "projeto",
+                   is_complement: bool = False):
     """Aborta um job por pressão de memória, de forma LIMPA — mantém o servidor de
     pé pra todos os outros. Marca erro com orientação + alerta.
 
@@ -7766,6 +7952,35 @@ def _abort_job_mem(job_id: str, done: int, total: int, motivo: str = "projeto"):
         _msg = ("Seu projeto é grande demais pra processar de uma vez e chegou perto do "
                 "limite de memória do servidor. Divida em 2-3 envios menores (ex.: "
                 "metade das pranchas por vez) que processa tranquilo.")
+    # 🩸 revisão final (21/09): num ANEXO, o freio gravava erro, mandava "deu
+    # erro" e tirava da tela a planilha que o cliente já tinha — o mesmo
+    # defeito que o except do motor deixou de ter. Com base, ela volta a valer.
+    if is_complement and _anexo_falhou_mantem_a_base(
+            job_id, "falhou",
+            "⚠ O arquivo anexado não pôde ser processado por falta de memória no "
+            "servidor" + (" (havia outro projeto rodando junto)" if motivo == "concorrencia"
+                          else "") + " — a planilha anterior foi mantida, nada foi apagado."):
+        try:
+            _log_error("mem:freio",
+                       f"Freio de memória ({motivo}) num ANEXO: abortado em {done}/{total} "
+                       f"pranchas (uso={_container_mem_frac()}, rodando={_JOBS_RODANDO}) "
+                       f"— planilha-base mantida", job_id, severity="error")
+        except Exception:
+            pass
+        # revisão dos consertos (21/09): o alerta interno não pode sumir — é
+        # o único sinal de que o servidor chegou perto do limite
+        try:
+            import threading as _thm2
+            _thm2.Thread(target=_notify_admin, args=(
+                "🛡️ Freio de memória disparou (anexo)",
+                f"O job <b>{job_id}</b> chegou perto do limite de RAM em {done}/{total} "
+                f"pranchas num ANEXO (motivo: {motivo}) e foi abortado antes de "
+                f"derrubar o servidor. A planilha que o cliente já tinha foi mantida "
+                f"e ele recebeu o aviso curto. (Servidor seguiu de pé.)"),
+                daemon=True).start()
+        except Exception:
+            pass
+        return
     try:
         jobs.update_field(job_id, status="error")
         jobs.update_field(job_id, error_message=_msg)
@@ -7810,7 +8025,8 @@ def _abort_job_mem(job_id: str, done: int, total: int, motivo: str = "projeto"):
         # 🔑 O conserto não é um ramo novo: pra falta de memória por concorrência,
         # reprocessar É a resposta certa — o servidor estava ocupado, o arquivo não
         # tem nada. Então o e-mail usa o ramo que já existe e já diz a verdade.
-        _email_falha_cliente(job_id, reprocessavel=(motivo == "concorrencia"))
+        _email_falha_cliente(job_id, reprocessavel=(motivo == "concorrencia"),
+                             anexo_ref=(_ref_do_anexo_que_falhou(job_id) if is_complement else ""))
     except Exception:
         pass
 
@@ -8406,8 +8622,10 @@ def _recusa_por_paginas(job_id, file_paths) -> bool:
     # GERADA") e mandaria e-mail de falha pra quem não perdeu nada — o mesmo
     # padrão que custou o caso de 19/09. A casa já tinha decidido isso dentro
     # do `process_job`; esta régua está a montante e passaria por cima.
-    # 🪤 A âncora é o FATO (já tem itens), não a flag `is_complement`: a
-    # retomada depois de um restart perde a flag e manteria o fato.
+    # 🪤 A âncora é o FATO (já tem itens), não a flag `is_complement`.
+    # 🩸 21/09: aqui dizia "a retomada perde a flag e manteria o fato" — era
+    # falso: a retomada APAGAVA os itens antes de relançar. Desde 21/09 ela lê
+    # `anexo_em_curso` e, sendo anexo, não apaga nada.
     try:
         _ja_entregou = _complement_base_has_items(job_id)
     except Exception:
@@ -8450,8 +8668,12 @@ def _recusa_por_paginas(job_id, file_paths) -> bool:
         pass
     # 🪤 reprocessável=False: reprocessar roda o MESMO envio e bate no mesmo
     # teto. O que resolve é dividir o envio, e é isso que o texto pede.
+    # 🩸 revisão dos consertos (21/09): ANEXO sem planilha recusado aqui
+    # calava pelo dedup por job. A âncora é a MARCA (aqui não há a flag).
     try:
-        _email_falha_cliente(job_id, reprocessavel=False)
+        _leu_ap, _marca_ap = _ler_marca_do_anexo(job_id)
+        _email_falha_cliente(job_id, reprocessavel=False,
+                             anexo_ref=(_marca_ap if _leu_ap and _marca_ap else ""))
     except Exception:
         pass
     return True
@@ -11205,6 +11427,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                 user_ambientes: dict[str, str] | None = None,
                 project_type: str = "arquitetura",
                 is_complement: bool = False,
+                anexados: list | None = None,
                 user_total_area: float = 0,
                 user_pe_direito: float = 0):
     """Processa um job prancha por prancha. Aceita PDF, DWG e DXF.
@@ -11916,26 +12139,28 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                     # sucesso). Se este job já tinha resultado, restaura 'done' + avisa —
                     # nunca marca erro. (Feedback Pedro 15/07: DWG-complemento que não abriu
                     # sumia a planilha da tela; ele achou que tinha perdido tudo.)
-                    if is_complement and _complement_base_has_items(job_id):
+                    # 🩸 revisão final (21/09): este return gravava `done` SEM
+                    # conferir (a RPC devolve False, não levanta — o except
+                    # nunca disparava), punha o store local em `done` ANTES, e o
+                    # e-mail limpava a marca: com um soluço do banco, a
+                    # varredura seguinte retomava como UPLOAD e apagava a base
+                    # depois do "nada foi apagado". Agora é a mesma porta do
+                    # except: base conferida, `done` confirmado, e só então
+                    # e-mail e marca. Sem isso, segue o erro de sempre (marca
+                    # intacta).
+                    # O texto não afirma que o CAD é "o que você anexou" (com
+                    # CAD no projeto a rota manda só os CADs) nem chuta causa.
+                    if is_complement:
                         _warn_txt = (
-                            f"O arquivo CAD que você anexou ({arquivos}) não pôde ser aberto "
-                            f"automaticamente (DWG de versão recente do AutoCAD ou com objetos "
-                            f"de MEP/elétrica). Sua planilha anterior foi mantida — nada foi "
-                            f"perdido. Pra medir pelo CAD: abra no AutoCAD ou BricsCAD, "
+                            f"Não conseguimos abrir automaticamente o desenho em CAD deste "
+                            f"projeto ({arquivos}). Sua planilha anterior foi mantida — nada "
+                            f"foi perdido. Pra medir pelo CAD: abra no AutoCAD ou BricsCAD, "
                             f"Salvar Como → DXF 2013, e anexe o DXF aqui.")
-                        jobs.update_field(job_id, status="done", progress=100, error_message=None,
-                                          current_step="Complemento não pôde ser lido — planilha anterior mantida")
-                        try:
-                            _supabase_update("projects", "job_id", job_id, {
-                                "status": "done",
-                                "error_message": None,
-                                "warnings": _avisos_com(job_id, _warn_txt),
-                                "completed_at": datetime.utcnow().isoformat(),
-                            })
-                        except Exception as _upe:
-                            print(f"[add-file] restaurar done falhou: {_upe}")
-                        print(f"[add-file] complemento CAD falhou, base preservada → done+aviso (sem erro)")
-                        return
+                        if _anexo_falhou_mantem_a_base(
+                                job_id, "cad_nao_abriu", _warn_txt,
+                                passo="Complemento não pôde ser lido — planilha anterior mantida"):
+                            print(f"[add-file] complemento CAD falhou, base preservada → done+aviso (sem erro)")
+                            return
                     jobs.update_field(job_id, error_message=msg, current_step="❌ Arquivo CAD inválido — leia mensagem abaixo")
                     raise RuntimeError(msg)
             except Exception as e:
@@ -12083,7 +12308,8 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                     _motivo_freio = (_decisao_do_freio()
                                      if idx > 0 and _mem_pressure(0.85) else None)
                     if _motivo_freio:
-                        _abort_job_mem(job_id, idx, n_dxf, motivo=_motivo_freio)
+                        _abort_job_mem(job_id, idx, n_dxf, motivo=_motivo_freio,
+                                       is_complement=is_complement)
                         # 🩸 03/09, varredura adversarial: esta é a QUARTA saída
                         # antecipada do laço, e a única que não é `continue` —
                         # por isso escapou do conserto de mais cedo, que só
@@ -13680,7 +13906,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
             _motivo_freio = (_decisao_do_freio()
                              if i > 0 and _mem_pressure(0.85) else None)
             if _motivo_freio:
-                _abort_job_mem(job_id, i, total, motivo=_motivo_freio)
+                _abort_job_mem(job_id, i, total, motivo=_motivo_freio,
+                               is_complement=is_complement)
                 return
             _disp = filename if page_count <= 1 else f"{filename} · pág {page_index+1}/{page_count}"
             step_pct = pdf_start_pct + int((i / max(total, 1)) * pdf_span)
@@ -14601,25 +14828,19 @@ bloco — só cite os que estão no inventário deste arquivo."""
             # Marcar erro aqui sumia a planilha da tela e mandava email de falha pra
             # quem não perdeu nada — mesmo bug que o guard do DWG inválido conserta,
             # só que por outra porta. Restaura 'done' + aviso; nunca marca erro.
-            if is_complement and _complement_base_has_items(job_id):
-                # 05/09 (cliente-39, 19:24): o texto mora em `_aviso_complemento_sem_itens`
-                # — três situações, três verdades (nada entrou / não consegui ler /
-                # lido sem item). Aqui dizia "foi lido" com `file_paths` VAZIO.
+            # 05/09 (cliente-39, 19:24): o texto mora em `_aviso_complemento_sem_itens`
+            # — três situações, três verdades (nada entrou / não consegui ler /
+            # lido sem item). Aqui dizia "foi lido" com `file_paths` VAZIO.
+            # 🩸 revisão final (21/09): mesma porta do return do CAD — `done`
+            # conferido antes de e-mail e marca (ver o comentário lá).
+            if is_complement:
                 _warn_zero = _aviso_complemento_sem_itens(
                     file_paths or [], list(dxf_errors or []) + list(sheet_errors or []))
-                jobs.update_field(job_id, status="done", progress=100, error_message=None,
-                                  current_step="Complemento sem itens — planilha anterior mantida")
-                try:
-                    _supabase_update("projects", "job_id", job_id, {
-                        "status": "done",
-                        "error_message": None,
-                        "warnings": _avisos_com(job_id, _warn_zero),
-                        "completed_at": datetime.utcnow().isoformat(),
-                    })
-                except Exception as _upe:
-                    print(f"[add-file] restaurar done (0 itens) falhou: {_upe}")
-                print(f"[add-file] complemento rendeu 0 itens, base preservada → done+aviso (sem erro)")
-                return
+                if _anexo_falhou_mantem_a_base(
+                        job_id, "sem_itens", _warn_zero,
+                        passo="Complemento sem itens — planilha anterior mantida"):
+                    print(f"[add-file] complemento rendeu 0 itens, base preservada → done+aviso (sem erro)")
+                    return
 
             # Considera falhas dos DOIS caminhos: PDF (sheet_errors) e DXF
             # (dxf_errors). Um projeto só-DXF cuja IA falhou tem dxf_errors mas
@@ -16756,7 +16977,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
         try:
             import html as _html, urllib.request as _ur2
             _q = (f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}"
-                  f"&select=user_email,user_name,project_name,reprocess_count,parent_job_id")
+                  f"&select=user_email,user_name,project_name,reprocess_count,parent_job_id"
+                  f",anexo_em_curso")
             _rq = _ur2.Request(_q, method="GET")
             _rq.add_header("apikey", SUPABASE_KEY)
             _rq.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
@@ -16773,25 +16995,86 @@ bloco — só cite os que estão no inventário deste arquivo."""
             # então o dedup por job nunca via o irmão e o cliente levava dois
             # avisos do MESMO projeto. Pai e filhote compartilham a raiz.
             _raiz = ((_rows[0].get("parent_job_id") if _rows else None) or job_id)
-            _ja_avisado = bool(_pe) and _aviso_de_fim_recente(_pe, _raiz)
+            # 🩸 21/09/2026 — O ANEXO SAÍA DA JANELA DA FAMÍLIA CALADO. A regra do
+            # Pedro, no mesmo dia: "tem que receber e-mail em todos". O ramo do
+            # complemento (logo abaixo) prometia "Email PRÓPRIO (não cai no dedup
+            # dos outros)… SEMPRE notifica", e a condição dele exigia
+            # `not _ja_avisado` — a janela de 30 min da FAMÍLIA (16/09). Job
+            # 7b60c43b, hoje: 1º aviso 12:54, a pessoa anexou um PDF às 13:19, a
+            # planilha nova ficou pronta 29,5 min depois do 1º aviso — e o e-mail
+            # não saiu. Foi a ÚNICA vez que essa janela segurou alguém desde
+            # que nasceu. 🔑 A janela da família é pra projeto que termina DUAS
+            # vezes pela mesma causa (varredura + reprocesso). Anexo é um pedido
+            # novo do cliente, com arquivo novo — tem a trava própria, por
+            # rodada, lá embaixo.
+            _ja_avisado = (bool(_pe) and not is_complement
+                           and _aviso_de_fim_recente(_pe, _raiz))
             if _ja_avisado:
                 _log_error("email:aviso-de-fim-ja-saiu",
                            f"pulei o aviso de fim: a família {_raiz} já avisou "
                            f"este cliente há menos de 30 min", job_id, severity="info")
-            if _pe and not _ja_avisado and is_complement:
-                # add-file: refizemos o projeto medindo pelo CAD que o cliente anexou.
-                # Email PRÓPRIO (não cai no dedup dos outros), 1x por job — garante que
-                # a conclusão do "complementar" SEMPRE notifica, independente de
-                # reprocess_count. Se um resume pós-restart perder o is_complement, cai
-                # no email "planilha pronta" normal (sem dedup) → cliente notificado mesmo.
-                if _email_auto_ja_enviado(_pe, "complemento_pronto", ref=job_id):
-                    print(f"[email] complemento-pronto já enviado pra este job — pulando")
+            if _pe and is_complement:
+                # add-file: refizemos o projeto com o arquivo que o cliente anexou.
+                # Email PRÓPRIO, fora da janela da família (ver acima).
+                # 🔑 21/09 — A CHAVE É O PEDIDO DE ANEXO: `job_id:anexo_em_curso`,
+                # o id que a rota grava junto com o status (`_tomar_o_projeto`).
+                # Ela é estável entre a rodada e uma retomada — que agora sabe
+                # que era anexo. Antes a retomada perdia o `is_complement` e o fim
+                # caía na janela da família ou na trava vitalícia do reprocesso:
+                # foi por aí que anexos de ago–set ficaram sem aviso (revisão de
+                # 21/09, cruzando os alertas do Gmail com os logs). A janela de
+                # 30 min só segura a MESMA rodada terminando duas vezes.
+                # 🩸 A 1ª versão deste conserto (21/09, não subiu) usava os NOMES
+                # dos arquivos processados — e com CAD no projeto a rota manda só
+                # os CADs: dois PDFs diferentes anexados davam a mesma chave, e o
+                # 2º calava. Os nomes ficam só de RESERVA, pra rodada sem marca
+                # (disparada antes deste conserto).
+                # 🪤 Na dúvida ENVIA (`_aviso_de_fim_recente` devolve False se
+                # não consegue ler) — e-mail a mais é melhor que cliente sem
+                # saber que a planilha mudou.
+                # 🪤 `hashlib` importado AQUI, não no topo: este bloco é
+                # executado por testes numa fatia com namespace próprio
+                # (tests/_fim_do_job.py), e função de módulo nova daria
+                # NameError engolido pelo `except` — o e-mail sumiria calado.
+                _anexo_c = str((_rows[0].get("anexo_em_curso") if _rows else None) or "").strip()
+                if _anexo_c:
+                    _ref_c = "%s:%s" % (job_id, _anexo_c)
+                else:
+                    import hashlib as _hl_c
+                    _ref_c = "%s:%s" % (job_id, _hl_c.sha1("|".join(sorted(
+                        os.path.basename(str(_fp_c)).lower()
+                        for _fp_c in (file_paths or []))).encode("utf-8")).hexdigest()[:10])
+                if _aviso_de_fim_recente(_pe, _ref_c, kind="complemento_pronto"):
+                    print(f"[email] complemento-pronto: esta rodada ({_ref_c}) já avisou — pulando")
+                    _log_error("email:anexo-ja-avisado",
+                               f"pulei o aviso do anexo: a rodada {_ref_c} já avisou "
+                               f"este cliente há menos de 30 min", job_id, severity="info")
                 else:
                     _pn_c = _html.escape(_rows[0].get("project_name") or "seu projeto")
                     _greet_c = _greeting_line(_html.escape(_nm))
                     _exts_c = [os.path.splitext(p)[1].lower() for p in file_paths]
                     _n_pdf_c = sum(1 for e in _exts_c if e == ".pdf")
                     _n_cad_c = sum(1 for e in _exts_c if e in (".dwg", ".dxf"))
+                    # 🩸 revisão final (21/09): com CAD no projeto a rota manda
+                    # SÓ os CADs — o PDF anexado nem é lido — e o e-mail dizia
+                    # "medindo pelo CAD que você anexou" (o caso 7b60c43b). A
+                    # rota diz o que foi anexado AGORA (`anexados`); a retomada
+                    # não sabe (None) e fica como antes.
+                    # 🪤 revisão dos consertos (21/09): a rota RENOMEIA o CAD cuja
+                    # extensão mente (DWG salvo como .dxf — cliente-39): o nome
+                    # anexado e o lido diferem só na extensão CAD. Compara sem ela
+                    # (e só ela: "planta.pdf" não vira "planta.dxf").
+                    def _raiz_c(_n):
+                        _n = os.path.basename(str(_n)).lower()
+                        return os.path.splitext(_n)[0] if _n.endswith((".dwg", ".dxf")) else _n
+                    _anexados_c = [os.path.basename(str(_a)).lower() for _a in (anexados or [])]
+                    _lidos_c = {_raiz_c(_p) for _p in file_paths}
+                    _entrou_c = (not _anexados_c) or any(_raiz_c(_a) in _lidos_c for _a in _anexados_c)
+                    _nota_c = ("" if _entrou_c else
+                               "<br><br>O arquivo que você anexou ("
+                               + ", ".join(_html.escape(_a) for _a in _anexados_c[:4])
+                               + ") não entrou nesta leitura: com o desenho em CAD no "
+                               "projeto, a medição vem do CAD. Ele ficou guardado no projeto.")
                     _diag_c = _build_reading_diagnostic(all_items, _n_pdf_c, _n_cad_c, project_type, project_data)
                     _n_med_c = sum(1 for it in all_items
                                    if str(getattr(getattr(it, "confidence", None), "value",
@@ -16823,8 +17106,9 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         anexo=("CAD" if _n_cad_c > 0 else
                                "PDF" if _n_pdf_c > 0 else "arquivo"),
                         frase_piora=(_cmp_c.get("frase") or ""),
-                        frase_origem=_frase_origem_c)
-                    _body_c = f"{_greet_c}<br><br>{_abre_c}{_diag_c}{_proximos_c}"
+                        frase_origem=_frase_origem_c,
+                        houve_anexo=_entrou_c)
+                    _body_c = f"{_greet_c}<br><br>{_abre_c}{_nota_c}{_diag_c}{_proximos_c}"
                     _ok_c = _send_email_smtp(
                         _pe, _subj_c,
                         _email_wrap(
@@ -16841,9 +17125,20 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         # dois logs contarem a mesma coisa.
                         log_kind="complemento_pronto", job_id=job_id)
                     if _ok_c:
-                        _email_auto_registrar(_pe, "complemento_pronto", ref=job_id)
+                        _email_auto_registrar(_pe, "complemento_pronto", ref=_ref_c)
                         _email_auto_registrar(_pe, "fim_de_job", ref=_raiz)
                     print(f"[email] complemento-pronto -> enviado={_ok_c}")
+            if is_complement and _supa_ok:
+                # 21/09: o anexo terminou — a marca sai. Pendurada, faria uma
+                # retomada futura (de outro motivo) tratar o projeto como anexo.
+                # 🩸 revisão final: só com o `done` CONFIRMADO (sem ele, a marca
+                # é o que impede a varredura de apagar a base) e só a marca
+                # DESTE pedido (um anexo novo pode ter tomado o projeto).
+                try:
+                    _limpar_marca_do_anexo(job_id, str(
+                        (_rows[0].get("anexo_em_curso") if _rows else None) or "").strip())
+                except Exception as _eac:
+                    print(f"[email] limpar anexo_em_curso {job_id}: {_eac}")
             if _pe and not _ja_avisado and not is_complement and _is_reproc:
                 # Antes: mudo (anti-spam). Agora: email PRÓPRIO de reprocesso, 1x por
                 # job (dedup em email_auto_log). Fecha o buraco onde o cliente
@@ -17124,6 +17419,25 @@ bloco — só cite os que estão no inventário deste arquivo."""
         import traceback as _tb_err
         _log_error("process_job", f"{type(e).__name__}: {e}\n{_tb_err.format_exc()[:1500]}", job_id)
 
+        # 🩸 21/09/2026 — ANEXO QUE MORRE NÃO APAGA A PLANILHA DA TELA. Este
+        # except não olhava `is_complement`: gravava `error` (a planilha que o
+        # cliente já tinha sumia da tela) e mandava "deu erro" a quem não perdeu
+        # nada — contra a regra dos dois returns antecipados do complemento, que
+        # já preservavam. Com base, volta `done` + aviso + e-mail curto; sem
+        # base, segue o erro de sempre (o motivo real já foi pro error_log acima).
+        # 🪤 `is_complement` protegido: há teste que executa este except num
+        # escopo montado à mão, sem ela — NameError aqui esconderia o erro real.
+        try:
+            _eh_anexo = bool(is_complement)
+        except NameError:
+            _eh_anexo = False
+        _base_mantida = bool(_eh_anexo and _anexo_falhou_mantem_a_base(
+                job_id, "falhou",
+                "⚠ O processamento do arquivo anexado não chegou ao fim — a planilha "
+                "anterior foi mantida, nada foi apagado."))
+        # 🪤 sem `return`: há teste que executa este except solto (fora de
+        # função). As duas ações de erro abaixo é que ficam condicionadas.
+
         # 🩸 03/09/2026 — O QUE O MOTOR JÁ SABIA MORRIA JUNTO COM O JOB.
         # Medido: 94 projetos em erro (42 de cliente) com ZERO aviso gravado,
         # contra 59% dos concluídos. Prancha cortada, plano B acionado, página
@@ -17148,45 +17462,49 @@ bloco — só cite os que estão no inventário deste arquivo."""
             except Exception:
                 pass
         # Atualizar erro no Supabase
-        _supabase_update("projects", "job_id", job_id, {
-            "status": "error",
-            # 🩸 04/09 — mesmo clobber do fim do job, no ramo de ERRO.
-            **({"warnings": _avisos_com(job_id, _avisos_ate_aqui)}
-               if _avisos_ate_aqui else {}),
-            # 🚨 ERA [:500] E CORTAVA A INSTRUCAO NO MEIO. As mensagens de erro
-            # amigaveis tem ~800 caracteres e terminam com os PASSOS pra
-            # resolver ("1. Abra o arquivo no seu CAD... 3. Suba o arquivo
-            # novo"). Cortando em 500, o cliente lia o diagnostico e a frase
-            # morria em "1. Abra o arqui" -- ficava sabendo que deu errado e
-            # nao o que fazer. A coluna e `text`, sem limite; o teto so existe
-            # pra um traceback gigante nao virar mensagem de cliente.
-            "error_message": str(e)[:2000],
-        })
+        if not _base_mantida:
+            _supabase_update("projects", "job_id", job_id, {
+                "status": "error",
+                # 🩸 04/09 — mesmo clobber do fim do job, no ramo de ERRO.
+                **({"warnings": _avisos_com(job_id, _avisos_ate_aqui)}
+                   if _avisos_ate_aqui else {}),
+                # 🚨 ERA [:500] E CORTAVA A INSTRUCAO NO MEIO. As mensagens de erro
+                # amigaveis tem ~800 caracteres e terminam com os PASSOS pra
+                # resolver ("1. Abra o arquivo no seu CAD... 3. Suba o arquivo
+                # novo"). Cortando em 500, o cliente lia o diagnostico e a frase
+                # morria em "1. Abra o arqui" -- ficava sabendo que deu errado e
+                # nao o que fazer. A coluna e `text`, sem limite; o teto so existe
+                # pra um traceback gigante nao virar mensagem de cliente.
+                "error_message": str(e)[:2000],
+            })
 
         # Email pro cliente (best-effort; sem jargão técnico). Distingue falha
         # passageira (reprocessar resolve) de arquivo não-quantificável (trocar
         # o arquivo) pela mensagem da exceção — a mesma distinção feita lá no
         # raise de "0 itens". O helper faz dedup pra não repetir por job.
-        try:
-            # Reprocessável SÓ se o erro for passageiro (infra/IA) — mesmo detector
-            # do alerta interno (_TRANSIENT_ERR_RX). DWG que não abre, DXF grande
-            # demais, 0 itens = problema de arquivo: reprocessar o mesmo NÃO resolve,
-            # o email orienta a trocar/corrigir o arquivo. (bug eletrivan/cliente-88 14/07)
-            # 🩸 19/09: o mesmo regex decidia DUAS coisas e errou nas duas —
-            # mandou "troque o arquivo" e ainda classificou um defeito nosso
-            # como problema do desenho. Erro de programação tem estado próprio:
-            # não é passageiro (retentar repete o mesmo bug) e não é do
-            # arquivo. O cliente não leva culpa pelo que é nosso.
-            _classe = como_classificar_a_falha(e)
-            _nosso = (_classe == "nosso")
-            _reproc = (_classe == "passageiro")
-            if _nosso:
-                _log_error("erro:defeito-nosso",
-                           f"exceção de programação derrubou o job: {str(e)[:200]}",
-                           job_id, severity="error")
-            _email_falha_cliente(job_id, reprocessavel=_reproc, culpa_nossa=_nosso)
-        except Exception as _ee3:
-            print(f"[email] erro-cliente nao enviado (nao-fatal): {_ee3}")
+        if not _base_mantida:
+            try:
+                # Reprocessável SÓ se o erro for passageiro (infra/IA) — mesmo detector
+                # do alerta interno (_TRANSIENT_ERR_RX). DWG que não abre, DXF grande
+                # demais, 0 itens = problema de arquivo: reprocessar o mesmo NÃO resolve,
+                # o email orienta a trocar/corrigir o arquivo. (bug eletrivan/cliente-88 14/07)
+                # 🩸 19/09: o mesmo regex decidia DUAS coisas e errou nas duas —
+                # mandou "troque o arquivo" e ainda classificou um defeito nosso
+                # como problema do desenho. Erro de programação tem estado próprio:
+                # não é passageiro (retentar repete o mesmo bug) e não é do
+                # arquivo. O cliente não leva culpa pelo que é nosso.
+                _classe = como_classificar_a_falha(e)
+                _nosso = (_classe == "nosso")
+                _reproc = (_classe == "passageiro")
+                if _nosso:
+                    _log_error("erro:defeito-nosso",
+                               f"exceção de programação derrubou o job: {str(e)[:200]}",
+                               job_id, severity="error")
+                _email_falha_cliente(job_id, reprocessavel=_reproc, culpa_nossa=_nosso,
+                                     anexo_ref=(_ref_do_anexo_que_falhou(job_id)
+                                                if _eh_anexo else ""))
+            except Exception as _ee3:
+                print(f"[email] erro-cliente nao enviado (nao-fatal): {_ee3}")
 
 
 @app.get("/")
@@ -19174,8 +19492,244 @@ def _email_auto_ja_enviado(email: str, kind: str, ref: str = "") -> bool:
         return True
 
 
-def _aviso_de_fim_recente(email: str, raiz: str, minutos: int = 30) -> bool:
+def _tomar_o_projeto(job_id: str, filtro_status: str, campos: dict) -> str:
+    """Grava `campos` no projeto SÓ se o status ainda casar com o filtro.
+
+    Devolve "ganhou" (1 linha mudou), "perdeu" (0 linha: outro já pegou) ou
+    "incerto" (a resposta se perdeu — pode ou não ter gravado).
+
+    🩸 21/09/2026 — UM MOTOR POR PROJETO. A rota de anexo LIA o status, passava
+    minutos subindo e baixando arquivo, e depois gravava "queued" sem
+    condição; a varredura automática lia "error" e relançava também sem
+    condição. Dois motores no mesmo job_id: IA paga duas vezes e dois e-mails.
+    🪤 `_supabase_update` NÃO serve de trava: a RPC grava sem olhar o status
+    anterior (só devolve 0 linha se o job_id não existe) e descarta calada
+    qualquer coluna fora das 7 dela. `_projeto_patch` também não: usa
+    `return=minimal` e devolve True com ZERO linhas. A trava é um PATCH com o
+    filtro de status E `return=representation`, contando a linha que voltou —
+    o precedente da casa é a gravação das respostas do cliente (18/09).
+    """
+    _st, _js = _supa_rest_service(
+        "PATCH", "projects", body=campos,
+        params={"job_id": f"eq.{job_id}", "status": filtro_status},
+        prefer="return=representation")
+    if _st in (200, 201) and isinstance(_js, list):
+        return "ganhou" if len(_js) == 1 else "perdeu"
+    return "incerto"
+
+
+#: o que dizer, em cada caso, quando o arquivo anexado NÃO mudou a planilha.
+#: Só o que o código SABE — nada de causa chutada (regra de 17321: "Nunca
+#: chutar causa"; o aviso do return do CAD cita uma causa fixa, este não).
+#: 🩸 revisão final (21/09): "o CAD que você anexou" era falso quando o cliente
+#: anexou PDF — com CAD no projeto a rota manda SÓ os CADs pro motor — e "a
+#: leitura não encontrou item" era falso quando a leitura FALHOU ou nada
+#: entrou. O detalhe verdadeiro está no aviso da página, que o e-mail aponta.
+_MOTIVO_ANEXO_SEM_MUDANCA = {
+    "cad_nao_abriu": "não conseguimos abrir o desenho em CAD deste projeto",
+    "sem_itens": "a nova leitura não gerou nenhuma linha na planilha",
+    "falhou": "o processamento do arquivo anexado não chegou ao fim",
+    "interrompido": ("o processamento do arquivo anexado foi interrompido "
+                     "e não pôde ser retomado"),
+}
+
+
+def _email_anexo_sem_mudanca(job_id: str, motivo: str) -> bool:
+    """Avisa o cliente que o ANEXO terminou sem mudar a planilha — e limpa a
+    marca `anexo_em_curso`. Nunca levanta: é chamado de dentro de `try` que
+    relançam (o return do CAD mora no try do DWG→DXF, cujo except grava erro).
+
+    🩸 21/09/2026 — O ANEXO QUE NÃO RENDIA NADA SAÍA CALADO. Os dois returns
+    antecipados do complemento ("CAD falhou, base preservada" e "Complemento
+    sem itens") gravavam `done` + um aviso e saíam ANTES do bloco de e-mail. O
+    job 8b7a2b71 (05/09) anexou 3 vezes, as 3 rodadas deram 0 item, e a pessoa
+    nunca recebeu uma linha. Regra do Pedro (21/09): "tem que receber e-mail
+    em todos".
+    🔑 A trava é a do anexo — `job_id:anexo_em_curso`, janela de 30 min — a
+    MESMA chave do e-mail de sucesso: se uma retomada refizer a rodada, não sai
+    um segundo aviso.
+    🪤 `_aviso_de_fim_recente` falha ABERTO (na dúvida, envia): um e-mail a mais
+    é melhor que o cliente sem saber o que houve com o arquivo dele.
+    """
+    import html as _hx
+    _enviou = False
+    try:
+        # 🩸 revisão final (21/09): `_supa_rows` devolve [] quando a LEITURA
+        # falha, e isso virava "projeto sem e-mail" (info) — o aviso sumia
+        # calado. Leitura estrita: falhou = rastro de verdade.
+        _st_p, _rows = _supa_rest_service(
+            "GET", "projects",
+            params={"job_id": f"eq.{job_id}",
+                    "select": "user_email,user_name,project_name,anexo_em_curso"})
+        if _st_p != 200 or not isinstance(_rows, list):
+            _log_error("email:anexo-sem-mudanca-sem-leitura",
+                       f"projects HTTP {_st_p} — não deu pra saber a quem avisar que o "
+                       f"anexo terminou sem mudar a planilha ({motivo})", job_id,
+                       severity="warning")
+            return False
+        _p = (_rows or [{}])[0] or {}
+        _pe = (_p.get("user_email") or "").strip()
+        _anexo = (_p.get("anexo_em_curso") or "").strip()
+        _ref = "%s:%s" % (job_id, _anexo or "sem-marca")
+        if not _pe:
+            _log_error("email:anexo-sem-mudanca-sem-destino",
+                       "o anexo terminou sem mudar a planilha e o projeto não tem "
+                       "e-mail de cliente", job_id, severity="info")
+        elif _aviso_de_fim_recente(_pe, _ref, kind="complemento_sem_resultado"):
+            _log_error("email:anexo-ja-avisado",
+                       f"pulei o aviso do anexo sem mudança: a rodada {_ref} já "
+                       f"avisou este cliente há menos de 30 min", job_id, severity="info")
+        else:
+            _pn_subj = (_p.get("project_name") or "Seu projeto").strip()
+            _nm = _resolve_client_name(_pe, hint=_p.get("user_name") or "")
+            _texto = _MOTIVO_ANEXO_SEM_MUDANCA.get(
+                motivo, _MOTIVO_ANEXO_SEM_MUDANCA["falhou"])
+            # 🪤 21/09 (revisão dos guardas): os dois returns antecipados decidem
+            # "tem base" por `_complement_base_has_items`, que diz True quando a
+            # LEITURA falha. Prometer "sua planilha continua" exige conferir de
+            # novo, estrito: só 200 com linha. Sem isso, o e-mail diz só o fato.
+            _st_bb, _js_bb = _supa_rest_service(
+                "GET", "project_items",
+                params={"job_id": f"eq.{job_id}", "select": "id", "limit": "1"})
+            _tem_base = bool(_st_bb == 200 and isinstance(_js_bb, list) and _js_bb)
+            _subject_am = f"{_pn_subj} — seu anexo não mudou a planilha"
+            _html_am = _email_wrap(
+                "Seu anexo não mudou a planilha",
+                f"{_greeting_line(_hx.escape(_nm))}<br><br>"
+                f"Sobre o projeto <b>{_hx.escape(_pn_subj)}</b>: {_texto}. "
+                + ("<b>A planilha que você já tinha continua exatamente como "
+                   "estava</b> — nada foi apagado.<br><br>" if _tem_base else "<br><br>")
+                + "O aviso com o detalhe está na página do projeto.",
+                "Abrir meu projeto", f"https://ai.arq.br/projeto.html?job_id={job_id}",
+                badge="⚠ Nada mudou", badge_color=cor_do_selo("⚠ Nada mudou"),
+                # a linha da caixa de entrada também só promete o que foi conferido
+                preheader=("O arquivo anexado não gerou mudança — nada foi apagado."
+                           if _tem_base else
+                           "O arquivo anexado não gerou mudança na planilha."))
+            _enviou = bool(_send_email_smtp(_pe, _subject_am, _html_am, log_kind="complemento_sem_resultado", job_id=job_id))
+            if _enviou:
+                # 🪤 NÃO registra `fim_de_job` da família (revisão final): este
+                # aviso não entrega planilha; com ele na janela de 30 min, um
+                # Reprocessar logo depois terminava sem "planilha pronta".
+                _email_auto_registrar(_pe, "complemento_sem_resultado", ref=_ref)
+            else:
+                _log_error("email:anexo-sem-mudanca-nao-saiu",
+                           f"o aviso de anexo sem mudança ({motivo}) não saiu pelo SMTP",
+                           job_id, severity="warning")
+        return _enviou
+    except Exception as _eam:
+        try:
+            _log_error("email:anexo-sem-mudanca-falhou",
+                       f"{type(_eam).__name__}: {_eam}", job_id, severity="warning")
+        except Exception:
+            pass
+        return _enviou
+
+
+def _ler_marca_do_anexo(job_id: str):
+    """(leu, marca): a marca `anexo_em_curso` do projeto, lida ESTRITA. Não leu
+    = não sabe — e quem não sabe a marca não limpa nada."""
+    _st, _js = _supa_rest_service(
+        "GET", "projects",
+        params={"job_id": f"eq.{job_id}", "select": "anexo_em_curso"})
+    if _st != 200 or not isinstance(_js, list):
+        return False, ""
+    return True, str(((_js or [{}])[0] or {}).get("anexo_em_curso") or "").strip()
+
+
+def _limpar_marca_do_anexo(job_id: str, marca: str) -> bool:
+    """Tira a marca SÓ se ela ainda for a DESTE pedido.
+
+    🩸 revisão final (21/09): a limpeza era incondicional — um anexo NOVO que
+    tomasse o projeto enquanto o aviso do anterior saía perdia a marca dele, e
+    a próxima retomada o trataria como upload (apagando a base). Marca que
+    fica pendurada num projeto `done` é inofensiva: a retomada só olha
+    queued/processing/error, e o próximo anexo grava a dele por cima."""
+    if not marca:
+        return False
+    _st, _ = _supa_rest_service(
+        "PATCH", "projects", body={"anexo_em_curso": None},
+        params={"job_id": f"eq.{job_id}", "anexo_em_curso": f"eq.{marca}"},
+        prefer="return=minimal")
+    if _st in (200, 204):
+        return True
+    _log_error("anexo:marca-nao-limpou", f"PATCH HTTP {_st} ao limpar a marca {marca}",
+               job_id, severity="warning")
+    return False
+
+
+def _anexo_falhou_mantem_a_base(job_id: str, motivo: str, aviso: str,
+                                passo: str = "Anexo não concluído — planilha anterior mantida") -> bool:
+    """O anexo morreu (exceção no motor, retomada que não pôde seguir): se o
+    projeto JÁ tinha planilha, ela volta a valer — `done` + aviso + e-mail
+    curto — em vez de virar ERRO.
+
+    🩸 21/09/2026 — o except genérico do `process_job` e os ramos de erro da
+    recuperação não olhavam se era anexo: gravavam `error` (a planilha que o
+    cliente já tinha sumia da tela) e mandavam "deu erro" a quem não perdeu
+    nada — contra a regra dos dois returns antecipados, que já preservavam.
+    Devolve True se restaurou (o chamador NÃO marca erro); False se não há
+    base (o chamador segue o caminho de erro de sempre).
+    🪤 `_complement_base_has_items` devolve True quando a LEITURA falha; aqui
+    isso significaria mandar "sua planilha continua" a quem talvez não tenha
+    planilha. Por isso a base é lida de novo, estrita: só uma resposta 200 com
+    linha conta como "tem planilha"; leitura que falha segue o erro de sempre.
+    """
+    try:
+        _st_b, _js_b = _supa_rest_service(
+            "GET", "project_items",
+            params={"job_id": f"eq.{job_id}", "select": "id", "limit": "1"})
+        if not (_st_b == 200 and isinstance(_js_b, list) and len(_js_b) > 0):
+            return False
+        # a marca DESTE pedido, antes de mexer em qualquer coisa (é ela que a
+        # limpeza confere no fim)
+        _leu_m, _marca = _ler_marca_do_anexo(job_id)
+        # 🪤 21/09 (revisão dos guardas): o retorno era ignorado. Com a RPC
+        # respondendo erro, a função dizia "mantive", o e-mail prometia a
+        # planilha, a marca do anexo era LIMPA — e o projeto ficava parado sem
+        # status final e sem marca: a próxima recuperação o trataria como
+        # upload comum e APAGARIA a base. Sem a gravação confirmada, nada disso
+        # acontece: devolve False e o chamador segue o erro de sempre (com a
+        # marca intacta, a retomada continua sabendo que era anexo).
+        _gravou = _supabase_update("projects", "job_id", job_id, {
+            "status": "done", "error_message": None,
+            "warnings": _avisos_com(job_id, aviso),
+            "completed_at": datetime.utcnow().isoformat() + "Z"})
+        if not _gravou:
+            _log_error("anexo:base-mantida-nao-gravou",
+                       f"não consegui gravar 'done' pra manter a planilha ({motivo}) "
+                       f"— sigo o caminho de erro", job_id, severity="warning")
+            return False
+        try:
+            if job_id in jobs:
+                jobs.update_field(job_id, status="done", progress=100, error_message=None,
+                                  current_step=passo)
+        except Exception:
+            pass
+        _log_error("anexo:base-mantida",
+                   f"anexo terminou sem mudar a planilha ({motivo}) — base mantida, "
+                   f"status done", job_id, severity="info")
+        _email_anexo_sem_mudanca(job_id, motivo)
+        # o `done` está CONFIRMADO: agora sim a marca sai (e só a deste pedido)
+        if _leu_m:
+            _limpar_marca_do_anexo(job_id, _marca)
+        return True
+    except Exception as _eab:
+        try:
+            _log_error("anexo:base-mantida-falhou", f"{type(_eab).__name__}: {_eab}",
+                       job_id, severity="warning")
+        except Exception:
+            pass
+        return False
+
+
+def _aviso_de_fim_recente(email: str, raiz: str, minutos: int = 30,
+                          kind: str = "fim_de_job") -> bool:
     """True se este cliente JÁ foi avisado do fim DESTE projeto há pouco.
+
+    `kind` — 21/09: o anexo (`complemento_pronto`, `complemento_sem_resultado`)
+    usa a mesma janela, com a chave do PEDIDO (`job:anexo_em_curso`) no lugar
+    da família.
 
     🩸 16/09/2026 — o projeto e o reprocesso dele são DOIS `job_id`, e o dedup
     de e-mail era por job. Quando os dois terminaram (a varredura automática e
@@ -19196,7 +19750,7 @@ def _aviso_de_fim_recente(email: str, raiz: str, minutos: int = 30) -> bool:
     try:
         _desde = (datetime.utcnow() - _td(minutes=minutos)).isoformat() + "Z"
         q = (f"{SUPABASE_URL}/rest/v1/email_auto_log?select=id"
-             f"&email=eq.{_up.quote(email)}&kind=eq.fim_de_job"
+             f"&email=eq.{_up.quote(email)}&kind=eq.{_up.quote(kind)}"
              f"&ref=eq.{_up.quote(raiz)}&sent_at=gte.{_up.quote(_desde)}&limit=1")
         req = _u.Request(q, method="GET")
         req.add_header("apikey", SUPABASE_KEY)
@@ -21779,8 +22333,12 @@ _EMAIL_CATALOG = [
                 "leitura mais completa de cada uma"},
     {"key": "complemento_pronto", "nome": "Complemento processado", "grupo": "auto",
      "gatilho": "auto: o cliente subiu arquivo a mais no mesmo projeto e a planilha "
-                "foi atualizada (1x por job)",
+                "foi atualizada (1 por anexo; a mesma rodada não repete em 30 min)",
      "sem_preview": "o texto nasce no processamento, com os números do job"},
+    {"key": "complemento_sem_resultado", "nome": "Anexo sem mudança", "grupo": "auto",
+     "gatilho": "auto: o arquivo anexado não abriu, não rendeu item ou não chegou ao "
+                "fim — a planilha anterior continua valendo (1 por anexo)",
+     "sem_preview": "o motivo nasce no processamento de cada anexo"},
     {"key": "reprocesso_pronto", "nome": "Reprocesso pronto", "grupo": "auto",
      "gatilho": "auto: reprocesso do mesmo projeto (pelo cliente ou resgate nosso), "
                 "1x por job",
@@ -32192,6 +32750,18 @@ async def add_file_and_reprocess(job_id: str, request: Request, files: list[Uplo
     # Regra dura nº1: nunca trocar medição por estimativa pelas nossas costas.
     if not _cads:
         _medidos_antes = _job_medidos_count(job_id)
+        # 🪤 21/09 (revisão dos guardas, reproduzido): `_job_medidos_count` devolve
+        # -1 quando a LEITURA falha, e "> 0" deixava o -1 passar — o anexo só com
+        # PDF rodava sobre uma base que talvez fosse medida. Sem saber, não roda.
+        if _medidos_antes < 0:
+            # 🩸 revisão final: "tente de novo" levava a um 409 FALSO — o
+            # arquivo já tinha subido, e o reenvio caía no "esse arquivo já
+            # está no projeto". O caminho que funciona é o Reprocessar.
+            raise HTTPException(503, (
+                "Não consegui conferir a planilha atual deste projeto agora. Os "
+                "arquivos que você mandou ficaram guardados no projeto — daqui a "
+                "pouco, use Reprocessar pra incluí-los (reenviar o mesmo arquivo "
+                "não funciona: ele já está lá)."))
         if _medidos_antes > 0:
             raise HTTPException(409, (
                 f"Esse projeto tem {_medidos_antes} itens medidos do CAD, e o arquivo CAD "
@@ -32226,19 +32796,67 @@ async def add_file_and_reprocess(job_id: str, request: Request, files: list[Uplo
     # 📏 5 projetos de cliente afetados desde 31/07; o pior (2a42f7ec) mostra
     # "1 prancha" com 18 DWG no Storage, e dois seguem contados como PDF puro
     # na estatística PDF × CAD depois de o cliente anexar o CAD.
-    # 🔑 Status continua pela RPC (é o que ela existe pra fazer); a COMPOSIÇÃO
-    # vai pelo patch direto.
-    _supabase_update("projects", "job_id", job_id,
-                     {"status": "queued", "error_message": None})
-    if sum(_comp.values()) > 0:
-        _projeto_patch(job_id, {"file_types": _comp,
-                                "files_count": sum(_comp.values())})
+    # 🔑 A COMPOSIÇÃO vai pelo patch direto (logo depois do disparo).
+    # 🩸 21/09/2026 — E O STATUS DEIXOU DE IR PELA RPC. Ela grava sem olhar o
+    # status anterior, então a leitura lá em cima (409 se queued/processing) e
+    # esta escrita tinham MINUTOS de upload/download no meio — e a varredura
+    # automática podia relançar o mesmo projeto nesse intervalo: dois motores,
+    # IA paga duas vezes, dois e-mails. Agora é UMA gravação condicional, que
+    # só vale se o projeto não estiver processando (`_tomar_o_projeto`), e que
+    # carrega a marca do anexo:
+    # `anexo_em_curso` é o id DESTE pedido. A retomada (depois de um reinício)
+    # lê a marca pra saber que era anexo — não apagar a planilha que o cliente
+    # já tinha, rodar como complemento e só com os CADs — e o e-mail do fim usa
+    # `job_id:anexo_em_curso` como chave, estável entre a rodada e a retomada.
+    # 🪤 A trava vem DEPOIS de todas as saídas por erro da rota (upload,
+    # listagem, anti-perda): nenhuma delas grava status, então nada fica preso
+    # em "queued" sem motor.
+    import uuid as _uuid_af
+    _anexo_id = _uuid_af.uuid4().hex[:12]
+    _tomada = _tomar_o_projeto(
+        job_id, "not.in.(queued,processing)",
+        {"status": "queued", "error_message": None, "anexo_em_curso": _anexo_id})
+    if _tomada == "incerto":
+        # a resposta pode ter se perdido DEPOIS de gravar: relê a marca
+        _rel = _supa_rows("GET", "projects",
+                          params={"job_id": f"eq.{job_id}", "select": "anexo_em_curso"})
+        if _rel and (_rel[0] or {}).get("anexo_em_curso") == _anexo_id:
+            _tomada = "ganhou"
+    if _tomada != "ganhou":
+        _log_error("anexo:projeto-ocupado",
+                   f"anexo recusado na trava ({_tomada}): o projeto já estava "
+                   f"processando ou a gravação não confirmou", job_id, severity="info")
+        if _tomada == "perdeu":
+            raise HTTPException(409, (
+                "Este projeto começou a processar agora há pouco. Os arquivos que "
+                "você mandou ficaram guardados no projeto — quando terminar, use "
+                "Reprocessar pra incluí-los."))
+        raise HTTPException(503, (
+            "Não consegui confirmar o início do processamento. Os arquivos que "
+            "você mandou ficaram guardados no projeto — daqui a pouco, use "
+            "Reprocessar pra incluí-los (reenviar o mesmo arquivo não funciona: "
+            "ele já está lá)."))
 
+    # O store local vem LOGO depois da trava, antes de qualquer outra ida à
+    # rede: a varredura periódica pula quem está vivo aqui (skip_local_active).
     jobs[job_id] = ProcessingStatus(
         job_id=job_id, status="queued", progress=0,
         current_step=f"Refazendo com o novo arquivo ({len(file_paths)} no total)",
         total_steps=3,
     )
+    import threading
+    threading.Thread(
+        target=_process_job_throttled,
+        args=(job_id, file_paths, work_dir),
+        kwargs={"typology": typology, "project_type": ptype, "is_complement": True,
+                "user_total_area": _uta_af, "user_pe_direito": _upd_af,
+                "anexados": list(_enviados)},
+        daemon=True,
+    ).start()
+
+    if sum(_comp.values()) > 0:
+        _projeto_patch(job_id, {"file_types": _comp,
+                                "files_count": sum(_comp.values())})
     # 🚨 Alerta interno pro Pedro. O /api/process avisava desde sempre; o
     # /add-file, NÃO — 173 linhas de função sem um único aviso. E este é o
     # cliente mais quente que existe: já recebeu uma planilha, não gostou do
@@ -32269,15 +32887,6 @@ async def add_file_and_reprocess(job_id: str, request: Request, files: list[Uplo
     except Exception as _na5:
         print(f"[notify] alerta add-file falhou: {_na5}")
         _log_error("notify:add-file", f"alerta nao saiu: {_na5}", job_id)
-
-    import threading
-    threading.Thread(
-        target=_process_job_throttled,
-        args=(job_id, file_paths, work_dir),
-        kwargs={"typology": typology, "project_type": ptype, "is_complement": True,
-                "user_total_area": _uta_af, "user_pe_direito": _upd_af},
-        daemon=True,
-    ).start()
 
     return {"status": "ok", "job_id": job_id, "files_count": len(file_paths)}
 

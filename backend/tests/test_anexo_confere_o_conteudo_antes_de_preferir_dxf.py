@@ -134,9 +134,18 @@ def anexar(monkeypatch, tmp_path):
 
         def _urlopen(req, timeout=None, **k):
             url = getattr(req, "full_url", str(req))
+            metodo = req.get_method() if hasattr(req, "get_method") else "GET"
 
             class _R:
+                # 21/09: a rota passou a tomar o projeto por um PATCH condicional
+                # (`_tomar_o_projeto`) que confere o código da resposta e a linha
+                # devolvida — sem `getcode` a trava lia "incerto" e dava 503.
+                def getcode(self_):
+                    return 200
+
                 def read(self_):
+                    if metodo == "PATCH" and "/rest/v1/projects" in url:
+                        return _json.dumps([{"job_id": "job-anexo"}]).encode("utf-8")
                     if "/storage/v1/object/list/" in url:
                         return _json.dumps(
                             [{"name": n} for n in sorted(storage)]).encode("utf-8")

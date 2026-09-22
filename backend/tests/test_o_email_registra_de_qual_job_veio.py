@@ -37,6 +37,8 @@ _KINDS_DE_JOB = {
     "planilha_pronta", "leu_sem_medir", "sem_medida", "complemento_pronto",
     "reprocesso_pronto", "erro_reprocessar", "erro_trocar",
     "leitura_combinada", "leitura_nova",
+    # 21/09: o anexo que não mudou a planilha também diz de qual job veio
+    "complemento_sem_resultado",
 }
 
 

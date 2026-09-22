@@ -120,6 +120,7 @@ def roda_ate_o_email(itens, cab_planob=None, medidos_antes=None, avisos=None,
                      antes_do_email=None, is_complement=False,
                      partial_failure=False, partial_errors=None,
                      dwg_failed=None, reprocess_count=0, parent_job_id=None,
+                     anexo_em_curso=None, anexados=None, done_grava=True,
                      pdfvec_por_prancha=None, exige_email=True):
     """Executa a fatia real e devolve o diário do que o cliente receberia.
 
@@ -151,7 +152,12 @@ def roda_ate_o_email(itens, cab_planob=None, medidos_antes=None, avisos=None,
                           "antes de fechar orçamento." % _n_antes))
         aviso_idx = len(proj.warnings) - 1
 
+    # 21/09: `patches` guarda o que foi gravado por `_projeto_patch` (a marca
+    # `anexo_em_curso` sai por ele no fim do anexo).
     diario = {"emails": [], "logs": [], "planilhas": [], "subiu": None,
+              "patches": [],
+              # 21/09 (revisão final): a marca que a limpeza CONFERE — a do pedido
+              "marcas_limpas": [],
               "regua": []}
     work_dir = tempfile.mkdtemp(prefix="fim_do_job_")
     caminhos = ([os.path.join(work_dir, "p%d.pdf" % k) for k in range(n_pdf)]
@@ -179,6 +185,8 @@ def roda_ate_o_email(itens, cab_planob=None, medidos_antes=None, avisos=None,
         "file_paths": caminhos,
         "dxf_paths": [p for p in caminhos if p.endswith(".dxf")],
         "project_type": project_type, "is_complement": is_complement,
+        # 21/09: o que a rota diz que foi anexado AGORA (None = não sabe)
+        "anexados": anexados,
         "partial_failure": partial_failure,
         "partial_errors": list(partial_errors or []), "_saida": "",
         "dwg_failed": list(dwg_failed or []),
@@ -207,13 +215,23 @@ def roda_ate_o_email(itens, cab_planob=None, medidos_antes=None, avisos=None,
         "_fundir_revisoes_do_cliente": lambda its, pai: (its, {}),
         "_persist_items_to_supabase": lambda j, its: len(its),
         "_comparar_com_versao_anterior": lambda *a, **k: {},
-        "_supabase_update": lambda *a, **k: True,
+        # `done_grava=False` simula a RPC do `done` falhando (ela devolve
+        # False, não levanta): é o que decide se a marca do anexo pode sair
+        "_supabase_update": lambda *a, **k: done_grava,
         "_avisos_com": lambda j, avisos_: list(avisos_),
         "_supabase_storage_upload": lambda p, n: diario.__setitem__("subiu", p) or True,
         "_ckpt_limpar": lambda *a, **k: None,
         "_resolve_client_name": lambda mail, hint="": (hint or "cliente-nn"),
         "_email_auto_ja_enviado": lambda *a, **k: False,
         "_email_auto_registrar": lambda *a, **k: None,
+        # 21/09: a marca do anexo sai por aqui no fim do complemento. Sem este
+        # nome no namespace, o NameError seria engolido pelo try do e-mail.
+        "_projeto_patch": lambda j, campos, *a, **k: diario["patches"].append(
+            (j, dict(campos))) or True,
+        # 21/09 (revisão final): a limpeza agora CONFERE a marca do pedido
+        "_limpar_marca_do_anexo": lambda j, marca, *a, **k: (
+            diario["patches"].append((j, {"anexo_em_curso": None})),
+            diario["marcas_limpas"].append(marca), True)[-1],
         # 16/09: o gate da FAMÍLIA (pai + filhote). Padrão "ninguém foi avisado",
         # pra os guardas antigos seguirem medindo o e-mail que sai.
         "_aviso_de_fim_recente": lambda *a, **k: False,
@@ -241,7 +259,7 @@ def roda_ate_o_email(itens, cab_planob=None, medidos_antes=None, avisos=None,
     urllib.request.urlopen = lambda req, **k: _resposta_fake([{
         "user_email": email, "user_name": "cliente-nn",
         "project_name": nome_projeto, "reprocess_count": reprocess_count,
-        "parent_job_id": parent_job_id}])
+        "parent_job_id": parent_job_id, "anexo_em_curso": anexo_em_curso}])
     try:
         exec(compile(fatia_do_fim_do_process_job(), "fim_do_job", "exec"), ns)
     finally:

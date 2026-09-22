@@ -72,8 +72,11 @@ def _varredura(monkeypatch, filhotes, *, leitura_quebra=False, http=200, count=0
         return 200, [{"status": s} for s in filhotes]
 
     monkeypatch.setattr(main, "_supa_rest_service", _supa)
+    # 21/09: `**k` — a re-tentativa passou a mandar `status_esperado="error"`;
+    # com a assinatura exata este dublê quebraria (e o de produção, que é o
+    # real, é engolido pelo laço periódico — a varredura morreria calada).
     monkeypatch.setattr(main, "_retomar_job_do_storage",
-                        lambda j, t, p: retomados.append(j) or True)
+                        lambda j, t, p, **k: retomados.append(j) or True)
     monkeypatch.setattr(main, "_email_auto_ja_enviado", lambda *a, **k: False)
     monkeypatch.setattr(main, "_email_auto_registrar", lambda *a, **k: None)
     monkeypatch.setattr(main, "_notify_admin",
@@ -189,8 +192,11 @@ def test_o_filhote_NAO_reavisa_quem_o_pai_ja_avisou(monkeypatch):
 
 def test_o_aviso_de_REPROCESSO_tambem_respeita_a_familia(monkeypatch):
     """🪤 São três ramos de e-mail no fim do job (complemento · reprocesso ·
-    planilha pronta) e o gate tem que valer nos três. Este é o ramo que mandou
-    o segundo e-mail em 16/09 — `reprocess_count>0`."""
+    planilha pronta). O gate da FAMÍLIA vale nos dois últimos; este é o ramo que
+    mandou o segundo e-mail em 16/09 — `reprocess_count>0`.
+    🩸 21/09: o complemento (anexo) saiu deste gate e tem trava própria, por
+    rodada — "tem que receber e-mail em todos" (Pedro). Ver
+    test_todo_anexo_avisa_o_cliente.py."""
     with pytest.raises(AssertionError) as _e:
         _fim(monkeypatch, ja_avisado=True, reprocess_count=1)
     assert "nenhum e-mail" in str(_e.value), (
