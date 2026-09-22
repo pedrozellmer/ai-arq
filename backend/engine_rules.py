@@ -3658,13 +3658,40 @@ def mesclar_project_data(destino, pd, area_readings=None, reg_area=None,
 # provavelmente hachura. Mostrar isso ao cliente seria impressionar com um
 # número que a gente sabe que está errado.
 
-def o_que_medimos_na_prancha(por_prancha) -> str:
+#: De onde veio a escala NÃO conferida por cota, pela `scale_src` da medição.
+#: 🪤 As MESMAS palavras da 1ª coluna de `main._FONTE_DA_ESCALA` — aquela vai pro
+#: prompt e pra observação da linha, esta pro e-mail. O guarda
+#: `test_a_procedencia_do_email_e_a_mesma_do_motor` reprova se as duas divergirem
+#: — fonte nova no motor sem frase aqui também reprova.
+FONTE_DA_ESCALA_SEM_PROVA = {
+    "carimbo": "do carimbo da prancha",
+    "viewport": "da caixa de recorte do PDF",
+    "cotas": "das cotas escritas na prancha (por votação)",
+    "vista": "do rótulo escrito ao lado do próprio desenho",
+}
+
+
+def o_que_medimos_na_prancha(por_prancha, project_type: str = "") -> str:
     """Frase honesta sobre a medição do PDF, pro cliente. "" quando não há o que dizer.
 
     Entra só o que se defende: quantos ambientes e quantos m². A escala é dita
-    com a PROCEDÊNCIA dela — conferida contra cota, ou lida do carimbo sem
-    conferência — porque as duas coisas valem coisas diferentes.
+    com a PROCEDÊNCIA dela — conferida contra cota, ou lida de onde veio (a
+    `scale_src`) sem conferência — porque as duas coisas valem coisas diferentes.
+
+    🩸 22/09/2026 — jobs ee801b82 e f8d8e6d8 (os mesmos 7 PDFs de estrutura).
+    Os dois e-mails abriram com "DE-X: 32 ambiente(s), 892,0 m², na escala 1:125
+    lida do carimbo da prancha". Duas mentiras numa linha:
+      · "ambiente" numa prancha ESTRUTURAL é qualquer face fechada que o leitor
+        vetorial achou (tampa, abertura, contorno de laje) — o número não
+        descreve nada que a cliente reconheça, e a planilha dela não usava;
+      · a escala tinha vindo do RÓTULO da vista (`scale_src="vista"`), e esta
+        frase dizia "carimbo" pra toda escala não conferida, sem olhar a fonte.
+    🔑 Em projeto de estrutura o bloco não lista ambientes/m²; em qualquer
+    projeto a procedência sai da `scale_src`. Fonte desconhecida é dita como
+    desconhecida — nunca emprestada do carimbo.
     """
+    if str(project_type or "").strip().lower() == "estrutura":
+        return ""
     linhas = []
     for _k, r in sorted((por_prancha or {}).items(),
                         key=lambda kv: -(float((kv[1] or {}).get("rooms_m2") or 0))):
@@ -3686,8 +3713,20 @@ def o_que_medimos_na_prancha(por_prancha) -> str:
             comoescala = (f"na escala 1:{esc}, que bate com {cotas} cota(s) "
                           f"escritas no próprio desenho")
         elif esc:
-            comoescala = (f"na escala 1:{esc} lida do carimbo da prancha "
-                          f"(sem conferência contra cota)")
+            _src = str(r.get("scale_src") or "").strip().lower()
+            _fonte = FONTE_DA_ESCALA_SEM_PROVA.get(_src)
+            if _src == "cotas":
+                # "sem conferência contra cota" negaria a própria fonte: a
+                # votação ACHOU a escala nas cotas; o que faltou foi o par
+                # cota×elemento na vista principal.
+                comoescala = (f"na escala 1:{esc} lida {_fonte}, sem par "
+                              f"cota×elemento que a confirmasse")
+            elif _fonte:
+                comoescala = (f"na escala 1:{esc} lida {_fonte} "
+                              f"(sem conferência contra cota)")
+            else:
+                comoescala = (f"na escala 1:{esc}, de origem não identificada "
+                              f"(sem conferência contra cota)")
         else:
             comoescala = "sem escala confirmada"
         linhas.append(f"{nome}: {n} ambiente(s), {m2:.1f} m², {comoescala}.")
@@ -3710,6 +3749,79 @@ def porque_nada_saiu_medido_no_pdf() -> str:
             "Enquanto não der pra provar a correspondência, a quantidade fica "
             "como estimativa pra você conferir. Com o desenho em DWG ou DXF a "
             "medição sai por item, com selo.")
+
+
+def area_informada_mudaria_a_planilha(items, pdfvec_m2: float = 0.0) -> bool:
+    """Se o cliente informar a área total no envio, ela vira número em alguma linha?
+
+    🩸 22/09/2026 — job ee801b82. O e-mail disse "Se só existe o PDF, me diga a
+    área total no upload" a quem tinha 1.116,3 m² de medição vetorial no job —
+    e com medição a área digitada não entra em linha NENHUMA. Conselho que a
+    própria régua recusa (a doença de 08/09, de novo, agora no e-mail).
+    🔑 As mesmas duas travas de `_area_informada_alcancaria` (dentro de
+    `_apply_area_honesty`): só piso/forro/laje em m², e só sem medição vetorial.
+    Aquela fica local de propósito (fatia executada por testes); esta é a que o
+    e-mail consulta. O aviso de projeto aplica as mesmas duas travas no próprio
+    `_alcanca` (o guarda de 09/09 lê aquela expressão pela AST).
+    """
+    try:
+        if float(pdfvec_m2 or 0) > 0:
+            return False
+    except (TypeError, ValueError):
+        return False
+    return any(
+        (_campo_do_item(it, "unit", "") or "") in FLOOR_M2_UNITS
+        and is_floor_surface_para_criar(_campo_do_item(it, "description", "") or "")
+        for it in (items or []))
+
+
+# O quadro de aço que o projetista pôs na prancha, como a IA o cita na
+# observação. Mais largo que `_QUADRO_DE_ACO` (que absolve SELO e é estreito de
+# propósito): aqui só se pergunta "a prancha trouxe o resumo?", pra texto.
+_RX_RESUMO_DE_ACO = _re.compile(
+    r"resumo\s+(?:de\s+)?(?:a[çc]o|tela)"
+    r"|quadro\s*(?:/\s*resumo\s*)?\s+de\s+(?:a[çc]o|ferr(?:o|os|agem|agens))"
+    r"|lista\s+de\s+ferros?",
+    _re.IGNORECASE)
+# "Não há quadro/resumo de aço nesta prancha" — a IA escreve isso em linha de
+# aço por TAXA. Negação no mesmo trecho da frase, colada antes da citação
+# (ancorada no fim: um "sem" solto lá atrás na frase não nega o quadro).
+_RX_NEGA_O_RESUMO = _re.compile(
+    r"(?:n[ãa]o\s+(?:h[áa]|tem|existe|consta|aparece|foi|veio)\b[^.;|]{0,24}"
+    r"|\bsem\s+(?:o\s+|a\s+|um\s+|uma\s+)?)$",
+    _re.IGNORECASE)
+
+
+def linhas_de_aco_do_resumo(items) -> int:
+    """Quantas linhas de aço (kg, com número) a IA tirou do resumo de aço da prancha.
+
+    🩸 22/09/2026 — job ee801b82 (estrutura, 7 PDFs). O aviso de topo disse
+    "O peso de aço depende do quadro de ferros, que é outra prancha (ARM)" — e
+    três das pranchas ENVIADAS traziam o RESUMO DE AÇO, lido em 7 linhas
+    (582, 784,45, 1,27, 306, 432,2, 54,6 e 199 kg). A frase afirmava sobre o
+    arquivo dela sem olhar o que a leitura achou.
+
+    🪤 Conta só `quantity > 0`: a linha "o peso das sapatas está no RESUMO DE
+    AÇO" com 0 kg cita o quadro e não tirou número dele. E a citação negada
+    ("Não há quadro/resumo de aço") não conta — é a frase das linhas por taxa.
+    """
+    n = 0
+    for it in (items or []):
+        try:
+            if str(_campo_do_item(it, "unit", "") or "").strip().lower() != "kg":
+                continue
+            if float(_campo_do_item(it, "quantity", 0) or 0) <= 0:
+                continue
+            obs = str(_campo_do_item(it, "observations", "") or "")
+            for m in _RX_RESUMO_DE_ACO.finditer(obs):
+                # o trecho da MESMA frase antes da citação
+                antes = _re.split(r"[.;|]", obs[max(0, m.start() - 40):m.start()])[-1]
+                if not _RX_NEGA_O_RESUMO.search(antes):
+                    n += 1
+                    break
+        except (TypeError, ValueError):
+            continue
+    return n
 
 
 # ─────────────────────────────────────────────────────────────────────────────

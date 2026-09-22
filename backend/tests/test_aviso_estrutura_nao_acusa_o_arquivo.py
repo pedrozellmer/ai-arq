@@ -50,12 +50,15 @@ _FIM = "        # ── HONESTIDADE DE ÁREA (regra dura"
 
 class _Item:
     def __init__(self, description="", quantity=0, unit="m²",
-                 confidence="estimado", observations=""):
+                 confidence="estimado", observations="", origem=""):
         self.description = description
         self.quantity = quantity
         self.unit = unit
         self.confidence = confidence
         self.observations = observations
+        # 22/09: a dica do pé-direito passou a perguntar se o job tem
+        # comprimento MEDIDO do CAD (origem 'dxf_geom') — é o que destrava.
+        self.origem = origem
 
 
 class _PD:
@@ -80,12 +83,15 @@ def _roda(itens, pe_direito=0, is_structural=True):
     trecho = textwrap.dedent(src[i:src.index(_FIM, i)])
     pd = _PD(pe_direito)
     chamadas = []
+    import main  # as duas réguas que a dica do PD consulta (22/09) — as REAIS
     ns = {
         "is_structural": is_structural,
         "all_items": itens,
         "project_data": pd,
         "job_id": "teste",
         "_log_error": lambda *a, **k: chamadas.append((a, k)),
+        "_tem_comprimento_medido": main._tem_comprimento_medido,
+        "_derive_estrutura_pe_direito": main._derive_estrutura_pe_direito,
     }
     exec(compile(trecho, "main_estrutura_slice", "exec"), ns)
     return pd.warnings, ns, chamadas
@@ -104,7 +110,8 @@ def _itens_cliente_69():
               observations="Área de projeção horizontal = 90.86 m² (layer 'LAJE'). "
                            "Espessuras lidas nos textos: H=10 cm, H=12 cm, H=14 cm."),
         _Item("Viga — Comprimento total de eixo (planta de fôrma típica)", 169.83, "m",
-              observations="Fonte: comprimento total de linhas do layer 'VIGA' = 339.66 m."),
+              observations="Fonte: comprimento total de linhas do layer 'VIGA' = 339.66 m.",
+              origem="dxf_geom"),
         _Item("Viga — Fôrma (compensado/madeira) — faces laterais e fundo", 0, "m²",
               observations="Área de fôrma de viga não calculada: altura de viga não "
                            "medida no CAD 2D. Seções '14/63' e '19/63'."),

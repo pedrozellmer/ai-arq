@@ -4663,7 +4663,10 @@ def _build_reading_diagnostic(all_items, n_pdf, n_cad, project_type, project_dat
         estimados = total - medidos
         is_estrut = (project_type or "").strip().lower() == "estrutura"
 
-        placar = (f"<b>&#10003; {medidos} medido(s)</b> direto do CAD (em branco na planilha) "
+        _so_pdf = (n_cad == 0 and n_pdf > 0)
+        # 🩸 22/09 (job ee801b82): "direto do CAD" pra quem só mandou PDF.
+        placar = (f"<b>&#10003; {medidos} medido(s)</b> "
+                  f"{'do desenho' if _so_pdf else 'direto do CAD'} (em branco na planilha) "
                   f"e <b>&#9888; {estimados} pra você confirmar</b> (em laranja).")
 
         if n_cad == 0 and n_pdf > 0:
@@ -4711,7 +4714,15 @@ def _build_reading_diagnostic(all_items, n_pdf, n_cad, project_type, project_dat
             porque = ("Os itens em branco foram medidos do desenho; os em laranja são pra você "
                       "confirmar a quantidade.")
 
-        if is_estrut:
+        if is_estrut and _so_pdf:
+            # 🩸 22/09/2026 — job ee801b82: três pranchas tinham o RESUMO DE AÇO,
+            # o aço saiu dele e saiu ESTIMADO — como tudo que vem de PDF (a
+            # frase logo acima diz isso). Prometer "sai medido" era contradizer
+            # a própria régua duas linhas depois.
+            porque += (" Como é projeto <b>estrutural</b>, lemos concreto em m&sup3;, fôrma em "
+                       "m&sup2; e aço em kg — e, em PDF, até o peso tirado de um "
+                       "<b>quadro/resumo de aço</b> sai como estimativa pra conferir.")
+        elif is_estrut:
             porque += (" Como é projeto <b>estrutural</b>, lemos concreto em m&sup3;, fôrma em "
                        "m&sup2; e aço em kg — o peso de aço sai medido quando a prancha tem um "
                        "<b>quadro/resumo de aço</b>.")
@@ -4906,11 +4917,14 @@ def _build_sem_medida_email(name: str, project_name: str, job_id: str,
         # copy (sem_medida=True) — perguntar "ficou boa?" depois
         # de nao medir nada seria surdo.
         + _bloco_avaliar_projeto(job_id, email, sem_medida=True))
+    _selo = "&#9888; Sem medida"
     html = _email_wrap(
         "Não consegui medir esse arquivo", corpo,
         "Abrir meu projeto",
         f"https://ai.arq.br/projeto.html?job_id={job_id}",
-        badge="&#9888; Sem medida",
+        badge=_selo,
+        # 🩸 22/09 (a irmã do job ee801b82): selo de aviso na pílula verde.
+        badge_color=cor_do_selo(_selo),
         # 🪤 Preheader de ma noticia nao pode soar animado. Diz o
         # fato e o caminho, sem promessa que a gente nao cumpre.
         preheader="Os itens saíram identificados, mas sem quantidade medida — "
@@ -4921,7 +4935,8 @@ def _build_sem_medida_email(name: str, project_name: str, job_id: str,
 
 def _build_leu_sem_medir_email(name: str, project_name: str, job_id: str,
                                n_total: int, n_zerados: int, extra_body_html: str = "",
-                               email: str = ""):
+                               email: str = "", so_pdf: bool = False,
+                               area_informada_serve: bool = True):
     """O TERCEIRO e-mail: 'li o seu desenho, mas não medi nada dele'.
 
     🩸 06/09/2026, visto AO VIVO. O cliente-15 subiu 3 PDFs de uma guarita e
@@ -4943,6 +4958,16 @@ def _build_leu_sem_medir_email(name: str, project_name: str, job_id: str,
 
     🚫 Não mexi nas condições da irmã: elas continuam valendo pro caso delas.
     Este builder entra no `else` que antes caía direto na comemoração.
+
+    🩸 22/09/2026 — jobs ee801b82 e f8d8e6d8 (7 PDFs, 0 medidos). Quem só
+    mandou PDF lia "sem quantidade medida do CAD" no assunto e no corpo, "o
+    motivo costuma ser escala" (em PDF nada sai medido, com ou sem escala — é
+    regra nossa) e "me diga a área total no upload" com 1.116,3 m² de medição
+    vetorial no job, onde a área digitada não entra em linha nenhuma.
+    `so_pdf` troca o CAD pelo desenho e diz o motivo verdadeiro;
+    `area_informada_serve` (quem chama pergunta a
+    `engine_rules.area_informada_mudaria_a_planilha`) cala o conselho recusado.
+    Os padrões mantêm o texto de antes pra quem não passar (preview).
     """
     import html as _hs
     _pn = (project_name or "").strip()
@@ -4950,34 +4975,56 @@ def _build_leu_sem_medir_email(name: str, project_name: str, job_id: str,
     # cliente lê pela metade. O primeiro que escrevi tinha 58 e o guarda pegou.
     # Numa má notícia, ler pela metade é pior ainda: "identifiquei os itens,
     # mas não medi as..." cortado vira promessa.
-    subject = (f"{_pn} — sem quantidade medida do CAD"
-               if _pn else "Sem quantidade medida do CAD")
+    _de_onde = "do desenho" if so_pdf else "do CAD"
+    if so_pdf:
+        subject = (f"{_pn} — sem quantidade medida"
+                   if _pn else "Sem quantidade medida")
+    else:
+        subject = (f"{_pn} — sem quantidade medida do CAD"
+                   if _pn else "Sem quantidade medida do CAD")
     _com_numero = max(0, int(n_total) - int(n_zerados))
+    if so_pdf:
+        _motivo = (
+            "O motivo é uma regra nossa, não um defeito do seu arquivo: de PDF a "
+            "gente nunca marca um número como medido — a IA lê a prancha e "
+            "<b>estima</b>, e medido só sai da geometria de um DWG ou DXF."
+            + (" As linhas sem número são as que a gente não conseguiu sustentar "
+               "sem essa medição: preferimos deixar em branco a inventar medida."
+               if int(n_zerados or 0) > 0 else "")
+            + "<br><br>")
+    else:
+        _motivo = (
+            "O motivo costuma ser escala: sem cota, sem carimbo confiável e sem "
+            "viewport, não dá pra saber o tamanho real do que está desenhado — e "
+            "a gente não inventa medida.<br><br>")
+    _area = (" Se só existe o PDF, me diga a área total no upload — entra como "
+             "informada por você, nunca como medida." if area_informada_serve else "")
     corpo = (
         f"{_greeting_line(_hs.escape(name or ''))}<br><br>"
         f"Li o seu desenho e identifiquei <b>{n_total} itens</b> — o escopo "
         f"está lá, com especificação e referência. Mas preciso te avisar de "
-        f"uma coisa antes de você abrir: <b>nenhuma quantidade foi medida do "
-        f"CAD</b>. As {_com_numero} linhas que vieram com número são "
+        f"uma coisa antes de você abrir: <b>nenhuma quantidade foi medida "
+        f"{_de_onde}</b>. As {_com_numero} linhas que vieram com número são "
         f"<b>estimativa</b>, marcadas em laranja pra você conferir, e outras "
         f"{n_zerados} ficaram sem número.<br><br>"
         f"Ou seja: serve como lista do que existe no projeto, <b>não como "
         f"quantitativo pronto</b>. Prefiro te dizer isso agora do que deixar "
         f"você descobrir na hora de orçar.<br><br>"
-        f"O motivo costuma ser escala: sem cota, sem carimbo confiável e sem "
-        f"viewport, não dá pra saber o tamanho real do que está desenhado — e "
-        f"a gente não inventa medida.<br><br>"
+        f"{_motivo}"
         f"<b>O que resolve:</b> mande a mesma planta em <b>DXF</b> (no AutoCAD "
         f"ou BricsCAD: Salvar Como → DXF 2013) no mesmo projeto. A gente refaz "
-        f"medindo de verdade, de graça. Se só existe o PDF, me diga a área "
-        f"total no upload — entra como informada por você, nunca como medida."
+        f"medindo de verdade, de graça.{_area}"
         f"{extra_body_html}"
         + _bloco_avaliar_projeto(job_id, email, sem_medida=True))
+    _selo = ("&#9888; Sem medi&ccedil;&atilde;o do desenho" if so_pdf
+             else "&#9888; Sem medi&ccedil;&atilde;o do CAD")
     html = _email_wrap(
         "Identifiquei os itens, mas não medi as quantidades", corpo,
         "Abrir meu projeto",
         f"https://ai.arq.br/projeto.html?job_id={job_id}",
-        badge="&#9888; Sem medi&ccedil;&atilde;o do CAD",
+        badge=_selo,
+        # 🩸 22/09: sem a cor, o selo de aviso saía na pílula VERDE de sucesso.
+        badge_color=cor_do_selo(_selo),
         preheader="O escopo saiu completo, mas as quantidades são estimativa — "
                   "veja o motivo e o que resolve.",
         reason="Você está recebendo este e-mail porque processou um projeto no AI.arq.")
@@ -16171,14 +16218,28 @@ bloco — só cite os que estão no inventário deste arquivo."""
             # 🪤 É a doença de 08/09 (conselho que a régua recusa) de novo, agora
             # no aviso de PROJETO em vez do de item. Consertar num lado só foi o
             # que a deixou viva aqui.
+            # 🩸 22/09/2026 — job ee801b82: tinha "Fôrma … laje" (piso pela régua
+            # de superfície) E 1.116,3 m² de medição vetorial. Com medição, a
+            # área digitada não vira número em linha nenhuma (a outra trava de
+            # `_area_informada_alcancaria`), e o convite saiu mesmo assim.
+            try:
+                _pv_alc = float(_pdfvec_area_m2 or 0)
+            except NameError:
+                _pv_alc = 0.0          # job sem PDF: o laço nem existiu
             _alcanca = any(
                 (getattr(_i, "unit", "") or "") in _FLOOR_M2_UNITS
                 and _is_floor_surface_criar(getattr(_i, "description", "") or "")
                 for _i in all_items)
-            if _alcanca:
+            if _alcanca and _pv_alc <= 0:
                 _conselho = (
                     " Pra resolver: reenvie informando a área total no campo do "
                     "envio, ou mande também a prancha que tem o quadro de áreas.")
+            elif _alcanca:
+                _conselho = (
+                    " Como medimos a geometria de pelo menos uma prancha deste "
+                    "projeto, a área digitada no envio não vira número em nenhuma "
+                    "linha — informá-la não mudaria a planilha; é só uma base de "
+                    "conferência que ficou faltando.")
             else:
                 # 🔑 Honesto: diz o que houve e NÃO pede trabalho inútil.
                 _conselho = (
@@ -16187,11 +16248,12 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     "— é só uma base de conferência que ficou faltando.")
             project_data.warnings = (project_data.warnings or []) + [
                 "⚠ Não encontramos a área total do projeto — a prancha não trazia um quadro "
-                "de áreas legível. Os itens medidos em m² saíram sem essa base de conferência, "
+                "de áreas legível. Os itens em m² saíram sem essa base de conferência, "
                 "então confira com atenção." + _conselho
             ]
             print(f"[area-ausente] job={job_id}: sem área total e sem área informada "
-                  f"(conselho de reenvio: {_alcanca})")
+                  f"(conselho de reenvio: {_alcanca and _pv_alc <= 0}; "
+                  f"pdfvec={_pv_alc:.1f} m²)")
 
         # 🩸 09/09/2026 — ESTES DOIS BLOCOS RODAVAM ANTES DA ÁREA EXISTIR.
         # `laje_area` e `ref_area` liam `project_data.total_area`, que só é
@@ -16722,24 +16784,73 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                   "altura de viga", "altura da viga", "altura de laje",
                                   "espessura de laje", "altura não", "altura nao")
                 _falta_altura = any(_m in _obs_todas for _m in _MARCAS_ALTURA)
-                # A dica do pé-direito existia só pro pilar CONTADO em 'un'. No
-                # caso cliente-23 a IA dobrou os 50+ pilares dentro da linha de
-                # fôrma em m², então a dica não disparou — justo pra quem ela foi
-                # escrita. Agora basta o motor ter dito que falta a altura.
+                # 🩸 22/09/2026 — CASO ee801b82 (estrutura, 7 PDFs, NPS 2). O aviso
+                # fez quatro afirmações e as quatro eram falsas NESTE job:
+                #   · "saíram com quantidade" — escrito ANTES da honestidade de
+                #     área, que zerou 46 das 48 linhas de m³/m² logo depois;
+                #   · "o que falta é a ALTURA" — a marca veio de UMA sapata ("cota
+                #     de altura não legível") que a IA quantificou mesmo assim; as
+                #     alturas estavam nos cortes;
+                #   · "o quadro de ferros é outra prancha (ARM)" — 3 das pranchas
+                #     enviadas traziam o RESUMO DE AÇO, lido em 7 linhas;
+                #   · "informe o PÉ-DIREITO e dá pra calcular" — a conta por PD só
+                #     existe pra pilar contado em 'un' com seção (nenhum aqui) ou
+                #     com comprimento medido de CAD (era só PDF).
+                # 🔑 Cada frase agora depende do que é verdade no job. A marca de
+                # altura continua escolhendo o RAMO (o outro ramo acusa o arquivo),
+                # mas a frase da ALTURA só sai se alguma linha de m³/m² ficou SEM
+                # número com a própria observação dizendo que falta altura.
+                _n_sem_altura = sum(
+                    1 for _it in all_items
+                    if not (getattr(_it, "quantity", 0) or 0) > 0
+                    and str(getattr(_it, "unit", "") or "").strip().lower()
+                    in ("m²", "m2", "m³", "m3")
+                    and any(_m in str(getattr(_it, "observations", "") or "").lower()
+                            for _m in _MARCAS_ALTURA))
+                from engine_rules import linhas_de_aco_do_resumo as _aco_do_resumo
+                _n_aco_resumo = _aco_do_resumo(all_items)
+                # A dica do PD só sai se o PD de fato destrava linha deste job:
+                # pergunta à própria conta (numa CÓPIA — ela escreve nos itens) e,
+                # com CAD, ao comprimento medido que a honestidade exige pra
+                # preservar a conta da IA com o PD informado (job b5ce23ff: pilares
+                # dobrados na fôrma em m², viga medida no layer VIGA).
+                _pd_destrava = False
+                if _sem_pd:
+                    try:
+                        import copy as _copy_pd
+                        _pd_destrava = bool(
+                            _tem_comprimento_medido(all_items)
+                            or _derive_estrutura_pe_direito(
+                                _copy_pd.deepcopy(all_items), 3.0) > 0)
+                    except Exception:
+                        _pd_destrava = False    # na dúvida, não promete
                 _dica_pd = (
                     " Dica: as seções já foram lidas do desenho — se você "
                     "reprocessar informando o PÉ-DIREITO (campo do envio), dá pra "
                     "calcular o volume e a fôrma a partir do que já foi lido."
-                    if ((_tem_pilar_contado or _falta_altura) and _sem_pd) else "")
-                if _leu_estrutura and _falta_altura:
+                    if _pd_destrava else "")
+                # Resumo de aço lido = a prancha de estrutura veio e foi lida: o
+                # ramo que diz "o arquivo não traz quadro de ferros" seria mentira.
+                if (_leu_estrutura and _falta_altura) or _n_aco_resumo:
                     _aviso_estrut = (
-                        "⚠ ESTRUTURA: o desenho foi lido — os elementos estruturais "
-                        "saíram com quantidade —, mas nenhum número foi MEDIDO do "
-                        "desenho no sentido estrito. O que falta aqui não é a prancha: "
-                        "é a ALTURA. Planta de fôrma é 2D e não carrega pé-direito do "
-                        "pavimento nem altura de viga, e sem altura não fecham m³ de "
-                        "concreto nem m² de fôrma. O peso de aço depende do quadro de "
-                        "ferros, que é outra prancha (ARM).")
+                        "⚠ ESTRUTURA: o desenho foi lido — a IA identificou os "
+                        "elementos estruturais —, mas nenhum número foi MEDIDO do "
+                        "desenho no sentido estrito.")
+                    if _n_sem_altura:
+                        _aviso_estrut += (
+                            " O que falta aqui não é a prancha: é a ALTURA. Planta "
+                            "de fôrma é 2D e não carrega pé-direito do pavimento nem "
+                            "altura de viga, e sem altura não fecham m³ de concreto "
+                            "nem m² de fôrma.")
+                    if _n_aco_resumo:
+                        _aviso_estrut += (
+                            " O aço foi lido do resumo de aço das próprias pranchas "
+                            "em %d linha(s) — leitura da IA, que segue como "
+                            "estimativa pra você conferir." % _n_aco_resumo)
+                    else:
+                        _aviso_estrut += (
+                            " O peso de aço depende do quadro de ferros, que é outra "
+                            "prancha (ARM).")
                 else:
                     _aviso_estrut = (
                         "⚠ ESTRUTURA: nenhum número desta planilha foi MEDIDO do desenho. "
@@ -16762,7 +16873,10 @@ bloco — só cite os que estão no inventário deste arquivo."""
                            f"confirmados=0 leu_estrutura={_leu_estrutura} "
                            f"falta_altura={_falta_altura} sem_pd={_sem_pd} "
                            f"dica_pd={bool(_dica_pd)} "
-                           f"ramo={'falta-altura' if (_leu_estrutura and _falta_altura) else 'falta-prancha'}"
+                           # 22/09: o que decide cada frase, pra medir depois
+                           f"sem_altura={_n_sem_altura} aco_do_resumo={_n_aco_resumo} "
+                           f"pilar_contado={_tem_pilar_contado} pd_destrava={_pd_destrava} "
+                           f"ramo={'falta-altura' if (_leu_estrutura and _falta_altura) else ('resumo-de-aco' if _n_aco_resumo else 'falta-prancha')}"
                            " — aviso de pré-dimensionamento emitido", job_id,
                            severity="info")
 
@@ -18245,7 +18359,11 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 try:
                     from engine_rules import (o_que_medimos_na_prancha,
                                               porque_nada_saiu_medido_no_pdf)
-                    _medimos = (o_que_medimos_na_prancha(_pdfvec_por_prancha)
+                    # 🩸 22/09 (ee801b82): em ESTRUTURA a função devolve "" —
+                    # "ambiente" do leitor vetorial numa prancha estrutural é
+                    # face fechada qualquer; e a escala diz a `scale_src` real.
+                    _medimos = (o_que_medimos_na_prancha(_pdfvec_por_prancha,
+                                                         project_type=project_type)
                                 if _n_cad == 0 and _n_pdf > 0 else "")
                     if _medimos:
                         _linhas_medimos = "".join(
@@ -18339,9 +18457,24 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     # que faz `_carimbar_regua_de_cobranca` marcar cobravel
                     # = false. O e-mail passa a falar a mesma língua do que a
                     # gente cobraria.
+                    # 🩸 22/09/2026 — job ee801b82: o e-mail pediu a área total a
+                    # quem tinha medição vetorial no job (lá ela não entra em
+                    # linha nenhuma) e falou de CAD a quem só mandou PDF. As
+                    # travas são as do aviso de projeto: piso/forro/laje em m²
+                    # e nenhuma medição vetorial no job.
+                    try:
+                        _pp_email = dict(_pdfvec_por_prancha)
+                    except NameError:
+                        _pp_email = {}      # job sem PDF: o laço nem existiu
+                    from engine_rules import area_informada_mudaria_a_planilha as _area_muda
+                    _area_serve = _area_muda(
+                        all_items,
+                        sum(float((_r or {}).get("rooms_m2") or 0)
+                            for _r in _pp_email.values()))
                     _subj_pp, _html_pp = _build_leu_sem_medir_email(
                         _nm, _rows[0].get("project_name") or "", job_id,
-                        len(all_items), _n_zerado, f"{_aviso_html}{_diag}", email=_pe)
+                        len(all_items), _n_zerado, f"{_aviso_html}{_diag}", email=_pe,
+                        so_pdf=_veio_pdf, area_informada_serve=_area_serve)
                     _log_error("motor:leu-sem-medir",
                                f"itens={len(all_items)} medidos=0 zerados={_n_zerado} "
                                f"— e-mail trocado por 'identifiquei, mas não medi'", job_id)
