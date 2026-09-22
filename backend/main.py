@@ -25196,7 +25196,8 @@ def registrar_avaliacao(payload: NotaAvaliacao):
         else:
             _gravou = bool(_supabase_insert("nps_responses", row))
         if not _gravou:
-            _log_error("avaliacao:nao-gravou", f"nps e={email} n={n}")
+            # 🔒 LGPD (22/09): o log leva o user_id truncado, não o e-mail.
+            _log_error("avaliacao:nao-gravou", f"nps user={_uid[:8] or '?'} n={n}")
             raise HTTPException(502, "não consegui salvar sua nota")
         if _nota_ant2 is None or int(_nota_ant2) != n:
             _alerta_nps(row, "promoter" if n >= 9 else "passive" if n >= 7 else "detractor")
@@ -25230,6 +25231,7 @@ def avaliar_comentario(payload: ComentarioAvaliacao):
     elif payload.tipo == "nps":
         if not _nota_token_ok("nps", email, payload.t):
             raise HTTPException(403, "link inválido")
+        _rs = []
         try:
             import urllib.parse as _up
             _rs = _supa_rows("GET", "nps_responses",
@@ -25241,7 +25243,9 @@ def avaliar_comentario(payload: ComentarioAvaliacao):
                     {"comment": txt})
                 ok = 200 <= int(_st or 0) < 300
         except Exception as _e:
-            _log_error("avaliacao:comentario-falhou", f"nps {email}: {_e}")
+            # 🔒 LGPD (22/09): sem o e-mail — o id da resposta de NPS é opaco.
+            _rid = _rs[0].get("id") if _rs and isinstance(_rs[0], dict) else "?"
+            _log_error("avaliacao:comentario-falhou", f"nps resposta={_rid}: {_e}")
     else:
         raise HTTPException(400, "tipo inválido")
     if not ok:
@@ -25283,8 +25287,10 @@ def _alerta_avaliacao_projeto(job_id: str, email: str, nota: int):
                 "Nota 1-2 é o cliente dizendo que a planilha NÃO serviu. Vale "
                 "abrir o projeto e ver o que o motor entregou — é achado de "
                 "motor com nome e arquivo.")
+            # 🔒 LGPD (22/09): o e-mail vai no AVISO acima e NÃO no log — mesma
+            # regra do `_alerta_nps` e do `_alerta_recado`. Log leva o job_id.
             _log_error("avaliacao:nota-baixa",
-                       f"{nota}/5 {email} avisei_admin={_avisou}", job_id,
+                       f"{nota}/5 job={job_id or '-'} avisei_admin={_avisou}", job_id,
                        severity="warning" if _avisou else "error")
         except Exception as _e:
             print(f"[avaliacao] alerta falhou (nao-fatal): {_e}")
@@ -32052,9 +32058,15 @@ def _alerta_nps(row: dict, category: str = "detractor"):
                 f"<b>Cliente:</b> {row.get('user_name') or '?'} ({row.get('user_email') or '?'})<br>"
                 f"<b>Comentário:</b> {_com or '(sem comentário)'}"
                 f"{_ctx}<br><br>{_fecho}")
+            # 🔒 LGPD (22/09/2026): o e-mail vai no AVISO acima (o Pedro precisa
+            # saber a quem responder) e NÃO no `error_log`, que é log técnico.
+            # Esta linha gravava o endereço cru — 8 de 8 linhas `nps:*-alerta`
+            # de 02/09 a 22/09. O `_alerta_recado` já tinha a regra desde 06/09;
+            # o NPS, irmão dele, ficou de fora. Log leva identificador opaco.
+            _uid8 = str(row.get("user_id") or "")[:8] or "?"
             _log_error(f"nps:{category}-alerta",
-                       f"resposta={_rotulo!r} score_guardado={_nota} {row.get('user_email')} "
-                       f"avisei_admin={_avisou_nps}", _jid)
+                       f"resposta={_rotulo!r} score_guardado={_nota} user={_uid8} "
+                       f"job={_jid or '-'} avisei_admin={_avisou_nps}", _jid)
         except Exception as _e:
             print(f"[nps] alerta de NPS falhou (não-fatal): {_e}")
 
