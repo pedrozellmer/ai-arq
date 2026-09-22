@@ -6734,15 +6734,37 @@ _MARCAS_QUE_NAO_VIAJAM = _re.compile(
     r"detalhe|indicad\w*)|fundido\s+de|consolidado\s+de|v[aá]rias\s+varia\w+|"
     r"n[aã]o\s+medid\w*|medid[oa]s?\b|layer", _re.IGNORECASE)
 
+# o começo das duas notas da passada 1 — quem já tem uma não ganha outra
+_MARCAS_DA_NOTA_P1 = ("Esta linha apareceu", "linhas com a mesma quantidade (")
 
-def _o_que_a_fusao_absorveu(grupo, ficou, teto: int = 3, com_texto: bool = True) -> str:
+
+def _qtd_na_nota(v) -> str:
+    """Quantidade escrita na observação: 13850.95 → "13.850,95"; 30.0 → "30".
+
+    🩸 22/09/2026 (revisão): o `:g` das notas de fusão tem 6 dígitos
+    significativos — "mesma quantidade (13851 m²)" numa linha de 13.850,95, e
+    1.000.000 saía "1e+06".
+    """
+    try:
+        v = round(float(v), 2)
+    except (TypeError, ValueError):
+        return str(v)
+    s = f"{v:,.2f}".rstrip("0").rstrip(".")
+    return s.replace(",", "\x00").replace(".", ",").replace("\x00", ".")
+
+
+def _o_que_a_fusao_absorveu(grupo, ficou, teto: int = 3) -> str:
     """O que saiu da planilha quando a fusão ficou com a quantidade de UMA linha.
 
     🩸 22/09/2026 (844603fb): a nota dizia "Fundido de 2 entradas com mesma qty
     30.0 un — descrições similares" — e não dizia QUAIS. A linha que ficou era
     uma tomada; o interruptor que ela engoliu não aparecia em lugar nenhum. Com o
     que foi absorvido escrito na linha, o arquiteto confere e desfaz.
-    `com_texto=False` só dá a prancha (a passada 1 junta a MESMA descrição).
+    Descrição idêntica à da linha que ficou sai só com a prancha.
+    🪤 Vale pras passadas 1 E 2: a 1 agrupa pela CHAVE (o começo da descrição),
+    não pela descrição — "Ralo — Lavabo 01" e "Ralo — Banho de Serviço" caem no
+    mesmo grupo, e a 1ª versão desta nota, só com a prancha, escondia o ralo que
+    sumiu (a mesma doença que ela veio curar na passada 2).
     """
     partes = []
     outros = [it for it in grupo if it is not ficou]
@@ -6750,7 +6772,7 @@ def _o_que_a_fusao_absorveu(grupo, ficou, teto: int = 3, com_texto: bool = True)
     for it in outros[:teto]:
         _d = " ".join((getattr(it, "description", "") or "").split())
         _pr = (getattr(it, "ref_sheet", "") or "").split(" (")[0].strip()[:40]
-        if not com_texto or _d == _base:
+        if _d == _base:
             partes.append(_pr or "sem prancha")
             continue
         _d = _MARCAS_QUE_NAO_VIAJAM.sub("…", _d)
@@ -6868,10 +6890,11 @@ def _consolidate_items(items: list, registro: list | None = None) -> list:
     PASSADA 1 — por (chave_normalizada, unidade, atributos de compra):
     - Mesma chave + mesma qty + mesma unidade → separa em famílias do MESMO
       item (`_familias_do_mesmo_item`), mantém 1 por família (desc mais
-      completa) e escreve na observação quantas vezes ela apareceu.
+      completa) e escreve na observação o que juntou (e de que prancha).
     - Mesma chave + mesma unidade + qtys diferentes → mantém todos.
     - Réplica por departamento (4+ itens, qty<2) → funde em 1 estimado,
-      SOMANDO (e fica fora da passada 2).
+      SOMANDO (e fica fora da passada 2). Réplica de total ZERO fica inteira
+      (03/09), decidida no grupo da chave sem a assinatura.
 
     PASSADA 2 — mesma qty_arredondada (>= 2) + mesma discipline, e SÓ quando é
     o mesmo item (engine_rules, 22/09/2026):
@@ -6911,13 +6934,30 @@ def _consolidate_items(items: list, registro: list | None = None) -> list:
         return _p
 
     # ── Passada 1 ──
+    # 🩸 22/09/2026 (revisão): a assinatura abaixo partia um grupo de 4+ linhas
+    # ZERADAS — que a regra de 03/09 (mais abaixo) mantém inteiro — em pedaços
+    # menores que 4, e cada pedaço caía no "mesma quantidade → fica uma". Zero
+    # igual não é prova de dobro: a regra de 03/09 é decidida no grupo da chave
+    # ANTIGA, antes de a assinatura partir.
+    _por_chave_antiga: dict = {}
+    for item in items:
+        _por_chave_antiga.setdefault(
+            (_normalize_description_key(item.description), item.unit), []).append(item)
+    _zerados_0309: set = set()
+    for _g0 in _por_chave_antiga.values():
+        if len(_g0) < 4:
+            continue
+        _q0 = [round(float(_it.quantity or 0), 2) for _it in _g0]
+        if max(_q0) < 2.0 and round(sum(_q0), 2) <= 0:
+            _zerados_0309.update(id(_it) for _it in _g0)
     groups: dict = {}
     for item in items:
         # 🩸 22/09/2026 (844603fb): a chave corta tudo depois do " — ", e
         # "Ponto de tomada — H=1,80m" e "— H=1,30m" viravam a mesma linha. A
         # assinatura (altura, corrente, medida, código...) entra na chave.
         key = (_normalize_description_key(item.description), item.unit,
-               _assinatura_de_atributos(item.description or ""))
+               "zerado-03/09" if id(item) in _zerados_0309
+               else _assinatura_de_atributos(item.description or ""))
         groups.setdefault(key, []).append(item)
 
     pass1 = []
@@ -7019,13 +7059,22 @@ def _consolidate_items(items: list, registro: list | None = None) -> list:
                 # escrevia nada na linha que fica. 🪤 Sem "Fundido de" nem
                 # "Consolidado de": a regra 🅓 rebaixaria o selo de uma medição
                 # que é a MESMA nas duas linhas.
+                # 🩸 22/09/2026 (revisão): o grupo é da CHAVE, não da descrição —
+                # "a mesma linha apareceu N vezes" só é verdade quando o texto é o
+                # mesmo. Texto diferente: a nota diz o que foi absorvido e pede a
+                # conferência, como a da passada 2.
                 _obs_p1 = (best.observations or "").rstrip(" |")
-                if "Esta linha apareceu" not in _obs_p1:     # consolidar de novo não repete
-                    best.observations = (
-                        (_obs_p1 + " | " if _obs_p1 else "")
-                        + f"Esta linha apareceu {len(_fam)} vezes com a mesma quantidade "
-                          f"({quantities[0]:g} {best.unit}); ficou uma só. As outras: "
-                          f"{_o_que_a_fusao_absorveu(_fam, best, teto=2, com_texto=False)}.")
+                if not any(_m in _obs_p1 for _m in _MARCAS_DA_NOTA_P1):   # consolidar de novo não repete
+                    _base_p1 = " ".join((best.description or "").split())
+                    _q_p1 = f"({_qtd_na_nota(quantities[0])} {best.unit})"
+                    _outras = _o_que_a_fusao_absorveu(_fam, best, teto=2)
+                    if all(" ".join((_x.description or "").split()) == _base_p1 for _x in _fam):
+                        _nota_p1 = (f"Esta linha apareceu {len(_fam)} vezes com a mesma "
+                                    f"quantidade {_q_p1}; ficou uma só. As outras: {_outras}.")
+                    else:
+                        _nota_p1 = (f"Juntei {len(_fam)} linhas com a mesma quantidade {_q_p1} "
+                                    f"e ficou esta. As outras: {_outras}. Confira se era o mesmo item.")
+                    best.observations = (_obs_p1 + " | " if _obs_p1 else "") + _nota_p1
         else:
             pass1.extend(group)
 
@@ -7091,14 +7140,14 @@ def _consolidate_items(items: list, registro: list | None = None) -> list:
             if unit_changed:
                 obs_parts.append(
                     f"Fundido de {variant_count} entradas com a mesma quantidade "
-                    f"({qty_r:g}) em unidades diferentes "
+                    f"({_qtd_na_nota(qty_r)}) em unidades diferentes "
                     f"({'/'.join(sorted(set(units)))}) — absorveu: {_absorveu}. "
                     f"Confira se era o mesmo item"
                 )
             else:
                 obs_parts.append(
                     f"Fundido de {variant_count} entradas com a mesma quantidade "
-                    f"({qty_r:g} {chosen_unit}) — absorveu: {_absorveu}. "
+                    f"({_qtd_na_nota(qty_r)} {chosen_unit}) — absorveu: {_absorveu}. "
                     f"Confira se era o mesmo item"
                 )
             merged_item = BudgetItem(
@@ -7223,10 +7272,6 @@ def _consolidate_items(items: list, registro: list | None = None) -> list:
             # 2 itens ambos com "conforme especificação" também funde
             should_merge = True
 
-        if not should_merge:
-            pass3.extend(group)
-            continue
-
         # 🩸 10/09/2026 — ESTA PASSADA SOMAVA O QUE AS OUTRAS SE RECUSARAM A JUNTAR.
         # Cliente novo, 1º projeto: duas linhas de caixilho com 2 un cada e
         # MEDIDAS diferentes. A passada 2 as manteve separadas (o guarda de
@@ -7245,12 +7290,25 @@ def _consolidate_items(items: list, registro: list | None = None) -> list:
         # (dimensão, código, bitola, classe, fck) é item diferente — regra dura
         # nº4. Aqui a checagem é PAR A PAR: um item sem dimensão no começo do
         # grupo não pode liberar duas dimensões diferentes depois dele.
-        # 🪤 As passadas 1 e 6 comparam só com o primeiro do grupo e a 2 com o
-        # primeiro da família: o resultado delas depende da ordem (achado separado).
+        # 🪤 A réplica da passada 1 e a passada 6 comparam só com o primeiro do
+        # grupo: o resultado delas depende da ordem (achado separado).
+        # 🩸 22/09/2026 (revisão, bf72d192): esta checagem vinha DEPOIS do "não é
+        # pra fundir, segue" — só o balde que a passada 3 queria fundir ganhava a
+        # proteção contra a passada 5. Quando as passadas 1 e 2 passaram a separar
+        # as portas PA01/PA02/PA03, o balde das portas foi de 22 pra 24 itens, a
+        # fração com "a definir" caiu abaixo dos 60% do `_is_legend_variant` (13
+        # de 24, o limiar virou 14), e a passada 5 engoliu quatro linhas de porta
+        # — três com cor e tipo de folha — numa linha "a especificar". A proteção
+        # vale pra todo balde com atributo em conflito, queira esta passada fundir
+        # ou não.
         _descs_p3 = [it.description or "" for it in group]
         if any(not _pode_fundir(_a, _b)
                for _i, _a in enumerate(_descs_p3) for _b in _descs_p3[_i + 1:]):
             _recusados_p3.update(id(_x) for _x in group)
+            pass3.extend(group)
+            continue
+
+        if not should_merge:
             pass3.extend(group)
             continue
 

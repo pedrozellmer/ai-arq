@@ -15,14 +15,18 @@
   poço dentro da do outro.
 
 📏 Replay nas respostas da IA de 60 dias (llm_cache, 33 jobs de cliente, sem
-rede): a passada 2 fazia 435 fusões e 364 delas deixam de acontecer — 103 com
+rede): a passada 2 fazia 435 fusões e 365 delas deixam de acontecer — 103 com
 substantivo diferente (massa corrida × pintura, porta × ferragem, piso ×
 rejunte), 123 com nomes que se excluem (interruptor duplo × intermediário,
 portão de acesso × de saída), 43 com código de legenda diferente (DI.02 ×
-DI.08, PA02 × PA04). Das 71 que continuam, conferidas à mão, 69 são a mesma
-linha lida em duas pranchas ("Forro — Varanda — a confirmar" × "Forro de gesso
-liso — Varanda (37,98 m²)"); 2 ficaram em dúvida (ponto de TV × ponto TV+RJ45;
-administração local de dois blocos).
+DI.08, PA02 × PA04). Das 70 que continuam, a conferência à mão (a do conserto
+e a da revisão) acha na maioria a mesma linha lida em duas pranchas ("Forro —
+Varanda — a confirmar" × "Forro de gesso liso — Varanda (37,98 m²)"), e deixa
+pelo menos 4 em dúvida: ponto de TV × ponto TV+RJ45, administração local de
+dois blocos, um perfil de acabamento com nome de produto × o mesmo perfil
+chamado só de "strip", o rejunte de mesma referência em duas áreas. Uma 5ª,
+errada (bloqueio de madeira da posição 1 × posição 2), a revisão pegou e virou
+régua — ver `test_a_fusao_nao_esconde_o_que_juntou.py`.
 
 🔑 A régua (`engine_rules.motivo_para_nao_fundir` + `prova_de_mesmo_item`):
 nada pode diferenciar os dois E alguma coisa tem que provar que são o mesmo. Na

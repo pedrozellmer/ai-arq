@@ -2038,8 +2038,12 @@ _AMBIENTES_FUSAO = frozenset((
     "escritorio", "circulacao", "corredor", "hall", "deposito", "lavanderia",
     "garagem", "recepcao", "estar", "jantar", "despensa", "gourmet",
     "quiosque", "auditorio", "vestiario", "refeitorio", "almoxarifado",
-    "guarita", "lixeira", "estacionamento", "mezanino",
+    "guarita", "lixeira", "estacionamento", "mezanino", "banho",
 ))
+# 🩸 22/09/2026 (revisão): "Ralo — Lavabo 01" × "Ralo — Banho de Serviço" fundiam — "banho"
+# não era ambiente. Na raiz ele é "banh" e o banheiro é "banheir": o sinônimo junta os
+# dois, senão "Banho social" × "Banheiro social" (o mesmo cômodo) viraria um conflito.
+_SINONIMOS_AMBIENTE_FUSAO = {"banho": "banheiro"}
 
 # estruturas que costumam ter NOME ("poço de sucção", "caixa de inspeção")
 _NOMEADAS_FUSAO = frozenset((
@@ -2050,10 +2054,12 @@ _PREP_DO_NOME = frozenset(("de", "do", "da", "dos", "das", "com", "c", "d", "par
 
 # rótulo: "Banheiro 01" × "Banheiro 02", "Conjunto CD" × "Conjunto CE", "Lote 01"
 # 🪤 o rótulo é número ou SIGLA EM MAIÚSCULA: "casa de bombas" não tem rótulo "de"
+# 🩸 22/09/2026 (revisão): "posição 1" × "posição 2" de um bloqueio de madeira fundiam
+# (os números soltos dos dois lados se cancelavam) — "posição" também rotula.
 _RX_ROTULO = _re.compile(
     r"(?i:\b(conjunto|lote|bloco|torre|quadra|setor|ala|trecho|etapa|fase|apto|"
     r"apartamento|sala|quarto|qto|su[ií]te|banheiro|wc|bwc|quiosque|dormit[oó]rio|"
-    r"garagem|vaga|jardim|servi[cç]o|circ|circuito))s?\.?\s+(?:n[º°o.]\s*)?"
+    r"garagem|vaga|jardim|servi[cç]o|circ|circuito|posi[cç][aã]o|pos))s?\.?\s+(?:n[º°o.]\s*)?"
     r"([A-Z]{0,3}\d{1,3}(?:[.\-]\d{1,3})*|[A-Z]{1,3})\b")
 
 # até onde vai a CABEÇA da descrição — o nome do item, antes do detalhe.
@@ -2101,6 +2107,7 @@ _ACOES_R = frozenset(map(_raiz_fusao, _ACOES_FUSAO))
 _OPOSTOS_R = tuple((_raiz_fusao(x), _raiz_fusao(y)) for x, y in _OPOSTOS_FUSAO)
 _ELEMENTOS_R = frozenset(map(_raiz_fusao, _ELEMENTOS_FUSAO))
 _AMBIENTES_R = frozenset(map(_raiz_fusao, _AMBIENTES_FUSAO))
+_SINONIMO_AMBIENTE_R = {_raiz_fusao(k): _raiz_fusao(v) for k, v in _SINONIMOS_AMBIENTE_FUSAO.items()}
 _NOMEADAS_R = frozenset(map(_raiz_fusao, _NOMEADAS_FUSAO))
 _POSICOES_R = frozenset(map(_raiz_fusao, _POSICOES_FUSAO))
 _APARELHOS_R = frozenset(map(_raiz_fusao, _APARELHOS_FUSAO))
@@ -2188,6 +2195,9 @@ _RX_PAVIMENTO = (
 # medida: "80×80cm", "0,90 × 2,10 m", "4x2" — em qualquer ordem ("2×4" = "4×2")
 _RX_MEDIDA = (_re.compile(
     r"(?<![\d.,])(\d{1,3}(?:[.,]\d{1,2})?)\s*[x×]\s*(\d{1,3}(?:[.,]\d{1,2})?)(?![\d])", _re.I),)
+# 🩸 22/09/2026 (revisão): a prancha em polegada traz o métrico entre colchetes —
+# "altura 2'-6\" [762mm]" × "2'-6 1/2\" [775mm]" são duas peças.
+_RX_MEDIDA_MM = (_re.compile(r"\[\s*(\d{1,4}(?:[.,]\d{1,2})?)\s*mm\s*\]", _re.I),)
 # bitola: "diâmetro 32mm", "ø25", "DN 50", "Ø3/4\"" (o `pode_fundir` não lê o "â")
 _RX_BITOLA = (
     _re.compile(r"(?:di[aâ]metro|diam\.?|ø|⌀|\bdn)\s*(\d{1,2}\s*/\s*\d{1,2}|\d{1,3}(?:[.,]\d)?)", _re.I),
@@ -2268,6 +2278,7 @@ def _atributos_fusao(desc: str) -> dict:
         "nivel": _conjunto(_RX_NIVEL, s, _norm_nivel),
         "pavimento": _conjunto(_RX_PAVIMENTO, s, _norm_pavimento),
         "medida": _conjunto(_RX_MEDIDA, s, _norm_medida),
+        "medida_mm": _conjunto(_RX_MEDIDA_MM, s, _norm_numero),
         "bitola": _conjunto(_RX_BITOLA, s, _norm_bitola),
         "codigo": _conjunto(_RX_CODIGO, s, _norm_codigo),
     }
@@ -2304,14 +2315,26 @@ _RX_NUMERO_DE_REFERENCIA = _re.compile(
     r"\b[\s._\-:ºo°n]*[\d][\d\s,e/._\-]*", _re.IGNORECASE)
 
 
+# número com sufixo MINÚSCULO colado: "Comando 1a" × "Comando 1b"
+_RX_NUMERO_COM_LETRA = _re.compile(r"(?<![\w.,/])(\d{1,3})([a-z])(?!\w)")
+
+
 def _numeros_fusao(desc: str) -> frozenset:
-    """Números soltos que ROTULAM o item ("Circulação 01", "Pl.vi.fi.02")."""
+    """Números soltos que ROTULAM o item ("Circulação 01", "Pl.vi.fi.02", "Comando 1a")."""
     s = _texto_fusao(desc)
     s = _RX_NUMERO_DE_REFERENCIA.sub(" ", s)
     s = _re.sub(r"\d+[.,]\d+", " ", s)
     s = _re.sub(r"\b\d+\s*(?:mm|cm|m|m2|m3|kg|w|a|v|l|btu|mpa|x)\b", " ", s)
     s = _re.sub(r"\d+\s*[x×]\s*\d+", " ", s)
-    return frozenset(str(int(n)) for n in _re.findall(r"(?<![a-z0-9])(\d{1,3})(?![a-z0-9])", s))
+    out = {str(int(n)) for n in _re.findall(r"(?<![a-z0-9])(\d{1,3})(?![a-z0-9])", s)}
+    # 🩸 22/09/2026 (revisão): "Comando 1a (16S)" × "Comando 1b (6S)" de um sistema DALI
+    # fundiam. Lido no texto CRU: em minúsculas o "1a" some como ampère, e o sufixo
+    # MAIÚSCULO é unidade (10A, 220V) — só o minúsculo é rótulo.
+    # 🪤 Sem tirar acento: o NFKD faz do ordinal "1ª categoria" um "1a", e a mesma
+    # escavação lida em duas pranchas deixava de fundir (replay, c378477f).
+    cru = _RX_NUMERO_DE_REFERENCIA.sub(" ", str(desc or ""))
+    out.update("%d%s" % (int(n), l) for n, l in _RX_NUMERO_COM_LETRA.findall(cru))
+    return frozenset(out)
 
 
 def _rotulos_fusao(desc: str) -> dict:
@@ -2353,6 +2376,7 @@ def perfil_de_fusao(desc: str, unidade: str = "", ref_sheet: str = "") -> dict:
         r = _raiz_fusao(t)
         if r not in _AMBIENTES_R:
             continue
+        r = _SINONIMO_AMBIENTE_R.get(r, r)
         j = i + 1
         while j < len(brutos) and brutos[j] in _PREP_DO_NOME:
             j += 1
@@ -2386,7 +2410,7 @@ def perfil_de_fusao(desc: str, unidade: str = "", ref_sheet: str = "") -> dict:
         # número solto que rotula o item (medida, unidade e norma já saíram)
         "numeros": _numeros_fusao(desc),
         "elementos": frozenset(t for t in toks if t in _ELEMENTOS_R),
-        "ambientes": frozenset(t for t in toks if t in _AMBIENTES_R),
+        "ambientes": frozenset(_SINONIMO_AMBIENTE_R.get(t, t) for t in toks if t in _AMBIENTES_R),
         "ambientes_nomes": {k: frozenset(v) for k, v in ambientes_nomes.items()},
         "posicoes": frozenset(t for t in toks if t in _POSICOES_R),
         "aparelhos": frozenset(t for t in toks if t in _APARELHOS_R),
