@@ -12,9 +12,12 @@ padrão do formulário (arquitetura — o de ontem era estrutura). Saíram um 2�
 projeto idêntico, no tipo errado, e um 2º e-mail de "sem quantidade". NPS 2.
 
 📏 Alcance medido (error_log × projects do mesmo user_id, 2 min): as 2 recusas
-por arquivo repetido da história (a barreira nasceu em 16/09) viraram projeto
-novo em 2,2 s e 5,1 s. Em 90 dias, 4 anexos por esse caminho deram certo.
-409 de outro motivo, 5xx e rede não deixavam rastro nenhum.
+por arquivo repetido que passaram pelo painel (a barreira nasceu em 16/09)
+viraram projeto novo em 2,2 s e 5,1 s. Em 90 dias, PELO MENOS 4 anexos por esse
+caminho deram certo — o `usage_events` só grava quem aceitou a telemetria no
+banner (113 de 207 projetos de cliente tinham o `start_project` ao lado), então
+4 é piso e o "2 de 6" que sai daí é teto. 409 de outro motivo, 5xx e rede não
+deixavam rastro nenhum; o `anexo_recusado` passa a mostrar uma AMOSTRA deles.
 
 O que este arquivo cobra, RODANDO a tela no motor JS (nunca procurando palavra):
   · o `startProcessing` real, com a sugestão real (`_acharProjetoIrmao`,
@@ -23,9 +26,11 @@ O que este arquivo cobra, RODANDO a tela no motor JS (nunca procurando palavra):
   · o recado do servidor chega à pessoa, e o `/api/process` só é chamado
     DEPOIS do clique dela no botão que diz o tipo;
   · o tipo oferecido é o do projeto irmão, a não ser que ela tenha escolhido
-    outro À MÃO no formulário;
-  · rede, 5xx sem recado, diálogo que falha e erro depois do anexo também não
-    criam nada sozinhos;
+    outro À MÃO no formulário — com o `change` disparado no listener que o
+    painel REGISTRA (o registro sai do dashboard e roda aqui);
+  · rede, 5xx sem recado, diálogo que falha, erro depois do anexo (que volta
+    ao formulário) e o confirm nativo sem o toast.js também não criam nada
+    sozinhos;
   · e CONTROLES: o harness enxerga o `/api/process` quando ele acontece, e cada
     conserto desfeito (decidir sem perguntar, esquecer o tipo do irmão, perder
     o recado, o `catch` que segue pro projeto novo) faz o defeito voltar.
@@ -126,8 +131,18 @@ function fetch(url) {
 var __els = {};
 function _el(id) {
   return { id: id, value: '', textContent: '', innerHTML: '', style: {}, dataset: {},
+           _ouvintes: {},
+           addEventListener: function (ev, fn) {
+             (this._ouvintes[ev] = this._ouvintes[ev] || []).push(fn); },
            classList: { add: function () {}, remove: function () {},
                         contains: function () { return false; } } };
+}
+// O gesto da pessoa: o navegador troca o valor e dispara o evento nos
+// ouvintes que a PÁGINA registrou. `sel.value = ...` do código não dispara nada.
+function __disparar(id, ev) {
+  var el = __els[id];
+  (el._ouvintes[ev] || []).forEach(function (fn) { fn.call(el, { type: ev, target: el }); });
+  return (el._ouvintes[ev] || []).length;
 }
 ['project-name', 'project-typology', 'project-type', 'project-area',
  'project-pe-direito'].forEach(function (i) { __els[i] = _el(i); });
@@ -177,6 +192,23 @@ def _fonte_das_funcoes(mutacoes=()):
     return site, js
 
 
+def _registros_do_tipo_a_mao(site):
+    """Os `addEventListener` que o painel faz com `_marcarTipoEscolhidoAMao`,
+    como estão no fonte — rodam aqui como rodam no carregamento da página.
+
+    🪤 Chamar `_marcarTipoEscolhidoAMao()` direto deixava o REGISTRO fora da
+    bancada: apagado (ou trocado de evento), a escolha feita à mão passava a
+    ser atropelada pelo tipo do irmão e tudo seguia verde.
+    """
+    regs = [m.group(0) for m in re.finditer(
+        r"document\.getElementById\('project-type'\)\s*\??\.addEventListener\([^;]*?\);",
+        site) if "_marcarTipoEscolhidoAMao" in m.group(0)]
+    assert regs, ("o painel não registra mais `_marcarTipoEscolhidoAMao` no "
+                  "<select id=\"project-type\">: sem o registro, a escolha feita "
+                  "à mão é atropelada pelo tipo do irmão")
+    return "\n;\n".join(regs)
+
+
 def _o_409_de_verdade(monkeypatch):
     """A rota `/add-file` REAL com os 7 PDFs que já estão no projeto.
 
@@ -219,10 +251,16 @@ def _o_409_de_verdade(monkeypatch):
 
 
 def _cena(anexo, cliques, tipo_irmao="estrutura", a_mao=None, mutacoes=(),
-          quebrar_volta=0, durante_o_dialogo=""):
+          quebrar_volta=0, durante_o_dialogo="", registrar=True, sem_toast=False):
     site, fonte = _fonte_das_funcoes(mutacoes)
     js = motor(_PRELUDIO)
     js.evaljs(fonte + "\n;1;")
+    if registrar:
+        # o que a página faz ao carregar: registra o ouvinte do <select>
+        js.evaljs(_registros_do_tipo_a_mao(site) + "\n;1;")
+    if sem_toast:
+        # o toast.js carrega com `defer`; sem ele sobra o confirm nativo
+        js.evaljs("window.toast = undefined; 1;")
     js.evaljs("document.getElementById('project-type').value = %s; 1;"
               % json.dumps(_padrao_do_select(site)))
     js.evaljs("var selectedFiles = %s.map(function (n) { return { name: n }; });"
@@ -235,9 +273,10 @@ def _cena(anexo, cliques, tipo_irmao="estrutura", a_mao=None, mutacoes=(),
                  quebrar_volta, json.dumps(_JOB), json.dumps(_NOME_IRMAO),
                  json.dumps(tipo_irmao)))
     if a_mao:
-        # a pessoa mexeu no <select>: o valor muda e o `change` dispara
+        # a pessoa mexeu no <select>: o valor muda e o navegador dispara o
+        # `change` nos ouvintes que a página registrou — nenhum atalho daqui
         js.evaljs("document.getElementById('project-type').value = %s;"
-                  " _marcarTipoEscolhidoAMao(); 1;" % json.dumps(a_mao))
+                  " __disparar('project-type', 'change'); 1;" % json.dumps(a_mao))
     if durante_o_dialogo:
         js.evaljs("__aoPerguntar = function (n) { %s }; 1;" % durante_o_dialogo)
     r = rodar(js, "startProcessing()")
@@ -265,6 +304,9 @@ def _recusa_409(monkeypatch):
 def test_o_409_mostra_o_recado_do_servidor_e_nao_cria_projeto_sozinho(monkeypatch):
     anexo, recado = _recusa_409(monkeypatch)
     assert "prancha-A.pdf" in recado and "prancha-G.pdf" in recado, recado
+    # o recado que agora CHEGA à pessoa fala dos 7, não de "Esse arquivo"
+    # (o texto em si é cobrado em test_anexo_repetido_nao_refaz_o_projeto)
+    assert recado.startswith("Esses 7 arquivos já estão no projeto"), recado[:120]
     c = _cena(anexo, [True, True])            # "Anexar", depois "Abrir o projeto"
     assert len(_anexos(c)) == 1, "o anexo nem saiu: a cena não é a do caso"
     assert _processos(c) == [], (
@@ -371,6 +413,23 @@ def test_erro_DEPOIS_do_anexo_nao_cai_no_projeto_novo():
     assert _processos(c) == [], c["xhr"]
     assert any(t[0] == "error" and "não criei projeto novo" in t[1]
                for t in c["toasts"]), c["toasts"]
+    # e a pessoa volta ao formulário — sem isto ela fica presa na tela de
+    # processamento, em "Anexando ao projeto…", só com o toast
+    assert c["estados"][-1] == "upload", c["estados"]
+
+
+def test_sem_o_toast_Cancelar_do_confirm_nativo_nao_cria_nada(monkeypatch):
+    """O toast.js carrega com `defer`; sem ele, o confirm nativo só tem
+    OK/Cancelar e a pergunta vira "criar?". Cancelar não pode criar."""
+    anexo, recado = _recusa_409(monkeypatch)
+    c = _cena(anexo, [True, False], sem_toast=True)   # "OK" (anexar), "Cancelar"
+    assert len(c["dialogos"]) == 2 and c["dialogos"][1].get("nativo"), (
+        "a cena não passou pelo confirm nativo: %r" % c["dialogos"])
+    assert recado in c["dialogos"][1]["msg"], c["dialogos"][1]["msg"][:300]
+    assert "Cancelar não cria nada" in c["dialogos"][1]["msg"], c["dialogos"][1]["msg"]
+    assert _processos(c) == [], "Cancelar no confirm nativo criou projeto: %r" % c["xhr"]
+    assert c["href"] == "", "navegou sem a pessoa pedir"
+    assert c["estados"][-1] == "upload", c["estados"]
 
 
 # ── controles: o harness enxerga, e cada conserto desfeito reprova ─────────
@@ -418,3 +477,22 @@ def test_CONTROLE_o_catch_que_segue_cria_o_projeto():
     c = _cena({"status": 409, "texto": json.dumps({"detail": "x"})}, [True, True],
               quebrar_volta=1, mutacoes=[("if (_anexoSaiu) {", "if (false) {")])
     assert len(_processos(c)) == 1, c["xhr"]
+
+
+def test_CONTROLE_sem_o_registro_do_change_o_irmao_atropela_a_escolha(monkeypatch):
+    """Sem este, 'o tipo à mão vence' passaria verde com um harness que nem
+    registra o ouvinte — que é como ele estava antes de 22/09."""
+    anexo, _ = _recusa_409(monkeypatch)
+    c = _cena(anexo, [True, False], a_mao="arquitetura", registrar=False)
+    assert c["dialogos"][1]["cancel"] == "Criar projeto novo (Estrutura)", c["dialogos"][1]
+    assert "project_type=estrutura" in _processos(c)[0]["url"], _processos(c)
+
+
+def test_CONTROLE_o_OK_do_confirm_nativo_cria_depois_do_clique(monkeypatch):
+    """Sem este, 'Cancelar não cria' passaria verde por um harness que nunca
+    chegasse ao confirm nativo, ou que não enxergasse o projeto nascer por ele."""
+    anexo, _ = _recusa_409(monkeypatch)
+    c = _cena(anexo, [True, True], sem_toast=True)    # "OK" (anexar), "OK" (criar)
+    procs = _processos(c)
+    assert len(procs) == 1 and procs[0]["dialogosAntes"] == 2, c["xhr"]
+    assert "project_type=estrutura" in procs[0]["url"], procs[0]["url"]

@@ -2,8 +2,8 @@
 """Anexar o arquivo que JÁ está no projeto não pode refazer a leitura.
 
 🩸 16/09/2026, cliente NOVO, primeiro projeto. O PDF dele foi lido e saiu sem
-nenhuma linha medida — PDF é a impressão da prancha, a medida não viaja dentro
-dele. Às 16:05 ele anexou **o mesmo PDF** pela tela de anexar, provavelmente
+nenhuma linha medida — de PDF a quantidade sai como estimativa, por regra
+nossa (`_pdf_downgrade`), não por defeito do arquivo. Às 16:05 ele anexou **o mesmo PDF** pela tela de anexar, provavelmente
 achando que insistir ajudaria. O sistema aceitou sem conferir:
 
   · arquivou a versão que ele tinha (67 linhas);
@@ -131,11 +131,47 @@ def test_o_projeto_que_ja_tem_CAD_e_reconhecido(tmp_path, monkeypatch):
 
 
 # ── o recado da tela ───────────────────────────────────────────────────────
+# 🩸 22/09/2026 (job ee801b82): o recado passou a CHEGAR à pessoa pelo painel e
+# dizia "O PDF é uma imagem da prancha: as medidas não viajam dentro dele" —
+# 5 das 7 pranchas dela tinham camada de texto, e a primeira trazia impresso o
+# quadro de quantitativos. O recado não abre o PDF, então não pode afirmar o
+# que tem dentro dele; o que ele pode dizer é a NOSSA regra, verdadeira por
+# construção (`_pdf_downgrade`): de PDF sai estimativa, nunca medida.
+_O_QUE_O_RECADO_NAO_SABE = ("imagem", "viajam", "camada", "texto", "escaneado")
+
+
+def _afirma_o_conteudo_do_pdf(txt):
+    return [p for p in _O_QUE_O_RECADO_NAO_SABE if p in txt.lower()]
+
+
 def test_o_recado_PEDE_o_CAD_quando_o_projeto_so_tem_PDF():
     txt = main._recado_do_anexo_repetido({"a (1).pdf": "a.pdf"}, tem_cad=False)
     assert "a.pdf" in txt, "o cliente precisa saber QUAL arquivo"
     assert "DWG" in txt and "DXF" in txt, txt
-    assert "medidas não viajam" in txt or "não viajam dentro dele" in txt, txt
+    assert "estimativa" in txt and "nunca como medida" in txt, (
+        "o recado não diz a regra que vale pra qualquer PDF: %r" % txt)
+    assert _afirma_o_conteudo_do_pdf(txt) == [], (
+        "o recado afirma o que tem dentro do PDF sem ter olhado: %r" % txt)
+
+
+def test_CONTROLE_o_guarda_pega_a_frase_que_mentiu():
+    antigo = ("Esse arquivo já está no projeto (a.pdf). O PDF é uma imagem da "
+              "prancha: as medidas não viajam dentro dele.")
+    assert _afirma_o_conteudo_do_pdf(antigo), "o guarda não enxerga a frase de 22/09"
+
+
+def test_o_recado_de_VARIOS_arquivos_fala_no_plural():
+    """Os 7 do caso: "Esse arquivo já está no projeto" de 7 arquivos."""
+    nomes = ["prancha-%s.pdf" % l for l in "ABCDEFG"]
+    txt = main._recado_do_anexo_repetido({n: n for n in nomes}, tem_cad=False)
+    assert txt.startswith("Esses 7 arquivos já estão no projeto ("), txt[:120]
+    assert "Esse arquivo" not in txt and "uma versão nova" not in txt, txt[:200]
+    assert "prancha-A.pdf" in txt and "prancha-G.pdf" in txt, txt
+
+
+def test_o_recado_de_UM_arquivo_fica_no_singular():
+    txt = main._recado_do_anexo_repetido({"a (1).pdf": "a.pdf"}, tem_cad=True)
+    assert txt.startswith("Esse arquivo já está no projeto (a.pdf)"), txt[:120]
 
 
 def test_o_recado_NAO_pede_CAD_pra_quem_ja_mandou():

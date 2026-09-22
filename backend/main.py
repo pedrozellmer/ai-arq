@@ -29142,6 +29142,11 @@ _TRACK_ALLOWED = {
     # não respondeu). Só a recusa por arquivo repetido deixava rastro, no
     # error_log; 409 de outro motivo, 5xx e rede eram invisíveis. `meta.type` =
     # código HTTP ou 'rede' (o mesmo formato do `upload_erro`).
+    # 🪤 É uma AMOSTRA, não a contagem: o `trackEvent` só grava quem aceitou a
+    # telemetria no banner (aiarq-utils.js) — em 90 dias, 113 de 207 projetos
+    # de cliente tinham o `start_project` ao lado. Contagem daqui é PISO, e
+    # razão que junta o error_log (grava todo mundo) com isto (só quem aceitou)
+    # sai INFLADA — o "2 de 6 (33%)" de 22/09 é teto, não medida.
     "anexo_recusado",
     # 23/08 (lote 3) — os passos que decidem a PRIMEIRA HORA, que não tinham evento:
     "tour_pulado", "tour_concluido",        # onboarding-tour.js
@@ -32515,7 +32520,8 @@ def _anexos_ja_no_projeto(job_id: str, recebidos: list):
     """Quais dos arquivos anexados AGORA já estão no projeto, byte a byte.
 
     🩸 16/09/2026 — cliente NOVO, 1º projeto: leu o PDF, não saiu linha medida
-    (PDF é impressão da prancha, a medida não viaja dentro dele), e ele anexou
+    (de PDF a quantidade sai como estimativa — regra nossa, `_pdf_downgrade`,
+    não defeito do arquivo; ver `_recado_do_anexo_repetido`), e ele anexou
     O MESMO PDF de novo pela tela de anexar. O sistema aceitou sem conferir,
     ARQUIVOU a versão de 67 linhas e entregou 52 — ainda com zero medida. Ele
     pagou com tempo e a gente pagou com IA, pra piorar a planilha dele.
@@ -32573,19 +32579,35 @@ def _anexos_ja_no_projeto(job_id: str, recebidos: list):
 
 
 def _recado_do_anexo_repetido(repetidos: dict, tem_cad: bool) -> str:
-    """O que a tela mostra quando o anexo é o arquivo que já está lá."""
+    """O que a tela mostra quando o anexo é o arquivo que já está lá.
+
+    🩸 22/09/2026 — job ee801b82. Até aqui o painel jogava este recado fora
+    (o anexo recusado virava projeto novo sozinho); consertado isso, ele
+    passou a CHEGAR à pessoa — e chegava errado duas vezes. Falava "Esse
+    arquivo já está no projeto" de 7 arquivos, e afirmava "O PDF é uma imagem
+    da prancha: as medidas não viajam dentro dele": 5 das 7 pranchas dela
+    tinham camada de texto, e a primeira trazia impresso o quadro de
+    quantitativos.
+    🔑 Só o que é verdade por construção, sem abrir o arquivo: de PDF a
+    quantidade sai como estimativa (`_pdf_downgrade` rebaixa todo
+    'confirmado'), e medida só sai do DWG/DXF. Nada sobre o que o PDF tem ou
+    não tem dentro — este texto não olha o PDF pra saber.
+    """
     nomes = ", ".join(sorted(set(repetidos.values())))[:200]
-    base = (f"Esse arquivo já está no projeto ({nomes}) — é o mesmo conteúdo, "
-            f"não uma versão nova. Reenviar refaria a leitura do zero sem "
-            f"informação nova, e o resultado pode até sair diferente do que "
-            f"você já tem.")
+    if len(repetidos) > 1:
+        base = (f"Esses {len(repetidos)} arquivos já estão no projeto ({nomes}) "
+                f"— são o mesmo conteúdo, não versões novas.")
+    else:
+        base = (f"Esse arquivo já está no projeto ({nomes}) — é o mesmo "
+                f"conteúdo, não uma versão nova.")
+    base += (" Reenviar refaria a leitura do zero sem informação nova, e o "
+             "resultado pode até sair diferente do que você já tem.")
     if tem_cad:
         return base + (" Se quiser refazer mesmo assim, use o botão "
                        "'Reprocessar' na página do projeto.")
-    return base + (" Pra sair quantidade MEDIDA, o que falta é o desenho em "
-                   "DWG ou DXF — o mesmo projeto exportado do CAD, em vez de "
-                   "impresso em PDF. O PDF é uma imagem da prancha: as medidas "
-                   "não viajam dentro dele.")
+    return base + (" Quantidade MEDIDA só sai do desenho em DWG ou DXF — o "
+                   "mesmo projeto exportado do CAD. De PDF, a quantidade sai "
+                   "como estimativa pra você conferir, nunca como medida.")
 
 
 @app.post("/api/project/{job_id}/add-file")
