@@ -3382,6 +3382,101 @@
     });
   }
 
+  // ── O anexo RECUSADO não vira projeto novo sozinho ─────────────────────
+  // 🩸 22/09/2026 — job ee801b82 → f8d8e6d8. A pessoa escolheu os mesmos 7 PDFs
+  // do projeto de ontem, a tela sugeriu anexar e ela clicou "Anexar". O
+  // servidor recusou (409, mesmo sha256) com um recado dizendo por quê; esta
+  // tela jogava o recado fora, avisava "vou criar um projeto novo" e criava,
+  // 0,33 s depois, no tipo PADRÃO do formulário (arquitetura; o anterior era
+  // estrutura). Saíram um 2º projeto idêntico, no tipo errado, e um 2º e-mail
+  // de "sem quantidade" — o que a barreira do servidor existe pra evitar.
+  // 📏 As 2 recusas por arquivo repetido da história (desde 16/09) viraram
+  // projeto novo em até 5 s. Nos 90 dias, 4 anexos por aqui deram certo.
+  // 🔑 Agora o recado chega, e projeto novo só com o clique dela, no botão que
+  // diz o tipo. Vale pra TODA falha do anexo: com 5xx ou rede nem dá pra saber
+  // se ele chegou (vários recados do servidor dizem "os arquivos ficaram
+  // guardados"), e outro projeto por cima dobraria motor, IA e e-mail.
+
+  // Sobe os arquivos no projeto irmão. Devolve {ok, status, recado}; não lança.
+  // `status` 0 = sem resposta (rede/timeout); `recado` = o `detail` do servidor.
+  function _anexarAoIrmao(irmao, tk) {
+    return new Promise(resolve => {
+      const fd = new FormData();
+      selectedFiles.forEach(f => fd.append('files', f));
+      const x = new XMLHttpRequest();
+      x.open('POST', `${window.API_UPLOAD_BASE}/api/project/${encodeURIComponent(irmao.job_id)}/add-file`);
+      x.setRequestHeader('Authorization', `Bearer ${tk}`);
+      x.timeout = 900000;
+      x.upload.onprogress = e => {
+        if (!e.lengthComputable) return;
+        const p = Math.round((e.loaded / e.total) * 100);
+        progressBar.style.width = p + '%';
+        progressPercent.textContent = p + '%';
+      };
+      x.onload = () => {
+        let corpo = null;
+        try { corpo = JSON.parse(x.responseText || ''); } catch (_) {}
+        const recado = (corpo && typeof corpo.detail === 'string') ? corpo.detail.trim() : '';
+        resolve({ ok: x.status >= 200 && x.status < 300 && !!corpo && corpo.status === 'ok',
+                  status: x.status, recado });
+      };
+      x.onerror = x.ontimeout = () => resolve({ ok: false, status: 0, recado: '' });
+      x.send(fd);
+    });
+  }
+
+  const _ROTULO_DO_TIPO = { arquitetura: 'Arquitetura', estrutura: 'Estrutura' };
+
+  // O tipo do projeto novo depois da recusa — e o formulário passa a MOSTRÁ-LO.
+  // Por que o do irmão: ao clicar "Anexar" a pessoa disse que estes arquivos
+  // são daquele projeto, e o anexo rodaria no tipo dele (o /add-file lê o tipo
+  // do original). O padrão do formulário não é escolha ("Na dúvida, deixe
+  // Arquitetura"); escolha feita À MÃO no formulário vence o irmão.
+  function _tipoDoProjetoNovoAposAnexo(irmao) {
+    const sel = document.getElementById('project-type');
+    const doIrmao = (irmao && _ROTULO_DO_TIPO[irmao.project_type]) ? irmao.project_type : '';
+    const aMao = !!(sel && sel.dataset && sel.dataset.escolhidoAMao === '1');
+    if (sel && doIrmao && !aMao && sel.value !== doIrmao) {
+      sel.value = doIrmao;
+      try { aplicarTextoDoPeDireito(); } catch (_) {}
+    }
+    return { tipo: (sel && sel.value) || 'arquitetura', doIrmao };
+  }
+
+  // O que a pessoa lê: o recado do servidor (ou o que sabemos, se ele não
+  // veio) e, separado, como sairia o projeto novo SE ela pedir um.
+  function _textoDoAnexoRecusado(irmao, r, t) {
+    const nome = irmao.project_name || 'anterior';
+    const conferir = `Pode ser que ele tenha chegado: abra o projeto "${nome}" pra conferir antes de mandar de novo.`;
+    const motivo = r.recado || (r.status === 0
+      ? `Não recebi a resposta do anexo ao projeto "${nome}" — a conexão pode ter caído no meio. ${conferir}`
+      : `O servidor não confirmou o anexo ao projeto "${nome}" (código ${r.status}). ${conferir}`);
+    let tipo = `Se quiser mesmo um projeto NOVO com estes arquivos, ele sai como ${_ROTULO_DO_TIPO[t.tipo] || t.tipo}`;
+    if (t.doIrmao && t.doIrmao === t.tipo) tipo += `, o mesmo tipo do projeto "${nome}".`;
+    else if (t.doIrmao) tipo += `, o tipo escolhido no formulário (o projeto "${nome}" é ${_ROTULO_DO_TIPO[t.doIrmao]}).`;
+    else tipo += '.';
+    return `${motivo}\n\nNão criei projeto novo. ${tipo}`;
+  }
+
+  // 'abrir' | 'criar' | 'voltar'. 'criar' só sai do clique no botão que diz o
+  // tipo; erro no diálogo cai em 'voltar', que não cria nada.
+  function _escolhaAposAnexoRecusado(msg, rotulo) {
+    return new Promise(resolve => {
+      try {
+        if (window.toast && window.toast.confirm) {
+          window.toast.confirm(msg, { ok: 'Abrir o projeto anterior',
+                                      cancel: `Criar projeto novo (${rotulo})` })
+            .then(v => resolve(v ? 'abrir' : 'criar'), () => resolve('voltar'));
+          return;
+        }
+        // Sem o toast o confirm nativo só tem OK/Cancelar: a pergunta vira
+        // "criar?", e Cancelar não cria nada.
+        resolve(confirm(`${msg}\n\nOK cria um projeto novo como ${rotulo}. Cancelar não cria nada.`)
+                ? 'criar' : 'voltar');
+      } catch (_) { resolve('voltar'); }
+    });
+  }
+
   async function startProcessing() {
     // Os avisos do envio ANTERIOR saem antes de qualquer caminho abaixo abrir a
     // tela de processamento — ver `_limparAvisosDoEnvio`.
@@ -3391,6 +3486,9 @@
 
     // Pergunta ANTES de criar o projeto — depois de criado não dá pra desfazer
     // sem deixar lixo no banco.
+    // 🩸 22/09/2026: depois que o anexo SAI, nenhum caminho daqui cria projeto
+    // sem o clique da pessoa — nem o `catch` (ver `_anexarAoIrmao`).
+    let _anexoSaiu = false;
     try {
       const { data: { session: _s } } = await sbClient.auth.getSession();
       const _tk = _s?.access_token;
@@ -3406,36 +3504,42 @@
           processingStep.textContent = `Anexando ao projeto "${irmao.project_name || 'anterior'}"…`;
           progressBar.style.width = '0%';
           progressPercent.textContent = '0%';
-          const fdAnexo = new FormData();
-          selectedFiles.forEach(f => fdAnexo.append('files', f));
-          const okAnexo = await new Promise(resolve => {
-            const x = new XMLHttpRequest();
-            x.open('POST', `${window.API_UPLOAD_BASE}/api/project/${encodeURIComponent(irmao.job_id)}/add-file`);
-            x.setRequestHeader('Authorization', `Bearer ${_tk}`);
-            x.timeout = 900000;
-            x.upload.onprogress = e => {
-              if (!e.lengthComputable) return;
-              const p = Math.round((e.loaded / e.total) * 100);
-              progressBar.style.width = p + '%';
-              progressPercent.textContent = p + '%';
-            };
-            x.onload = () => { try { resolve(JSON.parse(x.responseText).status === 'ok'); }
-                               catch (_) { resolve(false); } };
-            x.onerror = x.ontimeout = () => resolve(false);
-            x.send(fdAnexo);
-          });
-          if (okAnexo) {
+          _anexoSaiu = true;
+          const r = await _anexarAoIrmao(irmao, _tk);
+          if (r.ok) {
             if (window.trackEvent) trackEvent('anexou_ao_projeto', { job_id: irmao.job_id });
             window.location.href = `projeto.html?job_id=${encodeURIComponent(irmao.job_id)}`;
             return;
           }
-          // Anexo falhou: NÃO abandona o cliente. Volta e segue como projeto
-          // novo, que é o caminho que sempre funcionou.
-          const _m = 'Não consegui anexar ao projeto anterior — vou criar um projeto novo com esses arquivos.';
-          window.toast ? window.toast.info(_m) : alert(_m);
+          try {
+            if (window.trackEvent) trackEvent('anexo_recusado', { job_id: irmao.job_id, type: r.status ? String(r.status) : 'rede' });
+          } catch (_) {}
+          // Recusado: volta pro formulário (arquivos e tipo à vista) e PERGUNTA.
+          showState(stateUpload);
+          const t = _tipoDoProjetoNovoAposAnexo(irmao);
+          const escolha = await _escolhaAposAnexoRecusado(
+            _textoDoAnexoRecusado(irmao, r, t), _ROTULO_DO_TIPO[t.tipo] || t.tipo);
+          if (escolha === 'abrir') {
+            window.location.href = `projeto.html?job_id=${encodeURIComponent(irmao.job_id)}`;
+            return;
+          }
+          if (escolha !== 'criar') return;   // nada criado; fica no formulário
+          // 'criar' é o clique dela, no botão que diz o tipo: é esse que vale.
+          const _selTipo = document.getElementById('project-type');
+          if (_selTipo) _selTipo.value = t.tipo;
         }
       }
-    } catch (e) { /* segue o fluxo normal */ }
+    } catch (e) {
+      // Antes do anexo sair, erro aqui é a SUGESTÃO falhando (acessório):
+      // segue como projeto novo. Depois que ele saiu, não — criar outro
+      // projeto por cima é o que a barreira do servidor existe pra evitar.
+      if (_anexoSaiu) {
+        showState(stateUpload);
+        const _m = 'Não consegui concluir o anexo ao projeto anterior, e não criei projeto novo. Abra o projeto anterior pra conferir se os arquivos chegaram.';
+        window.toast ? window.toast.error(_m) : alert(_m);
+        return;
+      }
+    }
 
     showState(stateProcessing);
     processingStep.textContent = 'Enviando arquivos...';
@@ -4261,6 +4365,16 @@
 
   document.getElementById('project-type')
     ?.addEventListener('change', aplicarTextoDoPeDireito);
+
+  // O `change` só dispara com gesto da pessoa (nunca com `sel.value = ...` do
+  // código): é o que separa "escolheu este tipo" de "deixou o padrão" — ver
+  // `_tipoDoProjetoNovoAposAnexo`.
+  function _marcarTipoEscolhidoAMao() {
+    const sel = document.getElementById('project-type');
+    if (sel && sel.dataset) sel.dataset.escolhidoAMao = '1';
+  }
+  document.getElementById('project-type')
+    ?.addEventListener('change', _marcarTipoEscolhidoAMao);
 
   // 🩸 18/09/2026 — A RÉGUA DO RAIO-X, fora do renderizador de propósito.
   //

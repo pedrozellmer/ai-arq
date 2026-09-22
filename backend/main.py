@@ -29138,6 +29138,11 @@ _TRACK_ALLOWED = {
     "open_memorial", "download_memorial", "memorial_redacao_ia",
     "view_revisao", "revisao_pausada", "revisao_concluida",
     "indicou_whatsapp", "anexou_ao_projeto",
+    # 🩸 22/09/2026 — o anexo ao projeto irmão que o servidor RECUSOU (ou que
+    # não respondeu). Só a recusa por arquivo repetido deixava rastro, no
+    # error_log; 409 de outro motivo, 5xx e rede eram invisíveis. `meta.type` =
+    # código HTTP ou 'rede' (o mesmo formato do `upload_erro`).
+    "anexo_recusado",
     # 23/08 (lote 3) — os passos que decidem a PRIMEIRA HORA, que não tinham evento:
     "tour_pulado", "tour_concluido",        # onboarding-tour.js
     "arquivo_escolhido", "arquivo_ignorado", # dashboard addFiles (meta.type = extensão)
@@ -34074,7 +34079,7 @@ def projetos_candidatos_anexo(request: Request, horas: int = 72):
             f"projects?user_id=eq.{urllib.parse.quote(str(user['id']))}"
             f"&created_at=gte.{urllib.parse.quote(_desde)}"
             f"&archived_at=is.null"
-            f"&select=job_id,project_name,status,created_at,items_count,desenho_assinatura"
+            f"&select=job_id,project_name,project_type,status,created_at,items_count,desenho_assinatura"
             f"&order=created_at.desc&limit=8")
         if _st != 200 or not isinstance(_rows, list):
             return {"projetos": []}
@@ -34091,6 +34096,10 @@ def projetos_candidatos_anexo(request: Request, horas: int = 72):
             out.append({
                 "job_id": job,
                 "project_name": r.get("project_name") or "",
+                # 🩸 22/09/2026 (job ee801b82 → f8d8e6d8): o anexo recusado
+                # virava projeto novo no tipo PADRÃO do formulário. Com o tipo
+                # daqui, o site oferece o projeto novo no tipo do irmão.
+                "project_type": r.get("project_type") or "",
                 "status": r.get("status"),
                 "created_at": r.get("created_at"),
                 "items_count": r.get("items_count") or 0,
@@ -34151,7 +34160,7 @@ def comparar_desenho(payload: AssinaturaPayload, request: Request, horas: int = 
             f"projects?user_id=eq.{urllib.parse.quote(str(user['id']))}"
             f"&created_at=gte.{urllib.parse.quote(_desde)}"
             f"&archived_at=is.null&desenho_assinatura=not.is.null"
-            f"&select=job_id,project_name,created_at,items_count,desenho_assinatura"
+            f"&select=job_id,project_name,project_type,created_at,items_count,desenho_assinatura"
             f"&order=created_at.desc&limit=8")
         if _st != 200 or not isinstance(_rows, list):
             return {"achou": None}
@@ -34161,6 +34170,8 @@ def comparar_desenho(payload: AssinaturaPayload, request: Request, horas: int = 
                 return {"achou": {
                     "job_id": r.get("job_id"),
                     "project_name": r.get("project_name") or "",
+                    # o mesmo tipo que o /candidatos-anexo devolve (ver lá)
+                    "project_type": r.get("project_type") or "",
                     "created_at": r.get("created_at"),
                     "items_count": r.get("items_count") or 0,
                     "motivo": v.get("motivo"),
