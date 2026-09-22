@@ -910,6 +910,35 @@ Responda com o raciocínio e DEPOIS um bloco ```json contendo um OBJETO {"items"
 RELEITURA_SEM_ITEMS = """⚠ RELEITURA DESTA PRANCHA. Numa leitura anterior desta mesma prancha, a resposta não trouxe o array "items" — só dados do projeto. O que precisamos é o LEVANTAMENTO: responda de novo, com o bloco ```json no formato {"items": [...], "project_data": {...}}, "items" no topo, um item por serviço DESENHADO, COTADO ou ESCRITO nesta prancha. As regras continuam as mesmas: não invente número, e o que for derivado é "estimado". Se a prancha realmente não tem nada a quantificar (capa, índice, lista de documentos), devolva "items": [] e diga o porquê em project_data.warnings."""
 
 
+# 🩸 22/09/2026 (job 1d0751b8) — O PROMPT NÃO OFERECIA A SAÍDA HONESTA. Um
+# caderno de apresentação de 35 páginas (2 pranchas técnicas; 33 renders,
+# fotos, moodboard, capa e brochura) virou 537 linhas de levantamento: a foto
+# de uma loja já construída devolveu "Demolição ... 8 vb" e a brochura devolveu
+# a planilha inteira de uma loja de ~80 m². A IA ESCREVEU, em 18 das 35
+# páginas, que não havia prancha técnica — em PROSA, porque o PROMPT_ESTRUTURA
+# é o único que diz "devolva items: []" e o de arquitetura ainda empurrava pro
+# outro lado ("se viu pelo menos 1 ocorrência → vira item").
+# 🔑 Duas coisas, uma frase cada: a saída vazia vira resposta legítima, e o que
+# a página É sai como CAMPO (`tipo_de_pagina`), não como prosa que a gente
+# descarta. O motor lê o campo em engine_rules.escopo_de_pagina_sem_prancha.
+# 🪤 Vai no FIM do prompt de propósito: é a última coisa que o modelo lê, e
+# precisa valer acima das regras de contagem de cada prompt de tipo.
+# 🚫 Não entra em projeto ESTRUTURAL: lá o PROMPT_ESTRUTURA já tem a saída
+# vazia e o texto dele fica byte a byte como está (job ee801b82 é outra frente).
+SAIDA_DE_PAGINA_SEM_PRANCHA = """
+
+## O QUE É ESTA PÁGINA — CAMPO OBRIGATÓRIO
+No JSON, no TOPO do objeto (ao lado de "items"), devolva `"tipo_de_pagina"` com UMA destas palavras:
+- PRANCHA TÉCNICA: "planta" (planta baixa/layout), "corte" (corte, elevação, vista), "detalhe" (ampliação, detalhamento), "legenda" (quadro de especificação, tabela, memorial)
+- NÃO É PRANCHA TÉCNICA: "render" (perspectiva 3D, maquete eletrônica), "foto" (fotografia, referência fotográfica), "moodboard" (painel/amostra de materiais), "capa" (capa, índice, sumário, brochura de conceito)
+- "outro" se você não conseguir dizer.
+Se a página tem desenho técnico E imagem de apresentação, o desenho manda: é prancha técnica.
+
+## PÁGINA QUE NÃO É PRANCHA TÉCNICA: "items": [] É A RESPOSTA CERTA
+Se esta página é render, foto, moodboard ou capa, devolva `"items": []` e explique em project_data.warnings o que ela é. Lista vazia aqui não é falha sua — é a resposta honesta, e vale ACIMA de qualquer regra de contagem deste prompt.
+NÃO estime quantidade a partir de render, fotografia ou brochura: contar móvel, luminária ou tomada numa imagem de apresentação não mede a obra do cliente, e fotografia de obra pronta de OUTRO lugar não vira demolição nem canteiro. Sem desenho cotado, não há quantitativo."""
+
+
 PROMPTS_POR_TIPO = {
     SheetType.ARQUITETURA: PROMPT_ARQUITETURA,
     SheetType.FORRO: PROMPT_FORRO,
@@ -1307,6 +1336,12 @@ def analyze_sheet(client: anthropic.Anthropic, sheet: SheetInfo,
         prompt = typology_hint + "\n" + base_prompt
     else:
         prompt = base_prompt
+
+    # 🩸 22/09/2026 (job 1d0751b8): a saída "items": [] e o campo
+    # `tipo_de_pagina` vão no FIM de todo prompt que NÃO é de estrutura — o de
+    # estrutura já tem a saída vazia e não muda um byte.
+    if not is_structural:
+        prompt = prompt + SAIDA_DE_PAGINA_SEM_PRANCHA
 
     content = []
 

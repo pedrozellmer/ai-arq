@@ -26,6 +26,7 @@ não é janela de N caracteres — o mesmo motivo que fez `_corpo.corpo_de` exis
 E o que se afirma é o RESULTADO da execução, não a presença de um texto.
 """
 import ast
+import functools
 import io
 import os
 import textwrap
@@ -37,7 +38,10 @@ def _fonte(arquivo="main.py"):
     return io.open(os.path.join(_BACKEND, arquivo), encoding="utf-8").read()
 
 
+@functools.lru_cache(maxsize=None)
 def _funcao(nome, arquivo="main.py"):
+    # 🐢 22/09/2026: `ast.parse` do main.py (2 MB) a cada recorte. Um guarda que
+    # executa 4 statements pagava 4 vezes pelo mesmo parse.
     src = _fonte(arquivo)
     arv = ast.parse(src)
     for no in ast.walk(arv):
@@ -56,11 +60,23 @@ def trecho(nome_funcao, marcador, tamanho=0, arquivo="main.py"):
     """
     no_fn, src = _funcao(nome_funcao, arquivo)
     linhas = src.splitlines(True)
+    # 🐢 22/09/2026 — O MESMO RESULTADO, 100× MAIS BARATO. `process_job` tem
+    # milhares de statements e os de fora cobrem 6.000 linhas: montar o fonte
+    # de CADA um custava ~60 s por chamada, e um guarda que recorta 4
+    # statements levava 4 minutos — caro o bastante pra desencorajar o guarda
+    # que EXECUTA, que é o que esta casa quer.
+    # 🔑 Se o marcador está no fonte de um statement, a PRIMEIRA linha dele
+    # aparece em alguma linha dentro do intervalo daquele statement. Filtra por
+    # número de linha primeiro; quem decide continua sendo o `in`.
+    _primeira = marcador.split(chr(10))[0]
+    _candidatas = [i + 1 for i, l in enumerate(linhas) if _primeira in l]
     achados = []
     for no in ast.walk(no_fn):
         if not isinstance(no, ast.stmt):
             continue
         if getattr(no, "lineno", None) is None:
+            continue
+        if not any(no.lineno <= c <= no.end_lineno for c in _candidatas):
             continue
         bruto = "".join(linhas[no.lineno - 1:no.end_lineno])
         if marcador in bruto:

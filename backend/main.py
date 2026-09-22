@@ -15195,6 +15195,15 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # 🩸 22/09/2026 (job ee801b82): prancha lida SEM erro e SEM item não
         # entrava em lugar nenhum — o aviso de cobertura só conhece erro.
         _pranchas_sem_item: list[str] = []
+        # 🩸 22/09/2026 (job 1d0751b8): o que cada página É, na palavra da
+        # própria leitura. Vira o censo do envio (quantas eram prancha técnica)
+        # e a decisão de ESCOPO nas linhas que nasceram de render/foto/capa.
+        _tipos_de_pagina: list[str] = []
+        # Páginas que a LEITURA declarou render/foto/moodboard/capa — elas saem
+        # do aviso de "prancha lida sem item" lá embaixo.
+        _pranchas_nao_tecnicas: list[str] = []
+        _n_escopo = 0          # linhas que viraram ESCOPO
+        _n_escopo_zerado = 0   # ...e que tinham número antes
 
         # Ordenar PDFs por prioridade (layout primeiro)
         priority = {"layout_novo": 0, "layout_atual": 1, "demolir": 2, "arquitetura": 3,
@@ -15921,6 +15930,21 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 "Ar-Condicionado", "Incêndio e Segurança",
                 "Marcenaria", "Mobiliário", "Estrutura", "Complementares"
             ]
+            # 🩸 22/09/2026 (job 1d0751b8) — PÁGINA QUE NÃO É PRANCHA NÃO VIRA
+            # LEVANTAMENTO. Um caderno de apresentação de 35 páginas (2
+            # técnicas) entregou 537 linhas, 91,8% nascidas de render, foto,
+            # moodboard, capa e brochura: a foto de uma loja JÁ CONSTRUÍDA
+            # virou "Demolição e remoção de revestimentos — 8 vb".
+            # 🔑 Quem diz o que a página é agora é a própria leitura, no campo
+            # `tipo_de_pagina` (analyzer). A regra mora em engine_rules pra um
+            # guarda CHAMAR ela — dentro do process_job ninguém alcança.
+            # 🪤 Sem o campo (cache antigo, IA que não respondeu) `is False`
+            # é falso e nada muda: falta de estado não pode acusar ninguém.
+            from engine_rules import (
+                pagina_e_prancha_tecnica as _pg_tecnica,
+                escopo_de_pagina_sem_prancha as _escopo_pg)
+            _tipo_pg = result.get("tipo_de_pagina")
+            _pg_e_escopo = (_pg_tecnica(_tipo_pg) is False)
             for item_data in result.get("items", []):
                 try:
                     desc = item_data.get("description", "")
@@ -16035,6 +16059,18 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     from analyzer import monta_ref_sheet as _monta_ref
                     ia_hint = (item_data.get("ref_sheet") or "").strip()
                     _ref = _monta_ref(filename, page_index, page_count, ia_hint)
+
+                    # 🩸 1d0751b8: ESCOPO — a quantidade lida de imagem de
+                    # apresentação some e a observação passa a dizer de que
+                    # página a linha veio. A linha NÃO é apagada: medido nos 4
+                    # casos de hoje, apagar deixaria este envio com 44 linhas
+                    # (também zeradas) e comeria 47 linhas de um envio que
+                    # entregou (c378477f).
+                    qty, obs_raw, _zerou_pg = _escopo_pg(qty, obs_raw, _tipo_pg)
+                    if _pg_e_escopo:
+                        _n_escopo += 1
+                        if _zerou_pg:
+                            _n_escopo_zerado += 1
                     item = BudgetItem(
                         item_num=str(item_data.get("item_num", "")),
                         description=desc,
@@ -16063,6 +16099,14 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     except Exception:
                         pass
                     continue
+
+            # 🩸 22/09/2026 (job 1d0751b8): o veredito da página entra no
+            # censo do envio — inclusive quando veio do checkpoint, que guarda
+            # o resultado inteiro. Página que nem chegou à IA não entra: "não
+            # classificada" é diferente de "não foi lida".
+            _tipos_de_pagina.append(str(result.get("tipo_de_pagina") or ""))
+            if _pg_e_escopo:
+                _pranchas_nao_tecnicas.append(_disp)
 
             # 6. Liberar memória desta prancha
             del text, crop_paths, sheet, result
@@ -16524,9 +16568,51 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # 🩸 22/09/2026 (job ee801b82) — a prancha lida que não deu item fica
         # FORA do aviso acima de propósito: ela não falhou, e aquele texto
         # promete que reprocessar completa. Frase própria, sem essa promessa.
+        # 🩸 22/09/2026 (job 1d0751b8) — INTERAÇÃO COM O CONSERTO DE ee801b82.
+        # Agora que o prompt OFERECE "items": [] pra página que não é prancha
+        # técnica, um caderno de apresentação de 35 páginas faria 33 delas
+        # caírem no aviso abaixo, e o cliente leria "33 pranchas foram lidas e
+        # não geraram item — confira antes de fechar" sobre páginas que não são
+        # prancha e não têm o que conferir.
+        # 🔑 Aquele aviso é pra prancha TÉCNICA que sumiu calada (a de fundação
+        # do ee801b82). Render, foto, moodboard e capa têm recado próprio, logo
+        # abaixo, que diz a composição do envio inteiro. Sem o campo
+        # `tipo_de_pagina` a lista é vazia e nada muda.
+        # 🚫 A poda é statement PRÓPRIO: o `if` de baixo e o texto do aviso não
+        # são tocados.
+        if _pranchas_nao_tecnicas:
+            _pranchas_sem_item = [_n for _n in _pranchas_sem_item
+                                  if _n not in _pranchas_nao_tecnicas]
+
         if _pranchas_sem_item:
             project_data.warnings = (getattr(project_data, 'warnings', None) or []) + [
                 _aviso_de_prancha_sem_item(_pranchas_sem_item)]
+
+        # 🩸 22/09/2026 (job 1d0751b8) — O CLIENTE NUNCA SOUBE A COMPOSIÇÃO DO
+        # PRÓPRIO ENVIO. Ele recebeu 537 linhas sem uma palavra sobre o caderno
+        # ter 2 pranchas técnicas em 35 páginas. O recado diz esse número e
+        # quantas linhas saíram como ESCOPO por causa dele.
+        # 🪤 A conta é só sobre o que a leitura CLASSIFICOU — denominador
+        # inventado é o defeito que a auditoria de hoje mais achou.
+        try:
+            from engine_rules import (censo_de_paginas as _censo_pg,
+                                      aviso_das_paginas_sem_prancha as _aviso_pg)
+            _censo = _censo_pg(_tipos_de_pagina)
+            _av_pg = _aviso_pg(_censo, _n_escopo)
+            if _av_pg:
+                project_data.warnings = (
+                    getattr(project_data, 'warnings', None) or []) + [_av_pg]
+            if _censo.get("sem_prancha") or _n_escopo:
+                _log_error("motor:pagina-sem-prancha",
+                           f"paginas tecnicas={_censo.get('tecnicas')} "
+                           f"sem_prancha={_censo.get('sem_prancha')} "
+                           f"nao_classificadas={_censo.get('nao_disse')} "
+                           f"por_tipo={_censo.get('por_tipo')} | "
+                           f"linhas em ESCOPO={_n_escopo} "
+                           f"(tinham numero={_n_escopo_zerado})",
+                           job_id, severity="info")
+        except Exception as _e_pg:
+            print(f"[pagina-sem-prancha] censo falhou (nao-fatal): {_e_pg}")
 
         # Aviso de xref/estéril por-arquivo (independe de falha parcial): orienta o
         # usuário a incorporar o desenho externo, em vez de só ver tudo laranja.

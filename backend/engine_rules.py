@@ -4392,3 +4392,195 @@ def conferencia_do_peso_de_aco(descricao, obs, quantidade):
     else:
         info["acao"] = "alerta"
     return info
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  PÁGINA QUE NÃO É PRANCHA NÃO VIRA LEVANTAMENTO
+# ══════════════════════════════════════════════════════════════════════════
+# 🩸 22/09/2026 (job 1d0751b8) — um caderno de APRESENTAÇÃO de 35 páginas (2
+# pranchas técnicas; as outras 33 render, foto, moodboard, capa e brochura)
+# virou uma planilha de 537 linhas. 493 delas (91,8%) nasceram das páginas que
+# não são prancha: a fotografia de uma loja JÁ CONSTRUÍDA de outra cidade
+# devolveu "Demolição e remoção de revestimentos existentes — 8 vb", e uma
+# página de brochura devolveu a planilha inteira de uma loja de ~80 m² que
+# ninguém desenhou.
+#
+# 🔑 A IA não escondeu nada: em 18 das 35 páginas ela ESCREVEU, em prosa, que
+# não havia prancha técnica ("Impossível gerar quantitativos sem prancha
+# técnica"). Quem ignorou fomos nós — o prompt de arquitetura não oferecia a
+# saída "items": [] que o de estrutura oferece, e o motor não tinha onde ler o
+# veredito. Agora a leitura devolve `tipo_de_pagina` como CAMPO, e o motor age.
+#
+# 🚫 A decisão é ESCOPO, não apagar a linha (medido nos 4 casos de 22/09):
+#   · 1d0751b8: apagar deixaria a entrega com 44 linhas das 2 páginas técnicas
+#     — e essas 44 também saíram zeradas (35/35 páginas sem escala). O cliente
+#     ficaria com a planilha vazia em vez de com a lista de serviços que o
+#     caderno de fato mostra;
+#   · c378477f (19/09): 47 das 500 linhas vêm de página de foto/capa num envio
+#     que ENTREGOU — é o caso de [[feedback_o_numero_que_eu_medi_pode_ser_o_meu_
+#     proprio_corte]]: barrar por conta própria come entrega de verdade;
+#   · ee801b82, 844603fb e 95bab8ba (os outros 3 casos do dia): ZERO linha
+#     classificada como não-prancha — o dano colateral da regra é medido e é 0.
+# Então a linha continua, o SERVIÇO continua, e o que some é o NÚMERO — que
+# nunca foi contagem da obra do cliente, e sim de uma imagem de apresentação.
+#
+# 🪤 Falta de estado NÃO é neutra ([[project_a_capa_derrubou_a_planilha]]): sem
+# o campo (leitura antiga, cache velho, IA que não respondeu) nada muda. O
+# guarda só age sobre o que a IA DISSE, nunca sobre o que ela calou.
+
+#: Valores que a leitura pode devolver em `tipo_de_pagina`. O prompt oferece
+#: exatamente estes; os sinônimos abaixo absorvem a variação da IA.
+PAGINA_TECNICA = ("planta", "corte", "detalhe", "legenda")
+PAGINA_SEM_PRANCHA = ("render", "foto", "moodboard", "capa")
+
+_ROTULO_DA_PAGINA = {
+    "planta": "planta baixa",
+    "corte": "corte/elevação",
+    "detalhe": "detalhe",
+    "legenda": "legenda/quadro de especificação",
+    "render": "render (perspectiva 3D)",
+    "foto": "fotografia",
+    "moodboard": "moodboard / amostra de materiais",
+    "capa": "capa, índice ou brochura",
+}
+
+#: Sinônimo -> valor canônico. Chave já sem acento e em minúscula.
+_SINONIMOS_DE_PAGINA = {
+    "planta": "planta", "plantas": "planta", "planta baixa": "planta",
+    "planta baixa geral": "planta", "layout": "planta", "implantacao": "planta",
+    "corte": "corte", "cortes": "corte", "elevacao": "corte",
+    "elevacoes": "corte", "corte/elevacao": "corte", "vista": "corte",
+    "detalhe": "detalhe", "detalhes": "detalhe", "detalhamento": "detalhe",
+    "ampliacao": "detalhe",
+    "legenda": "legenda", "quadro": "legenda", "tabela": "legenda",
+    "especificacao": "legenda", "memorial": "legenda",
+    "render": "render", "renders": "render", "renderizacao": "render",
+    "perspectiva": "render", "perspectivas": "render", "3d": "render",
+    "imagem 3d": "render", "maquete eletronica": "render",
+    "foto": "foto", "fotos": "foto", "fotografia": "foto",
+    "fotografias": "foto", "referencia fotografica": "foto",
+    "imagem de referencia": "foto",
+    "moodboard": "moodboard", "mood board": "moodboard",
+    "painel de materiais": "moodboard", "amostra de materiais": "moodboard",
+    "amostra de material": "moodboard",
+    "capa": "capa", "indice": "capa", "sumario": "capa", "folha de rosto": "capa",
+    "brochura": "capa", "apresentacao": "capa",
+}
+
+
+def tipo_de_pagina(bruto):
+    """O `tipo_de_pagina` da leitura, normalizado para um dos valores conhecidos.
+
+    Devolve "" quando a IA não disse nada que a gente reconheça — e "" é o
+    estado em que NADA muda. Não adivinha por palavra solta dentro de frase:
+    o campo é fechado de propósito, e "não consegui dizer" tem que continuar
+    sendo distinguível de "disse que é render"."""
+    t = " ".join(_sem_acento(bruto).lower().replace("_", " ").split())
+    t = t.strip(" .:;-–—()[]\"'")
+    if not t:
+        return ""
+    if t in _SINONIMOS_DE_PAGINA:
+        return _SINONIMOS_DE_PAGINA[t]
+    # "render conceitual", "foto de fachada": a PRIMEIRA palavra manda, e só
+    # quando ela sozinha já é um valor conhecido.
+    primeira = t.split()[0]
+    return _SINONIMOS_DE_PAGINA.get(primeira, "")
+
+
+def pagina_e_prancha_tecnica(bruto):
+    """True (planta/corte/detalhe/legenda), False (render/foto/moodboard/capa)
+    ou None quando a leitura não disse — e None é o caso em que o motor não
+    mexe em nada."""
+    t = tipo_de_pagina(bruto)
+    if t in PAGINA_TECNICA:
+        return True
+    if t in PAGINA_SEM_PRANCHA:
+        return False
+    return None
+
+
+#: Marca que a observação ganha. Vale também como trava de idempotência: a
+#: retomada roda o mesmo item de novo e não pode empilhar duas vezes.
+MARCA_DE_ESCOPO = "ESCOPO (sem quantidade)"
+
+
+def escopo_de_pagina_sem_prancha(quantidade, observacao, bruto):
+    """(quantidade, observação, zerou) para um item lido de página que a IA
+    disse não ser prancha técnica.
+
+    A quantidade some (não é contagem da obra: é contagem de uma imagem) e a
+    observação passa a dizer DE QUE página a linha veio. Em página técnica, ou
+    quando a leitura não classificou, devolve tudo como veio."""
+    obs = "" if observacao is None else str(observacao)
+    if pagina_e_prancha_tecnica(bruto) is not False:
+        return quantidade, obs, False
+    try:
+        q = float(quantidade or 0)
+    except (TypeError, ValueError):
+        q = 0.0
+    zerou = q > 0
+    if MARCA_DE_ESCOPO in obs:
+        return 0, obs, zerou
+    rotulo = _ROTULO_DA_PAGINA.get(tipo_de_pagina(bruto), "imagem de apresentação")
+    nota = ("%s — esta página é %s, não é prancha técnica. O serviço foi "
+            "identificado; a quantidade NÃO sai de imagem de apresentação, "
+            "então ficou em branco pra você preencher."
+            % (MARCA_DE_ESCOPO, rotulo))
+    return 0, (nota + " | " + obs).strip(" |") if obs else nota, zerou
+
+
+def censo_de_paginas(tipos):
+    """Quantas páginas do envio a leitura classificou como prancha técnica,
+    quantas como render/foto/moodboard/capa e quantas ela não classificou."""
+    tecnicas = sem_prancha = nao_disse = 0
+    por_tipo = {}
+    for bruto in (tipos or []):
+        t = tipo_de_pagina(bruto)
+        if t:
+            por_tipo[t] = por_tipo.get(t, 0) + 1
+        veredito = pagina_e_prancha_tecnica(bruto)
+        if veredito is True:
+            tecnicas += 1
+        elif veredito is False:
+            sem_prancha += 1
+        else:
+            nao_disse += 1
+    return {"tecnicas": tecnicas, "sem_prancha": sem_prancha,
+            "nao_disse": nao_disse, "total": tecnicas + sem_prancha + nao_disse,
+            "por_tipo": por_tipo}
+
+
+def aviso_das_paginas_sem_prancha(censo, n_linhas_escopo=0):
+    """O recado ao cliente sobre a COMPOSIÇÃO do envio dele. None quando não há
+    página não-técnica — o aviso não existe pra envio normal.
+
+    🪤 A conta é só sobre o que a leitura CLASSIFICOU. Dizer "2 de 35" quando
+    10 páginas não foram classificadas seria inventar denominador; as não
+    classificadas saem numa frase própria."""
+    c = censo or {}
+    sem = int(c.get("sem_prancha") or 0)
+    if sem <= 0:
+        return None
+    tec = int(c.get("tecnicas") or 0)
+    mudas = int(c.get("nao_disse") or 0)
+    classificadas = tec + sem
+    partes = [
+        "📄 Deste envio, %d de %d página(s) lidas são prancha técnica "
+        "(planta, corte, detalhe ou legenda). As outras %d são render, foto, "
+        "moodboard ou capa."
+        % (tec, classificadas, sem)
+    ]
+    if mudas:
+        partes.append("(Outras %d página(s) a leitura não soube classificar.)"
+                      % mudas)
+    if n_linhas_escopo:
+        partes.append(
+            "Por isso %d linha(s) desta planilha saíram como ESCOPO, com o "
+            "serviço identificado e a quantidade em branco: imagem de "
+            "apresentação não é desenho cotado, e contar móvel em render não "
+            "mede a sua obra." % int(n_linhas_escopo))
+    if tec == 0:
+        partes.append("Nenhuma página deste envio é prancha técnica — pra sair "
+                      "quantitativo de verdade, mande a planta baixa (de "
+                      "preferência em DWG/DXF).")
+    return " ".join(partes)
