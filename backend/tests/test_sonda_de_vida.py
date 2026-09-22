@@ -81,6 +81,16 @@ def _minar_todas_as_saidas(monkeypatch):
     import subprocess
     import time
     import urllib.request
+    # 🩸 22/09/2026 — o `import psutil` morava lá embaixo, DEPOIS da mina do
+    # disco. O main só importa o psutil dentro do /api/health; num worker do
+    # `-n auto` em que nenhum teste anterior chamou o /api/health, o import
+    # acontecia AQUI, minado — e o psutil 5.9.8 lê /proc/stat ao ser importado
+    # no Linux. A bancada do CI ficou vermelha acusando a sonda, que nem sabe
+    # que o psutil existe. Quem arma a mina carrega o que vai minar ANTES.
+    try:
+        import psutil
+    except ImportError:
+        psutil = None
 
     pisadas = []
 
@@ -158,13 +168,27 @@ def _minar_todas_as_saidas(monkeypatch):
     # conserta adivinha de longe, que foi o que eu fiz a tarde inteira.
     import traceback as _tb
 
+    # 🩸 22/09 — e o QUEM CHAMOU ainda escondia o culpado: o filtro tirava as
+    # linhas deste arquivo, e o culpado era uma linha deste arquivo. A pilha
+    # mostrava só o miolo do psutil. Agora a mina diz também a linha mais
+    # funda do NOSSO código (backend/, fora das bibliotecas) — é ela que
+    # alguém vai abrir pra consertar.
+    def _nosso(quadro):
+        caminho = os.path.abspath(quadro.filename)
+        return caminho.startswith(_BACKEND) and "site-packages" not in caminho
+
     def _mina_de_disco(nome):
         def _explode(arquivo, *a, **k):
             _quem = [l.strip().replace("\n", " ")
                      for l in _tb.format_stack()[:-1]
                      if "test_sonda_de_vida" not in l][-3:]
-            pisadas.append("%s (%s) <- %s"
-                           % (nome, str(arquivo)[:70], " | ".join(_quem)[:300]))
+            _meus = [q for q in _tb.extract_stack()[:-1] if _nosso(q)]
+            _de_onde = ("%s:%d em %s(): %s" % (
+                os.path.basename(_meus[-1].filename), _meus[-1].lineno,
+                _meus[-1].name, (_meus[-1].line or "").strip())) if _meus else "?"
+            pisadas.append("%s (%s) [nosso código: %s] <- %s"
+                           % (nome, str(arquivo)[:70], _de_onde[:160],
+                              " | ".join(_quem)[:300]))
             raise AssertionError("a sonda de vida abriu %s" % (arquivo,))
         return _explode
 
@@ -174,12 +198,9 @@ def _minar_todas_as_saidas(monkeypatch):
                         raising=False)
     _armar(time, "sleep", "time.sleep")
     _armar(os, "statvfs", "os.statvfs")
-    try:
-        import psutil
+    if psutil is not None:
         for _at in ("virtual_memory", "Process", "cpu_percent", "disk_usage"):
             _armar(psutil, _at, "psutil.%s" % _at)
-    except ImportError:
-        pass
     return pisadas
 
 
@@ -238,6 +259,66 @@ def test_CONTROLE_a_mina_de_disco_DIZ_qual_arquivo(monkeypatch):
     except AssertionError as e:
         assert "/tmp/outro.txt" in str(e), \
             "a mina explodiu sem dizer qual arquivo foi aberto: %s" % e
+
+
+class _PsutilDeMentira:
+    """Biblioteca que lê disco ao ser IMPORTADA — como o psutil 5.9.8 no
+    Linux (`set_scputimes_ntuple("/proc")` abre /proc/stat no import). No
+    Windows o psutil de verdade não faz isso, e o defeito só aparecia no CI."""
+
+    def find_spec(self, nome, caminho=None, alvo=None):
+        import importlib.util
+        return importlib.util.spec_from_loader(nome, self) if nome == "psutil" else None
+
+    def create_module(self, spec):
+        return None
+
+    def exec_module(self, modulo):
+        with open(os.devnull, "rb"):
+            pass
+        modulo.virtual_memory = lambda: None
+
+
+def test_CONTROLE_biblioteca_que_le_disco_no_IMPORT_nao_vira_pisada(monkeypatch):
+    """🩸 22/09/2026 — a bancada do CI (commit 2f66c1f) acusou a sonda de ler
+    /proc/stat. Quem lia era o PRÓPRIO guarda: importava o psutil depois de
+    minar o disco. Aqui o import do psutil é forçado a acontecer dentro do
+    helper, com um psutil que lê disco no import — como o de verdade no Linux.
+    Com o import depois da mina, isto explode; com ele antes, fica limpo."""
+    monkeypatch.setitem(sys.modules, "psutil", None)
+    del sys.modules["psutil"]
+    monkeypatch.setattr(sys, "meta_path", [_PsutilDeMentira()] + sys.meta_path)
+    pisadas = _minar_todas_as_saidas(monkeypatch)
+    assert pisadas == [], (
+        "o guarda pisou na própria mina ao importar o psutil: %s" % pisadas)
+    import psutil
+    try:
+        psutil.virtual_memory()
+        raise AssertionError("a mina do psutil não armou")
+    except AssertionError as e:
+        assert "tocou em psutil.virtual_memory" in str(e), e
+
+
+def _abre_um_arquivo_de_proposito():
+    # por dentro de uma BIBLIOTECA (o pathlib chama o io.open), como o psutil:
+    # a linha que interessa é esta, não a de dentro da biblioteca
+    import pathlib
+    pathlib.Path("/tmp/um-arquivo-que-nao-existe-de-proposito.txt").read_text()
+
+
+def test_CONTROLE_a_mina_de_disco_DIZ_a_linha_do_nosso_codigo(monkeypatch):
+    """🩸 22/09 — a pilha que a mina gravava mostrava só o miolo do psutil: o
+    filtro tirava as linhas deste arquivo, e o culpado estava neste arquivo.
+    A pisada tem que dizer a linha mais funda do NOSSO código."""
+    pisadas = _minar_todas_as_saidas(monkeypatch)
+    try:
+        _abre_um_arquivo_de_proposito()
+    except AssertionError:
+        pass
+    assert len(pisadas) == 1, pisadas
+    assert "[nosso código: test_sonda_de_vida.py:" in pisadas[0], pisadas[0]
+    assert "_abre_um_arquivo_de_proposito()" in pisadas[0], pisadas[0]
+    assert "read_text()" in pisadas[0], pisadas[0]
 
 
 def test_a_sonda_e_TRIVIAL(monkeypatch):
