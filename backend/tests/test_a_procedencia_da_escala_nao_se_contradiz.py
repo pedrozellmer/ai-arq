@@ -41,13 +41,14 @@ if _BACKEND not in sys.path:
 
 _MAIN = os.path.join(_BACKEND, "main.py")
 
-# Os DOIS moldes reais do main.py, onde a frase é montada. Estão aqui porque é
-# o contrato: se o main.py mudar o molde, o teste de integração lá embaixo
-# reprova e alguém tem que reler as duas pontas juntas.
+# O molde real da linha de escala do prompt (main.py, seção de medição do
+# `process_job`). É o contrato: `test_a_linha_de_escala_do_prompt_EXECUTADO_e_este_molde`
+# executa o trecho de verdade e reprova se o main.py mudar o molde.
+# 🪤 22/09 (revisão): aqui morava também um `_MOLDE_REGRA` com o texto ANTIGO da
+# regra — ninguém o usava, a regra mudou e nada caiu. A regra agora é
+# `_regra_da_medicao_sem_prova`, e quem guarda o molde dela é
+# test_a_contagem_nao_diz_medido_do_desenho.py, chamando a função.
 _MOLDE_ESCALA = "Escala 1:50 lida {fonte}. {ressalva}."
-_MOLDE_REGRA = ("SEMPRE com confidence 'estimado' — NUNCA 'confirmado', porque "
-                "{ressalva}. Na observação, escreva a procedência: 'medido do "
-                "desenho com escala 1:50 lida {fonte} — confira a escala do seu PDF'.")
 
 
 def _funcao():
@@ -182,3 +183,24 @@ def test_o_process_job_chama_a_funcao_em_vez_de_remontar():
     assert not quebrados, (
         "o template quebrado / a frase contraditória voltaram como f-string "
         "viva: " + str(quebrados[:3]))
+
+
+@pytest.mark.parametrize("src", _FONTES_REAIS + ["vista"])
+def test_a_linha_de_escala_do_prompt_EXECUTADO_e_este_molde(src):
+    """Executa o trecho REAL da seção de medição (da fonte até `_vet_secao`) e
+    compara a linha de escala com `_MOLDE_ESCALA` — o contrato do topo."""
+    import textwrap
+    from _corpo import corpo_de
+    fonte_py = io.open(_MAIN, encoding="utf-8").read()
+    ini = "_fonte_txt, _ressalva = _frase_da_escala_sem_prova(_fonte)"
+    fim = '_vet_secao = "\\n".join(_l2)'
+    assert fonte_py.count(ini) == 1 and fonte_py.count(fim) == 1
+    a = fonte_py.rindex("\n", 0, fonte_py.index(ini)) + 1
+    b = fonte_py.index("\n", fonte_py.index(fim))
+    f, _ = _funcao()
+    ns = {"__name__": "secao_ns", "_frase_da_escala_sem_prova": f,
+          "_vm": {"scale": 50, "scale_src": src}, "_fonte": src}
+    exec(compile(corpo_de("_regra_da_medicao_sem_prova", src=fonte_py), "regra", "exec"), ns)
+    exec(compile(textwrap.dedent(fonte_py[a:b + 1]), "secao", "exec"), ns)
+    fonte, ressalva = f(src)
+    assert ns["_l2"][2] == _MOLDE_ESCALA.format(fonte=fonte, ressalva=ressalva), ns["_l2"]

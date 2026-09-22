@@ -38,13 +38,43 @@ SELO_MEDIDO = "✓ MEDIDO do CAD"
 SELO_ESTIMADO = "⚠ ESTIMADO — revisar"
 
 
+def veio_da_leitura_de_pdf(origem) -> bool:
+    """A origem diz que a IA LEU este número num PDF (`vision_pdf`)?
+
+    🔑 É a outra face de `e_medido`, e mora aqui pelo mesmo motivo: uma
+    resposta só. 🩸 22/09/2026 — o resgate de comprimento ganhou a pergunta
+    "este texto veio de PDF?" e ela nasceu escrita à mão em engine_rules.py
+    (`o == "vision_pdf"`); o guarda de cópias da regra
+    (`test_o_chat_sabe_o_que_e_medido`) reprovou a bancada inteira. Quem
+    precisa saber se a linha é leitura de PDF pergunta AQUI.
+    """
+    return str(origem or "").strip().lower() == "vision_pdf"
+
+
+def texto_veio_da_leitura_de_pdf(origem, tem_cad) -> bool:
+    """O texto da observação (o "comprimento total = N m") foi escrito lendo PDF?
+
+    Em PDF não existe layer: o número da observação é conta ou transcrição da
+    IA, nunca uma soma de layer feita pelo motor. A origem do item decide; a
+    linha SEM origem (a consolidação às vezes a perde — no job f8d8e6d8, 6 de
+    91) vale pelo job: sem CAD legível no envio, não há de onde ter vindo um
+    layer. Origem de outra fonte (dxf_geom, deriv_pd, revisao_cliente) não é
+    leitura de PDF.
+    """
+    if veio_da_leitura_de_pdf(origem):
+        return True
+    if str(origem or "").strip():
+        return False
+    return not tem_cad
+
+
 def e_medido(confidence, origem="") -> bool:
     """FAIL-SAFE: só CONFIRMADO é medido — e o que a IA leu numa imagem de
     PDF (`vision_pdf`) nunca é, porque Vision lê número, não mede geometria.
     Aceita o enum ou o texto cru do banco ("confirmado")."""
     _c = getattr(confidence, "value", confidence)
     return (str(_c or "").strip().lower() == Confidence.CONFIRMADO.value
-            and str(origem or "").strip().lower() != "vision_pdf")
+            and not veio_da_leitura_de_pdf(origem))
 
 
 class BudgetItem(BaseModel):

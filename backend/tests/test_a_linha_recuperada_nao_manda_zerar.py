@@ -61,6 +61,7 @@ def _roda_o_laco_do_comprimento(itens):
         "_n_uni": 0, "_n_rec": 0, "_n_ambiguo": 0,
         # 22/09: os cenários daqui são de CAD ("layer A-WALL") — o job tem DXF.
         "_tem_cad_compr": True,
+        "_texto_veio_da_leitura_de_pdf": main._texto_veio_da_leitura_de_pdf,
     }
     exec(compile(codigo, "laco-do-comprimento", "exec"), ns)
     return ns

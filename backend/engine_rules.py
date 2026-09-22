@@ -909,25 +909,16 @@ def _num_br(v):
 _UNIDADES_DE_AREA_OU_VOLUME = {"m²", "m2", "m2.", "m².", "m³", "m3"}
 
 
-def texto_veio_da_leitura_de_pdf(origem, tem_cad) -> bool:
-    """O 'comprimento total = N m' desta observação foi escrito lendo um PDF?
-
-    Em PDF não existe layer: o número da observação é conta ou transcrição da
-    IA, nunca uma soma de layer feita pelo motor. A origem do item decide; a
-    linha sem origem (a consolidação às vezes a perde) vale pelo job — sem CAD
-    legível no envio, não há de onde ter vindo um layer.
-    """
-    o = str(origem or "").strip().lower()
-    if o == "vision_pdf":
-        return True
-    if o:
-        return False              # dxf_geom, deriv_pd, revisao_cliente: outra fonte
-    return not tem_cad
-
-
-def corrigir_comprimento_medido(desc, unit, quantity, obs, origem="", tem_cad=True):
+def corrigir_comprimento_medido(desc, unit, quantity, obs, texto_de_pdf=False):
     """Devolve dict de correções ({} = não mexer) pro item cuja observação traz
     um 'comprimento total = N m'. Ver o bloco de comentário acima.
+
+    `texto_de_pdf`: o texto da observação foi escrito lendo PDF? Quem responde
+    é `models.texto_veio_da_leitura_de_pdf(origem, tem_cad)`, e quem chama
+    passa a resposta. 🪤 22/09 (revisão): a 1ª versão recebia a origem e a
+    comparava aqui com "vision_pdf" — uma 5ª cópia, escrita à mão, da pergunta
+    que `models` responde (o guarda de cópias reprovou a bancada). Este
+    módulo é só stdlib e não importa `models`; por isso recebe o veredito.
 
     🩸 22/09/2026 — job f8d8e6d8 (só PDF): a fôrma de vigas veio da IA com
     24,3 m², a honestidade de área zerou, e ESTA regra "recuperou" 32,40 m — a
@@ -939,9 +930,10 @@ def corrigir_comprimento_medido(desc, unit, quantity, obs, origem="", tem_cad=Tr
     escala adivinhada por votação e que a honestidade tinha zerado. Em CAD são
     19 linhas em 7 jobs, e lá o layer existe: o CAD fica como estava.
     🔑 Em texto lido de PDF a regra não recupera número nenhum (quem decide o
-    número de PDF é a honestidade de área, que já passou) e não troca unidade
-    de área por comprimento. `origem`/`tem_cad` têm default que mantém a regra
-    antiga pra quem chama sem eles.
+    número de PDF é a honestidade de área, que já passou) — nem em m² nem em
+    metro: o montante de 69,1 m ESTAVA em `ml` — e não troca unidade de área
+    ou volume por comprimento. `texto_de_pdf` tem default que mantém a regra
+    antiga pra quem chama sem ele.
     """
     medida = medida_de_comprimento_na_observacao(obs)
     if medida is None:
@@ -956,7 +948,7 @@ def corrigir_comprimento_medido(desc, unit, quantity, obs, origem="", tem_cad=Tr
         q = 0.0
 
     n = _num_br(medida)
-    do_pdf = texto_veio_da_leitura_de_pdf(origem, tem_cad)
+    do_pdf = bool(texto_de_pdf)
 
     # 1) mediu e entregou ZERO — vem primeiro, e vale mesmo com a unidade certa.
     # 🪤 Este caso passou batido na 1ª versão: eu saía cedo quando a unidade já

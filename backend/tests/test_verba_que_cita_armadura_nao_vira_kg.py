@@ -20,6 +20,7 @@ import ast
 import io
 import os
 import sys
+import types
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -93,6 +94,40 @@ def test_o_process_job_usa_o_laco_da_funcao_so_em_estrutura():
               if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
               and n.func.id == "_should_force_steel_kg"]
     assert not soltas, "o forçador voltou solto no process_job: linhas %s" % soltas
+
+
+def _roda_o_bloco_de_estrutura(itens, is_structural):
+    """Recorta e EXECUTA o `if is_structural:` real do `process_job`.
+
+    🪤 22/09 (revisão, mutante R07): o guarda de cima vê que a chamada existe,
+    não o que ela recebe — `_forca_aco_em_kg([])` passava verde."""
+    from _corpo import bloco_desde, fonte
+    src = fonte("main.py")
+    i = src.index("_fixed_kg = _forca_aco_em_kg(")
+    # do COMEÇO da linha: `bloco_desde` mede o fim pela indentação dela
+    k = src.rindex(chr(10), 0, src.rindex("if is_structural:", 0, i)) + 1
+    codigo = bloco_desde("if is_structural:", src=src[k:])
+    assert "_fixed_kg = _forca_aco_em_kg(" in codigo, codigo[:300]
+    ns = {"is_structural": is_structural, "all_items": itens,
+          "_forca_aco_em_kg": main._forca_aco_em_kg,
+          "_is_likely_wrong_type": main._is_likely_wrong_type,
+          "project_data": types.SimpleNamespace(warnings=[])}
+    exec(compile(codigo, "bloco-de-estrutura", "exec"), ns)
+    return ns
+
+
+def test_o_bloco_de_estrutura_EXECUTADO_troca_o_aco_e_deixa_a_verba():
+    verba = _It(_VERBA, "vb", 1)
+    aco = _It("Armadura em aço CA-50 — lajes", "m²", 37)
+    ns = _roda_o_bloco_de_estrutura([verba, aco], is_structural=True)
+    assert ns["_fixed_kg"] == 1, ns["_fixed_kg"]
+    assert (verba.unit, aco.unit, aco.quantity) == ("vb", "kg", 37)
+
+
+def test_CONTROLE_fora_de_estrutura_o_bloco_nao_mexe():
+    aco = _It("Armadura em aço CA-50 — lajes", "m²", 37)
+    ns = _roda_o_bloco_de_estrutura([aco], is_structural=False)
+    assert "_fixed_kg" not in ns and aco.unit == "m²", aco.unit
 
 
 def test_o_eval_de_invariantes_nao_acusa_a_verba():

@@ -11935,6 +11935,8 @@ def rebaixar_itens_sem_identidade(all_items):
 #  PROCEDÊNCIA: "medido do desenho" só onde a geometria mediu
 # ══════════════════════════════════════════════════════════════════════════
 import re as _re_procedencia   # 🪤 `re` não está importado no topo deste módulo (só aliases)
+# "este texto veio de PDF?" tem resposta única, ao lado de `e_medido` (22/09)
+from models import texto_veio_da_leitura_de_pdf as _texto_veio_da_leitura_de_pdf
 
 #: O que a medição geométrica do PDF produz: m² de ambiente e m de parede.
 #: Linha nessas unidades é da honestidade de área (`_apply_area_honesty`), que
@@ -11944,16 +11946,30 @@ _UNIDADES_QUE_A_GEOMETRIA_DO_PDF_MEDE = frozenset(
 
 #: O molde que o prompt da medição pede (ver `_regra_da_medicao_sem_prova`),
 #: com o conector que a IA põe antes (" — ", ", ") e o ponto final. A âncora é
-#: "com escala" e a negação fica de fora: "não medido do desenho" é verdade.
+#: "com escala" e a negação fica de fora: "não medido do desenho", "não é
+#: medido…" e "não foi medido…" são verdade.
+#: 🪤 Lookbehind do `re` só aceita largura FIXA — um por forma de negação.
+#: 🔑 22/09 (revisão): a frase curta, sem "confira", para no "." OU no ";" —
+#: só não para num "." ou ";" seguido do próprio "confira a escala", que é
+#: o molde quebrado em dois e sai inteiro.
 _RX_MEDIDO_DO_DESENHO_DA_IA = _re_procedencia.compile(
     r"(?P<con>\s*[—–,;-]\s*|\s*)"
-    r"(?<!n[ãa]o )medido do desenho com escala[^|]*?"
-    r"(?:confira a escala do seu pdf|(?=\.(?:\s|$)|\||$))"
-    r"(?P<ponto>\.)?",
+    r"(?<!n[ãa]o )(?<!n[ãa]o [ée] )(?<!n[ãa]o foi )"
+    r"medido do desenho com escala[^|]*?"
+    r"(?:confira a escala do seu pdf"
+    r"|(?=[.;](?!\s*confira a escala)(?:\s|$)|\||$))"
+    r"(?P<ponto>[.;])?",
     _re_procedencia.IGNORECASE)
 
-#: Quando a frase era a observação inteira, a linha não pode ficar sem dizer
-#: de onde veio o número.
+#: A frase ENTRE PARÊNTESES sai com os parênteses — senão sobra "Contagem ()."
+#: ou, sem o "confira", um "(" aberto. Aceita um nível de parêntese dentro:
+#: "(por votação)" é parte de uma das fontes (`_FONTE_DA_ESCALA["cotas"]`).
+_RX_MEDIDO_DO_DESENHO_ENTRE_PARENTESES = _re_procedencia.compile(
+    r"\s*\(\s*medido do desenho com escala(?:[^()|]|\([^()|]*\))*\)",
+    _re_procedencia.IGNORECASE)
+
+#: Quando a frase era tudo o que a IA disse da linha, a linha não pode ficar
+#: sem dizer de onde veio o número.
 _FRASE_NUMERO_DA_LEITURA = ("Número da leitura do PDF pela IA — não é medição "
                             "geométrica. Confira antes de orçar.")
 
@@ -11991,16 +12007,33 @@ def _sem_medido_do_desenho(obs: str) -> str:
     Sai só a ORAÇÃO, não a sentença: "… na prancha — medido do desenho com
     escala 1:75 lida do carimbo — confira a escala do seu PDF. Incluir …" perde
     o trecho do meio e guarda o ponto da frase de fora.
+
+    🪤 22/09 (revisão): o 1º segmento é o que a IA disse da linha; as notas
+    depois do "|" são do motor (fusão, pranchas). Quando o 1º fica sem letra
+    nenhuma — era só a frase, ou sobrou o "." de um travessão —, ele vira
+    `_FRASE_NUMERO_DA_LEITURA`: sem isso "Medido do desenho … | Fundido de 2
+    entradas" saía só com a nota da fusão, sem dizer de onde veio o número.
     """
     def _troca(m):
         if _re_procedencia.search(r"[—–,;-]", m.group("con")):
             return m.group("ponto") or ""
         return ""
-    novo = _RX_MEDIDO_DO_DESENHO_DA_IA.sub(_troca, str(obs or ""))
-    if novo == str(obs or ""):
-        return novo
-    segs = [" ".join(s.split()) for s in novo.split("|")]
-    return " | ".join(s for s in segs if s)
+    orig = str(obs or "")
+    segs, mudou = [], False
+    for n, seg in enumerate(orig.split("|")):
+        novo = _RX_MEDIDO_DO_DESENHO_ENTRE_PARENTESES.sub("", seg)
+        novo = _RX_MEDIDO_DO_DESENHO_DA_IA.sub(_troca, novo)
+        if novo != seg:
+            mudou = True
+            if not any(c.isalnum() for c in novo):
+                if n > 0:
+                    continue              # nota que era só a frase: sai inteira
+                novo = _FRASE_NUMERO_DA_LEITURA
+        segs.append(novo)
+    if not mudou:
+        return orig
+    segs = [" ".join(s.split()) for s in segs]
+    return " | ".join(s for s in segs if s) or _FRASE_NUMERO_DA_LEITURA
 
 
 def _tira_medido_do_desenho_de_quem_nao_foi_medido(all_items) -> int:
@@ -12035,7 +12068,7 @@ def _tira_medido_do_desenho_de_quem_nao_foi_medido(all_items) -> int:
         _novo = _sem_medido_do_desenho(_ob)
         if _novo == _ob:
             continue
-        _it.observations = _novo or _FRASE_NUMERO_DA_LEITURA
+        _it.observations = _novo
         limpos += 1
     return limpos
 
@@ -17047,7 +17080,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
             for _it in all_items:
                 _fix = _corrigir_comprimento_medido(
                     _it.description, _it.unit, _it.quantity, _it.observations,
-                    origem=getattr(_it, "origem", ""), tem_cad=_tem_cad_compr)
+                    texto_de_pdf=_texto_veio_da_leitura_de_pdf(
+                        getattr(_it, "origem", ""), _tem_cad_compr))
                 if not _fix:
                     continue
                 if "quantity" in _fix and _cita.get(round(_fix["quantity"], 2), 0) > 1:
