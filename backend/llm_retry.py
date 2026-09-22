@@ -257,6 +257,71 @@ def _scrub_payload(kwargs: dict) -> dict:
 # versões novas onde caching já é GA.
 _PROMPT_CACHE_BETA = "prompt-caching-2024-07-31"
 
+# -- Minimo do prefixo cacheavel, por modelo --------------------------------
+# 🚨 22/09/2026 — job 1d0751b8: o `sinapi_pick` queimou 1,58 MILHAO de tokens de
+# entrada em 44 chamadas (US$ 1,62 dos US$ 4,10 do job) com cache_marcado=false,
+# e a pergunta obvia foi "entao liga o cache aqui". Medido ANTES de escrever: o
+# UNICO trecho que pode virar PREFIXO cacheavel e o preambulo de instrucoes do
+# `_PICK_PROMPT`, 1.141 chars (~450 tokens) — **1,2%** de uma chamada de 37.324
+# tokens. Os outros 98,8% sao os 60 candidatos SINAPI de cada um dos 12 itens
+# do lote, texto novo em toda chamada. (A cauda do template tambem e fixa, mas
+# vem DEPOIS dos itens: cache e casamento de PREFIXO, entao ela nao conta.)
+# E 450 tokens NAO CACHEIAM no Haiku 4.5: o minimo do prefixo la e 4.096.
+#
+# 🪤 O jeito como a API falha aqui e o pior possivel: prefixo abaixo do minimo e
+# IGNORADO EM SILENCIO — sem erro, sem cobranca extra, `cache_creation` = 0. A
+# nossa telemetria, porem, gravaria `cache_marcado=true`, e a conta de custo
+# passaria a dizer "cache ligado, 0% de leitura" — indistinguivel de "a
+# Anthropic esta com hit rate ruim", que e EXATAMENTE a investigacao de 24/08
+# narrada no docstring de `_registrar_uso`. Um conserto que nao conserta e
+# ainda apaga o sintoma que faria alguem procurar o conserto de verdade.
+#
+# Minimos da doc oficial (jul/2026). Nao e monotonico entre geracoes: 512 nos
+# mais novos, 4.096 no Opus 4.6/4.5 e no Haiku 4.5.
+_MIN_PREFIXO_CACHE_TOK: dict[str, int] = {
+    "claude-opus-5": 512,
+    "claude-opus-4-8": 1024,
+    "claude-sonnet-5": 1024,
+    "claude-sonnet-4-6": 1024,
+    "claude-sonnet-4-5": 1024,
+    "claude-opus-4-7": 2048,
+    "claude-haiku-3-5": 2048,
+    "claude-opus-4-6": 4096,
+    "claude-opus-4-5": 4096,
+    "claude-haiku-4-5": 4096,
+}
+# 🔑 Modelo fora da tabela assume o MENOR minimo conhecido, nao o maior. O erro
+# para esse lado e mudo e de graca (marcar um prefixo que a API ignora nao custa
+# nada); para o outro lado seria dinheiro real — deixar de marcar um prefixo que
+# cachearia. Por isso esta funcao NUNCA decide nao marcar: ela so sabe avisar.
+_MIN_PREFIXO_CACHE_PADRAO = 512
+
+# Chars por token no cenario mais OTIMISTA pro prefixo. Medido 22/09 no proprio
+# sinapi_pick: 95.313 chars de prompt viraram 37.324 tokens = 2,55 chars/token
+# (texto tecnico em CAIXA ALTA tokeniza mal). Usar 2,0 garante que so chamamos
+# de "curto demais" o prefixo que e curto demais com folga.
+_CHARS_POR_TOKEN_OTIMISTA = 2.0
+
+
+def prefixo_cacheia(modelo, prefixo: str) -> bool:
+    """O prefixo tem TAMANHO pra virar entrada de cache NESTE modelo?
+
+    Estimativa por caracteres, de proposito enviesada pro "sim": contar token de
+    verdade custaria uma chamada de API por decisao de custo. Responde False so
+    quando nem no melhor cenario o prefixo alcanca o minimo do modelo.
+    """
+    if not prefixo:
+        return False
+    base = (modelo or "").strip()
+    minimo = None
+    for _m, _v in _MIN_PREFIXO_CACHE_TOK.items():
+        if base == _m or base.startswith(_m + "-"):
+            minimo = _v
+            break
+    if minimo is None:
+        minimo = _MIN_PREFIXO_CACHE_PADRAO
+    return (len(prefixo) / _CHARS_POR_TOKEN_OTIMISTA) >= minimo
+
 
 def _apply_system_cache(kwargs: dict) -> dict:
     """Torna o system prompt cacheável. Idempotente e seguro:
@@ -292,6 +357,17 @@ def _apply_system_cache(kwargs: dict) -> dict:
     else:
         hdrs["anthropic-beta"] = _PROMPT_CACHE_BETA
     kwargs["extra_headers"] = hdrs
+    # 🚨 Marcador que a API vai IGNORAR nao devolve erro nenhum: ele some, e o
+    # `cache_marcado=true` da telemetria vira afirmacao sem lastro. Avisar aqui
+    # e o que separa "o cache esta ligado e rendendo pouco" de "o cache nunca
+    # chegou a existir". Fica MUDO no caso normal: em 22/09/2026 nenhum call
+    # site de producao cai neste ramo (prancha ~4,4k tok e dxf cacheiam).
+    _pref = "".join(b.get("text") or "" for b in kwargs["system"]
+                    if isinstance(b, dict))
+    if _pref and not prefixo_cacheia(kwargs.get("model"), _pref):
+        print("[llm_cache] prefixo de %d chars NAO alcanca o minimo cacheavel "
+              "de %s: a API vai IGNORAR o marcador e o cache_read fica em 0"
+              % (len(_pref), kwargs.get("model") or "?"))
     return kwargs
 
 
