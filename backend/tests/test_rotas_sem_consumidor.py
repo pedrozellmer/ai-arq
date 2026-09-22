@@ -32,6 +32,10 @@ _IGNORA = ("/api/admin/", "/api/debug/", "/api/instagram/", "/api/whatsapp/",
            # cron existe — e o de token NÃO existe (`cron.job` não tem job de
            # token; medido em 08/09). Quem prova isso é uma consulta ao banco.
            "/api/token/tick",
+           # 21/09/2026 — avisos de cadastro pro Pedro, pg_cron de 5 em 5 min
+           # (`cadastro-alerta-tick`, criado por SQL no deploy — conferir em
+           # `cron.job`, pelo mesmo motivo do token acima).
+           "/api/cadastro/alerta/tick",
            "/api/public/", "/api/contact", "/api/nps")
 
 # 📉 TETO: 7 rotas sem consumidor, MEDIDAS por este detector em 31/08/2026.

@@ -19441,6 +19441,268 @@ def _require_tick_secret(request):
         raise HTTPException(401, "Tick não autorizado")
 
 
+# ── Avisos de cadastro pro Pedro, NA HORA ──────────────────────────────────
+# 🩸 21/09/2026 — Pedro: "quando um cliente faz um cadastro incompleto, eu estou
+# recebendo esse e-mail muito tempo depois, uma hora e meia, duas horas". Medido
+# nas 121 contas dos 60 dias anteriores: quem COMPLETA é avisado em ~1 min (o
+# aviso sai quando a pessoa abre o painel); quem PARA dependia do tick de
+# e-mails — que roda de hora em hora e SÓ das 8h às 20h de Brasília — e ainda
+# esperava a conta fazer 30 min. Mediana de 71 min para os 22 que pararam;
+# cadastro feito à noite só era avisado às 8h do dia seguinte (até 10 h
+# depois). E não existia o 2º aviso: 2 contas pararam, completaram dias
+# depois, e o Pedro nunca soube.
+#
+# 🔑 Esta rotina tem dono próprio — pg_cron de 5 em 5 min, 24 h por dia — e o
+# tick horário não cuida mais disso. Dois donos disputando o mesmo aviso é
+# aviso duplicado (29/07 e 04/08: "alerta duplicado é alerta em que não se
+# confia mais").
+#
+# Três marcas no email_auto_log (email = NOTIFY_EMAIL, ref = e-mail da conta):
+#   alerta_novo_cadastro       o Pedro já sabe que a conta existe — o MESMO
+#                              kind/ref do aviso do painel: quem chegar
+#                              primeiro cala o outro;
+#   alerta_cadastro_parou      o 1º aviso disse "parou antes de completar";
+#   alerta_cadastro_completou  o aviso de que completou DEPOIS já saiu.
+# ⏭️ As contas que pararam ANTES deste conserto ganharam a marca `parou` por
+# SQL no deploy — sem ela, quem completasse depois continuaria sem 2º aviso.
+
+#: Minutos de conta SEM perfil antes de dizer "parou". Medido em 21/09/2026:
+#: das 99 contas que completaram em 60 dias, metade levou até 0,9 min e 90%
+#: até 2,5 min; 7 levaram mais de 5 — essas recebem "parou" e, depois,
+#: "completou", que é o que o Pedro pediu.
+_CADASTRO_MIN_ANTES_DE_PAROU = 5
+#: Minutos de PERFIL antes de esta rotina anunciar um cadastro completo. O
+#: aviso do painel sai segundos depois de a pessoa completar; se esta rotina
+#: falasse na mesma hora, sairiam os dois — e de 5 em 5 min isso deixa de ser
+#: raro.
+_CADASTRO_MIN_DE_PERFIL_ANTES_DO_TICK = 3
+#: Conta mais velha que isto não recebe o 1º aviso: não ressuscita cadastro
+#: antigo depois de uma queda longa do cron.
+_CADASTRO_HORAS_DE_JANELA = 36
+
+_ALERTA_CADASTRO_TRAVA = threading.Lock()
+#: (kind, ref) que JÁ saíram neste processo. Segunda barreira: se a marca não
+#: gravar no banco, sem isto o mesmo aviso sairia de novo a cada 5 min.
+_ALERTA_CADASTRO_SAIU_AQUI: set = set()
+
+#: A falha de leitura já escrita no error_log. Uma linha por falha NOVA — não
+#: uma a cada 5 min (288 por dia numa queda longa) — e nunca zero: rodada que
+#: não lê não avisa ninguém, e a ausência de aviso se lê como "ninguém se
+#: cadastrou" (a armadilha de 08/09 no `_perfil_existe_agora`).
+_ALERTA_CADASTRO_FALHA_REGISTRADA = {"detalhe": None}
+
+_KINDS_DO_ALERTA_DE_CADASTRO = ("alerta_novo_cadastro", "alerta_cadastro_parou",
+                                "alerta_cadastro_completou")
+
+
+def _marcar_alerta_de_cadastro(kind: str, ref: str, uid: str = "") -> bool:
+    """Grava a marca. `ignore-duplicates`: se o aviso do painel gravou antes,
+    não é falha. Falhou de verdade → rastro (sem o e-mail: vai o id da conta)."""
+    st, _ = _supa_rest_service(
+        "POST", "/email_auto_log?on_conflict=email,kind,ref",
+        body={"email": NOTIFY_EMAIL, "kind": kind, "ref": ref},
+        prefer="resolution=ignore-duplicates,return=minimal", timeout=10)
+    if st in (200, 201, 204):
+        return True
+    _log_error("alerta-cadastro:marca-nao-gravou",
+               f"{kind} HTTP {st} (conta {uid or '?'}) — o aviso saiu e a marca "
+               f"não; só a memória do processo segura a repetição até o "
+               f"próximo reinício", severity="warning")
+    return False
+
+
+def _alertas_de_cadastro_ao_pedro(dry: bool = False) -> dict:
+    """Avisa o Pedro de conta nova (completa ou parada no meio) e de quem
+    completou DEPOIS de ter parado. dry=True só conta: não manda nem grava.
+
+    Uma rodada por vez (a trava): o servidor tem 1 processo, e uma rodada
+    lenta encavalando na seguinte mandaria o mesmo aviso duas vezes."""
+    if not _ALERTA_CADASTRO_TRAVA.acquire(blocking=False):
+        return {"status": "ocupado"}
+    try:
+        r = _alertas_de_cadastro_rodada(dry)
+    finally:
+        _ALERTA_CADASTRO_TRAVA.release()
+    if r.get("status") == "erro":
+        if r.get("detail") != _ALERTA_CADASTRO_FALHA_REGISTRADA["detalhe"]:
+            _ALERTA_CADASTRO_FALHA_REGISTRADA["detalhe"] = r.get("detail")
+            _log_error("alerta-cadastro:rodada-sem-leitura",
+                       f"{r.get('detail')} — nenhum aviso de cadastro sai até a "
+                       f"leitura voltar", severity="warning")
+    elif r.get("status") == "ok":
+        _ALERTA_CADASTRO_FALHA_REGISTRADA["detalhe"] = None
+    return r
+
+
+def _alertas_de_cadastro_rodada(dry: bool) -> dict:
+    from datetime import datetime as _dt, timezone as _tz, timedelta as _td
+    import html as _ha
+
+    def _parse(ts):
+        try:
+            d = _dt.fromisoformat(str(ts).replace("Z", "+00:00"))
+            return d if d.tzinfo else d.replace(tzinfo=_tz.utc)
+        except Exception:
+            return None
+
+    def _quando(d):
+        # mesma regra do `_agora_br_fn`: Brasília = UTC-3, sem horário de verão
+        return (d.astimezone(_tz.utc) - _td(hours=3)).strftime("%d/%m às %H:%M")
+
+    agora = _dt.now(_tz.utc)
+    users = _auth_admin_list_users()
+    if not users:
+        # Nunca é vazia de verdade (são mais de 150 contas): vazia = a leitura
+        # caiu. Sem a lista não há o que decidir — e não se chuta.
+        print("[alerta-cadastro] a lista de contas veio vazia — nada decidido nesta rodada")
+        return {"status": "erro", "detail": "lista de contas vazia"}
+
+    # Sem os perfis, todo mundo pareceria "parou no meio"; sem as marcas, todo
+    # mundo pareceria "nunca avisado". Nos dois casos, na dúvida, CALA.
+    _stp, _perfis = _supa_rest_tudo(
+        "profiles", params={"select": "user_id,email,full_name,created_at"},
+        ordem="user_id.asc", timeout=15)
+    if _stp != 200:
+        return {"status": "erro", "detail": "não consegui ler os perfis"}
+    _stm, _linhas = _supa_rest_tudo(
+        "email_auto_log",
+        params={"select": "kind,ref", "email": f"eq.{NOTIFY_EMAIL}",
+                "kind": "in.(%s)" % ",".join(_KINDS_DO_ALERTA_DE_CADASTRO)},
+        timeout=15)
+    if _stm != 200:
+        return {"status": "erro", "detail": "não consegui ler os avisos já enviados"}
+
+    perfil_por_uid, perfil_por_email = {}, {}
+    for p in _perfis:
+        if p.get("user_id"):
+            perfil_por_uid[str(p["user_id"])] = p
+        if p.get("email"):
+            perfil_por_email[str(p["email"]).strip().lower()] = p
+    marcas = {k: set() for k in _KINDS_DO_ALERTA_DE_CADASTRO}
+    for m in _linhas:
+        r = str(m.get("ref") or "").strip().lower()
+        if m.get("kind") in marcas and r:
+            marcas[m["kind"]].add(r)
+    # 🩸 revisão de 21/09: marca que falhou UMA vez (um soluço do banco logo
+    # depois do SMTP) nunca era regravada — a memória calava a repetição até o
+    # próximo reinício, e aí o aviso repetia ou o "Completou" se perdia pra
+    # sempre (a frase "chega outro aviso" viraria mentira). Agora a memória é
+    # FILA: o que saiu e não está no banco é regravado aqui, rodada a rodada.
+    for k, r in sorted(_ALERTA_CADASTRO_SAIU_AQUI):
+        if not dry and r not in marcas[k]:
+            _marcar_alerta_de_cadastro(k, r)
+        marcas[k].add(r)
+
+    contas = {}
+    for u in users:
+        e = str(u.get("email") or "").strip().lower()
+        if e and not _email_eh_interno(e):
+            contas[e] = u
+
+    def _perfil_de(e, u):
+        return perfil_por_uid.get(str(u.get("id") or "")) or perfil_por_email.get(e)
+
+    def _nome(u, p):
+        md = u.get("user_metadata") or {}
+        return str((p or {}).get("full_name") or md.get("full_name")
+                   or md.get("name") or "").strip()
+
+    # 1) quem tinha parado e completou depois
+    completaram = []
+    for e in sorted(marcas["alerta_cadastro_parou"] - marcas["alerta_cadastro_completou"]):
+        u = contas.get(e)
+        p = _perfil_de(e, u) if u is not None else None
+        if p is not None:
+            completaram.append((e, u, p))
+    # 2) conta nova que o Pedro ainda não conhece
+    novos = []
+    for e, u in contas.items():
+        if e in marcas["alerta_novo_cadastro"]:
+            continue
+        c = _parse(u.get("created_at"))
+        if c is None:
+            continue
+        idade_min = (agora - c).total_seconds() / 60.0
+        if idade_min <= _CADASTRO_HORAS_DE_JANELA * 60:
+            novos.append((e, u, idade_min))
+
+    if dry:
+        # Sem e-mail nem nome no retorno: a rota é de cron, não de painel.
+        return {"status": "dry", "completaram_depois": len(completaram),
+                "contas_novas_sem_aviso": len(novos)}
+
+    saiu = {"completou_depois": 0, "cadastro_novo": 0, "cadastro_incompleto": 0}
+    _link = '<br><a href="https://ai.arq.br/admin.html#usuarios">Abrir no painel</a>'
+
+    for e, u, p in completaram:
+        uid = str(u.get("id") or "")
+        c = _parse(u.get("created_at"))
+        corpo = (f"<b>{_ha.escape(_nome(u, p)) or '(sem nome)'}</b> completou o cadastro.<br>"
+                 f"E-mail: {_ha.escape(e)}<br>"
+                 f"Situação: ✅ <b>completou</b> — antes você tinha recebido o aviso "
+                 f"de que parou no meio"
+                 + (f" (conta criada em {_quando(c)})" if c else "") + ".<br>" + _link)
+        if _notify_admin(f"Completou o cadastro — {e}", corpo):
+            _ALERTA_CADASTRO_SAIU_AQUI.add(("alerta_cadastro_completou", e))
+            _marcar_alerta_de_cadastro("alerta_cadastro_completou", e, uid)
+            saiu["completou_depois"] += 1
+        else:
+            # não marca: tenta de novo na próxima rodada em vez de perder o aviso
+            print(f"[alerta-cadastro] aviso de 'completou' NÃO entregue (conta {uid})")
+
+    for e, u, idade_min in novos:
+        uid = str(u.get("id") or "")
+        p = _perfil_de(e, u)
+        if p is None:
+            if idade_min < _CADASTRO_MIN_ANTES_DE_PAROU:
+                continue    # ainda pode estar preenchendo
+            # 🚨 o retrato de perfis é do início da rodada; confere AGORA
+            agora_tem = _perfil_existe_agora(e, uid)
+            if agora_tem is None:
+                continue    # não deu pra saber: a marca é vitalícia, chutar é errar pra sempre
+            if agora_tem:
+                continue    # completou nestes segundos: o aviso do painel está saindo
+            tem = False
+        else:
+            pc = _parse(p.get("created_at"))
+            if pc is not None and (agora - pc).total_seconds() / 60.0 < _CADASTRO_MIN_DE_PERFIL_ANTES_DO_TICK:
+                continue    # o aviso do painel sai nestes minutos
+            tem = True
+        nome = _ha.escape(_nome(u, p)) or "(ainda sem nome)"
+        if tem:
+            assunto = f"Cadastro novo — {e}"
+            sit = "✅ completou o cadastro"
+        else:
+            assunto = f"Cadastro incompleto — {e}"
+            # o código sabe que FALTA o perfil N min depois — não que a pessoa
+            # desistiu (regra nº1: não afirmar o que não se sabe)
+            sit = (f"⚠️ <b>ainda não completou o cadastro</b> (conta criada há "
+                   f"{int(idade_min)} min)<br>Se completar, chega outro aviso.")
+        corpo = (f"<b>{nome}</b> criou uma conta.<br>E-mail: {_ha.escape(e)}<br>"
+                 f"Situação: {sit}<br>" + _link)
+        if _notify_admin(assunto, corpo):
+            _ALERTA_CADASTRO_SAIU_AQUI.add(("alerta_novo_cadastro", e))
+            _marcar_alerta_de_cadastro("alerta_novo_cadastro", e, uid)
+            if not tem:
+                _ALERTA_CADASTRO_SAIU_AQUI.add(("alerta_cadastro_parou", e))
+                _marcar_alerta_de_cadastro("alerta_cadastro_parou", e, uid)
+            saiu["cadastro_novo" if tem else "cadastro_incompleto"] += 1
+        else:
+            print(f"[alerta-cadastro] aviso de cadastro NÃO entregue (conta {uid})")
+
+    return {"status": "ok", **saiu}
+
+
+@app.post("/api/cadastro/alerta/tick")
+def cadastro_alerta_tick(request: Request, dry: int = 0):
+    """pg_cron de 5 em 5 min, 24 h: avisos de cadastro pro Pedro.
+    `def` e não `async def`: o corpo é todo bloqueante (ver o 28/08 abaixo)."""
+    _require_tick_secret(request)
+    if os.environ.get("EMAILS_AUTO", "1") == "0":
+        return {"status": "off"}
+    return _alertas_de_cadastro_ao_pedro(dry=bool(dry))
+
+
 # 🚨 28/08/2026 — ESTA ROTA CONGELAVA O SERVIDOR INTEIRO, DE HORA EM HORA.
 # Medido no log do Render de hoje (o `/health` bate de 5 em 5 segundos):
 #     14:59:56  /health 200
@@ -19782,70 +20044,20 @@ def emails_auto_tick(request: Request, dry: int = 0):
     acoes = [a for a in acoes if not _email_auto_ja_enviado(a["email"], a["kind"], ref=a.get("ref", ""))]
     acoes = [a for a in acoes if not _email_auto_recente(a["email"], dias=7)][:5]
 
-    # ── Alerta INTERNO pro Pedro: chegou gente nova ────────────────────────
-    # 28/07/2026: chega por e-mail em até 1h, dizendo se a pessoa completou o
-    # cadastro ou parou no meio.
-    # ⚠️ CORREÇÃO 29/07: o comentário aqui dizia que não existia alerta de cadastro
-    # nenhum. Existia — o "Novo cliente cadastrado", disparado quando a pessoa abre
-    # o painel. Resultado: 2 e-mails pela mesma pessoa (caso cliente-30). Os dois ficam,
-    # porque se completam — o imediato só dispara pra quem ABRE o painel, este pega
-    # quem criou conta e sumiu. Agora aquele registra o mesmo kind/ref aqui embaixo,
-    # então quem chegar primeiro cala o outro.
-    # Dedup por e-mail → 1 alerta por pessoa, na vida. NÃO entra no cooldown dos
-    # automáticos do usuário (aquilo protege a caixa do cliente; isto é interno).
-    novos = []
-    for _u2 in users:
-        _e2 = (_u2.get("email") or "").lower()
-        if not _e2 or _email_eh_interno(_e2):
-            continue
-        _c2 = _parse(_u2.get("created_at"))
-        if not _c2 or (now - _c2).total_seconds() / H > 36:
-            continue
-        if _email_auto_ja_enviado(NOTIFY_EMAIL, "alerta_novo_cadastro", ref=_e2):
-            continue
-        novos.append({
-            "email": _e2,
-            "uid": str(_u2.get("id") or ""),
-            "nome": ((_u2.get("user_metadata") or {}).get("full_name")
-                     or (_u2.get("user_metadata") or {}).get("name") or ""),
-            "tem_perfil": (str(_u2.get("id") or "") in ids_com_perfil) or (_e2 in emails_com_perfil),
-            # Minutos desde a criação da conta: não dá pra chamar de "parou"
-            # quem ainda pode estar digitando.
-            "idade_min": (now - _c2).total_seconds() / 60.0,
-        })
-
-    if not dry and novos:
-        import html as _ha
-        for _n in novos:
-            # 🚨 O retrato de perfis é do INÍCIO do tick, e este alerta sai 4 a
-            # 8 segundos depois de a pessoa completar — ou seja, o retrato está
-            # velho justamente pra quem acabou de completar. Confere agora.
-            _tem = _n["tem_perfil"]
-            if not _tem:
-                _agora = _perfil_existe_agora(_n["email"], _n.get("uid", ""))
-                if _agora is None:
-                    # Não deu pra saber: pula sem registrar dedup (a dedup é
-                    # vitalícia — errar aqui é errar pra sempre). Próximo tick.
-                    continue
-                _tem = _agora
-            # Sem perfil e conta recém-criada: não dá pra distinguir "desistiu"
-            # de "ainda preenchendo". Deixa o próximo tick julgar.
-            if not _tem and _n.get("idade_min", 999) < 30:
-                continue
-            _sit = ("✅ completou o cadastro" if _tem
-                    else "⚠️ <b>parou antes de completar o cadastro</b>")
-            _corpo = (
-                f"<b>{_ha.escape(_n['nome']) or '(ainda sem nome)'}</b> criou uma conta.<br>"
-                f"E-mail: {_ha.escape(_n['email'])}<br>"
-                f"Situação: {_sit}<br><br>"
-                f'<a href="https://ai.arq.br/admin.html#usuarios">Abrir no painel</a>'
-            )
-            if _notify_admin(f"Cadastro novo — {_n['email']}", _corpo):
-                _email_auto_registrar(NOTIFY_EMAIL, "alerta_novo_cadastro", ref=_n["email"])
-            else:
-                # Não registra: assim tenta de novo no próximo tick em vez de
-                # perder o aviso porque o SMTP piscou.
-                print(f"[emails-auto] alerta de cadastro novo NÃO entregue: {_n['email']}")
+    # ── Aviso de cadastro pro Pedro: o dono é o cron de 5 em 5 min ─────────
+    # 21/09/2026: saiu daqui para `_alertas_de_cadastro_ao_pedro` (pg_cron de
+    # 5 em 5 min, 24 h). Este tick roda de hora em hora e só das 8h às 20h — o
+    # aviso de cadastro incompleto chegava 1 a 10 h depois.
+    # 🔑 Ele chama a MESMA função como rede de segurança (revisão de 21/09): se
+    # o cron de 5 min sumir ou tomar 401, o aviso volta ao atraso antigo em vez
+    # de virar silêncio — e silêncio se lê como "ninguém parou no cadastro".
+    # Não é segundo dono: mesma trava (quem chega com a rodada em curso ouve
+    # "ocupado") e mesmas marcas (o que já saiu não sai de novo).
+    try:
+        _cad = _alertas_de_cadastro_ao_pedro(dry=bool(dry))
+    except Exception as _ecad:
+        _cad = {"status": "erro", "detail": type(_ecad).__name__}
+        _log_error("alerta-cadastro:rede-do-tick", str(_ecad)[:300], severity="warning")
 
     # ── Lembrete da newsletter no ÚLTIMO DIA ÚTIL do mês ───────────────────
     # Decisão do Pedro (28/07/2026, opção B): o sistema NÃO dispara newsletter
@@ -19902,8 +20114,8 @@ def emails_auto_tick(request: Request, dry: int = 0):
             "status": "dry",
             "total": len(acoes),
             "por_tipo": dict(_Counter(a["kind"] for a in acoes)),
-            "alertas_novo_cadastro": len(novos),
             "lembrete_newsletter": lembrete_news,
+            "alertas_cadastro": _cad,
         }
 
     enviados = []
@@ -19959,7 +20171,8 @@ def emails_auto_tick(request: Request, dry: int = 0):
             enviados.append(a)
     if enviados:
         print(f"[emails-auto] tick enviou {len(enviados)}: {[(a['kind'], a['email']) for a in enviados]}")
-    return {"status": "ok", "enviados": len(enviados), "detalhe": enviados}
+    return {"status": "ok", "enviados": len(enviados), "detalhe": enviados,
+            "alertas_cadastro": _cad}
 
 
 # ── NEWSLETTER MENSAL ──
