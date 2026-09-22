@@ -71,6 +71,8 @@ from engine_rules import (
     tipo_de_conflito_de_unidade as _tipo_conflito_unidade,
     quantidade_da_procedencia as _quantidade_da_procedencia,
     quantidade_medida_pelo_pdf as _quantidade_medida_pelo_pdf,
+    registros_da_leitura as _registros_da_leitura,
+    aviso_de_prancha_sem_item as _aviso_de_prancha_sem_item,
 )
 # calibrator.py foi desativado: o modelo de "fator absoluto" (real/ai) não
 # respeita o isolamento entre projetos. A calibração agora é 100% por
@@ -13328,6 +13330,11 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         # Robustez: array cru [...] vira {"items":[...]} (engine_rules,
                         # testado). Evita 'list object has no attribute get'.
                         result = _normalize_items_payload(result)
+                        # 🩸 22/09/2026 (job ee801b82): item aninhado que o
+                        # normalize subiu não passa calado neste laço também.
+                        for _st_leit, _msg_leit in _registros_da_leitura(
+                                result, _nome_prancha_bonito(dxf_path)):
+                            _log_error(_st_leit, _msg_leit, job_id, severity="warning")
 
                         # #7 leitura possivelmente INCOMPLETA (corte no teto via stop_reason
                         # OU JSON truncado): avisa — não entrega parcial calado (caso Ademir).
@@ -13789,6 +13796,9 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # "done" com planilha vazia e o usuário não sabia que houve falha.
         # Bug cliente-26 (2026-05-21): PDF processou em 17s, 0 itens, status done.
         sheet_errors: list[str] = []
+        # 🩸 22/09/2026 (job ee801b82): prancha lida SEM erro e SEM item não
+        # entrava em lugar nenhum — o aviso de cobertura só conhece erro.
+        _pranchas_sem_item: list[str] = []
 
         # Ordenar PDFs por prioridade (layout primeiro)
         priority = {"layout_novo": 0, "layout_atual": 1, "demolir": 2, "arquitetura": 3,
@@ -14450,6 +14460,14 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 print(f"[analyze-erro] {filename}: {err_msg}")
                 _log_error("pdf:analyze", f"{filename}: {err_msg}", job_id)
 
+            # 3c. 🩸 22/09/2026 (job ee801b82) — itens aninhados, releitura e
+            # prancha sem item deixam marca no resultado; aqui viram registro.
+            # Vale também pro resultado do checkpoint, que guarda as marcas.
+            for _st_leit, _msg_leit in _registros_da_leitura(result, _disp):
+                _log_error(_st_leit, _msg_leit, job_id, severity="warning")
+            if result.get("_sem_item"):
+                _pranchas_sem_item.append(_disp)
+
             # #7 leitura possivelmente INCOMPLETA nesta prancha (resposta da IA
             # cortada no teto). Avisa — não entrega parcial calado (caso Ademir).
             if result.get("_truncated"):
@@ -15090,6 +15108,13 @@ bloco — só cite os que estão no inventário deste arquivo."""
                           f"planilha — ela pode estar INCOMPLETA. {_saida} "
                           f"Faltaram: {_falhos[:280]}")
             project_data.warnings = (getattr(project_data, 'warnings', None) or []) + [_aviso_cob]
+
+        # 🩸 22/09/2026 (job ee801b82) — a prancha lida que não deu item fica
+        # FORA do aviso acima de propósito: ela não falhou, e aquele texto
+        # promete que reprocessar completa. Frase própria, sem essa promessa.
+        if _pranchas_sem_item:
+            project_data.warnings = (getattr(project_data, 'warnings', None) or []) + [
+                _aviso_de_prancha_sem_item(_pranchas_sem_item)]
 
         # Aviso de xref/estéril por-arquivo (independe de falha parcial): orienta o
         # usuário a incorporar o desenho externo, em vez de só ver tudo laranja.

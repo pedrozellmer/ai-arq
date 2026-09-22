@@ -83,12 +83,116 @@ def salvage_truncated_json(s):
 def normalize_items_payload(parsed):
     """A IA às vezes devolve um array cru [...] em vez de {"items":[...]} (mais comum
     no prompt estrutural). Embrulha pra o caller nunca fazer .get() num list — bug
-    'list object has no attribute get' que derrubou o job do cliente-88 (27/06)."""
+    'list object has no attribute get' que derrubou o job do cliente-88 (27/06).
+
+    🩸 22/09/2026 (job ee801b82) — E ÀS VEZES ELA ANINHA. A prancha do poço
+    de sucção voltou `{"project_data": {"kept_elements": [...], "items": [6]}}`
+    e os dois laços (PDF e DXF) só leem `result["items"]` no topo: os 6 itens,
+    785,7 kg de aço entre eles, sumiram sem uma linha de log. Quando o topo não
+    tem item, sobe a lista de UM nível abaixo e deixa a marca
+    `_items_aninhados` pra o main registrar — consertar calado esconderia que
+    o formato da IA variou. O resto do objeto (project_data) fica como veio."""
     if isinstance(parsed, list):
         return {"items": parsed}
     if not isinstance(parsed, dict):
         return {"items": []}
+    _topo = parsed.get("items")
+    if _topo:
+        return parsed
+    if _topo is not None and not isinstance(_topo, list):
+        # um "items" que não é lista nem nulo: fica como sempre ficou
+        return parsed
+    for _chave, _dentro in parsed.items():
+        if not isinstance(_dentro, dict):
+            continue
+        _lista = _dentro.get("items")
+        # 🪤 só lista com ao menos um OBJETO: lista de texto não é item, e o
+        # laço do main descartaria cada um no except, calado de novo.
+        if isinstance(_lista, list) and any(isinstance(x, dict) for x in _lista):
+            _out = dict(parsed)
+            _out["items"] = list(_lista)
+            _out["_items_aninhados"] = {"de": str(_chave), "n": len(_lista)}
+            return _out
     return parsed
+
+
+def motivo_da_prancha_sem_item(parsed):
+    """Por que a leitura (já parseada, ANTES do normalize) não trouxe item.
+
+    None quando há item (no topo ou um nível abaixo). "items-vazio" quando a IA
+    respondeu no formato pedido e disse que não há nada ("items": []). E
+    "sem-chave-items" quando ela respondeu OUTRA coisa — só project_data,
+    como a prancha de fundação do job ee801b82 (🩸 22/09/2026). As duas não
+    são a mesma coisa: a 1ª é uma resposta, a 2ª é uma pergunta não respondida."""
+    if (normalize_items_payload(parsed).get("items") or []):
+        return None
+    if isinstance(parsed, list):
+        return "items-vazio"
+    if isinstance(parsed, dict):
+        if "items" in parsed:
+            return "items-vazio"
+        if any(isinstance(v, dict) and "items" in v for v in parsed.values()):
+            return "items-vazio"
+    return "sem-chave-items"
+
+
+def registros_da_leitura(result, nome_prancha):
+    """(stage, mensagem) pro error_log a partir das marcas que o analyzer e o
+    normalize deixam no resultado da prancha.
+
+    🩸 22/09/2026 (job ee801b82) — duas pranchas de 7 sumiram sem registro
+    nenhum: uma com os itens aninhados, outra sem item e sem erro. O aviso de
+    cobertura só conhecia `result["error"]`. Uma função só, chamada pelos dois
+    laços do main, pra o log não depender de alguém lembrar de cada marca."""
+    out = []
+    if not isinstance(result, dict):
+        return out
+    nome = str(nome_prancha or "prancha").strip() or "prancha"
+    _an = result.get("_items_aninhados")
+    if isinstance(_an, dict):
+        out.append(("motor:items-aninhados",
+                    "%s: a IA pôs %s item(ns) dentro de '%s' em vez do topo — "
+                    "lidos de lá (antes eram descartados calados)"
+                    % (nome, _an.get("n"), _an.get("de"))))
+    _rl = result.get("_releitura")
+    if isinstance(_rl, dict):
+        _msg = ("%s: 1ª leitura sem item (%s); releitura corretiva deu %s item(ns)"
+                % (nome, _rl.get("motivo"), _rl.get("itens")))
+        if _rl.get("falhou"):
+            _msg += " — a releitura falhou: %s" % _rl.get("falhou")
+        out.append(("motor:prancha-releitura", _msg))
+    _si = result.get("_sem_item")
+    if isinstance(_si, dict):
+        out.append(("motor:prancha-sem-item",
+                    "%s: lida sem erro e sem nenhum item (motivo=%s, releu=%s) — "
+                    "entrou no aviso de cobertura"
+                    % (nome, _si.get("motivo"), bool(_si.get("releu")))))
+    return out
+
+
+def aviso_de_prancha_sem_item(nomes):
+    """A frase pro cliente quando prancha(s) foram lidas e não deram item.
+
+    🩸 22/09/2026 (job ee801b82): a prancha de fundação foi lida, não gerou
+    linha, e nenhum texto disse isso — o aviso de cobertura só contava erro.
+    🚫 Não promete que reprocessar resolve: ninguém mediu que resolve, e o
+    reprocesso gasto à toa é o erro que a casa já pagou (ver
+    `aviso_de_leitura_cortada`)."""
+    nomes = [str(n).strip() for n in (nomes or []) if str(n or "").strip()]
+    if not nomes:
+        return ""
+    _lista = ", ".join(nomes)
+    if len(_lista) > 280:
+        _lista = _lista[:277].rstrip(", ") + "…"
+    if len(nomes) == 1:
+        _cab = "ℹ 1 prancha foi lida e não gerou nenhum item nesta planilha"
+        _se = "Se ela tem desenho, quadro ou lista a quantificar, esses itens não estão aqui"
+    else:
+        _cab = ("ℹ %d pranchas foram lidas e não geraram nenhum item nesta planilha"
+                % len(nomes))
+        _se = ("Se alguma delas tem desenho, quadro ou lista a quantificar, esses "
+               "itens não estão aqui")
+    return "%s: %s. %s — confira antes de fechar o levantamento." % (_cab, _lista, _se)
 
 
 _ACO_PAT = _re.compile(r'armadura|estribo|ferragem|vergalh|\baço\b', _re.IGNORECASE)

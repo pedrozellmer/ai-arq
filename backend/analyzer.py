@@ -12,6 +12,7 @@ from engine_rules import (
     salvage_truncated_json as _salvage_truncated_json,
     extract_balanced_obj as _extract_balanced_obj,
     normalize_items_payload as _normalize_items_payload,
+    motivo_da_prancha_sem_item as _motivo_da_prancha_sem_item,
     response_truncated as _response_truncated,
 )
 
@@ -869,6 +870,46 @@ aparecerem. Se a legenda está ilegível, retorne items=[].
 Retorne JSON com items classificados na discipline correta."""
 
 
+# 🩸 22/09/2026 (job ee801b82) — A PRANCHA ESTRUTURAL NÃO TINHA PROMPT PRÓPRIO.
+# Em projeto marcado estrutura, o system já era o SYSTEM_PROMPT_ESTRUTURA
+# ("NÃO de arquitetura"), mas o prompt do usuário era o de ARQUITETURA inteiro
+# (alvenaria, pintura, portas, persianas) — ou o do tipo que a tela deixou
+# escolher, que só oferece tipos de arquitetura — mais "ESCRITÓRIO
+# CORPORATIVO". Ordens contraditórias, e deu nisso: uma prancha respondeu só
+# `kept_elements`, sem item; outra saiu com mobilização, limpeza e "projeto
+# executivo complementar" num poço de concreto. Este é o prompt da prancha em
+# projeto estrutural, coerente com o system.
+PROMPT_ESTRUTURA = """Analise DETALHADAMENTE estas imagens de uma prancha de PROJETO ESTRUTURAL de concreto armado (planta de fôrma, corte, armação, fundação, lista ou resumo de aço, quadro de quantitativos).
+
+⚠ ESTE É UM PROJETO ESTRUTURAL. Levante a ESTRUTURA que está nesta prancha, sempre com discipline="Estrutura":
+- CONCRETO → unidade "m³": um item por elemento ou conjunto (sapata, bloco, pilar, viga, laje, parede de poço/caixa/reservatório, laje de fundo, concreto de regularização), com a classe (fck) quando estiver escrita.
+- FÔRMA → unidade "m²": área em contato com o concreto, por elemento ou conjunto.
+- AÇO / ARMADURA / ESTRIBO / TELA → unidade "kg" (NUNCA m², m ou un), por bitola e categoria (CA-50, CA-60); tela soldada pelo peso.
+
+## DE ONDE VEM O NÚMERO (nesta ordem)
+1. QUADRO DE QUANTITATIVOS / RESUMO DE MATERIAIS impresso na prancha: copie TODAS as linhas de lá, com a unidade do quadro, e diga na observação que o valor veio do quadro. NÃO gere também uma linha de TOTAL ou SUBTOTAL que só repete a soma de linhas que você já listou.
+2. LISTA / RESUMO DE AÇO: o peso por bitola vem de lá. Se a coluna de peso estiver ilegível, calcule comprimento total × massa linear da bitola e marque "estimado".
+3. COTAS e ELEVAÇÕES explícitas: volume e fôrma calculados delas são "estimado", com a conta escrita na observação.
+
+## O QUE NÃO ENTRA
+- Nada que não esteja desenhado, cotado ou escrito NESTA prancha: nada de mobilização, canteiro, limpeza, administração local, projeto complementar ou proteção de áreas.
+- Nada de arquitetura: alvenaria, revestimento, pintura, piso, forro, esquadria, louça, mobiliário.
+- Aço por TAXA TÍPICA (kg/m³) não é leitura da prancha: sem lista de aço e sem comprimento legível, deixe o aço com quantity 0 e diga na observação o que falta.
+- Se o texto trouxer "MEDIÇÕES VETORIAIS" com ambientes e paredes, aquilo é medição pensada pra arquitetura: não converta esses m² em fôrma nem em volume de concreto.
+
+## CONFIANÇA
+"confirmado" só para o número copiado de quadro ou lista desta prancha. Todo o resto é "estimado". Não invente bitola, fck, espessura nem dimensão: sem o número escrito, quantity 0 e a observação diz o que falta.
+
+Responda com o raciocínio e DEPOIS um bloco ```json contendo um OBJETO {"items": [...], "project_data": {...}} — "items" no TOPO do objeto, nunca dentro de project_data. Cada item: item_num, description, unit, quantity, observations, ref_sheet (a vista ou o quadro de onde saiu), confidence, discipline="Estrutura". Se a prancha não tiver estrutura a quantificar, devolva "items": [] e explique em project_data.warnings."""
+
+
+# 🩸 22/09/2026 (job ee801b82) — a releitura de UMA vez, quando a prancha
+# responde sem "items" em lugar nenhum. O texto é diferente de propósito: o
+# payload muda, então o llm_cache não devolve a mesma resposta vazia. Não
+# pressiona a inventar — "items": [] com o porquê continua sendo resposta.
+RELEITURA_SEM_ITEMS = """⚠ RELEITURA DESTA PRANCHA. Numa leitura anterior desta mesma prancha, a resposta não trouxe o array "items" — só dados do projeto. O que precisamos é o LEVANTAMENTO: responda de novo, com o bloco ```json no formato {"items": [...], "project_data": {...}}, "items" no topo, um item por serviço DESENHADO, COTADO ou ESCRITO nesta prancha. As regras continuam as mesmas: não invente número, e o que for derivado é "estimado". Se a prancha realmente não tem nada a quantificar (capa, índice, lista de documentos), devolva "items": [] e diga o porquê em project_data.warnings."""
+
+
 PROMPTS_POR_TIPO = {
     SheetType.ARQUITETURA: PROMPT_ARQUITETURA,
     SheetType.FORRO: PROMPT_FORRO,
@@ -881,6 +922,7 @@ PROMPTS_POR_TIPO = {
     SheetType.LAYOUT_ATUAL: PROMPT_LAYOUT_ATUAL,
     SheetType.DET_FORRO: PROMPT_DET_FORRO,
     SheetType.DETALHE_AMBIENTE: PROMPT_DETALHE_AMBIENTE,
+    SheetType.ESTRUTURA: PROMPT_ESTRUTURA,
 }
 
 
@@ -1186,27 +1228,54 @@ Responda no MESMO formato pedido: o raciocínio e DEPOIS um bloco ```json conten
 # (fonte única; testados em tests/test_engine_rules.py). Importados no topo.
 
 
+def _json_da_resposta(text: str, stop_reason: str, filename: str):
+    """(objeto parseado, truncado?) do texto da IA. Levanta JSONDecodeError
+    quando nem o salvage acha item. Uma cópia só, pra leitura e releitura."""
+    if "```json" in text:
+        json_str = text.split("```json")[1].split("```")[0].strip()
+    elif "```" in text:
+        json_str = text.split("```")[1].split("```")[0].strip()
+    else:
+        json_str = text.strip()
+
+    # #7 sinal de 1ª classe: resposta cortada no teto (max_tokens) = leitura
+    # possivelmente INCOMPLETA, mesmo que o JSON ainda parseie ok.
+    _truncado = _response_truncated(stop_reason)
+    try:
+        _parsed = json.loads(json_str)
+    except json.JSONDecodeError:
+        # JSON truncado (resposta cortada no teto) — recupera os itens completos
+        _parsed = _salvage_truncated_json(json_str)
+        _truncado = True  # JSON quebrou = quase sempre corte no teto
+        if _parsed.get("items"):
+            print(f"PDF JSON truncado em {filename}; salvados {len(_parsed['items'])} itens")
+        else:
+            raise
+    return _parsed, _truncado
+
+
 def analyze_sheet(client: anthropic.Anthropic, sheet: SheetInfo,
                   typology: str = "office",
                   ambiente: str = "",
                   siblings: list = None,
                   is_structural: bool = False) -> dict:
-    base_prompt = PROMPTS_POR_TIPO.get(sheet.sheet_type, "Analise esta prancha de arquitetura e extraia todos os itens para orçamento. Retorne JSON com array 'items', cada item com: item_num, description, unit, quantity, observations, ref_sheet, confidence, discipline.")
     siblings = siblings or []
 
-    # Projeto ESTRUTURAL: o usuário marcou no upload. Reforça o contexto no
-    # prompt do usuário (o SYSTEM_PROMPT_ESTRUTURA já troca o papel global).
+    # Projeto ESTRUTURAL (o usuário marcou no upload): a prancha usa o prompt
+    # estrutural QUALQUER que seja o tipo dela. 🩸 22/09/2026 (job ee801b82):
+    # antes o preâmbulo estrutural era colado no prompt de arquitetura do tipo.
+    # 🔑 Vale pra todo tipo, não só pro desconhecido, porque o tipo aqui nunca é
+    # estrutural: a tela só oferece tipos de arquitetura, e nome de prancha de
+    # estrutura casa palavra de arquitetura ("laje do PISO", "FORRO"). No job
+    # do caso, a prancha que saiu com mobilização e limpeza foi lida como
+    # layout novo — a lista desses itens só existe no PROMPT_LAYOUT_NOVO.
     if is_structural:
-        base_prompt = (
-            "⚠ ESTE É UM PROJETO ESTRUTURAL (concreto armado). Gere quantitativo de "
-            "ESTRUTURA: concreto em m³, fôrma em m², aço/armadura/estribo em kg "
-            "(NUNCA m²/m/un), e discipline='Estrutura' em todos os itens. Use o "
-            "quadro/resumo de aço como fonte do peso (medido); o que você derivar por "
-            "fórmula/geometria é 'estimado'. Não invente bitola, fck ou dimensão.\n\n"
-            + base_prompt)
+        base_prompt = PROMPT_ESTRUTURA
+    else:
+        base_prompt = PROMPTS_POR_TIPO.get(sheet.sheet_type, "Analise esta prancha de arquitetura e extraia todos os itens para orçamento. Retorne JSON com array 'items', cada item com: item_num, description, unit, quantity, observations, ref_sheet, confidence, discipline.")
 
     # Se for DETALHE_AMBIENTE, injetar contexto do ambiente específico no placeholder
-    if sheet.sheet_type == SheetType.DETALHE_AMBIENTE:
+    if sheet.sheet_type == SheetType.DETALHE_AMBIENTE and not is_structural:
         base_prompt = base_prompt.replace(
             "{ambiente_context}", _ambiente_context(ambiente) or "")
 
@@ -1229,7 +1298,11 @@ def analyze_sheet(client: anthropic.Anthropic, sheet: SheetInfo,
     # Injetar contexto de tipologia antes do prompt específico da prancha.
     # Isso impede a IA de presumir "projeto corporativo" quando processa uma
     # planta residencial em isolamento.
-    typology_hint = _TYPOLOGY_HINT.get(typology, "")
+    # 🩸 22/09/2026 (job ee801b82): em estrutura a dica NÃO entra. Ela fala de
+    # ambiente e acabamento (estação de trabalho, piso elevado, cabeamento),
+    # nada que mude concreto, fôrma ou aço — e "office" é o padrão da tela: o
+    # caso era um conjunto de poços de concreto lido como escritório.
+    typology_hint = "" if is_structural else _TYPOLOGY_HINT.get(typology, "")
     if typology_hint:
         prompt = typology_hint + "\n" + base_prompt
     else:
@@ -1295,6 +1368,22 @@ def analyze_sheet(client: anthropic.Anthropic, sheet: SheetInfo,
 
     content.append({"type": "text", "text": prompt})
 
+    # Os mesmos parâmetros na leitura e na releitura: divergir o modelo ou o
+    # system entre as duas seria uma releitura de outra coisa.
+    _kw_ia = dict(
+        model="claude-sonnet-4-6",
+        max_tokens=16000,
+        temperature=0,
+        # cache_system: o SYSTEM_PROMPT (~4,4k tok) é idêntico em TODA prancha
+        # do projeto → cacheado, custa ~90% menos na leitura (só a imagem/DXF
+        # da prancha, que muda, paga cheio). Economia de custo da IA (23/07).
+        cache_system=True,
+        system=(SYSTEM_PROMPT_ESTRUTURA if is_structural else SYSTEM_PROMPT),
+        # 🔑 Cache por CONTEÚDO (llm_cache.py). Aqui `temperature=0` já pede
+        # determinismo, então servir a leitura anterior do MESMO payload é
+        # exatamente o que a chamada promete. Default do ambiente é SOMBRA.
+        cache=True,
+    )
     try:
         # STREAMING + teto maior + salvage: prancha de arquitetura complexa gerava
         # resposta > max_tokens (8000), truncava o JSON e caía em {items:[]} ->
@@ -1302,47 +1391,61 @@ def analyze_sheet(client: anthropic.Anthropic, sheet: SheetInfo,
         response = call_with_retry_stream(
             client,
             tag=f"analyzer:{sheet.filename}",
-            model="claude-sonnet-4-6",
-            max_tokens=16000,
-            temperature=0,
-            # cache_system: o SYSTEM_PROMPT (~4,4k tok) é idêntico em TODA prancha
-            # do projeto → cacheado, custa ~90% menos na leitura (só a imagem/DXF
-            # da prancha, que muda, paga cheio). Economia de custo da IA (23/07).
-            cache_system=True,
-            system=(SYSTEM_PROMPT_ESTRUTURA if is_structural else SYSTEM_PROMPT),
             messages=[{"role": "user", "content": content}],
-            # 🔑 Cache por CONTEÚDO (llm_cache.py). Aqui `temperature=0` já pede
-            # determinismo, então servir a leitura anterior do MESMO payload é
-            # exatamente o que a chamada promete. Default do ambiente é SOMBRA.
-            cache=True,
+            **_kw_ia,
         )
 
         text = response.content[0].text
-        if "```json" in text:
-            json_str = text.split("```json")[1].split("```")[0].strip()
-        elif "```" in text:
-            json_str = text.split("```")[1].split("```")[0].strip()
-        else:
-            json_str = text.strip()
-
-        # #7 sinal de 1ª classe: resposta cortada no teto (max_tokens) = leitura
-        # possivelmente INCOMPLETA, mesmo que o JSON ainda parseie ok.
-        _truncado = _response_truncated(getattr(response, "stop_reason", ""))
-        try:
-            _parsed = json.loads(json_str)
-        except json.JSONDecodeError:
-            # JSON truncado (resposta cortada no teto) — recupera os itens completos
-            _parsed = _salvage_truncated_json(json_str)
-            _truncado = True  # JSON quebrou = quase sempre corte no teto
-            if _parsed.get("items"):
-                print(f"PDF JSON truncado em {sheet.filename}; salvados {len(_parsed['items'])} itens")
-            else:
-                raise
-        # Robustez: array cru [...] vira {"items":[...]} (engine_rules, testado).
+        _parsed, _truncado = _json_da_resposta(
+            text, getattr(response, "stop_reason", ""), sheet.filename)
+        # Robustez: array cru [...] vira {"items":[...]} e item aninhado sobe um
+        # nível (engine_rules, testado).
+        _motivo_vazio = _motivo_da_prancha_sem_item(_parsed)
         _out = _normalize_items_payload(_parsed)
         # main.py lê _truncated e avisa o cliente (não entrega parcial calado).
         if _truncado:
             _out["_truncated"] = True
+            # corte no teto já tem aviso próprio, e reler corta no mesmo lugar
+            return _out
+        if not _motivo_vazio:
+            return _out
+
+        # 🩸 22/09/2026 (job ee801b82) — PRANCHA LIDA, SEM ITEM E SEM ERRO. A de
+        # fundação voltou só com `kept_elements` e sumiu calada: o aviso de
+        # cobertura só conta `error`. 🔑 Relê UMA vez só quando a resposta
+        # não trouxe "items" em lugar nenhum (respondeu outra pergunta); com
+        # "items": [] a IA respondeu que não há nada, e insistir empurra a
+        # inventar. O layout atual fica fora: o prompt dele não pede item.
+        _espera_items = is_structural or sheet.sheet_type != SheetType.LAYOUT_ATUAL
+        _releu = False
+        if _motivo_vazio == "sem-chave-items" and _espera_items:
+            _releu = True
+            try:
+                _resp2 = call_with_retry_stream(
+                    client,
+                    tag=f"analyzer:{sheet.filename}#releitura",
+                    messages=[{"role": "user", "content": content + [
+                        {"type": "text", "text": RELEITURA_SEM_ITEMS}]}],
+                    **_kw_ia,
+                )
+                _p2, _t2 = _json_da_resposta(
+                    _resp2.content[0].text, getattr(_resp2, "stop_reason", ""),
+                    sheet.filename)
+                _out2 = _normalize_items_payload(_p2)
+                _n2 = len(_out2.get("items") or [])
+                if _n2:
+                    if _t2:
+                        _out2["_truncated"] = True
+                    _out2["_releitura"] = {"motivo": _motivo_vazio, "itens": _n2}
+                    return _out2
+                _out["_releitura"] = {"motivo": _motivo_vazio, "itens": 0}
+            except Exception as _e2:
+                # A 1ª leitura foi boa; a releitura falhar não vira erro da prancha.
+                _out["_releitura"] = {"motivo": _motivo_vazio, "itens": 0,
+                                      "falhou": f"{type(_e2).__name__}: {_e2}"[:200]}
+        _out["_sem_item"] = {"motivo": (_motivo_vazio if _espera_items
+                                        else "layout-atual"),
+                             "releu": _releu}
         return _out
 
     except json.JSONDecodeError as e:
