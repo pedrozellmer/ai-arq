@@ -96,6 +96,40 @@ def test_prancha_de_PDF_de_varias_paginas_conta_por_pagina():
     assert f("caderno.pdf (p3)") != f("caderno.pdf (p4)")
     assert f("prancha-B.pdf (VISTA 1 – PLANTA)") == "prancha-B.pdf"
     assert f("") == "" and f(None) == ""
+    # 🩸 22/09 (revisão): sem isto, o DWG convertido apareceria na nota e no
+    # e-mail com o nome que o cliente nunca enviou
+    assert f("planta_libredwg.dxf (VISTA 1)") == "planta.dwg"
+
+
+def test_arquivo_com_parenteses_no_nome_continua_sendo_UM_arquivo():
+    """🩸 22/09/2026 (revisão): cortar no primeiro " (" juntava "X (1).pdf" e
+    "X (2).pdf" — dois arquivos que o navegador renomeou — numa prancha "X",
+    sem a extensão. 📏 60 d: 733 linhas em 14 jobs têm " (" antes da extensão."""
+    f = main._prancha_de_verdade
+    a, b = f("prancha-A (1).pdf (Planta Baixa)"), f("prancha-A (2).pdf (Corte A-A)")
+    assert a == "prancha-A (1).pdf" and b == "prancha-A (2).pdf", (a, b)
+    assert a.lower() != b.lower()
+    assert f("caderno (3).pdf (p2 · PLANTA)") == "caderno (3).pdf (p2)"
+    # 🧪 controle: sem extensão conhecida, o corte antigo continua valendo
+    assert f("ARQ-01 (planta)") == "ARQ-01"
+    assert main._vista_do_ref_sheet("prancha-A (1).pdf (Planta Baixa)") == "Planta Baixa"
+    assert main._vista_do_ref_sheet("caderno.pdf (p3 · VISTA 2)") == "VISTA 2"
+    assert main._vista_do_ref_sheet("caderno.pdf (p3)") == ""
+    assert main._vista_do_ref_sheet("prancha-A.pdf") == ""
+
+
+def test_a_contagem_do_filhote_nao_junta_arquivos_com_parenteses(monkeypatch):
+    """O mesmo defeito, na conta de pranchas do e-mail da liberação: 7
+    arquivos, dois pares "(1)"/"(2)", viravam 5 pranchas sem extensão."""
+    arqs = ["planta (1).pdf", "planta (2).pdf", "corte (1).pdf", "corte (2).pdf",
+            "fachada (1).pdf", "memorial.pdf", "detalhe.pdf"]
+    linhas = [{"confidence": "estimado", "ref_sheet": "%s (vista %d)" % (arqs[i % 7], i),
+               "quantity": 1, "unit": "m²"} for i in range(21)]
+    monkeypatch.setattr(main, "_supa_rest_service",
+                        lambda *a, **k: (200, [dict(x) for x in linhas]))
+    c = main._contagem_para_liberar("ev000001")
+    assert c["pranchas"] == 7, c["pranchas"]
+    assert sorted(c["por_prancha"]) == sorted(arqs), sorted(c["por_prancha"])
 
 
 def test_a_nota_resume_quando_ha_muitas_pranchas():
@@ -114,21 +148,63 @@ def test_a_nota_resume_quando_ha_muitas_pranchas():
     assert len(nota) <= 500, len(nota)
 
 
-def test_CONTROLE_mesma_prancha_com_hints_diferentes_NAO_leva_nota():
-    """🧪 Duas linhas da MESMA folha, com hints diferentes, não são "cross-
-    prancha" — a nota não pode sair (antes saía, com "2 pranchas")."""
-    itens = [BudgetItem(item_num="", description="Concreto estrutural fck 30 MPa — radier",
-                        unit="m³", quantity=5.6, observations="",
-                        ref_sheet="prancha-G.pdf (NÍVEL 1 – PLANTA / CORTE BB)",
-                        confidence=Confidence("estimado"), discipline="Estrutura"),
-             BudgetItem(item_num="", description="Concreto estrutural fck 30 MPa — laje",
-                        unit="m³", quantity=4.1, observations="",
-                        ref_sheet="prancha-G.pdf (NÍVEL 2 – PLANTA)",
-                        confidence=Confidence("estimado"), discipline="Estrutura")]
-    out = main._consolidate_items(itens)
+def _dois_pavimentos_na_mesma_folha(hint_a="PLANTA TÉRREO", hint_b="PLANTA SUPERIOR"):
+    """A reprodução da revisão: a mesma alvenaria, térreo e superior desenhados
+    na MESMA prancha — um PDF de uma página só."""
+    return [BudgetItem(item_num="", description="Alvenaria de vedação bloco cerâmico 14 cm — pavimento",
+                       unit="m²", quantity=120.0, observations="",
+                       ref_sheet="casa.pdf (%s)" % hint_a,
+                       confidence=Confidence("estimado"), discipline="Alvenaria"),
+            BudgetItem(item_num="", description="Alvenaria de vedação bloco cerâmico 14 cm — pavimento",
+                       unit="m²", quantity=95.0, observations="",
+                       ref_sheet="casa.pdf (%s)" % hint_b,
+                       confidence=Confidence("estimado"), discipline="Alvenaria")]
+
+
+def test_duas_vistas_da_MESMA_folha_levam_a_nota_de_VISTAS():
+    """🩸 22/09/2026 (revisão): a 1ª versão deste conserto contava a prancha de
+    verdade também pra DECIDIR, e duas vistas da mesma folha perderam o aviso
+    — o código de antes avisava. 📏 60 d: 6 jobs de 1 arquivo de 1 página
+    perderiam TODAS as notas (208 linhas; no job de elétrica, 17).
+    A nota volta, e diz "vistas desta prancha" — nunca "2 pranchas"."""
+    out = main._consolidate_items(_dois_pavimentos_na_mesma_folha())
+    assert len(out) == 2, "a consolidação apagou um pavimento"
+    for it in out:
+        nota = _nota(it.observations)
+        assert "aparece em 2 vistas desta prancha" in nota, nota
+        assert "PLANTA TÉRREO" in nota and "PLANTA SUPERIOR" in nota, nota
+        assert "pranchas" not in nota, (
+            "uma folha só não é '2 pranchas': %r" % nota)
+        assert "casa.pdf" not in nota, "a lista de vistas repetiu o arquivo: %r" % nota
+
+
+def test_a_prancha_nao_muda_com_a_caixa_do_nome():
+    """O nome do arquivo em maiúscula numa linha e minúscula na outra é a MESMA
+    folha — duas vistas dela, e não '2 pranchas'."""
+    itens = _dois_pavimentos_na_mesma_folha()
+    itens[1].ref_sheet = "CASA.PDF (PLANTA SUPERIOR)"
+    nota = _nota(main._consolidate_items(itens)[0].observations)
+    assert "aparece em 2 vistas desta prancha" in nota, nota
+
+
+def test_CONTROLE_a_MESMA_vista_repetida_NAO_leva_nota():
+    """🧪 O outro lado: duas linhas da mesma vista da mesma folha (o hint só
+    muda de caixa e de espaço) não são "cross-prancha" — a nota não sai."""
+    out = main._consolidate_items(
+        _dois_pavimentos_na_mesma_folha("PLANTA  TÉRREO", "planta térreo"))
     assert len(out) == 2
     assert not any("aparece em" in (x.observations or "") for x in out), (
         [x.observations for x in out])
+
+
+def test_CONTROLE_pranchas_diferentes_continuam_dizendo_pranchas():
+    """🧪 Dois arquivos com a mesma vista: são 2 PRANCHAS, e o texto é o de
+    pranchas — a nota de vistas não pode engolir o caso de sempre."""
+    itens = _dois_pavimentos_na_mesma_folha()
+    itens[1].ref_sheet = "casa-superior.pdf (PLANTA TÉRREO)"
+    nota = _nota(main._consolidate_items(itens)[0].observations)
+    assert "aparece em 2 pranchas do projeto (casa-superior.pdf, casa.pdf)" in nota, nota
+    assert "vistas" not in nota, nota
 
 
 # ── o motivo do zero chega à tela ───────────────────────────────────────────
@@ -224,3 +300,16 @@ def test_observacao_que_cabe_nao_mexe_no_que_ja_cabe():
     longa = "começo. " + "meio " * 400 + "| o veredito final."
     r = f(longa)
     assert len(r) <= 1000 and r.startswith("começo.") and r.endswith("o veredito final.")
+
+
+def test_o_fim_guardado_comeca_numa_fronteira_e_nao_no_meio_da_palavra():
+    """O pedaço do fim abre na primeira fronteira (" | " ou ". ") da sua
+    metade — não no meio de uma palavra que o corte partiu."""
+    f = main._observacao_que_cabe
+    # 700 "a" e depois uma fronteira: os últimos 500 caracteres começam no meio
+    # da tripa de "a", e a fronteira cai na 1ª metade deles
+    longa = "cabeça. " + "a" * 700 + " | " + "b" * 400 + " | o veredito final."
+    r = f(longa)
+    fim = r.split(main._OBS_EMENDA, 1)[1]
+    assert fim.startswith("b"), "o fim abriu no meio da palavra: %r" % fim[:30]
+    assert r.endswith("o veredito final.") and len(r) <= 1000

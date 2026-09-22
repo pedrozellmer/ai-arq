@@ -322,6 +322,14 @@ def test_revogar_devolve_o_nome_de_teste_certo(bancada):
     assert b2.patches[-1]["body"]["project_name"] == \
         "[TESTE] Residência Alto da Serra — avaliação"
 
+    # 🩸 22/09/2026: o nome NOVO da releitura (sem "motor atualizado") também
+    # volta a ser de avaliação — o de cima é o nome antigo, que ficou gravado
+    # nos filhotes liberados até hoje.
+    b3 = bancada["monta"]("ev597afa", nome_filho="Residência Alto da Serra — nova leitura")
+    main.admin_liberar_filhote("ev597afa", _Req(revogar=True))
+    assert b3.patches[-1]["body"]["project_name"] == \
+        "[TESTE] Residência Alto da Serra — avaliação", b3.patches[-1]["body"]
+
 
 # ═════════════════════════════════════════════════════════════════════════════
 #  O teto de 1 automático por semana vale nas DUAS portas
@@ -439,4 +447,7 @@ def test_a_liberacao_acontece_mesmo_quando_o_email_e_segurado(bancada, juiza):
     assert corpo.get("user_id") == PAI["user_id"], (
         "o job foi renomeado mas NÃO apontou pro dono: %r — o cliente nunca "
         "vê a leitura nova, e o log diz 'LIBERADO'" % corpo)
-    assert "nova leitura (motor atualizado)" in corpo.get("project_name", "")
+    # 🩸 22/09/2026 (revisão): o sufixo era " — nova leitura (motor
+    # atualizado)" — e a releitura pode ser do MESMO motor.
+    assert corpo.get("project_name", "").endswith(" — nova leitura"), corpo
+    assert "motor atualizado" not in corpo.get("project_name", ""), corpo

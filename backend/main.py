@@ -665,6 +665,29 @@ def _nome_limpo_da_prancha(ref_sheet: str) -> str:
     return nome_que_o_cliente_enviou(s).strip().lower()
 
 
+#: o ARQUIVO no começo de um `ref_sheet`: até a extensão de desenho, antes do
+#: " (" do hint ou do fim.
+#: 🩸 22/09/2026 (revisão): cortar no primeiro " (" juntava "X (1).pdf" e
+#: "X (2).pdf" — dois arquivos que o navegador renomeou — numa prancha "X", sem
+#: a extensão. 📏 60 d: 733 linhas em 14 jobs têm " (" antes da extensão; no
+#: d7c82c39, 7 arquivos viravam 5.
+import re as _re_ref   # 🪤 `_re` só é importado bem mais abaixo neste módulo
+_RE_ARQUIVO_DO_REF = _re_ref.compile(r"^(.*?\.(?:pdf|dwg|dxf))(?=$|\s*\()", _re_ref.IGNORECASE)
+
+
+def _arquivo_e_resto_do_ref(ref_sheet):
+    """(o arquivo como foi gravado, o que vem depois dele) de um `ref_sheet`.
+
+    Sem extensão conhecida, cai no corte antigo: o primeiro " (".
+    """
+    s = str(ref_sheet or "").strip()
+    m = _RE_ARQUIVO_DO_REF.match(s)
+    if m:
+        return m.group(1), s[m.end():]
+    i = s.find(" (")
+    return (s[:i], s[i:]) if i > 0 else (s, "")
+
+
 def _prancha_de_verdade(ref_sheet) -> str:
     """A PRANCHA de um `ref_sheet`: o arquivo e, se ele tem várias páginas, a página.
 
@@ -683,10 +706,20 @@ def _prancha_de_verdade(ref_sheet) -> str:
         return ""
     from analyzer import _pagina_do_ref_sheet
     from engine_rules import nome_que_o_cliente_enviou
-    i = s.find(" (")
-    arquivo = nome_que_o_cliente_enviou(s[:i] if i > 0 else s).strip()
-    pg = _pagina_do_ref_sheet(s)
+    _cru, _resto = _arquivo_e_resto_do_ref(s)
+    arquivo = nome_que_o_cliente_enviou(_cru).strip()
+    pg = _pagina_do_ref_sheet(_resto)
     return arquivo + (" (p%d)" % (pg + 1) if pg is not None else "")
+
+
+def _vista_do_ref_sheet(ref_sheet) -> str:
+    """A VISTA de um `ref_sheet` — o hint da IA ("PLANTA TÉRREO") — sem o
+    arquivo e sem a página. Vazio quando a IA não deu nome à vista."""
+    _cru, _resto = _arquivo_e_resto_do_ref(ref_sheet)
+    r = _resto.strip()
+    if r.startswith("(") and r.endswith(")"):
+        r = r[1:-1].strip()
+    return _re_ref.sub(r"^p\d+(?=\s|·|$)\s*(?:·\s*)?", "", r).strip()
 
 
 def _chave_de_prancha_para_comparar(nome) -> str:
@@ -787,7 +820,7 @@ def _projeto_ja_enviado(user_id, nomes_novos, pe_direito_agora, area_agora):
     _ants = _supa_rows(
         "GET", "/projects?user_id=eq.%s&status=eq.done&archived=not.eq.true"
                "&select=job_id,project_name,created_at,user_pe_direito,user_total_area"
-               ",project_type"
+               ",project_type,files_count"
                "&order=created_at.desc&limit=3" % user_id)
     if not _ants:
         return None
@@ -800,15 +833,27 @@ def _projeto_ja_enviado(user_id, nomes_novos, pe_direito_agora, area_agora):
         # 🔑 Os arquivos do projeto anterior vêm do Storage (conta exata). Só
         # sem ele a conta cai nos `ref_sheet` dos itens, e aí o número é piso.
         _arqs = _arquivos_do_projeto_no_storage(_jid)
-        _exata = _arqs is not None
-        if _exata:
-            _antigos = {_chave_de_prancha_para_comparar(n) for n in _arqs}
-        else:
+        # 🩸 22/09/2026 (revisão): o upload ao Storage é best-effort, então a
+        # lista pode vir PARCIAL — e parcial era tratada como exata. Só é exata
+        # quando cobre o `files_count` do projeto. 📏 90 d: 152 de 165
+        # projetos batem, 8 têm mais (anexo no mesmo prefixo), 2 têm menos, 3
+        # nenhum. Nos que não cobrem, soma Storage e itens e diz "pelo menos".
+        # 🪤 O `> 0` não é um desligador disfarçado: em 90 d NENHUM projeto
+        # concluído de cliente tem `files_count` zerado (conferido 22/09/2026
+        # 15:43, Brasília). Ele cobre só a linha velha que não gravou o campo —
+        # e aí cala, que é o lado certo de errar aqui.
+        try:
+            _n_enviados = int(_p.get("files_count") or 0)
+        except (TypeError, ValueError):
+            _n_enviados = 0
+        _exata = _arqs is not None and _n_enviados > 0 and len(_arqs) >= _n_enviados
+        _antigos = {_chave_de_prancha_para_comparar(n) for n in (_arqs or ())}
+        if not _exata:
             # 🪤 A amostragem aqui só pode causar aviso A MENOS (se eu perdesse
             # um nome, sobram menos coincidências e o aviso não sai) — nunca um
             # aviso falso. Errar pro lado de calar é o lado certo neste caso.
             _rows = _supa_rows("GET", "/project_items?job_id=eq.%s&select=ref_sheet&limit=400" % _jid)
-            _antigos = {_chave_de_prancha_para_comparar(r.get("ref_sheet")) for r in _rows}
+            _antigos |= {_chave_de_prancha_para_comparar(r.get("ref_sheet")) for r in _rows}
         _antigos.discard("")
         if not _antigos:
             continue
@@ -1913,6 +1958,55 @@ def _norm_desc(s: str, cortar: bool = True) -> str:
     return " ".join(palavras[:9] if cortar else palavras)
 
 
+#: teto da observação gravada em `project_items` (a tela e a revisão leem daqui).
+_OBS_TETO_GRAVADO = 1000
+_OBS_EMENDA = " […] "
+
+
+def _observacao_que_cabe(obs, teto: int = _OBS_TETO_GRAVADO) -> str:
+    """A observação que cabe no banco SEM perder o fim.
+
+    🩸 22/09/2026 (job f8d8e6d8): 31 das 61 linhas zeradas chegaram à tela sem
+    o motivo do zero, e 3 linhas com número perderam a ressalva "atribuída pela
+    IA — confira". O corte era `obs[:1000]`, e quem escreve DEPOIS (a
+    honestidade de área, as ressalvas do número) escreve no FIM: o corte comia
+    justamente o veredito. O cliente via "Cálculo: … = 0,69 m³" ao lado de um 0.
+    📏 60 dias, sem eval: 622 linhas cortadas; 255 zeradas sem o motivo.
+    🔑 Estourou, guarda o começo (o que a IA leu e as marcas que vão na frente)
+    e o fim inteiro (o último veredito), e corta o MEIO com uma emenda visível.
+    🩸 22/09/2026 (revisão): só a GRAVAÇÃO usava isto, e QUATORZE pontos que
+    juntam aviso à observação cortavam `[:1000]` EM MEMÓRIA — doze no caminho
+    do `process_job` (cinco deles DEPOIS da honestidade: o aviso SINAPI de
+    grandeza, o "mede só PARTE", o pé-direito da estrutura, o EXISTENTE e a
+    fusão das revisões), um no merge e um na rota que grava a correção do
+    cliente. A observação chegava à gravação com 1000 caracteres e o fim já
+    comido. 📏 Remedido em 22/09/2026 15:42 (Brasília), com os jobs de hoje
+    dentro: 813 linhas no teto em 39 jobs de 60 d (sem eval), 57 delas
+    começando pelo prepend do SINAPI — grandeza 13, unidade 4, base de medição
+    40, que são o MESMO `if`.
+    🔑 Quem junta aviso NESTE arquivo usa ESTA função, nunca `[:1000]`.
+    🪤 Sobra um `[:1000]` do mesmo feitio fora daqui: `engine_rules.py`,
+    `normalizar_administracao_local`, que antepõe a frase do prazo. Ficou de
+    fora porque o helper mora neste módulo (importar `main` de lá é ciclo) e
+    porque o alcance hoje é ZERO — das 63 linhas com aquela frase em 90 d,
+    nenhuma chegou ao teto. Mora aqui, antes da fusão das revisões, porque o
+    guarda da fusão executa esta fatia do arquivo (`_norm_desc` →
+    `_CAMPOS_ITEM_VERSAO`).
+    """
+    s = str(obs or "")
+    if len(s) <= teto:
+        return s
+    fim = s[-(teto // 2):]
+    # começa o fim numa fronteira, pra não abrir no meio de uma palavra
+    for _marca in (" | ", ". "):
+        k = fim.find(_marca)
+        if 0 <= k < len(fim) // 2:
+            fim = fim[k + len(_marca):]
+            break
+    cabeca = s[:teto - len(_OBS_EMENDA) - len(fim)].rstrip()
+    return cabeca + _OBS_EMENDA + fim
+
+
 def _fundir_revisoes_do_cliente(items: list, parent_job_id: str):
     """Faz a releitura PRESERVAR o que o cliente corrigiu à mão (regra dura nº7).
 
@@ -2138,8 +2232,9 @@ def _fundir_revisoes_do_cliente(items: list, parent_job_id: str):
         _obs = (c["observations"] or "").strip()
         _sel = ("✏️ QUANTIDADE CORRIGIDA POR VOCÊ — não é medida do CAD. "
                 if _digitou else "✏️ REVISADO POR VOCÊ — ")
-        alvo.observations = (_sel + "Mantido da sua revisão anterior; a leitura "
-                             "nova não vale por cima. " + _obs)[:1000]
+        alvo.observations = _observacao_que_cabe(
+            _sel + "Mantido da sua revisão anterior; a leitura nova não vale por "
+            "cima. " + _obs)
 
     def _acrescentar(c, motivo):
         from models import BudgetItem as _BI, Confidence as _Cf
@@ -2153,8 +2248,9 @@ def _fundir_revisoes_do_cliente(items: list, parent_job_id: str):
             description=c["description"],
             unit=c["unit"],
             quantity=_q,
-            observations=("✏️ REVISADO POR VOCÊ — mantido da sua revisão anterior; "
-                          + motivo + " " + (c["observations"] or ""))[:1000],
+            observations=_observacao_que_cabe(
+                "✏️ REVISADO POR VOCÊ — mantido da sua revisão anterior; "
+                + motivo + " " + (c["observations"] or "")),
             ref_sheet="",
             confidence=_Cf.ESTIMADO,
             origem="revisao_cliente",
@@ -2353,37 +2449,6 @@ def _comparar_com_versao_anterior(job_id: str, n_medidos: int, n_itens: int) -> 
                    f"({queda_pct:.0f}% a menos), medidos {antes_med} -> {n_medidos}",
                    job_id)
     return out
-
-
-#: teto da observação gravada em `project_items` (a tela e a revisão leem daqui).
-_OBS_TETO_GRAVADO = 1000
-_OBS_EMENDA = " […] "
-
-
-def _observacao_que_cabe(obs, teto: int = _OBS_TETO_GRAVADO) -> str:
-    """A observação que cabe no banco SEM perder o fim.
-
-    🩸 22/09/2026 (job f8d8e6d8): 31 das 61 linhas zeradas chegaram à tela sem
-    o motivo do zero, e 3 linhas com número perderam a ressalva "atribuída pela
-    IA — confira". O corte era `obs[:1000]`, e quem escreve DEPOIS (a
-    honestidade de área, as ressalvas do número) escreve no FIM: o corte comia
-    justamente o veredito. O cliente via "Cálculo: … = 0,69 m³" ao lado de um 0.
-    📏 60 dias, sem eval: 622 linhas cortadas; 255 zeradas sem o motivo.
-    🔑 Estourou, guarda o começo (o que a IA leu e as marcas que vão na frente)
-    e o fim inteiro (o último veredito), e corta o MEIO com uma emenda visível.
-    """
-    s = str(obs or "")
-    if len(s) <= teto:
-        return s
-    fim = s[-(teto // 2):]
-    # começa o fim numa fronteira, pra não abrir no meio de uma palavra
-    for _marca in (" | ", ". "):
-        k = fim.find(_marca)
-        if 0 <= k < len(fim) // 2:
-            fim = fim[k + len(_marca):]
-            break
-    cabeca = s[:teto - len(_OBS_EMENDA) - len(fim)].rstrip()
-    return cabeca + _OBS_EMENDA + fim
 
 
 def _contar_itens_no_banco(job_id: str):
@@ -2592,7 +2657,7 @@ def _juntar_admin_local(all_items) -> int:
                       f"outras pranchas: {_redacoes}.")
         else:
             _nota += f" A soma de {_qtd(_fica):g} réplicas virou 1 verba."
-        _fica.observations = (_nota + (" | " + _obs if _obs else ""))[:1000]
+        _fica.observations = _observacao_que_cabe(_nota + (" | " + _obs if _obs else ""))
     _fica.quantity = 1.0
     if _saem:
         _ids = {id(_it) for _it in _saem}
@@ -7603,18 +7668,31 @@ def _consolidate_items(items: list, registro: list | None = None) -> list:
             pass6.extend(group)
             continue
 
-        # Pra grupo com 2+ itens, verificar se vêm de pranchas diferentes.
-        # 🩸 22/09/2026 (jobs ee801b82/f8d8e6d8): era o set de STRINGS de
+        # Pra grupo com 2+ itens, verificar se vêm de pranchas (ou vistas) diferentes.
+        # 🩸 22/09/2026 (jobs ee801b82/f8d8e6d8): a NOTA contava STRINGS de
         # ref_sheet, e o hint da IA fazia uma folha virar várias ("12
-        # pranchas" num envio de 7 PDFs). Conta a prancha de verdade.
-        _pranchas_do_grupo = {}
+        # pranchas" num envio de 7 PDFs). O número e a lista passam a ser da
+        # prancha de verdade.
+        # 🩸 22/09/2026 (revisão): a 1ª versão do conserto usou a prancha de
+        # verdade também pra DECIDIR, e o aviso sumiu de duas vistas da MESMA
+        # folha (térreo e superior desenhados na mesma prancha). 📏 60 d: 6 jobs
+        # de 1 arquivo de 1 página perderiam todas as notas (208 linhas — no
+        # 844603fb, de elétrica, 17 linhas cruzando "Pavimento Tipo",
+        # "Circulação Último Pavimento" e "Área Técnica").
+        # 🔑 Decide pela VISTA (prancha + hint da IA), como sempre decidiu; a
+        # prancha de verdade só escolhe o TEXTO: "N pranchas" ou "N vistas".
+        _pranchas_do_grupo, _vistas_do_grupo = {}, {}
         for it in group:
             _pv = _prancha_de_verdade(it.ref_sheet) or "sem referência"
             _pranchas_do_grupo.setdefault(_pv.lower(), _pv)
-        ref_sheets = set(_pranchas_do_grupo)
+            _vt = _vista_do_ref_sheet(it.ref_sheet)
+            _vistas_do_grupo.setdefault(
+                (_pv.lower(), " ".join(_vt.lower().split())),
+                _vt or "sem nome de vista")
+        ref_sheets = set(_vistas_do_grupo)
         if len(ref_sheets) < 2:
-            # Mesma prancha — não é cross-prancha (provavelmente passadas anteriores
-            # já trataram). Manter como está.
+            # Mesma vista da mesma prancha — não é cross-prancha (provavelmente
+            # passadas anteriores já trataram). Manter como está.
             pass6.extend(group)
             continue
 
@@ -7700,7 +7778,11 @@ def _consolidate_items(items: list, registro: list | None = None) -> list:
         # cortado em 40 caracteres — a mesma prancha 13 vezes —, a nota passava
         # de 700 caracteres e empurrava o motivo do zero pra depois do corte
         # de 1000 da gravação. Cada prancha uma vez, no máximo 4 nomes.
-        _nomes_pr = sorted(_pranchas_do_grupo.values(), key=str.lower)
+        # 🔑 Uma prancha só com várias vistas não é "N pranchas": o texto diz
+        # "N vistas desta prancha" e lista as vistas (revisão de 22/09).
+        _uma_prancha = len(_pranchas_do_grupo) < 2
+        _nomes_pr = sorted((_vistas_do_grupo if _uma_prancha
+                            else _pranchas_do_grupo).values(), key=str.lower)
         _pranchas_txt = ", ".join(
             (_n if len(_n) <= 48 else _n[:47] + "…") for _n in _nomes_pr[:4])
         if len(_nomes_pr) > 4:
@@ -7715,16 +7797,23 @@ def _consolidate_items(items: list, registro: list | None = None) -> list:
         # linha que aqui estava zerada) e dos rebaixamentos de selo. O selo de
         # agora é provisório. A frase fala só da ORIGEM da linha, que é
         # verdadeira com qualquer desfecho.
-        for _it in group:
-            _obs = (_it.observations or "").rstrip(". ")
-            _obs += (". " if _obs else "")
-            _obs += (
-                f"⚠ Este serviço aparece em {len(ref_sheets)} pranchas do "
+        if _uma_prancha:
+            _nota_p6 = (
+                f"⚠ Este serviço aparece em {len(_nomes_pr)} vistas desta "
+                f"prancha ({_pranchas_txt}). Esta linha vem de uma delas — "
+                f"confira se são pavimentos ou trechos diferentes da obra, que "
+                f"somam, ou o mesmo trecho em planta e em corte, que não soma.")
+        else:
+            _nota_p6 = (
+                f"⚠ Este serviço aparece em {len(_nomes_pr)} pranchas do "
                 f"projeto ({_pranchas_txt}). Esta linha vem da prancha "
                 f"dela — confira se são trechos diferentes da obra (pavimentos, "
                 f"fases, blocos), que somam, ou o mesmo trecho desenhado mais de "
-                f"uma vez, que não soma."
-            )
+                f"uma vez, que não soma.")
+        for _it in group:
+            _obs = (_it.observations or "").rstrip(". ")
+            _obs += (". " if _obs else "")
+            _obs += _nota_p6
             _it.observations = _obs
         pass6.extend(group)
         continue
@@ -9436,14 +9525,16 @@ def _derive_estrutura_pe_direito(items, pe_direito: float) -> int:
                     it.confidence = Confidence("estimado")
                 except Exception:
                     pass
-                it.observations = (f"{_proc} = {valor} {un_rot} — NÃO é medição "
-                                   f"do CAD. " + _limpa_aviso_nao_medida(obs))[:1000]
+                it.observations = _observacao_que_cabe(
+                    f"{_proc} = {valor} {un_rot} — NÃO é medição do CAD. "
+                    + _limpa_aviso_nao_medida(obs))
                 it.origem = "deriv_pd"     # conta nossa (ver _apply_area_honesty)
                 tocados += 1
             elif "Conferência por seção×PD" not in obs:
                 # alvo já preenchido (índice da IA): só anota a conferência.
-                it.observations = (obs + f" | Conferência por seção×PD: "
-                                   f"{valor} {un_rot} ({_proc.lower()})")[:1000]
+                it.observations = _observacao_que_cabe(
+                    obs + f" | Conferência por seção×PD: {valor} {un_rot} "
+                    f"({_proc.lower()})")
                 tocados += 1
         except Exception:
             continue
@@ -11911,7 +12002,7 @@ def existente_nao_leva_quantidade(all_items) -> int:
         _nota = ("Levantado: %s %s do que JÁ EXISTE — fica fora da soma do "
                  "orçamento (item a manter). Se for remanejar, o número está aqui."
                  % (("%.2f" % _q).rstrip("0").rstrip("."), _u))
-        _it.observations = ((_nota + " | " + _obs) if _obs else _nota)[:1000]
+        _it.observations = _observacao_que_cabe((_nota + " | " + _obs) if _obs else _nota)
         _it.quantity = 0
         _it.unit = "vb"
         # Selo é procedência de NÚMERO: sem número a orçar, não há medição a
@@ -12029,10 +12120,10 @@ def rebaixar_itens_sem_identidade(all_items):
                 pass
         _ob = str(getattr(_it, "observations", "") or "")
         if "não sabemos o que é" not in _ob:
-            _it.observations = (
+            _it.observations = _observacao_que_cabe(
                 "⚠ A CONTAGEM é do desenho, mas não sabemos o que é "
                 "este elemento: o nome do bloco no CAD não diz. Vale a "
-                "quantidade; a descrição precisa vir do projetista. " + _ob)[:1000]
+                "quantidade; a descrição precisa vir do projetista. " + _ob)
     return n
 
 
@@ -16239,9 +16330,9 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     _falhou_rebaixar += 1
                 _o = str(getattr(_it, "observations", "") or "")
                 if "não é medição da geometria" not in _o:
-                    _it.observations = (
+                    _it.observations = _observacao_que_cabe(
                         "⚠ ESTIMADO — este número foi LIDO de um texto da prancha, "
-                        "não medido da geometria. " + _o)[:1000]
+                        "não medido da geometria. " + _o)
             if _sem_geo:
                 _log_error("motor:selo-sem-geometria",
                            f"rebaixei {len(_sem_geo)} item(ns) que estavam MEDIDOS "
@@ -16316,10 +16407,10 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         continue
                     _o = str(getattr(_it, "observations", "") or "")
                     if "escalas diferentes" not in _o:
-                        _it.observations = (
+                        _it.observations = _observacao_que_cabe(
                             "⚠ ESTIMADO — as pranchas deste projeto foram lidas em "
                             "escalas diferentes e esta é uma das divergentes; o número "
-                            "pode estar 1000× fora. Confira contra a prancha. " + _o)[:1000]
+                            "pode estar 1000× fora. Confira contra a prancha. " + _o)
                 _log_error("motor:escala-divergente",
                            "pranchas=%d fatores_distintos=%s suspeitas=%d "
                            "rebaixei=%d | %s" % (
@@ -16436,13 +16527,13 @@ bloco — só cite os que estão no inventário deste arquivo."""
                             pass
                     _obp = str(getattr(_it, "observations", "") or "")
                     if "menos parede do que o mínimo" not in _obp:
-                        _it.observations = (
+                        _it.observations = _observacao_que_cabe(
                             "⚠ A leitura encontrou MENOS parede do que o mínimo "
                             "possível pra área deste projeto (%.1f m contra %.1f m, "
                             "que é o perímetro de um quadrado de %.0f m² — e ainda "
                             "sem as paredes internas). Faltou parede na leitura: "
                             "trate este número como piso, não como medida. "
-                            % (_maior, _min_per, _area_ref) + _obp)[:1000]
+                            % (_maior, _min_per, _area_ref) + _obp)
                 _log_error("motor:parede-abaixo-do-minimo",
                            "parede=%.2f m area=%.2f m² minimo=%.2f m "
                            "(faltam %.0f%%) rebaixei=%d"
@@ -17322,7 +17413,9 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     if ("CONFERIR A UNIDADE" not in _obs_u
                             and "CONFERIR A GRANDEZA" not in _obs_u
                             and "BASE DE MEDIÇÃO DIFERENTE" not in _obs_u):
-                        _it_u.observations = (_av_u + _obs_u)[:1000]
+                        # 🩸 22/09/2026 (revisão): roda DEPOIS da honestidade —
+                        # `[:1000]` aqui comia o veredito que ela escreve no fim.
+                        _it_u.observations = _observacao_que_cabe(_av_u + _obs_u)
                         _n_unid += 1
                         if _tipo_cu == "base":
                             _n_base += 1
@@ -17445,11 +17538,11 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     continue
                 _it.confidence = _CfPar.ESTIMADO
                 if "cobre só parte" not in _ob:
-                    _it.observations = (
+                    _it.observations = _observacao_que_cabe(
                         "⚠ O número mede só PARTE deste item — o próprio "
                         "levantamento diz isso na observação abaixo. Não leve "
                         "como quantidade fechada: cobre só parte do que existe. "
-                        + _ob)[:1000]
+                        + _ob)
                 _n_par += 1
             if _n_par:
                 _log_error("motor:selo-parcial-rebaixado",
@@ -19410,11 +19503,18 @@ async def process_files(
         _tipo_antes = _repet.get("project_type") or ""
         _estrutura = project_type == "estrutura" or _tipo_antes == "estrutura"
         _saidas = []
-        if _tipo_antes and _tipo_antes != project_type:
+        # 🩸 22/09/2026 (revisão): com o tipo trocado, o aviso dizia "mandar de
+        # novo não muda o motivo" e, logo abaixo, "o tipo muda o que a gente
+        # procura" — na direção de correção, a 1ª frase é falsa. E mandava
+        # conferir DEPOIS de o envio sair, sem dizer como consertar.
+        _troca_de_tipo = bool(_tipo_antes and _tipo_antes != project_type)
+        if _troca_de_tipo:
             _saidas.append(
                 "da outra vez estas pranchas foram lidas como %s, e este envio "
-                "está como %s — o tipo muda o que a gente procura no desenho; "
-                "confira qual dos dois é o das pranchas"
+                "está como %s — o tipo muda o que a gente procura no desenho. "
+                "Se este envio estiver com o tipo errado, não precisa mandar os "
+                "arquivos de novo: quando ele terminar, abra o projeto e, em "
+                "Detalhes do processamento, use Reprocessar escolhendo o tipo certo"
                 % (_tipo_antes.upper(), (project_type or "").upper()))
         if not user_pe_direito and not _estrutura:
             # 📏 MEDIDO (26/08): informar o pé-direito derruba a fatia de linha
@@ -19446,12 +19546,14 @@ async def process_files(
             "titulo": "Estas pranchas já passaram por aqui",
             "texto": (
                 "%s arquivos deste envio têm o mesmo nome dos que você mandou "
-                "no projeto \"%s\". Seu projeto vai processar normalmente — mas "
-                "se o que te incomodou foi linha em branco e as pranchas são as "
-                "mesmas, mandar de novo não muda o motivo delas estarem em "
-                "branco.\n\n"
+                "no projeto \"%s\". Seu projeto vai processar normalmente%s\n\n"
                 "O que muda:\n%s"
                 % (_quantos, _repet["project_name"],
+                   (". Desta vez o tipo é outro, então a leitura pode sair "
+                    "diferente." if _troca_de_tipo else
+                    " — mas se o que te incomodou foi linha em branco e as "
+                    "pranchas são as mesmas, mandar de novo não muda o motivo "
+                    "delas estarem em branco."),
                    "\n".join("• " + s for s in _saidas) if _saidas else
                    "• abra a revisão do projeto e preencha as linhas que "
                    "faltam — o que você corrigir lá a gente usa")),
@@ -28659,7 +28761,12 @@ def submit_item_review(job_id: str, item_id: str, payload: ReviewPayload, reques
                            or (_antes or {}).get("observations") or "").strip()
             _marca = "✏️ QUANTIDADE CORRIGIDA POR VOCÊ — não é medida do CAD. "
             if _marca not in _obs_cli:
-                safe_edits["observations"] = (_marca + _obs_cli)[:1000]
+                # 🩸 22/09/2026 (revisão): este é o 14º ponto que antepõe aviso —
+                # e o único fora do motor. A observação que ele lê JÁ vem do
+                # banco, ou seja, já pode estar nos 1000: somar a marca e cortar
+                # comia o fim da procedência que a leitura gravou. 📏 90 d: 126
+                # correções de quantidade, 4 sobre observação de ≥ 945.
+                safe_edits["observations"] = _observacao_que_cabe(_marca + _obs_cli)
 
         if safe_edits:
             try:
@@ -31610,6 +31717,38 @@ def _ai_suggest_combine(files_meta: list, base_type: str = "") -> dict:
         return _fallback()
 
 
+#: unidades cujo número NÃO é quantidade de obra: verba ("1 vb" quer dizer
+#: "isto é um item, o valor é do orçamentista") e percentual. As de TEMPO vêm
+#: de `engine_rules._UNIDADES_DE_TEMPO`, a mesma lista da administração local.
+_UNIDADES_SEM_QUANTIDADE = frozenset({"vb", "vb.", "verba", "gl", "global", "%"})
+
+
+def _linha_tem_quantidade(linha) -> bool:
+    """A linha traz QUANTIDADE de obra? Número > 0 fora de verba, % e tempo.
+
+    🩸 22/09/2026 (revisão): a régua da liberação contava "linha com número" de
+    qualquer unidade — "1 vb" incluso. No ev572486 ("0 → 58 linhas com
+    quantidade") 20 das 58 eram verba ou prazo; na releitura do f8d8, 2 das 14
+    a mais eram verba.
+    """
+    from engine_rules import _UNIDADES_DE_TEMPO
+    try:
+        q = float((linha or {}).get("quantity") or 0)
+    except (TypeError, ValueError):
+        return False
+    if q <= 0:
+        return False
+    u = str((linha or {}).get("unit") or "").strip().lower()
+    return u not in _UNIDADES_SEM_QUANTIDADE and u not in _UNIDADES_DE_TEMPO
+
+
+def _linha_zerada(linha) -> bool:
+    try:
+        return float((linha or {}).get("quantity") or 0) <= 0
+    except (TypeError, ValueError):
+        return True
+
+
 def _contagem_para_liberar(job_id: str):
     """O que uma leitura tem, contado do banco — ou None se a leitura falhou.
 
@@ -31621,21 +31760,19 @@ def _contagem_para_liberar(job_id: str):
     linhas zeradas). O que o cliente usa é linha COM NÚMERO: `com_numero`.
     E "pranchas" contava strings de `ref_sheet` (30 e 38 num envio de 7 PDFs);
     agora conta a prancha de verdade (`_prancha_de_verdade`).
+    🩸 22/09/2026 (revisão): `com_numero` passou a ser QUANTIDADE de obra
+    (`_linha_tem_quantidade`, sem verba, % e tempo), e a contagem traz as
+    `zerados`, pra régua não chamar de melhora o que trouxe mais linha vazia do
+    que número.
     🪤 Erro de leitura devolve None, nunca zeros: "0 itens" no original faria
     qualquer filhote parecer melhor (23/08).
     """
     _st, _r = _supa_rest_service(
         "GET", "project_items",
-        params={"job_id": f"eq.{job_id}", "select": "confidence,ref_sheet,quantity"})
+        params={"job_id": f"eq.{job_id}", "select": "confidence,ref_sheet,quantity,unit"})
     if _st != 200:
         return None
     _r = _r or []
-
-    def _tem_numero(x):
-        try:
-            return float((x or {}).get("quantity") or 0) > 0
-        except (TypeError, ValueError):
-            return False
     # 24/08 (caso cliente-19): prancha é a causa, item é consequência — e por
     # prancha também, porque o saldo pode esconder a prancha que PIOROU.
     _pr = set()
@@ -31651,22 +31788,82 @@ def _contagem_para_liberar(job_id: str):
             _d["medidos"] += 1
     return {"itens": len(_r),
             "medidos": sum(1 for x in _r if (x or {}).get("confidence") == "confirmado"),
-            "com_numero": sum(1 for x in _r if _tem_numero(x)),
+            "com_numero": sum(1 for x in _r if _linha_tem_quantidade(x)),
+            "zerados": sum(1 for x in _r if _linha_zerada(x)),
             "pranchas": len(_pr),
             "por_prancha": _det}
 
 
 def _releitura_melhorou(antes: dict, depois: dict) -> bool:
-    """A versão nova tem mais LINHAS COM NÚMERO ou mais itens MEDIDOS?
+    """A versão nova tem mais itens MEDIDOS, ou mais linhas com QUANTIDADE sem
+    trazer ainda mais linha zerada?
 
     🩸 22/09/2026 (A10 do caso ee801b82/f8d8e6d8): a porta 3 chamava de
     melhora qualquer aumento de ITENS. Medido nas 21 liberações: ev572486
     passou com 0/19 → 0/83 (medidos/itens) e evbdbe1e com 6/28 → 5/47. Item a
     mais que nasce zerado é mais linha vazia, não leitura melhor.
+    🩸 22/09/2026 (revisão): a 1ª régua contava linha com número de qualquer
+    unidade e ignorava as zeradas — e a releitura do f8d8 (tipo errado) passaria
+    por melhora: 16 → 30 com número (+2 verba, +6 un, a fôrma virada "32,4 m")
+    e 47 → 61 zeradas. Agora verba não conta (`com_numero` já vem sem ela) e,
+    se as zeradas subiram MAIS que as linhas com quantidade, não é melhora.
+    📏 Remedido em 22/09/2026 15:38 (Brasília), já com as liberações de hoje:
+    nas 21 releituras/combinadas com os dois lados no banco, a régua nova
+    decide IGUAL à de antes nas 21 — nenhum aviso que saiu deixaria de sair.
+    🔑 Prancha que entrou NÃO decide sozinha (a do f8d8 também "ganhou" 2), mas
+    vai no `melhorou_em` e no motivo (`_ganho_da_releitura`).
     """
-    return (int((depois or {}).get("medidos") or 0) > int((antes or {}).get("medidos") or 0)
-            or int((depois or {}).get("com_numero") or 0)
-            > int((antes or {}).get("com_numero") or 0))
+    def _n(d, k):
+        try:
+            return int((d or {}).get(k) or 0)
+        except (TypeError, ValueError):
+            return 0
+    if _n(depois, "medidos") > _n(antes, "medidos"):
+        return True
+    _d_num = _n(depois, "com_numero") - _n(antes, "com_numero")
+    _d_zer = _n(depois, "zerados") - _n(antes, "zerados")
+    return _d_num > 0 and _d_zer <= _d_num
+
+
+def _ganho_da_releitura(antes: dict, depois: dict) -> list:
+    """No QUÊ a leitura nova tem mais — as frases do `melhorou_em` e do motivo.
+
+    🩸 22/09/2026 (revisão): com 5 → 7 pranchas e o mesmo número de linhas com
+    quantidade, a rota respondia `melhorou_em: "nada"` e o motivo dizia "não
+    ficou melhor" — de um filhote que recuperou as duas pranchas perdidas.
+    """
+    fora = []
+    for _k, _rot in (("medidos", "medidos"), ("com_numero", "linhas com quantidade"),
+                     ("pranchas", "pranchas lidas")):
+        try:
+            _a, _d = int((antes or {}).get(_k) or 0), int((depois or {}).get(_k) or 0)
+        except (TypeError, ValueError):
+            continue
+        if _d > _a:
+            fora.append("%d → %d %s" % (_a, _d, _rot))
+    return fora
+
+
+def _motivo_sem_ganho(antes: dict, depois: dict) -> str:
+    """O que a tela de quem liberou lê quando o e-mail NÃO sai por falta de ganho."""
+    def _n(d, k):
+        try:
+            return int((d or {}).get(k) or 0)
+        except (TypeError, ValueError):
+            return 0
+    txt = ("NÃO enviado: pela contagem, a versão nova não tem ganho que o e-mail "
+           "possa afirmar (linhas com quantidade %d → %d, sem contar verba; "
+           "linhas zeradas %d → %d; medidos %d → %d)."
+           % (_n(antes, "com_numero"), _n(depois, "com_numero"),
+              _n(antes, "zerados"), _n(depois, "zerados"),
+              _n(antes, "medidos"), _n(depois, "medidos")))
+    if _n(depois, "pranchas") > _n(antes, "pranchas"):
+        txt += (" Mas entraram %d prancha(s) que não tinham entrado (%d → %d) — "
+                "confira na tela o que elas trouxeram."
+                % (_n(depois, "pranchas") - _n(antes, "pranchas"),
+                   _n(antes, "pranchas"), _n(depois, "pranchas")))
+    return txt + (" A leitura nova já está no painel do cliente; se valer avisar, "
+                  "mande à mão.")
 
 
 def _patch_da_liberacao(pai: dict, novo_nome: str) -> dict:
@@ -31822,8 +32019,9 @@ def _auto_liberar_filhote_quando_pronto(eval_job_id: str, pai_id: str,
             return
 
         # LIBERAR — mesmo movimento do botão manual
-        novo_nome = (str(pai.get("project_name") or "Projeto")[:60]
-                     + " — nova leitura (motor atualizado)")
+        # 🩸 22/09/2026 (revisão): era " — nova leitura (motor atualizado)" —
+        # e a releitura pode ser do MESMO motor (o do f8d8 era o mesmo commit).
+        novo_nome = str(pai.get("project_name") or "Projeto")[:60] + " — nova leitura"
         _supa_rest_service("PATCH", "projects",
                            body=_patch_da_liberacao(pai, novo_nome),
                            params={"job_id": f"eq.{eval_job_id}"})
@@ -31835,13 +32033,10 @@ def _auto_liberar_filhote_quando_pronto(eval_job_id: str, pai_id: str,
             if _ca is None or _cd is None or not _releitura_melhorou(_ca, _cd):
                 _email_ok = False
                 _log_error("filhote:auto",
-                           "e-mail SEGURADO: sem ganho que o e-mail possa contar "
-                           "(linhas com número %s → %s, medidos %s → %s). A leitura "
-                           "nova está no painel; se valer avisar, é à mão."
-                           % ((_ca or {}).get("com_numero", "?"),
-                              (_cd or {}).get("com_numero", "?"),
-                              (_ca or {}).get("medidos", "?"),
-                              (_cd or {}).get("medidos", "?")),
+                           "e-mail SEGURADO: " + (
+                               _motivo_sem_ganho(_ca, _cd) if _ca and _cd else
+                               "não consegui contar as duas leituras. A leitura "
+                               "nova está no painel; se valer avisar, é à mão."),
                            eval_job_id, severity="info")
             # 🚨 29/08: o mesmo teto de 1 e-mail por semana que o botão manual
             # passou a respeitar. Este caminho é AUTOMÁTICO — sem ninguém pra
@@ -31943,22 +32138,30 @@ def _build_leitura_combinada_email(nome: str, proj: str, merge_job: str,
     import html as _hc
     ganho_med = depois.get("medidos", 0) - antes.get("medidos", 0)
     ganho_pr = depois.get("pranchas", 0) - antes.get("pranchas", 0)
+    # 🩸 22/09/2026 (revisão): o portão da liberação passou a aceitar merge cujo
+    # ganho é só linha com QUANTIDADE, e este e-mail não sabia falar dela — saía
+    # "O que você ganha: uma leitura mais completa" e o preheader "0 itens
+    # medidos do CAD, contra 0". Mesma regra do irmão (`_build_leitura_nova_
+    # email`): diz o que subiu, e medido só quando algum lado tem medido. Item
+    # a mais não é ganho.
+    ganho_num = depois.get("com_numero", 0) - antes.get("com_numero", 0)
+    _mostra_medidos = antes.get("medidos", 0) > 0 or depois.get("medidos", 0) > 0
 
     linhas = []
     if ganho_pr > 0:
         linhas.append("<b>%d prancha(s) que n&atilde;o tinham entrado agora entraram</b>" % ganho_pr)
+    if ganho_num > 0:
+        linhas.append("<b>%d &rarr; %d linhas com quantidade</b> (sem contar verba)"
+                      % (antes.get("com_numero", 0), depois.get("com_numero", 0)))
     if ganho_med > 0:
         linhas.append("<b>%d &rarr; %d itens medidos direto do CAD</b>"
                       % (antes.get("medidos", 0), depois.get("medidos", 0)))
-    if depois.get("itens", 0) > antes.get("itens", 0):
-        linhas.append("%d &rarr; %d itens no total"
-                      % (antes.get("itens", 0), depois.get("itens", 0)))
     if len(linhas) > 2:
         ganho_html = ", ".join(linhas[:-1]) + " e " + linhas[-1]
     elif linhas:
         ganho_html = " e ".join(linhas)
     else:
-        ganho_html = "uma leitura mais completa"
+        ganho_html = "a leitura mais completa de cada prancha, numa planilha s&oacute;"
 
     # A procedência por prancha e o aviso de sobreposição já foram escritos como
     # avisos do projeto combinado quando ele nasceu. Reaproveita em vez de
@@ -31992,8 +32195,9 @@ def _build_leitura_combinada_email(nome: str, proj: str, merge_job: str,
 
     corpo += _email_img(
         "pronta-hero.png",
-        "Planilha combinada: %d itens medidos do CAD, cada linha dizendo de qual "
-        "leitura veio" % depois.get("medidos", 0))
+        ("Planilha combinada: %d itens medidos do CAD, cada linha dizendo de qual "
+         "leitura veio" % depois.get("medidos", 0)) if _mostra_medidos else
+        "Planilha combinada: cada linha diz de qual leitura veio")
 
     if _proc:
         corpo += ('<div style="font-size:14px;color:#374151;line-height:1.6;'
@@ -32036,9 +32240,12 @@ def _build_leitura_combinada_email(nome: str, proj: str, merge_job: str,
         "https://ai.arq.br/projeto.html?job_id=%s" % merge_job,
         badge="&#129516; Combinada",
         reason="Você está recebendo este e-mail porque processou um projeto no AI.arq.",
-        preheader="%d itens medidos do CAD, contra %d na leitura anterior. "
-                  "A sua versão original continua no painel."
-                  % (depois.get("medidos", 0), antes.get("medidos", 0)))
+        preheader="".join(
+            [("%d itens medidos do CAD, contra %d na leitura anterior. "
+              % (depois.get("medidos", 0), antes.get("medidos", 0))) if ganho_med > 0 else "",
+             ("%d linhas com quantidade, contra %d na leitura anterior. "
+              % (depois.get("com_numero", 0), antes.get("com_numero", 0))) if ganho_num > 0 else ""]
+        ) + "A sua versão original continua no painel.")
     return subject, html
 
 
@@ -32096,10 +32303,11 @@ def _build_leitura_nova_email(nome: str, proj: str, filho_job: str,
     builder — até aqui a Central listava este e-mail como "fora do catálogo"."""
     import html as _hn
     ganho_pr = depois.get("pranchas", 0) - antes.get("pranchas", 0)
-    # 🩸 22/09 (f8d8e6d8): ganho é linha COM NÚMERO, não item; "0 → 0 medidos" não sai.
+    # 🩸 22/09 (f8d8e6d8): ganho é linha COM NÚMERO, não item; "0 → 0" não sai.
     _num_a, _num_d = antes.get("com_numero", 0), depois.get("com_numero", 0)
     _med_a, _med_d = antes.get("medidos", 0), depois.get("medidos", 0)
     _mostra_medidos = _med_a > 0 or _med_d > 0
+    _mostra_numero = _num_a > 0 or _num_d > 0
 
     linha_ganho = []
     # 24/08: prancha primeiro. Se 3 das 7 pranchas do cliente não tinham
@@ -32109,13 +32317,17 @@ def _build_leitura_nova_email(nome: str, proj: str, filho_job: str,
             "<b>%d prancha(s) que n&atilde;o tinham entrado agora entraram</b> "
             "(%d &rarr; %d pranchas lidas)"
             % (ganho_pr, antes.get("pranchas", 0), depois.get("pranchas", 0)))
-    linha_ganho.append("<b>%d &rarr; %d linhas com quantidade</b>" % (_num_a, _num_d))
+    if _mostra_numero:
+        linha_ganho.append("<b>%d &rarr; %d linhas com quantidade</b> (sem contar verba)"
+                           % (_num_a, _num_d))
     if _mostra_medidos:
         linha_ganho.append("<b>%d &rarr; %d medidos do CAD</b>" % (_med_a, _med_d))
     if len(linha_ganho) > 2:
         ganho_html = ", ".join(linha_ganho[:-1]) + " e " + linha_ganho[-1]
-    else:
+    elif linha_ganho:
         ganho_html = " e ".join(linha_ganho)
+    else:
+        ganho_html = "a leitura foi refeita &mdash; os n&uacute;meros est&atilde;o no painel"
 
     # 🚨 Honestidade dos dois lados. Se alguma prancha ficou com MENOS medições
     # que na leitura antiga, o cliente precisa saber ANTES de trocar a planilha
@@ -32151,9 +32363,10 @@ def _build_leitura_nova_email(nome: str, proj: str, filho_job: str,
         "seu, e continua tudo gr&aacute;tis no beta.</div>")
 
     subject = "%s — refizemos a leitura" % (proj or "Seu projeto")
-    _pre = ("%d → %d linhas com quantidade%s. A sua versão original continua no painel."
-            % (_num_a, _num_d,
-               (", %d → %d medidos do CAD" % (_med_a, _med_d)) if _mostra_medidos else ""))
+    _pre = "".join(
+        [("%d → %d linhas com quantidade. " % (_num_a, _num_d)) if _mostra_numero else "",
+         ("%d → %d medidos do CAD. " % (_med_a, _med_d)) if _mostra_medidos else ""]
+    ) + "A sua versão original continua no painel."
     html = _email_wrap(
         "Refizemos a leitura do seu projeto", corpo,
         "Ver a leitura nova",
@@ -32310,13 +32523,17 @@ def admin_liberar_filhote(eval_job_id: str, request: Request):
     # atualizado)" seria mentira — a gente não releu nada, juntou o melhor de
     # duas leituras que já existiam. O prefixo "mg" nasce em /merge-criar.
     _e_merge = str(eval_job_id).startswith("mg")
+    # 🩸 22/09/2026 (revisão): a releitura se chamava "nova leitura (motor
+    # atualizado)" — e pode ser do MESMO motor. O revogar ainda reconhece o
+    # nome antigo, que está gravado nos filhotes liberados até hoje.
     _SUFIXO = (" — versão combinada (o melhor das duas leituras)" if _e_merge
-               else " — nova leitura (motor atualizado)")
+               else " — nova leitura")
     novo_nome = str(pai.get("project_name") or "Projeto")[:60] + _SUFIXO
     # 23/08 (auditoria): ao revogar, gravava de volta o nome JÁ renomeado — o
     # job ficava marcado como "nova leitura" mesmo depois de recolhido.
     _nome_filho = str(filho.get("project_name") or "")
-    if revogar and _nome_filho.endswith(_SUFIXO):
+    if revogar and (_nome_filho.endswith(_SUFIXO) or (
+            not _e_merge and _nome_filho.endswith(" — nova leitura (motor atualizado)"))):
         _nome_filho = ("[TESTE] " + str(pai.get("project_name") or "Projeto")[:60]
                        + (" — combinada" if _e_merge else " — avaliação"))
     # 🔑 Revogar devolve o filhote ao estado de avaliação INTEIRO, contato
@@ -32351,11 +32568,7 @@ def admin_liberar_filhote(eval_job_id: str, request: Request):
         # por melhora. O motivo diz a régua, pra quem clicou entender por que o
         # aviso não saiu mesmo com "mais itens" na tela.
         elif not _releitura_melhorou(antes, depois):
-            email_motivo = "NÃO enviado: a versão nova não ficou melhor que a original " + (
-                "(linhas com quantidade %d → %d, medidos %d → %d; item a mais não "
-                "é melhora). Se valer avisar, mande à mão."
-                % (antes.get("com_numero", 0), depois.get("com_numero", 0),
-                   antes["medidos"], depois["medidos"]))
+            email_motivo = _motivo_sem_ganho(antes, depois)
         elif _email_auto_recente(pai.get("user_email", ""), dias=7):
             # 🚨 29/08/2026 — A cliente-68 RECEBEU TRÊS E-MAILS NUM DIA.
             #
@@ -32425,14 +32638,7 @@ def admin_liberar_filhote(eval_job_id: str, request: Request):
             # a divergir — e ganha `melhorou_em`, que diz no QUÊ melhorou, que é
             # o que quem libera precisa saber pra decidir.
             "melhorou": _releitura_melhorou(antes, depois),
-            "melhorou_em": ", ".join(
-                [t for t in (
-                    ("%d → %d medidos" % (antes["medidos"], depois["medidos"])
-                     if depois["medidos"] > antes["medidos"] else ""),
-                    ("%d → %d linhas com quantidade"
-                     % (antes.get("com_numero", 0), depois.get("com_numero", 0))
-                     if depois.get("com_numero", 0) > antes.get("com_numero", 0) else ""),
-                ) if t]) or "nada",
+            "melhorou_em": ", ".join(_ganho_da_releitura(antes, depois)) or "nada",
             "revisoes_no_original": revisoes,
             "email_enviado": email_enviado,
             "email_motivo": email_motivo,
@@ -33127,9 +33333,11 @@ def admin_merge_criar(eval_job_id: str, request: Request):
         _row["confidence"] = "estimado"
         _ob = str(_row.get("observations") or "")
         if "não é medição da geometria" not in _ob:
-            _row["observations"] = (
+            # 🩸 22/09/2026 (revisão): `[:1000]` comia o fim da observação que
+            # a leitura de origem já gravou — onde mora o veredito dela.
+            _row["observations"] = _observacao_que_cabe(
                 "⚠ ESTIMADO — este número foi LIDO de um texto da prancha, não "
-                "medido da geometria. " + _ob)[:1000]
+                "medido da geometria. " + _ob)
     if _rebaixados:
         _log_error("admin:merge",
                    "rebaixei %d item(ns) que vinham MEDIDOS com procedência só "

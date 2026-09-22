@@ -90,10 +90,19 @@ def _main():
 
 
 def _corpo(nome):
-    src = _main()
-    i = src.index("def " + nome)
-    j = src.index("\n@app.", i) if "\n@app." in src[i:] else i + 6000
-    return src[i:min(j, i + 6000)]
+    """O envio E o builder dele, cada um inteiro.
+
+    🩸 22/09/2026: era uma janela de 6000 caracteres a partir do `def` do
+    envio, e "continua no painel" (no builder) estava no caractere 5896 — um
+    comentário a mais no meio quebrava o guarda. É o defeito que `_corpo.py`
+    existe pra impedir: janela fixa mede o vizinho ou mede meia função.
+
+    🪤 O próprio `corpo_de` já emenda o builder (`ENVIO_E_BUILDER`) — juntar de
+    novo aqui duplicava o texto do builder, e texto duplicado faz qualquer
+    contagem futura mentir."""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from _corpo import corpo_de
+    return corpo_de(nome)
 
 
 def test_a_contagem_do_filhote_inclui_pranchas(monkeypatch):

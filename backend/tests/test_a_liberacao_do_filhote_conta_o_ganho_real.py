@@ -44,16 +44,18 @@ PAI = {"job_id": PAI_ID, "user_id": "u-cliente-nn", "user_email": EMAIL,
        "user_name": "Cliente NN", "project_name": "Projeto cliente-nn"}
 
 
-def _itens(n, com_numero, medidos, arquivos, hints):
+def _itens(n, com_numero, medidos, arquivos, hints, verbas=0):
     """`n` linhas espalhadas por `arquivos` PDFs de 1 página, com `hints`
-    variações de hint da IA no `ref_sheet` — como a leitura grava."""
+    variações de hint da IA no `ref_sheet` — como a leitura grava. As
+    `verbas` primeiras linhas com número são "1 vb"."""
     fora = []
     for i in range(n):
         arq = "prancha-%s.pdf" % "ABCDEFG"[i % arquivos]
+        verba = i < verbas
         fora.append({"confidence": "confirmado" if i < medidos else "estimado",
                      "ref_sheet": "%s (VISTA %d – PLANTA / CORTE)" % (arq, i % hints),
-                     "quantity": 1.5 if i < com_numero else 0,
-                     "description": "Item %d" % i, "unit": "m³"})
+                     "quantity": (1 if verba else 1.5) if i < com_numero else 0,
+                     "description": "Item %d" % i, "unit": "vb" if verba else "m³"})
     return fora
 
 
@@ -62,17 +64,26 @@ def _itens(n, com_numero, medidos, arquivos, hints):
 _PAI_ITENS = _itens(63, 16, 0, 5, 30)
 
 
+def _filho_bom():
+    """Um filhote BOM de verdade: as 7 pranchas, 16 → 40 linhas com quantidade
+    e MENOS linha zerada (47 → 30).
+    🩸 22/09 (revisão): até aqui o "filhote bom" era 91/30/7 — as contagens da
+    releitura REAL do f8d8, que foi de tipo errado. Ver o teste do caso."""
+    return _itens(70, 40, 0, 7, 38)
+
+
 class _Banco(object):
     """Supabase de mentira. Guarda o que foi GRAVADO."""
 
-    def __init__(self, itens_filho):
+    def __init__(self, itens_filho, itens_pai=None):
         self.projects = {
             PAI_ID: dict(PAI),
             FILHO_ID: {"job_id": FILHO_ID, "parent_job_id": PAI_ID, "is_eval": True,
                        "user_id": "eval", "user_email": "", "user_name": "",
                        "status": "done", "warnings": [],
                        "project_name": "[TESTE] Projeto cliente-nn — avaliação"}}
-        self.itens = {PAI_ID: _PAI_ITENS, FILHO_ID: itens_filho}
+        self.itens = {PAI_ID: itens_pai if itens_pai is not None else _PAI_ITENS,
+                      FILHO_ID: itens_filho}
         self.patches = []
 
     def rows(self, method, path, **kw):
@@ -131,8 +142,8 @@ def bancada(monkeypatch):
     monkeypatch.setattr(threading, "Thread", _ThreadJa)
     monkeypatch.setattr(time, "sleep", lambda *a, **k: None)
 
-    def _monta(itens_filho):
-        b = _Banco(itens_filho)
+    def _monta(itens_filho, itens_pai=None):
+        b = _Banco(itens_filho, itens_pai)
         monkeypatch.setattr(main, "_supa_rows", b.rows)
         monkeypatch.setattr(main, "_supa_rest_service", b.service)
         estado["banco"] = b
@@ -167,36 +178,124 @@ def test_a_contagem_conta_arquivo_e_linha_com_numero(bancada):
     bancada["monta"](_itens(91, 30, 0, 7, 38))
     c = main._contagem_para_liberar(PAI_ID)
     assert c["itens"] == 63 and c["com_numero"] == 16 and c["medidos"] == 0, c
+    assert c["zerados"] == 47, c
     assert c["pranchas"] == 5, "contou variação de hint como prancha: %r" % c["pranchas"]
+
+
+def test_verba_NAO_e_linha_com_quantidade(bancada):
+    """🩸 22/09/2026 (revisão): "1 vb" contava como linha com número. No
+    ev572486 ("0 → 58"), 20 das 58 eram verba ou prazo."""
+    f = main._linha_tem_quantidade
+    for un in ("vb", "VB", "verba", "%", "mês", "meses", "dia", "h"):
+        assert not f({"quantity": 1, "unit": un}), un
+    # 🧪 controle: quantidade de obra conta, zero não conta
+    for un in ("m²", "m³", "m", "kg", "un", "cj"):
+        assert f({"quantity": 2.5, "unit": un}), un
+    assert not f({"quantity": 0, "unit": "m²"}) and not f({"quantity": None, "unit": "m²"})
+    bancada["monta"](_itens(91, 30, 0, 7, 38), itens_pai=_itens(63, 16, 0, 5, 30, verbas=4))
+    c = main._contagem_para_liberar(PAI_ID)
+    assert c["com_numero"] == 12 and c["zerados"] == 47, (
+        "a verba entrou na conta de linha com quantidade: %r" % c)
+
+
+def test_mais_linha_zerada_que_linha_com_numero_NAO_e_melhora():
+    """🩸 A releitura do f8d8 (tipo errado): 12 → 24 com quantidade, mas 47 →
+    61 zeradas. Linha com número a mais não compensa ainda mais linha vazia."""
+    f = main._releitura_melhorou
+    assert not f({"medidos": 0, "com_numero": 12, "zerados": 47},
+                 {"medidos": 0, "com_numero": 24, "zerados": 61})
+    # 🧪 controles: ganho que não traz mais zerada (ou traz menos) é melhora
+    assert f({"medidos": 0, "com_numero": 12, "zerados": 47},
+             {"medidos": 0, "com_numero": 24, "zerados": 59})
+    assert f({"medidos": 0, "com_numero": 16, "zerados": 47},
+             {"medidos": 0, "com_numero": 40, "zerados": 30})
+    # e medido a mais continua sendo melhora, com zerada ou sem
+    assert f({"medidos": 1, "com_numero": 5, "zerados": 2},
+             {"medidos": 3, "com_numero": 5, "zerados": 9})
 
 
 # ── a rota: o e-mail só sai com ganho, e diz o ganho que houve ──────────────
 def test_o_caso_filhote_com_mais_itens_e_o_mesmo_numero_NAO_manda_email(bancada):
     """🩸 O filhote do caso, se ele só trouxer item zerado a mais: a cliente
-    não recebe "refizemos a leitura", e quem clicou lê o porquê."""
+    não recebe "refizemos a leitura", e quem clicou lê o porquê.
+    🩸 22/09 (revisão): e o porquê não pode dizer "não ficou melhor… nada" de
+    um filhote que recuperou as 2 pranchas perdidas (5 → 7)."""
     bancada["monta"](_itens(91, 16, 0, 7, 38))
     r = main.admin_liberar_filhote(FILHO_ID, _Req())
     assert bancada["emails"] == [], "mandou 'refizemos a leitura' sem ganho nenhum"
-    assert r["melhorou"] is False and r["melhorou_em"] == "nada", r
-    assert "NÃO enviado" in r["email_motivo"] and "16 → 16" in r["email_motivo"], (
-        r["email_motivo"])
+    assert r["melhorou"] is False, r
+    assert r["melhorou_em"] == "5 → 7 pranchas lidas", r["melhorou_em"]
+    m = r["email_motivo"]
+    assert "NÃO enviado" in m and "16 → 16" in m, m
+    assert "5 → 7" in m and "não ficou melhor" not in m, m
+    assert "painel" in m and "à mão" in m, m
+
+
+def test_o_caso_REAL_do_f8d8_como_filhote_NAO_manda_email(bancada):
+    """🩸 A releitura f8d8e6d8 (os mesmos 7 PDFs lidos como arquitetura) com as
+    contagens do banco: 63 → 91 itens, 16 → 30 com número (4 → 6 verbas), 47
+    → 61 zeradas, 5 → 7 arquivos. A 1ª régua a chamaria de melhora e o e-mail
+    diria "16 → 30 linhas com quantidade"."""
+    bancada["monta"](_itens(91, 30, 0, 7, 38, verbas=6),
+                     itens_pai=_itens(63, 16, 0, 5, 30, verbas=4))
+    r = main.admin_liberar_filhote(FILHO_ID, _Req())
+    assert bancada["emails"] == [], "a releitura de tipo errado virou 'refizemos a leitura'"
+    assert r["melhorou"] is False, r
+    m = r["email_motivo"]
+    assert "12 → 24" in m and "47 → 61" in m and "5 → 7" in m, m
+    assert "linhas com quantidade" in r["melhorou_em"], r["melhorou_em"]
 
 
 def test_com_ganho_o_email_conta_o_ganho_REAL(bancada):
-    """O filhote bom: 7 de 7 pranchas e 16 → 30 linhas com número. O e-mail
+    """O filhote bom: 7 de 7 pranchas e 16 → 40 linhas com número. O e-mail
     diz isso — e não diz "melhoramos o motor" nem "0 → 0 medidos"."""
-    bancada["monta"](_itens(91, 30, 0, 7, 38))
+    bancada["monta"](_filho_bom())
     r = main.admin_liberar_filhote(FILHO_ID, _Req())
     assert r["melhorou"] is True, r
+    assert r["melhorou_em"] == "16 → 40 linhas com quantidade, 5 → 7 pranchas lidas", r
     assert len(bancada["emails"]) == 1 and bancada["emails"][0]["para"] == EMAIL
     html = bancada["emails"][0]["html"]
-    assert "16 &rarr; 30 linhas com quantidade" in html, html
+    assert "16 &rarr; 40 linhas com quantidade</b> (sem contar verba)" in html, html
     assert "2 prancha(s) que n&atilde;o tinham entrado agora entraram" in html, (
         "a conta de prancha não é por arquivo")
     assert "(5 &rarr; 7 pranchas lidas)" in html, html
     assert "medidos do CAD" not in html, (
         "o e-mail fala de medido com 0 dos dois lados: 0 → 0 não diz nada")
     assert "Melhoramos o motor" not in html and "melhoramos o motor" not in html
+
+
+def test_zero_contra_zero_nao_sai_em_linha_nenhuma():
+    """O "0 → 0" que o commit anterior tirou dos medidos também não pode sair
+    nas linhas com quantidade (um DXF que só ganhou medido)."""
+    _a = {"itens": 9, "medidos": 1, "com_numero": 0, "pranchas": 1}
+    _d = {"itens": 9, "medidos": 3, "com_numero": 0, "pranchas": 1}
+    _s, html = main._build_leitura_nova_email("cliente-nn", "Projeto", FILHO_ID, _a, _d)
+    assert "1 &rarr; 3 medidos do CAD" in html, html
+    assert "0 &rarr; 0" not in html and "0 → 0" not in html, html
+
+
+def test_a_combinada_conta_linha_com_quantidade_e_nao_0_contra_0():
+    """🩸 22/09/2026 (revisão, R5): o portão novo vale também pro MERGE, e deixa
+    passar combinada cujo ganho é só linha com quantidade. O e-mail dela não
+    sabia falar disso: "O que você ganha: uma leitura mais completa" e, no
+    preheader, "0 itens medidos do CAD, contra 0 na leitura anterior"."""
+    antes = {"itens": 40, "medidos": 0, "com_numero": 10, "zerados": 30,
+             "pranchas": 3, "por_prancha": {}}
+    depois = {"itens": 40, "medidos": 0, "com_numero": 25, "zerados": 15,
+              "pranchas": 3, "por_prancha": {}}
+    assert main._releitura_melhorou(antes, depois), "controle: o portão deixa passar"
+    _s, html = main._build_leitura_combinada_email(
+        "cliente-nn", "Projeto cliente-nn", "mg000001", antes, depois, [])
+    assert "10 &rarr; 25 linhas com quantidade" in html, html
+    assert "25 linhas com quantidade, contra 10 na leitura anterior" in html, html
+    assert "uma leitura mais completa" not in html
+    assert "0 itens medidos do CAD" not in html and "contra 0 na leitura" not in html, html
+    # 🧪 controle: com medido de verdade, o medido aparece — como sempre
+    _s, h2 = main._build_leitura_combinada_email(
+        "cliente-nn", "Projeto cliente-nn", "mg000001",
+        dict(antes, medidos=49), dict(depois, medidos=77), [])
+    assert "49 &rarr; 77 itens medidos direto do CAD" in h2, h2
+    assert "77 itens medidos do CAD, contra 49 na leitura anterior" in h2, h2
 
 
 def test_medido_aparece_quando_algum_lado_tem(bancada):

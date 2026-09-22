@@ -480,8 +480,10 @@ def test_o_liberar_escolhe_o_email_certo(monkeypatch, job, qual):
         % (antes, depois))
 
     nome = patches[-1]["body"]["project_name"]
+    # 🩸 22/09/2026: a releitura perdeu o "(motor atualizado)" — pode ser do
+    # MESMO motor.
     esperado = (" — versão combinada (o melhor das duas leituras)"
-                if qual == "combinada" else " — nova leitura (motor atualizado)")
+                if qual == "combinada" else " — nova leitura")
     assert nome.endswith(esperado), (
         "o job %s chegou ao painel do cliente como %r" % (job, nome))
 

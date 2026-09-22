@@ -167,8 +167,13 @@ def _fatia_dos_rebaixamentos():
 def _rodar_os_rebaixamentos(itens, job_id="job-teste"):
     """RODA os dois blocos finais de produção. Devolve (_n_par, logs)."""
     from engine_rules import selos_sem_medida as _ssm
+    import main as _m
     logs = []
+    # 🩸 22/09/2026: o aviso do parcial passou a ser juntado por
+    # `_observacao_que_cabe` (o `[:1000]` comia o fim da observação) — a
+    # função REAL entra no escopo, como os outros colaboradores.
     ns = {"all_items": itens, "_selos_sem_medida": _ssm, "job_id": job_id,
+          "_observacao_que_cabe": _m._observacao_que_cabe,
           "_log_error": lambda *a, **k: logs.append(
               " ".join(str(x) for x in a))}
     exec(compile(_fatia_dos_rebaixamentos(), "rebaixa-selo", "exec"), ns)

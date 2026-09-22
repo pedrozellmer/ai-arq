@@ -209,11 +209,20 @@ def _selo(item):
     return str(getattr(c, "value", c) or "").strip().lower()
 
 
+def _observacao_que_cabe():
+    """🩸 22/09/2026: o aviso destes blocos passou a ser juntado pela função
+    REAL `_observacao_que_cabe` (o `[:1000]` comia o fim da observação) — ela
+    entra no escopo como os outros colaboradores."""
+    import main as _m
+    return _m._observacao_que_cabe
+
+
 def _rodar_a_rede(itens):
     """Executa o BLOCO REAL do process_job sobre `itens`.
 
     Devolve (avisos_ao_cliente, logs). Nada de rede, banco ou IA: o bloco só
-    precisa de `all_items`, `project_data`, `job_id` e `_log_error`.
+    precisa de `all_items`, `project_data`, `job_id`, `_log_error` e
+    `_observacao_que_cabe`.
     """
     logs = []
     pd = _ProjectDataFake()
@@ -222,6 +231,7 @@ def _rodar_a_rede(itens):
         "project_data": pd,
         "job_id": "job-do-guarda",
         "_log_error": lambda etapa, msg, *a, **k: logs.append((etapa, msg)),
+        "_observacao_que_cabe": _observacao_que_cabe(),
         "print": lambda *a, **k: None,
     }
     exec(compile(bloco_desde(_ANCORA_REDE), "<rede-do-selo>", "exec"), ns, ns)
@@ -303,6 +313,7 @@ def _rodar_a_rede_e_DEPOIS_a_escala(itens, escalas=None):
         "_escala_por_prancha": list(_ESCALAS_QUE_DIVERGEM if escalas is None
                                     else escalas),
         "_log_error": lambda etapa, msg, *a, **k: logs.append((etapa, msg)),
+        "_observacao_que_cabe": _observacao_que_cabe(),
         "print": lambda *a, **k: None,
     }
     exec(compile(bloco_desde(_ANCORA_REDE), "<rede-do-selo>", "exec"), ns, ns)

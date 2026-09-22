@@ -38,9 +38,11 @@ _SETE = ["prancha-%s.pdf" % letra for letra in "ABCDEFG"]
 _ANTERIOR = "ee801b82"
 
 
-def _banco(monkeypatch, storage, refs, tipo="estrutura", pd=None, area=None):
+def _banco(monkeypatch, storage, refs, tipo="estrutura", pd=None, area=None,
+           files_count=7):
     """`storage` = o que a lista do Storage devolve (None = não consegui
-    listar); `refs` = os `ref_sheet` dos itens do projeto anterior."""
+    listar); `refs` = os `ref_sheet` dos itens do projeto anterior;
+    `files_count` = quantos arquivos o projeto anterior recebeu."""
     chamadas = []
 
     def _rows(metodo, caminho, **k):
@@ -48,7 +50,8 @@ def _banco(monkeypatch, storage, refs, tipo="estrutura", pd=None, area=None):
         if caminho.startswith("/projects?"):
             return [{"job_id": _ANTERIOR, "project_name": "Projeto cliente-nn",
                      "created_at": "2026-09-21T20:07:31Z", "project_type": tipo,
-                     "user_pe_direito": pd, "user_total_area": area}]
+                     "user_pe_direito": pd, "user_total_area": area,
+                     "files_count": files_count}]
         if caminho.startswith("/project_items?"):
             return [{"ref_sheet": r} for r in refs]
         return []
@@ -103,6 +106,34 @@ def test_o_storage_so_conta_desenho(monkeypatch):
     _banco(monkeypatch, ["_thumbs", "prancha-A.png"], _REFS_SEM_D_E_F)
     r = main._projeto_ja_enviado("u1", set(_SETE), 0, 0)
     assert r and r["n_iguais"] == 5 and r["contagem_exata"] is False, r
+    # 🪤 22/09 (revisão): com a régua do `files_count`, miniatura contada como
+    # desenho completaria a conta — 5 desenhos + 2 miniaturas "cobririam" os 7
+    # e o Storage parcial viraria exato
+    so_ate_e = [n for n in _SETE if n[-5] in "ABCDE"]
+    _banco(monkeypatch, so_ate_e + ["_thumbs", "prancha-F.png"], _REFS_SEM_D_E_F)
+    r = main._projeto_ja_enviado("u1", set(_SETE), 0, 0)
+    assert r and r["contagem_exata"] is False, r
+
+
+def test_storage_PARCIAL_nao_e_conta_exata(monkeypatch):
+    """🩸 22/09/2026 (revisão): o upload ao Storage é best-effort, e uma lista
+    PARCIAL era tratada como exata — o texto afirmaria "5 dos 7". 📏 90 d: 2 de
+    165 projetos concluídos têm menos desenho no Storage que `files_count`.
+    Aqui o Storage perdeu F e G e os itens perderam D e F: juntos, os dois
+    pisos dão 6 — e o texto diz "pelo menos"."""
+    so_ate_e = [n for n in _SETE if n[-5] in "ABCDE"]
+    _banco(monkeypatch, so_ate_e, _REFS_SEM_D_E_F, files_count=7)
+    r = main._projeto_ja_enviado("u1", set(_SETE), 0, 0)
+    assert r and r["contagem_exata"] is False, r
+    assert r["n_iguais"] == 6, "não juntou o Storage parcial com os itens: %r" % r
+
+
+def test_CONTROLE_storage_que_cobre_o_envio_e_exato(monkeypatch):
+    """🧪 A lista que cobre o `files_count` (ou passa dele — anexo no mesmo
+    prefixo) continua sendo a conta exata."""
+    _banco(monkeypatch, _SETE + ["anexo.pdf"], _REFS_SEM_D_E_F, files_count=7)
+    r = main._projeto_ja_enviado("u1", set(_SETE), 0, 0)
+    assert r and r["contagem_exata"] is True and r["n_iguais"] == 7, r
 
 
 def test_CONTROLE_caderno_diferente_continua_sem_aviso(monkeypatch):
@@ -172,6 +203,20 @@ def test_o_caso_o_texto_afirma_7_de_7_e_nao_da_conselho_de_arquitetura(
     assert "PÉ-DIREITO" not in texto and "ÁREA TOTAL" not in texto, (
         "conselho de arquitetura pra prancha de estrutura: %r" % texto)
     assert "DXF" in texto and "comprimento de PDF" not in texto, texto
+    # 🩸 22/09 (revisão): com o tipo trocado, "mandar de novo não muda o
+    # motivo" é falso na direção de correção — e o texto tem que dizer como
+    # consertar sem reenviar
+    assert "não muda o motivo" not in texto, texto
+    assert "Reprocessar escolhendo o tipo certo" in texto, texto
+
+
+def test_CONTROLE_sem_troca_de_tipo_o_aviso_diz_que_nao_muda_o_motivo(
+        monkeypatch, tmp_path):
+    """🧪 O mesmo caderno, no mesmo tipo: aí sim a causa das linhas em branco
+    é a mesma, e o aviso diz isso."""
+    _banco(monkeypatch, _SETE, _REFS_SEM_D_E_F, tipo="arquitetura")
+    texto = _envia(monkeypatch, tmp_path, "arquitetura")
+    assert "não muda o motivo" in texto and "Reprocessar" not in texto, texto
 
 
 def test_em_projeto_estrutura_so_o_conselho_que_vale(monkeypatch, tmp_path):

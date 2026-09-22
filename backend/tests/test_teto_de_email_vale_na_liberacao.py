@@ -446,7 +446,10 @@ def test_o_motivo_VOLTA_pra_quem_libera_em_vez_de_sumir():
 
     O texto tem que dizer as duas coisas: que não mandou, e que a leitura já
     está no painel — senão quem lê acha que a liberação falhou."""
-    b = _bloco('email_motivo = "NÃO enviado: a versão nova não ficou melhor')
+    # 🩸 22/09/2026: o motivo sem ganho virou `_motivo_sem_ganho(...)` — a
+    # frase "não ficou melhor" mentia de filhote que recuperou prancha. A
+    # âncora é a porta dele; o que se confere abaixo é a porta do teto.
+    b = _bloco("elif not _releitura_melhorou(antes, depois):")
     i = b.find("_email_auto_recente")
     trecho = b[i:i + 700]
     assert "NÃO enviado" in trecho, "não devolve motivo pra quem libera"
