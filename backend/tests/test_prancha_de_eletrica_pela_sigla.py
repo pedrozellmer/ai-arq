@@ -111,7 +111,7 @@ def test_a_sigla_se_comporta_como_a_palavra_em_toda_posicao_da_ordem(sigla, mold
 
 @pytest.mark.parametrize("nome,motivo", [
     ("PRJ-ARQ-01.pdf", "ARQ: o fallback já é o prompt de arquitetura; a sigla só apagaria o palpite de ambiente"),
-    ("PRJ-EST-01.pdf", "EST: SheetType.ESTRUTURA não tem prompt nem recorte de prancha"),
+    ("PRJ-EST-01.pdf", "EST: estrutura não é PONTOS; levar EST ao tipo ESTRUTURA é decisão do prompt de estrutura"),
     ("CLIM_OBRA_REV02-P01.pdf", "CLIM: não existe tipo de climatização"),
     ("0000-PE-MEC-XXX-01.pdf", "MEC: idem"),
     ("PRJ-SPDA-01.pdf", "SPDA: nem a palavra por extenso (para-raios) tem tipo"),

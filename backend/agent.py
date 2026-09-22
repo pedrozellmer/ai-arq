@@ -176,18 +176,33 @@ def tool_get_item_details(job_id: str, item_num: str) -> dict:
 
 # ── Busca por palavras ──────────────────────────────────────────────────────
 # 🩸 22/09/2026 (job 844603fb): a cliente colou 3 linhas da legenda e o chat
-# respondeu "nenhum dos três itens foi encontrado" — 2 estavam na planilha
-# (conjunto tomada + interruptor paralelo, 8 un; tomada para luminária de
-# emergência, 12 un). A busca exigia a FRASE inteira como pedaço da descrição:
-# "tomada caixa 4x2" dava 0 com 8 linhas "Tomada ... em caixa 4x2\"". Em 60 dias
-# as 10 buscas de mais de uma palavra voltaram 0 (10 de 10). Agora é por
-# palavra, em qualquer ordem, sem acento nem caixa, e quando nenhuma linha tem
-# TODAS as palavras a resposta traz as mais parecidas dizendo o que bate e o
-# que falta — "count 0" nunca mais chega sozinho ao modelo.
+# respondeu "nenhum dos três itens foi encontrado". UM estava na planilha — o
+# conjunto tomada + interruptor paralelo (8 un). Os outros dois (tomada em
+# caixa 4x4 embutida no forro, para luminária de emergência, e tomada 4x4 de
+# piso) são linhas da legenda que a leitura da IA não listou. A busca exigia a
+# FRASE inteira como pedaço da descrição: "tomada caixa 4x2" dava 0 com 8
+# linhas "Tomada ... em caixa 4x2\"". Em 60 dias as 10 buscas de mais de uma
+# palavra voltaram 0 (10 de 10). Agora é por palavra, em qualquer ordem, sem
+# acento nem caixa, e quando nenhuma linha tem TODAS as palavras a resposta
+# traz as mais parecidas dizendo o que bate, o que falta e o que DIVERGE.
+# 🩸 A 1ª versão deste conserto (revisão de 22/09) errou pro outro lado:
+#   • a tomada 4x4 do FORRO saía como "a sua tomada, em caixa 4x2" — era a
+#     tomada 4x2 de OUTRA linha da legenda. Candidato com outra medida, outro
+#     lugar ou outro formato agora vem com `outro_item` e o `diverge`;
+#   • `items` trazia linha SEM a palavra: portão por porta, quadra por quadro,
+#     tampa por tampo (a variante de prefixo e de gênero contava como a mesma
+#     palavra), e "tipo" era palavra vazia, então "pavimento tipo" devolvia o
+#     "último pavimento". Variante agora só entra em `candidatos`.
 _PALAVRAS_VAZIAS = frozenset(
     "a o as os e de da do das dos em no na nos nas ao aos para pra por com "
-    "um uma ou que se conforme tipo uso legenda m h".split())
+    "um uma ou que se conforme uso legenda m h".split())
 _SINONIMOS_DA_BUSCA = {"cx": "caixa"}
+# Adjetivo de obra no feminino = o mesmo no masculino ("parede interna" acha o
+# "reboco interno ... paredes"). Lista FECHADA de propósito: a regra geral a/o
+# junta substantivos que não são a mesma coisa (quadro/quadra, tampo/tampa).
+_NO_MASCULINO = {p: p[:-1] + "o" for p in (
+    "interna externa embutida sobreposta rigida quadrada redonda dupla tripla "
+    "eletrica hidraulica metalica ceramica").split()}
 _TOKEN_DA_BUSCA = re.compile(
     r"\d+x\d+|\d+p\+t|\d+(?:,\d+)*[a-z]*|[a-z][a-z0-9]*")
 
@@ -233,53 +248,105 @@ def _termos_da_busca(texto) -> list:
         if tok in _PALAVRAS_VAZIAS:
             continue
         tok = _radical(tok)
+        tok = _NO_MASCULINO.get(tok, tok)
         if tok not in termos:
             termos.append(tok)
     return termos
 
 
-def _termo_casa(q: str, termos_da_linha: list) -> float:
-    """1.0 = a mesma palavra; 0.8 = a mesma com outra ponta (lumin/luminaria,
-    embutido/embutida). Número e medida só casam iguais: 4x2 não é 4x4."""
+def _termo_casa(q: str, termos_da_linha: list) -> tuple:
+    """(nota, a palavra da linha que casou).
+
+    1.0 = a MESMA palavra (depois de tirar acento, caixa, plural e o feminino
+    dos adjetivos de `_NO_MASCULINO`).
+    0.8 = VARIANTE: a mesma raiz com outra ponta (lumin/luminaria). A mesma
+    regra junta palavras que NÃO são a mesma coisa (porta/portao, quadro/quadra,
+    tampo/tampa), então variante só serve pra candidato — nunca pra `items`.
+    Número e medida só casam iguais: 4x2 não é 4x4."""
     if q in termos_da_linha:
-        return 1.0
+        return 1.0, q
     if not q.isalpha() or len(q) < 4:
-        return 0.0
+        return 0.0, ""
     for d in termos_da_linha:
         if len(d) < 4 or not d.isalpha():
             continue
         if d.startswith(q) or q.startswith(d):
-            return 0.8
+            return 0.8, d
         if (len(q) >= 5 and len(d) == len(q) and q[:-1] == d[:-1]
                 and q[-1] in "ao" and d[-1] in "ao"):
-            return 0.8
-    return 0.0
+            return 0.8, d
+    return 0.0, ""
+
+
+# Palavra (já no masculino) -> (classe, valor). Na MESMA classe, valor
+# diferente é OUTRO item: tomada de piso não é tomada de forro, caixa
+# octogonal não é caixa quadrada, parede externa não é parede interna.
+_CLASSE_DA_PALAVRA = {
+    "piso": ("lugar", "piso"), "contrapiso": ("lugar", "piso"),
+    "parede": ("lugar", "parede"),
+    "forro": ("lugar", "teto"), "teto": ("lugar", "teto"), "laje": ("lugar", "teto"),
+    "interno": ("lado", "interno"), "externo": ("lado", "externo"),
+    "quadrado": ("formato", "quadrado"), "retangular": ("formato", "retangular"),
+    "octogonal": ("formato", "octogonal"), "redondo": ("formato", "redondo"),
+    "circular": ("formato", "redondo"),
+}
+
+
+def _classe_do_termo(t: str):
+    """Medida: a FORMA com os números trocados — 4x4 e 4x2 são "9x9", 10a e 20a
+    são "9a", as alturas 1,2 e 0,4 são "9,9". Palavra: a da tabela acima."""
+    if any(c.isdigit() for c in t):
+        return ("medida " + re.sub(r"\d+", "9", t), t)
+    return _CLASSE_DA_PALAVRA.get(t)
+
+
+def _divergencias(falta: list, termos_da_linha: list) -> dict:
+    """{termo pedido: [o que a linha diz no lugar dele]}.
+
+    Só conta quando a linha traz um valor DIFERENTE da mesma classe (4x2 onde
+    se pediu 4x4). Linha que apenas não menciona o termo não diverge: o
+    conjunto tomada + interruptor paralelo da planilha do caso não traz a
+    altura H=1,20m da legenda e É o item — descrição curta não é outro item."""
+    out = {}
+    for q in falta:
+        cq = _classe_do_termo(q)
+        if not cq:
+            continue
+        outros = [d for d in termos_da_linha
+                  if (cd := _classe_do_termo(d)) and cd[0] == cq[0] and cd[1] != cq[1]]
+        if outros:
+            out[q] = outros
+    return out
 
 
 def buscar_linhas(linhas: list, query: str, max_hits: int = 20,
                   max_candidatos: int = 8) -> dict:
     """Busca por palavras nas descrições. `linhas` = dicts de _iter_orcamento_rows.
 
-    `items`: linhas com TODAS as palavras (ou a frase inteira), na ordem da
-    planilha — o mesmo contrato de antes, só que sem exigir a ordem das palavras.
+    `items`, na ordem da planilha: as linhas que a busca ANTIGA achava (a frase
+    como pedaço da descrição, sem ligar pra maiúscula — nada que ela achava se
+    perde) e as que têm TODAS as palavras IGUAIS, em qualquer ordem. Variante
+    não entra: a ferramenta promete ao modelo que `items` tem as palavras.
     `candidatos`: quando sobram menos de 3 em `items`, as linhas que têm ao
-    menos METADE das palavras, das mais parecidas pras menos, cada uma com
-    `bate` e `falta`. Palavra rara pesa mais que palavra que está em todo lugar
-    ("4x4" em 3 linhas decide mais que "caixa" em 16).
-    `termos_sem_correspondencia`: palavras que não aparecem em linha NENHUMA —
-    é o que deixa o modelo dizer "não há caixa QUADRADA; há octogonal".
+    menos METADE das palavras (iguais ou variantes), das mais parecidas pras
+    menos, cada uma com `bate`, `falta`, `variante` (a palavra parecida que a
+    linha tem no lugar), `diverge` e `outro_item`. `outro_item` = a linha diz
+    OUTRA medida, lugar ou formato do mesmo tipo: é outro item, nunca "o seu
+    item com outra medida". Palavra rara pesa mais que palavra que está em todo
+    lugar ("4x4" em 3 linhas decide mais que "caixa" em 16).
+    `termos_sem_correspondencia`: palavras que não aparecem, nem parecidas, em
+    linha NENHUMA — é o que deixa o modelo dizer "não há caixa QUADRADA".
     """
     import math
     termos = _termos_da_busca(query)
-    frase = " ".join(_normalizar_para_busca(query).split())
+    frase = str(query or "").lower().strip()  # o contrato da busca antiga, letra por letra
     base = []
     for r in linhas:
         desc = str(r.get("description") or "")
-        base.append((r, " ".join(_normalizar_para_busca(desc).split()),
-                     _termos_da_busca(desc)))
+        base.append((r, desc.lower(), _termos_da_busca(desc)))
     notas = [{q: _termo_casa(q, tl) for q in termos} for _, _, tl in base]
     n = len(base)
-    peso = {q: 1.0 + math.log((n + 1.0) / (sum(1 for nt in notas if nt[q]) + 1.0))
+    peso = {q: 1.0 + math.log((n + 1.0) / (sum(1 for nt in notas if nt[q][0]) + 1.0))
             for q in termos}
 
     def _linha(r, com_obs=True):
@@ -290,32 +357,45 @@ def buscar_linhas(linhas: list, query: str, max_hits: int = 20,
         return out
 
     hits, parciais = [], []
-    for i, ((r, desc_n, _), nt) in enumerate(zip(base, notas)):
-        casadas = [q for q in termos if nt[q]]
-        if (frase and frase in desc_n) or (termos and len(casadas) == len(termos)):
+    for i, ((r, desc_l, tl), nt) in enumerate(zip(base, notas)):
+        iguais = [q for q in termos if nt[q][0] == 1.0]
+        if (frase and frase in desc_l) or (termos and len(iguais) == len(termos)):
             if len(hits) < max_hits:
                 hits.append(_linha(r))
             continue
+        casadas = [q for q in termos if nt[q][0]]
         if casadas and 2 * len(casadas) >= len(termos):
-            parciais.append((-sum(peso[q] * nt[q] for q in termos), -len(casadas), i,
-                             r, casadas))
+            parciais.append((-sum(peso[q] * nt[q][0] for q in termos), -len(casadas), i,
+                             r, tl, nt, casadas))
     out = {"query": query, "count": len(hits), "items": hits,
            "busca_por_palavras": termos}
-    faltam_em_tudo = [q for q in termos if not any(nt[q] for nt in notas)]
+    faltam_em_tudo = [q for q in termos if not any(nt[q][0] for nt in notas)]
     if faltam_em_tudo:
         out["termos_sem_correspondencia"] = faltam_em_tudo
     if len(hits) < 3 and parciais:
         parciais.sort(key=lambda x: x[:3])
-        out["candidatos"] = [
-            dict(_linha(r, com_obs=False), bate=casadas,
-                 falta=[q for q in termos if q not in casadas])
-            for *_, r, casadas in parciais[:max_candidatos]]
+        cands = []
+        for *_, r, tl, nt, casadas in parciais[:max_candidatos]:
+            falta = [q for q in termos if q not in casadas]
+            diverge = _divergencias(falta, tl)
+            c = dict(_linha(r, com_obs=False), bate=casadas, falta=falta,
+                     outro_item=bool(diverge))
+            variante = {q: nt[q][1] for q in casadas if nt[q][0] < 1.0}
+            if variante:
+                c["variante"] = variante
+            if diverge:
+                c["diverge"] = diverge
+            cands.append(c)
+        out["candidatos"] = cands
     if not hits:
         out["aviso"] = (
             "Nenhuma linha tem TODAS as palavras da busca. Isso NÃO prova que o item "
-            "não existe: veja `candidatos` (o que bate e o que falta em cada um) e "
-            "`termos_sem_correspondencia`, e diga isso ao cliente. Se não houver "
-            "candidato, tente uma palavra só ou list_items antes de responder.")
+            "não existe, nem que um candidato É o item. Candidato com `outro_item: true` "
+            "traz OUTRA medida, lugar ou formato (`diverge`): é outro item — diga ao "
+            "cliente que a planilha não lista o que ele pediu e que a leitura do PDF "
+            "pode tê-lo deixado passar. Nos outros, diga o que a linha traz e o que ela "
+            "não diz (`falta`); `variante` é palavra parecida, não a mesma. Se não "
+            "houver candidato, tente uma palavra só ou list_items antes de responder.")
     return out
 
 
@@ -639,7 +719,7 @@ TOOLS = [
     },
     {
         "name": "search_items",
-        "description": "Busca itens da planilha por PALAVRAS na descrição — em qualquer ordem, sem acento nem maiúscula (4x2\", 2P+T e 10A são normalizados) —, com o mesmo campo `selo` de list_items ('medido', 'estimado' ou 'metadado'). Use quando o usuário menciona um termo (LED, alvenaria, forro etc). `items` traz as linhas com TODAS as palavras; se vier vazio ou curto, `candidatos` traz as mais parecidas com o que `bate` e o que `falta`, e `termos_sem_correspondencia` diz as palavras que não estão em linha nenhuma. Busque UM item por vez (se o cliente colar várias linhas de legenda, uma busca por linha).",
+        "description": "Busca itens da planilha por PALAVRAS na descrição — em qualquer ordem, sem acento nem maiúscula (4x2\", 2P+T e 10A são normalizados) —, com o mesmo campo `selo` de list_items ('medido', 'estimado' ou 'metadado'). Use quando o usuário menciona um termo (LED, alvenaria, forro etc). `items` traz as linhas com TODAS as palavras iguais; se vier vazio ou curto, `candidatos` traz as mais parecidas com o que `bate`, o que `falta`, a `variante` (palavra parecida, não a mesma: portão não é porta) e `outro_item: true` quando a linha diz OUTRA medida, lugar ou formato (`diverge`: 4x2 onde se pediu 4x4) — aí é outro item, não o pedido. `termos_sem_correspondencia` diz as palavras que não estão em linha nenhuma. Busque UM item por vez (se o cliente colar várias linhas de legenda, uma busca por linha).",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -764,7 +844,10 @@ REGRAS:
 - O QUE FAZER NESSE CASO, em vez de recusar seco: entregue o que você TEM, que é muito. Diga o que está no desenho (quantidades, contagens, comprimentos por layer, o que o carimbo declara) e o que o desenho NÃO traz (falta cota, falta quadro, o item aparece sem especificação). Isso é insumo de verdade pro projetista decidir. Depois diga, numa frase e sem rodeio, que a validação do projeto é dele — a gente levanta, ele decide.
 - 🪤 Isto vale mesmo quando o cliente descreve o pedido em detalhe e parece esperar a auditoria. Em 03/09/2026 um cliente mandou um briefing pedindo análise completa de um projeto de cabeamento (rack, rotas, interferências, norma) e a resposta saiu com "PROBLEMA → MOTIVO TÉCNICO → CORREÇÃO RECOMENDADA". Pedido detalhado não é autorização — é só um pedido detalhado.
 - Quando citar um item, mencione o item_num e cite a observação que justifica a quantidade.
-- BUSCA VAZIA NÃO PROVA QUE O ITEM NÃO EXISTE. Antes de dizer "não encontrei", leia `candidatos` e `termos_sem_correspondencia` do search_items e diga ao cliente qual linha bate e o que muda nela (ex.: "a planilha tem caixa octogonal 4x4, não quadrada"; "a tomada está em caixa 4x2, e não 4x4 como na legenda"). 🪤 Em 22/09/2026 o chat disse a uma cliente que 2 itens que ESTAVAM na planilha não existiam.
+- BUSCA VAZIA NÃO PROVA QUE O ITEM NÃO EXISTE — e candidato parecido não prova que existe. Antes de responder, leia `candidatos` e `termos_sem_correspondencia` do search_items:
+  • candidato com `outro_item: true` traz OUTRA medida, lugar ou formato (`diverge`: 4x2 onde se pediu 4x4, parede onde se pediu forro). É OUTRO item: diga que a planilha não lista o item pedido, que a leitura do PDF pode tê-lo deixado passar, e cite o candidato só como item diferente — nunca como "o seu item, com outra medida";
+  • candidato sem `outro_item` com palavra em `falta`: diga o que a linha traz e o que ela não diz (ex.: "a planilha tem o conjunto tomada + interruptor paralelo em caixa 4x2, 8 un; a linha não traz a altura"). Palavra em `variante` é parecida, não a mesma (portão não é porta).
+  🪤 Em 22/09/2026 o chat disse a uma cliente que o conjunto tomada + interruptor paralelo, que ESTAVA na planilha, não existia. E o primeiro conserto ia dizer a ela que a tomada 4x4 do forro, que a planilha NÃO tem, estava lá em caixa 4x2 — era a tomada de outra linha da legenda.
 - Se o usuário perguntar "por que essa quantidade?", busca o item, leia a observação (que cita layer CAD ou processo de consolidação) e explique.
 - LINHA DE ÁREA EM BRANCO TEM CONSERTO NA HORA — ofereça isso ANTES de qualquer outra saída. Se o cliente perguntar pela metragem que faltou num item de m² com quantidade ZERO de superfície horizontal (piso, forro, laje, contrapiso, revestimento de piso), diga que na tela de revisão, logo acima da lista de itens, existe um campo "Área total": informando a metragem ali, a planilha é refeita NA HORA, sem reprocessar e sem custo nenhum, e as linhas saem marcadas como "estimado (informado por você)". Só depois disso mencione reenviar em DXF ou preencher item por item — esses dois são caros e demorados.
 - NÃO ofereça esse campo pra pintura de PAREDE, alvenaria, chapisco/reboco ou qualquer item que dependa da ALTURA: a área total não preenche esses. Ali o que falta é o pé-direito, e ele só fecha a conta se houver parede medida em metro linear. E NUNCA prometa QUANTAS linhas serão preenchidas — quem decide item a item é o motor.
@@ -774,23 +857,74 @@ REGRAS:
 """
 
 
+_BUCKET_DAS_PRANCHAS = "aiarq-pranchas"  # o PRANCHAS_BUCKET de main.py (um guarda confere)
+
+
+def _pedir_json_ao_supabase(url: str, corpo: Optional[dict] = None):
+    req = urllib.request.Request(
+        url, data=None if corpo is None else json.dumps(corpo).encode("utf-8"),
+        method="GET" if corpo is None else "POST")
+    req.add_header("apikey", SUPABASE_KEY)
+    req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+    req.add_header("Accept", "application/json")
+    if corpo is not None:
+        req.add_header("Content-Type", "application/json")
+    return json.loads(urllib.request.urlopen(req, timeout=8).read().decode("utf-8"))
+
+
+def _ha_cad_guardado(job_id: str) -> Optional[bool]:
+    """True se o projeto tem .dxf/.dwg no Storage OU linha medida do DXF
+    (origem dxf_geom); False se as duas fontes responderam e não há; None se
+    alguma não respondeu. Falta de resposta não vira "não há CAD"."""
+    from urllib.parse import quote
+    try:
+        objs = _pedir_json_ao_supabase(
+            f"{SUPABASE_URL}/storage/v1/object/list/{_BUCKET_DAS_PRANCHAS}",
+            {"prefix": f"{job_id}/", "limit": 1000})
+        if not isinstance(objs, list):
+            return None
+        if any(str(o.get("name") or "").lower().endswith((".dxf", ".dwg"))
+               for o in objs if isinstance(o, dict)):
+            return True
+        linhas = _pedir_json_ao_supabase(
+            f"{SUPABASE_URL}/rest/v1/project_items?job_id=eq.{quote(str(job_id))}"
+            f"&origem=eq.dxf_geom&select=item_num&limit=1")
+        if not isinstance(linhas, list):
+            return None
+        return bool(linhas)
+    except Exception as e:
+        print(f"[agent] CAD guardado de {job_id}: {e}")
+        return None
+
+
 def tipos_de_arquivo_do_projeto(job_id: str) -> Optional[dict]:
     """{"pdf": n, "dxf": n, "dwg": n} que o cliente enviou, ou None se não deu
-    pra ler. Síncrona (rede) — a rota chama no threadpool, nunca no laço."""
+    pra confirmar. Síncrona (rede) — a rota chama no threadpool, nunca no laço.
+
+    🩸 22/09/2026 (revisão): `projects.file_types` está VELHO em projetos de
+    antes do conserto do /add-file de 03/09 — diz só PDF, e o Storage tem DWG
+    (num deles, 12 linhas medidas do DXF na planilha). Confiar só nele faria o
+    chat esconder read_dxf_summary e jurar "aqui não existe layer" a quem
+    mandou DWG. Só-PDF agora exige as duas fontes concordando; se discordam
+    ou uma não responde, volta None (o ramo "não consegui confirmar")."""
     try:
         from urllib.parse import quote
-        url = (f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{quote(str(job_id))}"
-               f"&select=file_types")
-        req = urllib.request.Request(url, method="GET")
-        req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
-        req.add_header("Accept", "application/json")
-        rows = json.loads(urllib.request.urlopen(req, timeout=8).read().decode("utf-8"))
+        rows = _pedir_json_ao_supabase(
+            f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{quote(str(job_id))}"
+            f"&select=file_types")
         ft = rows[0].get("file_types") if rows else None
-        return ft if isinstance(ft, dict) else None
     except Exception as e:
         print(f"[agent] tipos de arquivo de {job_id}: {e}")
         return None
+    if not isinstance(ft, dict):
+        return None
+    if projeto_so_pdf(ft):
+        cad = _ha_cad_guardado(job_id)
+        if cad is not False:
+            print(f"[agent] {job_id}: file_types diz só PDF, mas "
+                  f"{'há CAD guardado' if cad else 'não deu pra confirmar'} — não afirmo só-PDF")
+            return None
+    return ft
 
 
 def _conta_do_tipo(tipos, chave) -> int:

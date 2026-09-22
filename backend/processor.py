@@ -52,8 +52,9 @@ SHEET_PATTERNS = {
         # TOKEN inteiro (entre -, _, espaço, ponto ou borda do nome): "ele"
         # dentro de outra palavra não conta. Ficaram de fora de propósito:
         # ARQ (mesmo prompt do fallback; só apagaria o palpite de ambiente),
-        # EST (ESTRUTURA não tem prompt de prancha), CLIM/AVAC/MEC e SPDA (não
-        # há tipo pra elas), SAN ("San Marino") e EL (também é "elevação").
+        # EST (estrutura não é PONTOS; levar EST ao tipo ESTRUTURA é decisão do
+        # prompt de estrutura, não desta lista), CLIM/AVAC/MEC e SPDA (não há
+        # tipo pra elas), SAN ("San Marino") e EL (também é "elevação").
         r"(?<![a-z0-9à-ÿ])(?:ele|elet|hid|hidr|inc|ppci)(?![a-z0-9à-ÿ])",
     ],
     SheetType.PISO:         [r"(?:^|[^a-z])pisos?(?:[^a-z]|$)", r"(?:^|[^a-z])rodap"],
