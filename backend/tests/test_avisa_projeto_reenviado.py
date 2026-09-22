@@ -62,6 +62,10 @@ def _cenario(monkeypatch, refs_antigos, tinha_pd=None, tinha_area=None):
                  "user_pe_direito": tinha_pd, "user_total_area": tinha_area}]
     monkeypatch.setattr(main, "_supa_rows",
                         _falso_supa(projetos, {"144c1f04": refs_antigos}))
+    # 🪤 22/09/2026: a conta exata passou a vir da lista do Storage. Estes
+    # guardas medem a conta pelos ITENS (a reserva), então o Storage fica
+    # mudo — e sem isto a função sairia pra rede de verdade.
+    monkeypatch.setattr(main, "_pranchas_com_tamanho", lambda *a, **k: None)
 
 
 # ── O que dispara ──────────────────────────────────────────────────────────

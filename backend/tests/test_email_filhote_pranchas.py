@@ -96,22 +96,39 @@ def _corpo(nome):
     return src[i:min(j, i + 6000)]
 
 
-def test_a_contagem_do_filhote_inclui_pranchas():
-    """Sem contar prancha, o e-mail não tem como falar dela."""
-    corpo = _corpo("admin_liberar_filhote") if "def admin_liberar_filhote" in _main() else _main()
-    assert '"select": "confidence,ref_sheet"' in corpo, (
-        "o _conta voltou a ler só confidence — o e-mail perde a prancha")
-    assert '"pranchas": len(_pr)' in corpo
+def test_a_contagem_do_filhote_inclui_pranchas(monkeypatch):
+    """Sem contar prancha, o e-mail não tem como falar dela.
+
+    🩸 22/09/2026: este guarda lia o fonte (`'"select": "confidence,ref_sheet"'
+    in corpo`). A contagem saiu da rota pra `_contagem_para_liberar` — a mesma
+    do vigia automático — e agora ela RODA: a leitura do banco é dublada e o
+    que se confere é a prancha contada."""
+    linhas = [{"confidence": "confirmado", "ref_sheet": "planta-a.dxf", "quantity": 3},
+              {"confidence": "estimado", "ref_sheet": "planta-b.dxf", "quantity": 0}]
+    monkeypatch.setattr(main, "_supa_rest_service",
+                        lambda metodo, caminho, **k: (200, [dict(x) for x in linhas]))
+    c = main._contagem_para_liberar("ev000001")
+    assert c and c["pranchas"] == 2, (
+        "a contagem do filhote não conta prancha — o e-mail perde a causa: %r" % c)
+    assert set(c["por_prancha"]) == {"planta-a.dxf", "planta-b.dxf"}, c
 
 
 def test_o_email_fala_de_prancha_antes_de_falar_de_item():
-    """Ordem importa: é a primeira linha que o cliente lê."""
-    corpo = _corpo("_email_leitura_nova")
-    assert "ganho_pr" in corpo, "o e-mail não sabe quantas pranchas entraram"
-    i_pr = corpo.index("if ganho_pr > 0:")
-    i_it = corpo.index("if ganho_itens > 0:")
-    assert i_pr < i_it, (
-        "a linha de itens vem antes da de pranchas — o cliente lê a "
+    """Ordem importa: é a primeira linha que o cliente lê.
+
+    🩸 22/09/2026: o guarda procurava `if ganho_itens > 0:` no fonte; o item
+    saiu do e-mail (item a mais não é ganho) e deu lugar à linha COM NÚMERO.
+    Agora o e-mail é montado e a ordem é conferida no HTML."""
+    antes, depois = _ganhou_prancha_sem_piorar()
+    antes, depois = dict(antes, com_numero=30), dict(depois, com_numero=180)
+    html = _email(antes, depois)
+    # 🪤 a partir do "O que mudou": o preheader, no topo, também fala de linha
+    html = html[html.find("O que mudou:"):]
+    i_pr = html.find("prancha(s) que n&atilde;o tinham entrado")
+    i_num = html.find("linhas com quantidade")
+    assert i_pr > 0 and i_num > 0, "o e-mail não falou de prancha ou de linha"
+    assert i_pr < i_num, (
+        "a linha de quantidade vem antes da de pranchas — o cliente lê a "
         "consequência antes da causa")
 
 

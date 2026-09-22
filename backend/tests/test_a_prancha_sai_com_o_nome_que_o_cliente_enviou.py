@@ -126,6 +126,9 @@ def _ja_enviado(monkeypatch, gravados, novos):
             return [{"ref_sheet": g} for g in gravados]
         return []
     monkeypatch.setattr(main, "_supa_rows", _rows)
+    # 🪤 22/09/2026: Storage mudo — estes guardas medem a reserva pelos itens,
+    # e sem isto a função sairia pra rede de verdade.
+    monkeypatch.setattr(main, "_pranchas_com_tamanho", lambda *a, **k: None)
     r = main._projeto_ja_enviado("user-1", set(novos), None, None)
     assert chamadas, "a função não consultou nada — o guarda não executou o caminho"
     return r

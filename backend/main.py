@@ -665,6 +665,30 @@ def _nome_limpo_da_prancha(ref_sheet: str) -> str:
     return nome_que_o_cliente_enviou(s).strip().lower()
 
 
+def _prancha_de_verdade(ref_sheet) -> str:
+    """A PRANCHA de um `ref_sheet`: o arquivo e, se ele tem várias páginas, a página.
+
+    🩸 22/09/2026 (jobs ee801b82 e f8d8e6d8, 7 PDFs de uma página cada): a
+    nota "aparece em N pranchas" disse 12 e 19 pranchas, e o e-mail da leitura
+    nova diria "30 → 38 pranchas lidas". As duas contavam STRINGS de
+    `ref_sheet`, que carrega o hint da IA ("arquivo.pdf (VISTA 2 – PLANTA)")
+    e muda de item pra item dentro da mesma folha.
+    🔑 Prancha é o que `monta_ref_sheet` põe antes do " (": o arquivo, mais o
+    "pN" quando o PDF tem mais de uma página. O hint fica de fora. O nome volta
+    como o cliente enviou (sem o sufixo do conversor), porque também é o que
+    se MOSTRA.
+    """
+    s = str(ref_sheet or "").strip()
+    if not s:
+        return ""
+    from analyzer import _pagina_do_ref_sheet
+    from engine_rules import nome_que_o_cliente_enviou
+    i = s.find(" (")
+    arquivo = nome_que_o_cliente_enviou(s[:i] if i > 0 else s).strip()
+    pg = _pagina_do_ref_sheet(s)
+    return arquivo + (" (p%d)" % (pg + 1) if pg is not None else "")
+
+
 def _chave_de_prancha_para_comparar(nome) -> str:
     """Nome ENVIADO ou nome GRAVADO → a mesma chave, pra "caderno repetido".
 
@@ -700,6 +724,31 @@ def _chave_de_prancha_para_comparar(nome) -> str:
 _REPETIDO_MIN_ARQUIVOS = 3
 #: e que fatia do envio NOVO precisa já ter passado por aqui.
 _REPETIDO_MIN_FRACAO = 0.7
+
+
+def _arquivos_do_projeto_no_storage(job_id):
+    """Os nomes dos ARQUIVOS de desenho que o projeto recebeu, ou None.
+
+    🩸 22/09/2026 (job ee801b82 → f8d8e6d8): o aviso de caderno repetido disse
+    "5 dos 7 arquivos são os mesmos" quando eram 7 de 7, com sha256 idêntico.
+    A conta era feita pelos `ref_sheet` dos ITENS, e prancha que não gerou
+    item nenhum (2 das 7, perdidas no parse da IA) não existia pra ela.
+    🔑 A lista do Storage é a fonte exata: é o que o projeto recebeu, gerou
+    item ou não. É a mesma listagem que o /add-file usa pra achar o gêmeo.
+    🪤 None cobre "não consegui listar" E "lista vazia" (arquivo que a
+    retenção já apagou): nos dois casos quem chama cai na conta pelos itens,
+    que só pode errar pra MENOS, e diz "pelo menos".
+    """
+    from urllib.parse import unquote
+    lista = _pranchas_com_tamanho(job_id)
+    if not lista:
+        return None
+    nomes = set()
+    for nome, _tam in lista:
+        base = unquote(str(nome or "")).split("/")[-1]
+        if base.lower().endswith((".pdf", ".dwg", ".dxf")):
+            nomes.add(base)
+    return nomes or None
 
 
 def _projeto_ja_enviado(user_id, nomes_novos, pe_direito_agora, area_agora):
@@ -738,6 +787,7 @@ def _projeto_ja_enviado(user_id, nomes_novos, pe_direito_agora, area_agora):
     _ants = _supa_rows(
         "GET", "/projects?user_id=eq.%s&status=eq.done&archived=not.eq.true"
                "&select=job_id,project_name,created_at,user_pe_direito,user_total_area"
+               ",project_type"
                "&order=created_at.desc&limit=3" % user_id)
     if not _ants:
         return None
@@ -747,11 +797,18 @@ def _projeto_ja_enviado(user_id, nomes_novos, pe_direito_agora, area_agora):
         _jid = _p.get("job_id")
         if not _jid:
             continue
-        # 🪤 A amostragem aqui só pode causar aviso A MENOS (se eu perdesse um
-        # nome, sobram menos coincidências e o aviso não sai) — nunca um aviso
-        # falso. Errar pro lado de calar é o lado certo neste caso.
-        _rows = _supa_rows("GET", "/project_items?job_id=eq.%s&select=ref_sheet&limit=400" % _jid)
-        _antigos = {_chave_de_prancha_para_comparar(r.get("ref_sheet")) for r in _rows}
+        # 🔑 Os arquivos do projeto anterior vêm do Storage (conta exata). Só
+        # sem ele a conta cai nos `ref_sheet` dos itens, e aí o número é piso.
+        _arqs = _arquivos_do_projeto_no_storage(_jid)
+        _exata = _arqs is not None
+        if _exata:
+            _antigos = {_chave_de_prancha_para_comparar(n) for n in _arqs}
+        else:
+            # 🪤 A amostragem aqui só pode causar aviso A MENOS (se eu perdesse
+            # um nome, sobram menos coincidências e o aviso não sai) — nunca um
+            # aviso falso. Errar pro lado de calar é o lado certo neste caso.
+            _rows = _supa_rows("GET", "/project_items?job_id=eq.%s&select=ref_sheet&limit=400" % _jid)
+            _antigos = {_chave_de_prancha_para_comparar(r.get("ref_sheet")) for r in _rows}
         _antigos.discard("")
         if not _antigos:
             continue
@@ -766,6 +823,9 @@ def _projeto_ja_enviado(user_id, nomes_novos, pe_direito_agora, area_agora):
                     "n_iguais": len(_iguais),
                     "n_novos": len(nomes_novos),
                     "fracao": _frac,
+                    # False = contado pelos itens: o texto diz "pelo menos".
+                    "contagem_exata": _exata,
+                    "project_type": (_p.get("project_type") or "").strip().lower(),
                     "tinha_pe_direito": bool(_p.get("user_pe_direito")),
                     "tinha_area": bool(_p.get("user_total_area")),
                 }
@@ -2295,6 +2355,37 @@ def _comparar_com_versao_anterior(job_id: str, n_medidos: int, n_itens: int) -> 
     return out
 
 
+#: teto da observação gravada em `project_items` (a tela e a revisão leem daqui).
+_OBS_TETO_GRAVADO = 1000
+_OBS_EMENDA = " […] "
+
+
+def _observacao_que_cabe(obs, teto: int = _OBS_TETO_GRAVADO) -> str:
+    """A observação que cabe no banco SEM perder o fim.
+
+    🩸 22/09/2026 (job f8d8e6d8): 31 das 61 linhas zeradas chegaram à tela sem
+    o motivo do zero, e 3 linhas com número perderam a ressalva "atribuída pela
+    IA — confira". O corte era `obs[:1000]`, e quem escreve DEPOIS (a
+    honestidade de área, as ressalvas do número) escreve no FIM: o corte comia
+    justamente o veredito. O cliente via "Cálculo: … = 0,69 m³" ao lado de um 0.
+    📏 60 dias, sem eval: 622 linhas cortadas; 255 zeradas sem o motivo.
+    🔑 Estourou, guarda o começo (o que a IA leu e as marcas que vão na frente)
+    e o fim inteiro (o último veredito), e corta o MEIO com uma emenda visível.
+    """
+    s = str(obs or "")
+    if len(s) <= teto:
+        return s
+    fim = s[-(teto // 2):]
+    # começa o fim numa fronteira, pra não abrir no meio de uma palavra
+    for _marca in (" | ", ". "):
+        k = fim.find(_marca)
+        if 0 <= k < len(fim) // 2:
+            fim = fim[k + len(_marca):]
+            break
+    cabeca = s[:teto - len(_OBS_EMENDA) - len(fim)].rstrip()
+    return cabeca + _OBS_EMENDA + fim
+
+
 def _contar_itens_no_banco(job_id: str):
     """Quantas linhas project_items este job tem, AGORA, segundo o banco.
 
@@ -2556,7 +2647,7 @@ def _persist_items_to_supabase(job_id: str, items: list) -> int:
             "description": (getattr(it, "description", "") or "")[:500],
             "unit": (getattr(it, "unit", "") or "vb")[:20],
             "quantity": _q,
-            "observations": (getattr(it, "observations", "") or "")[:1000],
+            "observations": _observacao_que_cabe(getattr(it, "observations", "") or ""),
             "ref_sheet": (getattr(it, "ref_sheet", "") or "")[:200],
             "confidence": str(getattr(getattr(it, "confidence", None), "value", "estimado"))
                           if hasattr(getattr(it, "confidence", None), "value")
@@ -7512,8 +7603,15 @@ def _consolidate_items(items: list, registro: list | None = None) -> list:
             pass6.extend(group)
             continue
 
-        # Pra grupo com 2+ itens, verificar se vêm de pranchas diferentes
-        ref_sheets = set((it.ref_sheet or "").strip().lower() for it in group)
+        # Pra grupo com 2+ itens, verificar se vêm de pranchas diferentes.
+        # 🩸 22/09/2026 (jobs ee801b82/f8d8e6d8): era o set de STRINGS de
+        # ref_sheet, e o hint da IA fazia uma folha virar várias ("12
+        # pranchas" num envio de 7 PDFs). Conta a prancha de verdade.
+        _pranchas_do_grupo = {}
+        for it in group:
+            _pv = _prancha_de_verdade(it.ref_sheet) or "sem referência"
+            _pranchas_do_grupo.setdefault(_pv.lower(), _pv)
+        ref_sheets = set(_pranchas_do_grupo)
         if len(ref_sheets) < 2:
             # Mesma prancha — não é cross-prancha (provavelmente passadas anteriores
             # já trataram). Manter como está.
@@ -7598,8 +7696,15 @@ def _consolidate_items(items: list, registro: list | None = None) -> list:
         # jogaria fora medição legítima — trocaria um erro por outro (regra nº1
         # protege contra afirmar o que não se mediu, não manda esquecer o que se
         # mediu).
-        _pranchas_txt = ", ".join(sorted(
-            (it.ref_sheet or "sem referência")[:40] for it in group))
+        # 🩸 22/09/2026 (jobs ee801b82/f8d8e6d8): a lista repetia cada ITEM
+        # cortado em 40 caracteres — a mesma prancha 13 vezes —, a nota passava
+        # de 700 caracteres e empurrava o motivo do zero pra depois do corte
+        # de 1000 da gravação. Cada prancha uma vez, no máximo 4 nomes.
+        _nomes_pr = sorted(_pranchas_do_grupo.values(), key=str.lower)
+        _pranchas_txt = ", ".join(
+            (_n if len(_n) <= 48 else _n[:47] + "…") for _n in _nomes_pr[:4])
+        if len(_nomes_pr) > 4:
+            _pranchas_txt += " e mais %d" % (len(_nomes_pr) - 4)
         # 🩸 21/09/2026 — "Cada linha é a MEDIÇÃO da prancha dela" saía também
         # em linha que a IA LEU (selo estimado), e passou a dividir a célula com
         # "Quantidade atribuída pela IA a esta linha — não conferimos item a
@@ -19294,23 +19399,45 @@ async def process_files(
     if _repet:
         _so_pdf = file_types.get("pdf", 0) > 0 and (
             file_types.get("dwg", 0) + file_types.get("dxf", 0)) == 0
+        # 🩸 22/09/2026 (job ee801b82 → f8d8e6d8): pranchas de ESTRUTURA
+        # (poço, caixa de válvulas, bloco) receberam o conselho da arquitetura:
+        # pé-direito "pra parede, pintura e rodapé" e área "pra piso e forro".
+        # 📏 Medido em 22/09 (90 d, sem eval): em estrutura, pé-direito
+        # informado nunca preencheu linha (`motor:pe-direito` estrutura
+        # tocados=0 em todos) e área informada preencheu 0 linhas em 4 jobs.
+        # 🔑 O tipo das PRANCHAS conta: se da outra vez elas foram lidas como
+        # estrutura, o conselho de arquitetura também não vale pra elas agora.
+        _tipo_antes = _repet.get("project_type") or ""
+        _estrutura = project_type == "estrutura" or _tipo_antes == "estrutura"
         _saidas = []
-        if not user_pe_direito:
+        if _tipo_antes and _tipo_antes != project_type:
+            _saidas.append(
+                "da outra vez estas pranchas foram lidas como %s, e este envio "
+                "está como %s — o tipo muda o que a gente procura no desenho; "
+                "confira qual dos dois é o das pranchas"
+                % (_tipo_antes.upper(), (project_type or "").upper()))
+        if not user_pe_direito and not _estrutura:
             # 📏 MEDIDO (26/08): informar o pé-direito derruba a fatia de linha
             # em branco de 59,5% pra 27,3%. É a maior alavanca que existe, e é
             # um campo de dez segundos.
             _saidas.append(
                 "informe o PÉ-DIREITO no envio — é o campo que mais preenche "
                 "linha vazia aqui (parede, pintura e rodapé dependem dele)")
-        if not user_total_area:
+        if not user_total_area and not _estrutura:
             _saidas.append(
                 "informe a ÁREA TOTAL — ela vira base honesta pros itens de "
                 "piso, forro e laje, rotulada como informada por você")
         if _so_pdf:
             _saidas.append(
                 "se você tiver o DXF ou o DWG das mesmas pranchas, mande ele: "
-                "de PDF a gente lê a planta, mas comprimento de PDF não é "
-                "confiável o bastante pra virar número")
+                + ("de PDF a gente lê o desenho, mas número lido de PDF não "
+                   "vira quantidade medida" if _estrutura else
+                   "de PDF a gente lê a planta, mas comprimento de PDF não é "
+                   "confiável o bastante pra virar número"))
+        # 🔑 O número só é afirmado quando a conta é exata (lista do Storage).
+        # Pelos itens ele é piso: prancha sem item não entra.
+        _quantos = ("%d dos %d" if _repet.get("contagem_exata")
+                    else "Pelo menos %d dos %d") % (_repet["n_iguais"], _repet["n_novos"])
         resp["aviso_repetido"] = {
             "job_anterior": _repet["job_id"],
             "projeto_anterior": _repet["project_name"],
@@ -19318,13 +19445,13 @@ async def process_files(
             "arquivos_enviados": _repet["n_novos"],
             "titulo": "Estas pranchas já passaram por aqui",
             "texto": (
-                "%d dos %d arquivos deste envio são os mesmos do seu projeto "
-                "\"%s\". Seu projeto vai processar normalmente — mas se o que "
-                "te incomodou foi linha em branco, mandar as mesmas pranchas "
-                "de novo não muda o motivo delas estarem em branco.\n\n"
+                "%s arquivos deste envio têm o mesmo nome dos que você mandou "
+                "no projeto \"%s\". Seu projeto vai processar normalmente — mas "
+                "se o que te incomodou foi linha em branco e as pranchas são as "
+                "mesmas, mandar de novo não muda o motivo delas estarem em "
+                "branco.\n\n"
                 "O que muda:\n%s"
-                % (_repet["n_iguais"], _repet["n_novos"],
-                   _repet["project_name"],
+                % (_quantos, _repet["project_name"],
                    "\n".join("• " + s for s in _saidas) if _saidas else
                    "• abra a revisão do projeto e preencha as linhas que "
                    "faltam — o que você corrigir lá a gente usa")),
@@ -19332,10 +19459,13 @@ async def process_files(
         try:
             _log_error("upload:projeto-repetido",
                        "user=%s remandou %d de %d arquivos do job %s (%.0f%%) "
-                       "— avisado no envio (pe_direito=%s area=%s)"
+                       "— avisado no envio (pe_direito=%s area=%s) "
+                       "contagem=%s tipo=%s->%s"
                        % (str(user_id)[:8], _repet["n_iguais"], _repet["n_novos"],
                           _repet["job_id"], 100 * _repet["fracao"],
-                          user_pe_direito or "-", user_total_area or "-"),
+                          user_pe_direito or "-", user_total_area or "-",
+                          "storage" if _repet.get("contagem_exata") else "itens",
+                          _tipo_antes or "-", project_type or "-"),
                        job_id, severity="info")
         except Exception:
             pass
@@ -21144,9 +21274,14 @@ def emails_auto_tick(request: Request, dry: int = 0):
         # 🚨 25/08: `limit=2000` era ignorado (teto de 1000). Sao 254 projetos
         # hoje; cortada, esta lista faria a esteira dizer "voce nunca subiu
         # nada" pra quem subiu.
+        # 🩸 22/09/2026: sem `is_eval`. O filhote liberado passou a carregar o
+        # e-mail do dono (`_patch_da_liberacao`), e a releitura que NÓS fizemos
+        # viraria "último movimento" do cliente — retorno_30d, calibração e
+        # próximo_projeto contados da data do filhote. Releitura não é visita.
         _stj, _projs = _supa_rest_tudo(
             "projects",
             params={"select": "user_email,created_at,status,project_name,user_name,job_id",
+                    "is_eval": "not.is.true",
                     "order": "created_at.desc,id.asc"}, timeout=15)
         if _stj != 200:
             raise RuntimeError("projects HTTP %s" % _stj)
@@ -23210,9 +23345,9 @@ def _render_email_by_type_raw(key: str):
     if key in ("leitura_nova", "leitura_combinada"):
         # Exemplo com ganho E com uma prancha que piorou, pra o preview mostrar
         # o quadro de honestidade dos dois lados.
-        _antes = {"medidos": 12, "itens": 38, "pranchas": 5,
+        _antes = {"medidos": 12, "itens": 38, "com_numero": 24, "pranchas": 5,
                   "por_prancha": {"A01": {"medidos": 6}, "A02": {"medidos": 6}}}
-        _depois = {"medidos": 27, "itens": 46, "pranchas": 7,
+        _depois = {"medidos": 27, "itens": 46, "com_numero": 39, "pranchas": 7,
                    "por_prancha": {"A01": {"medidos": 22}, "A02": {"medidos": 5}}}
         if key == "leitura_nova":
             return _build_leitura_nova_email(nome, projeto, fake_job, _antes, _depois)
@@ -31475,6 +31610,83 @@ def _ai_suggest_combine(files_meta: list, base_type: str = "") -> dict:
         return _fallback()
 
 
+def _contagem_para_liberar(job_id: str):
+    """O que uma leitura tem, contado do banco — ou None se a leitura falhou.
+
+    É a régua das DUAS portas da liberação (botão e vigia automático) e do
+    e-mail que conta o ganho ao cliente.
+    🩸 22/09/2026 (caso ee801b82/f8d8e6d8): a régua tinha só itens e medidos.
+    Em PDF "medidos" é 0 por regra, então sobrava a contagem de ITENS — e item
+    a mais não é melhora (a releitura do f8d8 tinha 28 itens a mais e 61
+    linhas zeradas). O que o cliente usa é linha COM NÚMERO: `com_numero`.
+    E "pranchas" contava strings de `ref_sheet` (30 e 38 num envio de 7 PDFs);
+    agora conta a prancha de verdade (`_prancha_de_verdade`).
+    🪤 Erro de leitura devolve None, nunca zeros: "0 itens" no original faria
+    qualquer filhote parecer melhor (23/08).
+    """
+    _st, _r = _supa_rest_service(
+        "GET", "project_items",
+        params={"job_id": f"eq.{job_id}", "select": "confidence,ref_sheet,quantity"})
+    if _st != 200:
+        return None
+    _r = _r or []
+
+    def _tem_numero(x):
+        try:
+            return float((x or {}).get("quantity") or 0) > 0
+        except (TypeError, ValueError):
+            return False
+    # 24/08 (caso cliente-19): prancha é a causa, item é consequência — e por
+    # prancha também, porque o saldo pode esconder a prancha que PIOROU.
+    _pr = set()
+    _det = {}
+    for _x in _r:
+        _k = _prancha_de_verdade((_x or {}).get("ref_sheet"))
+        if not _k:
+            continue
+        _pr.add(_k.lower())
+        _d = _det.setdefault(_k, {"itens": 0, "medidos": 0})
+        _d["itens"] += 1
+        if (_x or {}).get("confidence") == "confirmado":
+            _d["medidos"] += 1
+    return {"itens": len(_r),
+            "medidos": sum(1 for x in _r if (x or {}).get("confidence") == "confirmado"),
+            "com_numero": sum(1 for x in _r if _tem_numero(x)),
+            "pranchas": len(_pr),
+            "por_prancha": _det}
+
+
+def _releitura_melhorou(antes: dict, depois: dict) -> bool:
+    """A versão nova tem mais LINHAS COM NÚMERO ou mais itens MEDIDOS?
+
+    🩸 22/09/2026 (A10 do caso ee801b82/f8d8e6d8): a porta 3 chamava de
+    melhora qualquer aumento de ITENS. Medido nas 21 liberações: ev572486
+    passou com 0/19 → 0/83 (medidos/itens) e evbdbe1e com 6/28 → 5/47. Item a
+    mais que nasce zerado é mais linha vazia, não leitura melhor.
+    """
+    return (int((depois or {}).get("medidos") or 0) > int((antes or {}).get("medidos") or 0)
+            or int((depois or {}).get("com_numero") or 0)
+            > int((antes or {}).get("com_numero") or 0))
+
+
+def _patch_da_liberacao(pai: dict, novo_nome: str) -> dict:
+    """O que a liberação grava no filhote: o dono E o contato do dono.
+
+    🩸 22/09/2026 (A11): o filhote liberado ficava com `user_email` vazio. Se
+    a cliente anexasse ou refizesse a partir dele, o fim do job lia o e-mail
+    de `projects.user_email` e não mandava nada: 21 de 21 liberados assim.
+    🔒 Regra nº2: o e-mail vem da MESMA linha do pai que dá o `user_id` (o pai
+    é achado pelo `parent_job_id` do filhote, nunca por parâmetro), então o
+    contato é sempre do dono do original.
+    🪤 Isto não manda e-mail na liberação: o filhote já terminou (a rota exige
+    status done). E a esteira ignora projeto `is_eval` — sem isso ela contaria
+    a nossa releitura como "último movimento" do cliente.
+    """
+    return {"user_id": pai["user_id"], "project_name": novo_nome,
+            "user_email": str(pai.get("user_email") or "").strip(),
+            "user_name": str(pai.get("user_name") or "").strip()}
+
+
 def _auto_liberar_filhote_quando_pronto(eval_job_id: str, pai_id: str,
                                         timeout_min: int = 45):
     """Espera o filhote concluir e, se uma IA JUÍZA disser que a planilha nova
@@ -31559,10 +31771,14 @@ def _auto_liberar_filhote_quando_pronto(eval_job_id: str, pai_id: str,
                            f"{x.get('confidence','')}")
             return out
         la, lb = _linhas(pai_id), _linhas(eval_job_id)
-        antes = {"itens": len(la),
-                 "medidos": sum(1 for x in la if x.endswith("confirmado"))}
-        depois = {"itens": len(lb),
-                  "medidos": sum(1 for x in lb if x.endswith("confirmado"))}
+        # 🔑 22/09/2026: a conta que vai pro e-mail e pro log é a MESMA régua do
+        # botão manual. A de antes contava as ≤120 linhas do prompt da juíza e
+        # não sabia de linha com número nem de prancha.
+        _ca, _cd = _contagem_para_liberar(pai_id), _contagem_para_liberar(eval_job_id)
+        antes = _ca or {"itens": len(la),
+                        "medidos": sum(1 for x in la if x.endswith("confirmado"))}
+        depois = _cd or {"itens": len(lb),
+                         "medidos": sum(1 for x in lb if x.endswith("confirmado"))}
 
         prompt = (
             "Você compara DUAS versões da planilha de quantitativos do MESMO projeto "
@@ -31609,13 +31825,28 @@ def _auto_liberar_filhote_quando_pronto(eval_job_id: str, pai_id: str,
         novo_nome = (str(pai.get("project_name") or "Projeto")[:60]
                      + " — nova leitura (motor atualizado)")
         _supa_rest_service("PATCH", "projects",
-                           body={"user_id": pai["user_id"], "project_name": novo_nome},
+                           body=_patch_da_liberacao(pai, novo_nome),
                            params={"job_id": f"eq.{eval_job_id}"})
         try:
+            # 🩸 22/09/2026: o e-mail só conta ganho que existe. A juíza pode
+            # liberar por conteúdo (o caso do cliente-81), mas o texto do
+            # e-mail é contagem — sem linha com número nem medido a mais, ele
+            # não tem o que dizer de verdadeiro. Segura e registra.
+            if _ca is None or _cd is None or not _releitura_melhorou(_ca, _cd):
+                _email_ok = False
+                _log_error("filhote:auto",
+                           "e-mail SEGURADO: sem ganho que o e-mail possa contar "
+                           "(linhas com número %s → %s, medidos %s → %s). A leitura "
+                           "nova está no painel; se valer avisar, é à mão."
+                           % ((_ca or {}).get("com_numero", "?"),
+                              (_cd or {}).get("com_numero", "?"),
+                              (_ca or {}).get("medidos", "?"),
+                              (_cd or {}).get("medidos", "?")),
+                           eval_job_id, severity="info")
             # 🚨 29/08: o mesmo teto de 1 e-mail por semana que o botão manual
             # passou a respeitar. Este caminho é AUTOMÁTICO — sem ninguém pra
             # ver o aviso e decidir —, então aqui ele só segura e registra.
-            if _email_auto_recente(pai.get("user_email", ""), dias=7):
+            elif _email_auto_recente(pai.get("user_email", ""), dias=7):
                 _email_ok = False
                 _log_error("filhote:auto",
                            "e-mail SEGURADO: a pessoa já recebeu automático nos "
@@ -31828,7 +32059,7 @@ def _email_leitura_nova(pai: dict, filho_job: str, antes: dict, depois: dict) ->
     que apaga o trabalho dele. Nesse caso o contato é do Pedro, à mão, com
     conversa — não automático. É a regra dura nº7.
 
-    🚫 Também não manda se a versão nova não mediu MAIS que a original: avisar
+    🚫 Também não manda sem ganho real (`_releitura_melhorou`): avisar
     sem ganho é gastar a confiança dele por nada.
 
     🪤 24/08: este e-mail saía como `<div>` cru — sem logo, sem CTA padrão e
@@ -31864,9 +32095,11 @@ def _build_leitura_nova_email(nome: str, proj: str, filho_job: str,
     pra Central de E-mails ter ficha, preview e "teste pra mim" pelo MESMO
     builder — até aqui a Central listava este e-mail como "fora do catálogo"."""
     import html as _hn
-    ganho_med = depois.get("medidos", 0) - antes.get("medidos", 0)
-    ganho_itens = depois.get("itens", 0) - antes.get("itens", 0)
     ganho_pr = depois.get("pranchas", 0) - antes.get("pranchas", 0)
+    # 🩸 22/09 (f8d8e6d8): ganho é linha COM NÚMERO, não item; "0 → 0 medidos" não sai.
+    _num_a, _num_d = antes.get("com_numero", 0), depois.get("com_numero", 0)
+    _med_a, _med_d = antes.get("medidos", 0), depois.get("medidos", 0)
+    _mostra_medidos = _med_a > 0 or _med_d > 0
 
     linha_ganho = []
     # 24/08: prancha primeiro. Se 3 das 7 pranchas do cliente não tinham
@@ -31876,18 +32109,13 @@ def _build_leitura_nova_email(nome: str, proj: str, filho_job: str,
             "<b>%d prancha(s) que n&atilde;o tinham entrado agora entraram</b> "
             "(%d &rarr; %d pranchas lidas)"
             % (ganho_pr, antes.get("pranchas", 0), depois.get("pranchas", 0)))
-    if ganho_itens > 0:
-        linha_ganho.append("<b>%d &rarr; %d itens</b>"
-                           % (antes.get("itens", 0), depois.get("itens", 0)))
-    if ganho_med > 0:
-        linha_ganho.append("<b>%d &rarr; %d medidos do CAD</b>"
-                           % (antes.get("medidos", 0), depois.get("medidos", 0)))
+    linha_ganho.append("<b>%d &rarr; %d linhas com quantidade</b>" % (_num_a, _num_d))
+    if _mostra_medidos:
+        linha_ganho.append("<b>%d &rarr; %d medidos do CAD</b>" % (_med_a, _med_d))
     if len(linha_ganho) > 2:
         ganho_html = ", ".join(linha_ganho[:-1]) + " e " + linha_ganho[-1]
-    elif linha_ganho:
-        ganho_html = " e ".join(linha_ganho)
     else:
-        ganho_html = "uma leitura mais completa"
+        ganho_html = " e ".join(linha_ganho)
 
     # 🚨 Honestidade dos dois lados. Se alguma prancha ficou com MENOS medições
     # que na leitura antiga, o cliente precisa saber ANTES de trocar a planilha
@@ -31901,9 +32129,10 @@ def _build_leitura_nova_email(nome: str, proj: str, filho_job: str,
     _piores.sort(key=lambda t: t[1] - t[2], reverse=True)
 
     _greet = _greeting_line(_hn.escape(nome))
+    # 🚫 Sem "melhoramos o motor": a releitura pode ser do MESMO motor (22/09).
     corpo = ("%s<br><br>"
-             "Melhoramos o motor que l&ecirc; os desenhos e <b>refizemos a leitura do seu "
-             "projeto %s</b> &mdash; sem voc&ecirc; precisar reenviar nada.<br><br>"
+             "J&aacute; est&aacute; no seu painel: <b>refizemos a leitura do seu projeto %s</b> &mdash; sem voc&ecirc; "
+             "precisar reenviar nada.<br><br>"
              "O que mudou: %s." % (_greet, _hn.escape(proj), ganho_html))
 
     if _piores:
@@ -31922,8 +32151,9 @@ def _build_leitura_nova_email(nome: str, proj: str, filho_job: str,
         "seu, e continua tudo gr&aacute;tis no beta.</div>")
 
     subject = "%s — refizemos a leitura" % (proj or "Seu projeto")
-    _pre = ("%d → %d itens medidos do CAD. A sua versão original continua no painel."
-            % (antes.get("medidos", 0), depois.get("medidos", 0)))
+    _pre = ("%d → %d linhas com quantidade%s. A sua versão original continua no painel."
+            % (_num_a, _num_d,
+               (", %d → %d medidos do CAD" % (_med_a, _med_d)) if _mostra_medidos else ""))
     html = _email_wrap(
         "Refizemos a leitura do seu projeto", corpo,
         "Ver a leitura nova",
@@ -32005,8 +32235,11 @@ def admin_liberar_filhote(eval_job_id: str, request: Request):
 
     🔑 Por que basta trocar o `user_id`: `list_user_projects` filtra **só** por
     user_id, não por `is_eval`. Então o filhote aparece pro cliente e continua
-    fora das varreduras de auto-retry/alerta (que filtram is_eval); o
-    `user_email` do FILHOTE segue vazio (nada de e-mail de conclusão duplicado).
+    fora das varreduras de auto-retry/alerta (que filtram is_eval).
+    🩸 22/09/2026: o `user_email` do filhote passou a ser gravado junto com o
+    `user_id` (`_patch_da_liberacao`). Vazio, ele calava o e-mail de TODO job
+    que a cliente rodasse depois em cima do filhote (anexo, reprocesso). Não
+    há e-mail de conclusão duplicado: o filhote já concluiu antes de liberar.
     📧 O AVISO AO CLIENTE É AUTOMÁTICO desde 08/08 — `_email_leitura_nova`, com
     o e-mail do PAI, logo abaixo. (Este parágrafo dizia o contrário até 23/08 e
     me fez responder errado ao Pedro: comentário velho mente igual código velho.)
@@ -32060,40 +32293,10 @@ def admin_liberar_filhote(eval_job_id: str, request: Request):
     if not pai.get("user_id"):
         raise HTTPException(400, "Original sem dono (user_id vazio) — não libero")
 
-    def _conta(jid):
-        # 23/08 (auditoria): com _supa_rows, falha de leitura devolvia [] — o
-        # original virava "0 itens", tudo parecia "melhorou" e o e-mail dizia
-        # "0 → 46 itens". Erro tem que ser erro.
-        _st, _r = _supa_rest_service(
-            "GET", "project_items",
-            params={"job_id": f"eq.{jid}", "select": "confidence,ref_sheet"})
-        if _st != 200:
-            return None
-        _r = _r or []
-        # 24/08 (caso cliente-19): o e-mail dizia "147 -> 263 itens" quando o fato era
-        # "3 das suas 7 pranchas nao tinham entrado". Item e consequencia;
-        # prancha e a causa, e e o que ele reclamaria. Conta as duas.
-        _pr = {str((x or {}).get("ref_sheet") or "").strip()
-               for x in _r if str((x or {}).get("ref_sheet") or "").strip()}
-        # 24/08: por PRANCHA tambem. O saldo do cliente-19 e +59 medidos, mas a
-        # prancha de eletrica dele CAIU de 77 para 49 medidos. Um e-mail que
-        # diz so "melhoramos" e meia verdade — e meia verdade sobre a planilha
-        # do cliente e o tipo de coisa que ele descobre sozinho e nao volta.
-        _det = {}
-        for _x in _r:
-            _k = str((_x or {}).get("ref_sheet") or "").strip()
-            if not _k:
-                continue
-            _d = _det.setdefault(_k, {"itens": 0, "medidos": 0})
-            _d["itens"] += 1
-            if (_x or {}).get("confidence") == "confirmado":
-                _d["medidos"] += 1
-        return {"itens": len(_r),
-                "medidos": sum(1 for x in _r if (x or {}).get("confidence") == "confirmado"),
-                "pranchas": len(_pr),
-                "por_prancha": _det}
-
-    antes, depois = _conta(pai_id), _conta(eval_job_id)
+    # 23/08 (auditoria): falha de leitura devolvia [] e o original virava "0
+    # itens" — erro tem que ser erro (None). A régua mora em
+    # `_contagem_para_liberar`, a mesma do vigia automático.
+    antes, depois = _contagem_para_liberar(pai_id), _contagem_para_liberar(eval_job_id)
     if antes is None or depois is None:
         raise HTTPException(502, "Não consegui contar os itens dos dois projetos agora — "
                                  "não libero sem saber se a versão nova é melhor.")
@@ -32116,8 +32319,11 @@ def admin_liberar_filhote(eval_job_id: str, request: Request):
     if revogar and _nome_filho.endswith(_SUFIXO):
         _nome_filho = ("[TESTE] " + str(pai.get("project_name") or "Projeto")[:60]
                        + (" — combinada" if _e_merge else " — avaliação"))
-    patch = ({"user_id": "eval", "project_name": _nome_filho} if revogar
-             else {"user_id": pai["user_id"], "project_name": novo_nome})
+    # 🔑 Revogar devolve o filhote ao estado de avaliação INTEIRO, contato
+    # incluído: projeto que o cliente não vê não pode mandar e-mail pra ele.
+    patch = ({"user_id": "eval", "project_name": _nome_filho,
+              "user_email": "", "user_name": ""} if revogar
+             else _patch_da_liberacao(pai, novo_nome))
     _supa_rest_service("PATCH", "projects", body=patch,
                        params={"job_id": f"eq.{eval_job_id}"})
 
@@ -32141,8 +32347,15 @@ def admin_liberar_filhote(eval_job_id: str, request: Request):
             email_motivo = (f"NÃO enviado: o cliente revisou {revisoes} item(ns) à mão. "
                             f"A versão nova não tem essas correções — fale com ele você, "
                             f"pessoalmente.")
-        elif depois["medidos"] <= antes["medidos"] and depois["itens"] <= antes["itens"]:
-            email_motivo = "NÃO enviado: a versão nova não ficou melhor que a original."
+        # 🩸 22/09/2026: era "medidos E itens não subiram" — item a mais passava
+        # por melhora. O motivo diz a régua, pra quem clicou entender por que o
+        # aviso não saiu mesmo com "mais itens" na tela.
+        elif not _releitura_melhorou(antes, depois):
+            email_motivo = "NÃO enviado: a versão nova não ficou melhor que a original " + (
+                "(linhas com quantidade %d → %d, medidos %d → %d; item a mais não "
+                "é melhora). Se valer avisar, mande à mão."
+                % (antes.get("com_numero", 0), depois.get("com_numero", 0),
+                   antes["medidos"], depois["medidos"]))
         elif _email_auto_recente(pai.get("user_email", ""), dias=7):
             # 🚨 29/08/2026 — A cliente-68 RECEBEU TRÊS E-MAILS NUM DIA.
             #
@@ -32211,14 +32424,14 @@ def admin_liberar_filhote(eval_job_id: str, request: Request):
             # 🔑 Passa a ser o MESMO critério do e-mail — um só, pra não voltar
             # a divergir — e ganha `melhorou_em`, que diz no QUÊ melhorou, que é
             # o que quem libera precisa saber pra decidir.
-            "melhorou": (depois["medidos"] > antes["medidos"]
-                         or depois["itens"] > antes["itens"]),
+            "melhorou": _releitura_melhorou(antes, depois),
             "melhorou_em": ", ".join(
                 [t for t in (
                     ("%d → %d medidos" % (antes["medidos"], depois["medidos"])
                      if depois["medidos"] > antes["medidos"] else ""),
-                    ("%d → %d itens" % (antes["itens"], depois["itens"])
-                     if depois["itens"] > antes["itens"] else ""),
+                    ("%d → %d linhas com quantidade"
+                     % (antes.get("com_numero", 0), depois.get("com_numero", 0))
+                     if depois.get("com_numero", 0) > antes.get("com_numero", 0) else ""),
                 ) if t]) or "nada",
             "revisoes_no_original": revisoes,
             "email_enviado": email_enviado,
