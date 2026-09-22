@@ -4032,7 +4032,12 @@ _EMAIL_ALERTANDO = threading.local()  # anti-recursão do alerta (ver abaixo)
 # por alguns minutos, SEM queimar o dia inteiro daquele tipo (que era o outro
 # defeito: a chave era marcada ANTES de tocar, então uma queda de SMTP calava o
 # tipo até a meia-noite mesmo depois de o servidor voltar).
-_EMAIL_ALERTA_ESTADO = {"caiu_em": 0.0}
+# 🪤 22/09/2026 — `caiu_em` nasce None, NAO 0.0. `time.monotonic()` conta desde
+# o boot da MAQUINA: num processo recem-subido (todo deploy do Render e um)
+# ele vale poucas dezenas de segundos, e com o sentinela 0.0 a conta
+# `agora - 0 < 300` dava VERDADE — a campainha nascia MUDA pelos 5 primeiros
+# minutos de vida do servidor, justamente a janela em que defeito aparece.
+_EMAIL_ALERTA_ESTADO = {"caiu_em": None}
 _EMAIL_ALERTA_ESPERA_S = 300.0
 # 🪤 Freio do RASTRO. Sem ele, uma queda de SMTP no meio da newsletter põe 65
 # linhas `email:falha` no painel de 40 linhas que o Pedro usa pra achar erro de
@@ -4212,7 +4217,8 @@ def _alerta_email_que_nao_saiu(to_email: str, subject: str, log_kind: str,
     # a campainha caiu há pouco: o servidor está fora do ar e tentar de novo, uma
     # vez por destinatário, custaria a newsletter inteira em conexões perdidas
     _agora_al = time.monotonic()
-    if _agora_al - float(_EMAIL_ALERTA_ESTADO.get("caiu_em") or 0.0) < _EMAIL_ALERTA_ESPERA_S:
+    _caiu_em = _EMAIL_ALERTA_ESTADO.get("caiu_em")
+    if _caiu_em is not None and _agora_al - float(_caiu_em) < _EMAIL_ALERTA_ESPERA_S:
         return False
     if len(_EMAIL_FALHA_AVISADO) > 5000:
         _EMAIL_FALHA_AVISADO.clear()

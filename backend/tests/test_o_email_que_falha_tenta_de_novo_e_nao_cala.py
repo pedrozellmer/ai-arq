@@ -58,6 +58,11 @@ _QUEDA = "Connection unexpectedly closed: The read operation timed out"
 #: `main._notify_admin` já é o dublê, e repô-lo em si mesmo não devolve nada.
 _NOTIFY_REAL = main._notify_admin
 
+#: 🪤 Como o MODULO NASCE, fotografado no import — antes de a fixture
+#: `bordas` trocar o estado. E o valor que vale em producao logo apos um
+#: deploy, e e sobre ele que o guarda do servidor recem-subido decide.
+_ALERTA_ESTADO_DE_FABRICA = dict(main._EMAIL_ALERTA_ESTADO)
+
 
 def _caiu():
     return smtplib.SMTPServerDisconnected(_QUEDA)
@@ -150,7 +155,7 @@ def bordas(monkeypatch):
     # zerar, o 4º guarda do arquivo já entra com o teto estourado pelo 1º e
     # "não gravou a linha" vira falso vermelho (aconteceu comigo hoje).
     monkeypatch.setattr(main, "_EMAIL_FALHA_LINHAS", {})
-    monkeypatch.setattr(main, "_EMAIL_ALERTA_ESTADO", {"caiu_em": 0.0})
+    monkeypatch.setattr(main, "_EMAIL_ALERTA_ESTADO", {"caiu_em": None})
 
     logs, avisos, esperas, gravados = [], [], [], []
 
@@ -634,8 +639,11 @@ def test_a_campainha_que_CAI_nao_queima_o_dia_daquele_tipo(bordas, monkeypatch):
     main._send_email_smtp(_CLIENTE, "A", "b", log_kind="boas_vindas")
     assert caiu["n"] == 1 and avisos == []
 
-    # o servidor voltou (o relógio do freio é tempo, não o dia)
-    main._EMAIL_ALERTA_ESTADO["caiu_em"] = 0.0
+    # o servidor voltou (o relógio do freio é tempo, não o dia).
+    # 🪤 `None`, não `0.0`: zero é um INSTANTE de `time.monotonic()`, e num
+    # processo recém-subido ele fica a menos de 300 s de agora — era assim
+    # que este próprio guarda ficava vermelho no runner do CI.
+    main._EMAIL_ALERTA_ESTADO["caiu_em"] = None
     monkeypatch.setattr(main, "_notify_admin",
                         lambda *a, **k: avisos.append(" ".join(str(x) for x in a)) or True)
     main._send_email_smtp(_CLIENTE, "A", "b", log_kind="boas_vindas")
@@ -713,3 +721,56 @@ def test_o_alerta_que_FALHA_nao_chama_outro_alerta(bordas, monkeypatch):
         "esperava 2 linhas (o e-mail do cliente + o alerta que também não saiu) "
         "e vieram %d — a trava anti-recursão furou: %r" % (len(falhas), falhas))
     assert srv.tentativas <= 2 * main._EMAIL_TENTATIVAS
+
+
+def test_a_campainha_TOCA_em_servidor_RECEM_SUBIDO(bordas, monkeypatch):
+    """🩸 22/09/2026, CI de 26d9a66 — 10 guardas deste arquivo verdes no
+    Windows e VERMELHOS no runner Linux. A causa nao era o sistema: era
+    `time.monotonic()`, que conta desde o boot da MAQUINA. Na maquina ligada
+    ha dias ele vale dezenas de milhares; no runner criado ha 2 minutos, ~100.
+    Com o sentinela `caiu_em = 0.0`, a conta do freio (`agora - 0 < 300`) dava
+    VERDADE — e a campainha nascia MUDA.
+
+    🔑 Isto NAO era so do CI: o Render reinicia o processo a cada deploy, entao
+    em producao o alarme de "e-mail de cliente nao saiu" ficava calado pelos 5
+    primeiros minutos de vida do servidor — a janela em que defeito aparece.
+    Irma da licao de 19/09: falta de estado NAO e neutra."""
+    _logs, avisos, _e, _g = bordas
+    monkeypatch.setattr(main, "_EMAIL_ALERTA_ESTADO", dict(_ALERTA_ESTADO_DE_FABRICA))
+    # maquina que bootou ha 12 segundos
+    monkeypatch.setattr(main.time, "monotonic", lambda: 12.0)
+    srv = _Servidor([_caiu()] * 30)
+    monkeypatch.setattr(smtplib, "SMTP", srv)
+
+    assert main._send_email_smtp(_CLIENTE, "A", "b", log_kind="planilha_pronta",
+                                 job_id=_JOB) is False
+    assert len(avisos) == 1, (
+        "servidor recem-subido tem que tocar a campainha; o freio so vale "
+        "depois de uma queda REAL da propria campainha. Vieram %d" % len(avisos))
+
+
+def test_CONTROLE_depois_de_a_campainha_CAIR_ela_espera_mesmo_recem_subido(
+        bordas, monkeypatch):
+    """Controle positivo do guarda acima: o freio tem que continuar freando.
+    Se `caiu_em` guarda uma queda de 2 s atras, a proxima falha NAO toca."""
+    _logs, avisos, _e, _g = bordas
+    monkeypatch.setattr(main, "_EMAIL_ALERTA_ESTADO", {"caiu_em": 10.0})
+    monkeypatch.setattr(main.time, "monotonic", lambda: 12.0)
+    srv = _Servidor([_caiu()] * 30)
+    monkeypatch.setattr(smtplib, "SMTP", srv)
+
+    assert main._send_email_smtp(_CLIENTE, "A", "b", log_kind="planilha_pronta",
+                                 job_id=_JOB) is False
+    assert avisos == [], (
+        "a campainha caiu ha 2 s: as proximas esperam os %.0f s. Vieram %r"
+        % (main._EMAIL_ALERTA_ESPERA_S, avisos))
+
+
+def test_o_freio_da_campainha_NAO_usa_zero_como_nunca_caiu():
+    """O guarda de cima passa se alguem trocar o None por 0.0 E subir a
+    ESPERA pra 0 — este ancora o FATO: o estado de fabrica diz "nunca caiu"
+    com um valor que nao e comparavel a relogio nenhum."""
+    assert _ALERTA_ESTADO_DE_FABRICA.get("caiu_em", 0.0) is None, (
+        "`caiu_em` de fabrica tem que ser None: 0.0 e um INSTANTE de "
+        "`time.monotonic()`, e num processo recem-subido ele esta a menos de "
+        "%.0f s de agora — o freio nasceria fechado" % main._EMAIL_ALERTA_ESPERA_S)
