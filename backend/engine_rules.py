@@ -3761,8 +3761,12 @@ def area_informada_mudaria_a_planilha(items, pdfvec_m2: float = 0.0) -> bool:
     🔑 As mesmas duas travas de `_area_informada_alcancaria` (dentro de
     `_apply_area_honesty`): só piso/forro/laje em m², e só sem medição vetorial.
     Aquela fica local de propósito (fatia executada por testes); esta é a que o
-    e-mail consulta. O aviso de projeto aplica as mesmas duas travas no próprio
-    `_alcanca` (o guarda de 09/09 lê aquela expressão pela AST).
+    e-mail consulta. O aviso de projeto aplica as duas em lugares diferentes:
+    a de superfície no próprio `_alcanca` (o guarda de 09/09 lê aquela
+    expressão pela AST) e a da medição no `if _alcanca and _pv_alc <= 0`.
+    🪤 São três cópias da mesma pergunta: o guarda
+    `test_as_tres_reguas_da_area_informada_concordam` roda as três nos mesmos
+    itens e reprova se uma responder diferente.
     """
     try:
         if float(pdfvec_m2 or 0) > 0:
@@ -3779,17 +3783,61 @@ def area_informada_mudaria_a_planilha(items, pdfvec_m2: float = 0.0) -> bool:
 # observação. Mais largo que `_QUADRO_DE_ACO` (que absolve SELO e é estreito de
 # propósito): aqui só se pergunta "a prancha trouxe o resumo?", pra texto.
 _RX_RESUMO_DE_ACO = _re.compile(
-    r"resumo\s+(?:de\s+)?(?:a[çc]o|tela)"
-    r"|quadro\s*(?:/\s*resumo\s*)?\s+de\s+(?:a[çc]o|ferr(?:o|os|agem|agens))"
-    r"|lista\s+de\s+ferros?",
+    r"resumos?\s+(?:de\s+)?(?:a[çc]o|tela)"
+    r"|quadros?\s*(?:/\s*resumos?\s*)?\s+de\s+(?:a[çc]o|ferr(?:o|os|agem|agens))"
+    r"|listas?\s+de\s+ferros?",
     _re.IGNORECASE)
 # "Não há quadro/resumo de aço nesta prancha" — a IA escreve isso em linha de
 # aço por TAXA. Negação no mesmo trecho da frase, colada antes da citação
 # (ancorada no fim: um "sem" solto lá atrás na frase não nega o quadro).
 _RX_NEGA_O_RESUMO = _re.compile(
-    r"(?:n[ãa]o\s+(?:h[áa]|tem|existe|consta|aparece|foi|veio)\b[^.;|]{0,24}"
-    r"|\bsem\s+(?:o\s+|a\s+|um\s+|uma\s+)?)$",
+    r"(?:n[ãa]o\s+(?:h[áa]|tem|existe|consta|aparece|foi|veio|apresenta|traz"
+    r"|possui|cont[ée]m|inclui|mostra)\b[^.;|]{0,24}"
+    r"|\bsem\s+(?:o\s+|a\s+|um\s+|uma\s+)?"
+    r"|\baus[êe]ncia\s+d[eoa]s?\s+|\bfalta(?:m)?\s+(?:o\s+|a\s+)?)$",
     _re.IGNORECASE)
+# "Quadro de aço não encontrado nesta prancha" — a negação vem DEPOIS.
+_RX_NEGA_DEPOIS = _re.compile(
+    r"^[^.;|]{0,30}?(?:\bn[ãa]o\s+(?:foi\s+|est[áa]\s+|é\s+|era\s+)?"
+    r"(?:encontrad|localizad|dispon[íi]ve|vis[íi]ve|leg[íi]ve|enviad|identificad"
+    r"|inclu[íi]d|apresentad|lid|consta|h[áa])|\bausente|\binexistente)",
+    _re.IGNORECASE)
+# 🩸 22/09/2026 (revisão) — quem AFIRMA que o número saiu do quadro, no mesmo
+# trecho da frase: "lido do", "copiado do", "extraído do", "fonte:",
+# "confirmado no", "declarado no", "total explícito no", "a partir do",
+# "conforme", "soma das". Citar o quadro não basta: "Verificar projeto
+# estrutural e quadro de ferragens" é recomendação, não procedência.
+_RX_RESUMO_AFIRMADO_ANTES = _re.compile(
+    r"(?:\bfonte\b[^:.;|]{0,25}:"
+    r"|\b(?:lid|copiad|extra[íi]d|transcrit|confirmad|declarad|expl[íi]cit|tirad"
+    r"|obtid|retirad|derivad|basead)[oa]s?\b"
+    r"|\ba\s+partir\s+d[oa]s?\b|\bconforme\b|\bde\s+acordo\s+com\b"
+    r"|\bcom\s+base\s+n[oa]s?\b|\bsegundo\b|\bsoma\w*\s+d[oa]s?\b)"
+    r"[^.;|]{0,60}$",
+    _re.IGNORECASE)
+_RX_RESUMO_AFIRMADO_DEPOIS = _re.compile(
+    r"^[^.;|]{0,25}?\b(?:lid|copiad|extra[íi]d|transcrit)[oa]s?\b|^[^.;|]{0,25}?\btotaliza",
+    _re.IGNORECASE)
+# Peso que SAIU de uma taxa (regra nº3): nesse trecho o quadro citado não é a
+# fonte do número, mesmo com "conforme" ao lado.
+_RX_PESO_DA_TAXA_NO_TRECHO = _re.compile(
+    r"\btaxa\b[^.;|]{0,60}?\b(?:adotad|aplicad|t[íi]pic)"
+    r"|\bconsumo\s+t[íi]pic|\bpor\s+taxa\b"
+    r"|\bestimad[oa]s?\s+(?:\w+\s+){0,2}?(?:por|pela)\s+taxa",
+    _re.IGNORECASE)
+
+
+def _citacao_do_resumo_afirma_a_fonte(obs: str, m) -> bool:
+    """A citação `m` do quadro diz que o número VEIO dele (e não o nega)?"""
+    _ini = max(0, m.start() - 90)
+    antes = _re.split(r"[.;|]", obs[_ini:m.start()])[-1]
+    depois = _re.split(r"[.;|]", obs[m.end():m.end() + 90])[0]
+    if _RX_NEGA_O_RESUMO.search(antes) or _RX_NEGA_DEPOIS.search(depois):
+        return False
+    if _RX_PESO_DA_TAXA_NO_TRECHO.search(antes + m.group(0) + depois):
+        return False
+    return bool(_RX_RESUMO_AFIRMADO_ANTES.search(antes)
+                or _RX_RESUMO_AFIRMADO_DEPOIS.search(depois))
 
 
 def linhas_de_aco_do_resumo(items) -> int:
@@ -3804,6 +3852,33 @@ def linhas_de_aco_do_resumo(items) -> int:
     🪤 Conta só `quantity > 0`: a linha "o peso das sapatas está no RESUMO DE
     AÇO" com 0 kg cita o quadro e não tirou número dele. E a citação negada
     ("Não há quadro/resumo de aço") não conta — é a frase das linhas por taxa.
+
+    🩸 22/09/2026 (revisão adversária) — a 1ª versão contava QUALQUER citação
+    não negada. No job 08ba5752 (PDF lido como estrutura, zero quadro de aço)
+    as 7 linhas diziam "Não há quadro de aço nestas pranchas. Taxa 100 kg/m³
+    adotada [...]. Verificar projeto estrutural e quadro de ferragens": a 1ª
+    citação era negada, a 2ª não — e 6 linhas de TAXA viravam "aço lido do
+    resumo", trocando a frase verdadeira do ARM por uma falsa.
+    🔑 Agora a citação só conta se o mesmo trecho da frase AFIRMA a
+    procedência ("lido do", "fonte:", "extraído do", "confirmado no"...), não
+    a nega antes nem depois, e não é trecho de peso por taxa.
+    📏 Medido (90 d, sem avaliação, now() de testemunha 22/09 15:37): 148
+    linhas kg > 0 citam quadro/resumo/lista, em 15 jobs. A régua antiga
+    contava 130; esta conta 119. Saem 12 linhas: as 6 do 08ba5752 e as 2 do
+    62c49fe6 (taxa, "não há quadro [...] verificar/revisar com quadro de
+    ferragens"), a do 7f7ef56a ("conferir com quadro de ferragens quando
+    disponível"), a estimativa por comprimento × massa do f8d8e6d8, e 3
+    linhas de soma/diagnóstico em jobs que seguem com dezenas lidas do
+    quadro. Entram 3: o PLURAL "Soma confirmada dos quadros de ferragens"
+    do 7f7ef56a, que a régua antiga (só singular) não via.
+    🪤 Por JOB, zeram só os dois que não tinham quadro nenhum (08ba5752 6→0,
+    62c49fe6 2→0). 7f7ef56a vai de 1 pra 3 — a régua antiga contava ali a
+    linha ERRADA (a recomendação) e perdia as três certas. Os outros 12
+    seguem contando (42c354a1 63→60, 6e9649a7 11→10, f8d8e6d8 5→4,
+    ee801b82 5→5).
+    🩸 A 1ª medição desta revisão disse "130→116, e os TRÊS zeram": ela
+    peneirou o acervo com a regex ANTIGA (sem plural), então mediu o alcance
+    da régua nova pelo corte da velha e perdeu 3 linhas do 7f7ef56a.
     """
     n = 0
     for it in (items or []):
@@ -3813,12 +3888,9 @@ def linhas_de_aco_do_resumo(items) -> int:
             if float(_campo_do_item(it, "quantity", 0) or 0) <= 0:
                 continue
             obs = str(_campo_do_item(it, "observations", "") or "")
-            for m in _RX_RESUMO_DE_ACO.finditer(obs):
-                # o trecho da MESMA frase antes da citação
-                antes = _re.split(r"[.;|]", obs[max(0, m.start() - 40):m.start()])[-1]
-                if not _RX_NEGA_O_RESUMO.search(antes):
-                    n += 1
-                    break
+            if any(_citacao_do_resumo_afirma_a_fonte(obs, m)
+                   for m in _RX_RESUMO_DE_ACO.finditer(obs)):
+                n += 1
         except (TypeError, ValueError):
             continue
     return n

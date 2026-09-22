@@ -112,8 +112,11 @@ def _aco_do_resumo():
             "Calculado a partir do RESUMO AÇO CA-50 da prancha (CTot lidos)."),
         _it("Armadura CA-60 — total geral (Ø5mm — estribos)", 54.6, "kg",
             "Calculado a partir do RESUMO AÇO CA-60 da prancha."),
+        # a redação REAL da IA no job (a 1ª versão deste fixture tirou o
+        # "CONFIRMADO", e a régua passou a exigir quem afirma a procedência)
         _it("Tela soldada Q335 — radier e laje", 199, "kg",
-            "Peso do RESUMO TELA DE AÇO da prancha: Q335, Área = 37 m², PTot = 199 kg."),
+            "Peso CONFIRMADO do RESUMO TELA DE AÇO da prancha: Q335, Área = 37 m², "
+            "PTot = 199 kg."),
     ]
 
 
@@ -278,8 +281,12 @@ def test_a_regua_conta_as_7_linhas_do_resumo_e_nao_conta_a_negacao():
 
 
 def test_CONTROLE_a_regua_conta_cada_forma_de_citar_o_quadro():
+    # 22/09 (revisão): formas que AFIRMAM a procedência, como a IA escreve no
+    # acervo — citar o quadro sem dizer que o número veio dele não conta mais
+    # (ver test_o_aco_por_taxa_nao_vira_resumo_lido.py).
     for obs in ("lido do RESUMO DE AÇO CA-50", "copiado do RESUMO AÇO CA-60",
-                "do RESUMO TELA DE AÇO", "fonte: quadro de ferragens da prancha",
-                "marca N3 da Lista de Ferros"):
+                "Peso CONFIRMADO do RESUMO TELA DE AÇO",
+                "fonte: quadro de ferragens da prancha",
+                "Marca N16: 1 barra × 520 cm (lida da Lista de Ferros)"):
         assert er.linhas_de_aco_do_resumo([_it("Aço", 10, "kg", obs)]) == 1, obs
     assert er.linhas_de_aco_do_resumo([_it("Aço", 10, "m²", "RESUMO DE AÇO")]) == 0

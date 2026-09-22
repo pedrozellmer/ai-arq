@@ -4664,9 +4664,11 @@ def _build_reading_diagnostic(all_items, n_pdf, n_cad, project_type, project_dat
         is_estrut = (project_type or "").strip().lower() == "estrutura"
 
         _so_pdf = (n_cad == 0 and n_pdf > 0)
-        # 🩸 22/09 (job ee801b82): "direto do CAD" pra quem só mandou PDF.
+        # 🩸 22/09 (job ee801b82): "direto do CAD" pra quem só mandou PDF. E
+        # não "do desenho": o bloco "O que a gente mediu no seu PDF" pode vir
+        # logo abaixo — o placar conta LINHAS da planilha, e é isso que diz.
         placar = (f"<b>&#10003; {medidos} medido(s)</b> "
-                  f"{'do desenho' if _so_pdf else 'direto do CAD'} (em branco na planilha) "
+                  f"{'na planilha (em branco)' if _so_pdf else 'direto do CAD (em branco na planilha)'} "
                   f"e <b>&#9888; {estimados} pra você confirmar</b> (em laranja).")
 
         if n_cad == 0 and n_pdf > 0:
@@ -4936,7 +4938,9 @@ def _build_sem_medida_email(name: str, project_name: str, job_id: str,
 def _build_leu_sem_medir_email(name: str, project_name: str, job_id: str,
                                n_total: int, n_zerados: int, extra_body_html: str = "",
                                email: str = "", so_pdf: bool = False,
-                               area_informada_serve: bool = True):
+                               area_informada_serve: bool = True,
+                               mediu_a_prancha: bool = False,
+                               dwg_nao_abriu: bool = False):
     """O TERCEIRO e-mail: 'li o seu desenho, mas não medi nada dele'.
 
     🩸 06/09/2026, visto AO VIVO. O cliente-15 subiu 3 PDFs de uma guarita e
@@ -4967,7 +4971,17 @@ def _build_leu_sem_medir_email(name: str, project_name: str, job_id: str,
     `so_pdf` troca o CAD pelo desenho e diz o motivo verdadeiro;
     `area_informada_serve` (quem chama pergunta a
     `engine_rules.area_informada_mudaria_a_planilha`) cala o conselho recusado.
-    Os padrões mantêm o texto de antes pra quem não passar (preview).
+    Os padrões mantêm o texto de antes pra quem não passar.
+
+    🩸 22/09/2026 (revisão adversária) — duas contradições no texto novo:
+      · `mediu_a_prancha`: com o bloco "📏 O que a gente mediu no seu PDF"
+        logo abaixo (32 ambientes, 892 m²), o selo "Sem medição do desenho", o
+        corpo "nenhuma quantidade foi medida do desenho" e o título "não medi
+        as quantidades" desmentiam o próprio e-mail. Aí o fato certo é outro:
+        nenhuma LINHA saiu marcada como medida.
+      · `dwg_nao_abriu`: 1 DWG que não converteu + PDFs contava como "só PDF",
+        e o motivo dizia "regra nossa, não um defeito do seu arquivo" logo
+        antes de "⚠ Seu arquivo DWG não abriu". O motivo é o DWG.
     """
     import html as _hs
     _pn = (project_name or "").strip()
@@ -4976,22 +4990,40 @@ def _build_leu_sem_medir_email(name: str, project_name: str, job_id: str,
     # Numa má notícia, ler pela metade é pior ainda: "identifiquei os itens,
     # mas não medi as..." cortado vira promessa.
     _de_onde = "do desenho" if so_pdf else "do CAD"
-    if so_pdf:
+    if mediu_a_prancha:
+        # o bloco do PDF diz o que medimos na prancha; o que não saiu é LINHA
+        # marcada como medida — "sem quantidade medida" desmentiria o bloco
+        subject = (f"{_pn} — nenhuma linha medida"
+                   if _pn else "Nenhuma linha saiu medida")
+    elif so_pdf:
         subject = (f"{_pn} — sem quantidade medida"
                    if _pn else "Sem quantidade medida")
     else:
         subject = (f"{_pn} — sem quantidade medida do CAD"
                    if _pn else "Sem quantidade medida do CAD")
     _com_numero = max(0, int(n_total) - int(n_zerados))
-    if so_pdf:
+    _dos_zerados = (" As linhas sem número são as que a gente não conseguiu "
+                    "sustentar sem essa medição: preferimos deixar em branco a "
+                    "inventar medida." if int(n_zerados or 0) > 0 else "")
+    if dwg_nao_abriu:
+        _motivo = (
+            "O motivo é o arquivo DWG que não abriu (o aviso logo abaixo diz "
+            "qual): era dele que a gente mediria. O que veio de PDF sai como "
+            "<b>estimativa</b> — de PDF a gente nunca marca um número como "
+            "medido." + _dos_zerados + "<br><br>")
+    elif so_pdf and mediu_a_prancha:
+        _motivo = (
+            "O motivo é uma regra nossa, não um defeito do seu arquivo: de PDF, "
+            "mesmo quando a gente mede a geometria da prancha (está logo "
+            "abaixo), nenhum número da planilha sai marcado como medido — cada "
+            "linha é leitura da IA, que <b>estima</b>, e medido por item só sai "
+            "da geometria de um DWG ou DXF." + _dos_zerados + "<br><br>")
+    elif so_pdf:
         _motivo = (
             "O motivo é uma regra nossa, não um defeito do seu arquivo: de PDF a "
             "gente nunca marca um número como medido — a IA lê a prancha e "
             "<b>estima</b>, e medido só sai da geometria de um DWG ou DXF."
-            + (" As linhas sem número são as que a gente não conseguiu sustentar "
-               "sem essa medição: preferimos deixar em branco a inventar medida."
-               if int(n_zerados or 0) > 0 else "")
-            + "<br><br>")
+            + _dos_zerados + "<br><br>")
     else:
         _motivo = (
             "O motivo costuma ser escala: sem cota, sem carimbo confiável e sem "
@@ -4999,12 +5031,14 @@ def _build_leu_sem_medir_email(name: str, project_name: str, job_id: str,
             "a gente não inventa medida.<br><br>")
     _area = (" Se só existe o PDF, me diga a área total no upload — entra como "
              "informada por você, nunca como medida." if area_informada_serve else "")
+    _fato = ("nenhuma linha da planilha saiu marcada como medida" if mediu_a_prancha
+             else f"nenhuma quantidade foi medida {_de_onde}")
     corpo = (
         f"{_greeting_line(_hs.escape(name or ''))}<br><br>"
         f"Li o seu desenho e identifiquei <b>{n_total} itens</b> — o escopo "
         f"está lá, com especificação e referência. Mas preciso te avisar de "
-        f"uma coisa antes de você abrir: <b>nenhuma quantidade foi medida "
-        f"{_de_onde}</b>. As {_com_numero} linhas que vieram com número são "
+        f"uma coisa antes de você abrir: <b>{_fato}</b>. As {_com_numero} "
+        f"linhas que vieram com número são "
         f"<b>estimativa</b>, marcadas em laranja pra você conferir, e outras "
         f"{n_zerados} ficaram sem número.<br><br>"
         f"Ou seja: serve como lista do que existe no projeto, <b>não como "
@@ -5016,10 +5050,17 @@ def _build_leu_sem_medir_email(name: str, project_name: str, job_id: str,
         f"medindo de verdade, de graça.{_area}"
         f"{extra_body_html}"
         + _bloco_avaliar_projeto(job_id, email, sem_medida=True))
-    _selo = ("&#9888; Sem medi&ccedil;&atilde;o do desenho" if so_pdf
-             else "&#9888; Sem medi&ccedil;&atilde;o do CAD")
+    if mediu_a_prancha:
+        _selo = "&#9888; Nada marcado como medido"
+    elif so_pdf:
+        _selo = "&#9888; Sem medi&ccedil;&atilde;o do desenho"
+    else:
+        _selo = "&#9888; Sem medi&ccedil;&atilde;o do CAD"
+    _titulo = ("Identifiquei os itens, mas nenhuma linha saiu medida"
+               if mediu_a_prancha
+               else "Identifiquei os itens, mas não medi as quantidades")
     html = _email_wrap(
-        "Identifiquei os itens, mas não medi as quantidades", corpo,
+        _titulo, corpo,
         "Abrir meu projeto",
         f"https://ai.arq.br/projeto.html?job_id={job_id}",
         badge=_selo,
@@ -18356,6 +18397,9 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 # 🚫 Não tentar dizer isto por ITEM: reprovado em revisão
                 # adversarial em 17/09, mesmo furo que aposentou o promotor
                 # automático em 15/07 (a demolição pegava a área do piso novo).
+                # 22/09: o e-mail leu_sem_medir pergunta se o bloco saiu — então
+                # o nome existe mesmo quando o `try` falha antes de atribuí-lo.
+                _medimos = ""
                 try:
                     from engine_rules import (o_que_medimos_na_prancha,
                                               porque_nada_saiu_medido_no_pdf)
@@ -18457,24 +18501,22 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     # que faz `_carimbar_regua_de_cobranca` marcar cobravel
                     # = false. O e-mail passa a falar a mesma língua do que a
                     # gente cobraria.
-                    # 🩸 22/09/2026 — job ee801b82: o e-mail pediu a área total a
-                    # quem tinha medição vetorial no job (lá ela não entra em
-                    # linha nenhuma) e falou de CAD a quem só mandou PDF. As
-                    # travas são as do aviso de projeto: piso/forro/laje em m²
-                    # e nenhuma medição vetorial no job.
+                    # 🩸 22/09 (ee801b82, 95bab8ba): a área total só se pede se
+                    # entraria numa linha; DWG que não abriu não é "só PDF"; com o
+                    # bloco do PDF, o fato é "nenhuma LINHA medida". Ver o montador.
                     try:
                         _pp_email = dict(_pdfvec_por_prancha)
                     except NameError:
                         _pp_email = {}      # job sem PDF: o laço nem existiu
                     from engine_rules import area_informada_mudaria_a_planilha as _area_muda
-                    _area_serve = _area_muda(
-                        all_items,
-                        sum(float((_r or {}).get("rooms_m2") or 0)
-                            for _r in _pp_email.values()))
+                    _area_serve = _area_muda(all_items, sum(
+                        float((_r or {}).get("rooms_m2") or 0) for _r in _pp_email.values()))
                     _subj_pp, _html_pp = _build_leu_sem_medir_email(
                         _nm, _rows[0].get("project_name") or "", job_id,
                         len(all_items), _n_zerado, f"{_aviso_html}{_diag}", email=_pe,
-                        so_pdf=_veio_pdf, area_informada_serve=_area_serve)
+                        so_pdf=(_veio_pdf and not dwg_failed),
+                        area_informada_serve=_area_serve,
+                        mediu_a_prancha=bool(_medimos), dwg_nao_abriu=bool(dwg_failed))
                     _log_error("motor:leu-sem-medir",
                                f"itens={len(all_items)} medidos=0 zerados={_n_zerado} "
                                f"— e-mail trocado por 'identifiquei, mas não medi'", job_id)
@@ -23572,9 +23614,18 @@ def _render_email_by_type_raw(key: str):
     # 06/09: o TERCEIRO caso — leu e identificou, mas nao mediu nada do CAD.
     # Numeros do exemplo tirados do caso real que o revelou (job 40550d3e):
     # 124 itens, 53 em branco, ZERO medidos.
+    # 🩸 22/09 (revisão): sem `so_pdf` o preview mostrava a versão do CAD —
+    # "costuma ser escala" e o convite da área —, que quase ninguém recebe.
+    # Medido às 15:57 de 22/09 (now() de testemunha): dos 9 leu_sem_medir com
+    # job_id desde 07/09, 8 eram só-PDF e 8 tinham `pdfvec:por-prancha` no log
+    # (medição vetorial, onde a área digitada não entra em linha nenhuma). O
+    # exemplo é esse caso. Sem o bloco do PDF aqui, `mediu_a_prancha` fica no
+    # padrão — de propósito: o preview mostra a variante mais comum, não
+    # todas (a do bloco se lê no e-mail do próprio job).
     if key == "leu_sem_medir":
         return _build_leu_sem_medir_email(nome, projeto, fake_job, 124, 53, "",
-                                          email="cliente@exemplo.com")
+                                          email="cliente@exemplo.com",
+                                          so_pdf=True, area_informada_serve=False)
     if key == "boas_vindas_cadastro":
         return _build_welcome_email(nome, True, fake_link)
     if key in ("leitura_nova", "leitura_combinada"):
