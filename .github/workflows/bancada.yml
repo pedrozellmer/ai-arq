@@ -197,7 +197,12 @@ jobs:
           # 🔑 3900 é 85,9% dos 4540 e aguenta até 5.200 — cerca de 660 testes
           # de folga, o dobro da vez anterior — e ainda pega qualquer queda
           # maior que 14%, que é o que o piso existe pra pegar.
-          PISO: 3900
+          # 22/09/2026, DÉCIMA vez: 3900 -> 4500. Os consertos do caso das três
+          # clientes de 22/09 levaram a bancada de 4865 para 5231 colhidos, e o
+          # guarda de 75% passou a cobrar 3923. Mesma decisão do Pedro de 21/09
+          # (subir o número), mesmo critério: 4500 é 86% dos 5231, aguenta até
+          # 6.000 e pega qualquer queda maior que 14%.
+          PISO: 4500
         run: |
           N=$(python -m pytest tests/ -q --collect-only 2>/dev/null | tail -1 | grep -oE '^[0-9]+' || echo 0)
           echo "testes colhidos: $N (piso: $PISO)"
