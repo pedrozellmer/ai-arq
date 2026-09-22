@@ -290,37 +290,99 @@ _MIN_PREFIXO_CACHE_TOK: dict[str, int] = {
     "claude-opus-4-5": 4096,
     "claude-haiku-4-5": 4096,
 }
-# 🔑 Modelo fora da tabela assume o MENOR minimo conhecido, nao o maior. O erro
-# para esse lado e mudo e de graca (marcar um prefixo que a API ignora nao custa
-# nada); para o outro lado seria dinheiro real — deixar de marcar um prefixo que
-# cachearia. Por isso esta funcao NUNCA decide nao marcar: ela so sabe avisar.
+# 🔑 Modelo fora da tabela assume o MENOR minimo conhecido, nao o maior. Esta
+# funcao NUNCA decide nao marcar — ela so decide se a gente FALA. Entao errar
+# aqui nao custa dinheiro: custa RUIDO (falar demais) ou SILENCIO (falar de
+# menos), e o silencio e o caro dos dois, porque e o que ja aconteceu.
 _MIN_PREFIXO_CACHE_PADRAO = 512
 
-# Chars por token no cenario mais OTIMISTA pro prefixo. Medido 22/09 no proprio
-# sinapi_pick: 95.313 chars de prompt viraram 37.324 tokens = 2,55 chars/token
-# (texto tecnico em CAIXA ALTA tokeniza mal). Usar 2,0 garante que so chamamos
-# de "curto demais" o prefixo que e curto demais com folga.
-_CHARS_POR_TOKEN_OTIMISTA = 2.0
+# Chars por token do PREFIXO — MEDIDO em producao, nao escolhido.
+#
+# 🩸 22/09/2026 — a 1a versao desta regua usava 2,0 chars/token, "enviesado pro
+# sim pra so dizer nao com folga". O vies comprou exatamente o silencio que a
+# regua existia pra quebrar: com 2,0 o `SYSTEM_PROMPT_ESTRUTURA` (2.701 chars)
+# estima 1.350 tokens, passa no minimo de 1.024 do Sonnet 4.6 e o aviso fica
+# MUDO no unico call site de producao que PROVADAMENTE tem o marcador ignorado.
+#
+# As DUAS ancoras sao de campo (`llm_uso`, 30 d, consulta de 22/09/2026 18:51
+# Brasilia com `now() at time zone 'America/Sao_Paulo'` de testemunha):
+#   · projeto de ARQUITETURA (SYSTEM_PROMPT, 17.399 chars): `tokens_cache_write`
+#     = 6.231 em TODAS as 64 escritas (`prancha` e `dxf`), sem UM valor
+#     diferente => 17.399 / 6.231 = 2,79 chars/token;
+#   · projeto de ESTRUTURA (SYSTEM_PROMPT_ESTRUTURA, 2.701 chars): 20 chamadas
+#     (18 `prancha` + 2 `dxf`, jobs 0745bfc3 de 11/09, 08ba5752 de 17/09,
+#     ee801b82 de 21/09 e o eval ev03e158), TODAS com cache_write = 0 E
+#     cache_read = 0 — a API ignorou o marcador, logo o preambulo esta ABAIXO
+#     de 1.024 tokens, ou seja > 2,64 chars/token.
+# 2,79 e o unico numero que respeita as duas. `test_sinapi_pick_nao_finge_cache`
+# prende a constante nesses dois pontos: mexer nela sem refazer a medida reprova.
+_CHARS_POR_TOKEN_MEDIDO = 2.79
+
+
+def _minimo_prefixo(modelo) -> int:
+    """Minimo de tokens do prefixo cacheavel DESTE modelo (doc oficial)."""
+    base = (modelo or "").strip()
+    for _m, _v in _MIN_PREFIXO_CACHE_TOK.items():
+        if base == _m or base.startswith(_m + "-"):
+            return _v
+    return _MIN_PREFIXO_CACHE_PADRAO
 
 
 def prefixo_cacheia(modelo, prefixo: str) -> bool:
     """O prefixo tem TAMANHO pra virar entrada de cache NESTE modelo?
 
-    Estimativa por caracteres, de proposito enviesada pro "sim": contar token de
-    verdade custaria uma chamada de API por decisao de custo. Responde False so
-    quando nem no melhor cenario o prefixo alcanca o minimo do modelo.
+    🪤 E ESTIMATIVA por caracteres, na razao MEDIDA em producao (ver
+    `_CHARS_POR_TOKEN_MEDIDO`) — contar token de verdade custaria uma chamada de
+    API por decisao. Serve so pra decidir se a gente FALA antes de enviar. Quem
+    CONFIRMA se o cache existiu e o `cache_creation`/`cache_read` da resposta,
+    conferido em `_registrar_uso`: estimativa nunca vira fato aqui.
     """
     if not prefixo:
         return False
-    base = (modelo or "").strip()
-    minimo = None
-    for _m, _v in _MIN_PREFIXO_CACHE_TOK.items():
-        if base == _m or base.startswith(_m + "-"):
-            minimo = _v
-            break
-    if minimo is None:
-        minimo = _MIN_PREFIXO_CACHE_PADRAO
-    return (len(prefixo) / _CHARS_POR_TOKEN_OTIMISTA) >= minimo
+    return (len(prefixo) / _CHARS_POR_TOKEN_MEDIDO) >= _minimo_prefixo(modelo)
+
+
+def prefixo_marcado(kwargs: dict) -> str:
+    """O texto que REALMENTE saiu marcado como cacheavel neste payload.
+
+    🔑 A diferenca entre o que foi PEDIDO (`cache_system=True`) e o que foi
+    FEITO. `_apply_system_cache` sai calado quando nao ha `system` pra marcar —
+    e sem esta funcao a telemetria gravaria `cache_marcado=true` numa chamada
+    em que nada foi marcado, que e mentira com cara de fato na conta de custo.
+    """
+    sysv = kwargs.get("system")
+    if not isinstance(sysv, list):
+        return ""
+    if not any(isinstance(b, dict) and b.get("cache_control") for b in sysv):
+        return ""
+    return "".join(b.get("text") or "" for b in sysv if isinstance(b, dict))
+
+
+# 🪤 22/09/2026 — O ATALHO QUE O PARAMETRO CONVIDA A USAR. `cache_system=True`
+# le como "liga o cache nesta chamada", mas `_apply_system_cache` so sabe marcar
+# o que esta em `system=`. Quem acrescentar o parametro numa chamada que manda o
+# prompt inteiro em `messages=` (o caso do `sinapi_pick`) nao marca NADA: os
+# tokens vao cheios, a API nao reclama, e so a telemetria mudava — dizendo
+# `cache_marcado=true`. Agora a telemetria grava o que foi FEITO e esta linha
+# diz em voz alta o que nao foi.
+_AVISO_CACHE_SEM_MARCA = (
+    "[llm_cache] cache_system=True mas NADA foi marcado nesta chamada: nao ha "
+    "`system` pra marcar (prompt inteiro em `messages`?). Os tokens vao cheios "
+    "e a telemetria grava cache_marcado=false, que e o que de fato aconteceu.")
+
+
+def _marcar_cache_do_system(kwargs: dict) -> tuple:
+    """(kwargs, cache_foi_feito). Separa o PEDIDO do FEITO num lugar só.
+
+    🔑 Devolve o FATO pra quem grava telemetria. Com o kill switch ligado
+    (`LLM_PROMPT_CACHE=0`) nada e marcado de proposito — entao nada e avisado,
+    mas `cache_marcado` cai pra false do mesmo jeito, porque e verdade.
+    """
+    kwargs = _apply_system_cache(kwargs)
+    feito = bool(prefixo_marcado(kwargs))
+    if not feito and os.environ.get("LLM_PROMPT_CACHE", "1") != "0":
+        print(_AVISO_CACHE_SEM_MARCA)
+    return kwargs, feito
 
 
 def _apply_system_cache(kwargs: dict) -> dict:
@@ -357,17 +419,24 @@ def _apply_system_cache(kwargs: dict) -> dict:
     else:
         hdrs["anthropic-beta"] = _PROMPT_CACHE_BETA
     kwargs["extra_headers"] = hdrs
-    # 🚨 Marcador que a API vai IGNORAR nao devolve erro nenhum: ele some, e o
+    # 🚨 Marcador que a API IGNORA nao devolve erro nenhum: ele some, e o
     # `cache_marcado=true` da telemetria vira afirmacao sem lastro. Avisar aqui
     # e o que separa "o cache esta ligado e rendendo pouco" de "o cache nunca
-    # chegou a existir". Fica MUDO no caso normal: em 22/09/2026 nenhum call
-    # site de producao cai neste ramo (prancha ~4,4k tok e dxf cacheiam).
-    _pref = "".join(b.get("text") or "" for b in kwargs["system"]
-                    if isinstance(b, dict))
+    # chegou a existir".
+    # 🪤 Isto e ESTIMATIVA (chars/token), nao medida — por isso a frase diz
+    # "provavelmente" e diz DE ONDE vem o numero. Estimativa escrita no tempo
+    # do indicativo num log de custo e a regra nº1 em outra roupa: quem afirma
+    # que o cache nao existiu e o `_registrar_uso`, lendo a resposta.
+    _pref = prefixo_marcado(kwargs)
     if _pref and not prefixo_cacheia(kwargs.get("model"), _pref):
-        print("[llm_cache] prefixo de %d chars NAO alcanca o minimo cacheavel "
-              "de %s: a API vai IGNORAR o marcador e o cache_read fica em 0"
-              % (len(_pref), kwargs.get("model") or "?"))
+        print("[llm_cache] prefixo de %d chars (~%d tok ESTIMADOS a %.2f "
+              "chars/tok medidos) provavelmente NAO alcanca o minimo de %d tok "
+              "de %s: se for isso, a API ignora o marcador sem erro e o "
+              "cache_read fica em 0. Quem confirma e o cache_creation da "
+              "resposta (ver _registrar_uso)."
+              % (len(_pref), int(len(_pref) / _CHARS_POR_TOKEN_MEDIDO),
+                 _CHARS_POR_TOKEN_MEDIDO, _minimo_prefixo(kwargs.get("model")),
+                 kwargs.get("model") or "?"))
     return kwargs
 
 
@@ -489,8 +558,13 @@ def _extract_retry_after(exc: Exception) -> float | None:
 
 
 
-def _registrar_uso(tag: str, resp, cache_system: bool, model=None, job_id=None) -> None:
+def _registrar_uso(tag: str, resp, cache_marcado: bool, model=None, job_id=None) -> None:
     """Grava o resultado REAL do prompt caching, por chamada.
+
+    🔑 `cache_marcado` e o que FOI MARCADO neste payload (`prefixo_marcado`), nao
+    o que o call site PEDIU com `cache_system=True`. Pedir cache numa chamada sem
+    `system` marca zero e gastaria a mesma coisa — gravar `true` ali seria custo
+    inventado com cara de fato.
 
     🚨 24/08/2026: o caching foi ligado em 23/07 e conferido com duas chamadas
     manuais naquele dia. Um mês depois a Anthropic avisou de novo que o hit rate
@@ -521,7 +595,7 @@ def _registrar_uso(tag: str, resp, cache_system: bool, model=None, job_id=None) 
             # foi. Agora vira linha com tokens NULL — "não sei quanto custou"
             # é diferente de "custou zero".
             _gravar_uso(tag=tag, resultado="sem_usage", modelo=_modelo,
-                        job_id=job_id, cache_marcado=cache_system,
+                        job_id=job_id, cache_marcado=cache_marcado,
                         erro="usage_ausente")
             return
         _le = int(getattr(u, "cache_read_input_tokens", 0) or 0)
@@ -531,16 +605,36 @@ def _registrar_uso(tag: str, resp, cache_system: bool, model=None, job_id=None) 
         _tot = _le + _esc + _novo
         if _tot <= 0:
             _gravar_uso(tag=tag, resultado="sem_usage", modelo=_modelo,
-                        job_id=job_id, cache_marcado=cache_system,
+                        job_id=job_id, cache_marcado=cache_marcado,
                         erro="usage_zerado")
             return
         _gravar_uso(tag=tag, resultado="api", modelo=_modelo, job_id=job_id,
                     novo=_novo, le=_le, esc=_esc, out=_out,
-                    cache_marcado=cache_system)
+                    cache_marcado=cache_marcado)
         _pct = round(100.0 * _le / _tot, 1)
         print(f"[llm_cache:{tag}] total_in={_tot} cache_read={_le} ({_pct}%) "
               f"cache_write={_esc} novo={_novo} out={_out} "
-              f"marcado={'sim' if cache_system else 'nao'}")
+              f"marcado={'sim' if cache_marcado else 'nao'}")
+        # 🚨 22/09/2026 — O FATO, não a estimativa: marcamos o prefixo e a
+        # resposta voltou com cache_creation=0 E cache_read=0. Prefixo abaixo do
+        # mínimo do modelo é ignorado EM SILÊNCIO — sem erro, sem cobrança
+        # extra —, e sem esta linha "cache ligado, 0% de leitura" fica
+        # indistinguível de "a Anthropic está com hit rate ruim", que é a
+        # investigação de 24/08 de novo, agora com o sintoma apagado por nós.
+        #
+        # 🩸 Não é hipótese: em 30 dias, 20 chamadas de produção (18 `prancha` +
+        # 2 `dxf`, TODAS de projeto ESTRUTURAL — jobs 0745bfc3 de 11/09,
+        # 08ba5752 de 17/09, ee801b82 de 21/09) gravaram cache_marcado=true com
+        # write=0 E read=0. A régua a priori não as via (o SYSTEM_PROMPT_ESTRUTURA
+        # tem 2.701 chars, ~968 tok, e o mínimo do Sonnet 4.6 é 1.024): esta
+        # linha vê, porque lê a RESPOSTA em vez de dividir caracteres.
+        _ignorado = bool(cache_marcado) and _esc == 0 and _le == 0
+        if _ignorado:
+            print(f"[llm_cache:{tag}] MARCADOR IGNORADO: o prefixo saiu marcado "
+                  f"como cacheável e a resposta veio com cache_creation=0 E "
+                  f"cache_read=0 — não houve cache nenhum nesta chamada "
+                  f"(modelo={_modelo or '?'}, total_in={_tot}). Causa mais "
+                  f"comum: prefixo abaixo do mínimo de tokens do modelo.")
         # 🪤 O import é local e dentro do try: llm_retry.py é usado por módulos
         # que NÃO importam o main.py (analyzer, classifier, pdfvec_carimbo), e
         # importar o main aqui criaria ciclo — e o main conecta em Supabase e
@@ -550,7 +644,8 @@ def _registrar_uso(tag: str, resp, cache_system: bool, model=None, job_id=None) 
             _log_error("llm:cache",
                        f"{tag} total_in={_tot} read={_le} ({_pct}%) "
                        f"write={_esc} novo={_novo} out={_out} "
-                       f"marcado={int(bool(cache_system))} "
+                       f"marcado={int(bool(cache_marcado))} "
+                       f"ignorado={int(_ignorado)} "
                        f"modelo={_modelo or '?'}")
         except Exception:
             pass
@@ -647,8 +742,12 @@ def call_with_retry(
         base_delay: delay inicial em segundos (dobra a cada tentativa).
         max_delay: teto do backoff.
         tag: string pra log identificar qual chamada tá retentando.
-        cache_system: se True, marca o system prompt como cacheável (economia de
+        cache_system: se True, marca o SYSTEM prompt como cacheável (economia de
             custo em chamadas repetidas com o mesmo system). Ver _apply_system_cache.
+            🪤 Ele só marca o que está em `system=` — numa chamada que manda o
+            prompt inteiro em `messages=` ele não marca nada e não economiza
+            nada. Quando isso acontece a chamada AVISA e a telemetria grava
+            `cache_marcado=false`, porque é o que foi feito.
         job_id: dono do gasto, quando o call site sabe. Vale MAIS que a
             ContextVar — use nos pontos que rodam fora da thread do job (rota
             HTTP, pool de threads), onde o contexto não chega. 🪤 É parâmetro
@@ -671,15 +770,16 @@ def call_with_retry(
         _gravar_uso(tag=tag, resultado="cache", modelo=kwargs.get("model"),
                     job_id=job_id, novo=0, le=0, esc=0, out=0)
         return _do_cache
+    _cache_feito = False
     if cache_system:
-        kwargs = _apply_system_cache(kwargs)
+        kwargs, _cache_feito = _marcar_cache_do_system(kwargs)
     last_exc: Exception | None = None
     delay = base_delay
 
     for attempt in range(max_retries + 1):
         try:
             _resp = client.messages.create(**kwargs)
-            _registrar_uso(tag, _resp, cache_system,
+            _registrar_uso(tag, _resp, _cache_feito,
                            model=kwargs.get("model"), job_id=job_id)
             _cache_depois(_chave, _resp, kwargs, tag=tag)
             return _resp
@@ -692,7 +792,7 @@ def call_with_retry(
                 # subcontagem se concentraria justamente nos jobs ruins.
                 _gravar_uso(tag=tag, resultado="falhou",
                             modelo=kwargs.get("model"), job_id=job_id,
-                            cache_marcado=cache_system, erro=type(e).__name__)
+                            cache_marcado=_cache_feito, erro=type(e).__name__)
                 # Não é transitório, ou esgotou: propaga
                 raise
 
@@ -746,8 +846,9 @@ def call_with_retry_stream(
         _gravar_uso(tag=tag, resultado="cache", modelo=kwargs.get("model"),
                     job_id=job_id, novo=0, le=0, esc=0, out=0)
         return _do_cache
+    _cache_feito = False
     if cache_system:
-        kwargs = _apply_system_cache(kwargs)
+        kwargs, _cache_feito = _marcar_cache_do_system(kwargs)
     last_exc: Exception | None = None
     delay = base_delay
 
@@ -755,7 +856,7 @@ def call_with_retry_stream(
         try:
             with client.messages.stream(**kwargs) as stream:
                 _resp = stream.get_final_message()
-            _registrar_uso(tag, _resp, cache_system,
+            _registrar_uso(tag, _resp, _cache_feito,
                            model=kwargs.get("model"), job_id=job_id)
             _cache_depois(_chave, _resp, kwargs, tag=tag)
             return _resp
@@ -765,7 +866,7 @@ def call_with_retry_stream(
             if not _is_retryable(e) or attempt >= max_retries:
                 _gravar_uso(tag=tag, resultado="falhou",
                             modelo=kwargs.get("model"), job_id=job_id,
-                            cache_marcado=cache_system, erro=type(e).__name__)
+                            cache_marcado=_cache_feito, erro=type(e).__name__)
                 raise
 
             sleep_for = _extract_retry_after(e) or delay
