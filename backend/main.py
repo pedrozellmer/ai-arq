@@ -10102,7 +10102,8 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
                         apenas_preencher: bool = False,
                         pdfvec_m2: float = 0,
                         pdfvec_por_prancha: dict = None,
-                        medicao_incompleta: bool = False) -> tuple[int, int]:
+                        medicao_incompleta: bool = False,
+                        numeros_do_texto_por_prancha: dict = None) -> tuple[int, int]:
     """Aplica a regra dura nº1 aos itens de ÁREA que NÃO vieram da geometria do CAD:
 
     - Se o cliente INFORMOU a área (total_area_source='informado') e o item é uma
@@ -10155,6 +10156,9 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
     lineares_zerados = 0
     #: linhas que receberam de volta a medição que já estava escrita nelas
     resgatados = 0
+    #: 22/09: número de QUADRO DE QUANTITATIVOS impresso — preservado com prova,
+    #: zerado sem prova, e a linha de TOTAL que só repetia a soma
+    quadro_preservados = quadro_sem_prova = quadro_totais = 0
     # 🩸 31/08 (caso cliente-14): quantas vezes a área informada já foi
     # atribuída, por família de superfície. A soma das superfícies
     # horizontais não pode passar do total declarado — 6 itens com 400 m²
@@ -10568,6 +10572,31 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
             _it0, _r0 = _lst[0]
             _resg_alvo[id(_it0)] = ([float(_r0.get("rooms_m2") or 0)],
                                     [float(_r0.get("walls_m") or 0)])
+    # ── 🩸 22/09/2026 — O QUADRO DE QUANTITATIVOS IMPRESSO NA PRANCHA ────────
+    # Jobs ee801b82 e f8d8e6d8: o quadro da 1ª prancha (26,8 m³ de concreto,
+    # 183,2 m² de fôrma) foi zerado nos dois dias pelo ramo final deste laço.
+    # A decisão mora em `engine_rules.veredito_do_quadro_impresso` (função que o
+    # guarda CHAMA); aqui só se monta a entrada. Precisa ver TODAS as linhas de
+    # uma vez: a prova pelo TOTAL e a trava "o quadro aparece no texto" olham o
+    # grupo da prancha, não a linha sozinha.
+    # 🪤 Import DENTRO da função, pelo mesmo motivo do resgate: três testes dão
+    # `exec` numa fatia desta função.
+    from engine_rules import veredito_do_quadro_impresso as _veredito_quadro
+    _elegiveis_q = [_it for _it in items
+                    if getattr(_it, "origem", "") not in ("dxf_geom", "revisao_cliente")]
+    _linhas_q = []
+    for _it in _elegiveis_q:
+        _rs_q = str(getattr(_it, "ref_sheet", "") or "")
+        _arq_q = _rs_q.split(" (")[0].strip()
+        _linhas_q.append({
+            "arquivo": _arq_q.lower(), "prancha": _arq_q,
+            "pagina": _pagina_do_ref_sheet(_rs_q) if _rs_q else None,
+            "unidade": getattr(_it, "unit", ""),
+            "quantidade": getattr(_it, "quantity", 0),
+            "texto": getattr(_it, "observations", ""),
+            "descricao": getattr(_it, "description", "")})
+    _vq = {id(_it): _v for _it, _v in zip(
+        _elegiveis_q, _veredito_quadro(_linhas_q, numeros_do_texto_por_prancha)) if _v}
     # 🚨 24/08: `apenas_preencher` é pra quem REIDRATA itens do banco (/inform-area).
     # Ali o motor já decidiu, lá atrás, com a geometria em mãos; reavaliar depois,
     # a partir de linhas que perderam metade do contexto, é decidir com MENOS
@@ -10825,6 +10854,68 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
                     "(o número já estava citado nesta linha) — estimativa, confira."
                 ).strip(" |")
             resgatados += 1
+        elif q > 0 and id(it) in _vq:
+            # 🩸 22/09/2026 — o número é de QUADRO DE QUANTITATIVOS impresso na
+            # prancha (ver o pré-passo acima). Com prova, fica — ESTIMADO, nunca
+            # branco: é a conta do projetista, não medição nossa. Sem prova,
+            # zera como antes, mas a linha diz qual número a leitura viu.
+            _tipo_q, _info_q = _vq[id(it)]
+            from engine_rules import _num_br as _num_br_q
+            try:
+                it.confidence = Confidence("estimado")
+            except Exception:
+                pass
+            _obs_q = _limpa_aviso_nao_medida(
+                _limpa_afirmacao_de_medida(it.observations or ""))
+            _prancha_q = (str(getattr(it, "ref_sheet", "") or "").split(" (")[0].strip()
+                          or "desta linha")
+            _un_q = str(getattr(it, "unit", "") or "")
+            if _tipo_q in ("texto", "total"):
+                if _tipo_q == "texto":
+                    _prova_q = "o número está escrito no texto do PDF desta prancha"
+                else:
+                    _prova_q = ("as linhas do quadro somam o TOTAL que a mesma leitura "
+                                "trouxe dele, %s %s" % (_num_br_q(_info_q.get("total") or 0),
+                                                        _un_q))
+                _frase_q = ("Número COPIADO do quadro de quantitativos impresso na "
+                            "prancha %s — não é medição nossa (%s). Confira no quadro "
+                            "antes de orçar." % (_prancha_q, _prova_q))
+                quadro_preservados += 1
+            else:
+                it.quantity = 0
+                blanked += 1
+                if _tipo_q == "e_o_total" and int(_info_q.get("parcelas") or 0) == 1:
+                    _frase_q = ("Linha de TOTAL: repete a única linha do quadro de "
+                                "quantitativos da prancha %s (%s %s). Fica em branco pra "
+                                "a mesma quantidade não contar duas vezes."
+                                % (_prancha_q, _num_br_q(_info_q.get("soma") or 0), _un_q))
+                    quadro_totais += 1
+                elif _tipo_q == "e_o_total" and _info_q.get("bate"):
+                    _frase_q = ("Linha de TOTAL: é a soma de %d linhas do quadro de "
+                                "quantitativos da prancha %s (%s %s). Fica em branco pra "
+                                "a mesma quantidade não contar duas vezes."
+                                % (int(_info_q.get("parcelas") or 0), _prancha_q,
+                                   _num_br_q(_info_q.get("soma") or 0), _un_q))
+                    quadro_totais += 1
+                elif _tipo_q == "e_o_total":
+                    # subtotal, ou total que não bate: não dá pra dizer "é a soma"
+                    _frase_q = ("Linha de TOTAL do quadro de quantitativos da prancha "
+                                "%s: resume outras %d linhas desta planilha. Fica em "
+                                "branco pra a mesma quantidade não contar duas vezes."
+                                % (_prancha_q, int(_info_q.get("parcelas") or 0)))
+                    quadro_totais += 1
+                else:
+                    _frase_q = ("Em branco: a leitura diz que o quadro de quantitativos "
+                                "impresso na prancha %s traz %s %s para esta linha, mas "
+                                "não conseguimos conferir esse número no texto do PDF. "
+                                "Confira no quadro e preencha na revisão."
+                                % (_prancha_q, _num_br_q(q), _un_q))
+                    quadro_sem_prova += 1
+            # NA FRENTE: a revisão mostra os primeiros 110 caracteres e o banco
+            # corta em 1000 (no caso, 48 das 63 observações já chegavam no teto).
+            if _frase_q not in _obs_q:
+                _obs_q = _frase_q + ((" | " + _obs_q) if _obs_q else "")
+            it.observations = _obs_q
         elif q > 0:
             # 📏 Esta linha só chegou aqui por causa do teto novo? Conta.
             # Sem este número o conserto é invisível: "apertei o teto" não se
@@ -11027,7 +11118,151 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
     # construir um segundo mecanismo em cima do zero do primeiro.
     _apply_area_honesty.ultimo_resg_alvos = len(_resg_alvo)
     _apply_area_honesty.ultimo_ambiguos = list(_ambiguos)
+    _apply_area_honesty.ultimo_quadro_preservados = quadro_preservados
+    _apply_area_honesty.ultimo_quadro_sem_prova = quadro_sem_prova
+    _apply_area_honesty.ultimo_quadro_totais = quadro_totais
     return filled, blanked
+
+
+def _zera_peso_por_taxa(items) -> int:
+    """Linha de aço cujo peso SAIU de uma taxa (kg/m³, kg/m²) fica em branco.
+
+    🩸 22/09/2026 — job ee801b82: 1.745 kg "estimado por taxa de consumo típica
+    de 100 kg/m³" numa prancha sem quadro de ferros, duplicando as listas reais
+    das outras pranchas; no f8d8e6d8, mais 2.114 kg. kg não passa pela
+    honestidade de área, então nada tocava nelas. Regra nº3: razão típica só
+    ALERTA. A régua (e o porquê de a mera menção à taxa não bastar) mora em
+    `engine_rules.peso_por_taxa`. Continua estimado; a conta da IA fica escrita.
+    Devolve quantas linhas zerou."""
+    from engine_rules import peso_por_taxa, _num_br
+    from models import Confidence
+    n = 0
+    for it in items:
+        if getattr(it, "origem", "") in ("dxf_geom", "revisao_cliente"):
+            continue
+        if (getattr(it, "unit", "") or "").strip().lower() != "kg":
+            continue
+        try:
+            q = float(getattr(it, "quantity", 0) or 0)
+        except (TypeError, ValueError):
+            continue
+        obs = str(getattr(it, "observations", "") or "")
+        if q <= 0 or not peso_por_taxa(obs):
+            continue
+        it.quantity = 0
+        try:
+            it.confidence = Confidence("estimado")
+        except Exception:
+            pass
+        _o = _limpa_afirmacao_de_medida(obs)
+        _frase = ("Em branco: peso por TAXA (kg por m³ ou m² de referência) não entra "
+                  "como número — é índice típico, não o aço do seu projeto, e somaria "
+                  "com a lista de ferros. A conta da leitura dava %s kg. Use o quadro "
+                  "de ferros da prancha de armação ou preencha na revisão." % _num_br(q))
+        it.observations = _frase + ((" | " + _o) if _o else "")
+        n += 1
+    return n
+
+
+def _confere_peso_de_aco(items) -> tuple:
+    """Confere cada linha de aço contra comprimento total × massa nominal.
+
+    🩸 22/09/2026 — job f8d8e6d8: "CTot = 1473,3 m" de ø8 na observação e 58 kg
+    na quantidade (o PTot estava cortado na imagem); o certo é 582 kg. A régua
+    mora em `engine_rules.conferencia_do_peso_de_aco`: dígito perdido (razão ≈
+    10ⁿ) vira o peso calculado, ESTIMADO e dito na linha; outra divergência só
+    ganha alerta com a conta — o número não muda. Devolve (corrigidos, alertas).
+    """
+    from engine_rules import conferencia_do_peso_de_aco, _num_br
+    from models import Confidence
+    corrigidos = alertas = 0
+    for it in items:
+        if getattr(it, "origem", "") in ("dxf_geom", "revisao_cliente"):
+            continue
+        if (getattr(it, "unit", "") or "").strip().lower() != "kg":
+            continue
+        try:
+            q = float(getattr(it, "quantity", 0) or 0)
+        except (TypeError, ValueError):
+            continue
+        obs = str(getattr(it, "observations", "") or "")
+        c = conferencia_do_peso_de_aco(getattr(it, "description", ""), obs, q)
+        if not c:
+            continue
+        _conta = "%s m de ø%s × %s kg/m (massa nominal NBR 7480) = %s kg" % (
+            _num_br(c["comprimento_m"]), ("%g" % c["bitola_mm"]).replace(".", ","),
+            ("%.3f" % c["massa_kg_m"]).replace(".", ","), _num_br(c["calculado"]))
+        if c["acao"] == "corrige":
+            _vezes = c["calculado"] / q
+            _frase = ("PESO RECALCULADO: a linha dizia %s kg, mas %s — o número lido "
+                      "era %s, dígito perdido na leitura do quadro. Sem acréscimo de "
+                      "perdas; confira o peso total no quadro de ferros."
+                      % (_num_br(q), _conta,
+                         ("%d× menor" % round(_vezes)) if _vezes > 1
+                         else ("%d× maior" % round(1 / _vezes))))
+            it.quantity = round(c["calculado"], 1)
+            try:
+                it.confidence = Confidence("estimado")
+            except Exception:
+                pass
+            corrigidos += 1
+        else:
+            _frase = ("⚠ CONFERIR: %s, e a linha diz %s kg — não bate. Confira bitola, "
+                      "comprimento e peso no quadro de ferros." % (_conta, _num_br(q)))
+            if _frase in obs:
+                continue          # já alertada numa rodada anterior
+            alertas += 1
+        it.observations = _frase + ((" | " + obs) if obs else "")
+    return corrigidos, alertas
+
+
+#: Quanto texto de UMA página vira número de prova. O pdfium já monta a
+#: página inteira pra cortar nos 6000 da IA; o teto só protege de prancha
+#: patológica.
+_TETO_TEXTO_DA_PROVA = 1_000_000
+
+
+def _chave_dos_numeros(filename, page_index):
+    """A mesma chave que a honestidade monta a partir do `ref_sheet`."""
+    return (str(filename or "").strip().lower(), int(page_index or 0))
+
+
+def _guarda_numeros_do_texto(mapa, filename, page_index, texto) -> None:
+    """Guarda os números decimais do texto desta página (22/09, prova do quadro).
+
+    Best-effort: falhar aqui só tira a prova por texto — o quadro cai no
+    caminho "sem prova" (zerado, com o número na frase), que é o de antes."""
+    t = str(texto or "")
+    if not t or t.startswith("[Erro ao extrair texto"):
+        return
+    try:
+        from engine_rules import numeros_decimais_do_texto
+        _ns = numeros_decimais_do_texto(t)
+        if _ns:
+            mapa[_chave_dos_numeros(filename, page_index)] = _ns
+    except Exception as _e:
+        print(f"[quadro] {filename} p{page_index}: números do texto falharam ({_e})")
+
+
+def _anexa_numeros_do_texto(mapa, filename, page_index, result) -> None:
+    """Põe os números desta página no checkpoint (lista, que JSON aceita)."""
+    try:
+        _ns = mapa.get(_chave_dos_numeros(filename, page_index))
+        if _ns and isinstance(result, dict):
+            result["_numeros_do_texto"] = sorted(_ns)
+    except Exception as _e:
+        print(f"[ckpt] {filename}: nao consegui anexar os numeros do texto ({_e})")
+
+
+def _restaura_numeros_do_texto(mapa, filename, page_index, result) -> None:
+    """Na retomada, os números voltam do checkpoint (o texto não é relido)."""
+    _ns = (result or {}).get("_numeros_do_texto") if isinstance(result, dict) else None
+    if not _ns:
+        return
+    try:
+        mapa[_chave_dos_numeros(filename, page_index)] = frozenset(int(x) for x in _ns)
+    except (TypeError, ValueError):
+        pass
 
 
 def _dedupe_revisoes(file_paths: list) -> tuple:
@@ -14095,6 +14330,11 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # 🪤 Só os campos numéricos — nunca a geometria, que estoura memória.
         _pdfvec_por_prancha = {}
         _pdfvec_falhas = []
+        # 🩸 22/09/2026 — os NÚMEROS escritos no texto de cada prancha, pra
+        # honestidade de área conferir um quadro de quantitativos impresso (ver
+        # `engine_rules.veredito_do_quadro_impresso`). Só centésimos, nunca o
+        # texto: o texto some no `del` do fim do laço.
+        _numeros_do_texto_por_prancha = {}
         for i, (pdf_path, filename, sheet_type, page_index, page_count) in enumerate(page_units):
             # 🛡️ Freio de MEMÓRIA (idem loop DXF): aborta limpo antes do OOM,
             # mantendo o servidor de pé pros outros clientes.
@@ -14196,9 +14436,20 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     # a prancha falhou na 1ª tentativa; o aviso do cliente não
                     # pode sumir só porque o job foi retomado
                     _pdfvec_falhas.append(dict(result["_pdfvec_falhou"]))
+                # 22/09: a prova do quadro de quantitativos também volta
+                _restaura_numeros_do_texto(_numeros_do_texto_por_prancha, filename,
+                                           page_index, result)
             else:
                 # 1. Extrair texto (só da página desta unidade — leve, bounded)
-                text = extract_text(pdf_path, page_index)
+                # 🩸 22/09: o texto INTEIRO da página vira os números da prova do
+                # quadro de quantitativos; a IA continua recebendo os mesmos 6000
+                # caracteres de antes (o pdfium já lia a página toda pra cortar).
+                _texto_inteiro = extract_text(pdf_path, page_index,
+                                              char_budget=_TETO_TEXTO_DA_PROVA)
+                text = _texto_inteiro[:6000]
+                _guarda_numeros_do_texto(_numeros_do_texto_por_prancha, filename,
+                                         page_index, _texto_inteiro)
+                del _texto_inteiro
 
                 # 2. Renderizar crops (1 página de cada vez; stem único por página)
                 crop_paths = render_crops(pdf_path, sheet_type, crops_dir,
@@ -14634,6 +14885,10 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                 result["_pdfvec_falhou"] = dict(_f_desta[-1])
                     except Exception as _ecp:
                         print(f"[ckpt] {_stem}: nao consegui anexar a medicao ({_ecp})")
+                    # 22/09: os números do texto viajam junto — a retomada não
+                    # extrai texto de novo, e sem eles o quadro perde a prova
+                    _anexa_numeros_do_texto(_numeros_do_texto_por_prancha, filename,
+                                            page_index, result)
                     _ckpt_save(job_id, _stem, result)
 
             # 3b. Capturar falha de IA nesta prancha (não interrompe o loop —
@@ -16160,18 +16415,52 @@ bloco — só cite os que estão no inventário deste arquivo."""
             _pdfvec_falhas_flag = bool(_pdfvec_falhas)
         except NameError:
             _pdfvec_falhas_flag = False
+        try:
+            _nums_texto_map = dict(_numeros_do_texto_por_prancha)
+        except NameError:
+            _nums_texto_map = {}  # job sem PDF: o laço nem existiu
         _n_fill, _blanked = _apply_area_honesty(
             all_items, project_data.total_area,
             getattr(project_data, "total_area_source", ""),
             pe_direito=float(getattr(project_data, "user_pe_direito", 0) or 0),
             pdfvec_m2=_pv_m2,
             pdfvec_por_prancha=_pp_map,
+            # 🩸 22/09 — a prova do quadro de quantitativos impresso (jobs
+            # ee801b82/f8d8e6d8): os números escritos no texto de cada prancha.
+            # 🪤 ANTES do `medicao_incompleta`: a linha que fecha a chamada é
+            # âncora do guarda de call site (test_area_medida_do_pdf...).
+            numeros_do_texto_por_prancha=_nums_texto_map,
             # 🩸 02/09 — prancha que não deu pra medir (tempo, OOM, filho morto)
             # significa que a nossa medição NÃO cobre o imóvel. Nesse caso o teto
             # por prancha aperta em cima do que a gente não viu, e foi assim que
             # o mezanino de 255,66 m² da cliente-84 — número escrito na prancha —
             # virou linha vazia. Ver o comentário em `_apply_area_honesty`.
             medicao_incompleta=bool(_pdfvec_falhas_flag))
+        # 🩸 22/09/2026 — o AÇO não passa pela honestidade de área (kg), e foi
+        # por aí que 1.745 kg por TAXA (ee801b82) e 58 kg no lugar de 582
+        # (f8d8e6d8) saíram com número. Duas réguas, cada uma com o seu porquê
+        # no docstring. Primeiro a taxa: linha zerada não é conferida.
+        try:
+            _n_taxa = _zera_peso_por_taxa(all_items)
+            if _n_taxa:
+                _log_error("motor:aco-por-taxa",
+                           "%d linha(s) de aço com peso por TAXA ficaram em branco "
+                           "(regra nº3: razão só alerta)" % _n_taxa,
+                           job_id, severity="info")
+        except Exception as _eat:
+            _log_error("motor:aco-por-taxa", f"FALHOU: {_eat}", job_id,
+                       severity="warning")
+        try:
+            _n_aco_corr, _n_aco_alerta = _confere_peso_de_aco(all_items)
+            if _n_aco_corr or _n_aco_alerta:
+                _log_error("motor:aco-massa-nominal",
+                           "corrigidos=%d (dígito perdido: razão ≈ 10ⁿ) alertas=%d "
+                           "(divergência sem padrão — número mantido)"
+                           % (_n_aco_corr, _n_aco_alerta),
+                           job_id, severity="info")
+        except Exception as _eam:
+            _log_error("motor:aco-massa-nominal", f"FALHOU: {_eam}", job_id,
+                       severity="warning")
         # 🩸 02/09 — O DESTINO DA ÁREA INFORMADA VIRA AVISO **DEPOIS DE ACONTECER**.
         # O aviso antigo, escrito lá atrás, prometia "ela entra como BASE pros
         # itens de área" antes de esta função decidir — e no job da cliente-31 ela
@@ -16342,7 +16631,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
             except NameError:
                 _n_resgate_pdf_log = 0      # job sem PDF: o laço nem existiu
             _resg_log = int(getattr(_apply_area_honesty, "ultimo_resgatados", 0) or 0)
-            if _pres or _n_fill or _blanked or _resg_log:
+            _quadro_log = int(getattr(_apply_area_honesty, "ultimo_quadro_preservados", 0) or 0)
+            if _pres or _n_fill or _blanked or _resg_log or _quadro_log:
                 # 🪤 `preservados_por_pe_direito` virou nome errado quando a
                 # preservação por medição do PDF entrou no mesmo contador
                 # (26/08). Na avaliação `eve9afae` ele imprimiu
@@ -16364,7 +16654,13 @@ bloco — só cite os que estão no inventário deste arquivo."""
                            # 16/09: quantos preenchimentos do passo 7 foram
                            # DESFEITOS porque a prancha já tinha outro
                            # acabamento com número (a vaga estava ocupada)
-                           f"p7_desfeitos={getattr(_apply_area_honesty, 'ultimo_p7_desfeitos', 0)}",
+                           f"p7_desfeitos={getattr(_apply_area_honesty, 'ultimo_p7_desfeitos', 0)} "
+                           # 22/09: o quadro de quantitativos impresso — com
+                           # prova (fica), sem prova (zera, número na frase) e
+                           # a linha de TOTAL que só repetia a soma
+                           f"quadro_preservados={_quadro_log} "
+                           f"quadro_sem_prova={getattr(_apply_area_honesty, 'ultimo_quadro_sem_prova', 0)} "
+                           f"quadro_totais={getattr(_apply_area_honesty, 'ultimo_quadro_totais', 0)}",
                            job_id)
         except Exception:
             pass

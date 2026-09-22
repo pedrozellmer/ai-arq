@@ -3756,3 +3756,351 @@ def nome_que_o_cliente_enviou(ref_sheet) -> str:
     if not s:
         return ""
     return _SUFIXO_DO_CONVERSOR.sub(".dwg", s)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  O QUADRO DE QUANTITATIVOS IMPRESSO NA PRANCHA (22/09/2026)
+# ─────────────────────────────────────────────────────────────────────────────
+# 🩸 22/09/2026 — jobs ee801b82 e f8d8e6d8 (os mesmos 7 PDFs de estrutura,
+# dois dias seguidos). A 1ª prancha traz um QUADRO DE QUANTITATIVOS impresso
+# pelo projetista: concreto 4,90/3,80/13,20/3,90/1,00 m³ e fôrma
+# 37,20/31,20/82,70/28,10/4,00 m². Duas leituras independentes da IA deram os
+# mesmos dez números — e a honestidade de área zerou os dez nos dois dias,
+# porque trata todo m²/m³ de PDF como chute. A planilha saiu com 0 m³ de
+# concreto num projeto que DECLARA 26,8 m³.
+# 🔑 O número do quadro não é medição nossa, e nunca vira branco/medido. Mas
+# também não é chute: é a conta do projetista, copiada. Só que "a observação
+# diz que copiou do quadro" é a PALAVRA da IA — ela escreve isso até em número
+# que inventou. Por isso a preservação exige uma prova que não saia da mesma
+# boca: o número escrito no TEXTO do PDF daquela prancha, ou a soma das linhas
+# do quadro batendo com uma linha de TOTAL que a leitura diz ter LIDO (não
+# somado).
+#: Verbo de TRANSCRIÇÃO + "quadro/tabela de quantitativos" (ou "de
+#: quantidades", "de volumes"). "Quadro de áreas" fica de fora de propósito: é
+#: outra doença (a área do imóvel colada num item), com régua própria.
+#: 📏 Medido em 22/09 (90 dias, sem avaliação, m²/m³/m fora do CAD): 30 linhas
+#: em 5 jobs casam, 28 delas zeradas; fora deste caso, 8 zeradas em 2 jobs, e as
+#: respostas da IA nesses jobs mostram quadros de verdade (memória de cálculo,
+#: tabela de termo de referência, quadro de paginação de piso).
+_RE_TRANSCRICAO_DE_QUADRO = _re.compile(
+    r"\b(?:lid[oa]s?|extra[ií]d[oa]s?|transcrit[oa]s?|copiad[oa]s?|retirad[oa]s?"
+    r"|obtid[oa]s?|conforme)\b[^.|;]{0,40}?"
+    r"\b(?:quadros?|tabelas?)\s+(?:de\s+)?(?:resumo\s+de\s+)?"
+    r"(?:quantitativ\w*|quantidades\b|volumes\b)",
+    _re.IGNORECASE)
+#: "não foi lido do quadro de quantitativos" é o CONTRÁRIO da afirmação.
+_RE_NEGA_A_TRANSCRICAO = _re.compile(r"\bn[ãa]o\b[^.|;]{0,20}$", _re.IGNORECASE)
+_RE_LINHA_DE_TOTAL = _re.compile(r"\b(?:sub)?tota(?:l|is)\b", _re.IGNORECASE)
+_RE_TOKEN_NUMERICO = _re.compile(r"\d+(?:[.,]\d+)+")
+
+
+def afirma_quadro_de_quantitativos(texto) -> bool:
+    """A observação AFIRMA que o número foi copiado de um quadro de quantitativos?
+
+    É a condição (a) — necessária, nunca suficiente: sozinha ela não preserva
+    número nenhum (ver `veredito_do_quadro_impresso`)."""
+    t = str(texto or "")
+    for m in _RE_TRANSCRICAO_DE_QUADRO.finditer(t):
+        if _RE_NEGA_A_TRANSCRICAO.search(t[max(0, m.start() - 25):m.start()]):
+            continue
+        return True
+    return False
+
+
+def e_linha_de_total(descricao) -> bool:
+    """A linha se apresenta como TOTAL ("TOTAL GERAL", "— total", "subtotal")?"""
+    return bool(_RE_LINHA_DE_TOTAL.search(str(descricao or "")))
+
+
+def _decimal_do_token(tok):
+    """'1.234,56' → 1234.56 · '4,90' → 4.9 · '37.20' → 37.2 · o resto → None.
+
+    🪤 Só número COM parte decimal escrita. Inteiro ("4", "215") aparece aos
+    montes numa prancha (cota, número de barra, nível) e casaria por acaso; e
+    "1.234" com três casas é ambíguo (milhar pt-BR ou decimal) — fica de fora.
+    """
+    if "," in tok:
+        if tok.count(",") != 1:
+            return None
+        inteiro, dec = tok.split(",")
+        if "." in inteiro and not _re.fullmatch(r"\d{1,3}(?:\.\d{3})+", inteiro):
+            return None
+        try:
+            return float(inteiro.replace(".", "") + "." + dec)
+        except ValueError:
+            return None
+    if tok.count(".") == 1 and len(tok.split(".")[1]) != 3:
+        try:
+            return float(tok)
+        except ValueError:
+            return None
+    return None
+
+
+def numeros_decimais_do_texto(texto) -> frozenset:
+    """Os números decimais escritos no texto de uma prancha, em CENTÉSIMOS.
+
+    Centésimo inteiro, e não float, pra "4,90" e 4.9 serem a mesma coisa sem
+    comparação de ponto flutuante. É o que viaja do laço de páginas (onde o
+    texto existe) até a honestidade de área (onde o texto já foi apagado)."""
+    out = set()
+    for tok in _RE_TOKEN_NUMERICO.findall(str(texto or "")):
+        v = _decimal_do_token(tok)
+        if v is not None and v > 0:
+            out.add(int(round(v * 100)))
+    return frozenset(out)
+
+
+def _familia_da_unidade(u):
+    u = (u or "").strip().lower()
+    if u in ("m³", "m3"):
+        return "m3"
+    if u in FLOOR_M2_UNITS:
+        return "m2"
+    if u in ("m", "ml", "mts"):
+        return "m"
+    return u
+
+
+def veredito_do_quadro_impresso(linhas, numeros_por_prancha=None):
+    """Decide, linha a linha, o que fazer com número de quadro de quantitativos.
+
+    `linhas`: lista de dicts com `arquivo` (nome minúsculo, chave da prancha),
+    `pagina` (int ou None), `prancha` (nome pra frase), `unidade`,
+    `quantidade`, `texto` (observação) e `descricao`.
+    `numeros_por_prancha`: {(arquivo, pagina): frozenset de centésimos} — o que
+    `numeros_decimais_do_texto` achou no texto do PDF de cada prancha.
+
+    Devolve uma lista do mesmo tamanho, com `None` (linha fora da régua) ou
+    `(tipo, info)`:
+      · "texto"     — (a) + o número está no texto do PDF da prancha: preserva;
+      · "total"     — (a) + as linhas do quadro somam um TOTAL LIDO (±1%): preserva;
+      · "sem_prova" — (a) sem prova: continua zerada, e a frase diz o número;
+      · "e_o_total" — a linha É o total das outras: zerada, pra não contar em dobro.
+
+    🪤 Duas travas contra o acaso, porque prancha tem número pra todo lado:
+      1. prova por texto só vale se o quadro APARECE no texto — pelo menos dois
+         números distintos das linhas (a) daquela prancha estão lá. Um "1,00"
+         solto casa em qualquer desenho;
+      2. o TOTAL só prova as parcelas quando a própria linha do total diz que
+         foi LIDO do quadro e não é uma soma. No ee801b82 o "TOTAL GERAL" era a
+         conta da própria IA ("Soma dos valores do quadro: 4,90 + 3,80 + …") —
+         conta de chegada, prova nenhuma.
+    """
+    # a chave do item sai do `ref_sheet` em minúsculas; a do mapa também tem que sair
+    nums = {(str(a or "").strip().lower(), p): v
+            for (a, p), v in dict(numeros_por_prancha or {}).items()}
+    n = len(linhas)
+    out = [None] * n
+
+    def _q(l):
+        try:
+            return float(l.get("quantidade") or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    def _nums_da(l):
+        arq = l.get("arquivo") or ""
+        if not arq:
+            return None
+        pg = l.get("pagina")
+        if pg is not None:
+            return nums.get((arq, int(pg)))
+        # sem página no `ref_sheet`: só vale se o arquivo tem UMA página lida
+        cands = [v for (a, _p), v in nums.items() if a == arq]
+        return cands[0] if len(cands) == 1 else None
+
+    chave = [((l.get("arquivo") or ""), l.get("pagina")) for l in linhas]
+    fam = [_familia_da_unidade(l.get("unidade")) for l in linhas]
+    qs = [_q(l) for l in linhas]
+    afirma = [afirma_quadro_de_quantitativos(l.get("texto"))
+              or afirma_quadro_de_quantitativos(l.get("descricao")) for l in linhas]
+    total = [e_linha_de_total(l.get("descricao")) for l in linhas]
+
+    # ── o TOTAL: a linha que resume as outras linhas (a) do mesmo quadro ──
+    # 🪤 Erra PRA MENOS, de propósito. Linha que se diz total/subtotal, com
+    # parcelas no quadro, NUNCA fica com número (bata a soma ou não); e linha
+    # que é igual à soma de TODAS as outras do quadro também é total, diga o
+    # que disser — senão parcelas descritas como "volume total da estrutura 3"
+    # esconderiam o TOTAL GERAL e a planilha contaria em dobro.
+    e_o_total = {}
+    provada_pelo_total = {}
+    grupos = {}
+    for i in range(n):
+        if (afirma[i] or total[i]) and qs[i] > 0 and chave[i][0]:
+            grupos.setdefault((chave[i], fam[i]), []).append(i)
+    for membros in grupos.values():
+        for i in membros:
+            outras = [j for j in membros if j != i and afirma[j]]
+            parc = [j for j in outras if not total[j]]
+            if total[i] and len(parc) >= 2:
+                soma = sum(qs[j] for j in parc)
+                bate = abs(soma - qs[i]) <= 0.01 * qs[i]
+                e_o_total[i] = {"soma": soma, "parcelas": len(parc), "bate": bate}
+                if (bate and afirma[i]
+                        and not a_fonte_declarada_e_uma_soma(linhas[i].get("texto"))):
+                    for j in parc:
+                        provada_pelo_total[j] = qs[i]
+            elif (total[i] and len(parc) == 1
+                  and abs(qs[parc[0]] - qs[i]) <= 0.01 * qs[i]):
+                # total de UMA linha só é a mesma linha duas vezes — e não prova
+                # nada (é o mesmo número)
+                e_o_total[i] = {"soma": qs[parc[0]], "parcelas": 1, "bate": True}
+            elif len(outras) >= 2:
+                soma = sum(qs[j] for j in outras)
+                if abs(soma - qs[i]) <= 0.01 * qs[i]:
+                    e_o_total[i] = {"soma": soma, "parcelas": len(outras), "bate": True}
+
+    # ── o quadro aparece no texto do PDF? (trava 1) ──
+    achados = {}
+    for i in range(n):
+        if not afirma[i] or qs[i] <= 0:
+            continue
+        _ns = _nums_da(linhas[i])
+        if _ns and int(round(qs[i] * 100)) in _ns:
+            achados.setdefault(chave[i], set()).add(int(round(qs[i] * 100)))
+
+    for i in range(n):
+        if i in e_o_total:
+            out[i] = ("e_o_total", e_o_total[i])
+            continue
+        if not afirma[i] or qs[i] <= 0:
+            continue
+        _ns = _nums_da(linhas[i])
+        _c = int(round(qs[i] * 100))
+        if _ns and _c in _ns and len(achados.get(chave[i], ())) >= 2:
+            out[i] = ("texto", {})
+        elif i in provada_pelo_total:
+            out[i] = ("total", {"total": provada_pelo_total[i]})
+        else:
+            out[i] = ("sem_prova", {})
+    return out
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  AÇO POR TAXA não vira número (22/09/2026)
+# ─────────────────────────────────────────────────────────────────────────────
+# 🩸 22/09/2026 — job ee801b82: 294 + 215 + 485 + 751 = 1.745 kg de aço
+# "estimado por taxa de consumo típica de 100 kg/m³" numa prancha SEM quadro de
+# ferros — o mesmo aço que as listas das outras pranchas já traziam (e 100×
+# um volume que o próprio motor zerou). No f8d8e6d8, mais 2.114 kg assim.
+# kg não passa pela honestidade de área, então nada tocava nessas linhas.
+# 🔑 Regra nº3: razão típica ALERTA, nunca vira número. Peso por taxa não é o
+# aço do projeto do cliente — é um índice de livro multiplicado por um volume.
+# 📏 Medido em 22/09 (90 dias, sem avaliação, kg fora do CAD): 22 linhas com
+# número em 7 jobs citam taxa/índice/consumo; 14 delas fora deste caso.
+# 🪤 A menção à taxa NÃO basta: "Soma dos quadros de ferragens … Taxa média
+# ponderada ≈ 141,71 kg/m³" é aço de LISTA com a taxa como conferência. O que
+# decide é o peso ter SAÍDO da taxa (multiplicação encostada nela, ou "adotada",
+# "estimado por taxa", "consumo típico").
+_RE_PESO_DA_TAXA = _re.compile(
+    r"kg\s*/\s*m\s*[³3²2][^.|;]{0,40}?[×x*]\s*\(?\s*\d"
+    r"|m\s*[³3²2]\s*\)?\s*[×x*]\s*(?:taxa\s*(?:de\s*)?)?\d+(?:[.,]\d+)?\s*kg\s*/\s*m"
+    r"|\b(?:estimad[oa]s?|estimativa|calculad[oa]s?)\s+(?:\w+\s+){0,2}?(?:por|pela|com\s+a)\s+taxa"
+    r"|\btaxa\b[^.|;]{0,60}?\b(?:adotad[oa]|aplicad[oa])"
+    r"|\b(?:adotad[oa]|aplicad[oa])\b[^.|;]{0,15}?\d+(?:[.,]\d+)?\s*kg\s*/\s*m"
+    r"|\bconsumo\s+t[íi]pico|\btaxa\s+(?:de\s+\w+\s+)?t[íi]pica"
+    r"|\bestimativa\s+param[ée]trica",
+    _re.IGNORECASE)
+#: Prova de que o peso veio de LISTA/QUADRO de ferros — aí a taxa é conferência.
+_RE_PESO_DE_LISTA = _re.compile(
+    r"\b(?:lid[oa]s?|extra[ií]d[oa]s?|copiad[oa]s?|transcrit[oa]s?|conforme"
+    r"|soma\w*(?:\s+confirmad[oa])?\s+d[oa]s?)\b[^.|;]{0,40}?"
+    r"\b(?:quadros?|resumos?|listas?|tabelas?|rela[çc][ãa]o)\s+(?:de\s+|do\s+|da\s+)?"
+    r"(?:a[çc]o|ferros?|ferragens?|armadura|arma[çc][ãa]o)"
+    r"|\b[cp]\.?\s*tot",
+    _re.IGNORECASE)
+
+
+def peso_por_taxa(obs) -> bool:
+    """O peso desta linha foi CALCULADO com uma taxa (kg/m³, kg/m²)?"""
+    t = str(obs or "")
+    if not _RE_PESO_DA_TAXA.search(t):
+        return False
+    return not _RE_PESO_DE_LISTA.search(t)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  O PESO DE AÇO CONTRA A MASSA NOMINAL (22/09/2026)
+# ─────────────────────────────────────────────────────────────────────────────
+# 🩸 22/09/2026 — job f8d8e6d8, 3ª prancha: a observação traz "CTot = 1473,3 m"
+# de ø8 e "PTot … parcialmente cortado na imagem (lido como '58')", e a linha
+# saiu com 58 kg. 1.473,3 × 0,395 = 582 kg — o mesmo arquivo, lido no dia
+# anterior, deu 582. Erro de 10× com a conta certa escrita na própria linha.
+# 🔑 A conferência já existia, mas só no caminho do CAD
+# (`structural_extractor`, faixa 0,70–1,70). No PDF ninguém fazia a conta.
+# 📏 Medido em 22/09 (90 dias, kg fora do CAD com comprimento total e bitola na
+# observação): 1 linha com erro de potência de dez (esta); outras ~9 em 4 jobs
+# divergem sem ser dígito perdido — leituras de quadro que a própria IA já
+# marcou como inconsistentes (tela soldada?, dois quadros somados?).
+# 🚫 Por isso "diverge > 20% → troca pelo calculado" NÃO é a régua: nesses 9
+# casos não se sabe se errou o peso ou o comprimento, e trocar seria inventar
+# qual dos dois está certo. Só o DÍGITO PERDIDO (razão ≈ 10ⁿ) vira troca; o
+# resto ganha um ALERTA com a conta (regra nº3: razão alerta, não decide).
+_RE_BITOLA_ACO = _re.compile(
+    r"(?:[øØ⌀Φφ]|\bbitola\s*(?:de\s*)?)\s*(\d{1,2}(?:[.,]\d)?)(?!\d)",
+    _re.IGNORECASE)
+_RE_COMPRIMENTO_TOTAL_ACO = _re.compile(
+    r"(?:\bc\.?\s*tot(?:al)?\b|\bcomprimento\s+total\b)(?:\s*\([^)]{0,20}\))?"
+    r"[^\d|;]{0,30}?(\d{1,3}(?:\.\d{3})+(?:,\d+)?|\d+(?:[.,]\d+)?)\s*m\b",
+    _re.IGNORECASE)
+#: Faixa em que peso e comprimento × massa nominal CONCORDAM — a mesma do
+#: `structural_extractor` (inclui o acréscimo de 10% de perdas dos quadros).
+FAIXA_PESO_NOMINAL = (0.70, 1.70)
+#: Quão perto de 10ⁿ a razão tem que ficar pra ser dígito perdido. 📏 Medido:
+#: o caso dá 0,997; o vizinho mais próximo no acervo que NÃO é dígito perdido
+#: dá 0,856 (tela soldada lida como ø5). Cabe o +10% de perdas (1,10).
+FAIXA_DIGITO_PERDIDO = (0.90, 1.20)
+
+
+def conferencia_do_peso_de_aco(descricao, obs, quantidade):
+    """Confere o peso de UMA linha de aço contra comprimento × massa nominal.
+
+    Devolve None (sem o que conferir, ou concorda) ou um dict com `acao`
+    ("corrige" | "alerta"), `calculado`, `comprimento_m`, `bitola_mm`,
+    `massa_kg_m` e `razao` (peso da linha / calculado).
+    Só confere com UMA bitola e UM comprimento total na linha: linha de total
+    geral com várias bitolas não tem a quem aplicar a massa.
+    """
+    from structural_extractor import BITOLAS_MM, massa_linear_kg_m
+    import math
+    try:
+        q = float(quantidade or 0)
+    except (TypeError, ValueError):
+        return None
+    if q <= 0:
+        return None
+    txt = "%s | %s" % (descricao or "", obs or "")
+    bitolas = set()
+    for m in _RE_BITOLA_ACO.finditer(txt):
+        try:
+            b = float(m.group(1).replace(",", "."))
+        except ValueError:
+            continue
+        for ok in BITOLAS_MM:
+            if abs(b - ok) < 0.05:
+                bitolas.add(ok)
+    comprimentos = set()
+    for m in _RE_COMPRIMENTO_TOTAL_ACO.finditer(str(obs or "")):
+        v = num_br_para_float(m.group(1))
+        if v:
+            comprimentos.add(round(v, 2))
+    if len(bitolas) != 1 or len(comprimentos) != 1:
+        return None
+    b = next(iter(bitolas))
+    c = next(iter(comprimentos))
+    massa = massa_linear_kg_m(b)
+    calc = c * massa
+    if calc <= 0:
+        return None
+    r = q / calc
+    info = {"calculado": calc, "comprimento_m": c, "bitola_mm": b,
+            "massa_kg_m": massa, "razao": r}
+    if FAIXA_PESO_NOMINAL[0] <= r <= FAIXA_PESO_NOMINAL[1]:
+        return None
+    k = round(math.log10(r))
+    if k != 0 and FAIXA_DIGITO_PERDIDO[0] <= r / (10 ** k) <= FAIXA_DIGITO_PERDIDO[1]:
+        info["acao"] = "corrige"
+    else:
+        info["acao"] = "alerta"
+    return info

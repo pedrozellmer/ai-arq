@@ -207,17 +207,20 @@ def _entrega_do_call_site(**mundo):
     real = _fatia()["_apply_area_honesty"]
     visto = {}
 
+    # 🪤 22/09/2026: `**k` — parâmetro novo da honestidade (os números do texto
+    # da prancha) não pode derrubar nem desarmar este espião; ele repassa.
     def _espiao(items, total_area=0, total_area_source="", pe_direito=0,
                 apenas_preencher=False, pdfvec_m2=0, pdfvec_por_prancha=None,
-                medicao_incompleta=False):
+                medicao_incompleta=False, **k):
         visto["pdfvec_m2"] = pdfvec_m2
         visto["por_prancha"] = pdfvec_por_prancha
         visto["medicao_incompleta"] = medicao_incompleta
         visto["total_area"] = total_area
+        visto["extras"] = dict(k)
         return real(items, total_area, total_area_source,
                     pe_direito=pe_direito, apenas_preencher=apenas_preencher,
                     pdfvec_m2=pdfvec_m2, pdfvec_por_prancha=pdfvec_por_prancha,
-                    medicao_incompleta=medicao_incompleta)
+                    medicao_incompleta=medicao_incompleta, **k)
 
     proj = mundo.pop("project_data", None) or _ProjetoDeMentira()
     ns = {"__name__": "call_site_ns", "project_data": proj,
