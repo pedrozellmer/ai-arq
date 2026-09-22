@@ -17,8 +17,17 @@ em branco (continua estimada), e a frase diz por quê e qual era a conta.
 ponderada ≈ 141,71 kg/m³" é aço de LISTA com a taxa como conferência — zerar
 isso seria apagar leitura legítima. O controle abaixo cobra.
 
-📏 Alcance medido (22/09, 90 dias, sem avaliação, kg fora do CAD): 22 linhas
-com número em 7 jobs citam taxa/índice/consumo; 14 fora deste caso.
+📏 Alcance medido (22/09, 90 dias, sem avaliação, kg > 0 fora do CAD e da
+revisão do cliente), rodando `peso_por_taxa` nas 48 linhas que citam
+taxa/índice/consumo/kg por m: 25 linhas em 8 jobs falam de taxa, índice ou
+consumo; a régua pega 24 em 7 jobs (92.146 kg), 16 delas fora deste caso. A
+25ª é o aço de LISTA com a taxa de conferência (controle abaixo).
+
+🩸 22/09 (revisão da 1ª versão): (1) "ÍNDICE típico" é a mesma conta com outro
+nome, e passava — 3 linhas, 11.710 kg num job de 18/08; (2) "massa linear
+adotada 0,395 kg/m" é a conta CERTA do aço de lista e caía na régua; (3) a
+frase dizia "somaria com a lista de ferros" em job SEM lista nenhuma (4 jobs,
+14 linhas no acervo: a IA recorre à taxa justamente onde não há quadro).
 """
 import os
 import sys
@@ -26,6 +35,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import main  # noqa: E402
+import engine_rules  # noqa: E402
 
 _REF = "prancha-B.pdf (DE-X)"
 
@@ -159,9 +169,77 @@ def test_o_process_job_CHAMA_as_duas_reguas_do_aco_na_ordem():
     ns = {"__name__": "aco_ns", "all_items": [taxa, cortado], "job_id": "f8d8e6d8",
           "_zera_peso_por_taxa": main._zera_peso_por_taxa,
           "_confere_peso_de_aco": main._confere_peso_de_aco,
-          "_log_error": lambda st, msg, job=None, severity="error": logs.append((st, severity))}
+          # **k: parâmetro novo no _log_error não pode desarmar o dublê calado
+          "_log_error": lambda st, msg, job=None, severity="error", **k: logs.append((st, severity))}
     exec(compile(_fatia_do_aco(), "aco", "exec"), ns)
     assert taxa.quantity == 0
     assert abs(cortado.quantity - 581.8) < 0.2
     assert ("motor:aco-por-taxa", "info") in logs, logs
     assert ("motor:aco-massa-nominal", "info") in logs, logs
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  🩸 22/09/2026 — O QUE A REVISÃO ADVERSÁRIA DA 1ª VERSÃO ACHOU
+# ══════════════════════════════════════════════════════════════════════════
+def test_INDICE_tipico_e_taxa_com_outro_nome():
+    """As três linhas reais do job de 18/08 (rótulos do desenho trocados por
+    neutros): 7.759,5 + 1.955,75 + 1.995 = 11.710 kg "por índice", que a 1ª
+    versão deixava com número."""
+    textos = [
+        (7759.5, "Estimativa por índice: 310,38 m² (texto 'ÁREA A CONSTRUIR: "
+                 "310,38m²' no layer textos 02) × 25 kg/m² (índice típico "
+                 "residencial). SEM projeto estrutural — valor meramente indicativo."),
+        (1955.75, "Estimativa por índice: 78,23 m² (texto 'ÁREA B = 78.23m²' no layer "
+                  "textos 02) × 25 kg/m². SEM projeto estrutural — valor meramente "
+                  "indicativo."),
+        (1995, "Estimativa: 57,00 m² (layer textos 02) × 35 kg/m² (índice típico "
+               "piscina concreto armado). Valor estimado — solicitar projeto "
+               "estrutural da piscina."),
+    ]
+    itens = [_Item("Armadura de aço CA-50/CA-60", "kg", q, o) for q, o in textos]
+    assert main._zera_peso_por_taxa(itens) == 3
+    assert [i.quantity for i in itens] == [0, 0, 0]
+    # 🧪 "índice DE PERDAS" é o +10% da lista, não taxa de consumo
+    perdas = _Item("Armadura CA-50", "kg", 528,
+                   "Peso calculado pelo índice de perdas de 10% sobre 480 kg = 528 kg.")
+    assert main._zera_peso_por_taxa([perdas]) == 0 and perdas.quantity == 528
+
+
+def test_CONTROLE_massa_LINEAR_adotada_nao_e_taxa():
+    """kg/m SEM expoente é massa linear nominal (0,395 kg/m do ø8) — a conta
+    certa do aço de lista. A mesma linha de 582 kg do caso, escrita sem "CTot"
+    (a releitura não repete as palavras), não pode ser zerada."""
+    for obs, q in (("Comprimento total 1473,3 m de ø8 com massa linear adotada "
+                    "0,395 kg/m = 582 kg.", 582),
+                   ("Barras N1 ø10: 56,2 m; massa nominal aplicada 0,617 kg/m -> "
+                    "34,7 kg.", 34.7)):
+        it = _Item("Armadura CA-50", "kg", q, obs)
+        assert main._zera_peso_por_taxa([it]) == 0, obs
+        assert it.quantity == q
+    # 🧪 e "adotado" com kg/m³ continua sendo taxa (só esta alternativa da régua
+    # pega este texto: não tem "taxa", nem ×, nem "típico")
+    it = _Item("Armadura", "kg", 900, "Valor adotado 90 kg/m³ sobre o volume do bloco (10 m³).")
+    assert main._zera_peso_por_taxa([it]) == 1
+
+
+def test_sem_outro_aco_a_frase_nao_promete_lista():
+    """Em 4 jobs do acervo a taxa era o ÚNICO aço da planilha ("Não há quadro de
+    aço nestas pranchas"). Dizer "somaria com a lista de ferros" ali é falso."""
+    sozinhas = [_Item("Armadura (aço CA-50) — vigas", "kg", 5000,
+                      "ESTIMADO. Não há quadro de aço nestas pranchas. Taxa 100 kg/m³ "
+                      "adotada para vigas."),
+                _Item("Armadura (aço CA-50) — pilares", "kg", 1725,
+                      "ESTIMADO. Não há quadro de aço nestas pranchas. Taxa 150 kg/m³ "
+                      "adotada para pilares.")]
+    assert main._zera_peso_por_taxa(sozinhas) == 2
+    for t in sozinhas:
+        assert t.observations.startswith("Em branco: peso por TAXA"), t.observations[:60]
+        assert "somaria" not in t.observations, t.observations
+        assert "Nenhuma outra linha desta planilha traz peso de armadura" in t.observations
+    # 🧪 com lista ao lado, a dupla contagem é o motivo — e a frase diz
+    taxa = _taxa(294, "2,94")
+    main._zera_peso_por_taxa([taxa] + _listas_do_caso())
+    assert "somaria com o aço que outras linhas desta planilha já trazem" in taxa.observations
+    # perfil metálico não é lista de ferros
+    assert not engine_rules.e_linha_de_armadura(
+        "Estrutura metálica em perfil de aço ASTM A36")

@@ -3877,6 +3877,9 @@ def veredito_do_quadro_impresso(linhas, numeros_por_prancha=None):
       · "total"     — (a) + as linhas do quadro somam um TOTAL LIDO (±1%): preserva;
       · "sem_prova" — (a) sem prova: continua zerada, e a frase diz o número;
       · "e_o_total" — a linha É o total das outras: zerada, pra não contar em dobro.
+        `info` traz `soma`, `parcelas`, `bate`, `parcelas_com_numero` (quantas
+        das linhas que ele resume ficaram com número) e, quando só o NÚMERO
+        diz que é total (a descrição não diz), `pela_soma`.
 
     🪤 Duas travas contra o acaso, porque prancha tem número pra todo lado:
       1. prova por texto só vale se o quadro APARECE no texto — pelo menos dois
@@ -3924,6 +3927,8 @@ def veredito_do_quadro_impresso(linhas, numeros_por_prancha=None):
     # que disser — senão parcelas descritas como "volume total da estrutura 3"
     # esconderiam o TOTAL GERAL e a planilha contaria em dobro.
     e_o_total = {}
+    #: quem cada TOTAL resume — pra dizer, no fim, se alguma parcela ficou com número
+    resume = {}
     provada_pelo_total = {}
     grupos = {}
     for i in range(n):
@@ -3937,6 +3942,7 @@ def veredito_do_quadro_impresso(linhas, numeros_por_prancha=None):
                 soma = sum(qs[j] for j in parc)
                 bate = abs(soma - qs[i]) <= 0.01 * qs[i]
                 e_o_total[i] = {"soma": soma, "parcelas": len(parc), "bate": bate}
+                resume[i] = parc
                 if (bate and afirma[i]
                         and not a_fonte_declarada_e_uma_soma(linhas[i].get("texto"))):
                     for j in parc:
@@ -3946,10 +3952,17 @@ def veredito_do_quadro_impresso(linhas, numeros_por_prancha=None):
                 # total de UMA linha só é a mesma linha duas vezes — e não prova
                 # nada (é o mesmo número)
                 e_o_total[i] = {"soma": qs[parc[0]], "parcelas": 1, "bate": True}
+                resume[i] = parc
             elif len(outras) >= 2:
                 soma = sum(qs[j] for j in outras)
                 if abs(soma - qs[i]) <= 0.01 * qs[i]:
-                    e_o_total[i] = {"soma": soma, "parcelas": len(outras), "bate": True}
+                    # 🪤 22/09 (revisão): aqui a linha NÃO se diz total — é o
+                    # NÚMERO que manda. Uma parcela legítima igual à soma das
+                    # outras cai aqui também, então a frase tem que perguntar,
+                    # não afirmar (`pela_soma`).
+                    e_o_total[i] = {"soma": soma, "parcelas": len(outras), "bate": True,
+                                    "pela_soma": True}
+                    resume[i] = outras
 
     # ── o quadro aparece no texto do PDF? (trava 1) ──
     achados = {}
@@ -3974,6 +3987,12 @@ def veredito_do_quadro_impresso(linhas, numeros_por_prancha=None):
             out[i] = ("total", {"total": provada_pelo_total[i]})
         else:
             out[i] = ("sem_prova", {})
+    # 🩸 22/09 (revisão): sem prova, as parcelas ficam em branco JUNTO com o
+    # total — e aí "fica em branco pra não contar duas vezes" era falso: não
+    # conta nem uma. A frase do total precisa saber se alguma parcela ficou.
+    for i, parc in resume.items():
+        e_o_total[i]["parcelas_com_numero"] = sum(
+            1 for j in parc if out[j] and out[j][0] in ("texto", "total"))
     return out
 
 
@@ -3987,19 +4006,31 @@ def veredito_do_quadro_impresso(linhas, numeros_por_prancha=None):
 # kg não passa pela honestidade de área, então nada tocava nessas linhas.
 # 🔑 Regra nº3: razão típica ALERTA, nunca vira número. Peso por taxa não é o
 # aço do projeto do cliente — é um índice de livro multiplicado por um volume.
-# 📏 Medido em 22/09 (90 dias, sem avaliação, kg fora do CAD): 22 linhas com
-# número em 7 jobs citam taxa/índice/consumo; 14 delas fora deste caso.
+# 📏 Medido em 22/09 (90 dias, sem avaliação, kg > 0 fora do CAD e da revisão
+# do cliente), rodando esta função nas 48 linhas que citam taxa/índice/
+# consumo/kg por m: 25 linhas em 8 jobs falam de taxa, índice ou consumo; a
+# régua pega 24 em 7 jobs (92.146 kg), 16 delas fora deste caso. A 25ª é aço
+# de LISTA com a taxa de conferência — fica.
+# 🩸 22/09 (revisão): a 1ª versão não via "ÍNDICE", que é a mesma conta com
+# outro nome ("Estimativa por índice: 310,38 m² × 25 kg/m² (índice típico
+# residencial)"): 3 linhas, 11.710 kg, num job de 18/08 ficavam com número.
 # 🪤 A menção à taxa NÃO basta: "Soma dos quadros de ferragens … Taxa média
 # ponderada ≈ 141,71 kg/m³" é aço de LISTA com a taxa como conferência. O que
 # decide é o peso ter SAÍDO da taxa (multiplicação encostada nela, ou "adotada",
-# "estimado por taxa", "consumo típico").
+# "estimado por taxa/índice", "consumo típico", "índice típico").
+# 🪤 "adotada/aplicada N kg/m" só vale com m³/m²: kg/m SEM expoente é massa
+# LINEAR nominal (0,395 kg/m do ø8), que é a conta certa do aço de lista.
+# 🪤 "calculado pelo índice/pela taxa DE PERDAS" é o +10% da lista, não taxa de
+# consumo: fica de fora.
 _RE_PESO_DA_TAXA = _re.compile(
     r"kg\s*/\s*m\s*[³3²2][^.|;]{0,40}?[×x*]\s*\(?\s*\d"
     r"|m\s*[³3²2]\s*\)?\s*[×x*]\s*(?:taxa\s*(?:de\s*)?)?\d+(?:[.,]\d+)?\s*kg\s*/\s*m"
-    r"|\b(?:estimad[oa]s?|estimativa|calculad[oa]s?)\s+(?:\w+\s+){0,2}?(?:por|pela|com\s+a)\s+taxa"
+    r"|\b(?:estimad[oa]s?|estimativa|calculad[oa]s?)\s+(?:\w+\s+){0,2}?"
+    r"(?:por|pel[oa]|com\s+[oa])\s+(?:taxa|[íi]ndice)(?!\s+de\s+perdas?\b)"
     r"|\btaxa\b[^.|;]{0,60}?\b(?:adotad[oa]|aplicad[oa])"
-    r"|\b(?:adotad[oa]|aplicad[oa])\b[^.|;]{0,15}?\d+(?:[.,]\d+)?\s*kg\s*/\s*m"
+    r"|\b(?:adotad[oa]|aplicad[oa])\b[^.|;]{0,15}?\d+(?:[.,]\d+)?\s*kg\s*/\s*m\s*[³3²2]"
     r"|\bconsumo\s+t[íi]pico|\btaxa\s+(?:de\s+\w+\s+)?t[íi]pica"
+    r"|\b[íi]ndices?\s+(?:de\s+\w+\s+)?t[íi]picos?"
     r"|\bestimativa\s+param[ée]trica",
     _re.IGNORECASE)
 #: Prova de que o peso veio de LISTA/QUADRO de ferros — aí a taxa é conferência.
@@ -4018,6 +4049,21 @@ def peso_por_taxa(obs) -> bool:
     if not _RE_PESO_DA_TAXA.search(t):
         return False
     return not _RE_PESO_DE_LISTA.search(t)
+
+
+#: Aço de ARMADURA (o que uma lista de ferros traz) — não perfil metálico A36.
+_RE_ACO_DE_ARMADURA = _re.compile(
+    r"\bCA[\s-]?(?:50|60)\b|\barmadura|\barma[çc][ãa]o|\bferr(?:o|os|agem|agens)\b"
+    r"|\btela\s+soldada|\bvergalh|[øØ⌀Φφ]\s*\d",
+    _re.IGNORECASE)
+
+
+def e_linha_de_armadura(descricao) -> bool:
+    """A descrição é de aço de armadura (CA-50/60, ferros, tela, ø)?
+
+    Serve pra frase do peso por taxa dizer "somaria com o aço das outras
+    linhas" só quando essas linhas existem (22/09, revisão)."""
+    return bool(_RE_ACO_DE_ARMADURA.search(str(descricao or "")))
 
 
 # ─────────────────────────────────────────────────────────────────────────────

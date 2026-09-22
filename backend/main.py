@@ -10028,6 +10028,25 @@ def _limpa_afirmacao_de_medida(obs: str) -> str:
     return " | ".join(segs)
 
 
+#: 🩸 22/09/2026 — as duas frases do quadro de quantitativos impresso que deixam
+#: a linha EM BRANCO de propósito (ramo do quadro em `_apply_area_honesty`).
+#: Quem escreve e quem lê usam a MESMA constante: texto de aviso é dominó (21/09,
+#: o /inform-area reconhece aviso pela marca, e a marca antiga era "não medida").
+_PREFIXO_TOTAL_DO_QUADRO = "Linha de TOTAL"
+_PREFIXO_QUADRO_SEM_PROVA = "Em branco: a leitura diz que o quadro de quantitativos"
+
+
+def _e_total_do_quadro_em_branco(obs) -> bool:
+    """A linha é o TOTAL de um quadro de quantitativos, deixado em branco de propósito?
+
+    🩸 22/09/2026 (revisão, jobs ee801b82/f8d8e6d8): ela fica em branco pra a
+    soma das parcelas não contar duas vezes — e o /inform-area, que só olha
+    "linha zerada de piso", enchia ela com a área informada. Num quadro de
+    piso de 134,95 + 55,19 m² com prova, a planilha ia a 590,14 m²."""
+    return any(s.strip().startswith(_PREFIXO_TOTAL_DO_QUADRO)
+               for s in str(obs or "").split("|"))
+
+
 def _limpa_aviso_nao_medida(obs: str) -> str:
     """Tira do texto os trechos "Área NÃO medida … informe a área no upload".
 
@@ -10035,10 +10054,15 @@ def _limpa_aviso_nao_medida(obs: str) -> str:
     destrói o número (o card "informe a metragem" cai no caminho que zera).
     Mensagem contraditória foi o que a auditoria de 05/08 mostrou queimar a
     confiança do cliente mais rápido que erro de número.
+    🩸 22/09/2026 (revisão): a frase do quadro de quantitativos SEM prova ("Em
+    branco: a leitura diz que o quadro … traz X m²") também é aviso de linha
+    vazia, e não diz "não medida" — sem sair aqui, a linha que ganha número
+    depois continuava começando com "Em branco".
     """
     segs = [x.strip() for x in str(obs or "").split("|")]
     segs = [x for x in segs
-            if x and "não medida" not in x.lower() and "nao medida" not in x.lower()]
+            if x and "não medida" not in x.lower() and "nao medida" not in x.lower()
+            and not x.startswith(_PREFIXO_QUADRO_SEM_PROVA)]
     return " | ".join(segs)
 
 
@@ -10651,9 +10675,12 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
         #   (c) teto por FAMÍLIA: no máximo uma superfície de piso e uma de
         #       forro herdam a área total. Da 2ª em diante, não preenche.
         _fam = _familia_da_superficie(getattr(it, "description", ""))
+        # 🩸 22/09/2026 (revisão): o TOTAL de um quadro de quantitativos está em
+        # branco DE PROPÓSITO (as parcelas carregam o número) — não é vaga.
         if (informado and _area_informada_alcancaria(it, u)
                 and q == 0
                 and _usou_area_informada.get(_fam, 0) < 1
+                and not _e_total_do_quadro_em_branco(getattr(it, "observations", ""))
                 and not (apenas_preencher and q > 0)):
             # 🪤 31/08 (auditoria): quem fica com a área total é decidido pela
             # ORDEM DA LISTA, e a lista vem da IA — então o MESMO projeto,
@@ -10676,8 +10703,10 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
             except Exception:
                 pass
             # tira aviso antigo "área NÃO medida" e põe o rótulo honesto da área informada
+            # (22/09: e o "Em branco: a leitura diz que o quadro…", que é o mesmo aviso)
             _segs = [s.strip() for s in (it.observations or "").split("|")
-                     if "não medida" not in s.lower() and "nao medida" not in s.lower()]
+                     if "não medida" not in s.lower() and "nao medida" not in s.lower()
+                     and not s.strip().startswith(_PREFIXO_QUADRO_SEM_PROVA)]
             _segs.append("Área informada por você (não medida): assumido = área total do "
                          "projeto. Confira antes de orçar.")
             it.observations = " | ".join(s for s in _segs if s)
@@ -10884,32 +10913,68 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
             else:
                 it.quantity = 0
                 blanked += 1
-                if _tipo_q == "e_o_total" and int(_info_q.get("parcelas") or 0) == 1:
-                    _frase_q = ("Linha de TOTAL: repete a única linha do quadro de "
-                                "quantitativos da prancha %s (%s %s). Fica em branco pra "
+                # 🪤 Toda frase de TOTAL começa com `_PREFIXO_TOTAL_DO_QUADRO`: é
+                # a marca que o /inform-area respeita pra não encher esta linha.
+                _n_parc_q = int(_info_q.get("parcelas") or 0)
+                _soma_q = "%s %s" % (_num_br_q(_info_q.get("soma") or 0), _un_q)
+                if _tipo_q == "e_o_total" and not _info_q.get("parcelas_com_numero"):
+                    # 🩸 22/09 (revisão): sem prova, as parcelas também zeram —
+                    # "não contar duas vezes" seria falso (não conta nenhuma). O
+                    # cliente escolhe onde pôr o número.
+                    # 🪤 Não afirma "todas ficaram em branco": parcela de piso pode
+                    # ter sido preservada por OUTRO ramo (a medição da prancha)
+                    # antes deste. O que se sabe aqui é que o quadro não provou.
+                    _nenhuma_q = ("a única linha que ele repete também não pôde ser "
+                                  "conferida no texto do PDF" if _n_parc_q == 1
+                                  else "nenhuma das %d linhas que ele resume pôde ser "
+                                       "conferida no texto do PDF" % _n_parc_q)
+                    if _info_q.get("pela_soma"):
+                        _frase_q = ("%s? O número (%s %s) é igual à soma das outras "
+                                    "linhas do quadro de quantitativos da prancha %s, e %s. "
+                                    "Preencha as parcelas OU esta linha, não as duas."
+                                    % (_PREFIXO_TOTAL_DO_QUADRO, _num_br_q(q), _un_q,
+                                       _prancha_q, _nenhuma_q))
+                    else:
+                        _frase_q = ("%s do quadro de quantitativos da prancha %s (a leitura "
+                                    "trouxe %s %s): %s. Preencha as parcelas OU esta "
+                                    "linha, não as duas."
+                                    % (_PREFIXO_TOTAL_DO_QUADRO, _prancha_q, _num_br_q(q),
+                                       _un_q, _nenhuma_q))
+                    quadro_totais += 1
+                elif _tipo_q == "e_o_total" and _info_q.get("pela_soma"):
+                    # 🩸 22/09 (revisão): a descrição não diz "total" — só o
+                    # NÚMERO bate com a soma das outras. Pode ser uma parcela
+                    # (2,00 = 1,00 + 1,00): a frase pergunta, não afirma.
+                    _frase_q = ("%s? O número é igual à soma das outras %d linhas do "
+                                "quadro de quantitativos da prancha %s (%s), então fica "
+                                "em branco pra não contar duas vezes. Se for uma "
+                                "parcela, preencha na revisão."
+                                % (_PREFIXO_TOTAL_DO_QUADRO, _n_parc_q, _prancha_q, _soma_q))
+                    quadro_totais += 1
+                elif _tipo_q == "e_o_total" and _n_parc_q == 1:
+                    _frase_q = ("%s: repete a única linha do quadro de "
+                                "quantitativos da prancha %s (%s). Fica em branco pra "
                                 "a mesma quantidade não contar duas vezes."
-                                % (_prancha_q, _num_br_q(_info_q.get("soma") or 0), _un_q))
+                                % (_PREFIXO_TOTAL_DO_QUADRO, _prancha_q, _soma_q))
                     quadro_totais += 1
                 elif _tipo_q == "e_o_total" and _info_q.get("bate"):
-                    _frase_q = ("Linha de TOTAL: é a soma de %d linhas do quadro de "
-                                "quantitativos da prancha %s (%s %s). Fica em branco pra "
+                    _frase_q = ("%s: é a soma de %d linhas do quadro de "
+                                "quantitativos da prancha %s (%s). Fica em branco pra "
                                 "a mesma quantidade não contar duas vezes."
-                                % (int(_info_q.get("parcelas") or 0), _prancha_q,
-                                   _num_br_q(_info_q.get("soma") or 0), _un_q))
+                                % (_PREFIXO_TOTAL_DO_QUADRO, _n_parc_q, _prancha_q, _soma_q))
                     quadro_totais += 1
                 elif _tipo_q == "e_o_total":
                     # subtotal, ou total que não bate: não dá pra dizer "é a soma"
-                    _frase_q = ("Linha de TOTAL do quadro de quantitativos da prancha "
+                    _frase_q = ("%s do quadro de quantitativos da prancha "
                                 "%s: resume outras %d linhas desta planilha. Fica em "
                                 "branco pra a mesma quantidade não contar duas vezes."
-                                % (_prancha_q, int(_info_q.get("parcelas") or 0)))
+                                % (_PREFIXO_TOTAL_DO_QUADRO, _prancha_q, _n_parc_q))
                     quadro_totais += 1
                 else:
-                    _frase_q = ("Em branco: a leitura diz que o quadro de quantitativos "
-                                "impresso na prancha %s traz %s %s para esta linha, mas "
+                    _frase_q = ("%s impresso na prancha %s traz %s %s para esta linha, mas "
                                 "não conseguimos conferir esse número no texto do PDF. "
                                 "Confira no quadro e preencha na revisão."
-                                % (_prancha_q, _num_br_q(q), _un_q))
+                                % (_PREFIXO_QUADRO_SEM_PROVA, _prancha_q, _num_br_q(q), _un_q))
                     quadro_sem_prova += 1
             # NA FRENTE: a revisão mostra os primeiros 110 caracteres e o banco
             # corta em 1000 (no caso, 48 das 63 observações já chegavam no teto).
@@ -11134,34 +11199,54 @@ def _zera_peso_por_taxa(items) -> int:
     ALERTA. A régua (e o porquê de a mera menção à taxa não bastar) mora em
     `engine_rules.peso_por_taxa`. Continua estimado; a conta da IA fica escrita.
     Devolve quantas linhas zerou."""
-    from engine_rules import peso_por_taxa, _num_br
+    from engine_rules import peso_por_taxa, e_linha_de_armadura, _num_br
     from models import Confidence
-    n = 0
-    for it in items:
-        if getattr(it, "origem", "") in ("dxf_geom", "revisao_cliente"):
-            continue
-        if (getattr(it, "unit", "") or "").strip().lower() != "kg":
-            continue
+
+    def _q_de(it):
         try:
-            q = float(getattr(it, "quantity", 0) or 0)
+            return float(getattr(it, "quantity", 0) or 0)
         except (TypeError, ValueError):
-            continue
+            return 0.0
+
+    def _kg(it):
+        return (getattr(it, "unit", "") or "").strip().lower() == "kg"
+
+    alvos = [it for it in items
+             if getattr(it, "origem", "") not in ("dxf_geom", "revisao_cliente")
+             and _kg(it) and _q_de(it) > 0
+             and peso_por_taxa(str(getattr(it, "observations", "") or ""))]
+    # 🩸 22/09 (revisão): "somaria com a lista de ferros" só é verdade se EXISTE
+    # outro aço com peso na planilha. Em 4 jobs do acervo (14 linhas) a taxa era
+    # o ÚNICO aço — a IA recorre à taxa justamente onde não há lista.
+    _ids = {id(it) for it in alvos}
+    tem_outro_aco = any(
+        id(it) not in _ids and _kg(it) and _q_de(it) > 0
+        and e_linha_de_armadura(getattr(it, "description", ""))
+        for it in items)
+    for it in alvos:
         obs = str(getattr(it, "observations", "") or "")
-        if q <= 0 or not peso_por_taxa(obs):
-            continue
+        q = _q_de(it)
         it.quantity = 0
         try:
             it.confidence = Confidence("estimado")
         except Exception:
             pass
         _o = _limpa_afirmacao_de_medida(obs)
-        _frase = ("Em branco: peso por TAXA (kg por m³ ou m² de referência) não entra "
-                  "como número — é índice típico, não o aço do seu projeto, e somaria "
-                  "com a lista de ferros. A conta da leitura dava %s kg. Use o quadro "
-                  "de ferros da prancha de armação ou preencha na revisão." % _num_br(q))
+        if tem_outro_aco:
+            _frase = ("Em branco: peso por TAXA (kg por m³ ou m² de referência) não "
+                      "entra como número — é índice típico, não o aço do seu projeto, e "
+                      "somaria com o aço que outras linhas desta planilha já trazem. A "
+                      "conta da leitura dava %s kg. Use o quadro de ferros da prancha de "
+                      "armação ou preencha na revisão." % _num_br(q))
+        else:
+            _frase = ("Em branco: peso por TAXA (kg por m³ ou m² de referência) não "
+                      "entra como número — é índice típico de livro, não o aço do seu "
+                      "projeto. A conta da leitura dava %s kg. Nenhuma outra linha desta "
+                      "planilha traz peso de armadura: o número de verdade sai do quadro de "
+                      "ferros do projeto de armação — envie essa prancha ou preencha na "
+                      "revisão." % _num_br(q))
         it.observations = _frase + ((" | " + _o) if _o else "")
-        n += 1
-    return n
+    return len(alvos)
 
 
 def _confere_peso_de_aco(items) -> tuple:
@@ -11219,7 +11304,10 @@ def _confere_peso_de_aco(items) -> tuple:
 #: Quanto texto de UMA página vira número de prova. O pdfium já monta a
 #: página inteira pra cortar nos 6000 da IA; o teto só protege de prancha
 #: patológica.
-_TETO_TEXTO_DA_PROVA = 1_000_000
+#: 🪤 22/09 (v2): `10 ** 6`, e não o literal com sublinhados — o guarda da área
+#: informada (test_area_informada_tem_plausibilidade) reprova esse literal em
+#: qualquer ponto do main.py, e a 1ª versão deixou a bancada vermelha.
+_TETO_TEXTO_DA_PROVA = 10 ** 6
 
 
 def _chave_dos_numeros(filename, page_index):

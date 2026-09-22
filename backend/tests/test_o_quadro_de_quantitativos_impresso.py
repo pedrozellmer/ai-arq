@@ -383,3 +383,259 @@ def test_a_chamada_REAL_entrega_o_mapa_a_honestidade():
     exec(compile(_fatia_da_chamada(), "chamada", "exec"), ns)
     assert visto.get("numeros_do_texto_por_prancha") == mapa, (
         "a honestidade não recebeu os números do texto: %r" % sorted(visto))
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  🩸 22/09/2026 — O QUE A REVISÃO ADVERSÁRIA DA 1ª VERSÃO ACHOU
+# ══════════════════════════════════════════════════════════════════════════
+# A 1ª versão (fb1126e) passou 28/28 e a sabotagem dela deu 23/23 — e mesmo
+# assim a revisão achou: (1) o /inform-area enchia as linhas que o conserto
+# deixa em branco DE PROPÓSITO, e a frase velha ficava colada contradizendo o
+# número; (2) a conta da prova pelo TOTAL, o caminho da retomada, o "quadro de
+# áreas" e o milhar de 3 casas não tinham guarda nenhum (5 mutações dela
+# sobreviveram); (3) duas frases afirmavam o que não era verdade.
+_PISO_LIDO = "Área extraída diretamente do Quadro Quantitativo | Piso da prancha."
+
+
+def _piso_do_quadro():
+    """Quadro de PAGINAÇÃO DE PISO (a população existe no acervo: um job com
+    quadro de piso e área informada de 400 m²). Números neutros."""
+    return [_Item("Piso porcelanato 120x120 — sala", "m²", 134.95, _PISO_LIDO),
+            _Item("Piso porcelanato 60x60 — quartos", "m²", 55.19, _PISO_LIDO),
+            _Item("Piso porcelanato — TOTAL", "m²", 190.14,
+                  "Soma do quadro quantitativo de piso.")]
+
+
+def _inform_area(itens, area=400):
+    """A chamada EXATA da rota /inform-area (itens reidratados do banco)."""
+    return main._apply_area_honesty(itens, area, "informado", pe_direito=0,
+                                    apenas_preencher=True)
+
+
+def test_o_inform_area_nao_enche_o_TOTAL_do_quadro():
+    """R1: com as duas parcelas provadas pelo texto, o TOTAL fica em branco pra
+    não contar em dobro. A área informada depois NÃO pode entrar nele — antes
+    ela entrava (vaga de "piso zerado") e a planilha ia a 590,14 m²."""
+    itens = _piso_do_quadro()
+    main._apply_area_honesty(itens, numeros_do_texto_por_prancha={
+        (ARQ.lower(), 0): frozenset({13495, 5519})})
+    sala, quartos, total = itens
+    assert (sala.quantity, quartos.quantity, total.quantity) == (134.95, 55.19, 0)
+    assert main._e_total_do_quadro_em_branco(total.observations), total.observations[:80]
+    _inform_area(itens)
+    assert total.quantity == 0, (
+        "o /inform-area encheu o TOTAL do quadro: %s m² contam duas vezes"
+        % total.quantity)
+    assert round(sum(i.quantity for i in itens), 2) == 190.14
+    assert total.observations.startswith("Linha de TOTAL")
+
+
+def test_CONTROLE_o_inform_area_ainda_enche_a_vaga_de_verdade():
+    """A trava do TOTAL não pode desligar o /inform-area: a mesma descrição de
+    piso, zerada pelo motor com a frase de sempre, recebe a área informada."""
+    vaga = _Item("Piso porcelanato — TOTAL", "m²", 190.14, "Área estimada pela IA.")
+    main._apply_area_honesty([vaga], numeros_do_texto_por_prancha={})
+    assert vaga.quantity == 0 and "Área NÃO medida" in vaga.observations
+    assert not main._e_total_do_quadro_em_branco(vaga.observations)
+    preench, _ = _inform_area([vaga])
+    assert (preench, vaga.quantity) == (1, 400.0)
+
+
+def test_o_inform_area_que_enche_a_parcela_sem_prova_tira_o_Em_branco():
+    """R1: parcela de quadro SEM prova sai do motor com "Em branco: a leitura
+    diz que o quadro … traz 134,95 m²". Se a área informada entra nela, a
+    frase sai — linha com número não pode começar dizendo "Em branco"."""
+    sala, quartos = _piso_do_quadro()[:2]
+    main._apply_area_honesty([sala, quartos], numeros_do_texto_por_prancha={})
+    assert sala.quantity == 0 and sala.observations.startswith("Em branco:")
+    preench, _ = _inform_area([sala, quartos])
+    assert preench == 1
+    com_numero = [i for i in (sala, quartos) if i.quantity]
+    assert [i.quantity for i in com_numero] == [400.0]
+    assert "Em branco" not in com_numero[0].observations, com_numero[0].observations
+    assert "Área informada por você" in com_numero[0].observations
+    # a que continua vazia continua dizendo o número que a leitura viu
+    vazia = [i for i in (sala, quartos) if not i.quantity][0]
+    assert vazia.observations.startswith("Em branco: a leitura diz que o quadro")
+
+
+def test_a_limpeza_do_aviso_de_linha_vazia_leva_a_frase_do_quadro():
+    """`_limpa_aviso_nao_medida` é chamada em TODO ponto onde linha zerada volta
+    a ter número (passo 7, pé-direito, pdfvec, recuperação do layer)."""
+    obs = ("Em branco: a leitura diz que o quadro de quantitativos impresso na "
+           "prancha prancha-A.pdf traz 4,90 m³ para esta linha, mas não "
+           "conseguimos conferir esse número no texto do PDF. Confira no quadro e "
+           "preencha na revisão. | Concreto C30, cobrimento 5,0 cm.")
+    assert main._limpa_aviso_nao_medida(obs) == "Concreto C30, cobrimento 5,0 cm."
+
+
+def test_CONTROLE_TOTAL_LIDO_que_NAO_bate_nao_prova_nada():
+    """R3: a prova (b2) é a SOMA bater. 4,90 + 3,80 + 13,20 = 21,90, e o TOTAL
+    "lido" diz 30,00: nenhuma parcela fica com número."""
+    ps = [_Item("Concreto — Estrutura %d" % n, "m³", q, _LIDO)
+          for n, q in enumerate((4.90, 3.80, 13.20), start=1)]
+    t = _Item("Concreto — TOTAL GERAL", "m³", 30.00,
+              "Total lido diretamente do quadro de quantitativos da prancha: 30,00 m³.")
+    _roda(ps + [t], numeros={})
+    assert [i.quantity for i in ps + [t]] == [0, 0, 0, 0], (
+        "um TOTAL que não bate provou as parcelas: %r" % [i.quantity for i in ps])
+    assert all("as linhas do quadro somam o TOTAL" not in i.observations for i in ps)
+    # 🧪 e o mesmo TOTAL batendo (21,90) prova — senão o controle não controla
+    t.quantity, t.observations = 21.90, "Total lido diretamente do quadro de quantitativos: 21,90 m³."
+    for p, q in zip(ps, (4.90, 3.80, 13.20)):
+        p.quantity, p.observations = q, _LIDO
+    _roda(ps + [t], numeros={})
+    assert [p.quantity for p in ps] == [4.90, 3.80, 13.20]
+
+
+def test_sem_prova_o_TOTAL_nao_diz_que_evita_contar_em_dobro():
+    """R4: é o ee801b82 sem camada de texto. As 5 parcelas zeram, o TOTAL
+    também — e a frase "pra a mesma quantidade não contar duas vezes" era falsa:
+    não conta nenhuma. O cliente precisa saber que escolhe ONDE pôr o número."""
+    itens = _roda(_quadro_do_caso(total_somado_pela_ia=True), numeros={})
+    totais = [i for i in itens if "TOTAL" in i.description]
+    for t in totais:
+        assert t.quantity == 0
+        assert t.observations.startswith(
+            "Linha de TOTAL do quadro de quantitativos da prancha prancha-A.pdf "
+            "(a leitura trouxe"), t.observations[:120]
+        assert "nenhuma das 5 linhas que ele resume" in t.observations
+        assert "Preencha as parcelas OU esta linha, não as duas." in t.observations
+        assert "não contar duas vezes" not in t.observations
+    info = engine_rules.veredito_do_quadro_impresso(_tres_linhas(), {})
+    assert info[2][0] == "e_o_total" and info[2][1]["parcelas_com_numero"] == 0
+
+
+def _tres_linhas():
+    """Duas parcelas lidas e um TOTAL que é a SOMA da IA (não prova nada)."""
+    soma = "Soma dos valores do quadro de quantitativos: 4,90 + 3,80 = 8,70 m³."
+    return [{"arquivo": "a.pdf", "pagina": 0, "unidade": "m³", "quantidade": q,
+             "texto": t, "descricao": d}
+            for d, q, t in (("E1", 4.9, _LIDO), ("E2", 3.8, _LIDO), ("TOTAL", 8.7, soma))]
+
+
+def test_com_prova_o_TOTAL_conta_as_parcelas_com_numero():
+    info = engine_rules.veredito_do_quadro_impresso(
+        _tres_linhas(), {("a.pdf", 0): frozenset({490, 380})})
+    assert [v[0] for v in info] == ["texto", "texto", "e_o_total"]
+    assert info[2][1]["parcelas_com_numero"] == 2
+
+
+def test_parcela_igual_a_soma_das_outras_a_frase_PERGUNTA():
+    """R7: 2,00 = 1,00 + 1,00. A régua "igual à soma de todas as outras" erra
+    pra menos de propósito e zera o bloco de 2,00 — mas a frase não pode
+    AFIRMAR que ele é o total: pode ser uma parcela."""
+    a = _Item("Concreto — bloco B1", "m³", 2.00, _LIDO)
+    b = _Item("Concreto — bloco B2", "m³", 1.00, _LIDO)
+    c = _Item("Concreto — bloco B3", "m³", 1.00, _LIDO)
+    _roda([a, b, c], {(ARQ.lower(), 0): frozenset({200, 100})})
+    assert (a.quantity, b.quantity, c.quantity) == (0, 1.0, 1.0)
+    assert a.observations.startswith("Linha de TOTAL? O número é igual à soma das "
+                                     "outras 2 linhas"), a.observations[:100]
+    assert "Se for uma parcela, preencha na revisão." in a.observations
+    assert main._e_total_do_quadro_em_branco(a.observations)
+
+
+def test_CONTROLE_quadro_de_AREAS_nao_e_quadro_de_quantitativos():
+    """R3: "quadro de áreas" fica de fora de propósito (é outra doença: a área
+    do imóvel colada num item). Mesmo com os números no texto, zera como antes."""
+    assert not engine_rules.afirma_quadro_de_quantitativos(
+        "Área lida diretamente do quadro de áreas da prancha.")
+    sala = _Item("Piso — sala", "m²", 85.40, "Área lida diretamente do quadro de áreas da prancha.")
+    coz = _Item("Piso — cozinha", "m²", 12.30, "Área lida diretamente do quadro de áreas da prancha.")
+    # sem medição vetorial: piso não tem outro ramo que o preserve
+    main._apply_area_honesty([sala, coz], numeros_do_texto_por_prancha={
+        (ARQ.lower(), 0): frozenset({8540, 1230})})
+    for it in (sala, coz):
+        assert it.quantity == 0
+        assert "Área NÃO medida" in it.observations
+        assert "quadro de quantitativos impresso" not in it.observations
+
+
+def test_CONTROLE_numero_com_TRES_casas_nao_e_decimal():
+    """R3: "1.234" é mil duzentos e trinta e quatro em pt-BR ou 1,234 — ambíguo,
+    fica de fora da prova. Com vírgula decimal ele vale."""
+    ns = engine_rules.numeros_decimais_do_texto("EL. 1.234  COTA 2.500  1.234,50  4,90")
+    assert ns == frozenset({123450, 490}), sorted(ns)
+
+
+# ── R3: o laço de páginas EXECUTADO, nos dois ramos ─────────────────────────
+def _laco_de_pdf():
+    """O `if _ck_key in _ckpt_cache:` do laço de pranchas de PDF, no `process_job`."""
+    src = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
+    pj = next(n for n in ast.parse(src).body
+              if isinstance(n, ast.FunctionDef) and n.name == "process_job")
+    ifs = [n for n in ast.walk(pj) if isinstance(n, ast.If)
+           and isinstance(n.test, ast.Compare)
+           and getattr(n.test.left, "id", "") == "_ck_key"]
+    assert len(ifs) == 1, "esperava 1 `if _ck_key in _ckpt_cache` no process_job: %d" % len(ifs)
+    return src.splitlines(True), ifs[0]
+
+
+def _codigo(linhas, nos):
+    import textwrap
+    return textwrap.dedent("".join(linhas[nos[0].lineno - 1:nos[-1].end_lineno]))
+
+
+def test_o_laco_de_paginas_EXECUTADO_guarda_anexa_salva_e_restaura(tmp_path):
+    """R3: o guarda de AST só CONTAVA as chamadas. Anexar os números DEPOIS do
+    `_ckpt_save`, ou restaurar dentro de um `if` morto, passava verde — e o job
+    retomado perdia a prova calado. Aqui roda o código REAL do laço: a página
+    nova (texto → números), o checkpoint (o que `_ckpt_save` RECEBE) e a
+    retomada (de volta do checkpoint), e a honestidade no fim."""
+    from processor import extract_text
+    linhas, ck = _laco_de_pdf()
+    pdf = str(tmp_path / ARQ)
+    _pdf_com_quadro(pdf, enchimento=900)        # o quadro fica depois dos 6000
+
+    # 1) página nova: do extract_text até o `del _texto_inteiro`
+    k = next(n for n, st in enumerate(ck.orelse) if isinstance(st, ast.Delete)
+             and any(getattr(t, "id", "") == "_texto_inteiro" for t in st.targets))
+    ns1 = {"__name__": "pagina_ns", "extract_text": extract_text, "pdf_path": pdf,
+           "page_index": 0, "filename": ARQ,
+           "_TETO_TEXTO_DA_PROVA": main._TETO_TEXTO_DA_PROVA,
+           "_guarda_numeros_do_texto": main._guarda_numeros_do_texto,
+           "_numeros_do_texto_por_prancha": {}}
+    exec(compile(_codigo(linhas, ck.orelse[:k + 1]), "pagina", "exec"), ns1)
+    mapa = ns1["_numeros_do_texto_por_prancha"]
+    assert len(ns1["text"]) <= 6000, "a IA passou a receber mais que 6000 caracteres"
+    assert {490, 8270} <= set(mapa.get((ARQ.lower(), 0), ())), (
+        "a página nova não guardou os números do quadro: %r" % sorted(mapa))
+
+    # 2) o checkpoint: o `if not result.get("error")` que chama `_ckpt_save`
+    bloco = [n for n in ast.walk(ck) if isinstance(n, ast.If)
+             and any(isinstance(s, ast.Expr) and isinstance(s.value, ast.Call)
+                     and getattr(s.value.func, "id", "") == "_ckpt_save" for s in n.body)]
+    assert len(bloco) == 1, len(bloco)
+    salvos = []
+    ns2 = {"__name__": "ckpt_ns", "result": {"items": []}, "_stem": "prancha-A_p0",
+           "_pdfvec_por_prancha": {}, "_pdfvec_falhas": [], "filename": ARQ,
+           "page_index": 0, "job_id": "ee801b82", "print": lambda *a, **k: None,
+           "_numeros_do_texto_por_prancha": mapa,
+           "_anexa_numeros_do_texto": main._anexa_numeros_do_texto,
+           # o checkpoint é JSON: guarda o que o save RECEBEU, na hora
+           "_ckpt_save": lambda job, stem, res, **k: salvos.append(json.loads(json.dumps(res)))}
+    exec(compile(_codigo(linhas, bloco), "ckpt", "exec"), ns2)
+    assert len(salvos) == 1 and salvos[0].get("_numeros_do_texto"), (
+        "o checkpoint foi gravado SEM os números do texto: %r" % sorted(salvos[0]))
+
+    # 3) a retomada: o corpo inteiro do ramo do checkpoint
+    class _Jobs:
+        def update_field(self, *a, **k):
+            pass
+    ns3 = {"__name__": "retomada_ns", "_ckpt_cache": {"k": salvos[0]}, "_ck_key": "k",
+           "jobs": _Jobs(), "i": 0, "total": 1, "_u_total": "", "_sufixo_total": "",
+           "_disp": ARQ, "_stem": "prancha-A_p0", "print": lambda *a, **k: None,
+           "_a_escala_sustenta_a_medicao": lambda *a, **k: (True, ""),
+           "_log_error": lambda *a, **k: None, "_pdfvec_falhas": [],
+           "_pdfvec_por_prancha": {}, "_pdfvec_area_m2": 0.0, "_pdfvec_compr_m": 0.0,
+           "pdf_path": pdf, "filename": ARQ, "page_index": 0, "job_id": "ee801b82",
+           "_restaura_numeros_do_texto": main._restaura_numeros_do_texto,
+           "_numeros_do_texto_por_prancha": {}}
+    exec(compile(_codigo(linhas, ck.body), "retomada", "exec"), ns3)
+    volta = ns3["_numeros_do_texto_por_prancha"]
+    assert volta == mapa, "a retomada não trouxe os números de volta: %r" % sorted(volta)
+
+    # 4) e a prova chega: o quadro do caso fica com número no job RETOMADO
+    itens = _roda(_quadro_do_caso(), volta)
+    assert _soma(itens, "m³") == 26.8 and _soma(itens, "m²") == 183.2
