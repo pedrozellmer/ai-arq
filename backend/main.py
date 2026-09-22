@@ -25833,7 +25833,10 @@ async def agent_ask(request: Request, job_id: str, question: str = ""):
         history = None
 
     try:
-        from agent import ask
+        from agent import ask, tipos_de_arquivo_do_projeto
+        # 🩸 22/09/2026 (job 844603fb): sem saber o que o cliente enviou, o chat
+        # culpou "layers do DWG" num projeto de 1 PDF. Leitura de rede → threadpool.
+        _tipos = await run_in_threadpool(tipos_de_arquivo_do_projeto, job_id)
         # 🧊 03/09/2026 — ESTA ROTA DERRUBOU O SITE. Cliente `cliente-11@`
         # (job eebe543a) mandou uma pergunta no chat às 15:07:36 BRT; às
         # 15:07:30–15:09 o `instance_count` do Render foi a ZERO e o e-mail de
@@ -25856,7 +25859,8 @@ async def agent_ask(request: Request, job_id: str, question: str = ""):
         # assinatura, e passar posicional fixaria o default aqui — mudar a
         # assinatura lá quebraria isto de um jeito silencioso.
         result = await run_in_threadpool(
-            ask, job_id=job_id, question=question.strip(), history=history)
+            ask, job_id=job_id, question=question.strip(), history=history,
+            tipos_de_arquivo=_tipos)
         return {"status": "ok", **result}
     except Exception as e:
         raise HTTPException(500, f"Erro do agente: {type(e).__name__}: {e}")

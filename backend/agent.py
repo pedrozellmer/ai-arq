@@ -174,27 +174,162 @@ def tool_get_item_details(job_id: str, item_num: str) -> dict:
     return found
 
 
+# ── Busca por palavras ──────────────────────────────────────────────────────
+# 🩸 22/09/2026 (job 844603fb): a cliente colou 3 linhas da legenda e o chat
+# respondeu "nenhum dos três itens foi encontrado" — 2 estavam na planilha
+# (conjunto tomada + interruptor paralelo, 8 un; tomada para luminária de
+# emergência, 12 un). A busca exigia a FRASE inteira como pedaço da descrição:
+# "tomada caixa 4x2" dava 0 com 8 linhas "Tomada ... em caixa 4x2\"". Em 60 dias
+# as 10 buscas de mais de uma palavra voltaram 0 (10 de 10). Agora é por
+# palavra, em qualquer ordem, sem acento nem caixa, e quando nenhuma linha tem
+# TODAS as palavras a resposta traz as mais parecidas dizendo o que bate e o
+# que falta — "count 0" nunca mais chega sozinho ao modelo.
+_PALAVRAS_VAZIAS = frozenset(
+    "a o as os e de da do das dos em no na nos nas ao aos para pra por com "
+    "um uma ou que se conforme tipo uso legenda m h".split())
+_SINONIMOS_DA_BUSCA = {"cx": "caixa"}
+_TOKEN_DA_BUSCA = re.compile(
+    r"\d+x\d+|\d+p\+t|\d+(?:,\d+)*[a-z]*|[a-z][a-z0-9]*")
+
+
+def _normalizar_para_busca(texto) -> str:
+    """Minúsculo, sem acento, e as medidas no formato único (4x2, 2p+t, 10a)."""
+    import unicodedata
+    t = unicodedata.normalize("NFKD", str(texto or ""))
+    t = "".join(c for c in t if not unicodedata.combining(c)).lower()
+    t = t.replace("×", "x").replace("°", "o")  # aspas (4x2" / 4x2'') já separam token
+    t = re.sub(r"(\d)\s*x\s*(\d)", r"\1x\2", t)                # 4 x 4 -> 4x4
+    t = re.sub(r"(\d)\s*p\s*\+\s*t(?![a-z0-9])", r"\1p+t", t)  # 2P + T -> 2p+t
+    t = re.sub(r"(\d)\.(\d)", r"\1,\2", t)                      # 1.20 -> 1,20
+    t = re.sub(r"(\d)\s+a(?![a-z0-9])", r"\1a", t)             # 10 A -> 10a
+    return t
+
+
+def _radical(p: str) -> str:
+    """Plural -> singular, só o bastante pra "tomadas" achar "tomada"."""
+    if len(p) <= 3 or not p.isalpha():
+        return p
+    if p.endswith("oes"):
+        return p[:-3] + "ao"
+    if len(p) >= 5 and p.endswith(("res", "zes")):
+        return p[:-2]
+    if len(p) > 4 and p.endswith("is"):
+        return p[:-2] + "l"
+    if p.endswith("s") and not p.endswith("ss"):
+        return p[:-1]
+    return p
+
+
+def _termos_da_busca(texto) -> list:
+    termos = []
+    for tok in _TOKEN_DA_BUSCA.findall(_normalizar_para_busca(texto)):
+        m = re.fullmatch(r"(\d+),(\d+)(m?)", tok)
+        if m:  # 1,20m -> 1,2 (a altura escrita de 3 jeitos é a mesma)
+            dec = m.group(2).rstrip("0")
+            tok = m.group(1) + ("," + dec if dec else "")
+        elif re.fullmatch(r"\d+m", tok):
+            tok = tok[:-1]
+        tok = _SINONIMOS_DA_BUSCA.get(tok, tok)
+        if tok in _PALAVRAS_VAZIAS:
+            continue
+        tok = _radical(tok)
+        if tok not in termos:
+            termos.append(tok)
+    return termos
+
+
+def _termo_casa(q: str, termos_da_linha: list) -> float:
+    """1.0 = a mesma palavra; 0.8 = a mesma com outra ponta (lumin/luminaria,
+    embutido/embutida). Número e medida só casam iguais: 4x2 não é 4x4."""
+    if q in termos_da_linha:
+        return 1.0
+    if not q.isalpha() or len(q) < 4:
+        return 0.0
+    for d in termos_da_linha:
+        if len(d) < 4 or not d.isalpha():
+            continue
+        if d.startswith(q) or q.startswith(d):
+            return 0.8
+        if (len(q) >= 5 and len(d) == len(q) and q[:-1] == d[:-1]
+                and q[-1] in "ao" and d[-1] in "ao"):
+            return 0.8
+    return 0.0
+
+
+def buscar_linhas(linhas: list, query: str, max_hits: int = 20,
+                  max_candidatos: int = 8) -> dict:
+    """Busca por palavras nas descrições. `linhas` = dicts de _iter_orcamento_rows.
+
+    `items`: linhas com TODAS as palavras (ou a frase inteira), na ordem da
+    planilha — o mesmo contrato de antes, só que sem exigir a ordem das palavras.
+    `candidatos`: quando sobram menos de 3 em `items`, as linhas que têm ao
+    menos METADE das palavras, das mais parecidas pras menos, cada uma com
+    `bate` e `falta`. Palavra rara pesa mais que palavra que está em todo lugar
+    ("4x4" em 3 linhas decide mais que "caixa" em 16).
+    `termos_sem_correspondencia`: palavras que não aparecem em linha NENHUMA —
+    é o que deixa o modelo dizer "não há caixa QUADRADA; há octogonal".
+    """
+    import math
+    termos = _termos_da_busca(query)
+    frase = " ".join(_normalizar_para_busca(query).split())
+    base = []
+    for r in linhas:
+        desc = str(r.get("description") or "")
+        base.append((r, " ".join(_normalizar_para_busca(desc).split()),
+                     _termos_da_busca(desc)))
+    notas = [{q: _termo_casa(q, tl) for q in termos} for _, _, tl in base]
+    n = len(base)
+    peso = {q: 1.0 + math.log((n + 1.0) / (sum(1 for nt in notas if nt[q]) + 1.0))
+            for q in termos}
+
+    def _linha(r, com_obs=True):
+        out = {"item_num": r["item_num"], "description": r["description"][:120],
+               "unit": r["unit"], "quantity": r["quantity"], "selo": r["selo"]}
+        if com_obs:
+            out["observation_preview"] = (r.get("observations") or "")[:120]
+        return out
+
+    hits, parciais = [], []
+    for i, ((r, desc_n, _), nt) in enumerate(zip(base, notas)):
+        casadas = [q for q in termos if nt[q]]
+        if (frase and frase in desc_n) or (termos and len(casadas) == len(termos)):
+            if len(hits) < max_hits:
+                hits.append(_linha(r))
+            continue
+        if casadas and 2 * len(casadas) >= len(termos):
+            parciais.append((-sum(peso[q] * nt[q] for q in termos), -len(casadas), i,
+                             r, casadas))
+    out = {"query": query, "count": len(hits), "items": hits,
+           "busca_por_palavras": termos}
+    faltam_em_tudo = [q for q in termos if not any(nt[q] for nt in notas)]
+    if faltam_em_tudo:
+        out["termos_sem_correspondencia"] = faltam_em_tudo
+    if len(hits) < 3 and parciais:
+        parciais.sort(key=lambda x: x[:3])
+        out["candidatos"] = [
+            dict(_linha(r, com_obs=False), bate=casadas,
+                 falta=[q for q in termos if q not in casadas])
+            for *_, r, casadas in parciais[:max_candidatos]]
+    if not hits:
+        out["aviso"] = (
+            "Nenhuma linha tem TODAS as palavras da busca. Isso NÃO prova que o item "
+            "não existe: veja `candidatos` (o que bate e o que falta em cada um) e "
+            "`termos_sem_correspondencia`, e diga isso ao cliente. Se não houver "
+            "candidato, tente uma palavra só ou list_items antes de responder.")
+    return out
+
+
 def tool_search_items(job_id: str, query: str, max_hits: int = 20) -> dict:
-    """Busca itens cuja descrição contenha o termo (case-insensitive)."""
+    """Busca itens por palavras na descrição (qualquer ordem, sem acento).
+    Ver `buscar_linhas` — é ela que decide; aqui só se abre a planilha."""
     wb = _open_planilha(job_id)
     if wb is None:
         return {"error": f"planilha do job {job_id} não encontrada"}
-    q = query.lower().strip()
-    hits = []
-    for r in _iter_orcamento_rows(wb):
-        if q in r["description"].lower():
-            hits.append({
-                "item_num": r["item_num"],
-                "description": r["description"][:120],
-                "unit": r["unit"],
-                "quantity": r["quantity"],
-                "selo": r["selo"],
-                "observation_preview": r["observations"][:120],
-            })
-            if len(hits) >= max_hits:
-                break
-    wb.close()
-    return {"query": query, "count": len(hits), "items": hits}
+    try:
+        linhas = list(_iter_orcamento_rows(wb))
+    finally:
+        wb.close()
+    return buscar_linhas(linhas, query, max_hits=max_hits)
 
 
 def tool_read_dxf_summary(job_id: str, dxf_filename: str = "") -> dict:
@@ -504,11 +639,11 @@ TOOLS = [
     },
     {
         "name": "search_items",
-        "description": "Busca itens da planilha por palavra-chave na descrição, com o mesmo campo `selo` de list_items ('medido', 'estimado' ou 'metadado'). Use quando o usuário menciona um termo (LED, alvenaria, forro etc).",
+        "description": "Busca itens da planilha por PALAVRAS na descrição — em qualquer ordem, sem acento nem maiúscula (4x2\", 2P+T e 10A são normalizados) —, com o mesmo campo `selo` de list_items ('medido', 'estimado' ou 'metadado'). Use quando o usuário menciona um termo (LED, alvenaria, forro etc). `items` traz as linhas com TODAS as palavras; se vier vazio ou curto, `candidatos` traz as mais parecidas com o que `bate` e o que `falta`, e `termos_sem_correspondencia` diz as palavras que não estão em linha nenhuma. Busque UM item por vez (se o cliente colar várias linhas de legenda, uma busca por linha).",
         "input_schema": {
             "type": "object",
             "properties": {
-                "query": {"type": "string", "description": "Termo de busca"},
+                "query": {"type": "string", "description": "Palavras do item (ex.: 'tomada caixa 4x2', 'luminária emergência')"},
             },
             "required": ["query"],
         },
@@ -629,6 +764,7 @@ REGRAS:
 - O QUE FAZER NESSE CASO, em vez de recusar seco: entregue o que você TEM, que é muito. Diga o que está no desenho (quantidades, contagens, comprimentos por layer, o que o carimbo declara) e o que o desenho NÃO traz (falta cota, falta quadro, o item aparece sem especificação). Isso é insumo de verdade pro projetista decidir. Depois diga, numa frase e sem rodeio, que a validação do projeto é dele — a gente levanta, ele decide.
 - 🪤 Isto vale mesmo quando o cliente descreve o pedido em detalhe e parece esperar a auditoria. Em 03/09/2026 um cliente mandou um briefing pedindo análise completa de um projeto de cabeamento (rack, rotas, interferências, norma) e a resposta saiu com "PROBLEMA → MOTIVO TÉCNICO → CORREÇÃO RECOMENDADA". Pedido detalhado não é autorização — é só um pedido detalhado.
 - Quando citar um item, mencione o item_num e cite a observação que justifica a quantidade.
+- BUSCA VAZIA NÃO PROVA QUE O ITEM NÃO EXISTE. Antes de dizer "não encontrei", leia `candidatos` e `termos_sem_correspondencia` do search_items e diga ao cliente qual linha bate e o que muda nela (ex.: "a planilha tem caixa octogonal 4x4, não quadrada"; "a tomada está em caixa 4x2, e não 4x4 como na legenda"). 🪤 Em 22/09/2026 o chat disse a uma cliente que 2 itens que ESTAVAM na planilha não existiam.
 - Se o usuário perguntar "por que essa quantidade?", busca o item, leia a observação (que cita layer CAD ou processo de consolidação) e explique.
 - LINHA DE ÁREA EM BRANCO TEM CONSERTO NA HORA — ofereça isso ANTES de qualquer outra saída. Se o cliente perguntar pela metragem que faltou num item de m² com quantidade ZERO de superfície horizontal (piso, forro, laje, contrapiso, revestimento de piso), diga que na tela de revisão, logo acima da lista de itens, existe um campo "Área total": informando a metragem ali, a planilha é refeita NA HORA, sem reprocessar e sem custo nenhum, e as linhas saem marcadas como "estimado (informado por você)". Só depois disso mencione reenviar em DXF ou preencher item por item — esses dois são caros e demorados.
 - NÃO ofereça esse campo pra pintura de PAREDE, alvenaria, chapisco/reboco ou qualquer item que dependa da ALTURA: a área total não preenche esses. Ali o que falta é o pé-direito, e ele só fecha a conta se houver parede medida em metro linear. E NUNCA prometa QUANTAS linhas serão preenchidas — quem decide item a item é o motor.
@@ -636,6 +772,66 @@ REGRAS:
 - Respostas curtas (3-5 frases). Use linguagem comum, sem jargão técnico de IA.
 - Se a pergunta sair do escopo do quantitativo, redirecione: "Não tenho acesso a isso, posso ajudar com itens da sua planilha?"
 """
+
+
+def tipos_de_arquivo_do_projeto(job_id: str) -> Optional[dict]:
+    """{"pdf": n, "dxf": n, "dwg": n} que o cliente enviou, ou None se não deu
+    pra ler. Síncrona (rede) — a rota chama no threadpool, nunca no laço."""
+    try:
+        from urllib.parse import quote
+        url = (f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{quote(str(job_id))}"
+               f"&select=file_types")
+        req = urllib.request.Request(url, method="GET")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        req.add_header("Accept", "application/json")
+        rows = json.loads(urllib.request.urlopen(req, timeout=8).read().decode("utf-8"))
+        ft = rows[0].get("file_types") if rows else None
+        return ft if isinstance(ft, dict) else None
+    except Exception as e:
+        print(f"[agent] tipos de arquivo de {job_id}: {e}")
+        return None
+
+
+def _conta_do_tipo(tipos, chave) -> int:
+    try:
+        return max(0, int((tipos or {}).get(chave) or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def projeto_so_pdf(tipos) -> bool:
+    """Veio PDF e nenhum CAD. Sem a informação (None), NÃO é só-PDF: falta de
+    dado não pode esconder a ferramenta de DXF de quem mandou DXF."""
+    if not isinstance(tipos, dict):
+        return False
+    return (_conta_do_tipo(tipos, "pdf") > 0 and _conta_do_tipo(tipos, "dxf") == 0
+            and _conta_do_tipo(tipos, "dwg") == 0)
+
+
+def contexto_dos_arquivos(tipos) -> str:
+    """O que o modelo precisa saber dos arquivos ANTES de explicar uma ausência.
+
+    🩸 22/09/2026 (job 844603fb): projeto de 1 PDF e nenhum CAD, e o chat culpou
+    "os layers do DWG", "um arquivo DXF separado" e ofereceu "listar os DXFs do
+    projeto". O prompt nunca dizia o que o cliente enviou, e o modelo chutou.
+    """
+    if not isinstance(tipos, dict):
+        return ("\n\nARQUIVOS DESTE PROJETO: não consegui confirmar agora quais tipos "
+                "de arquivo vieram. Não afirme que existe DWG/DXF nem fale de layer "
+                "ou bloco sem antes ver o DXF pela ferramenta read_dxf_summary.")
+    pdf, dxf, dwg = (_conta_do_tipo(tipos, k) for k in ("pdf", "dxf", "dwg"))
+    if projeto_so_pdf(tipos):
+        return ("\n\nARQUIVOS DESTE PROJETO: só PDF (%d arquivo%s), NENHUM DWG ou DXF. "
+                "Aqui não existe layer, bloco nem DXF: nunca explique a falta de um "
+                "item por layer, bloco ou DWG, e não ofereça listar DXF. No PDF a IA "
+                "lê a imagem da prancha, então toda quantidade é estimativa (nunca "
+                "medida) e um símbolo pode ter passado despercebido na leitura. Pra "
+                "medir de verdade, o caminho é enviar o DXF da mesma prancha."
+                % (pdf, "" if pdf == 1 else "s"))
+    return ("\n\nARQUIVOS DESTE PROJETO: %d DWG, %d DXF e %d PDF. O que veio de PDF "
+            "é leitura da imagem (estimativa); layer e bloco só existem nos DWG/DXF."
+            % (dwg, dxf, pdf))
 
 
 def _log_conversation(job_id: str, question: str, answer: str,
@@ -767,7 +963,8 @@ def _conteudo_da_ferramenta(result, teto: int = _TETO_RESULTADO_FERRAMENTA) -> s
 
 
 def ask(job_id: str, question: str, max_iterations: int = 8,
-        history: Optional[list] = None) -> dict:
+        history: Optional[list] = None,
+        tipos_de_arquivo: Optional[dict] = None) -> dict:
     """Roda o loop do agente até ele dar resposta final.
 
     Args:
@@ -776,6 +973,10 @@ def ask(job_id: str, question: str, max_iterations: int = 8,
         history: opcional, lista de {role, content} de turnos anteriores
                  da MESMA conversa. Permite o cliente perguntar "e o item 3.4?"
                  como continuação. Se None, conversa inicia do zero.
+        tipos_de_arquivo: {"pdf": n, "dxf": n, "dwg": n} do projeto (a rota lê
+                 com `tipos_de_arquivo_do_projeto`). None = não se sabe, e o
+                 prompt manda não afirmar CAD nenhum. Só-PDF esconde a
+                 ferramenta de DXF — não há DXF pra ler.
 
     Retorna {answer, tool_calls: [(name, input, result)...], iterations}.
     Loga conversa em agent_conversations no Supabase.
@@ -830,6 +1031,13 @@ def ask(job_id: str, question: str, max_iterations: int = 8,
     _continuacoes = 0
     _ficou_truncada = False
 
+    # 22/09/2026 (job 844603fb): o modelo precisa saber o que o cliente ENVIOU
+    # antes de explicar por que um item falta — senão culpa "layer do DWG" num
+    # projeto que nunca teve DWG.
+    _system = SYSTEM_PROMPT.format(job_id=job_id) + contexto_dos_arquivos(tipos_de_arquivo)
+    _ferramentas = ([t for t in TOOLS if t["name"] != "read_dxf_summary"]
+                    if projeto_so_pdf(tipos_de_arquivo) else TOOLS)
+
     from llm_retry import call_with_retry
     for it in range(max_iterations):
         try:
@@ -839,8 +1047,8 @@ def ask(job_id: str, question: str, max_iterations: int = 8,
                 max_retries=3,
                 model="claude-sonnet-4-6",
                 max_tokens=4000,
-                system=SYSTEM_PROMPT.format(job_id=job_id),
-                tools=TOOLS,
+                system=_system,
+                tools=_ferramentas,
                 messages=messages,
             )
         except Exception as e:

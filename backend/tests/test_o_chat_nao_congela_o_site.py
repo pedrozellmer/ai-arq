@@ -58,6 +58,9 @@ def _rodar_a_rota(monkeypatch, falso_ask, corpo=b"",
                   pergunta="  quantos m2 de piso?  ", job_id="job-cliente-11"):
     monkeypatch.setattr(main, "_require_project_owner", lambda *a, **k: "dono")
     monkeypatch.setattr(agent, "ask", falso_ask)
+    # 22/09/2026: a rota lê os tipos de arquivo do projeto (rede) — aqui, sem rede.
+    monkeypatch.setattr(agent, "tipos_de_arquivo_do_projeto",
+                        lambda *a, **k: {"pdf": 1, "dxf": 0, "dwg": 0})
     medido = {"thread_do_laco": None, "tiques": 0, "tiques_durante": 0,
               "resposta": None}
 
@@ -137,7 +140,7 @@ def test_a_rota_do_chat_NAO_chama_o_agente_no_laco_de_eventos(
     """
     visto = {}
 
-    def _falso_ask(job_id, question, max_iterations=8, history=None):
+    def _falso_ask(job_id, question, max_iterations=8, history=None, **k):
         visto["thread"] = threading.get_ident()
         visto["history"] = history
         time.sleep(0.30)                    # o agente "pensando"
