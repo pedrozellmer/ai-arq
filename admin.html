@@ -1212,6 +1212,29 @@
               <input id="sup-motivo" type="text" placeholder="motivo (ex.: 3 devolu&ccedil;&otilde;es por caixa cheia)" class="rounded-lg border border-slate-300 px-3 py-2 text-sm flex-1" style="min-width:240px">
               <button type="submit" class="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold">Suprimir</button>
             </form>
+            <!-- 22/09/2026: a lista existia desde 05/09 e NADA a alimentava (2 linhas,
+                 as duas postas &agrave; m&atilde;o). As devolu&ccedil;&otilde;es chegam na caixa do Pedro e o
+                 sistema marca os envios como ENVIADOS, porque o servidor aceitou.
+                 Medido: 14 devolu&ccedil;&otilde;es em 90 dias, 4 endere&ccedil;os, 3 clientes sem
+                 NENHUM e-mail nosso. Aqui ele cola o que j&aacute; recebe. -->
+            <div class="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+              <p class="text-xs font-semibold text-gray-700 mb-1">&#8617; Colar devolu&ccedil;&otilde;es (bounce)</p>
+              <p class="text-xs text-gray-500 mb-2">Cole os endere&ccedil;os que <b>voltaram</b> &mdash; um por linha, ou separados por v&iacute;rgula; pode colar &ldquo;Nome &lt;email&gt;&rdquo;. A contagem de devolu&ccedil;&otilde;es de quem j&aacute; estava na lista &eacute; <b>somada</b>, e o seu pr&oacute;prio e-mail &eacute; recusado (alerta n&atilde;o pode ser calado).</p>
+              <form onsubmit="registrarDevolucoes(event)" class="space-y-2">
+                <textarea id="dev-emails" required rows="3" placeholder="fulano@exemplo.com&#10;beltrano@exemplo.com" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"></textarea>
+                <div class="flex flex-wrap items-center gap-2">
+                  <select id="dev-tipo" class="rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                    <option value="caixa_cheia">caixa cheia</option>
+                    <option value="inexistente">endere&ccedil;o inexistente</option>
+                    <option value="reclamou">marcou como spam</option>
+                    <option value="manual">outro</option>
+                  </select>
+                  <input id="dev-data" type="date" class="rounded-lg border border-slate-300 px-3 py-2 text-sm" title="data da devolu&ccedil;&atilde;o (padr&atilde;o: hoje)">
+                  <button type="submit" class="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold">Registrar devolu&ccedil;&otilde;es</button>
+                </div>
+              </form>
+              <p id="dev-saida" class="hidden mt-2 text-xs"></p>
+            </div>
           </section>
         </div>
         <div id="emails-error" class="hidden text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl p-4"></div>
@@ -4218,6 +4241,41 @@ async function suprimirDeNovo(email) {
     _adminToast('Suprimido de novo: ' + email, 'success');
     loadSuprimidos();
   } catch (e) { _adminToast('Não deu: ' + (e.message || e), 'error'); }
+}
+// 22/09/2026 — a porta pela qual a lista de supressão passa a ser ALIMENTADA.
+// 🪤 A tela diz o que o servidor RESPONDEU (quantos gravou, quem recusou), não
+// "pronto!": recusa silenciosa aqui viraria cliente calado lá na frente.
+async function registrarDevolucoes(ev) {
+  ev.preventDefault();
+  const saida = document.getElementById('dev-saida');
+  const emails = document.getElementById('dev-emails').value;
+  const tipo = document.getElementById('dev-tipo').value;
+  const data = document.getElementById('dev-data').value;
+  try {
+    const res = await authFetch(`${API_BASE}/api/admin/email-devolucoes`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ emails: [emails], tipo, ultima_devolucao: data || null })
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(d.detail || ('HTTP ' + res.status));
+    const recusados = (d.recusados || []);
+    saida.className = 'mt-2 text-xs text-emerald-700';
+    saida.textContent = d.n + (d.n === 1 ? ' endereço suprimido' : ' endereços suprimidos')
+      + (recusados.length ? (' · ' + recusados.length + ' recusado(s) por ser interno: ' + recusados.join(', ')) : '');
+    saida.classList.remove('hidden');
+    document.getElementById('dev-emails').value = '';
+    _adminToast(d.n + ' endereço(s) não recebem mais nada', 'success');
+    loadSuprimidos();
+  } catch (e) {
+    // 🪤 Não afirmo "não gravei nada": erro de REDE é ambíguo (a gravação pode
+    // ter acontecido e a resposta ter se perdido) — é a mesma dúvida que o
+    // conserto de hoje aprendeu a não engolir no envio. A lista acima diz a
+    // verdade; é ela que o Pedro olha antes de tentar de novo.
+    saida.className = 'mt-2 text-xs text-red-600';
+    saida.textContent = '⚠ Não deu: ' + (e.message || e)
+      + ' — confira a lista acima antes de mandar de novo.';
+    saida.classList.remove('hidden');
+  }
 }
 async function liberarEmail(email) {
   try {

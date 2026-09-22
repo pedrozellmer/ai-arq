@@ -74,11 +74,17 @@ class _Sessao:
 
     def __init__(self, dono, **k):
         self.dono = dono
+        self.entregou = False
 
     def __enter__(self, *a, **k):
         return self
 
     def __exit__(self, *a, **k):
+        # 🩸 22/09, achado A1 (2ª sonda da revisão): o `__exit__` do smtplib
+        # manda QUIT, e um 4xx aí vira exceção DEPOIS de a mensagem já ter sido
+        # aceita. Sem este dublê, a casa nunca testaria esse caminho.
+        if self.entregou and self.dono.cai_no_fecho is not None:
+            raise self.dono.cai_no_fecho
         return False
 
     def ehlo(self, *a, **k):
@@ -94,22 +100,38 @@ class _Sessao:
         i = self.dono.tentativas - 1
         erro = self.dono.roteiro[i] if i < len(self.dono.roteiro) else None
         if erro is not None:
+            # 🔑 O dublê que FALTAVA. No guarda original todo `sendmail`
+            # levantava ANTES de registrar a entrega, então a duplicata que a
+            # revisão mediu não tinha como aparecer em teste nenhum: `entrega_antes`
+            # é o servidor que RECEBE a mensagem e só depois some — o outro lado
+            # da mesma exceção de 22/09.
+            if self.dono.entrega_antes:
+                self.dono.enviados.append((de, list(para), corpo))
             raise erro
         self.dono.enviados.append((de, list(para), corpo))
+        self.entregou = True
 
 
 class _Servidor:
     """Faz as vezes de `smtplib.SMTP`: um roteiro de exceções por tentativa
-    (None = aceita a mensagem). `no_connect=True` derruba já na conexão."""
+    (None = aceita a mensagem). `no_connect=True` derruba já na conexão;
+    `entrega_antes=True` registra a entrega ANTES de levantar (servidor que
+    recebeu e não respondeu); `cai_no_fecho=exc` derruba a sessão no QUIT,
+    depois de a mensagem já ter sido aceita."""
 
-    def __init__(self, roteiro=(), no_connect=None):
+    def __init__(self, roteiro=(), no_connect=None, entrega_antes=False,
+                 cai_no_fecho=None):
         self.roteiro = list(roteiro)
         self.no_connect = no_connect
+        self.entrega_antes = entrega_antes
+        self.cai_no_fecho = cai_no_fecho
         self.tentativas = 0
         self.enviados = []
+        self.timeouts = []              # o `timeout=` de CADA tentativa (A2)
 
     def __call__(self, *a, **k):
         self.tentativas += 1
+        self.timeouts.append(k.get("timeout", (list(a) + [None, None, None])[2]))
         if self.no_connect is not None:
             raise self.no_connect
         return _Sessao(self)
@@ -124,6 +146,11 @@ def bordas(monkeypatch):
     monkeypatch.setattr(main, "_email_suprimido", lambda e: None)
     monkeypatch.setattr(main, "_EMAIL_FALHA_AVISADO", set())
     monkeypatch.setattr(main, "_EMAIL_ALERTANDO", threading.local())
+    # 🪤 O freio do rastro e o relógio da campainha são estado de MÓDULO: sem
+    # zerar, o 4º guarda do arquivo já entra com o teto estourado pelo 1º e
+    # "não gravou a linha" vira falso vermelho (aconteceu comigo hoje).
+    monkeypatch.setattr(main, "_EMAIL_FALHA_LINHAS", {})
+    monkeypatch.setattr(main, "_EMAIL_ALERTA_ESTADO", {"caiu_em": 0.0})
 
     logs, avisos, esperas, gravados = [], [], [], []
 
@@ -364,6 +391,310 @@ def test_a_trava_de_reentrancia_segura_o_alerta(bordas):
     saiu = main._alerta_email_que_nao_saiu(_CLIENTE, "A", "leu_sem_medir", _JOB,
                                            "SMTPServerDisconnected", 3)
     assert saiu is False and avisos == []
+
+
+def test_o_CAMINHO_COMUM_nao_deixa_rastro_nenhum(bordas, monkeypatch):
+    """🧪 O controle positivo do caminho de sempre — e o que faltava (achado A5).
+
+    Sem ele, uma mutação que gravasse `email:retentado` em TODO sucesso passava
+    verde, e o instrumento que vai decidir a fila (`quantas falhas a
+    re-tentativa salvou`) passaria a responder "todas". Medido: são ~364
+    envios por 30 dias; o mutante daria 364 linhas de rastro falso."""
+    logs, avisos, esperas, gravados = bordas
+    srv = _Servidor([None])
+    monkeypatch.setattr(smtplib, "SMTP", srv)
+
+    ok = main._send_email_smtp(_CLIENTE, "Sua planilha está pronta", "<b>oi</b>",
+                               log_kind="planilha_pronta", job_id=_JOB)
+
+    assert ok is True and srv.tentativas == 1 and len(srv.enviados) == 1
+    assert esperas == [] and avisos == []
+    assert logs == [], "envio que deu certo de primeira não escreve no error_log: %r" % logs
+    assert [t for t, _l in gravados] == ["email_sent_log"]
+    assert gravados[0][1]["kind"] == "planilha_pronta" and gravados[0][1]["job_id"] == _JOB
+
+
+# ── (3) achado A1: entregou, não entregou, ou não se sabe ──────────────────
+def test_o_servidor_ACEITOU_e_a_sessao_caiu_no_FECHO_nao_e_retentado(bordas, monkeypatch):
+    """🩸 A 2ª sonda da revisão: 4xx no QUIT levanta DEPOIS de a mensagem ter
+    sido aceita, e 4xx é passageiro pela régua — então o conserto de hoje de
+    manhã mandava a MESMA mensagem de novo. Duas entregas, uma linha no
+    `email_sent_log`: a duplicata invisível."""
+    logs, _a, _e, gravados = bordas
+    srv = _Servidor([None], cai_no_fecho=smtplib.SMTPResponseException(421, "4.7.0 closing"))
+    monkeypatch.setattr(smtplib, "SMTP", srv)
+
+    ok = main._send_email_smtp(_CLIENTE, "A", "b", log_kind="planilha_pronta", job_id=_JOB)
+
+    assert ok is True, "o servidor aceitou a mensagem: isso é entrega, não falha"
+    assert srv.tentativas == 1, "retentar aqui manda a mesma mensagem duas vezes"
+    assert len(srv.enviados) == 1
+    assert [t for t, _l in gravados] == ["email_sent_log"]
+    assert "fecho" in _uma(logs, "email:fecho-torto")["msg"]
+    assert not _linhas(logs, "email:falha")
+
+
+def test_a_queda_DENTRO_da_entrega_pode_duplicar_e_o_log_DIZ(bordas, monkeypatch):
+    """🩸 Achado A1. A MESMA exceção de 22/09 serve pra "ele nem viu" e pra "ele
+    aceitou e a resposta se perdeu" — `SMTP.data()` manda o corpo e só então lê.
+
+    A casa escolheu proteger o CLIENTE (retentar), porque ficar sem o aviso foi
+    o que custou caro. O preço é esta linha: o `email_sent_log` continua com uma
+    linha só, e sem o rastro a segunda cópia seria invisível."""
+    logs, _a, _e, gravados = bordas
+    srv = _Servidor([_caiu(), None], entrega_antes=True)
+    monkeypatch.setattr(smtplib, "SMTP", srv)
+
+    ok = main._send_email_smtp(_CLIENTE, "Sua planilha está pronta", "<b>oi</b>",
+                               log_kind="leu_sem_medir", job_id=_JOB)
+
+    assert ok is True and srv.tentativas == 2
+    assert len(srv.enviados) == 2, (
+        "o servidor recebeu DUAS mensagens — é exatamente isso que o log precisa dizer")
+    assert len([t for t, _l in gravados if t == "email_sent_log"]) == 1
+    linha = _uma(logs, "email:pode-ter-duplicado")
+    assert "duas cópias" in linha["msg"] and linha["sev"] == "error", linha
+    assert "pessoa=" in linha["msg"] and _RE_EMAIL.search(linha["msg"]) is None, (
+        "🔒 nem no aviso de duplicata o endereço entra no error_log: %r" % linha["msg"])
+
+
+@pytest.mark.parametrize("respondeu", [
+    smtplib.SMTPRecipientsRefused({_CLIENTE: (451, b"greylisted")}),
+    smtplib.SMTPDataError(451, "4.3.0 try again"),
+    smtplib.SMTPSenderRefused(451, "4.7.1 try again", "remetente@exemplo"),
+])
+def test_CONTROLE_quando_o_servidor_RESPONDE_nao_ha_duvida_nenhuma(bordas, monkeypatch,
+                                                                   respondeu):
+    """A régua olha a RESPOSTA, não o momento: recusa de remetente/destinatário
+    acontece ANTES do corpo ir pro fio (`mail` e `rcpt` vêm antes de `data`), e
+    erro no DATA é o servidor dizendo que NÃO aceitou. Nos três se sabe o
+    desfecho. Sem este controle, "avisou da dúvida" passaria a valer pra toda
+    falha e o aviso viraria ruído — e o mutante que faz TODA resposta virar
+    dúvida passaria verde (ele passou, na 1ª rodada de sabotagem: o controle só
+    cobria `SMTPRecipientsRefused`, que nem é `SMTPResponseException`)."""
+    logs, _a, _e, _g = bordas
+    srv = _Servidor([respondeu, None])
+    monkeypatch.setattr(smtplib, "SMTP", srv)
+
+    assert main._send_email_smtp(_CLIENTE, "A", "b", log_kind="planilha_pronta") is True
+    assert srv.tentativas == 2, "4xx é 'tente mais tarde': retenta"
+    assert not _linhas(logs, "email:pode-ter-duplicado"), (
+        "o servidor respondeu — não há cópia possível pra avisar: %s"
+        % type(respondeu).__name__)
+    assert main._entrega_ficou_sem_resposta(respondeu) is False
+
+
+def test_falha_TOTAL_depois_de_entrar_na_entrega_avisa_que_pode_ter_saido(bordas, monkeypatch):
+    logs, avisos, _e, gravados = bordas
+    srv = _Servidor([_caiu()] * 3, entrega_antes=True)
+    monkeypatch.setattr(smtplib, "SMTP", srv)
+
+    assert main._send_email_smtp(_CLIENTE, "Sua planilha está pronta", "<b>oi</b>",
+                                 log_kind="leu_sem_medir", job_id=_JOB) is False
+    assert not gravados, "sem confirmação, não vira linha de enviado"
+    assert "pode ter saído cópia" in _uma(logs, "email:falha")["msg"]
+    assert len(avisos) == 1 and "não dá pra saber se ele chegou" in avisos[0], avisos
+
+
+def test_CONTROLE_falha_ANTES_da_entrega_avisa_o_contrario(bordas, monkeypatch):
+    """A campainha do caso comum continua dizendo "NÃO recebeu" — se dissesse
+    "pode ter recebido" em toda falha, o Pedro pararia de reenviar."""
+    _l, avisos, _e, _g = bordas
+    srv = _Servidor(no_connect=smtplib.SMTPConnectError(-1, "sem resposta"))
+    monkeypatch.setattr(smtplib, "SMTP", srv)
+
+    main._send_email_smtp(_CLIENTE, "A", "b", log_kind="leu_sem_medir", job_id=_JOB)
+    assert len(avisos) == 1
+    assert "NÃO recebeu esse aviso" in avisos[0] and "pode ter recebido" not in avisos[0]
+
+
+# ── (4) achado A2: o orçamento encolhe a tentativa, não só decide o início ──
+def test_o_orcamento_ENCOLHE_o_timeout_da_tentativa_seguinte(bordas, monkeypatch):
+    """🩸 Achado A2: a verificação do "teto" só decidia se a PRÓXIMA tentativa
+    começava. Com 20 s fixos por tentativa, o job ficava preso 42 s, 54 s e —
+    com a campainha — 84 s, contra os 30 s anunciados. Agora o que sobrou do
+    orçamento vira o `timeout=` do socket."""
+    _l, _a, esperas, _g = bordas
+    relogio = {"t": 0.0}
+    monkeypatch.setattr(main.time, "monotonic", lambda: relogio["t"])
+    monkeypatch.setattr(main.time, "sleep",
+                        lambda s, *a, **k: (esperas.append(s),
+                                            relogio.__setitem__("t", relogio["t"] + s)))
+    srv = _Servidor([_caiu(), _caiu(), None])
+
+    def _demora(*a, **k):
+        relogio["t"] += 18.0          # servidor que só dá timeout
+        return srv(*a, **k)
+
+    monkeypatch.setattr(smtplib, "SMTP", _demora)
+    main._send_email_smtp(_CLIENTE, "A", "b", log_kind="planilha_pronta")
+
+    assert srv.timeouts[0] == main._EMAIL_TIMEOUT_S, (
+        "a 1ª tentativa leva o timeout cheio — o orçamento não pode estrangular "
+        "a única tentativa que quase todo envio faz: %r" % srv.timeouts)
+    assert srv.timeouts[1] < srv.timeouts[0], (
+        "a 2ª tem que caber no que sobrou do orçamento: %r" % srv.timeouts)
+    assert srv.timeouts[1] == 10.0, srv.timeouts    # 30 - (18 gastos + 2 de espera)
+
+
+def test_o_timeout_encolhido_tem_PISO(bordas, monkeypatch):
+    """🪤 Piso, senão a 2ª tentativa nasce com 1 s e falha por ser curta — o
+    mesmo defeito de 'catraca no mínimo que passa' que a casa já pagou 7 vezes."""
+    _l, _a, esperas, _g = bordas
+    relogio = {"t": 0.0}
+    monkeypatch.setattr(main.time, "monotonic", lambda: relogio["t"])
+    monkeypatch.setattr(main.time, "sleep",
+                        lambda s, *a, **k: (esperas.append(s),
+                                            relogio.__setitem__("t", relogio["t"] + s)))
+    monkeypatch.setattr(main, "_EMAIL_TETO_S", 21.0)
+    srv = _Servidor([_caiu(), None])
+
+    def _demora(*a, **k):
+        relogio["t"] += 18.0
+        return srv(*a, **k)
+
+    monkeypatch.setattr(smtplib, "SMTP", _demora)
+    main._send_email_smtp(_CLIENTE, "A", "b", log_kind="planilha_pronta")
+    assert srv.timeouts[1] == main._EMAIL_TIMEOUT_MIN_S, srv.timeouts
+
+
+def test_a_campainha_vai_em_UMA_tentativa_e_com_timeout_curto(bordas, monkeypatch):
+    """🩸 Achado A2, a parte que dobrava o tempo: a campainha sai pela MESMA
+    porta síncrona e tinha as mesmas 3 tentativas de 20 s. Medido pela revisão:
+    84 s presos no job. Ela não vale mais que o e-mail do cliente."""
+    _l, _a, _e, _g = bordas
+    monkeypatch.setattr(main, "_notify_admin", _NOTIFY_REAL)
+    srv = _Servidor([_caiu()] * 30)
+    monkeypatch.setattr(smtplib, "SMTP", srv)
+
+    main._send_email_smtp(_CLIENTE, "A", "b", log_kind="leu_sem_medir", job_id=_JOB)
+
+    assert srv.tentativas == main._EMAIL_TENTATIVAS + 1, (
+        "3 tentativas do cliente + UMA da campainha: %d" % srv.tentativas)
+    assert srv.timeouts[-1] == main._EMAIL_TIMEOUT_ALERTA_S < main._EMAIL_TIMEOUT_S
+
+
+# ── (5) achado A3: a campainha é por PESSOA, não por tipo ──────────────────
+def test_clientes_DIFERENTES_do_mesmo_tipo_tocam_campainhas_DIFERENTES(bordas, monkeypatch):
+    """🩸 Achado A3, medido no banco em 22/09: 349 dos 364 e-mails de 30 dias
+    NÃO têm `job_id` (96%), e `boas_vindas` — o tipo mais comum, 69 em 30 dias —
+    é um deles. Com a chave `(dia, kind, job)`, cinco clientes falhando no mesmo
+    tipo davam UMA campainha e os outros quatro ficavam como o de 22/09."""
+    _l, avisos, _e, _g = bordas
+    monkeypatch.setattr(smtplib, "SMTP", _Servidor([_caiu()] * 60))
+
+    for i in range(5):
+        main._send_email_smtp("cliente-%02d@example.com" % i, "A", "b",
+                              log_kind="boas_vindas")
+    assert len(avisos) == 5, (
+        "cinco pessoas sem e-mail são cinco avisos — o tipo não é a pessoa: %d" % len(avisos))
+
+
+def test_CONTROLE_a_MESMA_pessoa_no_mesmo_tipo_toca_UMA_vez(bordas, monkeypatch):
+    """O freio continua existindo: a esteira horária tentaria 24× por dia."""
+    _l, avisos, _e, _g = bordas
+    monkeypatch.setattr(smtplib, "SMTP", _Servidor([_caiu()] * 60))
+    for _ in range(4):
+        main._send_email_smtp(_CLIENTE, "A", "b", log_kind="boas_vindas")
+    assert len(avisos) == 1
+
+
+def test_o_rastro_da_falha_identifica_a_PESSOA_sem_o_endereco(bordas, monkeypatch):
+    logs, _a, _e, _g = bordas
+    monkeypatch.setattr(smtplib, "SMTP", _Servidor([_caiu()] * 9))
+    main._send_email_smtp(_CLIENTE, "A", "b", log_kind="boas_vindas")
+    msg = _uma(logs, "email:falha")["msg"]
+    assert ("pessoa=" + main._marca_do_email(_CLIENTE)) in msg, msg
+    assert _RE_EMAIL.search(msg) is None, msg
+
+
+def test_CONTROLE_a_marca_separa_pessoas_e_e_estavel():
+    """Sem isto, um `_marca_do_email` que devolvesse sempre "-" passaria nos
+    guardas de LGPD por mérito falso — e o rastro voltaria a juntar clientes."""
+    a, b = "cliente-nn@example.com", "outro-cliente@example.com"
+    assert main._marca_do_email(a) != main._marca_do_email(b)
+    assert main._marca_do_email(a) == main._marca_do_email("  CLIENTE-NN@Example.COM ")
+    assert _RE_EMAIL.search(main._marca_do_email(a)) is None
+    assert a.split("@")[0] not in main._marca_do_email(a)
+
+
+def test_a_campainha_que_CAI_nao_queima_o_dia_daquele_tipo(bordas, monkeypatch):
+    """🩸 Achado A3, 2ª metade: a chave era marcada ANTES de a campainha tocar.
+    Numa queda de SMTP — justamente quando o alerta também falha — o tipo ficava
+    calado até a meia-noite, mesmo depois de o servidor voltar."""
+    _l, avisos, _e, _g = bordas
+    caiu = {"n": 0}
+
+    def _aviso_que_cai(*a, **k):
+        caiu["n"] += 1
+        return False                      # o alerta não saiu
+
+    monkeypatch.setattr(main, "_notify_admin", _aviso_que_cai)
+    monkeypatch.setattr(smtplib, "SMTP", _Servidor([_caiu()] * 60))
+    main._send_email_smtp(_CLIENTE, "A", "b", log_kind="boas_vindas")
+    assert caiu["n"] == 1 and avisos == []
+
+    # o servidor voltou (o relógio do freio é tempo, não o dia)
+    main._EMAIL_ALERTA_ESTADO["caiu_em"] = 0.0
+    monkeypatch.setattr(main, "_notify_admin",
+                        lambda *a, **k: avisos.append(" ".join(str(x) for x in a)) or True)
+    main._send_email_smtp(_CLIENTE, "A", "b", log_kind="boas_vindas")
+    assert len(avisos) == 1, "a chave não podia ter sido queimada pela campainha que caiu"
+
+
+def test_a_campainha_que_CAI_segura_as_proximas_por_um_tempo(bordas, monkeypatch):
+    """🪤 O outro lado: sem freio, uma newsletter de 65 destinatários viraria 65
+    tentativas de campainha contra um servidor que está fora do ar."""
+    _l, _a, _e, _g = bordas
+    tentou = {"n": 0}
+    monkeypatch.setattr(main, "_notify_admin",
+                        lambda *a, **k: (tentou.__setitem__("n", tentou["n"] + 1), False)[1])
+    monkeypatch.setattr(smtplib, "SMTP", _Servidor([_caiu()] * 200))
+    for i in range(10):
+        main._send_email_smtp("cliente-%02d@example.com" % i, "A", "b", log_kind="newsletter")
+    assert tentou["n"] == 1, "a 1ª tentou e caiu; as outras nove esperam: %d" % tentou["n"]
+
+
+def test_o_dia_do_freio_e_o_de_BRASILIA(monkeypatch):
+    """🪤 `datetime.utcnow()` vira o dia às 21:00 de Brasília — o freio de "uma
+    campainha por dia" reiniciava no meio da noite de trabalho do Pedro."""
+    import datetime as _dt
+    quando = _dt.datetime(2026, 9, 23, 1, 30)        # 22/09 22:30 em Brasília
+    monkeypatch.setattr(main, "datetime",
+                        type("D", (), {"utcnow": staticmethod(lambda: quando)}))
+    assert main._dia_brasilia() == "2026-09-22"
+    assert quando.strftime("%Y-%m-%d") == "2026-09-23", (
+        "controle: é exatamente aqui que o jeito antigo errava")
+
+
+# ── (6) achado A4: o rastro também precisa de freio ────────────────────────
+def test_o_rastro_da_falha_tem_FREIO_por_tipo(bordas, monkeypatch):
+    """🩸 Achado A4: uma queda de SMTP no meio da newsletter (65 destinatários)
+    punha 65 linhas de erro no painel de 40 linhas que o Pedro usa pra achar
+    erro de verdade — empurrando o erro real pra fora da tela. O diagnóstico não
+    perde nada: o que interessa é "o tipo X parou de sair"."""
+    logs, _a, _e, _g = bordas
+    monkeypatch.setattr(smtplib, "SMTP", _Servidor([_caiu()] * 200))
+    for i in range(20):
+        main._send_email_smtp("cliente-%02d@example.com" % i, "A", "b",
+                              log_kind="newsletter")
+
+    linhas = _linhas(logs, "email:falha")
+    assert len(linhas) == main._EMAIL_FALHA_MAX_LINHAS + 1, (
+        "20 falhas do mesmo tipo: %d linhas" % len(linhas))
+    assert "teto" in linhas[-1]["msg"], linhas[-1]["msg"]
+
+
+def test_CONTROLE_o_freio_do_rastro_nao_cala_OUTRO_tipo(bordas, monkeypatch):
+    """Um freio que calasse tudo esconderia justamente o segundo problema."""
+    logs, _a, _e, _g = bordas
+    monkeypatch.setattr(smtplib, "SMTP", _Servidor([_caiu()] * 200))
+    for i in range(10):
+        main._send_email_smtp("cliente-%02d@example.com" % i, "A", "b",
+                              log_kind="newsletter")
+    main._send_email_smtp("outro@example.com", "A", "b", log_kind="planilha_pronta")
+    assert any("kind=planilha_pronta" in x["msg"] for x in _linhas(logs, "email:falha")), (
+        "o tipo que ainda não falhou nesta janela tem que aparecer")
 
 
 def test_o_alerta_que_FALHA_nao_chama_outro_alerta(bordas, monkeypatch):

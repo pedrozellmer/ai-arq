@@ -3831,10 +3831,22 @@ def _suprimidos(force: bool = False) -> dict:
     if not force and cache["mapa"] is not None and agora - cache["em"] < _SUPRIMIDOS_TTL_S:
         return cache["mapa"]
     st, rows = _supa_rest_service(
-        "GET", "/email_suprimidos?select=email,motivo,liberado_em&liberado_em=is.null", timeout=8)
+        "GET", "/email_suprimidos?select=email,motivo,tipo,n_devolucoes,ultima_devolucao,"
+               "criado_em,liberado_em&liberado_em=is.null", timeout=8)
     if st == 200 and isinstance(rows, list):
         cache["mapa"] = {str(r.get("email") or "").strip().lower(): str(r.get("motivo") or "")
                          for r in rows if r.get("email")}
+        # 🔑 22/09: a MESMA leitura passa a guardar a ficha (tipo/data), pro
+        # aviso na tela do cliente. Uma consulta a mais por e-mail enviado seria
+        # cara; aqui é campo a mais na consulta que já acontece, uma a cada 5 min.
+        cache["fichas"] = {
+            str(r.get("email") or "").strip().lower(): {
+                "tipo": str(r.get("tipo") or "manual"),
+                "n_devolucoes": int(r.get("n_devolucoes") or 0),
+                "ultima_devolucao": (str(r.get("ultima_devolucao"))[:10]
+                                     if r.get("ultima_devolucao") else None),
+                "desde": (str(r.get("criado_em"))[:10] if r.get("criado_em") else None),
+            } for r in rows if r.get("email")}
     else:
         # falha aberta, com rastro — e mantendo o último mapa bom (vale mais que nada)
         try:
@@ -3855,6 +3867,24 @@ def _email_suprimido(email: str):
     if not e:
         return None
     return _suprimidos().get(e)
+
+
+def _email_suprimido_ficha(email: str):
+    """A ficha ({tipo, n_devolucoes, ultima_devolucao, desde}) de quem está
+    suprimido; None pra quem pode receber. Sai do MESMO cache de 5 min.
+
+    🩸 22/09/2026 — o cliente suprimido simplesmente PARAVA de receber e-mail e
+    ninguém contava isso pra ele. Medido no banco: 4 endereços devolveram 14
+    mensagens em 90 dias e **3 clientes ficaram sem NENHUM e-mail nosso**, um
+    deles desde julho, todos por caixa cheia. Os 2 que já estavam na lista têm
+    conta no site — ou seja, a tela ALCANÇA quem o e-mail não alcança.
+
+    🚫 Não devolve o `motivo`: ele é texto livre do admin e pode citar outra
+    pessoa. Pro cliente vai o TIPO, que a tela traduz."""
+    e = (email or "").strip().lower()
+    if not e or not _suprimidos().get(e):
+        return None
+    return (_SUPRIMIDOS_CACHE.get("fichas") or {}).get(e) or {"tipo": "manual"}
 
 
 _NOSSOS_HOSTS = ("ai.arq.br", "www.ai.arq.br", "aiarq.com.br", "www.aiarq.com.br")
@@ -3975,14 +4005,103 @@ def _marcar_links_do_email(html: str, kind: str) -> str:
 # (b) o SILÊNCIO. Sem rastro, "não recebi e-mail" é investigação do zero.
 _EMAIL_TENTATIVAS = 3                 # 1 + 2 re-tentativas
 _EMAIL_ESPERAS_S = (2.0, 5.0)         # espera crescente ENTRE elas
-# 🪤 Orçamento TOTAL. O envio acontece dentro do job (e dentro do laço da
-# newsletter): sem teto, um servidor que só dá timeout de 20 s por tentativa
-# seguraria cada e-mail por mais de um minuto. Com teto, a 3ª tentativa só
-# acontece quando as anteriores falharam RÁPIDO (queda de conexão), que é
-# justamente o caso em que ela vale.
+# 🪤 ORÇAMENTO, não interruptor — a revisão derrubou a palavra "teto" que este
+# bloco usava. A verificação só decidia se a PRÓXIMA tentativa começava; nenhuma
+# tentativa em curso era interrompida, e cada uma pode gastar vários timeouts de
+# socket (connect, ehlo, starttls, login, mail, rcpt, data, quit). Medido pela
+# revisão: 42 s, 54 s e — somando a campainha, que sai pela MESMA porta síncrona
+# — 84 s segurando o job, contra os "30 s" que o código anunciava.
+# O que o orçamento faz agora, e é TUDO o que ele pode fazer sem thread:
+#   (a) decide se a próxima tentativa começa (como antes);
+#   (b) ENCOLHE o timeout de socket da tentativa seguinte pro que sobrou —
+#       antes toda tentativa nascia com 20 s fixos, desse o orçamento o que desse;
+#   (c) a campainha fica em UMA tentativa e com timeout curto (é outro envio,
+#       e era ela que dobrava o tempo do job).
+# 🚫 Não é garantia: servidor que trava em 8 operações seguidas de 5 s passa do
+# orçamento assim mesmo. Garantia de verdade custa thread com prazo. O número
+# promete isto e nada mais — e quem for subi-lo lê esta frase primeiro.
 _EMAIL_TETO_S = 30.0
-_EMAIL_FALHA_AVISADO = set()          # (dia, kind, job) → um alerta por dia
+_EMAIL_TIMEOUT_S = 20.0               # timeout de socket da 1ª tentativa
+_EMAIL_TIMEOUT_MIN_S = 5.0            # piso: tentativa de 1 s não é tentativa
+_EMAIL_TIMEOUT_ALERTA_S = 8.0         # a campainha não pode dobrar o tempo do job
+_EMAIL_FALHA_AVISADO = set()          # (dia BR, kind, job, marca) → 1 campainha/dia
 _EMAIL_ALERTANDO = threading.local()  # anti-recursão do alerta (ver abaixo)
+# 🪤 A campainha sai pela MESMA porta que acabou de falhar. Quando ELA falha,
+# cada falha seguinte tentaria de novo — 65 destinatários viram 65 tentativas de
+# campainha contra um servidor que está fora do ar. Este relógio segura todas
+# por alguns minutos, SEM queimar o dia inteiro daquele tipo (que era o outro
+# defeito: a chave era marcada ANTES de tocar, então uma queda de SMTP calava o
+# tipo até a meia-noite mesmo depois de o servidor voltar).
+_EMAIL_ALERTA_ESTADO = {"caiu_em": 0.0}
+_EMAIL_ALERTA_ESPERA_S = 300.0
+# 🪤 Freio do RASTRO. Sem ele, uma queda de SMTP no meio da newsletter põe 65
+# linhas `email:falha` no painel de 40 linhas que o Pedro usa pra achar erro de
+# verdade — a mesma doença que `_avisar_com_teto` (main.py) existe pra evitar, e
+# que este arquivo já documenta em `_log_error`. O diagnóstico não perde nada: o
+# que interessa é "o tipo X parou de sair", e isso 3 linhas dizem. A campainha
+# continua saindo à parte, com o contato.
+_EMAIL_FALHA_LINHAS = {}              # (janela, kind) → quantas já vieram
+_EMAIL_FALHA_MAX_LINHAS = 3
+_EMAIL_FALHA_JANELA_S = 900.0         # 15 min, a mesma janela do `_avisar_com_teto`
+
+
+def _dia_brasilia() -> str:
+    """AAAA-MM-DD no fuso do Pedro (UTC-3).
+
+    🪤 `datetime.utcnow().strftime(...)` — que era o que estava aqui — vira o dia
+    às **21:00 de Brasília**: o freio de "uma campainha por dia" reiniciava no
+    meio da noite de trabalho dele. Mesmo remendo de `_saudacao`."""
+    return (datetime.utcnow() - timedelta(hours=3)).strftime("%Y-%m-%d")
+
+
+def _marca_do_email(email: str) -> str:
+    """Apelido estável do destinatário, pro `error_log`.
+
+    🔒 Regra dura nº6 + repo público: o log técnico não leva endereço. Mas sem
+    NENHUM identificador o rastro não distingue dois clientes — era o achado A3:
+    96% dos e-mails da casa não têm `job_id` (medido em 22/09: 349 de 364 em 30
+    dias), então a chave `(dia, kind, job)` juntava clientes diferentes numa
+    campainha só e o segundo em diante ficava exatamente como o de 22/09.
+
+    🪤 É PSEUDÔNIMO, não anonimato: quem tem a lista de endereços consegue
+    refazer o hash. Serve pra (a) separar pessoas no log e (b) o Pedro casar a
+    linha com `profiles`/`email_sent_log` — não pra publicar."""
+    import hashlib as _hl_em
+    e = (email or "").strip().lower()
+    if not e:
+        return "-"
+    return _hl_em.sha256(e.encode("utf-8")).hexdigest()[:12]
+
+
+def _registrar_falha_de_email(stage: str, kind: str, mensagem: str,
+                              job_id: str = "", severity: str = "error") -> bool:
+    """Grava a falha no `error_log` com freio por (janela de 15 min, tipo).
+
+    Devolve True quando a linha foi gravada. As três primeiras de cada tipo na
+    janela vão inteiras; a quarta vira UM aviso de teto; o resto fica no
+    `print` e na campainha. 🚨 Nunca levanta — quem chama já está num except."""
+    try:
+        _janela = int(time.monotonic() // max(1.0, _EMAIL_FALHA_JANELA_S))
+        _chave = (_janela, str(kind or "email"))
+        if len(_EMAIL_FALHA_LINHAS) > 500:       # não vira vazamento de memória
+            _EMAIL_FALHA_LINHAS.clear()
+        _n = int(_EMAIL_FALHA_LINHAS.get(_chave) or 0) + 1
+        _EMAIL_FALHA_LINHAS[_chave] = _n
+        if _n <= _EMAIL_FALHA_MAX_LINHAS:
+            _log_error(stage, mensagem, (job_id or None), severity=severity)
+            return True
+        if _n == _EMAIL_FALHA_MAX_LINHAS + 1:
+            _log_error(stage,
+                       f"kind={kind or 'email'} — teto de {_EMAIL_FALHA_MAX_LINHAS} "
+                       f"linhas nesta janela de {int(_EMAIL_FALHA_JANELA_S / 60)} min; "
+                       f"as próximas falhas deste tipo não geram linha nova (a "
+                       f"campainha continua saindo). Freio pra não empurrar o erro "
+                       f"de verdade pra fora do painel de 40 linhas.",
+                       (job_id or None), severity=severity)
+            return True
+    except Exception:
+        pass
+    return False
 
 
 def _email_sem_endereco(texto: str) -> str:
@@ -4031,8 +4150,31 @@ def _falha_de_email_e_passageira(e) -> bool:
     return isinstance(e, (TimeoutError, ConnectionError, _sk.gaierror, _sk.herror))
 
 
+def _entrega_ficou_sem_resposta(e) -> bool:
+    """True quando a entrega caiu SEM o servidor responder — desfecho desconhecido.
+
+    🩸 Achado A1 (22/09). `SMTP.data()` manda o corpo e SÓ ENTÃO lê a resposta;
+    `getreply()` transforma QUALQUER erro de leitura (o "read operation timed
+    out" do caso) em `SMTPServerDisconnected`. Ou seja: a mesma exceção serve
+    pra "ele nem viu" e pra "ele aceitou e a resposta se perdeu".
+
+    🧪 O outro lado, que é o que torna esta régua útil: quando o servidor
+    RESPONDE — remetente recusado, destinatário recusado, erro no DATA — o
+    desfecho é conhecido (não entregou) e não há dúvida nenhuma a registrar.
+    Por isso a régua olha a resposta, não o momento."""
+    import smtplib as _s
+    if isinstance(e, _s.SMTPResponseException):
+        return False                 # veio código do servidor: sabemos o fim
+    if isinstance(e, _s.SMTPRecipientsRefused):
+        return False                 # idem (não é SMTPResponseException)
+    # sem resposta: sessão caída ou socket estourado no meio do corpo.
+    # `OSError` cobre timeout/reset/abort — dentro do `sendmail` só há socket.
+    return isinstance(e, (_s.SMTPServerDisconnected, OSError))
+
+
 def _alerta_email_que_nao_saiu(to_email: str, subject: str, log_kind: str,
-                               job_id: str, motivo: str, tentativas: int) -> bool:
+                               job_id: str, motivo: str, tentativas: int,
+                               incerto: bool = False) -> bool:
     """Campainha interna quando o e-mail de um CLIENTE não saiu.
 
     🔒 Aqui o contato PODE aparecer: quem lê é o Pedro, e sem o endereço ele
@@ -4041,37 +4183,67 @@ def _alerta_email_que_nao_saiu(to_email: str, subject: str, log_kind: str,
 
     🪤 O alerta sai pelo MESMO `_send_email_smtp` que acabou de falhar. Sem
     trava, um servidor fora do ar viraria recursão: falha → alerta → falha do
-    alerta → alerta… A trava é por thread, e o contador do dia evita que uma
-    newsletter de 65 destinatários vire 65 campainhas."""
+    alerta → alerta… A trava é por thread.
+
+    🩸 O freio era `(dia, kind, job)` e a revisão mostrou que isso CALA CLIENTE:
+    96% dos e-mails da casa não têm `job_id` (349 de 364 em 30 dias, medido em
+    22/09), e `boas_vindas` — o tipo mais comum, 69 em 30 dias — é um deles.
+    Cinco clientes diferentes falhando no mesmo tipo e no mesmo dia davam UMA
+    campainha, e os outros quatro ficavam como o de 22/09: ninguém sabia. Agora
+    a chave leva a marca do destinatário (hash, não endereço), e o dia é o de
+    Brasília — com `utcnow()` a janela virava às 21:00.
+
+    🪤 E a chave só é marcada DEPOIS de a campainha tocar: marcada antes, uma
+    queda de SMTP (quando o alerta sai pela porta quebrada e falha) calava o
+    tipo o dia inteiro, mesmo depois de o servidor voltar. Quem segura o custo
+    nesse caso é `_EMAIL_ALERTA_ESPERA_S`, que é tempo e não dia."""
+    if incerto is None:
+        incerto = False
     if not to_email or _email_eh_interno(to_email):
         return False
     if (to_email or "").lower() == (NOTIFY_EMAIL or "").lower():
         return False                      # o alerta é o próprio destinatário
     if getattr(_EMAIL_ALERTANDO, "dentro", False):
         return False                      # já estamos tentando avisar
-    _chave = (datetime.utcnow().strftime("%Y-%m-%d"), str(log_kind or "email"),
-              str(job_id or ""))
+    _chave = (_dia_brasilia(), str(log_kind or "email"), str(job_id or ""),
+              _marca_do_email(to_email))
     if _chave in _EMAIL_FALHA_AVISADO:
+        return False
+    # a campainha caiu há pouco: o servidor está fora do ar e tentar de novo, uma
+    # vez por destinatário, custaria a newsletter inteira em conexões perdidas
+    _agora_al = time.monotonic()
+    if _agora_al - float(_EMAIL_ALERTA_ESTADO.get("caiu_em") or 0.0) < _EMAIL_ALERTA_ESPERA_S:
         return False
     if len(_EMAIL_FALHA_AVISADO) > 5000:
         _EMAIL_FALHA_AVISADO.clear()
-    _EMAIL_FALHA_AVISADO.add(_chave)
     _EMAIL_ALERTANDO.dentro = True
     try:
-        return bool(_notify_admin(
-            "E-mail NÃO saiu — %s" % (log_kind or "email"),
-            "<b>Um e-mail de cliente não foi entregue.</b><br><br>"
+        _tocou = bool(_notify_admin(
+            ("E-mail pode NÃO ter saído — %s" if incerto else "E-mail NÃO saiu — %s")
+            % (log_kind or "email"),
+            ("<b>A sessão caiu DEPOIS que o e-mail começou a ser entregue — não dá "
+             "pra saber se ele chegou.</b><br>Reenviar pode gerar uma segunda cópia; "
+             "não reenviar pode deixar o cliente sem o aviso. Confira com ele.<br><br>"
+             if incerto else
+             "<b>Um e-mail de cliente não foi entregue.</b><br><br>") +
             "<b>Para:</b> %s<br><b>Tipo:</b> %s<br><b>Projeto:</b> %s<br>"
             "<b>Assunto:</b> %s<br><b>Tentativas:</b> %d<br>"
-            "<b>Motivo:</b> %s<br><br>"
-            "O cliente NÃO recebeu esse aviso. Vale reenviar na mão." % (
+            "<b>Motivo:</b> %s<br><br>%s" % (
                 to_email, (log_kind or "email"), (job_id or "—"),
-                (subject or "")[:200], tentativas, motivo)))
+                (subject or "")[:200], tentativas, motivo,
+                ("O cliente PODE não ter recebido esse aviso."
+                 if incerto else
+                 "O cliente NÃO recebeu esse aviso. Vale reenviar na mão."))))
     except Exception as _ea:
         print(f"[email] alerta de falha nao saiu (nao-fatal): {_ea}")
-        return False
+        _tocou = False
     finally:
         _EMAIL_ALERTANDO.dentro = False
+    if _tocou:
+        _EMAIL_FALHA_AVISADO.add(_chave)
+    else:
+        _EMAIL_ALERTA_ESTADO["caiu_em"] = _agora_al
+    return _tocou
 
 
 def _send_email_smtp(to_email: str, subject: str, html_body: str, text_body: str = "",
@@ -4100,9 +4272,15 @@ def _send_email_smtp(to_email: str, subject: str, html_body: str, text_body: str
                     _SUPRIMIDO_AVISADO.clear()
                 _SUPRIMIDO_AVISADO.add(_chave)
                 try:
+                    # 🔒 22/09 (achado A6): esta linha gravava o endereço do
+                    # cliente no `error_log` — a MESMA tabela de onde o commit
+                    # da manhã tirou o e-mail do alerta de NPS, na MESMA
+                    # função que escreve `email:falha` sem endereço. Vai a
+                    # marca (hash), que separa pessoas sem publicar ninguém.
                     _log_error("email:suprimido",
-                               f"{log_kind or 'email'} para {to_email} NÃO saiu — na lista de "
-                               f"supressão: {_motivo_sup}", severity="info")
+                               f"{log_kind or 'email'} para pessoa={_marca_do_email(to_email)} "
+                               f"NÃO saiu — na lista de supressão: "
+                               f"{_email_sem_endereco(_motivo_sup)}", severity="info")
                 except Exception:
                     pass
             print(f"[email] suprimido -> {to_email} ({log_kind}): {_motivo_sup}")
@@ -4121,9 +4299,28 @@ def _send_email_smtp(to_email: str, subject: str, html_body: str, text_body: str
     from_email = os.getenv("SMTP_FROM", user)
     _erro = None
     _tentativa = 0
+    _entregue = False        # o servidor ACEITOU a mensagem (sendmail voltou)
+    _na_entrega = False      # a falha pegou DENTRO do sendmail
+    _duvida = False          # …e sem resposta do servidor: pode ter saído
     _t0 = time.monotonic()
-    while _tentativa < _EMAIL_TENTATIVAS:
+    # 🪤 A campainha é outro envio, por esta mesma porta. Ela não pode ter três
+    # tentativas nem 20 s de socket: era ela que dobrava o tempo preso do job
+    # (84 s medidos pela revisão, contra os 30 s anunciados).
+    _sou_a_campainha = bool(getattr(_EMAIL_ALERTANDO, "dentro", False))
+    _max_tentativas = 1 if _sou_a_campainha else _EMAIL_TENTATIVAS
+    while _tentativa < _max_tentativas:
         _tentativa += 1
+        _na_entrega = False
+        # (b) do orçamento: a tentativa seguinte nasce com o que SOBROU dele.
+        # A 1ª leva o timeout cheio — o orçamento não pode estrangular a única
+        # tentativa que a maioria dos envios faz.
+        if _sou_a_campainha:
+            _tempo = _EMAIL_TIMEOUT_ALERTA_S
+        elif _tentativa == 1:
+            _tempo = _EMAIL_TIMEOUT_S
+        else:
+            _tempo = max(_EMAIL_TIMEOUT_MIN_S,
+                         min(_EMAIL_TIMEOUT_S, _EMAIL_TETO_S - (time.monotonic() - _t0)))
         try:
             import smtplib
             from email.mime.multipart import MIMEMultipart
@@ -4142,69 +4339,131 @@ def _send_email_smtp(to_email: str, subject: str, html_body: str, text_body: str
             # passar o tipo, e o que eu esquecesse ficaria cego pra sempre, calado.
             msg.attach(MIMEText(_marcar_links_do_email(html_body, log_kind),
                                 "html", "utf-8"))
-            with smtplib.SMTP(host, port, timeout=20) as server:
+            with smtplib.SMTP(host, port, timeout=_tempo) as server:
                 server.ehlo()
                 server.starttls()
                 server.login(user, password)
+                # 🩸 A FRONTEIRA (achado A1 da revisão). Daqui pra baixo a
+                # mensagem já pode estar no servidor: `SMTP.data()` manda o
+                # corpo e SÓ ENTÃO lê a resposta, e qualquer erro de leitura
+                # (o "read operation timed out" de 22/09) vira o MESMO
+                # `SMTPServerDisconnected` de quando o servidor nem viu nada.
+                # Retentar aqui entrega DUAS vezes e grava UMA linha em
+                # `email_sent_log` — a duplicata invisível, que é o cego de
+                # 22/09 do outro lado.
+                _na_entrega = True
                 server.sendmail(from_email, [to_email], msg.as_string())
-            print(f"[email] OK -> {to_email}: {subject}"
-                  + (f" (na tentativa {_tentativa})" if _tentativa > 1 else ""))
-            if _tentativa > 1:
-                # 🔑 O instrumento que decide se um dia vale FILA de re-envio:
-                # sem ele, "a re-tentativa resolve?" continuaria sendo palpite.
-                try:
-                    _log_error("email:retentado",
-                               f"kind={log_kind or 'email'} job={job_id or '-'} "
-                               f"— saiu na tentativa {_tentativa}",
-                               (job_id or None), severity="info")
-                except Exception:
-                    pass
-            # Registra TODO email enviado pro usuario (medir volume/pessoa, nao poluir).
-            # Pula contas internas (Pedro/aliases) e o alerta interno (NOTIFY_EMAIL).
-            try:
-                _to = (to_email or "").lower()
-                if not _email_eh_interno(_to) and _to != (NOTIFY_EMAIL or "").lower():
-                    _linha_log = {
-                        "email": to_email,
-                        "kind": (log_kind or "email"),
-                        "subject": (subject or "")[:200],
-                    }
-                    # 🪤 Só grava a chave quando há job — string vazia viraria um
-                    # vínculo falso e entraria no índice como se fosse um job.
-                    _jid_log = str(job_id or "").strip()
-                    if _jid_log:
-                        _linha_log["job_id"] = _jid_log
-                    _supabase_insert("email_sent_log", _linha_log)
-            except Exception as _e:
-                print(f"[email] log de envio falhou (nao critico): {_e}")
-            return True
+                _entregue = True
+                _na_entrega = False
         except Exception as e:
             _erro = e
-            if not _falha_de_email_e_passageira(e) or _tentativa >= _EMAIL_TENTATIVAS:
-                break
-            if time.monotonic() - _t0 >= _EMAIL_TETO_S:
-                print(f"[email] desisto de repetir ({log_kind}): passei do teto "
-                      f"de {_EMAIL_TETO_S:.0f}s segurando o job")
-                break
-            _espera = _EMAIL_ESPERAS_S[min(_tentativa - 1, len(_EMAIL_ESPERAS_S) - 1)]
-            print(f"[email] tentativa {_tentativa} caiu ({type(e).__name__}) "
-                  f"— de novo em {_espera:.0f}s")
-            time.sleep(_espera)
-    # 🩸 Daqui pra baixo o e-mail NÃO saiu. Até 22/09 isto era um `print` e
-    # mais nada — ver o bloco de comentários acima de `_EMAIL_TENTATIVAS`.
+            if not _entregue:
+                if _na_entrega and _entrega_ficou_sem_resposta(e):
+                    # 🩸 Achado A1: aqui a mensagem PODE já estar no servidor.
+                    # A dúvida é grudenta — uma vez levantada, acompanha o
+                    # desfecho até o fim, porque é ela que o Pedro precisa ler.
+                    _duvida = True
+                if not _falha_de_email_e_passageira(e) or _tentativa >= _max_tentativas:
+                    break
+                if time.monotonic() - _t0 >= _EMAIL_TETO_S:
+                    print(f"[email] desisto de repetir ({log_kind}): passei do "
+                          f"orçamento de {_EMAIL_TETO_S:.0f}s segurando o job")
+                    break
+                _espera = _EMAIL_ESPERAS_S[min(_tentativa - 1, len(_EMAIL_ESPERAS_S) - 1)]
+                print(f"[email] tentativa {_tentativa} caiu ({type(e).__name__}) "
+                      f"— de novo em {_espera:.0f}s")
+                time.sleep(_espera)
+                continue
+            # 🔑 O servidor JÁ tinha aceitado a mensagem e a sessão caiu no
+            # fecho (4xx no QUIT, conexão cortada no `__exit__`). Isso é
+            # ENTREGA, não falha: retentar aqui era a segunda duplicata que a
+            # revisão mediu. Fica o rastro, porque servidor que despede assim
+            # todo dia é sintoma.
+            print(f"[email] sessao caiu DEPOIS da entrega -> {log_kind}: "
+                  f"{type(e).__name__}")
+            try:
+                _log_error("email:fecho-torto",
+                           f"kind={log_kind or 'email'} job={job_id or '-'} "
+                           f"pessoa={_marca_do_email(to_email)} — o servidor aceitou "
+                           f"a mensagem e a sessão caiu no fecho: "
+                           f"{_email_sem_endereco(type(e).__name__)}",
+                           (job_id or None), severity="info")
+            except Exception:
+                pass
+        # ── chegou aqui = a mensagem FOI aceita pelo servidor ──────────────
+        print(f"[email] OK -> {to_email}: {subject}"
+              + (f" (na tentativa {_tentativa})" if _tentativa > 1 else ""))
+        if _duvida:
+            # 🩸 ACHADO A1, a metade honesta. A casa escolheu PROTEGER O
+            # CLIENTE (retentar) em vez de proteger o log, porque ficar sem o
+            # aviso foi o que custou caro em 22/09. O preço dessa escolha é
+            # esta linha: pode ter ido cópia repetida, e `email_sent_log` só
+            # tem UMA linha. Sem isto, a duplicata seria invisível — e a
+            # auditoria de e-mail duplicado da casa já errou 6 de 7 por método
+            # cego (18/09); não dá pra plantar mais um cego.
+            _registrar_falha_de_email(
+                "email:pode-ter-duplicado", (log_kind or "email"),
+                f"kind={log_kind or 'email'} job={job_id or '-'} "
+                f"pessoa={_marca_do_email(to_email)} — uma tentativa anterior caiu "
+                f"DENTRO da entrega, sem resposta do servidor, e a tentativa "
+                f"{_tentativa} foi aceita: o cliente pode ter recebido duas cópias. "
+                f"`email_sent_log` tem só uma linha deste envio.",
+                (job_id or ""), severity="error")
+        if _tentativa > 1:
+            # 🔑 O instrumento que decide se um dia vale FILA de re-envio:
+            # sem ele, "a re-tentativa resolve?" continuaria sendo palpite.
+            try:
+                _log_error("email:retentado",
+                           f"kind={log_kind or 'email'} job={job_id or '-'} "
+                           f"— saiu na tentativa {_tentativa}",
+                           (job_id or None), severity="info")
+            except Exception:
+                pass
+        # Registra TODO email enviado pro usuario (medir volume/pessoa, nao poluir).
+        # Pula contas internas (Pedro/aliases) e o alerta interno (NOTIFY_EMAIL).
+        try:
+            _to = (to_email or "").lower()
+            if not _email_eh_interno(_to) and _to != (NOTIFY_EMAIL or "").lower():
+                _linha_log = {
+                    "email": to_email,
+                    "kind": (log_kind or "email"),
+                    "subject": (subject or "")[:200],
+                }
+                # 🪤 Só grava a chave quando há job — string vazia viraria um
+                # vínculo falso e entraria no índice como se fosse um job.
+                _jid_log = str(job_id or "").strip()
+                if _jid_log:
+                    _linha_log["job_id"] = _jid_log
+                _supabase_insert("email_sent_log", _linha_log)
+        except Exception as _e:
+            print(f"[email] log de envio falhou (nao critico): {_e}")
+        return True
+    # 🩸 Daqui pra baixo o e-mail NÃO saiu — ou não se sabe se saiu. Até 22/09
+    # isto era um `print` e mais nada — ver o bloco acima de `_EMAIL_TENTATIVAS`.
+    #
+    # 🧭 A ESCOLHA DO CASO DUVIDOSO (achado A1). Quando a queda pega DENTRO do
+    # `sendmail` e o servidor não responde, os dois mundos cabem na MESMA
+    # exceção: ele pode não ter visto nada, ou já ter aceitado e só ter demorado
+    # a responder. A casa retenta assim mesmo — ficar sem o aviso foi o que
+    # custou caro em 22/09, e uma cópia repetida é chateação, não perda. Mas a
+    # dúvida não é engolida: ela vira `email:pode-ter-duplicado` quando a
+    # re-tentativa dá certo, e vira frase no rastro e na campainha quando não dá.
+    # 📏 O número que reverte a escolha: cliente reclamando de cópia repetida
+    # com `email:pode-ter-duplicado` no log. Hoje o log do Render tem UMA falha
+    # de e-mail em 10 dias — nenhum dos dois lados é caro nesse volume.
     print(f"[email] FALHA -> {to_email}: {type(_erro).__name__}: {_erro}")
     _motivo = _email_sem_endereco(f"{type(_erro).__name__}: {_erro}")[:400]
-    try:
-        _log_error("email:falha",
-                   f"kind={log_kind or 'email'} job={job_id or '-'} "
-                   f"tentativas={_tentativa} "
-                   f"({'passageira' if _falha_de_email_e_passageira(_erro) else 'permanente'})"
-                   f" — {_motivo}", (job_id or None), severity="error")
-    except Exception:
-        pass
+    _registrar_falha_de_email(
+        "email:falha", (log_kind or "email"),
+        f"kind={log_kind or 'email'} job={job_id or '-'} "
+        f"pessoa={_marca_do_email(to_email)} tentativas={_tentativa} "
+        f"({'passageira' if _falha_de_email_e_passageira(_erro) else 'permanente'})"
+        + (" — 🪤 uma tentativa caiu DENTRO da entrega sem resposta do servidor: "
+           "pode ter saído cópia" if _duvida else "")
+        + f" — {_motivo}", (job_id or ""), severity="error")
     try:
         _alerta_email_que_nao_saiu(to_email, subject, log_kind, job_id,
-                                   _motivo, _tentativa)
+                                   _motivo, _tentativa, incerto=_duvida)
     except Exception as _ea2:
         print(f"[email] alerta de falha nao saiu (nao-fatal): {_ea2}")
     return False
@@ -23957,6 +24216,128 @@ def admin_email_liberar(payload: SuprimirPayload, request: Request):
     return {"status": "ok", "email": e}
 
 
+# ── DEVOLUÇÃO (bounce): quem alimenta a lista de supressão (22/09/2026) ──────
+# 🩸 A lista existe desde 05/09 e o envio JÁ a consulta — mas NADA a alimenta:
+# ela tem 2 linhas, as duas postas à mão naquele dia. Medido em 22/09 pelo
+# Pedro, na caixa dele: **14 devoluções em 90 dias, de 4 endereços**; 3 clientes
+# ficaram sem NENHUM e-mail nosso (um deles desde julho), todos por caixa cheia,
+# e 1 endereço não existe. O sistema marca esses envios como ENVIADOS — o
+# servidor aceitou a mensagem; a recusa chega minutos depois, na caixa do Pedro.
+# Ou seja: `email_sent_log` diz "saiu" e o cliente não recebeu. É o silêncio de
+# 22/09 outra vez, por outra porta.
+#
+# 📏 ALCANCE (só leitura, 22/09): 622 envios pra 159 endereços em 90 dias; 8
+# deles foram pros 2 endereços hoje suprimidos, e ZERO depois da supressão — a
+# trava funciona, o que falta é quem a alimente. Os 2 suprimidos TÊM conta no
+# site: a tela alcança quem o e-mail não alcança.
+#
+# 🧭 POR QUE NÃO LER A CAIXA (IMAP) — decisão pro Pedro, não minha. Ler as
+# devoluções sozinho exigiria: credencial de app do Gmail dele em env var
+# (segredo novo, e o repo é público), uma rotina periódica no Render (a vaga do
+# motor é UMA — `JOBS_SIMULTANEOS=1`), parser de DSN/bounce report (formato
+# variado por provedor) e uma regra pra separar "caixa cheia de hoje" de
+# "endereço que não existe". É meio dia de trabalho e um segredo novo pra
+# resolver 14 eventos em 90 dias. O caminho barato é este: o Pedro cola a lista
+# que ele JÁ recebe, e o sistema faz o resto. Se as devoluções passarem de ~1
+# por semana, o IMAP se paga — e aí a conta muda.
+class DevolucoesPayload(BaseModel):
+    emails: list = []                    # a lista colada da caixa do Pedro
+    tipo: str = "caixa_cheia"
+    motivo: Optional[str] = ""
+    ultima_devolucao: Optional[str] = None
+
+
+def _emails_da_colagem(bruto) -> list:
+    """Tira endereços de um texto colado (ou de uma lista) — vírgula, ponto e
+    vírgula, quebra de linha, `Nome <e-mail>`, tudo serve. Devolve em minúsculas
+    e sem repetir, na ordem em que apareceram."""
+    import re as _re_dev
+    if isinstance(bruto, (list, tuple)):
+        texto = "\n".join(str(x or "") for x in bruto)
+    else:
+        texto = str(bruto or "")
+    vistos, saida = set(), []
+    for achado in _re_dev.findall(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", texto):
+        e = achado.strip().lower()
+        if e not in vistos:
+            vistos.add(e)
+            saida.append(e)
+    return saida
+
+
+@app.post("/api/admin/email-devolucoes")
+def admin_email_devolucoes(payload: DevolucoesPayload, request: Request):
+    """Recebe a lista de endereços que DEVOLVERAM e grava todos de uma vez.
+
+    O Pedro cola o que a caixa dele mostra; a rota normaliza, soma a contagem de
+    devoluções do que já estava lá e faz um upsert só. Devolve o que gravou e o
+    que recusou — nunca 400 na lista inteira por causa de uma linha torta, que é
+    o que faria ele desistir da tela e voltar pro formulário de um em um.
+
+    🚫 Endereço INTERNO (Pedro/aliases, NOTIFY_EMAIL) é recusado: suprimir o
+    destino dos alertas calaria a casa inteira, e é exatamente o tipo de linha
+    que aparece numa caixa de devolução por engano."""
+    _require_admin(request)
+    if payload.tipo not in _SUPRIMIR_TIPOS:
+        raise HTTPException(400, f"tipo: use {', '.join(_SUPRIMIR_TIPOS)}")
+    alvos = _emails_da_colagem(payload.emails)
+    if not alvos:
+        raise HTTPException(400, "não achei nenhum endereço na lista")
+    if len(alvos) > 200:
+        raise HTTPException(400, "lista grande demais — mande até 200 por vez")
+    recusados = [e for e in alvos
+                 if _email_eh_interno(e) or e == (NOTIFY_EMAIL or "").lower()]
+    alvos = [e for e in alvos if e not in recusados]
+    if not alvos:
+        return {"status": "ok", "gravados": [], "recusados": recusados, "n": 0}
+
+    # 🪤 O upsert do PostgREST REESCREVE a linha inteira. Sem ler antes, um
+    # endereço que já tinha 7 devoluções voltaria pra 1 e perderia a data da
+    # primeira — e é justamente esse histórico que decide se vale suprimir.
+    # Leitura que falha NÃO vira escrita com número inventado: 502, e o Pedro
+    # tenta de novo.
+    _filtro = ",".join(urllib.parse.quote(e) for e in alvos)
+    st_ler, antigos = _supa_rest_service(
+        "GET", f"/email_suprimidos?select=email,n_devolucoes,primeira_devolucao"
+               f"&email=in.({_filtro})", timeout=10)
+    if st_ler != 200 or antigos is None:
+        raise HTTPException(502, "não consegui ler a lista atual — não gravei nada")
+    _por_email = {str(r.get("email") or "").strip().lower(): r for r in (antigos or [])}
+
+    _hoje = _dia_brasilia()
+    _quando = (payload.ultima_devolucao or _hoje)[:10]
+    corpo = []
+    for e in alvos:
+        _velho = _por_email.get(e) or {}
+        corpo.append({
+            "email": e,
+            "motivo": (payload.motivo or "").strip() or f"devolução registrada em {_hoje}",
+            "tipo": payload.tipo,
+            "n_devolucoes": int(_velho.get("n_devolucoes") or 0) + 1,
+            "primeira_devolucao": _velho.get("primeira_devolucao") or _quando,
+            "ultima_devolucao": _quando,
+            "criado_por": "admin:devolucao",
+            "liberado_em": None,          # devolveu de novo: volta a bloquear
+            "liberado_por": None,
+        })
+    st, _ = _supa_rest_service("POST", "/email_suprimidos?on_conflict=email", body=corpo,
+                               prefer="resolution=merge-duplicates,return=minimal",
+                               timeout=15)
+    if st not in (200, 201, 204):
+        raise HTTPException(502, "não consegui gravar as devoluções — tente de novo")
+    _suprimidos(force=True)               # o próximo envio já bloqueia
+    try:
+        # 🔒 contagem, nunca endereço: `error_log` é técnico e o repo é público.
+        _log_error("email:devolucoes",
+                   f"{len(corpo)} endereço(s) suprimido(s) por devolução "
+                   f"(tipo={payload.tipo}); {len(recusados)} recusado(s) por serem internos",
+                   severity="info")
+    except Exception:
+        pass
+    return {"status": "ok", "n": len(corpo), "recusados": recusados,
+            "gravados": [r["email"] for r in corpo]}
+
+
 _AVISOS_COM_TETO: dict = {}
 
 
@@ -29992,7 +30373,31 @@ def list_my_projects(user_id: str, request: Request):
         req.add_header('Content-Type', 'application/json')
         resp = urllib.request.urlopen(req, timeout=15)
         projects = json.loads(resp.read().decode('utf-8'))
-        return {"status": "ok", "user_id": user_id, "projects": projects, "count": len(projects)}
+        saida = {"status": "ok", "user_id": user_id, "projects": projects,
+                 "count": len(projects)}
+        # 🩸 22/09/2026 — O CLIENTE SUPRIMIDO NÃO SABIA. A lista de supressão
+        # cala TODO e-mail daquele endereço (é o desenho, e está certo: 14
+        # devoluções em 90 dias pesam na reputação do remetente), mas ninguém
+        # contava isso pra ele — ele só parava de receber "sua planilha está
+        # pronta" e achava que a casa tinha sumido. Medido: 3 clientes ficaram
+        # sem NENHUM e-mail nosso, um desde julho. Os suprimidos de hoje têm
+        # conta: a TELA alcança quem o e-mail não alcança.
+        # 🪤 Só pro DONO da conta, e vindo do token — nunca do `user_id` da URL.
+        # E falha ABERTA: lista ilegível não pode derrubar a tela de projetos.
+        try:
+            _meu = (user.get("email") or "").strip().lower()
+            if _meu and user.get("id") == user_id:
+                _ficha_sup = _email_suprimido_ficha(_meu)
+                if _ficha_sup:
+                    saida["entrega_email"] = {
+                        "suprimido": True,
+                        "tipo": _ficha_sup.get("tipo") or "manual",
+                        "desde": _ficha_sup.get("desde"),
+                        "ultima_devolucao": _ficha_sup.get("ultima_devolucao"),
+                    }
+        except Exception as _es:
+            print(f"[email] ficha de supressão do dono falhou (nao-fatal): {_es}")
+        return saida
     except Exception as e:
         raise HTTPException(500, f"Erro ao buscar projetos: {str(e)}")
 

@@ -19,6 +19,7 @@ O desenho:
 o guarda de forma cobra a trava ANTES de olhar o SMTP.
 """
 import os
+import re
 import sys
 
 import pytest
@@ -32,6 +33,9 @@ import main  # noqa: E402
 from _corpo import corpo_de  # noqa: E402
 
 REQ = type("R", (), {"headers": {}})()
+
+#: mesmo padrão que a auditoria de repo público usa pra caçar e-mail no código
+_RE_EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 
 
 class _Servico:
@@ -106,6 +110,11 @@ def _sem_smtp(monkeypatch):
 
 
 def test_endereco_suprimido_NAO_sai_e_fica_o_rastro(monkeypatch, limpo):
+    """🔒 22/09: esta linha gravava o ENDEREÇO do cliente no `error_log` — a
+    mesma tabela de onde o commit da manhã tirou o e-mail do alerta de NPS, e a
+    mesma função que escreve `email:falha` sem endereço (regra dura nº6, repo
+    público). O rastro continua servindo pro diagnóstico: leva o tipo, o motivo
+    e a MARCA do destinatário, que separa pessoas sem publicar ninguém."""
     monkeypatch.setattr(main, "_email_suprimido", lambda e: "7 devoluções caixa cheia")
     import smtplib
     monkeypatch.setattr(smtplib, "SMTP", lambda *a, **k: (_ for _ in ()).throw(AssertionError("tentou falar com o SMTP")))
@@ -113,7 +122,21 @@ def test_endereco_suprimido_NAO_sai_e_fica_o_rastro(monkeypatch, limpo):
     ok = main._send_email_smtp("cliente2@example.com", "Assunto", "<b>x</b>", log_kind="proximo_projeto")
     assert ok is False
     sup = [l for l in limpo if l[0] == "email:suprimido"]
-    assert len(sup) == 1 and "proximo_projeto" in sup[0][1] and "cliente2@example.com" in sup[0][1] and "caixa cheia" in sup[0][1]
+    assert len(sup) == 1 and "proximo_projeto" in sup[0][1] and "caixa cheia" in sup[0][1]
+    assert "cliente2@example.com" not in sup[0][1], (
+        "🔒 endereço de cliente no error_log — regra dura nº6: %r" % sup[0][1])
+    assert _RE_EMAIL.search(sup[0][1]) is None, sup[0][1]
+    assert main._marca_do_email("cliente2@example.com") in sup[0][1], (
+        "sem a marca, duas pessoas suprimidas viram a mesma linha: %r" % sup[0][1])
+
+
+def test_CONTROLE_o_endereco_ESTAVA_no_caminho_dessa_linha():
+    """Prova que o guarda acima reprova: o endereço chega à função, e o motivo
+    guardado no banco pode trazer outro dentro. Sem este controle, "não vazou"
+    poderia ser só "não havia nada pra vazar"."""
+    assert _RE_EMAIL.search("proximo_projeto para cliente2@example.com NÃO saiu")
+    assert _RE_EMAIL.search(main._email_sem_endereco(
+        "devolveu pra cliente2@example.com")) is None
 
 
 def test_um_log_por_dia_por_endereco_e_tipo(monkeypatch, limpo):
@@ -192,3 +215,210 @@ def test_listar_devolve_ativos_e_falha_e_502_nao_lista_vazia(monkeypatch, admin)
     with pytest.raises(main.HTTPException) as ex:
         main.admin_email_suprimidos(REQ)
     assert ex.value.status_code == 502
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  DEVOLUÇÃO (bounce) — quem ALIMENTA a lista (22/09/2026)
+#
+#  🩸 A lista está no ar desde 05/09 e o envio já a consulta, mas nada a
+#  alimentava: **2 linhas**, as duas postas à mão naquele dia. As devoluções
+#  chegam na caixa do Pedro; o sistema marca o envio como ENVIADO porque o
+#  servidor aceitou a mensagem. Medido por ele em 22/09: 14 devoluções em 90
+#  dias, 4 endereços, **3 clientes sem NENHUM e-mail nosso** — um desde julho.
+#  📏 No banco (só leitura, 22/09): 622 envios pra 159 endereços em 90 dias; 8
+#  foram pros 2 suprimidos e ZERO depois da supressão — a trava funciona, o que
+#  faltava era quem a alimentasse.
+# ══════════════════════════════════════════════════════════════════════════
+class _ServicoPorMetodo:
+    """Dublê do REST com resposta POR MÉTODO. `**k` de propósito: dublê de
+    assinatura exata desarma calado quando a função real ganha parâmetro."""
+
+    def __init__(self, respostas):
+        self.respostas = dict(respostas)
+        self.chamadas = []
+
+    def __call__(self, method, path, body=None, *a, **k):
+        self.chamadas.append({"m": method, "path": path, "body": body,
+                              "prefer": k.get("prefer")})
+        return self.respostas.get(method, (200, []))
+
+    def posts(self):
+        return [c for c in self.chamadas if c["m"] == "POST"]
+
+
+def test_a_colagem_entende_o_que_a_caixa_do_Pedro_cospe():
+    """Ele cola o que tem: uma por linha, "Nome <e-mail>", vírgula, repetido."""
+    achados = main._emails_da_colagem(
+        ["Fulano <Cliente2@Example.com>, cliente5@example.com\n"
+         "cliente2@example.com; \n  lixo sem arroba\n"])
+    assert achados == ["cliente2@example.com", "cliente5@example.com"], achados
+    assert main._emails_da_colagem("") == [] and main._emails_da_colagem(None) == []
+
+
+def test_devolucao_SOMA_a_contagem_e_guarda_a_primeira_data(monkeypatch, admin):
+    """🪤 O upsert do PostgREST REESCREVE a linha: sem ler antes, quem tinha 7
+    devoluções voltaria pra 1 e perderia a data da primeira — e é esse histórico
+    que decide se vale suprimir."""
+    svc = _ServicoPorMetodo({
+        "GET": (200, [{"email": "cliente2@example.com", "n_devolucoes": 7,
+                       "primeira_devolucao": "2026-07-09"}]),
+        "POST": (201, None)})
+    monkeypatch.setattr(main, "_supa_rest_service", svc)
+    monkeypatch.setattr(main, "_suprimidos", lambda force=False, **k: {})
+
+    r = main.admin_email_devolucoes(main.DevolucoesPayload(
+        emails=["cliente2@example.com", "Novo <cliente9@example.com>"],
+        tipo="caixa_cheia", ultima_devolucao="2026-09-22"), REQ)
+
+    assert r["status"] == "ok" and r["n"] == 2
+    corpo = svc.posts()[0]["body"]
+    assert isinstance(corpo, list) and len(corpo) == 2, "um POST só pra lista inteira"
+    velho = [x for x in corpo if x["email"] == "cliente2@example.com"][0]
+    novo = [x for x in corpo if x["email"] == "cliente9@example.com"][0]
+    assert velho["n_devolucoes"] == 8, "somou, não reescreveu: %r" % velho
+    assert velho["primeira_devolucao"] == "2026-07-09", velho
+    assert velho["ultima_devolucao"] == "2026-09-22" and velho["liberado_em"] is None
+    assert novo["n_devolucoes"] == 1 and novo["primeira_devolucao"] == "2026-09-22"
+    assert "on_conflict=email" in svc.posts()[0]["path"]
+    assert "merge-duplicates" in (svc.posts()[0]["prefer"] or "")
+
+
+def test_devolucao_RECUSA_endereco_interno_e_grava_o_resto(monkeypatch, admin):
+    """🚨 Suprimir o destino dos alertas calaria a casa inteira — e endereço
+    interno aparece numa caixa de devolução com a maior facilidade (o Pedro é
+    remetente E destinatário dos avisos). Controle positivo no mesmo teste: o
+    endereço de cliente da MESMA lista continua sendo gravado."""
+    svc = _ServicoPorMetodo({"GET": (200, []), "POST": (201, None)})
+    monkeypatch.setattr(main, "_supa_rest_service", svc)
+    monkeypatch.setattr(main, "_suprimidos", lambda force=False, **k: {})
+
+    r = main.admin_email_devolucoes(main.DevolucoesPayload(
+        emails=[main.ADMIN_EMAIL, main.NOTIFY_EMAIL, "cliente9@example.com"]), REQ)
+
+    assert r["n"] == 1 and r["gravados"] == ["cliente9@example.com"]
+    assert sorted(r["recusados"]) == sorted([main.ADMIN_EMAIL.lower(),
+                                             main.NOTIFY_EMAIL.lower()])
+    assert [x["email"] for x in svc.posts()[0]["body"]] == ["cliente9@example.com"]
+
+
+def test_devolucao_com_a_LEITURA_caida_nao_grava_nada(monkeypatch, admin):
+    """🪤 Gravar sem saber o que já havia é apagar histórico com número
+    inventado. Falha FECHADA aqui, ao contrário do envio (lá a falha é aberta
+    porque calar todo e-mail é pior que mandar pra caixa cheia)."""
+    svc = _ServicoPorMetodo({"GET": (500, None), "POST": (201, None)})
+    monkeypatch.setattr(main, "_supa_rest_service", svc)
+    with pytest.raises(main.HTTPException) as ex:
+        main.admin_email_devolucoes(main.DevolucoesPayload(emails=["cliente9@example.com"]), REQ)
+    assert ex.value.status_code == 502
+    assert not svc.posts(), "não pode escrever sem ter lido"
+
+
+@pytest.mark.parametrize("ruim", [{"emails": ["nada aqui"]}, {"emails": []},
+                                  {"emails": ["a@b.com"], "tipo": "chato"}])
+def test_devolucao_recusa_entrada_torta(monkeypatch, admin, ruim):
+    svc = _ServicoPorMetodo({"GET": (200, []), "POST": (201, None)})
+    monkeypatch.setattr(main, "_supa_rest_service", svc)
+    with pytest.raises(main.HTTPException) as ex:
+        main.admin_email_devolucoes(main.DevolucoesPayload(**ruim), REQ)
+    assert ex.value.status_code == 400
+    assert not svc.posts()
+
+
+def test_devolucao_renova_o_cache_na_hora(monkeypatch, admin):
+    """Sem isto, o endereço que acabou de devolver continuaria recebendo por
+    até 5 min — e o próximo e-mail seria mais uma devolução."""
+    forcou = []
+    monkeypatch.setattr(main, "_supa_rest_service",
+                        _ServicoPorMetodo({"GET": (200, []), "POST": (201, None)}))
+    monkeypatch.setattr(main, "_suprimidos",
+                        lambda force=False, **k: forcou.append(force) or {})
+    main.admin_email_devolucoes(main.DevolucoesPayload(emails=["cliente9@example.com"]), REQ)
+    assert True in forcou
+
+
+# ── o aviso na tela do cliente ─────────────────────────────────────────────
+def test_a_ficha_do_suprimido_sai_do_MESMO_cache(monkeypatch, limpo):
+    """Uma consulta a mais por tela seria cara; a ficha vem da leitura que já
+    acontece (uma a cada 5 min)."""
+    svc = _Servico((200, [{"email": "cliente2@example.com", "motivo": "7 devoluções",
+                           "tipo": "caixa_cheia", "n_devolucoes": 7,
+                           "ultima_devolucao": "2026-09-03",
+                           "criado_em": "2026-09-05T21:25:51Z", "liberado_em": None}]))
+    monkeypatch.setattr(main, "_supa_rest_service", svc)
+    ficha = main._email_suprimido_ficha("  Cliente2@Example.com ")
+    assert ficha["tipo"] == "caixa_cheia" and ficha["desde"] == "2026-09-05"
+    assert ficha["ultima_devolucao"] == "2026-09-03"
+    assert main._email_suprimido_ficha("cliente-106@exemplo.com") is None
+    assert len(svc.chamadas) == 1, "a ficha não pode custar leitura nova"
+
+
+def test_a_ficha_NAO_leva_o_motivo_pro_cliente(monkeypatch, limpo):
+    """🔒 O motivo é texto livre do admin e pode citar outra pessoa ou o que ele
+    viu na caixa dele. Pro cliente vai o TIPO, que a tela traduz."""
+    monkeypatch.setattr(main, "_supa_rest_service", _Servico(
+        (200, [{"email": "cliente2@example.com", "tipo": "caixa_cheia",
+                "motivo": "devolveu as 7 que mandei pra fulano@exemplo.com",
+                "criado_em": "2026-09-05T21:25:51Z", "liberado_em": None}])))
+    ficha = main._email_suprimido_ficha("cliente2@example.com")
+    assert "motivo" not in ficha
+    assert _RE_EMAIL.search(str(ficha)) is None, ficha
+
+
+def _dubla_lista_de_projetos(monkeypatch, quem, dono_id):
+    """Põe `list_my_projects` de pé com a RPC dublada."""
+    import io as _io
+    monkeypatch.setattr(main, "_get_user_from_request", lambda request, **k: quem)
+    monkeypatch.setattr(main.urllib.request, "urlopen",
+                        lambda req, *a, **k: _io.BytesIO(b'[{"job_id":"abc"}]'))
+    return main.list_my_projects(dono_id, REQ)
+
+
+def test_o_DONO_ve_na_tela_que_o_email_dele_nao_esta_saindo(monkeypatch, limpo):
+    """🩸 O caso: o cliente para de receber e ninguém conta pra ele. Os dois
+    endereços suprimidos hoje TÊM conta no site — a tela alcança quem o e-mail
+    não alcança.
+
+    🔒 E a resposta que vai pro navegador é conferida AQUI, não só na ficha: o
+    mutante que acrescentava `motivo` no payload da rota passou verde na 1ª
+    rodada de sabotagem porque o guarda do `motivo` olhava a ficha, e a ficha
+    não é o que o cliente recebe."""
+    monkeypatch.setattr(main, "_email_suprimido_ficha",
+                        lambda e: {"tipo": "caixa_cheia", "desde": "2026-09-05",
+                                   "motivo": "devolveu as 7 de fulano@exemplo.com"})
+    r = _dubla_lista_de_projetos(monkeypatch,
+                                 {"id": "u-1", "email": "Cliente2@Example.com"}, "u-1")
+    assert r["entrega_email"]["suprimido"] is True
+    assert r["entrega_email"]["tipo"] == "caixa_cheia"
+    assert "motivo" not in r["entrega_email"], (
+        "o motivo é anotação do admin — não vai pro navegador do cliente: %r"
+        % r["entrega_email"])
+    assert _RE_EMAIL.search(str(r["entrega_email"])) is None, r["entrega_email"]
+    assert r["projects"], "a lista de projetos continua vindo inteira"
+
+
+def test_CONTROLE_quem_recebe_normal_nao_ve_faixa_nenhuma(monkeypatch, limpo):
+    monkeypatch.setattr(main, "_email_suprimido_ficha", lambda e: None)
+    r = _dubla_lista_de_projetos(monkeypatch,
+                                 {"id": "u-1", "email": "cliente-106@exemplo.com"}, "u-1")
+    assert "entrega_email" not in r, "faixa de alarme só quando o servidor afirma"
+
+
+def test_a_lista_ilegivel_NAO_derruba_a_tela_de_projetos(monkeypatch, limpo):
+    """Falha aberta: o cliente perder o aviso é ruim; perder a tela de projetos
+    por causa de um soluço do banco é pior."""
+    def _explode(e):
+        raise RuntimeError("banco fora")
+    monkeypatch.setattr(main, "_email_suprimido_ficha", _explode)
+    r = _dubla_lista_de_projetos(monkeypatch,
+                                 {"id": "u-1", "email": "cliente2@example.com"}, "u-1")
+    assert r["status"] == "ok" and "entrega_email" not in r
+
+
+def test_o_ADMIN_olhando_outra_conta_nao_recebe_a_ficha(monkeypatch, limpo):
+    """🔒 A ficha é do DONO e vem do token — nunca do `user_id` da URL."""
+    chamou = []
+    monkeypatch.setattr(main, "_email_suprimido_ficha",
+                        lambda e: chamou.append(e) or {"tipo": "caixa_cheia"})
+    r = _dubla_lista_de_projetos(
+        monkeypatch, {"id": "admin-1", "email": main.ADMIN_EMAIL}, "u-outro")
+    assert "entrega_email" not in r and not chamou

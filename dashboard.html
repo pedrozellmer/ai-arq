@@ -186,6 +186,17 @@
   <main id="main" class="flex-1 p-4 md:p-6 lg:p-8">
     <div class="max-w-7xl mx-auto">
 
+      <!-- 🩸 22/09/2026 — O CLIENTE SUPRIMIDO NÃO SABIA. Quando um endereço
+           devolve nossas mensagens, a casa para de mandar (é o certo: cada
+           devolução pesa na reputação do remetente). Só que ninguém contava
+           isso pro cliente: ele parava de receber "sua planilha está pronta" e
+           achava que a gente tinha sumido. Medido na caixa do Pedro: 14
+           devoluções em 90 dias, 4 endereços, 3 clientes sem NENHUM e-mail
+           nosso — um deles desde julho. Os suprimidos de hoje têm conta no
+           site, então esta faixa alcança quem o e-mail não alcança.
+           Fica FORA das abas de propósito: vale em qualquer tela. -->
+      <div id="aviso-email-suprimido" class="hidden mb-6" role="status" aria-live="polite"></div>
+
       <!-- ═══════════════════════════════════════════ -->
       <!-- TAB 1: NOVO PROJETO                        -->
       <!-- ═══════════════════════════════════════════ -->
@@ -2156,11 +2167,56 @@
       // abas herdarem a mesma falha sem nova tentativa. Erro limpa o cache na hora.
       __byUserPromise = authFetch(`${API_BASE}/api/projects/by-user/${currentUser.id}`)
         .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-        .then(d => { setTimeout(() => { __byUserPromise = null; }, 15000); return d; })
+        .then(d => {
+          setTimeout(() => { __byUserPromise = null; }, 15000);
+          // 22/09: a faixa mora AQUI, na única chamada que todas as abas
+          // compartilham — pendurar em cada consumidor deixaria a aba que eu
+          // esquecesse sem aviso, calada, que é a doença que ela veio curar.
+          try { pintaEntregaDeEmail(d); } catch (_) {}
+          return d;
+        })
         .catch(e => { __byUserPromise = null; throw e; });
     }
     return __byUserPromise;
   }
+
+  // ── Faixa "não estamos conseguindo te mandar e-mail" (22/09/2026) ──
+  // 🪤 Só aparece quando o backend AFIRMA que o endereço está suprimido. Lista
+  // ilegível no servidor devolve a resposta sem o campo — e aí a faixa não
+  // aparece, em vez de acusar uma coisa que ninguém confirmou.
+  const _MOTIVO_SUPRIMIDO = {
+    caixa_cheia: 'sua caixa de entrada estava cheia e nossas mensagens voltaram',
+    inexistente: 'o endereço do seu cadastro recusou nossas mensagens',
+    reclamou: 'nossas mensagens foram marcadas como spam nesse endereço',
+    manual: 'nossas mensagens para esse endereço não estão sendo entregues'
+  };
+  function pintaEntregaDeEmail(data) {
+    const box = document.getElementById('aviso-email-suprimido');
+    if (!box) return;
+    const ent = (data && data.entrega_email) || null;
+    if (!ent || ent.suprimido !== true) { box.classList.add('hidden'); box.innerHTML = ''; return; }
+    const motivo = _MOTIVO_SUPRIMIDO[ent.tipo] || _MOTIVO_SUPRIMIDO.manual;
+    const desde = ent.desde ? (' desde ' + String(ent.desde).slice(0, 10).split('-').reverse().join('/')) : '';
+    box.innerHTML =
+      '<div class="rounded-xl border border-amber-300 bg-amber-50 p-4">' +
+        '<p class="text-sm font-semibold text-amber-900">Não estamos conseguindo te enviar e-mail</p>' +
+        '<p class="mt-1 text-sm text-amber-900">Paramos de mandar mensagens para <b>' + escapeHtml(currentUser && currentUser.email || 'seu e-mail') + '</b>' + escapeHtml(desde) + ' porque ' + motivo + '. ' +
+        'Você <b>não</b> está recebendo os avisos de planilha pronta — mas seus projetos continuam aqui, e nada muda na sua conta.</p>' +
+        '<p class="mt-2 text-sm text-amber-900">Resolveu do seu lado (liberou espaço, tirou do spam)? Fale com a gente que reativamos o envio na hora.</p>' +
+        '<button type="button" onclick="avisarEntregaDeEmail()" class="mt-3 px-3 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold">Falar com a gente</button>' +
+      '</div>';
+    box.classList.remove('hidden');
+  }
+  window.avisarEntregaDeEmail = function () {
+    // 🪤 'outro' porque é um dos valores que EXISTEM no <select> do modal
+    // (contact-modal.js:147-152). Um tipo inventado deixa o campo vazio no
+    // envio — e a mensagem chegaria sem classificação nenhuma.
+    if (window.aiArqContactOpen) {
+      window.aiArqContactOpen({ type: 'outro' });
+    } else {
+      window.location.hash = '#meu-cadastro';
+    }
+  };
   async function checkAuth() {
     const { data: { session } } = await sbClient.auth.getSession();
     if (!session) {
