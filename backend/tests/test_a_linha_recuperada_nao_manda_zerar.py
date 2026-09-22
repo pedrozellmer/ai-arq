@@ -59,6 +59,8 @@ def _roda_o_laco_do_comprimento(itens):
         "_medida_e_base_de_calculo": main._medida_e_base_de_calculo,
         "_Conf2": type("C", (), {"ESTIMADO": "estimado"}),
         "_n_uni": 0, "_n_rec": 0, "_n_ambiguo": 0,
+        # 22/09: os cenários daqui são de CAD ("layer A-WALL") — o job tem DXF.
+        "_tem_cad_compr": True,
     }
     exec(compile(codigo, "laco-do-comprimento", "exec"), ns)
     return ns

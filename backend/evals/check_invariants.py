@@ -41,8 +41,10 @@ def check_project(items, project_meta, spec):
         out.append((f"project_type = {spec['project_type']}", pt == spec["project_type"], f"veio: {pt}"))
 
     if spec.get("steel_must_be_kg"):
+        # 22/09: a unidade vai junto — verba que cita "armadura" não é aço fora de kg.
         bad = [it for it in items
-               if should_force_steel_kg(it.get("description", "") or "")
+               if should_force_steel_kg(it.get("description", "") or "",
+                                        it.get("unit") or "")
                and (it.get("unit") or "").lower() != "kg"]
         amostra = "; ".join((b.get("description", "") or "")[:40] for b in bad[:3])
         out.append(("aço/armadura sempre em kg", not bad, f"{len(bad)} fora de kg. {amostra}"))

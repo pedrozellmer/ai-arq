@@ -11931,6 +11931,134 @@ def rebaixar_itens_sem_identidade(all_items):
     return n
 
 
+# ══════════════════════════════════════════════════════════════════════════
+#  PROCEDÊNCIA: "medido do desenho" só onde a geometria mediu
+# ══════════════════════════════════════════════════════════════════════════
+import re as _re_procedencia   # 🪤 `re` não está importado no topo deste módulo (só aliases)
+
+#: O que a medição geométrica do PDF produz: m² de ambiente e m de parede.
+#: Linha nessas unidades é da honestidade de área (`_apply_area_honesty`), que
+#: já tira ou troca a frase; fora delas, número nenhum veio da nossa medição.
+_UNIDADES_QUE_A_GEOMETRIA_DO_PDF_MEDE = frozenset(
+    {"m²", "m2", "m2.", "m².", "m", "ml", "mts", "metro", "metros", "m linear"})
+
+#: O molde que o prompt da medição pede (ver `_regra_da_medicao_sem_prova`),
+#: com o conector que a IA põe antes (" — ", ", ") e o ponto final. A âncora é
+#: "com escala" e a negação fica de fora: "não medido do desenho" é verdade.
+_RX_MEDIDO_DO_DESENHO_DA_IA = _re_procedencia.compile(
+    r"(?P<con>\s*[—–,;-]\s*|\s*)"
+    r"(?<!n[ãa]o )medido do desenho com escala[^|]*?"
+    r"(?:confira a escala do seu pdf|(?=\.(?:\s|$)|\||$))"
+    r"(?P<ponto>\.)?",
+    _re_procedencia.IGNORECASE)
+
+#: Quando a frase era a observação inteira, a linha não pode ficar sem dizer
+#: de onde veio o número.
+_FRASE_NUMERO_DA_LEITURA = ("Número da leitura do PDF pela IA — não é medição "
+                            "geométrica. Confira antes de orçar.")
+
+
+def _regra_da_medicao_sem_prova(escala, fonte_txt: str, ressalva: str) -> str:
+    """A REGRA que entra no prompt junto com a medição de escala não confirmada.
+
+    🩸 22/09/2026 — jobs 844603fb e f8d8e6d8. A regra dizia "use estes valores
+    como base para itens de ÁREA e COMPRIMENTO … Na observação, escreva a
+    procedência: 'medido do desenho com escala 1:X …'", sem dizer EM QUAIS
+    itens. A IA escreveu a frase em todos: 26 de 35 linhas de uma planta de
+    pontos elétricos (contagens) e 9 linhas de un/kg de uma estrutura — uma
+    delas 1.850 kg de aço por taxa de 100 kg/m³.
+    🔑 A frase fica só no item de área/comprimento que saiu DESTES valores; o
+    resto diz o que o número é. Ela continua a mesma palavra por palavra porque
+    `_limpa_afirmacao_de_medida` a reconhece assim — texto é dominó.
+    🪤 A IA não obedece sempre: quem garante é
+    `_tira_medido_do_desenho_de_quem_nao_foi_medido`, depois da leitura.
+    """
+    return (
+        "REGRA: use estes valores como base para itens de ÁREA e COMPRIMENTO, "
+        "SEMPRE com confidence 'estimado' — NUNCA 'confirmado', porque "
+        f"{ressalva}. Só na observação de item de ÁREA (m²) ou de COMPRIMENTO (m) "
+        "cuja quantidade saiu DESTES valores, escreva a procedência: "
+        f"'medido do desenho com escala 1:{escala} lida {fonte_txt} — confira a "
+        "escala do seu PDF'. Em qualquer outro item — contagem (un), verba (vb), "
+        "conjunto (cj), peso (kg), volume (m³) ou número calculado de outra "
+        "forma — NÃO escreva essa frase: diga o que o número é ('contagem "
+        "visual', 'calculado de …', 'verba').")
+
+
+def _sem_medido_do_desenho(obs: str) -> str:
+    """Tira da observação a frase-molde "medido do desenho com escala …".
+
+    Sai só a ORAÇÃO, não a sentença: "… na prancha — medido do desenho com
+    escala 1:75 lida do carimbo — confira a escala do seu PDF. Incluir …" perde
+    o trecho do meio e guarda o ponto da frase de fora.
+    """
+    def _troca(m):
+        if _re_procedencia.search(r"[—–,;-]", m.group("con")):
+            return m.group("ponto") or ""
+        return ""
+    novo = _RX_MEDIDO_DO_DESENHO_DA_IA.sub(_troca, str(obs or ""))
+    if novo == str(obs or ""):
+        return novo
+    segs = [" ".join(s.split()) for s in novo.split("|")]
+    return " | ".join(s for s in segs if s)
+
+
+def _tira_medido_do_desenho_de_quem_nao_foi_medido(all_items) -> int:
+    """Linha de contagem, verba, peso ou volume não diz "medido do desenho".
+
+    🩸 22/09/2026 — job 844603fb (1 PDF de planta de pontos elétricos): 26 de
+    35 linhas diziam "Medido do desenho com escala 1:50 lida do rótulo escrito
+    ao lado do próprio desenho" com a própria observação dizendo "Contagem
+    visual estimada". Job f8d8e6d8: 9 linhas de un e kg com a mesma frase,
+    nenhuma medida — uma é 1.850 kg de aço por taxa. Quem escreve é a IA,
+    porque o NOSSO prompt manda (`_regra_da_medicao_sem_prova`), e a limpeza
+    que existia (`_limpa_afirmacao_de_medida`) só roda na honestidade de área,
+    que pula tudo que não é m²/m/m³.
+    📏 60 d, sem avaliação (22/09, 9h): 655 linhas em 24 jobs com a frase; 294
+    delas (16 jobs) fora de m²/m — un 264, vb 10, kg 8, cj 7, m³ 5 —, 270 com
+    número. Em 14 a IA encurta o molde e para em "lida do carimbo.". A
+    geometria do PDF só mede m² de ambiente e m de parede: nenhuma das 294
+    podia ter sido medida. As de m²/m são da honestidade de área (desde 21/09
+    ela limpa a zerada e a preservada pelo pdfvec); estas não passavam por
+    limpeza nenhuma.
+    🔑 Muda só TEXTO: número, unidade e selo ficam. Linha em m²/m fica com a
+    honestidade de área. Devolve quantas linhas foram limpas.
+    """
+    limpos = 0
+    for _it in (all_items or []):
+        _u = str(getattr(_it, "unit", "") or "").strip().lower()
+        if _u in _UNIDADES_QUE_A_GEOMETRIA_DO_PDF_MEDE:
+            continue
+        _ob = str(getattr(_it, "observations", "") or "")
+        if "medido do desenho com escala" not in _ob.lower():
+            continue
+        _novo = _sem_medido_do_desenho(_ob)
+        if _novo == _ob:
+            continue
+        _it.observations = _novo or _FRASE_NUMERO_DA_LEITURA
+        limpos += 1
+    return limpos
+
+
+def _forca_aco_em_kg(all_items) -> int:
+    """Em projeto estrutural, põe `kg` no item de aço que veio noutra unidade.
+
+    Era um laço solto dentro do `process_job`; saiu pra cá em 22/09/2026 pra
+    um guarda poder CHAMAR. 🩸 Job ee801b82: a verba "Projeto executivo
+    complementar (detalhamento de armadura…)" virou 1 kg — agora a unidade vai
+    junto pra `should_force_steel_kg`, que recusa verba/serviço. Só troca o
+    rótulo, nunca a quantidade. Devolve quantos itens trocou.
+    """
+    n = 0
+    for _it in (all_items or []):
+        if (_should_force_steel_kg(getattr(_it, "description", ""),
+                                   getattr(_it, "unit", ""))
+                and getattr(_it, "unit", "") != "kg"):
+            _it.unit = "kg"
+            n += 1
+    return n
+
+
 def process_job(job_id: str, file_paths: list[str], work_dir: str,
                 typology: str = "office",
                 user_sheet_types: dict[str, str] | None = None,
@@ -14826,12 +14954,10 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         if _vm.get("walls_m"):
                             _l2.append(f"Paredes/divisórias medidas: {_vm['walls_m']} m "
                                        f"({_vm.get('n_walls')} segmentos).")
-                        _l2.append(
-                            "REGRA: use estes valores como base para itens de ÁREA e COMPRIMENTO, "
-                            "SEMPRE com confidence 'estimado' — NUNCA 'confirmado', porque "
-                            f"{_ressalva}. Na observação, escreva a procedência: "
-                            f"'medido do desenho com escala 1:{_vm.get('scale')} lida "
-                            f"{_fonte_txt} — confira a escala do seu PDF'.")
+                        # 🩸 22/09 (844603fb): a regra não dizia EM QUAIS itens
+                        # escrever a procedência, e a IA pôs em contagem e verba.
+                        _l2.append(_regra_da_medicao_sem_prova(
+                            _vm.get('scale'), _fonte_txt, _ressalva))
                         _vet_secao = "\n".join(_l2)
                         try:
                             _pdfvec_area_m2 += float(_vm.get("rooms_m2") or 0)
@@ -15191,11 +15317,9 @@ bloco — só cite os que estão no inventário deste arquivo."""
         if is_structural:
             # Aço SEMPRE em kg (regra de norma) + guardrail de tipo errado.
             # Regras em engine_rules.py (testadas em tests/test_engine_rules.py).
-            _fixed_kg = 0
-            for _it in all_items:
-                if _should_force_steel_kg(getattr(_it, "description", "")) and getattr(_it, "unit", "") != "kg":
-                    _it.unit = "kg"
-                    _fixed_kg += 1
+            # 🩸 22/09 (ee801b82): o laço virou `_forca_aco_em_kg`, fora daqui,
+            # pra um guarda CHAMAR — e a unidade vai junto pra verba não virar kg.
+            _fixed_kg = _forca_aco_em_kg(all_items)
             if _fixed_kg:
                 print(f"[estrutural] forcei unit=kg em {_fixed_kg} item(ns) de aço")
 
@@ -16873,6 +16997,19 @@ bloco — só cite os que estão no inventário deste arquivo."""
             print(f"[pai-e-filho] job={job_id}: checagem falhou: {_epf}")
             _log_error("motor:pai-e-filho", f"FALHOU: {_epf}", job_id)
 
+        # 🩸 22/09/2026 (844603fb, f8d8e6d8): contagem, verba, peso e volume não
+        # dizem "medido do desenho" — a geometria do PDF só mede m² e m. Roda
+        # ANTES do resgate de comprimento, que pode trocar `un` por `m` e tirar
+        # a linha do alcance desta limpeza.
+        try:
+            _n_proc = _tira_medido_do_desenho_de_quem_nao_foi_medido(all_items)
+            _log_error("motor:procedencia-ia",
+                       f"varridos={len(all_items)} limpos={_n_proc}", job_id,
+                       severity="info")
+        except Exception as _eproc:
+            print(f"[procedencia-ia] job={job_id}: limpeza falhou: {_eproc}")
+            _log_error("motor:procedencia-ia", f"FALHOU: {_eproc}", job_id)
+
         # Comprimento medido que saiu com rótulo errado ou foi descartado
         # (caso cliente-70 03/08, job 2f9f81c2): a observação do item traz
         # "comprimento total = N m" e a linha saiu em m² ou com quantidade 0.
@@ -16881,6 +17018,12 @@ bloco — só cite os que estão no inventário deste arquivo."""
         try:
             from models import Confidence as _Conf2
             _n_uni, _n_rec, _n_ambiguo = 0, 0, 0
+            # 🩸 22/09 (f8d8e6d8): sem CAD legível não há layer — o "comprimento
+            # total" da observação é conta da IA (ver `corrigir_comprimento_medido`).
+            try:
+                _tem_cad_compr = bool(dxf_paths)
+            except NameError:
+                _tem_cad_compr = False
 
             # 🚨 Trava de RATEIO (03/08): quando DUAS linhas zeradas do mesmo
             # projeto citam o MESMO total, o número é de um layer que cobre as
@@ -16903,7 +17046,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
 
             for _it in all_items:
                 _fix = _corrigir_comprimento_medido(
-                    _it.description, _it.unit, _it.quantity, _it.observations)
+                    _it.description, _it.unit, _it.quantity, _it.observations,
+                    origem=getattr(_it, "origem", ""), tem_cad=_tem_cad_compr)
                 if not _fix:
                     continue
                 if "quantity" in _fix and _cita.get(round(_fix["quantity"], 2), 0) > 1:

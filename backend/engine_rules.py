@@ -199,11 +199,37 @@ _ACO_PAT = _re.compile(r'armadura|estribo|ferragem|vergalh|\baço\b', _re.IGNORE
 _FORMA_PAT = _re.compile(r'f[ôo]rma', _re.IGNORECASE)
 
 
-def should_force_steel_kg(description):
+#: Unidades que dizem o que o número É sem ser peso: verba, conjunto, serviço,
+#: tempo, "sem unidade" declarado. Trocar o rótulo delas por kg não converte
+#: nada — só inventa um peso (o forçador troca a ETIQUETA, nunca a conta).
+UNIDADES_QUE_NAO_VIRAM_KG = frozenset({
+    "vb", "vb.", "verba", "gl", "global", "cj", "cj.", "conj", "conjunto",
+    "un.g", "sv", "serv", "serviço", "servico",
+    "mês", "mes", "h", "hora", "dia",
+    "—", "–", "-",
+})
+
+
+def should_force_steel_kg(description, unit=None):
     """Em projeto ESTRUTURAL, aço/armadura/estribo é SEMPRE kg (regra de norma,
     universal). True quando a descrição é claramente de aço E não é fôrma (m²).
-    NÃO casa 'concreto armado' (concreto/fôrma) — só o aço de verdade. Caso cliente-88."""
+    NÃO casa 'concreto armado' (concreto/fôrma) — só o aço de verdade. Caso cliente-88.
+
+    🩸 22/09/2026 — job ee801b82: "Projeto executivo complementar (detalhamento
+    de armadura…)" chegou da IA em `vb`, quantidade 1, e saiu na planilha como
+    **1 kg** — o padrão casou "armadura" dentro do nome de um SERVIÇO. O
+    forçador só troca o rótulo (não converte), então verba que vira kg é um
+    peso inventado somado no total de aço.
+    📏 Medido no llm_cache (começa em 28/08) × project_items, pela mesma
+    descrição: o forçador trocou 4 rótulos, e nenhum era aço de verdade — 1
+    verba (este) e 3 linhas "sem itens quantificáveis" com unidade "—". É piso:
+    descrição que a consolidação reescreveu não casa.
+    🔑 `unit` é opcional pra não mudar quem chama sem ela: sem unidade, vale a
+    regra antiga (só a descrição).
+    """
     d = description or ""
+    if unit is not None and str(unit).strip().lower() in UNIDADES_QUE_NAO_VIRAM_KG:
+        return False
     return bool(_ACO_PAT.search(d)) and not _FORMA_PAT.search(d)
 
 
@@ -879,9 +905,44 @@ def _num_br(v):
     return f"{v:,.2f}".replace(",", "\x00").replace(".", ",").replace("\x00", ".")
 
 
-def corrigir_comprimento_medido(desc, unit, quantity, obs):
+#: Área e volume: numa linha dessas, um comprimento é no máximo a BASE da conta.
+_UNIDADES_DE_AREA_OU_VOLUME = {"m²", "m2", "m2.", "m².", "m³", "m3"}
+
+
+def texto_veio_da_leitura_de_pdf(origem, tem_cad) -> bool:
+    """O 'comprimento total = N m' desta observação foi escrito lendo um PDF?
+
+    Em PDF não existe layer: o número da observação é conta ou transcrição da
+    IA, nunca uma soma de layer feita pelo motor. A origem do item decide; a
+    linha sem origem (a consolidação às vezes a perde) vale pelo job — sem CAD
+    legível no envio, não há de onde ter vindo um layer.
+    """
+    o = str(origem or "").strip().lower()
+    if o == "vision_pdf":
+        return True
+    if o:
+        return False              # dxf_geom, deriv_pd, revisao_cliente: outra fonte
+    return not tem_cad
+
+
+def corrigir_comprimento_medido(desc, unit, quantity, obs, origem="", tem_cad=True):
     """Devolve dict de correções ({} = não mexer) pro item cuja observação traz
-    um 'comprimento total = N m'. Ver o bloco de comentário acima."""
+    um 'comprimento total = N m'. Ver o bloco de comentário acima.
+
+    🩸 22/09/2026 — job f8d8e6d8 (só PDF): a fôrma de vigas veio da IA com
+    24,3 m², a honestidade de área zerou, e ESTA regra "recuperou" 32,40 m — a
+    conta da própria IA ("2×16,20=32,40m") —, trocou m² por m e escreveu "o
+    motor mediu 32,40 m neste layer". Três mentiras numa linha: PDF não tem
+    layer, o número é da IA, e fôrma é área.
+    📏 60 d, sem avaliação: 3 recuperações em PDF (3 jobs), as 3 erradas — duas
+    fôrmas de área viradas em metro e um montante de 69,1 m que vinha de uma
+    escala adivinhada por votação e que a honestidade tinha zerado. Em CAD são
+    19 linhas em 7 jobs, e lá o layer existe: o CAD fica como estava.
+    🔑 Em texto lido de PDF a regra não recupera número nenhum (quem decide o
+    número de PDF é a honestidade de área, que já passou) e não troca unidade
+    de área por comprimento. `origem`/`tem_cad` têm default que mantém a regra
+    antiga pra quem chama sem eles.
+    """
     medida = medida_de_comprimento_na_observacao(obs)
     if medida is None:
         return {}
@@ -895,6 +956,7 @@ def corrigir_comprimento_medido(desc, unit, quantity, obs):
         q = 0.0
 
     n = _num_br(medida)
+    do_pdf = texto_veio_da_leitura_de_pdf(origem, tem_cad)
 
     # 1) mediu e entregou ZERO — vem primeiro, e vale mesmo com a unidade certa.
     # 🪤 Este caso passou batido na 1ª versão: eu saía cedo quando a unidade já
@@ -903,6 +965,8 @@ def corrigir_comprimento_medido(desc, unit, quantity, obs):
     # rótulo certo, medição jogada fora do mesmo jeito. Unidade certa não diz
     # nada sobre a quantidade.
     if q <= 0:
+        if do_pdf:
+            return {}             # número da IA não volta como "o motor mediu"
         return {"quantity": round(medida, 2),
                 "unit": unit if u in LENGTH_UNITS_OK else "m",
                 "confidence": "estimado",
@@ -917,6 +981,8 @@ def corrigir_comprimento_medido(desc, unit, quantity, obs):
 
     if u in LENGTH_UNITS_OK:
         return {}                                  # unidade certa e com número
+    if do_pdf and u in _UNIDADES_DE_AREA_OU_VOLUME:
+        return {}                                  # em PDF, área não vira metro
 
     # 2) mesmo número, rótulo errado (tolerância de centavo)
     if abs(q - medida) <= max(0.01, medida * 0.001):
