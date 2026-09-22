@@ -1923,6 +1923,578 @@ def pode_fundir(desc_a: str, desc_b: str) -> bool:
 
 
 # ══════════════════════════════════════════════════════════════════════
+#  FUSÃO POR QUANTIDADE IGUAL — só junta o que é o MESMO item
+# ══════════════════════════════════════════════════════════════════════
+# 🩸 22/09/2026 (jobs 844603fb e f8d8e6d8). As passadas 1 e 2 do
+# `_consolidate_items` juntam linhas com a MESMA quantidade e ficam com a
+# quantidade de UMA só. Existem pra tirar o dobro de verdade: o mesmo item
+# lido em duas pranchas/vistas ("Forro — Varanda" e "Forro de gesso liso —
+# Varanda"), ou a mesma medida que veio em unidades trocadas (m² × ml).
+# Só que quantidade igual é coincidência comum, e o critério era "mesmo
+# primeiro substantivo OU 2 palavras em comum":
+#   - 844603fb (planta de pontos): interruptor sumiu dentro de tomada (as duas
+#     dizem "simples monopolar") e o ponto de tomada a H=1,80 m dentro do de
+#     H=1,30 m (a chave da passada 1 corta tudo depois do " — "). Dos 67
+#     interruptores que a IA contou, a planilha ficou com 10;
+#   - f8d8e6d8 (estrutura): o concreto do poço de sucção dentro do concreto do
+#     poço com depósito de areia; o do radier EL.332.70 dentro do da laje
+#     EL.335.60; a fôrma de um poço dentro da do outro, em pranchas diferentes.
+# 🔑 Agora a fusão exige as DUAS coisas:
+#   (1) nada que diferencie os dois (`motivo_para_nao_fundir`);
+#   (2) prova de que é o mesmo item (`prova_de_mesmo_item`).
+# 🪤 Na dúvida ficam duas linhas: duplicar é um erro que o arquiteto VÊ na
+# planilha; apagar é um que ele não tem como ver (a mesma decisão que a
+# passada 6 tomou em 06/09).
+# 🪤 `pode_fundir`, acima, fica como estava: a passada 6 (o aviso de "aparece
+# em N pranchas"), a 3 e a réplica da 1 — as que SOMAM ou só avisam — ainda
+# usam só ele. Esta régua é das fusões que GUARDAM A QUANTIDADE DE UMA SÓ.
+
+# artigo, preposição e as palavras genéricas da chave da passada 1.
+# 🪤 Menos o MATERIAL ("cerâmico", "metálico"), que a chave trata como genérico:
+# aqui "Piso cerâmico" × "Piso vinílico" são dois pisos.
+_VAZIAS_FUSAO = frozenset((
+    "a", "o", "e", "ou", "as", "os", "de", "do", "da", "dos", "das", "d",
+    "para", "p", "com", "c", "em", "no", "na", "nos", "nas", "ao", "aos",
+    "por", "sem", "sob", "sobre", "entre", "ate", "um", "uma", "cada",
+    "nova", "novo", "novas", "novos", "existente", "existentes", "conforme",
+    "especificacao", "especificacoes", "projeto", "instalacao", "execucao",
+    "fornecimento", "fornecida", "fornecido", "tipo", "tipos", "cor", "modelo",
+    "padrao", "altura", "comprimento", "largura", "espessura", "area", "areas",
+    "m2", "m", "un", "ml",
+    "incluindo", "inclui", "inclusive", "incluso", "inclusos", "total",
+))
+
+# posição na obra: guarda-corpo da fachada frontal não é o da lateral leste
+_POSICOES_FUSAO = frozenset((
+    "frontal", "lateral", "fundos", "posterior", "norte", "sul", "leste", "oeste",
+))
+
+# unidades que medem (comprimento/área/volume): a IA troca uma pela outra na
+# MESMA medida. "6 m²" de armário × "6 un" de módulo não é troca, é outra coisa.
+_UNIDADES_DE_MEDIDA_FUSAO = frozenset(("m", "ml", "m²", "m³"))
+
+# palavras de linha VAGA: dizem o que falta na prancha, não o que o item é.
+# 🔑 Sem elas "Forro — Varanda — tipo e acabamento a confirmar" (a leitura
+# vaga) cabe em "Forro de gesso liso — Varanda (37,98 m²)" (a completa).
+_LACUNA_FUSAO = frozenset((
+    "confirmar", "confirmado", "confirmada", "definir", "definido", "definida",
+    "especificado", "especificada", "especificados", "especificadas",
+    "especificar", "informado", "informada", "indicado", "indicada",
+    "indicados", "indicadas", "indicacao", "legenda", "prancha", "pranchas",
+    "planta", "plantas", "nesta", "neste", "desta", "deste", "analisada",
+    "analisadas", "memorial", "descritivo", "visivel", "identificado",
+    "identificada", "identificados", "identificadas", "nao", "acabamento",
+    "detalhe", "fabricante", "referencia", "estimado", "estimada", "ver",
+    "mesmo", "mesma", "geral", "item", "itens",
+))
+
+# palavras de ação que vêm ANTES do item ("Assentamento de piso" é piso)
+_ACOES_FUSAO = frozenset((
+    "aplicacao", "assentamento", "colocacao", "montagem", "levantamento",
+    "construcao", "confeccao", "implantacao", "execucao", "fornecimento",
+    "instalacao", "fabricacao",
+))
+
+# pares que se EXCLUEM: parede interna não é parede externa
+_OPOSTOS_FUSAO = (
+    ("interna", "externa"), ("masculino", "feminino"), ("fria", "quente"),
+    ("entrada", "saida"), ("superior", "inferior"), ("esquerda", "direita"),
+    ("positiva", "negativa"), ("agua", "esgoto"), ("maior", "menor"),
+)
+
+# aparelhos: ponto de esgoto do mictório não é o da bacia e do lavatório.
+# 🪤 Sem "banheira": na raiz ela é "banheir", a mesma de "banheiro" (ambiente).
+_APARELHOS_FUSAO = frozenset((
+    "bacia", "vaso", "mictorio", "lavatorio", "pia", "cuba", "tanque", "chuveiro",
+    "ducha", "bebedouro", "torneira", "ralo", "filtro", "geladeira",
+    "fogao", "cooktop", "forno", "microondas", "lavadora", "secadora",
+))
+
+# cor do material: "cor VERDE COLONIAL" × "cor branco neve" são duas pinturas.
+# 🪤 "(cor ciano na planta)" é a cor do HACHURADO do desenho, não do material —
+# sai antes de comparar.
+_CORES_FUSAO = frozenset((
+    "branco", "preto", "cinza", "grafite", "verde", "azul", "amarelo", "vermelho",
+    "marrom", "bege", "rosa", "roxo", "laranja", "dourado", "prata", "creme",
+    "terracota", "vinho", "caramelo",
+))
+_RX_COR_DO_DESENHO = _re.compile(
+    r"(?:\bcor\s+)?[\w/\s\-]{0,40}?\s+(?:na|da|em)\s+planta\b|\bhachura\s+\w+", _re.IGNORECASE)
+# "cor CAMURÇA" × "cor AREIA": o nome que vem depois de "cor" também é cor
+_RX_NOME_DA_COR = _re.compile(r"\bcor(?:es)?\s*[:=]?\s+([a-z]{3,})", _re.IGNORECASE)
+
+# elementos e superfícies da obra: radier não é laje, parede não é forro
+_ELEMENTOS_FUSAO = frozenset((
+    "poco", "caixa", "reservatorio", "cisterna", "tanque", "camara", "bloco",
+    "laje", "radier", "sapata", "viga", "pilar", "muro", "cortina", "escada",
+    "rampa", "galeria", "estaca", "tubulao", "baldrame", "marquise",
+    "platibanda", "parede", "forro", "teto", "piso", "fachada", "calcada",
+))
+
+# ambientes: o piso da varanda não é o piso da sala de TV
+_AMBIENTES_FUSAO = frozenset((
+    "sala", "quarto", "qto", "suite", "dormitorio", "banheiro", "bwc", "wc",
+    "lavabo", "cozinha", "copa", "varanda", "sacada", "terraco", "closet",
+    "escritorio", "circulacao", "corredor", "hall", "deposito", "lavanderia",
+    "garagem", "recepcao", "estar", "jantar", "despensa", "gourmet",
+    "quiosque", "auditorio", "vestiario", "refeitorio", "almoxarifado",
+    "guarita", "lixeira", "estacionamento", "mezanino",
+))
+
+# estruturas que costumam ter NOME ("poço de sucção", "caixa de inspeção")
+_NOMEADAS_FUSAO = frozenset((
+    "poco", "caixa", "reservatorio", "cisterna", "tanque", "camara", "bloco",
+    "laje", "casa", "galeria", "estacao", "torre", "muro", "cortina",
+))
+_PREP_DO_NOME = frozenset(("de", "do", "da", "dos", "das", "com", "c", "d", "para", "p"))
+
+# rótulo: "Banheiro 01" × "Banheiro 02", "Conjunto CD" × "Conjunto CE", "Lote 01"
+# 🪤 o rótulo é número ou SIGLA EM MAIÚSCULA: "casa de bombas" não tem rótulo "de"
+_RX_ROTULO = _re.compile(
+    r"(?i:\b(conjunto|lote|bloco|torre|quadra|setor|ala|trecho|etapa|fase|apto|"
+    r"apartamento|sala|quarto|qto|su[ií]te|banheiro|wc|bwc|quiosque|dormit[oó]rio|"
+    r"garagem|vaga|jardim|servi[cç]o|circ|circuito))s?\.?\s+(?:n[º°o.]\s*)?"
+    r"([A-Z]{0,3}\d{1,3}(?:[.\-]\d{1,3})*|[A-Z]{1,3})\b")
+
+# até onde vai a CABEÇA da descrição — o nome do item, antes do detalhe.
+# 🪤 Inclui os cortes da chave da passada 1 (" departamento ", " sala "...): sem
+# eles "Demarcação — departamento RH" e "— departamento Marketing", réplicas que a
+# passada 1 SOMA de propósito, teriam nomes que se excluem.
+_RX_FIM_DA_CABECA = _re.compile(
+    r"\s[—–-]\s|[(,;:]|\sconforme\s|\s/\s|\s(?:departamento|deptos|do depto|da sala|sala|"
+    r"para sala)\s", _re.IGNORECASE)
+
+# 🔑 cobertura mínima: quanto do que a descrição MAIS CURTA diz tem que estar
+# na outra. 📏 Replay de 22/09 (33 jobs de cliente, llm_cache de 60 d): entre
+# 0,60 e 0,75 ficam duplicatas de verdade ("Piso — Garagem (17,38 m²) — a
+# definir" × "Piso em concreto desempenado — Garagem"; "Transporte de material
+# excedente (bota-fora)" em duas pranchas); abaixo de 0,60 começam os pares
+# diferentes que nenhuma outra régua pega ("Ponto de detecção de incêndio —
+# acionador manual" × "— sensor/detector", 0,57).
+COBERTURA_MINIMA_FUSAO = 0.60
+
+_NUMERO_EXTENSO = {"uma": "1", "um": "1", "duas": "2", "dois": "2", "tres": "3",
+                   "quatro": "4"}
+
+
+def _raiz_fusao(t: str) -> str:
+    """Raiz grosseira: plural e gênero ("internas" e "internos" → "intern")."""
+    if any(ch.isdigit() for ch in t):
+        return _re.sub(r"(?<!\d)0+(?=\d)", "", t)          # "p09" == "p9", "100" fica
+    if len(t) > 4 and t.endswith("oes"):
+        t = t[:-3] + "ao"                                  # botões → botao
+    elif len(t) > 5 and t.endswith(("res", "zes", "les")):
+        t = t[:-2]                                         # interruptores
+    elif len(t) > 4 and t.endswith("ns"):
+        t = t[:-2] + "m"                                   # ferragens
+    elif len(t) > 3 and t.endswith("s"):
+        t = t[:-1]
+    # 🪤 sem cortar o "o" de "-ão": "portao" viraria "porta"
+    if len(t) >= 5 and t[-1] in "ao" and not t.endswith("ao"):
+        t = t[:-1]                                         # preto/preta
+    return t
+
+
+# os vocabulários acima, na mesma raiz em que os tokens são comparados
+_LACUNA_R = frozenset(map(_raiz_fusao, _LACUNA_FUSAO))
+_ACOES_R = frozenset(map(_raiz_fusao, _ACOES_FUSAO))
+_OPOSTOS_R = tuple((_raiz_fusao(x), _raiz_fusao(y)) for x, y in _OPOSTOS_FUSAO)
+_ELEMENTOS_R = frozenset(map(_raiz_fusao, _ELEMENTOS_FUSAO))
+_AMBIENTES_R = frozenset(map(_raiz_fusao, _AMBIENTES_FUSAO))
+_NOMEADAS_R = frozenset(map(_raiz_fusao, _NOMEADAS_FUSAO))
+_POSICOES_R = frozenset(map(_raiz_fusao, _POSICOES_FUSAO))
+_APARELHOS_R = frozenset(map(_raiz_fusao, _APARELHOS_FUSAO))
+_CORES_R = frozenset(map(_raiz_fusao, _CORES_FUSAO))
+
+
+def _texto_fusao(desc: str) -> str:
+    return _sem_acento(desc or "").lower()
+
+
+def _tokens_fusao(desc: str) -> list:
+    """Palavras que dizem o que o item É, em ordem, já na raiz.
+
+    Número com casa decimal ou com unidade ("37,98 m²", "3 cm") sai: é MEDIDA,
+    e medida é comparada pelos atributos. Número solto fica ("Suíte 03").
+    """
+    s = _texto_fusao(desc)
+    s = _re.sub(r"\d+[.,]\d+", " ", s)
+    s = _re.sub(r"\b\d+\s*(?:mm|cm|m|m2|m3|kg|w|a|v|l|btu|mpa)\b", " ", s)
+    out = []
+    for t in _re.findall(r"[a-z0-9]+", s):
+        if len(t) < 2 or t in _VAZIAS_FUSAO:
+            continue
+        out.append(_raiz_fusao(t))
+    return out
+
+
+def _substantivo_fusao(tokens: list) -> str:
+    """O primeiro nome de coisa: "Execução de alvenaria nova" → alvenaria."""
+    for t in tokens:
+        if len(t) >= 3 and not any(ch.isdigit() for ch in t) \
+                and t not in _ACOES_R and t not in _LACUNA_R:
+            return t
+    return ""
+
+
+def _conjunto(regexes, s, norm) -> frozenset:
+    vals = set()
+    for rx in regexes:
+        for m in rx.finditer(s):
+            v = norm(m)
+            if v:
+                vals.add(v)
+    return frozenset(vals)
+
+
+def _num(v: str) -> float:
+    return float(str(v).replace(",", "."))
+
+
+def _norm_altura(m) -> str:
+    """Altura em centímetros. "0,30 cm do piso" é erro de digitação de metro."""
+    try:
+        v = _num(m.group(1))
+    except (TypeError, ValueError):
+        return ""
+    u = (m.group(2) or "").lower() if m.re.groups >= 2 else ""
+    if u == "m" or (u == "cm" and v < 5) or (not u and v < 10):
+        v *= 100
+    return str(int(round(v)))
+
+
+_RX_ALTURA = (
+    _re.compile(r"\b[Hh]\s*[=:]\s*(\d{1,3}(?:[.,]\d{1,2})?)\s*(cm|m)?(?![a-z0-9])", _re.I),
+    _re.compile(r"(\d{1,3}(?:[.,]\d{1,2})?)\s*(cm|m)\s+do\s+piso", _re.I),
+    _re.compile(r"\baltura\s*(?:de\s*)?(\d{1,3}(?:[.,]\d{1,2})?)\s*(cm|m)\b", _re.I),
+)
+# corrente: "20A", "10 A", "2P+T-20A" — A MAIÚSCULO, senão "110 a 120" casaria
+_RX_CORRENTE = (_re.compile(r"(?<![\w.,])(\d{1,3})\s?A\b"),)
+_RX_TENSAO = (_re.compile(r"(?<![\w.,])(\d{2,3})\s?V(?:CA|AC)?\b"),)
+_RX_POTENCIA = (_re.compile(
+    r"(?<![\w.,])(\d{1,3}\.\d{3}(?:,\d)?|\d{1,4}(?:[.,]\d)?)\s?[Ww]\b"),)
+_RX_BTU = (_re.compile(r"(\d{1,3}(?:[.\s]?\d{3})?)\s*btu", _re.I),)
+_RX_LITROS = (_re.compile(r"(?<![\w.,])(\d{1,3}(?:[.\s]?\d{3})?)\s*(?:l|litros)\b", _re.I),)
+_RX_TECLAS = (_re.compile(r"\b(\d|uma|duas|tres|tr[eê]s|quatro)\s+teclas?\b", _re.I),)
+_RX_NIVEL = (
+    _re.compile(r"\bel\s*\.?\s*[+\-]?\s*(\d{1,4}[.,]\d{1,3})", _re.I),
+    _re.compile(r"\bn[ií]vel\s*[+\-]?\s*(\d{1,4}[.,]\d{1,3})", _re.I),
+)
+_RX_PAVIMENTO = (
+    _re.compile(r"\b(t[eé]rreo|subsolo|mezanino)\b", _re.I),
+    _re.compile(r"\bpavimento\s+(superior|\d{1,2})\b", _re.I),
+    _re.compile(r"\b(\d{1,2})\s*[ºo°]\s*(?:pav|andar)", _re.I),
+)
+# medida: "80×80cm", "0,90 × 2,10 m", "4x2" — em qualquer ordem ("2×4" = "4×2")
+_RX_MEDIDA = (_re.compile(
+    r"(?<![\d.,])(\d{1,3}(?:[.,]\d{1,2})?)\s*[x×]\s*(\d{1,3}(?:[.,]\d{1,2})?)(?![\d])", _re.I),)
+# bitola: "diâmetro 32mm", "ø25", "DN 50", "Ø3/4\"" (o `pode_fundir` não lê o "â")
+_RX_BITOLA = (
+    _re.compile(r"(?:di[aâ]metro|diam\.?|ø|⌀|\bdn)\s*(\d{1,2}\s*/\s*\d{1,2}|\d{1,3}(?:[.,]\d)?)", _re.I),
+)
+# código de projeto/legenda: LM05c, PM02, CP.01, EEM.03, EQc.13, P21, V3
+_RX_CODIGO = (_re.compile(
+    r"(?<![A-Za-z0-9.])([A-Z]{1,4}[a-z]?(?:\.[A-Za-z]{1,3})*)[.\-]?(\d{1,3}(?:[.\-]\d{1,3})*)"
+    r"(?:[.\-]?([a-zA-Z]))?(?![A-Za-z0-9])"),)
+_NAO_E_CODIGO = frozenset(("NBR", "ABNT", "CA", "DN", "PVC", "BTU", "IP", "AF", "EL",
+                           "NR", "ISO", "UV", "LED", "KW", "A", "W", "MPA", "TR", "CPVC"))
+
+
+def _norm_simples(m) -> str:
+    return _re.sub(r"\s+", "", m.group(1) or "").replace(",", ".").lower()
+
+
+def _norm_numero(m) -> str:
+    try:
+        return "%g" % _num(_re.sub(r"[\s.](?=\d{3}\b)", "", m.group(1)))
+    except (TypeError, ValueError):
+        return ""
+
+
+def _norm_bitola(m) -> str:
+    v = _re.sub(r"\s+", "", m.group(1) or "")
+    if "/" in v:
+        return v                                   # polegada: "3/4"
+    try:
+        return "%g" % _num(v)                      # "5,0" == "5"
+    except (TypeError, ValueError):
+        return ""
+
+
+def _norm_teclas(m) -> str:
+    v = _sem_acento(m.group(1) or "").lower()
+    return _NUMERO_EXTENSO.get(v, v)
+
+
+def _norm_nivel(m) -> str:
+    try:
+        return "%.2f" % _num(m.group(1))
+    except (TypeError, ValueError):
+        return ""
+
+
+def _norm_pavimento(m) -> str:
+    return _sem_acento(m.group(1) or "").lower()
+
+
+def _norm_medida(m) -> str:
+    try:
+        a, b = sorted((_num(m.group(1)), _num(m.group(2))))
+    except (TypeError, ValueError):
+        return ""
+    return "%gx%g" % (a, b)
+
+
+def _norm_codigo(m) -> str:
+    pre = m.group(1) or ""
+    if pre.upper().split(".")[0] in _NAO_E_CODIGO:
+        return ""
+    # "QLF-10-1" × "QLF-10-2", "QTR-10-A" × "QTR-10-B", "T1.14" × "T1.15"
+    num = "-".join(str(int(p)) for p in _re.split(r"[.\-]", m.group(2)))
+    return "%s%s%s" % (pre.upper(), num, (m.group(3) or "").lower())
+
+
+def _atributos_fusao(desc: str) -> dict:
+    """{categoria: conjunto de valores} — o que muda a COMPRA do item."""
+    s = str(desc or "")
+    cats = {
+        "altura": _conjunto(_RX_ALTURA, s, _norm_altura),
+        "corrente": _conjunto(_RX_CORRENTE, s, _norm_simples),
+        "tensao": _conjunto(_RX_TENSAO, s, _norm_simples),
+        "potencia": _conjunto(_RX_POTENCIA, s, _norm_numero),
+        "btu": _conjunto(_RX_BTU, s, _norm_numero),
+        "litros": _conjunto(_RX_LITROS, s, _norm_numero),
+        "teclas": _conjunto(_RX_TECLAS, s, _norm_teclas),
+        "nivel": _conjunto(_RX_NIVEL, s, _norm_nivel),
+        "pavimento": _conjunto(_RX_PAVIMENTO, s, _norm_pavimento),
+        "medida": _conjunto(_RX_MEDIDA, s, _norm_medida),
+        "bitola": _conjunto(_RX_BITOLA, s, _norm_bitola),
+        "codigo": _conjunto(_RX_CODIGO, s, _norm_codigo),
+    }
+    return {k: v for k, v in cats.items() if v}
+
+
+def assinatura_de_atributos(desc: str) -> tuple:
+    """Os atributos de compra num formato que entra em CHAVE de agrupamento.
+
+    🩸 22/09/2026 (844603fb): a chave da passada 1 corta tudo depois do " — ",
+    e "Ponto de tomada — H=1,80m" e "Ponto de tomada — H=1,30m" viravam a mesma
+    linha. Com a assinatura na chave, a altura não some antes de ser comparada.
+    """
+    _at = dict(_atributos_fusao(desc))
+    _at.update({"rotulo:" + k: v for k, v in _rotulos_fusao(desc).items()})
+    return tuple(sorted((k, tuple(sorted(v))) for k, v in _at.items()))
+
+
+def _prancha_da_ref(ref_sheet: str) -> str:
+    """Arquivo + página: "x.pdf (p3 · Planta)" → "x.pdf#p3". Vazio = sem prancha."""
+    r = str(ref_sheet or "").strip()
+    arq = r.split(" (")[0].strip().lower()
+    m = _re.search(r"\(\s*p(\d+)\b", r)
+    return arq + ("#p" + m.group(1) if m else "")
+
+
+# número de REFERÊNCIA não é rótulo do item: "NBR 9050", "SINAPI AF_01/2024",
+# "planta baixa 38 e fachadas 39/40", "keynote 26". Um lado citar a norma e o
+# outro não, não faz deles dois itens.
+_RX_NUMERO_DE_REFERENCIA = _re.compile(
+    r"\b(?:nbr|abnt|sinapi|sicor|tcpo|af|ed|prancha|pranchas|folha|folhas|vista|vistas|"
+    r"nota|notas|keynote|item|itens|detalhe|detalhes|corte|cortes|planta|plantas|baixa|"
+    r"legenda|rev|revisao|fachada|fachadas|elevacao|elevacoes|serie|circuito|circuitos)"
+    r"\b[\s._\-:ºo°n]*[\d][\d\s,e/._\-]*", _re.IGNORECASE)
+
+
+def _numeros_fusao(desc: str) -> frozenset:
+    """Números soltos que ROTULAM o item ("Circulação 01", "Pl.vi.fi.02")."""
+    s = _texto_fusao(desc)
+    s = _RX_NUMERO_DE_REFERENCIA.sub(" ", s)
+    s = _re.sub(r"\d+[.,]\d+", " ", s)
+    s = _re.sub(r"\b\d+\s*(?:mm|cm|m|m2|m3|kg|w|a|v|l|btu|mpa|x)\b", " ", s)
+    s = _re.sub(r"\d+\s*[x×]\s*\d+", " ", s)
+    return frozenset(str(int(n)) for n in _re.findall(r"(?<![a-z0-9])(\d{1,3})(?![a-z0-9])", s))
+
+
+def _rotulos_fusao(desc: str) -> dict:
+    """{"banheiro": {"1"}, "conjunto": {"CD"}} — o rótulo que separa gêmeos."""
+    out: dict = {}
+    for m in _RX_ROTULO.finditer(str(desc or "")):
+        chave = _raiz_fusao(_sem_acento(m.group(1)).lower())
+        v = m.group(2)
+        out.setdefault(chave, set()).add(str(int(v)) if v.isdigit() else v)
+    return {k: frozenset(v) for k, v in out.items()}
+
+
+def perfil_de_fusao(desc: str, unidade: str = "", ref_sheet: str = "") -> dict:
+    """Tudo o que as duas réguas abaixo comparam, calculado UMA vez por item."""
+    brutos = _re.findall(r"[a-z0-9]+", _texto_fusao(desc))
+    toks = _tokens_fusao(desc)
+    cabeca = _RX_FIM_DA_CABECA.split(str(desc or ""), maxsplit=1)[0]
+    # nome de estrutura: lido na sequência CRUA (com as preposições)
+    nomes: dict = {}
+    for i, t in enumerate(brutos):
+        r = _raiz_fusao(t)
+        if r not in _NOMEADAS_R:
+            continue
+        q = set()
+        j = i + 1
+        if j < len(brutos) and brutos[j] in _PREP_DO_NOME:
+            for k in range(j + 1, min(j + 3, len(brutos))):
+                w = brutos[k]
+                if w in _VAZIAS_FUSAO or w in _PREP_DO_NOME:
+                    continue
+                rw = _raiz_fusao(w)
+                if not any(ch.isdigit() for ch in w) and rw not in _LACUNA_R:
+                    q.add(rw)
+                break
+        nomes.setdefault(r, set()).update(q)
+    # ambiente com NOME: "WC Hóspedes" × "WC Bebê", "Quarto Casal" × "Quarto Bebê"
+    ambientes_nomes: dict = {}
+    for i, t in enumerate(brutos):
+        r = _raiz_fusao(t)
+        if r not in _AMBIENTES_R:
+            continue
+        j = i + 1
+        while j < len(brutos) and brutos[j] in _PREP_DO_NOME:
+            j += 1
+        q = set()
+        if j < len(brutos):
+            w = brutos[j]
+            rw = _raiz_fusao(w)
+            if w.isalpha() and len(w) >= 3 and w not in _VAZIAS_FUSAO \
+                    and rw not in _LACUNA_R and rw not in _ACOES_R:
+                q.add(rw)
+        ambientes_nomes.setdefault(r, set()).update(q)
+    _sem_desenho = _RX_COR_DO_DESENHO.sub(" ", str(desc or ""))
+    cores = set(t for t in _tokens_fusao(_sem_desenho) if t in _CORES_R)
+    for _m in _RX_NOME_DA_COR.finditer(_sem_acento(_sem_desenho)):
+        _c = _raiz_fusao(_m.group(1).lower())
+        if _c not in _VAZIAS_FUSAO and _c not in _LACUNA_R:
+            cores.add(_c)
+    cores = frozenset(cores)
+    _u = (unidade or "").strip().lower().replace("2", "²").replace("3", "³")
+    return {
+        "desc": desc or "",
+        "unidade": _u,
+        "prancha": _prancha_da_ref(ref_sheet),
+        "substantivo": _substantivo_fusao(toks),
+        "palavras": frozenset(t for t in toks if t not in _LACUNA_R and t not in _ACOES_R),
+        "cabeca": frozenset(t for t in _tokens_fusao(cabeca)
+                            if t not in _LACUNA_R and t not in _ACOES_R),
+        "raizes": frozenset(toks),
+        "atributos": _atributos_fusao(desc),
+        "rotulos": _rotulos_fusao(desc),
+        # número solto que rotula o item (medida, unidade e norma já saíram)
+        "numeros": _numeros_fusao(desc),
+        "elementos": frozenset(t for t in toks if t in _ELEMENTOS_R),
+        "ambientes": frozenset(t for t in toks if t in _AMBIENTES_R),
+        "ambientes_nomes": {k: frozenset(v) for k, v in ambientes_nomes.items()},
+        "posicoes": frozenset(t for t in toks if t in _POSICOES_R),
+        "aparelhos": frozenset(t for t in toks if t in _APARELHOS_R),
+        "cores": cores,
+        "nomes": {k: frozenset(v) for k, v in nomes.items()},
+    }
+
+
+def _perfil(x) -> dict:
+    return x if isinstance(x, dict) else perfil_de_fusao(x)
+
+
+def motivo_para_nao_fundir(a, b) -> str:
+    """'' quando nada DIFERENCIA os dois itens; senão, o motivo em poucas palavras.
+
+    `a` e `b` são perfis (`perfil_de_fusao`) ou descrições. Cada regra só
+    bloqueia quando os DOIS lados dizem algo e o que dizem se exclui — atributo
+    presente de um lado só não bloqueia (a leitura vaga não diz a altura).
+    """
+    a, b = _perfil(a), _perfil(b)
+    if a["substantivo"] and b["substantivo"] and a["substantivo"] != b["substantivo"]:
+        return "substantivo %s × %s" % (a["substantivo"], b["substantivo"])
+    if not pode_fundir(a["desc"], b["desc"]):
+        return "atributo (bitola/classe/fck/medida/código)"
+    for cat in set(a["atributos"]) & set(b["atributos"]):
+        va, vb = a["atributos"][cat], b["atributos"][cat]
+        # 🪤 código: basta cada lado ter um que o outro não tem — o modelo
+        # "RX-24" em comum não faz o filtro FX1 virar o FX2
+        if (not (va & vb)) or (cat == "codigo" and (va - vb) and (vb - va)):
+            return "%s %s × %s" % (cat, "/".join(sorted(va - vb or va))[:30],
+                                   "/".join(sorted(vb - va or vb))[:30])
+    for cat in set(a["rotulos"]) & set(b["rotulos"]):
+        if not (a["rotulos"][cat] & b["rotulos"][cat]):
+            return "rotulo %s %s × %s" % (cat, "/".join(sorted(a["rotulos"][cat])),
+                                          "/".join(sorted(b["rotulos"][cat])))
+    # número: como o código, basta cada lado ter um que o outro não tem
+    # ("tipo 1 — ambiente 9" × "tipo 1 — ambiente 105")
+    if (a["numeros"] - b["numeros"]) and (b["numeros"] - a["numeros"]):
+        return "numeros %s × %s" % ("/".join(sorted(a["numeros"] - b["numeros"]))[:20],
+                                    "/".join(sorted(b["numeros"] - a["numeros"]))[:20])
+    # 🔑 o NOME do item (a cabeça, antes do primeiro " — ", vírgula ou
+    # parêntese): cada um tem uma palavra que o outro não tem → são dois itens
+    # ("Interruptor duplo" × "Interruptor intermediário", "Portão de acesso" ×
+    # "Portão de saída"). Se um nome cabe no outro, não é conflito ("Forro" ×
+    # "Forro de gesso liso").
+    if (a["cabeca"] - b["cabeca"]) and (b["cabeca"] - a["cabeca"]):
+        return "nomes %s × %s" % ("/".join(sorted(a["cabeca"] - b["cabeca"]))[:40],
+                                  "/".join(sorted(b["cabeca"] - a["cabeca"]))[:40])
+    ra, rb = a["raizes"], b["raizes"]
+    for x, y in _OPOSTOS_R:
+        if (x in ra and y not in ra and y in rb and x not in rb) or \
+                (y in ra and x not in ra and x in rb and y not in rb):
+            return "lados opostos %s × %s" % (x, y)
+    if a["elementos"] and b["elementos"] and not (a["elementos"] & b["elementos"]):
+        return "elementos %s × %s" % ("/".join(sorted(a["elementos"])),
+                                      "/".join(sorted(b["elementos"])))
+    if a["ambientes"] and b["ambientes"] and not (a["ambientes"] & b["ambientes"]):
+        return "ambientes %s × %s" % ("/".join(sorted(a["ambientes"])),
+                                      "/".join(sorted(b["ambientes"])))
+    for amb in set(a["ambientes_nomes"]) & set(b["ambientes_nomes"]):
+        qa, qb = a["ambientes_nomes"][amb], b["ambientes_nomes"][amb]
+        if qa and qb and not (qa & qb):
+            return "ambiente %s %s × %s" % (amb, "/".join(sorted(qa)), "/".join(sorted(qb)))
+    for cat in ("posicoes", "aparelhos", "cores"):
+        if a[cat] and b[cat] and not (a[cat] & b[cat]):
+            return "%s %s × %s" % (cat, "/".join(sorted(a[cat])), "/".join(sorted(b[cat])))
+    for est in set(a["nomes"]) & set(b["nomes"]):
+        qa, qb = a["nomes"][est], b["nomes"][est]
+        if qa and qb and not (qa & qb):
+            return "%s %s × %s" % (est, "/".join(sorted(qa)), "/".join(sorted(qb)))
+    # 🔑 Em pranchas diferentes, "o poço" de uma não prova ser "o poço de
+    # sucção" da outra (f8d8e6d8: a fôrma de 22 m² de dois poços).
+    if a["prancha"] and b["prancha"] and a["prancha"] != b["prancha"]:
+        for p, q in ((a, b), (b, a)):
+            for est, nomes in p["nomes"].items():
+                if nomes and not (nomes & q["raizes"]):
+                    return "%s %s só numa das pranchas" % (est, "/".join(sorted(nomes)))
+    return ""
+
+
+def prova_de_mesmo_item(a, b) -> bool:
+    """A mesma quantidade só junta com PROVA de que é o mesmo item:
+
+    - a mesma medida veio em unidades diferentes (a IA errou a unidade de UM
+      item: 222,11 m² e 222,11 ml da mesma linha de LED); ou
+    - uma descrição CABE na outra: pelo menos `COBERTURA_MINIMA_FUSAO` do que a
+      mais curta diz do item está na mais longa ("Forro — Varanda — a
+      confirmar" cabe em "Forro de gesso liso — Varanda (37,98 m²)").
+    """
+    a, b = _perfil(a), _perfil(b)
+    if " ".join(a["desc"].lower().split()) == " ".join(b["desc"].lower().split()):
+        return True                                  # a mesma linha, repetida
+    if a["unidade"] != b["unidade"] and {a["unidade"], b["unidade"]} <= _UNIDADES_DE_MEDIDA_FUSAO:
+        return True
+    return cobertura_fusao(a, b) >= COBERTURA_MINIMA_FUSAO
+
+
+def cobertura_fusao(a, b) -> float:
+    """Fração das palavras da descrição mais curta que a outra também tem."""
+    a, b = _perfil(a), _perfil(b)
+    pa, pb = a["palavras"], b["palavras"]
+    menor, maior = (pa, pb) if len(pa) <= len(pb) else (pb, pa)
+    if not menor:
+        return 0.0
+    return len(menor & maior) / len(menor)
+
+
+# ══════════════════════════════════════════════════════════════════════
 #  RESSALVA POR DIMENSÃO — nem toda ressalva atinge todo item
 # ══════════════════════════════════════════════════════════════════════
 # 🚨 Por que existe (17/08/2026): `extraction_has_quality_caveat` é

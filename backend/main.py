@@ -66,6 +66,10 @@ from engine_rules import (
     FLOOR_M2_UNITS as _FLOOR_M2_UNITS,
     linhas_pai_e_filho as _linhas_pai_e_filho,
     pode_fundir as _pode_fundir,
+    perfil_de_fusao as _perfil_de_fusao,
+    motivo_para_nao_fundir as _motivo_para_nao_fundir,
+    prova_de_mesmo_item as _prova_de_mesmo_item,
+    assinatura_de_atributos as _assinatura_de_atributos,
     caveat_atinge_unidade as _caveat_atinge_unidade,
     selos_sem_medida as _selos_sem_medida,
     tipo_de_conflito_de_unidade as _tipo_conflito_unidade,
@@ -6722,6 +6726,88 @@ def _resumo_do_grupo(group, teto: int = 4) -> str:
     return " · ".join(partes)
 
 
+# 🪤 A descrição citada vai pra OBSERVAÇÃO, e há regras que leem a observação
+# (🅒/🅓 rebaixam o selo por "a definir"/"fundido de"; a passada 5 junta o que diz
+# "a definir"). A citação não pode carregar essas marcas de uma linha pra outra.
+_MARCAS_QUE_NAO_VIAJAM = _re.compile(
+    r"a\s+definir|por\s+definir|a\s+ser\s+definid\w*|conforme\s+(?:projeto|especifica\w*|"
+    r"detalhe|indicad\w*)|fundido\s+de|consolidado\s+de|v[aá]rias\s+varia\w+|"
+    r"n[aã]o\s+medid\w*|medid[oa]s?\b|layer", _re.IGNORECASE)
+
+
+def _o_que_a_fusao_absorveu(grupo, ficou, teto: int = 3, com_texto: bool = True) -> str:
+    """O que saiu da planilha quando a fusão ficou com a quantidade de UMA linha.
+
+    🩸 22/09/2026 (844603fb): a nota dizia "Fundido de 2 entradas com mesma qty
+    30.0 un — descrições similares" — e não dizia QUAIS. A linha que ficou era
+    uma tomada; o interruptor que ela engoliu não aparecia em lugar nenhum. Com o
+    que foi absorvido escrito na linha, o arquiteto confere e desfaz.
+    `com_texto=False` só dá a prancha (a passada 1 junta a MESMA descrição).
+    """
+    partes = []
+    outros = [it for it in grupo if it is not ficou]
+    _base = " ".join((getattr(ficou, "description", "") or "").split())
+    for it in outros[:teto]:
+        _d = " ".join((getattr(it, "description", "") or "").split())
+        _pr = (getattr(it, "ref_sheet", "") or "").split(" (")[0].strip()[:40]
+        if not com_texto or _d == _base:
+            partes.append(_pr or "sem prancha")
+            continue
+        _d = _MARCAS_QUE_NAO_VIAJAM.sub("…", _d)
+        _d = "«%s»" % (_d[:60].rstrip() + ("…" if len(_d) > 60 else ""))
+        partes.append(_d + (" (%s)" % _pr if _pr else ""))
+    if len(outros) > teto:
+        partes.append("(+%d)" % (len(outros) - teto))
+    return "; ".join(partes)
+
+
+def _familias_do_mesmo_item(grupo: list, perfil) -> list:
+    """Separa linhas de MESMA quantidade em famílias do MESMO item.
+
+    🩸 22/09/2026 (844603fb, f8d8e6d8): as passadas 1 e 2 ficavam com a
+    quantidade de UMA linha do grupo inteiro — interruptor dentro de tomada,
+    o concreto de um poço dentro do de outro. Duas famílias só se juntam se
+    NENHUM par entre elas tem o que diferencie (`_motivo_para_nao_fundir`) e
+    ALGUM par tem prova de que é o mesmo item (`_prova_de_mesmo_item`).
+    🔑 Junta família com família, e não item com o 1º da família: um item vago
+    ("Tomada — conforme legenda") não pode servir de ponte entre dois
+    diferentes, e o resultado não depende da ordem das pranchas.
+    `perfil(it)` devolve o perfil de fusão do item (calculado uma vez só).
+    """
+    familias = [[it] for it in grupo]
+    _motivo: dict = {}      # cada par é julgado uma vez só, por mais voltas que o laço dê
+    _prova: dict = {}
+
+    def _tem_motivo(a, b):
+        k = (id(a), id(b)) if id(a) < id(b) else (id(b), id(a))
+        if k not in _motivo:
+            _motivo[k] = bool(_motivo_para_nao_fundir(perfil(a), perfil(b)))
+        return _motivo[k]
+
+    def _tem_prova(a, b):
+        k = (id(a), id(b)) if id(a) < id(b) else (id(b), id(a))
+        if k not in _prova:
+            _prova[k] = _prova_de_mesmo_item(perfil(a), perfil(b))
+        return _prova[k]
+
+    juntou = True
+    while juntou and len(familias) > 1:
+        juntou = False
+        for i in range(len(familias)):
+            for j in range(i + 1, len(familias)):
+                fa, fb = familias[i], familias[j]
+                if any(_tem_motivo(a, b) for a in fa for b in fb):
+                    continue
+                if any(_tem_prova(a, b) for a in fa for b in fb):
+                    fa.extend(fb)
+                    del familias[j]
+                    juntou = True
+                    break
+            if juntou:
+                break
+    return familias
+
+
 def _anota_fusao(registro, passada: str, grupo: list, ficou) -> None:
     """Guarda o que uma passada de fusão comeu, pro log `motor:fusao-calada`.
 
@@ -6779,16 +6865,21 @@ def _consolidate_items(items: list, registro: list | None = None) -> list:
     `registro`, quando é uma lista, recebe o que cada passada fundiu — é o que
     alimenta o log `motor:fusao-calada`. Não muda nada do que o cliente recebe.
 
-    PASSADA 1 — por (chave_normalizada, unidade):
-    - Mesma chave + mesma qty + mesma unidade → mantém 1 (desc mais completa).
+    PASSADA 1 — por (chave_normalizada, unidade, atributos de compra):
+    - Mesma chave + mesma qty + mesma unidade → separa em famílias do MESMO
+      item (`_familias_do_mesmo_item`), mantém 1 por família (desc mais
+      completa) e escreve na observação quantas vezes ela apareceu.
     - Mesma chave + mesma unidade + qtys diferentes → mantém todos.
-    - Réplica por departamento (4+ itens, qty<2) → funde em 1 estimado.
+    - Réplica por departamento (4+ itens, qty<2) → funde em 1 estimado,
+      SOMANDO (e fica fora da passada 2).
 
-    PASSADA 2 — fusões qty+discipline+noun (qty >= 2):
-    - Mesma qty_arredondada + mesma discipline + units diferentes →
-      funde. Escolhe melhor unit.
-    - Mesma qty_arredondada + mesma discipline + mesma unit + primary_noun
-      igual → funde.
+    PASSADA 2 — mesma qty_arredondada (>= 2) + mesma discipline, e SÓ quando é
+    o mesmo item (engine_rules, 22/09/2026):
+    - nenhum par tem o que os diferencie (substantivo, altura, corrente,
+      medida, código, estrutura nomeada, lados opostos...); e
+    - algum par tem prova: uma descrição cabe na outra, ou a mesma medida veio
+      em unidades diferentes (escolhe a melhor unit).
+    A observação diz o que foi absorvido.
 
     PASSADA 3 — fusões por FAMÍLIA em qty pequena (unit=un, vb, ml):
     - Itens com mesmo primary_noun + mesma discipline + qty <= 2 +
@@ -6809,13 +6900,28 @@ def _consolidate_items(items: list, registro: list | None = None) -> list:
     """
     from models import BudgetItem, Confidence
 
+    # Perfil de fusão de cada item, calculado uma vez (passadas 1 e 2).
+    _perfis: dict = {}
+
+    def _pf(it):
+        _p = _perfis.get(id(it))
+        if _p is None:
+            _p = _perfis[id(it)] = _perfil_de_fusao(
+                it.description or "", it.unit or "", getattr(it, "ref_sheet", "") or "")
+        return _p
+
     # ── Passada 1 ──
     groups: dict = {}
     for item in items:
-        key = (_normalize_description_key(item.description), item.unit)
+        # 🩸 22/09/2026 (844603fb): a chave corta tudo depois do " — ", e
+        # "Ponto de tomada — H=1,80m" e "— H=1,30m" viravam a mesma linha. A
+        # assinatura (altura, corrente, medida, código...) entra na chave.
+        key = (_normalize_description_key(item.description), item.unit,
+               _assinatura_de_atributos(item.description or ""))
         groups.setdefault(key, []).append(item)
 
     pass1 = []
+    _agregados_p1: set = set()      # as somas "(várias variantes)" desta passada
     for key, group in groups.items():
         if len(group) == 1:
             pass1.append(group[0])
@@ -6824,11 +6930,16 @@ def _consolidate_items(items: list, registro: list | None = None) -> list:
         quantities = [round(float(it.quantity), 2) for it in group]
         unique_qtys = set(quantities)
 
+        _replica = max(quantities) < 2.0 and len(group) >= 4
+
         # 🚨 GUARDA DE ATRIBUTO na passada 1 também: se o grupo mistura
         # atributos distintivos (bitola/classe/fck/dimensão/código), NÃO é
         # duplicata — são itens diferentes que a chave normalizada achatou.
         # Mantém todos e sai. (Caso cliente-20, 17/08/2026.)
-        if any(not _pode_fundir(group[0].description, _o.description) for _o in group[1:]):
+        # 🪤 22/09/2026: vale só pra réplica, que SOMA — a mesma quantidade, mais
+        # abaixo, separa o grupo em famílias do mesmo item (régua da passada 2).
+        if _replica and any(not _pode_fundir(group[0].description, _o.description)
+                            for _o in group[1:]):
             pass1.extend(group)
             continue
 
@@ -6847,10 +6958,10 @@ def _consolidate_items(items: list, registro: list | None = None) -> list:
         # 🪤 Isto NÃO afeta fusão que soma algo: a regra já exige max < 2,0, e
         # o corte novo só dispensa o caso em que o total é ZERO.
         _total_do_grupo = round(sum(quantities), 2)
-        if max(quantities) < 2.0 and len(group) >= 4 and _total_do_grupo <= 0:
+        if _replica and _total_do_grupo <= 0:
             pass1.extend(group)
             continue
-        if max(quantities) < 2.0 and len(group) >= 4:
+        if _replica:
             best = max(group, key=lambda x: (len(x.description or ""), _desempate_estavel(x)))
             clean_desc = best.description
             for sep in (' - ', ' — ', ' departamento ', ' deptos ', ' da sala '):
@@ -6881,20 +6992,40 @@ def _consolidate_items(items: list, registro: list | None = None) -> list:
                 spec_origem=getattr(best, "spec_origem", "") or "",
             )
             pass1.append(consolidated)
+            _agregados_p1.add(id(consolidated))
         elif len(unique_qtys) == 1:
-            # 🩸 30/08: a escolha era só por tamanho de descrição — e podia
-            # ficar com a cópia SEM selo (origem vazia) da mesma medição,
-            # que o zerador de honestidade depois matava. Mesma qty em
-            # todas: o representante certo é o que carrega a origem medida
-            # e as specs preenchidas.
-            best = max(group, key=lambda x: (
-                (getattr(x, "origem", "") or "") == "dxf_geom",
-                sum(1 for _f in ("marca", "codigo_fabricante", "cor", "spec_origem")
-                    if getattr(x, _f, "")),
-                len(x.description or ""), _desempate_estavel(x)))
-            pass1.append(best)
-            # a única fusão que não escreve nada na linha que fica — só aqui há rastro
-            _anota_fusao(registro, "p1-igual", group, best)
+            # 🩸 22/09/2026: a chave só vê o começo da descrição. "Circuito de
+            # tomadas — circ. T1.14" e "— circ. T1.15", "Demolição de forro — WC
+            # Hóspedes" e "— WC Bebê" caíam no mesmo grupo e ficava UMA. Mesma régua
+            # da passada 2: o grupo se separa em famílias do MESMO item.
+            for _fam in _familias_do_mesmo_item(group, _pf):
+                if len(_fam) == 1:
+                    pass1.append(_fam[0])
+                    continue
+                # 🩸 30/08: a escolha era só por tamanho de descrição — e podia
+                # ficar com a cópia SEM selo (origem vazia) da mesma medição,
+                # que o zerador de honestidade depois matava. Mesma qty em
+                # todas: o representante certo é o que carrega a origem medida
+                # e as specs preenchidas.
+                best = max(_fam, key=lambda x: (
+                    (getattr(x, "origem", "") or "") == "dxf_geom",
+                    sum(1 for _f in ("marca", "codigo_fabricante", "cor", "spec_origem")
+                        if getattr(x, _f, "")),
+                    len(_pf(x)["palavras"]), len(x.description or ""),
+                    _desempate_estavel(x)))
+                pass1.append(best)
+                _anota_fusao(registro, "p1-igual", _fam, best)
+                # 🩸 22/09/2026 (844603fb): esta era a única fusão que não
+                # escrevia nada na linha que fica. 🪤 Sem "Fundido de" nem
+                # "Consolidado de": a regra 🅓 rebaixaria o selo de uma medição
+                # que é a MESMA nas duas linhas.
+                _obs_p1 = (best.observations or "").rstrip(" |")
+                if "Esta linha apareceu" not in _obs_p1:     # consolidar de novo não repete
+                    best.observations = (
+                        (_obs_p1 + " | " if _obs_p1 else "")
+                        + f"Esta linha apareceu {len(_fam)} vezes com a mesma quantidade "
+                          f"({quantities[0]:g} {best.unit}); ficou uma só. As outras: "
+                          f"{_o_que_a_fusao_absorveu(_fam, best, teto=2, com_texto=False)}.")
         else:
             pass1.extend(group)
 
@@ -6913,7 +7044,11 @@ def _consolidate_items(items: list, registro: list | None = None) -> list:
             qty_r = round(float(it.quantity or 0), 2)
         except Exception:
             qty_r = 0.0
-        if qty_r < MIN_QTY_PASS2:
+        # 🩸 22/09/2026: a linha "(várias variantes)" da passada 1 já é uma SOMA,
+        # e a descrição dela perdeu o que vinha depois do " — " (o código EQc.01
+        # × EQc.02 de dois refrigeradores). Juntar duas somas porque o total
+        # coincidiu apagava um aparelho inteiro.
+        if qty_r < MIN_QTY_PASS2 or id(it) in _agregados_p1:
             buckets.setdefault(("__solo__", id(it)), []).append(it)
             continue
         buckets.setdefault((it.discipline or "", qty_r), []).append(it)
@@ -6924,55 +7059,47 @@ def _consolidate_items(items: list, registro: list | None = None) -> list:
             pass2.extend(group)
             continue
 
-        # Tenta fundir itens do mesmo bucket em "famílias". Critério de fusão:
-        # mesmo primary_noun OU interseção de >= 2 tokens significativos.
-        # (1 token só gera FP — ex.: dois itens com "porta" mas sentidos distintos.)
-        families: list[list] = []
-        for it in group:
-            noun = _primary_noun(it.description)
-            key_tokens = set(_normalize_description_key(it.description).split())
-            placed = False
-            for fam in families:
-                fam_noun = _primary_noun(fam[0].description)
-                fam_tokens = set(_normalize_description_key(fam[0].description).split())
-                overlap = key_tokens & fam_tokens
-                # 🚨 GUARDA DE ATRIBUTO (17/08/2026, caso cliente-20): bitola,
-                # classe de aço, fck, dimensão e código IDENTIFICAM o item —
-                # aço Ø8 e Ø16 são materiais diferentes (regra dura nº4). O
-                # critério de "2 palavras em comum" fundia os dois, porque toda
-                # linha estrutural compartilha "armadura"+"vigas", e a linha
-                # fundida ficava com a quantidade de UMA só. Medido em bancada
-                # com o padrão real (12 pranchas × 6 bitolas): 72 linhas /
-                # 18.168 kg viravam 1 linha / 508 kg — 97% da obra evaporava.
-                if not _pode_fundir(it.description, fam[0].description):
-                    continue
-                if noun and noun == fam_noun:
-                    fam.append(it); placed = True; break
-                if len(overlap) >= 2:
-                    fam.append(it); placed = True; break
-            if not placed:
-                families.append([it])
+        # Famílias = o MESMO item repetido (lido em duas pranchas/vistas, ou
+        # com a unidade trocada). 🚨 GUARDA DE ATRIBUTO (17/08/2026, cliente-20):
+        # aço Ø8 e Ø16 fundiam porque toda linha estrutural divide "armadura" +
+        # "vigas" — 72 linhas / 18.168 kg viravam 1 linha / 508 kg.
+        # 🩸 22/09/2026 (844603fb, f8d8e6d8): o critério "mesmo 1º substantivo
+        # OU 2 palavras em comum" fundia interruptor com tomada ("simples
+        # monopolar"), massa corrida com pintura, porta com ferragem, e o
+        # concreto de um poço com o de outro. Agora a régua é a de
+        # `_familias_do_mesmo_item`.
+        families = _familias_do_mesmo_item(group, _pf)
 
         for fam in families:
             if len(fam) == 1:
                 pass2.append(fam[0])
                 continue
-            # Fundir família: melhor descrição, melhor unidade, obs combinada
-            best = max(fam, key=lambda x: len(x.description or ""))
+            # Fundir família: melhor descrição, melhor unidade, obs combinada.
+            # 🩸 22/09/2026: "a mais longa" escolhia "Forro — Varanda — tipo e
+            # acabamento a definir com projeto" no lugar de "Forro de gesso liso
+            # — Varanda": ganha a que diz MAIS do item (palavras que não são lacuna).
+            best = max(fam, key=lambda x: (len(_pf(x)["palavras"]), len(x.description or ""),
+                                           _desempate_estavel(x)))
             units = [it.unit for it in fam]
             chosen_unit = _pick_best_unit(units, best.description)
             unit_changed = len(set(units)) > 1
             variant_count = len(fam)
             obs_parts = [best.observations or ""]
+            # 🩸 22/09/2026: a nota dizia "descrições similares" e não dizia
+            # QUAIS — agora diz o que saiu da planilha pra ficar nesta linha.
+            _absorveu = _o_que_a_fusao_absorveu(fam, best)
             if unit_changed:
                 obs_parts.append(
-                    f"Fundido de {variant_count} entradas com units divergentes "
-                    f"({'/'.join(sorted(set(units)))}) — mesma qty {qty_r}"
+                    f"Fundido de {variant_count} entradas com a mesma quantidade "
+                    f"({qty_r:g}) em unidades diferentes "
+                    f"({'/'.join(sorted(set(units)))}) — absorveu: {_absorveu}. "
+                    f"Confira se era o mesmo item"
                 )
             else:
                 obs_parts.append(
-                    f"Fundido de {variant_count} entradas com mesma qty "
-                    f"{qty_r} {chosen_unit} — descrições similares"
+                    f"Fundido de {variant_count} entradas com a mesma quantidade "
+                    f"({qty_r:g} {chosen_unit}) — absorveu: {_absorveu}. "
+                    f"Confira se era o mesmo item"
                 )
             merged_item = BudgetItem(
                 item_num=best.item_num,

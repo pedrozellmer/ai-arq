@@ -49,11 +49,19 @@ def test_residuo_2_dept():
 
 
 def test_residuo_3_ledline():
-    """3 LED LINE com qty 222.11 mas units diferentes (m², m², ml)."""
+    """3 LED LINE com qty 222.11 mas units diferentes (m², m², ml).
+
+    🩸 22/09/2026: a versão de abril deste teste fundia "pendurada", "encastrada"
+    e "linear" numa linha só. São montagens diferentes (outro perfil, outra
+    compra — regra nº4), e a mesma régua que fundia as três fundia interruptor
+    com tomada no job 844603fb. O caso que o teste protege — a MESMA linha de
+    LED que veio em m² e em ml — continua fundindo; as três montagens ficam em
+    `test_a_fusao_so_junta_o_mesmo_item.py`.
+    """
     items = [
-        mk("LED LINE pendurada tipo A", "m²", 222.11, "Iluminação"),
-        mk("LED LINE tipo A encastrada", "m²", 222.11, "Iluminação"),
-        mk("LED LINE linear tipo A", "ml", 222.11, "Iluminação"),
+        mk("LED LINE tipo A", "m²", 222.11, "Iluminação"),
+        mk("LED LINE tipo A — pendurada", "m²", 222.11, "Iluminação"),
+        mk("LED LINE tipo A", "ml", 222.11, "Iluminação"),
     ]
     out = _consolidate_items(items)
     assert len(out) == 1, f"Esperado 1 item fundido, veio {len(out)}: {[(i.description, i.unit) for i in out]}"
