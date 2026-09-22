@@ -24,11 +24,16 @@ O conserto tem três partes, e este arquivo guarda as três:
       veio;
   (c) o cliente lê quantas páginas do envio dele eram prancha técnica.
 
-📊 ALCANCE MEDIDO em 22/09 (90 dias, sem is_eval, testemunha `now()` junto):
+📊 ALCANCE, E O QUE ELE É (22/09, 90 dias, sem is_eval, testemunha `now()`):
 13.176 linhas em 168 jobs. Pelo `ref_sheet` que a própria leitura escreve, 3
 jobs têm linha nascida de página de render/foto/capa — 1d0751b8 (400 linhas,
 74,5% da entrega), c378477f (47 de 500) e aec7cac2 (1 de 1.044). É POUCO JOB e
 MUITA LINHA: quando acontece, decide a planilha inteira.
+🪤 Isso é PROXY, não a medida desta régua: `ref_sheet` é texto livre, e o campo
+`tipo_de_pagina` que a régua lê não existe em leitura nenhuma do acervo — ele
+começa a ser pedido neste commit. O proxy SUBCONTA: na única entrega conferida
+linha a linha (1d0751b8) ele acha 400 das 493 (91,8%). O tamanho de verdade sai
+do log `motor:pagina-sem-prancha` em 2-4 semanas.
 
 🚫 POR QUE ESCOPO E NÃO APAGAR A LINHA — medido nos 4 casos de hoje:
   · 1d0751b8: apagar deixaria a entrega com 44 linhas (as 2 páginas técnicas),
@@ -38,11 +43,24 @@ MUITA LINHA: quando acontece, decide a planilha inteira.
     que ENTREGOU. Barrar por conta própria come entrega de verdade — é o
     "o número que eu medi pode ser o meu próprio corte";
   · ee801b82/f8d8e6d8, 844603fb e 95bab8ba (os outros 3 casos de hoje):
-    ZERO linha classificada como não-prancha. O dano colateral é medido e é 0.
+    ZERO linha PELO PROXY. 🪤 esse zero não prova dano colateral nenhum: em
+    22/09 nenhuma linha do banco PODE estar classificada, porque o
+    classificador nasce aqui — é a tautologia irmã do "0 de 117" de 18/09.
 
 🧪 Os guardas EXECUTAM: o prompt sai de `analyze_sheet` de verdade (com um
 cliente falso no lugar da IA) e a fiação do motor é recortada do `main.py` pela
 árvore sintática e executada (tests/_executa.py) — nunca `assert "..." in src`.
+
+🔁 22/09/2026, DEPOIS DA REVISÃO — quatro coisas a mais, guardadas aqui:
+  · o recado não pede o DWG a quem mandou o DWG no mesmo envio (18 dos 167
+    jobs entregues em 90 dias, 10,8%, trazem PDF e DWG/DXF juntos), e a
+    primeira frase diz que o denominador é só das páginas dos PDFs;
+  · o número de linhas do recado é o da planilha ENTREGUE, contado depois da
+    consolidação — 19,2% dos itens montados somem depois do laço de páginas;
+  · a página cuja LEITURA FALHOU sai do censo: "não classificada" é diferente
+    de "não foi lida";
+  · a página que voltou sem item E sem se classificar é CONTADA no log, e só —
+    agir sobre "não sei" é o que esta régua inteira se proíbe de fazer.
 """
 import os
 import sys
@@ -296,14 +314,79 @@ def test_CONTROLE_a_fiacao_nao_toca_em_quem_nao_declarou():
     assert (ns["qty"], ns["obs_raw"], ns["_n_escopo"]) == (30, "obs", 0)
 
 
-def test_o_censo_recolhe_o_veredito_de_cada_pagina():
-    ns = {"result": {"tipo_de_pagina": "render"}, "_tipos_de_pagina": [],
-          "_pranchas_nao_tecnicas": [], "_pg_e_escopo": True,
-          "_disp": "pagina 17"}
-    roda("process_job", '_tipos_de_pagina.append(str(result.get("tipo_de_pagina")', ns)
+#: Marcadores dos statements reais do censo, no fim do laço de páginas.
+_MARCA_CENSO = '_tipos_de_pagina.append(str(result.get("tipo_de_pagina")'
+_MARCA_SEM_TIPO = "_n_sem_item_sem_tipo += 1"
+
+
+def _ns_censo(result):
+    """Executa os statements REAIS do fim do laço de páginas do process_job."""
+    ns = {"result": result, "_tipos_de_pagina": [],
+          "_pranchas_nao_tecnicas": [], "_disp": "pagina 17",
+          "_n_sem_item_sem_tipo": 0}
+    roda("process_job", _MARCA_IMPORT, ns)      # liga _pg_tecnica de verdade
+    roda("process_job", _MARCA_TIPO, ns)
+    roda("process_job", _MARCA_VEREDITO, ns)
+    roda("process_job", _MARCA_CENSO, ns, tamanho=1)
+    roda("process_job", _MARCA_SEM_TIPO, ns, tamanho=1)
     roda("process_job", "_pranchas_nao_tecnicas.append(_disp)", ns, tamanho=1)
+    return ns
+
+
+def test_o_censo_recolhe_o_veredito_de_cada_pagina():
+    ns = _ns_censo({"tipo_de_pagina": "render"})
     assert ns["_tipos_de_pagina"] == ["render"]
     assert ns["_pranchas_nao_tecnicas"] == ["pagina 17"]
+
+
+def test_a_pagina_cuja_LEITURA_FALHOU_nao_entra_no_censo():
+    """🩸 22/09 (revisão) — a página que a IA nunca respondeu não tem
+    `continue` neste laço: ela caía no censo como "" e virava, pro cliente,
+    "(Outras N página(s) a leitura não soube classificar.)". São 11 páginas em
+    3 jobs em 90 dias (error_log stage='pdf:analyze'), e o comentário do
+    próprio conserto já dizia a regra que o código não cumpria."""
+    ns = _ns_censo({"items": [], "error": "[status=529] overloaded"})
+    assert ns["_tipos_de_pagina"] == [], (
+        '"não classificada" tem que continuar diferente de "não foi lida"')
+
+
+def test_CONTROLE_a_pagina_LIDA_que_nao_se_classificou_entra_no_censo():
+    """O controle do controle: é ela que faz a frase das não classificadas —
+    se o filtro de cima comesse as duas, o denominador voltaria a mentir."""
+    ns = _ns_censo({"tipo_de_pagina": "outro", "items": []})
+    assert ns["_tipos_de_pagina"] == ["outro"], (
+        "o censo guarda o BRUTO da leitura; quem normaliza e censo_de_paginas")
+    assert R.censo_de_paginas(ns["_tipos_de_pagina"]) == {
+        "tecnicas": 0, "sem_prancha": 0, "nao_disse": 1, "total": 1,
+        "por_tipo": {}}
+
+
+def test_conta_a_pagina_que_voltou_sem_item_e_sem_dizer_o_que_e():
+    """🪤 22/09 (revisão) — o prompt novo oferece `"items": []` a TODO prompt
+    não estrutural e oferece "outro" a quem não souber classificar. A página
+    que responde a lista vazia sem se classificar escapa da poda e chega ao
+    cliente pelo aviso de "prancha lida que não gerou item". Tirar o "outro"
+    do prompt trocaria "não sei" por palpite — e palpite de "render" ZERA a
+    quantidade de prancha de verdade. Então aqui a gente MEDE, e não age."""
+    ns = _ns_censo({"tipo_de_pagina": "outro", "items": [],
+                    "_sem_item": {"motivo": "items-vazio"}})
+    assert ns["_n_sem_item_sem_tipo"] == 1
+    assert ns["_pranchas_nao_tecnicas"] == [], (
+        "medir não é agir: sem classificação a página NÃO pode sair do aviso "
+        "da outra frente")
+
+
+@pytest.mark.parametrize("tipo", ["render", "planta"])
+def test_CONTROLE_quem_se_classificou_nao_conta_como_sem_tipo(tipo):
+    ns = _ns_censo({"tipo_de_pagina": tipo, "items": [],
+                    "_sem_item": {"motivo": "items-vazio"}})
+    assert ns["_n_sem_item_sem_tipo"] == 0
+
+
+def test_CONTROLE_pagina_que_gerou_item_nao_conta_como_sem_tipo():
+    ns = _ns_censo({"tipo_de_pagina": "outro",
+                    "items": [{"description": "Piso vinílico"}]})
+    assert ns["_n_sem_item_sem_tipo"] == 0
 
 
 def test_a_pagina_de_render_sai_do_aviso_de_prancha_sem_item():
@@ -364,6 +447,35 @@ def test_quando_nenhuma_pagina_e_prancha_o_recado_pede_a_planta():
     assert "DWG/DXF" in aviso
 
 
+def test_o_recado_nao_pede_o_DWG_a_quem_mandou_o_DWG():
+    """🩸 22/09 (revisão) — O CENSO SÓ ENXERGA PÁGINA DE PDF. Num envio que
+    também trouxe DWG/DXF (18 dos 167 jobs entregues em 90 dias, 10,8%), o
+    cliente lia "mande a planta baixa (de preferência em DWG/DXF)" sobre o DWG
+    que ele acabara de mandar."""
+    censo = R.censo_de_paginas(["render", "foto"])
+    com_cad = R.aviso_das_paginas_sem_prancha(censo, 12, leu_cad=True)
+    assert "mande a planta baixa" not in com_cad, com_cad
+    assert "foi lido à parte" in com_cad
+
+
+def test_CONTROLE_sem_CAD_no_envio_o_recado_continua_pedindo_a_planta():
+    """O controle positivo do caminho COMUM: quem mandou só PDF de
+    apresentação precisa continuar ouvindo que falta a planta."""
+    censo = R.censo_de_paginas(["render", "foto"])
+    sem_cad = R.aviso_das_paginas_sem_prancha(censo, 12, leu_cad=False)
+    assert "Nenhuma página deste envio é prancha técnica" in sem_cad
+    assert "mande a planta baixa" in sem_cad
+    assert "foi lido à parte" not in sem_cad
+
+
+def test_a_primeira_frase_diz_que_o_denominador_e_so_das_paginas_de_PDF():
+    """🪤 O denominador excluía, calado, todas as pranchas de CAD lidas — o
+    mesmo defeito de denominador que a função guarda uma frase acima."""
+    aviso = R.aviso_das_paginas_sem_prancha(
+        R.censo_de_paginas(["planta", "render"]))
+    assert aviso.startswith("📄 Das páginas dos PDFs deste envio, 1 de 2")
+
+
 def test_CONTROLE_envio_normal_nao_ganha_aviso_nenhum():
     """O recado não existe pra quem mandou prancha — senão vira ruído em toda
     entrega, que é como a nota "aparece em N pranchas" ocupou 76% da
@@ -372,45 +484,107 @@ def test_CONTROLE_envio_normal_nao_ganha_aviso_nenhum():
         assert R.aviso_das_paginas_sem_prancha(R.censo_de_paginas(tipos)) is None
 
 
+class _ItemDaPlanilha:
+    """O que a planilha entregue tem: um item com observação."""
+
+    def __init__(self, observations=""):
+        self.observations = observations
+
+
+class _PDVazio:
+    warnings = []
+
+
+class _LogLista:
+    def __init__(self):
+        self.linhas = []
+
+    def __call__(self, stage, message, job_id=None, severity="error", **k):
+        self.linhas.append((stage, message, job_id, severity))
+
+
+def _ns_recado(**kw):
+    ns = {"_tipos_de_pagina": _CADERNO_DO_CASO, "_n_escopo": 0,
+          "_n_escopo_zerado": 0, "all_items": [], "_cad_analisou": False,
+          "_n_sem_item_sem_tipo": 0, "job_id": "1d0751b8"}
+    ns.update(kw)
+    ns.setdefault("project_data", _PDVazio())
+    ns.setdefault("_log_error", _LogLista())
+    roda("process_job", "aviso_das_paginas_sem_prancha as _aviso_pg", ns,
+         tamanho=1)
+    return ns
+
+
 def test_a_fiacao_do_recado_escreve_no_warnings_e_no_log():
     class _PD:
         warnings = ["aviso que já estava"]
 
-    class _Log:
-        def __init__(self):
-            self.linhas = []
-
-        def __call__(self, stage, message, job_id=None, severity="error", **k):
-            self.linhas.append((stage, message, job_id, severity))
-
-    pd, log = _PD(), _Log()
-    ns = {"_tipos_de_pagina": _CADERNO_DO_CASO, "_n_escopo": 493,
-          "_n_escopo_zerado": 192, "project_data": pd, "_log_error": log,
-          "job_id": "1d0751b8"}
-    roda("process_job", "aviso_das_paginas_sem_prancha as _aviso_pg", ns,
-         tamanho=1)
+    pd, log = _PD(), _LogLista()
+    # 🩸 22/09 (revisão) — O LAÇO MONTOU 493 LINHAS DE ESCOPO; A PLANILHA QUE O
+    # CLIENTE RECEBE TEM 3. `_consolidate_items`, `_dedupe_by_block` e
+    # `_drop_nonsense_items` rodam DEPOIS do laço e comem 19,2% dos itens em
+    # 90 dias (44 jobs, 7.616 -> 6.151; no job do caso, 743 -> 542, 27%). O
+    # recado tem que dizer o número da planilha dele.
+    entregues = [_ItemDaPlanilha(R.MARCA_DE_ESCOPO + " — veio de render"),
+                 _ItemDaPlanilha(R.MARCA_DE_ESCOPO + " — veio de foto"),
+                 _ItemDaPlanilha(R.MARCA_DE_ESCOPO + " — veio de capa"),
+                 _ItemDaPlanilha("medido do desenho")]
+    ns = _ns_recado(project_data=pd, _log_error=log, _n_escopo=493,
+                    _n_escopo_zerado=192, all_items=entregues)
     assert pd.warnings[0] == "aviso que já estava", "aviso alheio foi atropelado"
     assert "2 de 35" in pd.warnings[-1]
+    assert "3 linha(s)" in pd.warnings[-1], (
+        "o recado conta a planilha ENTREGUE, não o laço: %s" % pd.warnings[-1])
+    assert "493" not in pd.warnings[-1], (
+        "493 é o número do laço — ele não existe na planilha do cliente")
     assert [l[0] for l in log.linhas] == ["motor:pagina-sem-prancha"]
     assert log.linhas[0][2] == "1d0751b8" and log.linhas[0][3] == "info"
-    assert "linhas em ESCOPO=493" in log.linhas[0][1]
+    assert "linhas em ESCOPO=3" in log.linhas[0][1]
+    assert "no laco=493" in log.linhas[0][1], (
+        "os dois números juntos são o que mede quanto a consolidação comeu")
     assert "tinham numero=192" in log.linhas[0][1]
+    assert ns["_n_escopo_entregue"] == 3
+
+
+def test_CONTROLE_a_linha_que_nao_e_escopo_nao_entra_na_conta():
+    """Sem este, um `len(all_items)` passaria verde no teste de cima."""
+    ns = _ns_recado(all_items=[_ItemDaPlanilha("medido do desenho"),
+                               _ItemDaPlanilha("")])
+    assert ns["_n_escopo_entregue"] == 0
+    assert "saíram como ESCOPO" not in ns["project_data"].warnings[-1]
+
+
+def test_a_fiacao_do_recado_nao_pede_o_DWG_a_quem_mandou_o_DWG():
+    """🩸 R1 no motor: `_cad_analisou` (bool(dxf_paths)) é o estado que diz se
+    sobrou CAD pra analisar neste envio. Sem ele chegar à régua, o recado
+    mandava o cliente mandar o desenho que ele já tinha mandado."""
+    ns = _ns_recado(_tipos_de_pagina=["render", "foto"], _cad_analisou=True)
+    texto = ns["project_data"].warnings[-1]
+    assert "mande a planta baixa" not in texto, texto
+    assert "foi lido à parte" in texto
+    assert "leu_cad=True" in ns["_log_error"].linhas[0][1]
+
+
+def test_CONTROLE_a_fiacao_sem_CAD_continua_pedindo_a_planta():
+    ns = _ns_recado(_tipos_de_pagina=["render", "foto"], _cad_analisou=False)
+    texto = ns["project_data"].warnings[-1]
+    assert "Nenhuma página deste envio é prancha técnica" in texto
+    assert "mande a planta baixa" in texto
+    assert "leu_cad=False" in ns["_log_error"].linhas[0][1]
+
+
+def test_a_pagina_sem_item_e_sem_tipo_vai_pro_LOG_e_nao_pro_CLIENTE():
+    """🪤 R4: a medida serve pra DECIDIR em 2-4 semanas, com a frente do aviso
+    de prancha sem item. Ela não vira texto pro cliente hoje."""
+    ns = _ns_recado(_tipos_de_pagina=["planta", "corte"],
+                    _n_sem_item_sem_tipo=2)
+    assert ns["project_data"].warnings == [], "medida não vira recado"
+    log = ns["_log_error"]
+    assert [l[0] for l in log.linhas] == ["motor:pagina-sem-prancha"]
+    assert "sem item e sem tipo=2" in log.linhas[0][1]
 
 
 def test_CONTROLE_a_fiacao_do_recado_cala_em_envio_normal():
-    class _PD:
-        warnings = []
-
-    class _Log:
-        linhas = []
-
-        def __call__(self, *a, **k):
-            type(self).linhas.append(a)
-
-    pd, log = _PD(), _Log()
-    ns = {"_tipos_de_pagina": ["planta", "corte"], "_n_escopo": 0,
-          "_n_escopo_zerado": 0, "project_data": pd, "_log_error": log,
-          "job_id": "ee801b82"}
-    roda("process_job", "aviso_das_paginas_sem_prancha as _aviso_pg", ns,
-         tamanho=1)
-    assert pd.warnings == [] and _Log.linhas == []
+    ns = _ns_recado(_tipos_de_pagina=["planta", "corte"])
+    assert ns["project_data"].warnings == []
+    assert ns["_log_error"].linhas == []

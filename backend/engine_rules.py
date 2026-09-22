@@ -4420,7 +4420,16 @@ def conferencia_do_peso_de_aco(descricao, obs, quantidade):
 #     que ENTREGOU — é o caso de [[feedback_o_numero_que_eu_medi_pode_ser_o_meu_
 #     proprio_corte]]: barrar por conta própria come entrega de verdade;
 #   · ee801b82, 844603fb e 95bab8ba (os outros 3 casos do dia): ZERO linha
-#     classificada como não-prancha — o dano colateral da regra é medido e é 0.
+#     pelo PROXY que dá pra medir hoje — regex sobre `ref_sheet`, que é texto
+#     livre escrito pela leitura.
+# 🪤 22/09/2026 (revisão) — ESSE ZERO NÃO É A MEDIDA DESTA RÉGUA. Chamar ele de
+# "dano colateral medido" era tautologia, irmã do "0 de 117" de 18/09:
+# `tipo_de_pagina` não existe em leitura nenhuma do acervo — ele começa a ser
+# PEDIDO neste commit, então em 22/09 nenhuma linha do banco PODE estar
+# classificada. E o proxy subconta: na única entrega conferida linha a linha
+# (1d0751b8) ele acha 400 das 493 (91,8%). O dano colateral da régua nova só
+# fica mensurável depois que o campo existir — é pra essa consulta, em 2-4
+# semanas, que o log `motor:pagina-sem-prancha` grava `por_tipo`.
 # Então a linha continua, o SERVIÇO continua, e o que some é o NÚMERO — que
 # nunca foi contagem da obra do cliente, e sim de uma imagem de apresentação.
 #
@@ -4550,13 +4559,26 @@ def censo_de_paginas(tipos):
             "por_tipo": por_tipo}
 
 
-def aviso_das_paginas_sem_prancha(censo, n_linhas_escopo=0):
+def aviso_das_paginas_sem_prancha(censo, n_linhas_escopo=0, leu_cad=False):
     """O recado ao cliente sobre a COMPOSIÇÃO do envio dele. None quando não há
     página não-técnica — o aviso não existe pra envio normal.
 
     🪤 A conta é só sobre o que a leitura CLASSIFICOU. Dizer "2 de 35" quando
     10 páginas não foram classificadas seria inventar denominador; as não
-    classificadas saem numa frase própria."""
+    classificadas saem numa frase própria.
+
+    🩸 22/09/2026 (revisão) — O CENSO SÓ ENXERGA PÁGINA DE PDF, e o recado não
+    sabia disso. Num envio que também trouxe DWG/DXF, o cliente lia "Nenhuma
+    página deste envio é prancha técnica — mande a planta baixa (de preferência
+    em DWG/DXF)" sobre o DWG que ele mandou NAQUELE MESMO envio; e o
+    denominador da primeira frase excluía, calado, todas as pranchas de CAD
+    lidas — o mesmo defeito de denominador que o parágrafo acima guarda.
+    Medido em 22/09 19h03 Brasília (90 dias, sem is_eval, `now()` de
+    testemunha): 18 dos 167 jobs entregues (10,8%) trazem PDF e DWG/DXF no
+    mesmo envio.
+
+    🔑 `leu_cad` é PARÂMETRO, não dedução: quem chama é que sabe se sobrou CAD
+    pra analisar, e parâmetro explícito deixa o guarda executar os dois ramos."""
     c = censo or {}
     sem = int(c.get("sem_prancha") or 0)
     if sem <= 0:
@@ -4565,9 +4587,9 @@ def aviso_das_paginas_sem_prancha(censo, n_linhas_escopo=0):
     mudas = int(c.get("nao_disse") or 0)
     classificadas = tec + sem
     partes = [
-        "📄 Deste envio, %d de %d página(s) lidas são prancha técnica "
-        "(planta, corte, detalhe ou legenda). As outras %d são render, foto, "
-        "moodboard ou capa."
+        "📄 Das páginas dos PDFs deste envio, %d de %d lida(s) são prancha "
+        "técnica (planta, corte, detalhe ou legenda). As outras %d são render, "
+        "foto, moodboard ou capa."
         % (tec, classificadas, sem)
     ]
     if mudas:
@@ -4580,7 +4602,13 @@ def aviso_das_paginas_sem_prancha(censo, n_linhas_escopo=0):
             "apresentação não é desenho cotado, e contar móvel em render não "
             "mede a sua obra." % int(n_linhas_escopo))
     if tec == 0:
-        partes.append("Nenhuma página deste envio é prancha técnica — pra sair "
-                      "quantitativo de verdade, mande a planta baixa (de "
-                      "preferência em DWG/DXF).")
+        if leu_cad:
+            # 🪤 Pedir "mande o DWG" a quem mandou o DWG é o defeito de R1.
+            partes.append("Nenhuma página de PDF deste envio é prancha técnica; "
+                          "o desenho em DWG/DXF que veio junto foi lido à "
+                          "parte, e é dele que sai o quantitativo medido.")
+        else:
+            partes.append("Nenhuma página deste envio é prancha técnica — pra "
+                          "sair quantitativo de verdade, mande a planta baixa "
+                          "(de preferência em DWG/DXF).")
     return " ".join(partes)

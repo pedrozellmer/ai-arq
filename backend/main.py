@@ -15204,6 +15204,13 @@ bloco — só cite os que estão no inventário deste arquivo."""
         _pranchas_nao_tecnicas: list[str] = []
         _n_escopo = 0          # linhas que viraram ESCOPO
         _n_escopo_zerado = 0   # ...e que tinham número antes
+        # 🪤 22/09/2026 (revisão): páginas que voltaram SEM item E SEM dizer o
+        # que são. O prompt novo oferece `"items": []` a todo prompt não
+        # estrutural e oferece "outro" pra quem não souber classificar, então
+        # elas escapam da poda e chegam ao cliente pelo aviso de "prancha lida
+        # que não gerou item". Não dá pra medir o tamanho disso antes de o
+        # campo existir no acervo — então conta, e NÃO age.
+        _n_sem_item_sem_tipo = 0
 
         # Ordenar PDFs por prioridade (layout primeiro)
         priority = {"layout_novo": 0, "layout_atual": 1, "demolir": 2, "arquitetura": 3,
@@ -16104,7 +16111,20 @@ bloco — só cite os que estão no inventário deste arquivo."""
             # censo do envio — inclusive quando veio do checkpoint, que guarda
             # o resultado inteiro. Página que nem chegou à IA não entra: "não
             # classificada" é diferente de "não foi lida".
-            _tipos_de_pagina.append(str(result.get("tipo_de_pagina") or ""))
+            # 🩸 22/09/2026 (revisão): a página cuja LEITURA FALHOU também não
+            # entra. Ela não tem `continue` neste laço (só o registro em 3b),
+            # então caía aqui como "" e virava, pro cliente, "(Outras N
+            # página(s) a leitura não soube classificar.)" — sobre página que a
+            # IA nunca chegou a responder. São 11 páginas em 3 jobs em 90 dias
+            # (error_log stage='pdf:analyze'), e o comentário acima já dizia a
+            # regra que o código não cumpria.
+            if not result.get("error"):
+                _tipos_de_pagina.append(str(result.get("tipo_de_pagina") or ""))
+            # 🪤 (revisão) Quem voltou sem item E sem se classificar: aqui só
+            # CONTA. "outro" e campo ausente são "não sei", e agir sobre "não
+            # sei" é exatamente o que esta régua inteira se proíbe de fazer.
+            if result.get("_sem_item") and _pg_tecnica(_tipo_pg) is None:
+                _n_sem_item_sem_tipo += 1
             if _pg_e_escopo:
                 _pranchas_nao_tecnicas.append(_disp)
 
@@ -16596,20 +16616,43 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # inventado é o defeito que a auditoria de hoje mais achou.
         try:
             from engine_rules import (censo_de_paginas as _censo_pg,
-                                      aviso_das_paginas_sem_prancha as _aviso_pg)
+                                      aviso_das_paginas_sem_prancha as _aviso_pg,
+                                      MARCA_DE_ESCOPO as _MARCA_ESCOPO)
+            # 🩸 22/09/2026 (revisão) — O NÚMERO DO RECADO É O DA PLANILHA QUE
+            # O CLIENTE RECEBE. `_n_escopo` conta item montado DENTRO do laço
+            # de páginas; depois dele a lista ainda passa por
+            # `_consolidate_items`, `_dedupe_by_block` e `_drop_nonsense_items`.
+            # Medido em 22/09 19h03 Brasília (90 dias, sem is_eval, now() de
+            # testemunha, error_log motor:itens-removidos): 44 jobs, 7.616
+            # montados -> 6.151 entregues, 19,2% somem depois do laço; no job
+            # do caso (1d0751b8) foram 743 -> 542, 27%. E a régua AUMENTA a
+            # diferença: com toda quantidade zerada, a família que só escapava
+            # da 1ª passada por ter números diferentes ("8 vb" numa página, "3
+            # vb" noutra) passa a ter um único valor e colapsa numa linha só.
+            # O do laço fica no log: os dois juntos medem quanto a consolidação
+            # comeu.
+            _n_escopo_entregue = sum(
+                1 for _it in all_items
+                if _MARCA_ESCOPO in (getattr(_it, "observations", "") or ""))
             _censo = _censo_pg(_tipos_de_pagina)
-            _av_pg = _aviso_pg(_censo, _n_escopo)
+            # 🪤 `_cad_analisou` (bool(dxf_paths)) é o que diz se SOBROU CAD pra
+            # analisar neste envio — sem ele o recado pedia o DWG a quem já
+            # tinha mandado o DWG.
+            _av_pg = _aviso_pg(_censo, _n_escopo_entregue, leu_cad=_cad_analisou)
             if _av_pg:
                 project_data.warnings = (
                     getattr(project_data, 'warnings', None) or []) + [_av_pg]
-            if _censo.get("sem_prancha") or _n_escopo:
+            if _censo.get("sem_prancha") or _n_escopo or _n_sem_item_sem_tipo:
                 _log_error("motor:pagina-sem-prancha",
                            f"paginas tecnicas={_censo.get('tecnicas')} "
                            f"sem_prancha={_censo.get('sem_prancha')} "
                            f"nao_classificadas={_censo.get('nao_disse')} "
-                           f"por_tipo={_censo.get('por_tipo')} | "
-                           f"linhas em ESCOPO={_n_escopo} "
-                           f"(tinham numero={_n_escopo_zerado})",
+                           f"por_tipo={_censo.get('por_tipo')} "
+                           f"leu_cad={bool(_cad_analisou)} | "
+                           f"linhas em ESCOPO={_n_escopo_entregue} "
+                           f"(no laco={_n_escopo}, "
+                           f"tinham numero={_n_escopo_zerado}) | "
+                           f"sem item e sem tipo={_n_sem_item_sem_tipo}",
                            job_id, severity="info")
         except Exception as _e_pg:
             print(f"[pagina-sem-prancha] censo falhou (nao-fatal): {_e_pg}")
