@@ -7324,6 +7324,120 @@ def _drop_nonsense_items(items: list) -> list:
 # Prefixo de AVISO escrito pela IA como se fosse item. As 3 condições (prefixo
 # + unidade 'vb' + quantidade 0) são exigidas juntas de propósito: serviço
 # legítimo que comece com "Nota" não pode ser engolido.
+#: A linha fala de esquadria (porta, janela, caixilho, veneziana).
+#: 🪤 O `s?` não é enfeite: sem ele, `porta\b` não casa "PortaS" e
+#: `esquadria\b` não casa "esquadriaS" — e a linha real *"PortaS hospitalares
+#: … a confirmar com quadro de esquadriaS"* escapava inteira. O guarda pegou.
+_RE_E_ESQUADRIA = _re.compile(
+    r"\b(esquadrias?|caixilhos?|portas?|janelas?|venezianas?|"
+    r"basculantes?|port[õo]es|port[ãa]o)\b", _re.I)
+
+#: …e está INCOMPLETA: o texto pede o quadro, ou diz que ele não veio.
+#: 🔑 As duas últimas são o MOTOR DIZENDO que o quadro não está no envio —
+#: "(não apresentado nesta prancha)", "quadro completo não visível nesta
+#: prancha". Ele já sabe; ninguém estava escutando.
+#: 🪤 "conforme quadro de esquadrias" TEM que entrar: nas descrições reais do
+#: banco a linha incompleta costuma sair sem a expressão "a confirmar" —
+#: *"Porta PA01 — tipo, dimensão e material CONFORME QUADRO DE ESQUADRIAS
+#: (código PA01)"*. Quem separa essa da linha completa não é o verbo, é a
+#: DIMENSÃO (`_RE_TEM_DIMENSAO`), conferida logo depois.
+_RE_PEDE_O_QUADRO = _re.compile(
+    r"(a\s+(?:confirmar|definir|especificar)|"
+    r"conforme\s+(?:o\s+)?quadro\s+de\s+esquadria|"
+    r"conforme\s+(?:a\s+)?legenda\s+de\s+esquadria|"
+    r"n[ãa]o\s+apresentad|n[ãa]o\s+vis[íi]vel|n[ãa]o\s+consta)", _re.I)
+
+#: Dimensão escrita na própria linha: `1,42×0,50 m`, `250x210 cm`, `0,90 × 2,10`.
+#: Quem tem isso NÃO entra no aviso — a especificação chegou.
+_RE_TEM_DIMENSAO = _re.compile(
+    r"\d+[,.]?\d*\s*[×xX]\s*\d+[,.]?\d*\s*(?:m|cm|mm)?\b")
+
+#: O código da esquadria: PA01, PM04, J02, VF05, P10, JA01.
+_RE_CODIGO_ESQUADRIA = _re.compile(r"\b([A-Z]{1,3}\s?-?\d{1,3}[A-Z]?)\b")
+
+
+def esquadrias_sem_o_quadro(items):
+    """As esquadrias que saíram só com o CÓDIGO porque o quadro não veio.
+
+    🩸 POR QUE ISTO EXISTE — 23/09/2026, medido no acervo. **85 projetos** têm
+    linha de esquadria "a confirmar com quadro de esquadrias", somando **444
+    linhas**. E **47 desses (55%) mandaram UM arquivo só**: o quadro não veio
+    junto, não há o que ler.
+
+    🔬 Conferido no arquivo REAL (`a298b4e5`): baixei o PDF, ele traz `PA01`–
+    `PA07`, `PM02`–`PM08`, `VF`, `JA` na planta, e **a palavra "quadro" não
+    aparece no texto da página**. O motor criou 21 linhas "a confirmar" — 21
+    linhas que o orçamentista não consegue precificar, e que ele apaga.
+
+    🔑 **O motor JÁ SABE e JÁ ESCREVE**: "(não apresentado nesta prancha)",
+    "quadro completo não visível nesta prancha". A informação estava na
+    descrição; faltava alguém transformar isso em pedido ao cliente.
+
+    🪤 **Quem já tem dimensão NÃO entra.** Há linha completa citando o quadro:
+    *"Janela de correr 4 folhas, caixilho de alumínio branco, 1,42×0,50 m,
+    peitoril H=1,80 m — conforme quadro de esquadrias"*. Essa a especificação
+    chegou; avisar sobre ela seria pedir o que já temos.
+
+    Devolve `{"n": int, "codigos": [...], "linhas": [...]}` — `n` é quantas
+    linhas ficaram sem especificação.
+
+    Função PURA: recebe os itens, não toca em nada. É o que o guarda CHAMA.
+    """
+    achadas, codigos = [], []
+    for it in (items or []):
+        desc = str(getattr(it, "description", "") or "")
+        if not desc or not _RE_E_ESQUADRIA.search(desc):
+            continue
+        if not _RE_PEDE_O_QUADRO.search(desc):
+            continue
+        if _RE_TEM_DIMENSAO.search(desc):
+            continue          # a especificação chegou: não é o que falta
+        achadas.append(desc[:80])
+        m = _RE_CODIGO_ESQUADRIA.search(desc)
+        if m:
+            c = m.group(1).replace(" ", "").replace("-", "")
+            if c not in codigos:
+                codigos.append(c)
+    return {"n": len(achadas), "codigos": codigos[:12], "linhas": achadas[:6]}
+
+
+#: Abaixo disto não vale interromper o cliente: 1 ou 2 esquadrias sem detalhe
+#: ele resolve olhando a própria planta. O aviso é pra quando o buraco é o
+#: quadro inteiro. 📊 Medido: os jobs afetados têm 21, 23, 27, 29 e 39 linhas —
+#: bem acima de 3, então o piso não corta nenhum caso real.
+_MINIMO_ESQUADRIAS_PRA_AVISAR = 3
+
+
+def aviso_da_esquadria_sem_quadro(achado):
+    """O texto que o CLIENTE lê quando o quadro de esquadrias não veio.
+
+    Texto escolhido pelo Pedro em 23/09 (opção A, com os códigos): citar os
+    códigos prova que a gente leu o projeto dele de verdade — foi o que fez o
+    e-mail do cliente do ArchiCAD funcionar no mesmo dia (ele reenviou e o
+    projeto mediu).
+
+    🪤 As linhas NÃO são escondidas da planilha: o cliente pode saber de cor o
+    que é `P13`. O aviso complementa, não substitui.
+    🪤 Fica só na TELA (`project_data.warnings`), sem e-mail: hoje um cliente
+    chegou a levar 3 automáticos em 37 minutos.
+
+    Devolve a string, ou None quando não há o que pedir.
+    """
+    n = int((achado or {}).get("n") or 0)
+    if n < _MINIMO_ESQUADRIAS_PRA_AVISAR:
+        return None
+    codigos = [c for c in ((achado or {}).get("codigos") or []) if c][:6]
+    quais = (" Identifiquei os códigos na planta (%s%s), mas o QUADRO DE "
+             "ESQUADRIAS não veio no envio — é ele que diz dimensão, material "
+             "e tipo de cada uma."
+             % (", ".join(codigos), "…" if len(codigos) >= 6 else "")
+             ) if codigos else (
+        " Identifiquei as esquadrias na planta, mas o QUADRO DE ESQUADRIAS não "
+        "veio no envio — é ele que diz dimensão, material e tipo de cada uma.")
+    return ("%d esquadria(s) ficaram sem especificação.%s "
+            "Mande a prancha de esquadrias e eu detalho essas linhas." % (n, quais))
+
+
 _RE_ITEM_QUE_E_AVISO = _re.compile(
     r"^\s*(AVISO|ATEN[ÇC][ÃA]O|OBSERVA[ÇC][ÃA]O|NOTA)\b\s*[:\-—]", _re.IGNORECASE)
 
@@ -18544,6 +18658,26 @@ bloco — só cite os que estão no inventário deste arquivo."""
             # 🪤 `branco_sem_prova` DEVE ser ~0 aqui: o `selos_sem_medida` acabou
             # de rebaixar esses. Se subir, é regressão DAQUELE guarda, e o
             # cliente está recebendo selo branco sem medição — regra nº1.
+            # 🔑 23/09/2026 — A ESQUADRIA QUE SAIU SÓ COM O CÓDIGO.
+            # Mesmo ponto de propósito: é o estado final que o cliente lê.
+            # 📊 85 projetos têm linha "a confirmar com quadro de esquadrias"
+            # (444 linhas) e 47 deles (55%) mandaram UM arquivo só — o quadro
+            # não veio. O motor já escrevia "(não apresentado nesta prancha)";
+            # faltava virar PEDIDO.
+            try:
+                _esq = esquadrias_sem_o_quadro(all_items)
+                if _esq["n"]:
+                    _log_error("motor:esquadria-sem-quadro",
+                               "linhas=%d codigos=%s" % (_esq["n"],
+                                                         ",".join(_esq["codigos"]) or "-"),
+                               job_id, severity="info")
+                _msg_esq = aviso_da_esquadria_sem_quadro(_esq)
+                if _msg_esq and project_data is not None:
+                    project_data.warnings = (project_data.warnings or []) + [_msg_esq]
+            except Exception as _eesq:
+                _log_error("motor:esquadria-sem-quadro-falhou", str(_eesq)[:160],
+                           job_id, severity="warning")
+
             if _rs["branco_sem_prova"]:
                 _log_error("motor:branco-sem-prova-sobrou",
                            "%d item(ns) continuam BRANCOS sem prova de geometria "
