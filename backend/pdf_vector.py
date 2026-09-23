@@ -281,6 +281,13 @@ def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
                 "por_vista": _pv.get("por_vista"),
                 "n_vistas": _pv.get("n_vistas"),
                 "bboxes": _pv.get("bboxes"),
+                # 🔑 23/09/2026 — DE ONDE veio cada escala ("esc"/"solta" = do
+                # TEXTO do PDF, de graça; "vision" = imagem paga) e quantas
+                # vistas ainda precisaram do modelo. É o que torna a economia
+                # MENSURÁVEL em produção, em vez de suposta: sem isto, "o
+                # texto resolveu" seria mais uma afirmação sem consulta.
+                "fonte": _pv.get("fonte_da_escala"),
+                "vision_pediu": _pv.get("vision_pediu"),
             }
             if _pv.get("erro"):
                 out["err_escala_vista"] = _pv["erro"]
@@ -600,6 +607,14 @@ def rastro_da_escala_por_vista(r) -> dict:
     if isinstance(pv, dict):
         saida["n"] = pv.get("n_vistas")
         saida["lidas"] = list(pv.get("por_vista") or [])[:12]
+        # 23/09: a FONTE viaja junto. Uma prancha que lê tudo do texto sai com
+        # `fonte=['esc','esc'] pagou=0` — e aí dá pra contar, no acervo, quanto
+        # Vision a leitura do texto deixou de gastar.
+        _f = pv.get("fonte")
+        if _f:
+            saida["fonte"] = list(_f)[:12]
+        if pv.get("vision_pediu") is not None:
+            saida["pagou"] = pv.get("vision_pediu")
     if err:
         saida["erro"] = str(err)[:120]
     return saida

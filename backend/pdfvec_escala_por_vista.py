@@ -177,6 +177,114 @@ def escala_principal(por_vista, areas=None) -> Optional[int]:
     return cands[0][1]
 
 
+#: O rótulo COM a palavra: "ESC/ 1:50", "ESC. 1:25", "ESCALA 1:100", "esc 1/20".
+#: O `[^0-9]{0,6}` engole o separador seja ele qual for — e foi barra (`ESC/`)
+#: no arquivo que abriu este caso, não dois-pontos.
+_RE_ESC_COM_ROTULO = re.compile(
+    r"\bESC(?:ALA)?S?\b[^0-9]{0,6}1\s*[:/]\s*(\d{1,4})\b", re.I)
+
+#: A razão SOZINHA, sem a palavra ao lado. Menos confiável: só vale quando a
+#: vista inteira concorda num valor só (ver `escala_do_rotulo`).
+_RE_ESC_SOLTA = re.compile(r"\b1\s*[:/]\s*(\d{1,4})\b")
+
+
+def escala_do_rotulo(texto):
+    """Denominador da escala escrita num pedaço de texto de prancha.
+
+    🩸 POR QUE ESTA FUNÇÃO EXISTE — 23/09/2026, prancha de estrutura de um
+    cliente (`f57e3dba`). O log dizia `sem escala (viewport, carimbo nem cota)`
+    numa página que trazia **`ESC/ 1:50` e `ESC/ 1:25` setenta vezes**, uma por
+    viga. O módulo já recortava a vista certa — só que mandava a IMAGEM pro
+    Vision perguntar a escala, e o Vision devolveu `None` nas 6 vistas.
+
+    🔑 O texto estava ali o tempo todo, dentro do PDF, extraível em
+    milissegundos e de graça. Pagamos uma chamada de IA pra adivinhar um dado
+    ESCRITO no arquivo — e erramos.
+
+    Devolve `(denominador, "esc"|"solta")`, ou `(None, None)`.
+
+    🪤 A razão SOLTA (`1:50` sem a palavra "ESC") só é aceita quando a vista
+    inteira traz um único valor: número no formato `a:b` também aparece em
+    proporção de armadura e referência de detalhe, e um chute aqui vira erro de
+    escala — que multiplica TODA a medição da prancha (regra dura nº1).
+
+    Função PURA: sem PDF, sem rede. É o que o guarda consegue CHAMAR.
+    """
+    if not texto:
+        return (None, None)
+    com_rotulo = [int(m.group(1)) for m in _RE_ESC_COM_ROTULO.finditer(texto)]
+    com_rotulo = [d for d in com_rotulo if d > 0]
+    if com_rotulo:
+        return (_vence(com_rotulo), "esc")
+    soltas = {int(m.group(1)) for m in _RE_ESC_SOLTA.finditer(texto)}
+    soltas = {d for d in soltas if d > 0}
+    if len(soltas) == 1:
+        return (soltas.pop(), "solta")
+    return (None, None)
+
+
+def _vence(denominadores):
+    """O denominador que manda, quando a vista traz mais de um rótulo.
+
+    🔑 Critério: o MAIS FREQUENTE; empate resolve no MAIOR denominador. Numa
+    prancha de vigas, cada recorte pega a elevação (`ESC/ 1:50`) e a seção A-A
+    ao lado (`ESC/ 1:25`) — uma vez cada, empate. O desenho PRINCIPAL é o menos
+    ampliado dos dois, e é ele que manda no quantitativo; a seção é o detalhe.
+    🚫 Calibrado em UM arquivo real, como o resto deste módulo. Por isso a
+    escolha viaja no log (`fonte_da_escala`), pra dar pra conferir depois.
+    """
+    if not denominadores:
+        return None
+    contagem = {}
+    for d in denominadores:
+        contagem[d] = contagem.get(d, 0) + 1
+    return sorted(contagem.items(), key=lambda kv: (-kv[1], -kv[0]))[0][0]
+
+
+def caixa_absoluta(caixa, frac):
+    """A fração da página de volta em PONTOS — o que o textpage entende.
+
+    🔑 Usa a MESMA geometria do recorte que iria pro Vision, inclusive o
+    "estender até a margem esquerda". Assim o texto lido é exatamente o que a
+    imagem mostraria: as duas fontes nunca discordam por olharem lugares
+    diferentes. Pura, pelo mesmo motivo que `recorte_da_vista`.
+    """
+    px0, py0, px1, py1 = caixa
+    W = float(px1 - px0) or 1.0
+    H = float(py1 - py0) or 1.0
+    fx0, fy0, fx1, fy1 = frac
+    return (px0 + fx0 * W, py0 + fy0 * H, px0 + fx1 * W, py0 + fy1 * H)
+
+
+def escalas_do_texto(page, caixa, fracs):
+    """Lê a escala ESCRITA dentro de cada recorte. Zero rede, zero token.
+
+    Devolve `(denominadores, fontes)` — uma entrada por recorte, `None` onde
+    não havia rótulo legível.
+
+    🪤 PDF de prancha escaneada (imagem pura) não tem texto: devolve tudo
+    `None` e o Vision assume, como antes. Esta função ADICIONA um caminho
+    barato, nunca tira o que já funcionava.
+    """
+    dens = [None] * len(fracs)
+    fontes = [None] * len(fracs)
+    try:
+        tp = page.get_textpage()
+    except Exception:
+        return (dens, fontes)
+    for i, frac in enumerate(fracs):
+        try:
+            l, b, r, t = caixa_absoluta(caixa, frac)
+            txt = tp.get_text_bounded(l, b, r, t)
+        except Exception:
+            continue
+        d, fonte = escala_do_rotulo(txt)
+        if d:
+            dens[i] = d
+            fontes[i] = fonte
+    return (dens, fontes)
+
+
 def read_view_scales(pdf_path: str, page_index: int = 0, views=None,
                      max_vistas: int = MAX_VISTAS, _cliente=None) -> dict:
     """Lê a escala ao lado de cada vista. Uma chamada Vision pra todas.
@@ -204,23 +312,46 @@ def read_view_scales(pdf_path: str, page_index: int = 0, views=None,
             return fora
         page = doc[page_index]
         caixa = _caixa_da_pagina(page)
-        jpegs, usadas, areas = [], [], []
+        fracs, usadas, areas = [], [], []
         for v in views:
             bb = v.get("bbox") if isinstance(v, dict) else v
             if not bb:
                 continue
-            frac = recorte_da_vista(caixa, bb)
-            img = _render_fracao(page, frac)
+            fracs.append(recorte_da_vista(caixa, bb))
+            usadas.append(bb)
+            areas.append(abs((bb[2] - bb[0]) * (bb[3] - bb[1])))
+        if not fracs:
+            return fora
+
+        # 🔑 1ª FONTE: o TEXTO que já está no PDF (23/09/2026). De graça, em
+        # milissegundos, e exato — contra uma chamada de Vision que na prancha
+        # que abriu este caso devolveu None nas 6 vistas com a escala escrita
+        # 70 vezes ao lado. O Vision continua logo abaixo, como rede de
+        # segurança pra prancha escaneada, que não tem texto nenhum.
+        do_texto, fontes = escalas_do_texto(page, caixa, fracs)
+        faltam = [i for i, d in enumerate(do_texto) if not d]
+
+        # Só renderiza (e só paga) o que o texto NÃO resolveu.
+        jpegs, idx_do_jpeg = [], []
+        for i in faltam:
+            img = _render_fracao(page, fracs[i])
             if img:
-                jpegs.append(img); usadas.append(bb)
-                areas.append(abs((bb[2] - bb[0]) * (bb[3] - bb[1])))
+                jpegs.append(img); idx_do_jpeg.append(i)
     finally:
         doc.close()
+
+    fora["n_vistas"] = len(fracs)
+    fora["bboxes"] = [[round(float(c), 1) for c in b] for b in usadas]
+    fora["do_texto"] = list(do_texto)
+    fora["fonte_da_escala"] = list(fontes)
+    fora["vision_pediu"] = len(jpegs)
+
     if not jpegs:
+        # 🎉 O texto resolveu tudo: nenhuma imagem renderizada, nenhum token.
+        fora["por_vista"] = list(do_texto)
+        fora["main_scale"] = escala_principal(do_texto, areas)
         return fora
 
-    fora["n_vistas"] = len(jpegs)
-    fora["bboxes"] = [[round(float(c), 1) for c in b] for b in usadas]
     try:
         cli = _cliente
         if cli is None:
@@ -241,9 +372,23 @@ def read_view_scales(pdf_path: str, page_index: int = 0, views=None,
         m = re.search(r"\{.*\}", texto, re.DOTALL)
         bruto = json.loads(m.group(0)) if m else {}
     except Exception as e:
+        # 🪤 Vision caiu — mas o que o TEXTO já leu continua valendo. Antes
+        # deste caminho, um erro aqui devolvia a página inteira sem escala.
         fora["erro"] = f"{type(e).__name__}: {e}"[:120]
+        fora["por_vista"] = list(do_texto)
+        fora["main_scale"] = escala_principal(do_texto, areas)
         return fora
 
-    fora["por_vista"] = normalizar(bruto, len(jpegs))
-    fora["main_scale"] = escala_principal(fora["por_vista"], areas)
+    # A resposta do modelo é sobre as vistas QUE FALTARAM, na ordem em que
+    # foram enviadas — volta pro índice original por `idx_do_jpeg`.
+    do_vision = normalizar(bruto, len(jpegs))
+    junto = list(do_texto)
+    for k, i in enumerate(idx_do_jpeg):
+        if junto[i] is None and k < len(do_vision) and do_vision[k]:
+            junto[i] = do_vision[k]
+            fontes[i] = "vision"
+
+    fora["fonte_da_escala"] = list(fontes)
+    fora["por_vista"] = junto
+    fora["main_scale"] = escala_principal(junto, areas)
     return fora

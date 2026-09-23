@@ -747,4 +747,73 @@
     }
   };
 
+  // ══ TRAVA DE CLIQUE DUPLO ═══════════════════════════════════════════════
+  // 🩸 23/09/2026 — um cliente avaliou o produto UMA vez e o painel registrou
+  // DUAS: duas linhas de NPS 10, mesmo projeto, mesmo contexto, separadas por
+  // **197 milissegundos**. Ninguém avalia duas vezes em dois décimos de
+  // segundo — foi o botão "Enviar" aceitando o 2º clique enquanto o 1º ainda
+  // estava no ar. `/api/nps` é INSERT puro: cada POST vira uma linha.
+  // 📊 Com 15 avaliações em toda a história do produto, 1 fantasma é **6,7%**
+  // da base. Numa amostra dessa, uma linha a mais move a média e inventa um
+  // promotor que não existe.
+  //
+  // 🔑 POR QUE AQUI, E NÃO NO BOTÃO: o site tem **73 chamadas que escrevem**
+  // (admin 23 · projeto 16 · revisão 9 · dashboard 8) espalhadas em 14
+  // arquivos. Consertar uma a uma é garantir que alguma fique de fora — e a
+  // próxima que ficar vai duplicar um projeto, um e-mail ou um pagamento, não
+  // uma nota. Este arquivo carrega em 21 das 23 páginas; as 2 de fora
+  // (`404.html`, `meus-projetos.html`) não têm escrita nenhuma.
+  //
+  // 🪤 A JANELA É CURTA DE PROPÓSITO (700 ms). O duplo clique do sistema
+  // operacional é ~500 ms, então 700 pega o acidente. Mais que isso começaria
+  // a atrapalhar o intencional — abrir e fechar um menu, por exemplo, que é
+  // clique repetido legítimo no MESMO botão.
+  // 🚫 Quem precisa de clique repetido rápido (paginação, +/-, teclado
+  // numérico) marca `data-repetivel` e passa direto.
+  var _JANELA_DUPLO_MS = 700;
+
+  function _ehAcionavel(el) {
+    if (!el || el.hasAttribute('data-repetivel')) return false;
+    if (el.disabled) return false;
+    var tag = (el.tagName || '').toLowerCase();
+    if (tag === 'button') return true;
+    if (tag === 'input') {
+      var t = (el.type || '').toLowerCase();
+      return t === 'submit' || t === 'button';
+    }
+    // Link só conta quando ele AGE (tem onclick) — link de navegação pura
+    // pode ser clicado de novo à vontade.
+    if (tag === 'a') return el.hasAttribute('onclick');
+    return el.getAttribute('role') === 'button';
+  }
+
+  // Função NOMEADA, não arrow anônima dentro do addEventListener: handler
+  // anônimo é exatamente o que guarda nenhum consegue chamar, e esta casa já
+  // pagou por condição escondida dentro de callback.
+  // `agora` entra por parâmetro pra o teste poder mover o relógio sem mexer
+  // em `Date.now`.
+  function _guardaDeCliqueDuplo(ev, agora) {
+    var el = ev && ev.target && ev.target.closest
+      ? ev.target.closest('button, input, a, [role="button"]') : null;
+    if (!_ehAcionavel(el)) return false;
+    agora = agora || Date.now();
+    var ultimo = Number(el.getAttribute('data-aiarq-clique') || 0);
+    if (ultimo && (agora - ultimo) < _JANELA_DUPLO_MS) {
+      ev.stopImmediatePropagation();
+      ev.preventDefault();
+      return true;   // barrado
+    }
+    el.setAttribute('data-aiarq-clique', String(agora));
+    return false;
+  }
+
+  // `capture: true` é o que faz isto funcionar: o guarda roda ANTES de
+  // qualquer handler da página, inclusive dos `onclick=` embutidos no HTML.
+  // `stopImmediatePropagation` derruba o 2º clique antes que ele vire POST.
+  document.addEventListener('click', function (ev) {
+    _guardaDeCliqueDuplo(ev);
+  }, true);
+
+  window.aiArqGuardaDeCliqueDuplo = _guardaDeCliqueDuplo;
+
 })();

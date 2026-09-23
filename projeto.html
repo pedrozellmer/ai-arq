@@ -133,14 +133,14 @@
           <path class="ab-line ab-door" pathLength="1" d="M10 20 L10 14.5 L14 14.5 L14 20" stroke="#22d3ee" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
       </span>
-      <p class="font-bold text-gray-900">Ainda processando este projeto</p>
+      <p id="proc-titulo" class="font-bold text-gray-900">Ainda processando este projeto</p>
     </div>
     <p id="proc-step" class="text-sm text-gray-600 mt-1">Lendo as pranchas…</p>
-    <div class="h-3 rounded-full bg-gray-100 overflow-hidden mt-4" role="progressbar" aria-label="Progresso do processamento">
+    <div id="proc-trilho" class="h-3 rounded-full bg-gray-100 overflow-hidden mt-4" role="progressbar" aria-label="Progresso do processamento">
       <div id="proc-bar" class="h-full rounded-full transition-all duration-500" style="width:3%;background:linear-gradient(135deg,#4f46e5,#22d3ee)"></div>
     </div>
     <p id="proc-pct" class="text-xs text-gray-500 mt-2" aria-live="polite">3%</p>
-    <p class="text-xs text-gray-400 mt-3">Pode deixar esta aba aberta — a página recarrega sozinha quando terminar.</p>
+    <p id="proc-rodape" class="text-xs text-gray-400 mt-3">Pode deixar esta aba aberta — a página recarrega sozinha quando terminar.</p>
 
     <!-- Card das 3 perguntas (16/08): respostas que MELHORAM esta planilha.
          Só o cliente sabe pé-direito, área e prazo — e são as linhas que mais
@@ -1479,6 +1479,75 @@ async function enviarRespostasProc() {
   }
 }
 
+// ══ A ESPERA NA FILA (23/09/2026) ════════════════════════════════
+// Pedido do Pedro: "dizer que está na fila fica feio". E estava — mas não pelo
+// motivo que parecia. Quem caia na fila via a pior combinação possível:
+//   • o título fixo "AINDA processando este projeto" sobre um projeto que nem
+//     começou — o "ainda" sugere demora antes de existir qualquer trabalho;
+//   • "começa em instantes…", prazo que NÃO controlamos: a vaga abre quando o
+//     projeto da frente termina (mediana medida ~10 min, pior caso 51 min);
+//   • uma barra em 3% que não ia sair do lugar, e barra parada lê como travado
+//     — a mesma doença do creep em 95% que consertamos em 03/08.
+// O texto novo só afirma o que é FATO no instante em que ele aparece: os
+// arquivos chegaram e passaram pela conferência do envio.
+// 🔑 O aviso por e-mail não é promessa vazia: medido em 30 dias, 85 dos 88
+// projetos concluídos (96,6%) receberam e-mail na conclusão. A 1ª consulta que
+// fiz dizia 20,5% porque contava o VÍNCULO job_id no log, não o e-mail.
+// Função PURA porque é o que o guarda consegue CHAMAR (lição de 14/09).
+function _textoDaEspera(nArquivos) {
+  var n = Number(nArquivos);
+  var vale = isFinite(n) && n > 0;
+  var chegada = !vale
+    ? 'Seus arquivos chegaram e foram conferidos.'
+    : (n === 1
+        ? 'Seu arquivo chegou e foi conferido.'
+        : 'Seus ' + n + ' arquivos chegaram e foram conferidos.');
+  return {
+    titulo: 'Projeto recebido',
+    passo: chegada + ' A leitura começa em seguida.',
+    rodape: 'Pode fechar esta página — o aviso vai por e-mail quando terminar.'
+  };
+}
+
+// Liga/desliga o estado de espera NA TELA. Chamada no 1º desenho e a cada tick:
+// quando a vaga abre ela DESFAZ — senão "Projeto recebido" e a barra escondida
+// ficariam pra sempre, e o cliente nunca veria o progresso real.
+// Decide se a escotilha "Parece que travou?" deve aparecer.
+// 🪤 23/09/2026 — quem está NA FILA nunca teve progresso pra congelar: o
+// relógio do travamento contava desde o 1º segundo e, com mediana de espera de
+// ~10 min, o alarme aparecia pra quase todo mundo que pegou fila (17,3% dos
+// projetos em 60 dias). Não travou — NÃO COMEÇOU. E o botão que ela oferece
+// manda recarregar, o pior conselho possível pra quem só precisa esperar.
+// Função PURA porque a condição morava solta dentro do setInterval, onde
+// nenhum guarda alcançava — e guarda que lê o FONTE erra de 2 jeitos.
+function _deveAlarmarTravamento(naFila, elapsed, lastAdvance, jaMostrou, stallSecs) {
+  if (naFila) return false;
+  if (jaMostrou) return false;
+  return (elapsed - lastAdvance) > stallSecs;
+}
+
+function _pintarEspera(naFila, nArquivos) {
+  var t = document.getElementById('proc-titulo');
+  var s = document.getElementById('proc-step');
+  var trilho = document.getElementById('proc-trilho');
+  var pct = document.getElementById('proc-pct');
+  var rodape = document.getElementById('proc-rodape');
+  if (naFila) {
+    var txt = _textoDaEspera(nArquivos);
+    if (t) t.textContent = txt.titulo;
+    if (s) s.textContent = txt.passo;
+    if (rodape) rodape.textContent = txt.rodape;
+    if (trilho) trilho.classList.add('hidden');
+    if (pct) pct.classList.add('hidden');
+  } else {
+    if (t) t.textContent = 'Ainda processando este projeto';
+    if (rodape) rodape.textContent = 'Pode deixar esta aba aberta — a página recarrega sozinha quando terminar.';
+    if (trilho) trilho.classList.remove('hidden');
+    if (pct) pct.classList.remove('hidden');
+  }
+  return !!naFila;
+}
+
 function mostrarProcessando(live, session, pmeta) {
   const bloco = document.getElementById('proc-block');
   if (!bloco) return;
@@ -1562,10 +1631,16 @@ function mostrarProcessando(live, session, pmeta) {
   // vez — pra distinguir "trabalhando devagar" de "travou de vez" (não só por tempo).
   let _lastRealPct = _backendPct, _lastAdvance = 0, _escotilhaShown = false;
   const _STALL_SECS = 300;  // 5min de progresso real congelado → oferece ação
-  if (live && live.current_step) stepEl.textContent = live.current_step;
-  else stepEl.textContent = (live && live.status === 'queued')
-    ? 'Na fila — começa em instantes…'
-    : 'Lendo as pranchas…';
+  // Quantos arquivos o cliente mandou — é o que prova a ele que o material
+  // JÁ está na nossa mão enquanto a vaga não abre.
+  const _nArqs = (pmeta && pmeta.files_count) || null;
+  let _naFila = !!(live && live.status === 'queued');
+  _pintarEspera(_naFila, _nArqs);
+  // 🪤 Na fila o texto é NOSSO: um current_step que o backend mande antes de
+  // começar não pode reescrever "Projeto recebido".
+  if (!_naFila) {
+    stepEl.textContent = (live && live.current_step) ? live.current_step : 'Lendo as pranchas…';
+  }
 
   const paint = () => {
     barEl.style.width = Math.round(_shown) + '%';
@@ -1627,8 +1702,16 @@ function mostrarProcessando(live, session, pmeta) {
           _backendPct = Math.max(_backendPct, Math.round(sd.progress || 0));
           // Progresso REAL avançou → marca o momento e esconde a escotilha (job vivo).
           if (_backendPct > _lastRealPct) { _lastRealPct = _backendPct; _lastAdvance = _elapsed; _hideEscotilha(); }
-          if (sd.current_step) stepEl.textContent = sd.current_step;
           const st = sd.status || '';
+          // A vaga abriu? Desfaz a espera e REINICIA o relógio do travamento.
+          // 🪤 Sem esse reset a escotilha "Parece que travou?" dispararia no
+          // primeiro tick depois da fila: _elapsed já passou dos 300 s de espera,
+          // e o progresso real acabou de começar do zero.
+          const _estavaNaFila = _naFila;
+          _naFila = (st === 'queued');
+          if (_estavaNaFila && !_naFila) _lastAdvance = _elapsed;
+          _pintarEspera(_naFila, _nArqs);
+          if (!_naFila && sd.current_step) stepEl.textContent = sd.current_step;
           if (st === 'done' || st === 'completed' || st === 'error' || st === 'failed' || _backendPct >= 100) {
             _stopped = true;
             clearInterval(_tick);
@@ -1659,7 +1742,7 @@ function mostrarProcessando(live, session, pmeta) {
     if (target > _shown) _shown = Math.min(target, _shown + 0.7);
     paint();
     // Progresso REAL congelado tempo demais (não só tempo total): oferece a ação.
-    if (!_escotilhaShown && (_elapsed - _lastAdvance) > _STALL_SECS) _mostrarEscotilha();
+    if (_deveAlarmarTravamento(_naFila, _elapsed, _lastAdvance, _escotilhaShown, _STALL_SECS)) _mostrarEscotilha();
     // 20min sem terminar: para o creep mas deixa claro que não travou de vez
     if (_elapsed > 1200) parar('Tá demorando mais que o normal. Pode deixar a aba aberta — ou volte em alguns minutos.');
   }, 600);

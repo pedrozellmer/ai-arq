@@ -569,6 +569,11 @@ _STAGES_DIAGNOSTICO = frozenset({
     "motor:unidade", "motor:preview-prancha", "motor:consenso-area",
     "motor:geometria", "motor:comprimento", "motor:dxf-slim",
     "motor:prancha-itens", "motor:sinapi-unidade", "motor:area-regra",
+    # 🪤 23/09: o irmão do de cima. Sem ele aqui, o "rodei e não achei"
+    # sairia como severity crua e poluiria o painel de erro — ou pior,
+    # seria filtrado e o silêncio continuaria ambíguo, que é o defeito
+    # que ele existe pra matar.
+    "motor:area-regra-vazia",
     "motor:pe-direito", "motor:escala-aviso", "motor:concordancia-rotulo",
     "motor:parede-medida",
     # 15/09: os trechos de perfil e escala H/V que a prancha escreve. Só
@@ -15605,8 +15610,27 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     if _lin_quadro:
                         _log_error("motor:area-regra", _lin_quadro, job_id,
                                    severity="info")
+                    else:
+                        # 🩸 23/09 — SILÊNCIO NÃO É DIAGNÓSTICO. A 1ª versão só
+                        # logava quando ACHAVA quadro, e no primeiro cliente que
+                        # passou (job f442339b, 1 PDF) o log veio vazio — sem
+                        # dar pra saber se a régua não achou nada ou se ela nem
+                        # rodou. É exatamente o buraco que me fez subir o
+                        # conserto do DXF na porta errada e achar que estava
+                        # funcionando. Agora ela diz que passou por aqui.
+                        # 🔑 `info`, como os outros instrumentos: é migalha de
+                        # diagnóstico, não problema.
+                        _log_error(
+                            "motor:area-regra-vazia",
+                            "arq=%s p.%d — rodei e NÃO achei quadro de áreas "
+                            "(texto=%d chars)" % (filename, page_index + 1,
+                                                  len(_texto_inteiro or "")),
+                            job_id, severity="info")
                 except Exception as _eqp:
                     print(f"[area-regra/pdf] {filename} p{page_index}: {_eqp}")
+                    _log_error("motor:area-regra-vazia",
+                               f"arq={filename} p{page_index + 1} FALHOU: {_eqp}",
+                               job_id, severity="warning")
                 del _texto_inteiro
 
                 # 2. Renderizar crops (1 página de cada vez; stem único por página)

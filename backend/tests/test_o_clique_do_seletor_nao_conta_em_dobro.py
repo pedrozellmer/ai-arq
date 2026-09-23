@@ -38,8 +38,23 @@ from _bancada_js import Pagina  # noqa: E402
 # `document.addEventListener` da bancada é vazio de propósito).
 _PRELUDIO = r"""
 window.__cliqueHandler = null;
-document.addEventListener = function (tipo, fn) {
-  if (tipo === 'click') { window.__cliqueHandler = fn; }
+window.__cliqueCaptura = null;
+window.__todosOsCliques = [];
+// 🪤 23/09/2026 — ATE HOJE SO HAVIA UM listener de clique no arquivo, e este
+// preludio guardava "o ultimo" sem pensar. A trava de clique duplo
+// (`_guardaDeCliqueDuplo`, no fim do aiarq-utils.js) virou o SEGUNDO, e como e
+// registrada depois, `__cliqueHandler` passou a ser ELA: os 6 testes daqui
+// caíram acusando o rastreador de nao registrar evento, quando o rastreador
+// nem chegava a ser chamado.
+// 🪤 E a 1a tentativa de conserto tambem falhou: separei pelo 3o argumento
+// achando que so a trava usava captura — os DOIS usam (`}, true`). Distinguir
+// por flag era chute; distinguir pelo que a funcao FAZ e fato.
+// 🔑 O rastreador e o unico que menciona `data-track`.
+document.addEventListener = function (tipo, fn, captura) {
+  if (tipo !== 'click') return;
+  window.__todosOsCliques.push(fn);
+  if (String(fn).indexOf('data-track') >= 0) { window.__cliqueHandler = fn; }
+  else { window.__cliqueCaptura = fn; }
 };
 1;
 """
@@ -177,3 +192,26 @@ def test_o_rotulo_visivel_continua_indo_junto():
     _clica(p, "divDentro")
     rot = p.eval("window.__eventos[0].meta.rotulo || ''")
     assert "Arraste os arquivos" in rot, rot
+
+
+def test_a_TRAVA_de_clique_duplo_nao_engole_o_rastreador():
+    """🩸 23/09 — a trava nova quase matou este arquivo inteiro.
+
+    Os dois listeners convivem na mesma página: a trava roda na CAPTURA (antes
+    de todos) e o rastreador no bubbling. O gesto do seletor passa por
+    elementos DIFERENTES (o label e o input que ele comanda), então a trava
+    — que só barra o MESMO elemento — não tem o que barrar aqui.
+
+    🔑 Este guarda existe pra que, se um dia a trava passar a engolir clique
+    legítimo, a queda apareça com o nome certo em vez de acusar o rastreador.
+    """
+    p = _pagina()
+    assert p.eval("window.__todosOsCliques.length") == 2, (
+        "esperava 2 listeners de clique (rastreador + trava), achei %s"
+        % p.eval("window.__todosOsCliques.length"))
+    assert p.eval("window.__cliqueHandler ? 1 : 0") == 1, (
+        "o rastreador (o que menciona data-track) sumiu")
+    assert p.eval("window.__cliqueCaptura ? 1 : 0") == 1, (
+        "a trava de clique duplo sumiu do aiarq-utils.js")
+    assert p.eval("window.__cliqueCaptura === window.__cliqueHandler ? 1 : 0") == 0, (
+        "os dois viraram o mesmo: o preludio parou de distinguir")

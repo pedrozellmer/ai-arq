@@ -150,3 +150,43 @@ def test_CONTROLE_a_regua_do_PDF_e_so_LEITURA():
     for proibido in ("_reg_area(", "_area_readings", ".quantity", ".confidence"):
         assert proibido not in trecho, (
             "a régua do PDF encostou em %r — ela é só leitura" % proibido)
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  🩸 SILÊNCIO NÃO É DIAGNÓSTICO
+#  A 1ª versão só registrava quando ACHAVA quadro. No primeiro cliente real
+#  que passou (job f442339b, 1 PDF, processado DEPOIS do deploy da régua), o
+#  log veio VAZIO — e não havia como saber se ela não achou nada ou se nem
+#  rodou. É o mesmo buraco que me fez subir o conserto do DXF na porta errada
+#  e achar, com 10 guardas verdes, que estava funcionando.
+# ══════════════════════════════════════════════════════════════════════════
+def test_a_regua_REGISTRA_que_rodou_mesmo_sem_achar_quadro():
+    """Os dois ramos têm que deixar rastro: achou → `motor:area-regra`;
+    não achou → `motor:area-regra-vazia`. Sem o segundo, zero no log fica
+    ambíguo entre 'não tem quadro' e 'a ligação quebrou'."""
+    src = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
+    i = src.find("_lin_quadro = quadro_de_areas_do_texto_do_pdf(")
+    assert i > 0, "sumiu a chamada da régua"
+    trecho = src[i:i + 1400]
+    assert "motor:area-regra" in trecho, "o ramo que ACHA não registra"
+    assert "motor:area-regra-vazia" in trecho, (
+        "o ramo que NÃO acha continua mudo — zero no log volta a ser ambíguo")
+    assert "rodei e NÃO achei" in trecho, (
+        "a mensagem precisa dizer que a régua PASSOU por ali")
+
+
+def test_o_stage_novo_entra_na_lista_de_DIAGNOSTICO():
+    """🪤 Stage de instrumento fora de `_STAGES_DIAGNOSTICO` entope o painel
+    de erros do motor — foi o que aconteceu com `cobranca:regua`, que ocupava
+    13 das 40 linhas."""
+    import main as _m
+    assert "motor:area-regra-vazia" in _m._STAGES_DIAGNOSTICO
+
+
+def test_a_FALHA_da_regua_tambem_deixa_rastro():
+    """🪤 O `except` antes só fazia `print`, que o log do Render descarta em
+    dias — a mesma doença do e-mail que falhava calado (22/09)."""
+    src = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
+    i = src.find("[area-regra/pdf]")
+    assert i > 0
+    assert "FALHOU" in src[i:i + 400], "falha da régua continua só no print"

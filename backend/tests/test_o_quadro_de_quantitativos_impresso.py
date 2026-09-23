@@ -609,16 +609,30 @@ def test_o_laco_de_paginas_EXECUTADO_guarda_anexa_salva_e_restaura(tmp_path):
     # 1) página nova: do extract_text até o `del _texto_inteiro`
     k = next(n for n, st in enumerate(ck.orelse) if isinstance(st, ast.Delete)
              and any(getattr(t, "id", "") == "_texto_inteiro" for t in st.targets))
+    # 🪤 23/09: o laço ganhou a régua do quadro de áreas do PDF (a instrumentação
+    # da inversão). Quem EXECUTA o código real tem que encenar as dependências
+    # novas — é a terceira vez na semana, e é o sinal de que este guarda roda de
+    # verdade em vez de ler o fonte. `_log_error` vira espião: o ramo "rodei e
+    # não achei" precisa deixar rastro, e aqui a gente confere que ele deixa.
+    _regua_log = []
     ns1 = {"__name__": "pagina_ns", "extract_text": extract_text, "pdf_path": pdf,
            "page_index": 0, "filename": ARQ,
            "_TETO_TEXTO_DA_PROVA": main._TETO_TEXTO_DA_PROVA,
            "_guarda_numeros_do_texto": main._guarda_numeros_do_texto,
+           "quadro_de_areas_do_texto_do_pdf": main.quadro_de_areas_do_texto_do_pdf,
+           "_log_error": lambda stage, msg, *a, **k: _regua_log.append(str(stage)),
+           "job_id": "teste",
            "_numeros_do_texto_por_prancha": {}}
     exec(compile(_codigo(linhas, ck.orelse[:k + 1]), "pagina", "exec"), ns1)
     mapa = ns1["_numeros_do_texto_por_prancha"]
     assert len(ns1["text"]) <= 6000, "a IA passou a receber mais que 6000 caracteres"
     assert {490, 8270} <= set(mapa.get((ARQ.lower(), 0), ())), (
         "a página nova não guardou os números do quadro: %r" % sorted(mapa))
+    # 🔑 E a régua do quadro de áreas passou por aqui — num ramo ou no outro.
+    # Silêncio nos dois seria a ligação quebrada sem ninguém notar (foi o que
+    # aconteceu no 1º cliente que passou por ela, job f442339b).
+    assert any(s.startswith("motor:area-regra") for s in _regua_log), (
+        "a régua do quadro de áreas não deixou rastro nenhum: %r" % _regua_log)
 
     # 2) o checkpoint: o `if not result.get("error")` que chama `_ckpt_save`
     bloco = [n for n in ast.walk(ck) if isinstance(n, ast.If)
