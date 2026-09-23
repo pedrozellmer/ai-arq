@@ -31,9 +31,20 @@ def _ci():
 
 def _saida_colheita():
     """O que o pytest COLHE, sem rodar. Uma chamada só, reusada."""
-    r = subprocess.run([sys.executable, "-m", "pytest", "tests/", "-q", "--collect-only"],
-                       cwd=_BACKEND, capture_output=True, text=True, timeout=300)
-    return r.stdout
+    # 🪤 22/09/2026 — ESTE GUARDA MORRIA NA MÁQUINA DO DEV E VIVIA NO CI. Com
+    # `text=True` o Python decodifica a saída do filho como UTF-8, mas o filho
+    # no Windows escreve em cp1252: um acento no meio de 180 KB virava
+    # UnicodeDecodeError DENTRO da thread leitora, `stdout` voltava None e a
+    # falha aparecia como "não achei o piso no bancada.yml" — mentindo sobre a
+    # causa. No Linux do CI passava, então parecia defeito de quem mexeu por
+    # último. É a mesma armadilha do contador de sabotagem, em 21/09.
+    # 🔑 `-X utf8` manda o filho escrever UTF-8; `errors="replace"` garante que
+    # um byte torto vire "�" em vez de derrubar a leitura inteira.
+    r = subprocess.run([sys.executable, "-X", "utf8", "-m", "pytest",
+                        "tests/", "-q", "--collect-only"],
+                       cwd=_BACKEND, capture_output=True, text=True,
+                       encoding="utf-8", errors="replace", timeout=300)
+    return r.stdout or ""
 
 
 def test_o_CI_confere_o_NUMERO_de_testes_colhidos():
