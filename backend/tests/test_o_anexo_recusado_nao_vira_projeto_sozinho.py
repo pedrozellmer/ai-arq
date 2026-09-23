@@ -51,10 +51,16 @@ _JOB = "ee801b82"
 _NOME_IRMAO = "Projeto 21/09/2026"
 _NOMES = ["prancha-%s.pdf" % l for l in "ABCDEFG"]
 
+# 🪤 22/09/2026: `startProcessing` ganhou a janela do pé-direito, e os 10
+# guardas deste arquivo caíram com "_confirmarPremissasVazias is not defined".
+# É o acoplamento funcionando: quem EXECUTA a função real tem que encenar as
+# dependências dela — a alternativa (tornar a chamada tolerante) esconderia o
+# defeito em produção. Dependência nova de `startProcessing` entra AQUI.
 _FUNCOES = ("startProcessing", "_acharProjetoIrmao", "_assinaturaLocalDXF",
             "_baseLocal", "_perguntarAnexo", "_anexarAoIrmao",
             "_tipoDoProjetoNovoAposAnexo", "_textoDoAnexoRecusado",
-            "_escolhaAposAnexoRecusado", "_marcarTipoEscolhidoAMao")
+            "_escolhaAposAnexoRecusado", "_marcarTipoEscolhidoAMao",
+            "_premissasEmBranco", "_confirmarPremissasVazias")
 
 
 def _padrao_do_select(site):
@@ -107,7 +113,14 @@ function XMLHttpRequest() {
   this.setRequestHeader = function () {};
   this.open = function (m, u) {
     x._u = String(u);
-    __xhr.push({ metodo: m, url: String(u), dialogosAntes: __dialogos.length });
+    __xhr.push({ metodo: m, url: String(u), dialogosAntes: __dialogos.length,
+      // 🪤 22/09: `startProcessing` ganhou a janela do pé-direito, que é um
+      // diálogo A MAIS e não tem nada a ver com o que este arquivo guarda
+      // (projeto novo só depois do clique da pessoa). Contar diálogo por
+      // NÚMERO ABSOLUTO prendia a forma; o que importa é quantos diálogos DO
+      // ANEXO vieram antes do envio. A janela nova é excluída pelo assunto.
+      dialogosDoAnexoAntes: __dialogos.filter(function (d) {
+        return String((d && d.msg) || '').indexOf('pé-direito') < 0; }).length });
   };
   this.send = function () {
     var r = (x._u.indexOf('/add-file') >= 0) ? __respAnexo : __respProcess;
@@ -147,6 +160,11 @@ function __disparar(id, ev) {
 ['project-name', 'project-typology', 'project-type', 'project-area',
  'project-pe-direito'].forEach(function (i) { __els[i] = _el(i); });
 __els['project-typology'].value = 'office';
+// 🪤 22/09: com pé-direito e área VAZIOS, `startProcessing` abre a janela das
+// premissas — um diálogo a mais, que consumiria uma resposta da fila deste
+// cenário e desalinharia tudo. O assunto aqui é o anexo recusado, não as
+// premissas: o cenário declara o pé-direito e a janela não tem por que abrir.
+__els['project-pe-direito'].value = '2,80';
 var document = {
   getElementById: function (id) { return __els[id] || null; },
   querySelectorAll: function () { return []; }
@@ -333,7 +351,7 @@ def test_projeto_novo_so_com_o_clique_dela_e_no_tipo_do_irmao(monkeypatch):
         c["dialogos"][1]["msg"])
     procs = _processos(c)
     assert len(procs) == 1, c["xhr"]
-    assert procs[0]["dialogosAntes"] == 2, (
+    assert procs[0]["dialogosDoAnexoAntes"] == 2, (
         "o projeto novo saiu ANTES do clique da pessoa: %r" % procs[0])
     assert "project_type=estrutura" in procs[0]["url"], procs[0]["url"]
     assert ["start_project", {"type": "estrutura"}] in c["ev"], c["ev"]
@@ -453,7 +471,7 @@ def test_CONTROLE_decidir_sem_perguntar_volta_o_defeito(monkeypatch):
         "const escolha = await _escolhaAposAnexoRecusado(",
         "const escolha = 'criar'; void (")])
     procs = _processos(c)
-    assert len(procs) == 1 and procs[0]["dialogosAntes"] == 1, (
+    assert len(procs) == 1 and procs[0]["dialogosDoAnexoAntes"] == 1, (
         "com a decisão tirada da pessoa, o guarda devia ver o projeto novo "
         "nascer sem o 2º clique: %r" % c["xhr"])
 
@@ -494,5 +512,5 @@ def test_CONTROLE_o_OK_do_confirm_nativo_cria_depois_do_clique(monkeypatch):
     anexo, _ = _recusa_409(monkeypatch)
     c = _cena(anexo, [True, True], sem_toast=True)    # "OK" (anexar), "OK" (criar)
     procs = _processos(c)
-    assert len(procs) == 1 and procs[0]["dialogosAntes"] == 2, c["xhr"]
+    assert len(procs) == 1 and procs[0]["dialogosDoAnexoAntes"] == 2, c["xhr"]
     assert "project_type=estrutura" in procs[0]["url"], procs[0]["url"]

@@ -289,18 +289,23 @@ def test_CONTROLE_o_recorte_do_bloco_da_tela_ACHA_o_alvo():
 #  Resultado medido: 11 projetos só-PDF na lista de cobráveis.
 # ─────────────────────────────────────────────────────────────────────────────
 
-def test_so_PDF_que_MEDIU_nao_e_cobravel(monkeypatch):
-    """O caso exato dos 11 do banco: mediu de verdade, e mesmo assim não cobra
-    — porque a promessa não é 'mediu alguma coisa', é 'mediu do CAD'."""
+def test_so_PDF_que_MEDIU_passa_a_ser_cobravel(monkeypatch):
+    """⏭️ DECISÃO DO PEDRO, 22/09/2026 — a exigência de CAD saiu da condição.
+
+    🩸 Este guarda cobrava o CONTRÁRIO até hoje, e a promessa que ele prendia
+    ("PDF-only nunca cobra") nasceu de uma PREVISÃO: 0,2% de medição em PDF na
+    vida do produto. A previsão valia enquanto a única forma de medir PDF era
+    a IA ler a imagem — e essa a regra dura nº1 nunca aceitou. Com o NÍVEL 1
+    no ar (quadro impresso conferido contra o TEXTO do PDF), PDF mede COM
+    prova, e "mediu mas não cobra porque não veio CAD" virou contradição.
+
+    🔑 O que decide dinheiro é a MEDIÇÃO, não o formato do arquivo."""
     ch = _capturar(monkeypatch)
     main._carimbar_regua_de_cobranca("ggg777", 3, 40, 0)
     d = ch[0]["dados"]
-    assert d["cobravel"] is False, (
-        "projeto só-PDF com 3 linhas medidas entrou como cobrável — é "
-        "exatamente o caso dos 11 que o backfill de 06/09 marcou: %s" % d)
-    assert d["linhas_medidas"] == 3, (
-        "a régua mentiu sobre a medição pra justificar o não-cobrável; o "
-        "número entregue continua sendo 3: %s" % d)
+    assert d["cobravel"] is True, (
+        "só-PDF com 3 linhas medidas continua fora da cobrança: %s" % d)
+    assert d["linhas_medidas"] == 3, d
 
 
 def test_CONTROLE_o_MESMO_projeto_COM_CAD_e_cobravel(monkeypatch):
@@ -313,9 +318,9 @@ def test_CONTROLE_o_MESMO_projeto_COM_CAD_e_cobravel(monkeypatch):
 
 
 def test_so_PDF_deixa_rastro_PROPRIO_no_registro(monkeypatch):
-    """A entrega vazia e a entrega só-PDF não faturam pelo MESMO motivo, e o
-    registro tem que distinguir as duas — senão não dá pra saber quanto a
-    promessa custa no dia em que o motor passar a medir PDF de verdade."""
+    """O instrumento continua — contando o OUTRO lado. Era "quanto a promessa
+    custa"; é "quanto o PDF passa a faturar". A entrega vazia e a entrega
+    só-PDF continuam distinguíveis no registro."""
     avisos = []
     monkeypatch.setattr(main, "_projeto_patch", lambda *a, **k: True)
     monkeypatch.setattr(main, "_log_error",
@@ -325,6 +330,15 @@ def test_so_PDF_deixa_rastro_PROPRIO_no_registro(monkeypatch):
     assert not any("0 linhas medidas" in m for _, m in avisos), (
         "o só-PDF foi registrado como entrega vazia — são causas diferentes "
         "e a de cima é falsa: este projeto mediu 3 linhas. %s" % avisos)
+
+
+def test_CONTROLE_entrega_SEM_medida_continua_fora_da_cobranca(monkeypatch):
+    """🧪 O que NÃO mudou, e é a metade da régua que o Pedro aprovou em 06/09:
+    entrega com ZERO linha medida não fatura, venha CAD ou não. Sem este
+    controle, "cobravel sempre True" passaria nos guardas acima."""
+    ch = _capturar(monkeypatch)
+    main._carimbar_regua_de_cobranca("jjj000", 0, 80, 3)
+    assert ch[0]["dados"]["cobravel"] is False, ch[0]["dados"]
 
 
 def test_o_tipo_de_arquivo_e_OBRIGATORIO_na_regua():

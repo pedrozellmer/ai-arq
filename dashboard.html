@@ -3536,6 +3536,46 @@
     });
   }
 
+  //: 🔑 22/09/2026 — A JANELA DO PÉ-DIREITO E DA ÁREA (ideia do Pedro).
+  //: 📊 Medido em 90 dias, 210 projetos: só 28 (13,3%) informam o pé-direito,
+  //: 28 informam a área, e 170 (81%) não informam NADA. O campo está ali, e
+  //: fica vazio — porque a tela pede o dado sem dizer o que se perde sem ele.
+  //: 🔑 A pergunta não se repete: ela diz o CUSTO. E o custo mudou hoje — com
+  //: a regra nova do selo, o pé-direito que o cliente informa entra como
+  //: INSUMO MEDIDO na conta (contagem × seção × pé-direito), então a fôrma de
+  //: pilar e a área de parede saem medidas em vez de em branco.
+  //: 🪤 Nunca obrigatório: às vezes a pessoa não sabe, e travar o envio por
+  //: causa disso custa o projeto inteiro. Uma pergunta, duas saídas.
+  function _premissasEmBranco() {
+    const pd = (document.getElementById('project-pe-direito')?.value || '').trim();
+    const area = (document.getElementById('project-area')?.value || '').trim();
+    return { pd: !pd, area: !area, nenhum: !pd && !area };
+  }
+
+  function _confirmarPremissasVazias() {
+    const falta = _premissasEmBranco();
+    if (!falta.nenhum) return Promise.resolve('seguir');   // informou algum: segue
+    const msg = 'Você não informou o pé-direito nem a área total. '
+              + 'São os dois campos que mais mudam a planilha: sem o pé-direito, '
+              + 'parede, pintura e fôrma de pilar saem em branco ou como '
+              + 'estimativa — é ele que transforma o comprimento medido em área. '
+              + 'Informar leva 5 segundos.';
+    return new Promise(resolve => {
+      try {
+        if (window.toast && window.toast.confirm) {
+          window.toast.confirm(msg, { ok: 'Informar agora',
+                                      cancel: 'Enviar assim mesmo' })
+            .then(v => resolve(v ? 'informar' : 'seguir'),
+                  () => resolve('seguir'));
+          return;
+        }
+        // 🪤 Sem o toast, NÃO cai no confirm() nativo: ele trava a aba (visto
+        // em 19/09) e a pergunta não vale o envio travado. Segue em silêncio.
+        resolve('seguir');
+      } catch (_) { resolve('seguir'); }
+    });
+  }
+
   async function startProcessing() {
     // Os avisos do envio ANTERIOR saem antes de qualquer caminho abaixo abrir a
     // tela de processamento — ver `_limparAvisosDoEnvio`.
@@ -3598,6 +3638,25 @@
         window.toast ? window.toast.error(_m) : alert(_m);
         return;
       }
+    }
+
+    // 🔑 A última chance de informar pé-direito/área — depois daqui o projeto
+    // é criado. Só pergunta quando os DOIS estão vazios, e só uma vez.
+    if (await _confirmarPremissasVazias() === 'informar') {
+      showState(stateUpload);
+      const _alvo = document.getElementById('project-pe-direito')
+                 || document.getElementById('project-area');
+      // 🪤 Tudo protegido: `scrollIntoView`/`focus` são conveniência, e um
+      // navegador (ou um teste) sem eles não pode derrubar o envio.
+      try {
+        if (_alvo && _alvo.scrollIntoView) {
+          _alvo.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        if (_alvo && _alvo.focus) {
+          setTimeout(() => { try { _alvo.focus(); } catch (_) {} }, 350);
+        }
+      } catch (_) {}
+      return;                      // nada criado: os arquivos seguem escolhidos
     }
 
     showState(stateProcessing);

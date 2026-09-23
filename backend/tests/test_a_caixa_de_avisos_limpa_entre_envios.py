@@ -90,6 +90,10 @@ def _cena(respostas, sem_limpeza=False):
           " throw new Error('%s'); }" % _PAROU,
           bloco_a_partir_de(site, "function mostrarAvisoAec(", "dashboard.html", fecho=""),
           bloco_a_partir_de(site, "function _limparAvisosDoEnvio(", "dashboard.html", fecho=""),
+          # 🪤 22/09: dependências novas do `startProcessing` (a janela do
+          # pé-direito). Sem elas o JS real para em ReferenceError.
+          bloco_a_partir_de(site, "function _premissasEmBranco(", "dashboard.html", fecho=""),
+          bloco_a_partir_de(site, "function _confirmarPremissasVazias(", "dashboard.html", fecho=""),
           "function startProcessing__real() {}",
           iniciar,
           "function _enviar(dados) { DADOS = dados; (function () { %s })(); }" % despacho]

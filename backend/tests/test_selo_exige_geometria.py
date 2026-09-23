@@ -21,6 +21,8 @@ entregues a clientes.
 import os
 import sys
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 # 🪤 Janela de tamanho fixo mede o vizinho (ou um pedaço) e passa
 # verde por engano — a auditoria de 25/08 achou 17 assim. O recorte
@@ -372,10 +374,21 @@ def _promocoes_de_selo(no):
     """
     import ast as _a
 
+    #: 🔑 22/09/2026 — A PORTA ÚNICA. A regra deixou de ser "ninguém promove" e
+    #: passou a ser "promoção só pela porta", depois que passaram a existir duas
+    #: provas conferíveis contra o arquivo do cliente (geometria medida e quadro
+    #: impresso achado no texto do PDF). Isto NÃO afrouxa o censo: atribuição
+    #: direta de 'confirmado' continua sendo acusada — e agora há um lugar só
+    #: pra auditar, que exige a prova por escrito.
+    _PORTA_DA_PROMOCAO = "_selo_medido_com_prova"
+
     def _e_estimado(v):
         if isinstance(v, _a.Attribute):
             return v.attr == "ESTIMADO"
         if isinstance(v, _a.Call):
+            nome = getattr(v.func, "id", None) or getattr(v.func, "attr", None)
+            if nome == _PORTA_DA_PROMOCAO:
+                return True          # passou pela porta: auditável e com motivo
             args = [x for x in v.args if isinstance(x, _a.Constant)]
             return bool(args) and str(args[0].value).strip().lower() == "estimado"
         if isinstance(v, _a.Constant):
@@ -609,3 +622,59 @@ def test_CONTROLE_POSITIVO_o_guarda_ainda_acusa_o_que_deve():
     ):
         assert selos_sem_geometria([_it(obs)]), (
             "deixou de acusar, o guarda virou peneira: %r" % obs[:60])
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  A PORTA ÚNICA DA PROMOÇÃO (22/09/2026)
+# ══════════════════════════════════════════════════════════════════════════
+def test_toda_promocao_do_motor_passa_pela_PORTA():
+    """🔑 O censo acima aceita a porta. Este cobra que ela é REALMENTE usada —
+    senão "aceitar a porta" viraria só um buraco no censo."""
+    import ast as _a
+    pj = _process_job()
+    pela_porta = 0
+    for n in _a.walk(pj):
+        if not isinstance(n, _a.Assign):
+            continue
+        for alvo in n.targets:
+            if getattr(alvo, "attr", None) != "confidence":
+                continue
+            v = n.value
+            if isinstance(v, _a.Call):
+                nome = getattr(v.func, "id", None) or getattr(v.func, "attr", None)
+                if nome == "_selo_medido_com_prova":
+                    pela_porta += 1
+    assert pela_porta >= 1, (
+        "nenhuma promoção passa pela porta — ou o motor parou de promover, "
+        "ou alguém promoveu por fora e o censo precisa ser reconferido")
+
+
+def test_a_PORTA_exige_a_prova_por_ESCRITO():
+    """🧪 Controle positivo, EXECUTANDO a porta de verdade: promover sem dizer
+    qual é a prova tem que explodir. Prova sem nome não é prova — e o motivo é
+    justamente o que vira rastro na observação do cliente."""
+    import main as _m
+    assert str(getattr(_m._selo_medido_com_prova("area medida no layer X"),
+                       "value", "")) == "confirmado"
+    for vazio in ("", "   ", None):
+        with pytest.raises(ValueError):
+            _m._selo_medido_com_prova(vazio)
+
+
+def test_CONTROLE_promocao_por_FORA_da_porta_continua_sendo_acusada():
+    """🪤 O risco de abrir a porta é ela virar desculpa pra qualquer promoção.
+    As três formas diretas continuam reprovando."""
+    import ast as _a
+    _nl = chr(10)
+    promove = _a.parse(_nl.join([
+        "def f():",
+        "    it.confidence = Confidence('confirmado')",
+        "    _it.confidence = _Cf.CONFIRMADO",
+        "    setattr(_x, 'confidence', 'confirmado')",
+    ]))
+    assert len(_promocoes_de_selo(promove)) == 3
+    pela_porta = _a.parse(_nl.join([
+        "def f():",
+        "    it.confidence = _selo_medido_com_prova('geometria bate')",
+    ]))
+    assert _promocoes_de_selo(pela_porta) == []

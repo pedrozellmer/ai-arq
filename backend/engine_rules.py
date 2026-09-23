@@ -4627,3 +4627,257 @@ def aviso_das_paginas_sem_prancha(censo, n_linhas_escopo=0, leu_cad=False):
                           "sair quantitativo de verdade, mande a planta baixa "
                           "(de preferência em DWG/DXF).")
     return " ".join(partes)
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  A CHAVE DO SELO — a única régua da casa que PROMOVE (22/09/2026)
+# ══════════════════════════════════════════════════════════════════════════
+#: 🩸 POR QUE ELA EXISTE. Até hoje, TODA régua de revisão só sabia rebaixar
+#: ("Só REBAIXA. Nunca promove nada" aparece em 12 lugares, e há 32 pontos de
+#: rebaixamento só no main.py). O efeito medido: quem decide o teto do que sai
+#: medido é a IA, e o revisor só pode baixá-lo. Se ela for tímida — e o prompt
+#: mandava ser, até hoje —, nada corrige pra cima. Em 60 dias, 15 de 69 jobs
+#: com CAD entregaram ZERO linha medida, e 43 (62%) menos de 1 em 4.
+#:
+#: 🔑 O DESENHO: ela roda POR ÚLTIMO, depois das 32 travas, e só promove o que
+#: a GEOMETRIA prova. Nenhuma trava é desarmada — quem foi rebaixado por um
+#: motivo que continua valendo não volta, porque a prova exigida aqui é o
+#: número, não a redação da observação.
+#:
+#: 🪤 O QUE ELA NÃO FAZ: não mexe em quantidade, não cria linha, não promove
+#: `vision_pdf` (Vision lê número, não mede geometria — regra dura nº1), e não
+#: promove nada cuja observação diga que o modelo ADOTOU um insumo.
+
+#: Palavras com que o modelo confessa ter escolhido um insumo por conta.
+#: Uma só delas basta pra barrar — é o outro lado de "o selo segue a
+#: procedência do INSUMO": insumo adotado rebaixa, e aqui ele impede a subida.
+_RE_ADOCAO = _re.compile(
+    r"\b(adotad|adotei|adotou|consider(?:ei|ou|ando|ad[ao]s?)|presumid|presumi|"
+    r"predominante|dominante|de\s+praxe|t[íi]pic|aproximad|estimativa|"
+    r"arbitrad|assumid|supondo|suposi)", _re.IGNORECASE)
+
+#: Grandeza que cada unidade aceita como prova. `m³` e `kg` ficam de FORA de
+#: propósito: o motor não mede volume nem peso — ele mede comprimento, área e
+#: contagem. Volume é sempre área×espessura ou seção×comprimento, e a
+#: espessura/seção vem de texto, não de geometria.
+_PROVA_POR_UNIDADE = {
+    "m": "comprimento", "ml": "comprimento", "m.l.": "comprimento",
+    "m²": "area", "m2": "area", "m^2": "area",
+    "un": "contagem", "und": "contagem", "unid": "contagem", "pç": "contagem",
+    "pc": "contagem", "peça": "contagem", "pecas": "contagem",
+}
+
+
+def _bate(a, b, tol=0.005):
+    """Dois números medem a mesma coisa? Tolerância relativa de 0,5%."""
+    try:
+        a, b = float(a), float(b)
+    except (TypeError, ValueError):
+        return False
+    if a <= 0 or b <= 0:
+        return False
+    return abs(a - b) <= tol * max(a, b)
+
+
+def prova_da_geometria(quantity, unit, obs, indice):
+    """A geometria do arquivo prova esta quantidade? Devolve o motivo, ou "".
+
+    O `indice` é o que o MOTOR mediu neste envio, por grandeza:
+        {"comprimento": [(layer, metros), ...],
+         "area":        [(layer, m2), ...],
+         "contagem":    [(bloco, n), ...]}
+
+    🪤 Só a prova DIRETA mora aqui: a quantidade da linha é, ela mesma, um
+    número que o motor mediu. É a prova que não depende de interpretar texto
+    nenhum — e por isso é a única que basta sozinha.
+    """
+    grandeza = _PROVA_POR_UNIDADE.get(str(unit or "").strip().lower())
+    if not grandeza:
+        return ""
+    if _RE_ADOCAO.search(str(obs or "")):
+        return ""
+    for rotulo, valor in (indice or {}).get(grandeza, []):
+        if layer_is_anotacao(rotulo):
+            continue          # letras e setas não são obra (rede de 24/08)
+        if _bate(quantity, valor):
+            return "%s medido no layer '%s' = %s" % (
+                grandeza, rotulo, ("%.2f" % float(valor)).replace(".", ","))
+    return ""
+
+
+def selo_com_prova_da_geometria(items, indice):
+    """Promove a 'confirmado' as linhas que a geometria do arquivo prova.
+
+    Devolve [{indice, descricao, unidade, motivo}] — as linhas promovidas.
+    Não altera quantidade, descrição nem observação: só o selo.
+
+    🚨 Anda só pra UM lado, como as outras — mas para CIMA, e só com prova.
+    Nunca rebaixa: item que já está confirmado sai daqui como estava.
+    """
+    promovidos = []
+    for i, it in enumerate(items or []):
+        selo = _campo_do_item(it, "confidence", "")
+        selo = str(getattr(selo, "value", selo) or "").strip().lower()
+        if selo != "estimado":
+            continue                      # só sobe quem está laranja
+        if str(_campo_do_item(it, "origem", "") or "").strip().lower() != "dxf_geom":
+            continue                      # PDF não mede geometria (regra nº1)
+        try:
+            q = float(_campo_do_item(it, "quantity", 0) or 0)
+        except (TypeError, ValueError):
+            continue
+        if q <= 0:
+            continue                      # linha em branco não é medição
+        motivo = prova_da_geometria(
+            q, _campo_do_item(it, "unit", ""),
+            _campo_do_item(it, "observations", ""), indice)
+        if not motivo:
+            continue
+        promovidos.append({
+            "indice": i,
+            "descricao": str(_campo_do_item(it, "description", "") or "")[:60],
+            "unidade": str(_campo_do_item(it, "unit", "") or "").strip(),
+            "motivo": motivo,
+        })
+    return promovidos
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  A TABELA IMPRESSA — nível 1 para CONTAGEM (22/09/2026)
+# ══════════════════════════════════════════════════════════════════════════
+#: ⏭️ Decisão do Pedro em 21/09: *"se você conseguiu ver numa tabela… tem que
+#: colocar como medido — independente se é PDF ou CAD"*. O nível 1 nasceu
+#: preso ao vocabulário "quadro de quantitativos", que é como ESTRUTURA
+#: escreve. 📊 Medido em 90 dias (7.628 linhas com número, não medidas, sem
+#: CAD): "quadro de quantitativos" alcança **24 linhas**; "tabela", "legenda"
+#: e "quadro" juntos alcançam **2.888 (38%)**.
+#:
+#: 🔑 E a quebra por família decide o recorte: dessas 2.888, **1.859 são
+#: CONTAGEM** (134 projetos), 350 kg, e **só 247 são m²**. Contagem de tabela
+#: é o que a IA faz bem (20–29% de acerto em símbolo, contra 2–9% em área —
+#: auditoria de 19/09); ÁREA lida de legenda é exatamente o vazamento da rede
+#: de 24/08 ("Conforme legenda código 04", 33.962 m² como medidos). Por isso
+#: esta régua é SÓ contagem, e as outras famílias ficam onde estão.
+#:
+#: 🩸 O caso: cliente de 22/09 17:57 (16 PDFs, 537 linhas, ZERO medidas). 86
+#: linhas dele dizem "Quantidade conforme TABELA DE EQUIPAMENTOS da prancha".
+_RE_AFIRMA_TABELA = _re.compile(
+    r"\b(?:conforme|segundo|de acordo com|indicad[ao] n[ao]|lid[ao] n[ao]|"
+    r"consta n[ao]|extra[íi]d[ao] d[ao]|d[ao])?\s*"
+    r"\b(tabela|legenda|quadro|planilha|rela[çc][ãa]o|lista)\b",
+    _re.IGNORECASE)
+
+#: 🪤 A NEGAÇÃO não é procedência — é ressalva. "não consta na tabela", "sem
+#: legenda", "a tabela não traz". Mesma trava que a régua da soma usa.
+_RE_NEGA_TABELA = _re.compile(
+    r"\b(?:n[ãa]o|sem|falta|ausente|inexist)\w*\b[^.]{0,30}$", _re.IGNORECASE)
+
+#: A mesma negação, do outro lado: "a tabela NÃO traz", "o quadro não indica".
+_RE_NEGA_DEPOIS = _re.compile(
+    r"^[^.]{0,16}\b(?:n[ãa]o|sem|nada)\b", _re.IGNORECASE)
+
+#: Unidades de CONTAGEM. Nada de m/m²/m³/kg aqui — de propósito.
+_UNIDADES_DE_CONTAGEM = {
+    "un", "und", "unid", "unidade", "unidades", "pç", "pc", "peca", "peça",
+    "pecas", "peças", "cj", "conj", "par", "pares", "jg", "jogo",
+}
+
+#: Quantos números DISTINTOS daquela prancha precisam estar no texto do PDF
+#: pra gente aceitar que ali existe mesmo uma tabela.
+#: 🪤 Contagem é número PEQUENO e inteiro: "7" aparece em qualquer prancha, e
+#: uma prova de UMA linha seria acaso com cara de medição. Três linhas
+#: diferentes, com três números diferentes, todas dizendo que leram da tabela,
+#: e os três achados no texto — isso é a tabela, não coincidência.
+_MINIMO_DE_PROVAS_NA_PRANCHA = 3
+
+
+def afirma_tabela_impressa(texto) -> bool:
+    """A observação diz que o número foi lido de uma TABELA impressa?
+
+    Vocabulário largo de propósito (tabela/legenda/quadro/planilha/relação/
+    lista): cada disciplina escreve de um jeito, e foi o vocabulário estreito
+    que deixou o nível 1 alcançando 24 linhas de 2.888.
+    """
+    t = str(texto or "")
+    for m in _RE_AFIRMA_TABELA.finditer(t):
+        # 🪤 A negação cabe dos DOIS lados: "sem tabela na prancha" (antes)
+        # e "a tabela NÃO traz este item" (depois). A 1ª versão só olhava
+        # pra trás e deixava passar a segunda — achado do guarda, não meu.
+        if _RE_NEGA_TABELA.search(t[max(0, m.start() - 32):m.start()]):
+            continue
+        if _RE_NEGA_DEPOIS.search(t[m.end():m.end() + 32]):
+            continue
+        return True
+    return False
+
+
+def selo_da_tabela_impressa(linhas, numeros_por_prancha=None):
+    """Promove CONTAGENS lidas de tabela cujo número está no texto do PDF.
+
+    `linhas`: dicts com `arquivo`, `pagina`, `unidade`, `quantidade`,
+    `texto`, `descricao`, `selo`, `origem` — o mesmo formato que
+    `veredito_do_quadro_impresso` recebe, mais `selo`/`origem`.
+    `numeros_por_prancha`: {(arquivo, pagina): frozenset de centésimos}.
+
+    Devolve [{indice, motivo}] — só as promovidas. Nunca rebaixa.
+    """
+    nums = {(str(a or "").strip().lower(), p): v
+            for (a, p), v in dict(numeros_por_prancha or {}).items()}
+
+    def _nums_da(l):
+        arq = str(l.get("arquivo") or "").strip().lower()
+        if not arq:
+            return None
+        pg = l.get("pagina")
+        if pg is not None:
+            return nums.get((arq, int(pg)))
+        cands = [v for (a, _p), v in nums.items() if a == arq]
+        return cands[0] if len(cands) == 1 else None
+
+    # 1ª passada: quem é candidata, e qual número dela está no texto
+    candidatas = {}          # indice -> (chave da prancha, centesimos)
+    for i, l in enumerate(linhas or []):
+        selo = str(getattr(l.get("selo"), "value", l.get("selo")) or "").strip().lower()
+        if selo != "estimado":
+            continue
+        if str(l.get("origem") or "").strip().lower() == "dxf_geom":
+            continue          # CAD tem a prova da geometria, que é mais forte
+        if str(l.get("unidade") or "").strip().lower() not in _UNIDADES_DE_CONTAGEM:
+            continue
+        obs = l.get("texto") or ""
+        if not (afirma_tabela_impressa(obs) or afirma_tabela_impressa(l.get("descricao"))):
+            continue
+        if _RE_ADOCAO.search(str(obs)):
+            continue          # a IA disse que adotou: não é leitura
+        try:
+            q = float(l.get("quantidade") or 0)
+        except (TypeError, ValueError):
+            continue
+        if q <= 0 or abs(q - round(q)) > 1e-9:
+            continue          # contagem é inteiro; fração aqui é outra coisa
+        do_texto = _nums_da(l)
+        if not do_texto:
+            continue
+        cent = int(round(q * 100))
+        if cent not in do_texto:
+            continue
+        candidatas[i] = ((str(l.get("arquivo") or "").strip().lower(),
+                          l.get("pagina")), cent)
+
+    # 2ª passada: a trava anti-acaso — a prancha tem mesmo uma tabela?
+    por_prancha = {}
+    for i, (chave, cent) in candidatas.items():
+        por_prancha.setdefault(chave, set()).add(cent)
+
+    promovidos = []
+    for i, (chave, cent) in sorted(candidatas.items()):
+        distintos = len(por_prancha.get(chave, ()))
+        if distintos < _MINIMO_DE_PROVAS_NA_PRANCHA:
+            continue
+        promovidos.append({
+            "indice": i,
+            "motivo": ("tabela impressa na prancha: a quantidade está escrita "
+                       "no texto do PDF, com outras %d leituras da mesma "
+                       "prancha conferidas" % (distintos - 1)),
+        })
+    return promovidos

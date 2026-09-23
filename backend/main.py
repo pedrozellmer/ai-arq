@@ -9687,7 +9687,17 @@ def _carimbar_regua_de_cobranca(job_id: str, n_medidas: int, n_total: int,
         # `planilha_gerada_em` e `desenho_assinatura` em agosto.
         # `_projeto_patch` faz PATCH direto na tabela.
         _ok = _projeto_patch(job_id, {
-            "cobravel": bool(n_medidas > 0 and n_cad > 0),
+            # 🔑 22/09/2026 — A EXIGÊNCIA DE CAD SAIU DA CONDIÇÃO (decisão do
+            # Pedro). Ela nasceu de uma previsão: "PDF-only nunca mede"
+            # (0,2% na vida do produto). A previsão valia enquanto a única
+            # forma de medir PDF era a IA ler a imagem — e essa a régua
+            # dura nº1 nunca aceitou. Com o NÍVEL 1 no ar (quadro impresso
+            # conferido contra o TEXTO do PDF), PDF passa a medir com
+            # prova, e "mediu, mas não cobra porque não veio CAD" vira
+            # contradição: o que decide é a MEDIÇÃO, não o formato.
+            # 🪤 `n_cad` continua obrigatório e continua no registro: é
+            # ele que deixa medir quanto o PDF passa a faturar.
+            "cobravel": bool(n_medidas > 0),
             "cobravel_em": datetime.utcnow().isoformat() + "Z",
             "linhas_medidas": int(n_medidas),
             "linhas_total": int(n_total),
@@ -9703,14 +9713,14 @@ def _carimbar_regua_de_cobranca(job_id: str, n_medidas: int, n_total: int,
                        f"NAO cobravel: 0 linhas medidas de {n_total}", job_id,
                        severity="warning")
         elif n_cad == 0:
-            # 🩸 O caso novo, e o que mais importa contar: MEDIU, mas veio só
-            # PDF. Antes de 14/09 este projeto entrava na lista de cobráveis
-            # contra a regra escrita no próprio docstring. Linha própria pra
-            # dar pra medir quanto a promessa custa — se um dia o motor passar
-            # a medir PDF de verdade, é aqui que vai aparecer primeiro.
+            # 🩸 ERA "NAO cobravel: so PDF". Desde 22/09 o só-PDF que MEDE é
+            # cobrável como qualquer outro — a linha continua, como INFO, pra
+            # responder a pergunta que o comentário de 14/09 já fazia: quanto
+            # o PDF passa a faturar quando o motor mede de verdade. É o mesmo
+            # instrumento, contando o outro lado.
             _log_error("cobranca:regua",
-                       f"NAO cobravel: so PDF (mediu {n_medidas} de {n_total} "
-                       f"linhas, nenhum arquivo CAD)", job_id, severity="warning")
+                       f"cobravel so PDF (mediu {n_medidas} de {n_total} "
+                       f"linhas, nenhum arquivo CAD)", job_id, severity="info")
     except Exception as _e:
         print(f"[cobranca] regua nao carimbada (nao-fatal): {_e}")
 
@@ -11623,8 +11633,25 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
             # zera como antes, mas a linha diz qual número a leitura viu.
             _tipo_q, _info_q = _vq[id(it)]
             from engine_rules import _num_br as _num_br_q
+            # 🔑 22/09/2026, NÍVEL 1 DA REGRA DO MEDIDO (decisão do Pedro em
+            # 21/09): "se você conseguiu ver numa tabela… tem que colocar como
+            # medido — independente se é PDF ou CAD". Veredito "texto" quer
+            # dizer que o número da linha está ESCRITO no texto do PDF daquela
+            # prancha, e "total" que as parcelas somam o total que a mesma
+            # leitura trouxe do quadro. Nos dois casos há PROVA conferível; o
+            # que sobrava era a régua tratar prova como se fosse chute.
+            # 🩸 Medido: as 5 linhas de fôrma (183,20 m²) e as 5 de concreto
+            # (26,80 m³) do quadro impresso da cliente que deu NPS 2 saíram
+            # laranja, com a frase dizendo "não é medição nossa".
+            # 🪤 Sem prova (`sem_prova`/`e_o_total`) continua estimado e zerando
+            # como antes — é a mesma régua, só o veredito PROVADO muda de lado.
             try:
-                it.confidence = Confidence("estimado")
+                if _tipo_q in ("texto", "total"):
+                    it.confidence = _selo_medido_com_prova(
+                        "quadro de quantitativos impresso, conferido contra o "
+                        "texto do PDF da prancha")
+                else:
+                    it.confidence = Confidence("estimado")
             except Exception:
                 pass
             _obs_q = _limpa_aviso_nao_medida(
@@ -11639,9 +11666,10 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
                     _prova_q = ("as linhas do quadro somam o TOTAL que a mesma leitura "
                                 "trouxe dele, %s %s" % (_num_br_q(_info_q.get("total") or 0),
                                                         _un_q))
-                _frase_q = ("Número COPIADO do quadro de quantitativos impresso na "
-                            "prancha %s — não é medição nossa (%s). Confira no quadro "
-                            "antes de orçar." % (_prancha_q, _prova_q))
+                _frase_q = ("✓ MEDIDO do quadro impresso — o número é do quadro de "
+                            "quantitativos da prancha %s, medido pelo PROJETISTA, e "
+                            "nós conferimos que %s. Confira no quadro antes de orçar."
+                            % (_prancha_q, _prova_q))
                 quadro_preservados += 1
             else:
                 it.quantity = 0
@@ -12769,6 +12797,42 @@ def _sem_medido_do_desenho(obs: str) -> str:
     return " | ".join(s for s in segs if s) or _FRASE_NUMERO_DA_LEITURA
 
 
+def _selo_medido_com_prova(motivo: str):
+    """A ÚNICA porta por onde um selo de MEDIDO entra no motor (22/09/2026).
+
+    🚨 Até hoje a regra era "nenhum passo do process_job promove" — e o guarda
+    `test_NENHUM_passo_do_process_job_ATRIBUI_selo_de_MEDIDO` a prendia. Ela
+    nasceu certa: 61 itens em 19 projetos de 15 clientes tinham saído com
+    "✓ MEDIDO do CAD" vindos de um TEXTO lido da prancha (24/08).
+
+    🔑 O que mudou não foi a rede — foi haver PROVA. Duas provas, ambas
+    conferíveis contra o arquivo do cliente e nenhuma dependendo de a IA estar
+    corajosa no sorteio daquele dia:
+      · a quantidade da linha É um número que o motor mediu na geometria
+        (`engine_rules.selo_com_prova_da_geometria`);
+      · o número está escrito no texto do PDF da prancha, no quadro de
+        quantitativos (`engine_rules.veredito_do_quadro_impresso`, veredito
+        "texto"/"total").
+
+    Em vez de abrir a regra ("agora pode promover"), ela virou uma porta só:
+    promoção sem passar por aqui continua sendo defeito, e o guarda continua
+    fechado sobre todo o resto do `process_job`. Quem promover no futuro tem
+    que dizer, por escrito, qual é a prova.
+
+    🪤 `motivo` é obrigatório de propósito: prova sem nome não é prova, e é o
+    que vira rastro na observação do cliente.
+    """
+    if not str(motivo or "").strip():
+        raise ValueError(
+            "promover selo exige motivo: sem a prova por escrito, isto seria "
+            "exatamente o vazamento que a regra dura nº1 existe pra impedir")
+    # 🪤 import LOCAL: `Confidence` não é nome de módulo aqui (os blocos que o
+    # usam importam de models dentro da própria função) — sem isto, a porta
+    # levanta NameError justamente na hora de promover.
+    from models import Confidence as _ConfPorta
+    return _ConfPorta("confirmado")
+
+
 def _tira_medido_do_desenho_de_quem_nao_foi_medido(all_items) -> int:
     """Linha de contagem, verba, peso ou volume não diz "medido do desenho".
 
@@ -13703,6 +13767,11 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                 n_dxf = len(dxf_paths)
                 dxf_span = cad_end_pct - extract_start
                 _escala_arqs = []   # 21/08: como a escala de cada prancha foi decidida
+                # 🔑 22/09/2026 — O QUE O MOTOR MEDIU, guardado pra depois.
+                # `extraction` morre no fim de cada volta (`del extraction`, por
+                # causa da RAM), e a chave do selo só roda no FIM do job, depois
+                # das 32 travas. Sem este cofre ela não teria contra o que provar.
+                _indice_geom = {"comprimento": [], "area": [], "contagem": []}
                 for idx, dxf_path in enumerate(dxf_paths):
                     # 🛡️ Freio de MEMÓRIA: se o container está chegando perto do limite
                     # de RAM, aborta ANTES do OOM matar o servidor inteiro. Um projeto
@@ -14316,6 +14385,20 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                         _tot = round(sum(_a for _a in _areas if _a and _a > 0), 2)
                         if _tot > 0:
                             _multi_hatch_sums.add(_tot)
+
+                    # 🔑 O QUE ESTE ARQUIVO MEDIU vai pro cofre do job. Só número
+                    # e rótulo — nada de entidade viva, que é o que pesa na RAM.
+                    try:
+                        for _lyr, _c in (extraction.get_walls_by_layer() or {}).items():
+                            _indice_geom["comprimento"].append((str(_lyr), round(float(_c), 2)))
+                        for _lyr, _a in (extraction.get_areas_by_layer() or {}).items():
+                            _indice_geom["area"].append((str(_lyr), round(float(_a), 2)))
+                        for _lyr, _a in (extraction.get_polygon_areas_by_layer() or {}).items():
+                            _indice_geom["area"].append((str(_lyr), round(float(_a), 2)))
+                        for _blk, _n in (extraction.get_block_summary() or {}).items():
+                            _indice_geom["contagem"].append((str(_blk), int(_n)))
+                    except Exception as _eig:
+                        print(f"[selo:indice] {os.path.basename(dxf_path)}: nao consegui guardar ({_eig})")
 
                     # 2. Enviar pro Claude interpretar
                     jobs.update_field(job_id, progress=dxf_mid)
@@ -18486,6 +18569,85 @@ bloco — só cite os que estão no inventário deste arquivo."""
             _refazer_planilha.append(
                 f"{_fusao['revisoes']} correção(ões) do cliente "
                 f"(casadas={_fusao['casadas']} acrescentadas={_fusao['acrescentadas']})")
+
+        # ─────────────────────────────────────────────────────────────────
+        # 🔑 A CHAVE DO SELO (22/09/2026) — a ÚNICA régua que promove.
+        # Roda AQUI de propósito: depois das 32 travas de rebaixamento e antes
+        # de gravar. Nenhuma trava é desarmada — quem foi rebaixado por motivo
+        # que continua valendo não volta, porque a prova exigida aqui é o
+        # NÚMERO da linha contra o que o motor mediu, não a redação.
+        # 🩸 Por quê: em 60 dias, 15 de 69 jobs com CAD entregaram ZERO linha
+        # medida, com a geometria medida no mesmo envio. Só sabíamos rebaixar.
+        # ─────────────────────────────────────────────────────────────────
+        try:
+            from engine_rules import selo_com_prova_da_geometria as _chave_selo
+            try:
+                _idx_selo = _indice_geom
+            except NameError:
+                _idx_selo = None          # job sem CAD: nada a provar
+            if _idx_selo and any(_idx_selo.values()):
+                _promovidos = _chave_selo(all_items, _idx_selo)
+                for _pr in _promovidos:
+                    _alvo_selo = all_items[_pr["indice"]]
+                    _alvo_selo.confidence = _selo_medido_com_prova(_pr["motivo"])
+                    # o rastro fica na observação: sem ele ninguém audita depois
+                    _alvo_selo.observations = (
+                        "✓ MEDIDO — %s (conferido contra a geometria do arquivo). "
+                        % _pr["motivo"]) + str(_alvo_selo.observations or "")
+                _log_error("motor:selo-com-prova",
+                           f"linhas={len(all_items)} promovidas={len(_promovidos)} "
+                           f"indice_c={len(_idx_selo.get('comprimento') or [])} "
+                           f"indice_a={len(_idx_selo.get('area') or [])} "
+                           f"indice_n={len(_idx_selo.get('contagem') or [])}",
+                           job_id, severity="info")
+        except Exception as _esel:
+            print(f"[selo-com-prova] job={job_id}: nao rodou (segue): {_esel}")
+            _log_error("motor:selo-com-prova", f"FALHOU: {_esel}", job_id)
+
+        # ─────────────────────────────────────────────────────────────────
+        # 🔑 A TABELA IMPRESSA (22/09/2026) — nível 1 para CONTAGEM, em PDF.
+        # Mesma porta, mesma posição: depois das travas, antes de gravar.
+        # 📊 Alcance medido: 1.859 linhas em 134 projetos (90 d). Só contagem
+        # — área lida de legenda é o vazamento de 24/08 e fica de fora.
+        # ─────────────────────────────────────────────────────────────────
+        try:
+            from engine_rules import selo_da_tabela_impressa as _chave_tabela
+            # 🪤 import LOCAL, como os outros dois usos deste helper: ele
+            # mora no analyzer, não é nome de módulo aqui.
+            from analyzer import _pagina_do_ref_sheet
+            try:
+                _nums_tab = dict(_numeros_do_texto_por_prancha)
+            except NameError:
+                _nums_tab = {}
+            if _nums_tab:
+                _linhas_tab = []
+                for _itt in all_items:
+                    _rs_t = str(getattr(_itt, "ref_sheet", "") or "")
+                    _arq_t = _rs_t.split(" (")[0].strip()
+                    _linhas_tab.append({
+                        "arquivo": _arq_t.lower(), "prancha": _arq_t,
+                        "pagina": _pagina_do_ref_sheet(_rs_t) if _rs_t else None,
+                        "unidade": getattr(_itt, "unit", ""),
+                        "quantidade": getattr(_itt, "quantity", 0),
+                        "texto": getattr(_itt, "observations", ""),
+                        "descricao": getattr(_itt, "description", ""),
+                        "selo": getattr(_itt, "confidence", ""),
+                        "origem": getattr(_itt, "origem", "")})
+                _prom_tab = _chave_tabela(_linhas_tab, _nums_tab)
+                for _pt in _prom_tab:
+                    _alvo_t = all_items[_pt["indice"]]
+                    _alvo_t.confidence = _selo_medido_com_prova(_pt["motivo"])
+                    _alvo_t.observations = (
+                        "✓ MEDIDO da tabela impressa — %s. A contagem é do "
+                        "PROJETISTA; nós conferimos o número. " % _pt["motivo"]
+                    ) + str(_alvo_t.observations or "")
+                _log_error("motor:selo-da-tabela",
+                           f"linhas={len(all_items)} promovidas={len(_prom_tab)} "
+                           f"pranchas_com_texto={len(_nums_tab)}",
+                           job_id, severity="info")
+        except Exception as _etab:
+            print(f"[selo-da-tabela] job={job_id}: nao rodou (segue): {_etab}")
+            _log_error("motor:selo-da-tabela", f"FALHOU: {_etab}", job_id)
 
         # Persistir itens individuais no Supabase pra permitir revisão inline
         # no navegador (endpoint /api/items/{job_id}). Sem isso, os itens só

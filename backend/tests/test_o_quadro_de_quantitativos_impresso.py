@@ -142,21 +142,39 @@ def _numeros_do_pdf(tmp_path, enchimento=0):
 # ══════════════════════════════════════════════════════════════════════════
 #  O caso, com o quadro no texto do PDF
 # ══════════════════════════════════════════════════════════════════════════
-def test_com_o_quadro_no_texto_do_PDF_os_dez_numeros_ficam_como_ESTIMADOS(tmp_path):
+def test_com_o_quadro_no_texto_do_PDF_os_dez_numeros_saem_MEDIDOS(tmp_path):
+    """⏭️ DECISÃO DO PEDRO, 21/09/2026 — o NÍVEL 1 da regra do medido:
+    *"se você conseguiu ver numa tabela, ou se conseguir medir da geometria,
+    tem que colocar como medido… independente se é PDF ou CAD"*.
+
+    🩸 Este guarda nasceu na manhã de 22/09 cobrando o CONTRÁRIO ("número de
+    quadro NUNCA sai branco"), e estas dez linhas são as do projeto da cliente
+    que deu NPS 2: fôrma 183,20 m² e concreto 26,80 m³, impressos no quadro da
+    prancha dela, conferidos um a um contra o texto do PDF — e entregues
+    laranja, com a frase dizendo "não é medição nossa".
+
+    🔑 O que mudou não foi o rigor, foi de quem é o número: quem mediu foi o
+    PROJETISTA, e o que a gente prova é que o número está escrito no texto do
+    PDF daquela prancha. A frase diz as duas coisas. Sem prova (`sem_prova`),
+    a linha continua zerando — é o teste logo abaixo.
+    """
     mapa, _ = _numeros_do_pdf(tmp_path)
     itens = _roda(_quadro_do_caso(), mapa)
     parcelas = [i for i in itens if "TOTAL" not in i.description]
     assert _soma(itens, "m³") == 26.8, [i.quantity for i in parcelas]
     assert _soma(itens, "m²") == 183.2, [i.quantity for i in parcelas]
     for i in parcelas:
-        assert _selo(i) == "estimado", "número de quadro NUNCA sai branco: %r" % i.description
-        assert i.observations.startswith(
-            "Número COPIADO do quadro de quantitativos impresso na prancha prancha-A.pdf"), (
-            "a procedência tem que vir NA FRENTE (a revisão mostra 110 caracteres): %r"
-            % i.observations[:140])
-        assert "não é medição nossa" in i.observations
+        assert _selo(i) == "confirmado", (
+            "quadro impresso COM prova no texto do PDF sai medido: %r" % i.description)
+        assert i.observations.startswith("✓ MEDIDO do quadro impresso"), (
+            "a procedência tem que vir NA FRENTE (a revisão mostra 110 "
+            "caracteres): %r" % i.observations[:140])
+        assert "medido pelo PROJETISTA" in i.observations, (
+            "a frase tem que dizer QUEM mediu — não fomos nós")
+        assert "prancha prancha-A.pdf" in i.observations
         assert "Confira no quadro" in i.observations
-        assert "medido do desenho" not in i.observations.lower()
+        assert "medido do desenho" not in i.observations.lower(), (
+            "'do desenho' é a marca da geometria; esta prova é de TEXTO")
     assert main._apply_area_honesty.ultimo_quadro_preservados == 10
     assert main._apply_area_honesty.ultimo_quadro_totais == 2
 
