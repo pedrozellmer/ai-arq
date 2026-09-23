@@ -221,10 +221,16 @@ def test_o_aviso_diz_QUANTAS_e_QUAIS():
     assert "QUADRO DE ESQUADRIAS" in t, t
 
 
-def test_o_aviso_termina_em_ACAO_concreta():
-    """Sem o pedido, é só uma queixa — foi o pedido que trouxe o cliente hoje."""
+def test_o_aviso_termina_em_CONVITE_sem_prometer():
+    """🚨 23/09, mesmo dia: o texto dizia "Mande a prancha e eu DETALHO essas
+    linhas" — promessa. Fui medir e não achei base: só **2 projetos** em todo o
+    acervo mandaram a prancha de esquadrias, com 14,9% de especificação contra
+    24,8% de quem não mandou. Com 2 amostras não se promete nada.
+
+    🔑 O convite fica; a garantia de resultado sai."""
     t = aviso_da_esquadria_sem_quadro({"n": 27, "codigos": ["J11"]})
-    assert "Mande a prancha de esquadrias" in t, t
+    assert "mande junto" in t, t
+    assert "é a fonte" in t, t
 
 
 def test_sem_codigo_legivel_o_aviso_ainda_sai():
@@ -249,7 +255,9 @@ def test_o_piso_nao_corta_nenhum_caso_REAL():
 def test_a_lista_de_codigos_nao_vira_paredao():
     t = aviso_da_esquadria_sem_quadro(
         {"n": 40, "codigos": ["C%02d" % i for i in range(1, 13)]})
-    assert t.count(",") <= 7, "cortar em 6 códigos + reticências: " + t
+    # 6 códigos = 5 vírgulas na lista; o resto do texto tem as suas.
+    trecho = t[t.index("(") + 1:t.index(")")]
+    assert trecho.count(",") <= 5, "cortar em 6 códigos: " + trecho
     assert "…" in t
 
 
@@ -258,9 +266,33 @@ def test_achado_vazio_ou_lixo_nao_gera_aviso():
         assert aviso_da_esquadria_sem_quadro(ruim) is None, ruim
 
 
-def test_CONTROLE_um_aviso_SEM_acao_nao_serviria():
-    """O que a gente NÃO quer: constatar sem pedir."""
-    generico = "Algumas esquadrias ficaram sem especificação."
-    assert "Mande a prancha" not in generico
+def test_o_aviso_NAO_PROMETE_resultado():
+    """🚨 REGRA: dizer o que falta é fato; garantir que mandar resolve é
+    afirmação sem dado — e se o cliente mandar e nada melhorar, a culpa vira
+    nossa. Medido: só 2 projetos mandaram a prancha, e não deu pra concluir.
+    """
     t = aviso_da_esquadria_sem_quadro({"n": 27, "codigos": ["J11"]})
-    assert "Mande a prancha" in t, "o nosso TEM que pedir"
+    for promessa in ("eu detalho", "vou detalhar", "eu completo", "resolve",
+                     "garanto", "e eu meço", "eu meço"):
+        assert promessa not in t.lower(), (
+            "o aviso voltou a PROMETER (%r): %s" % (promessa, t))
+
+
+def test_CONTROLE_o_texto_PROMETIDO_seria_reprovado():
+    """Prova que o guarda acima não é decorativo: o texto que subiu às 19h
+    (commit aa78642) seria pego por ele."""
+    antigo = ("27 esquadria(s) ficaram sem especificação. Mande a prancha de "
+              "esquadrias e eu detalho essas linhas.")
+    assert any(p in antigo.lower() for p in ("eu detalho", "vou detalhar")), (
+        "o controle parou de provar: o texto antigo TINHA a promessa")
+    t = aviso_da_esquadria_sem_quadro({"n": 27, "codigos": ["J11"]})
+    assert "eu detalho" not in t.lower(), "e o novo NÃO pode ter"
+
+
+def test_o_aviso_continua_dizendo_o_QUE_falta_e_POR_QUE():
+    """Tirar a promessa não pode virar aviso vago."""
+    t = aviso_da_esquadria_sem_quadro({"n": 27, "codigos": ["J11", "P13"]})
+    assert "27 esquadria" in t, t
+    assert "J11" in t and "P13" in t, t
+    assert "QUADRO DE ESQUADRIAS" in t, t
+    assert "dimensão, material e tipo" in t, t

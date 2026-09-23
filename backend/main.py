@@ -7434,8 +7434,22 @@ def aviso_da_esquadria_sem_quadro(achado):
              ) if codigos else (
         " Identifiquei as esquadrias na planta, mas o QUADRO DE ESQUADRIAS não "
         "veio no envio — é ele que diz dimensão, material e tipo de cada uma.")
+    # 🚨 23/09, MESMO DIA: o texto dizia "Mande a prancha de esquadrias e eu
+    # detalho essas linhas" — uma PROMESSA. Fui medir se mandar o quadro de
+    # fato melhora a leitura e não encontrei base: **só 2 projetos em todo o
+    # acervo mandaram a prancha de esquadrias**, e neles a especificação ficou
+    # em 14,9% contra 24,8% de quem não mandou. Com 2 amostras isso não prova
+    # nada nos dois sentidos — e é exatamente por isso que não dá pra prometer.
+    # 🔑 E a prancha REAL que abri ("DETALHES ESQUADRIAS — PORTAS E JANELAS",
+    # job 8590fa4d) **não tem tabela nenhuma em texto**: os únicos números
+    # soltos da página são "19" e "24", a numeração da prancha. As dimensões
+    # estão desenhadas como COTA VETORIAL, não como texto legível.
+    # 🪤 Prometer ao cliente o que não foi medido queima confiança: ele manda
+    # o arquivo, nada melhora, e a culpa passa a ser nossa. O texto diz o que
+    # FALTA e POR QUÊ; o convite fica sem garantia de resultado.
     return ("%d esquadria(s) ficaram sem especificação.%s "
-            "Mande a prancha de esquadrias e eu detalho essas linhas." % (n, quais))
+            "Se tiver a prancha de esquadrias, mande junto: ela é a fonte "
+            "dessa informação." % (n, quais))
 
 
 _RE_ITEM_QUE_E_AVISO = _re.compile(
