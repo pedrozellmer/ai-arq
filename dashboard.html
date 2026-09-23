@@ -2762,6 +2762,27 @@
       // mesmo lembrete gentil. Avisar DEPOIS (no e-mail de conclusão) já era
       // tarde — o cliente esperou o processamento inteiro pra descobrir.
       const _soPdf = selectedFiles.every(f => /\.pdf$/i.test(f.name));
+      // 💡 23/09/2026, ideia do Pedro: "avisar também que subir o PDF JUNTO
+      // com os outros tipos funciona melhor".
+      // 📊 Medido no acervo (90 d, projetos de cliente concluídos):
+      //     só PDF ..............  60 projetos —  0,0% das linhas medidas
+      //     só CAD ..............  88 projetos — 25,3%
+      //     MISTO (CAD + PDF) ...  19 projetos — 32,9%   ← o melhor
+      // 🔑 Faz sentido: o CAD dá a geometria, e o PDF dá o que o CAD não tem
+      // — carimbo, legenda e quadro de quantitativos, que é de onde sai a
+      // prova do número impresso. O caso de 22-23/09 (job a62f7ae3) é o
+      // exemplo: 15 DWG + 16 PDF do mesmo projeto, 521 linhas medidas.
+      // 🪤 Sem número na frase: porcentagem em copy envelhece e vira
+      // promessa. A frase diz O QUE o PDF acrescenta, não quanto.
+      const _semPdf = !selectedFiles.some(_ehPdf);
+      const _CONVITE_DO_PDF_JUNTO = _semPdf
+        ? ' <span class="block mt-1.5">Se tiver o <strong>PDF</strong> das mesmas pranchas, mande junto tamb&eacute;m: '
+          + 'o CAD d&aacute; a geometria e o PDF traz carimbo, legenda e quadro de quantitativos.</span>'
+        : '';
+      const _CONVITE_DO_PDF_JUNTO_VERDE = _semPdf
+        ? ' <span class="block mt-1">Se tiver o <strong>PDF</strong> das mesmas pranchas, mande junto &mdash; '
+          + 'legenda e quadro de quantitativos ajudam a fechar o que a geometria n&atilde;o diz.</span>'
+        : '';
       const _rem = document.createElement('div');
       if (_soPdf) {
         // 🩸 04/09/2026 — esta caixa dizia "na maioria das vezes NÃO CONSEGUIMOS
@@ -2794,11 +2815,13 @@
         _rem.innerHTML = '<span class="text-base shrink-0" aria-hidden="true">&#128161;</span>'
           + '<p class="text-xs text-amber-800 leading-relaxed"><strong>Lembrete:</strong> em <strong>DXF</strong> a gente <strong>mede</strong> a geometria de verdade '
           + '(n&uacute;mero <strong>medido</strong>, n&atilde;o estimado). Se puder, exporte suas pranchas em DXF antes de subir. '
-          + '<button type="button" onclick="openExportModal()" class="underline font-medium hover:text-amber-900">Como exportar DXF &rarr;</button></p>';
+          + '<button type="button" onclick="openExportModal()" class="underline font-medium hover:text-amber-900">Como exportar DXF &rarr;</button></p>'
+          + _CONVITE_DO_PDF_JUNTO;
       } else {
         _rem.className = 'flex items-center gap-2.5 rounded-xl bg-emerald-50 border border-emerald-100 px-4 py-2.5';
         _rem.innerHTML = '<span class="text-base shrink-0" aria-hidden="true">&#10003;</span>'
-          + '<p class="text-xs text-emerald-800"><strong>DXF &mdash; &oacute;tima escolha!</strong> Vamos medir a geometria de verdade, n&atilde;o estimar.</p>';
+          + '<p class="text-xs text-emerald-800"><strong>DXF &mdash; &oacute;tima escolha!</strong> Vamos medir a geometria de verdade, n&atilde;o estimar.'
+          + _CONVITE_DO_PDF_JUNTO_VERDE + '</p>';
       }
       fileList.appendChild(_rem);
     }
@@ -3546,6 +3569,54 @@
   //: pilar e a área de parede saem medidas em vez de em branco.
   //: 🪤 Nunca obrigatório: às vezes a pessoa não sabe, e travar o envio por
   //: causa disso custa o projeto inteiro. Uma pergunta, duas saídas.
+  //: 💡 23/09/2026, ideia do Pedro: "quando o arquivo for PDF o cliente recebe
+  //: um aviso na tela antes de rodar — vamos ler seu arquivo, mas funcionamos
+  //: muito melhor com dwg ou dxf. E um ticker confirmando que leu o aviso."
+  //:
+  //: 🩸 O QUE DEU A IDEIA, no mesmo dia: o cliente do job a62f7ae3 mandou 16
+  //: PDFs e recebeu 537 linhas com ZERO medidas. No dia seguinte mandou os 15
+  //: DWG do MESMO projeto: 753 linhas e 521 medidas. Mesmo escritório, mesmo
+  //: desenho, 18 horas de diferença.
+  //: 🪤 O aviso NÃO cita esse número nem promete multiplicador nenhum (decisão
+  //: do Pedro: "não sei se faz sentido ser tão específico"). Número em copy
+  //: envelhece e vira promessa; a frase diz o QUE muda, não QUANTO.
+  //: 🔑 E NUNCA BLOQUEIA o envio: muita gente só tem o PDF — o cliente do job
+  //: f442339b, hoje, é exatamente esse caso. A caixa é ciência, não pedágio:
+  //: marcar e seguir é um clique.
+  //: 🪤 REUSA `_ehPdf`, que já existe nesta tela — a régua de "isto é PDF?"
+  //: mora num lugar só. Eu tinha escrito uma TERCEIRA cópia do mesmo regex
+  //: aqui e a revisão pegou: o dashboard já o tinha duas vezes.
+  function _soPdfNoEnvio() {
+    if (!selectedFiles || !selectedFiles.length) return false;
+    return selectedFiles.every(_ehPdf);
+  }
+
+  function _confirmarSoPdf() {
+    if (!_soPdfNoEnvio()) return Promise.resolve('seguir');
+    //: 🔑 A caixa âmbar que aparece ao escolher os arquivos JÁ explica o que
+    //: muda (e traz o número medido). Esta frase NÃO repete a explicação: ela
+    //: só chama de volta pro aviso e pede a ciência. Dois textos dizendo a
+    //: mesma coisa viram ruído, e o segundo some da vista.
+    const msg = 'Seu envio tem só PDF. Como diz o aviso acima: a gente lê e '
+              + 'preenche a planilha, mas a quantidade sai como estimativa — '
+              + 'com DWG ou DXF a gente mede de verdade.';
+    return new Promise(resolve => {
+      try {
+        if (window.toast && window.toast.confirm) {
+          window.toast.confirm(msg, {
+            ok: 'Enviar assim mesmo',
+            cancel: 'Vou buscar o DWG',
+            checkbox: 'Li o aviso e quero seguir só com o PDF',
+          }).then(v => resolve(v ? 'seguir' : 'buscar'), () => resolve('seguir'));
+          return;
+        }
+        // 🪤 Sem o toast da casa NÃO cai no confirm() nativo — ele trava a aba
+        // (19/09). Avisar não vale um envio travado.
+        resolve('seguir');
+      } catch (_) { resolve('seguir'); }
+    });
+  }
+
   function _premissasEmBranco() {
     const pd = (document.getElementById('project-pe-direito')?.value || '').trim();
     const area = (document.getElementById('project-area')?.value || '').trim();
@@ -3638,6 +3709,13 @@
         window.toast ? window.toast.error(_m) : alert(_m);
         return;
       }
+    }
+
+    // 🔑 Aviso do formato ANTES do aviso dos campos: qual arquivo veio decide
+    // mais o resultado do que qualquer campo do formulário.
+    if (await _confirmarSoPdf() === 'buscar') {
+      showState(stateUpload);
+      return;                      // nada criado: os arquivos seguem escolhidos
     }
 
     // 🔑 A última chance de informar pé-direito/área — depois daqui o projeto

@@ -60,7 +60,8 @@ _FUNCOES = ("startProcessing", "_acharProjetoIrmao", "_assinaturaLocalDXF",
             "_baseLocal", "_perguntarAnexo", "_anexarAoIrmao",
             "_tipoDoProjetoNovoAposAnexo", "_textoDoAnexoRecusado",
             "_escolhaAposAnexoRecusado", "_marcarTipoEscolhidoAMao",
-            "_premissasEmBranco", "_confirmarPremissasVazias")
+            "_premissasEmBranco", "_confirmarPremissasVazias",
+            "_soPdfNoEnvio", "_confirmarSoPdf")
 
 
 def _padrao_do_select(site):
@@ -165,6 +166,11 @@ __els['project-typology'].value = 'office';
 // cenário e desalinharia tudo. O assunto aqui é o anexo recusado, não as
 // premissas: o cenário declara o pé-direito e a janela não tem por que abrir.
 __els['project-pe-direito'].value = '2,80';
+// 🪤 23/09: `_confirmarSoPdf` usa `_ehPdf`, que a tela define no meio do
+// arquivo (não é função nomeada que o recorte pegue). O cenário encena a
+// mesma régua — e com DWG na lista, pra o aviso de só-PDF não abrir aqui:
+// o assunto deste arquivo é o anexo recusado, não o formato.
+var _ehPdf = function (f) { return /[.]pdf$/i.test((f && f.name) || ''); };
 var document = {
   getElementById: function (id) { return __els[id] || null; },
   querySelectorAll: function () { return []; }
@@ -281,6 +287,13 @@ def _cena(anexo, cliques, tipo_irmao="estrutura", a_mao=None, mutacoes=(),
         js.evaljs("window.toast = undefined; 1;")
     js.evaljs("document.getElementById('project-type').value = %s; 1;"
               % json.dumps(_padrao_do_select(site)))
+    # 🪤 23/09: o cenário sobe 7 PDFs, e `startProcessing` passou a abrir o
+    # aviso de só-PDF antes de tudo — um diálogo A MAIS, que comeria uma
+    # resposta da fila deste roteiro e desalinharia os cliques. O assunto aqui
+    # é o anexo recusado; o do aviso tem arquivo próprio
+    # (`test_o_aviso_de_so_pdf_pede_ciencia.py`). Desligar é explícito: a
+    # dependência continua encenada, só não dispara nesta cena.
+    js.evaljs("_soPdfNoEnvio = function () { return false; }; 1;")
     js.evaljs("var selectedFiles = %s.map(function (n) { return { name: n }; });"
               "__respAnexo = %s; __respostas = %s; __quebrarVoltaAoFormulario = %d;"
               "__candidatos = [{ job_id: %s, project_name: %s, project_type: %s,"

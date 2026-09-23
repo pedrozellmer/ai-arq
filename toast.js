@@ -43,6 +43,10 @@
   .toast-item.toast-error   { border-left-color: #ef4444; }
   .toast-item.toast-warn    { border-left-color: #f59e0b; }
   .toast-item.toast-info    { border-left-color: #3b82f6; }
+  .toast-check { display: flex; align-items: flex-start; gap: 8px;
+                 margin: 8px 0 0; font-weight: 400; cursor: pointer; }
+  .toast-check input { margin-top: 3px; }
+  .toast-actions button[disabled] { opacity: .5; cursor: not-allowed; }
   .toast-icon {
     flex-shrink: 0; font-size: 18px; line-height: 1; padding-top: 1px;
     width: 22px; text-align: center;
@@ -141,11 +145,19 @@
       const okLabel = (opts && opts.ok) || 'Confirmar';
       const cancelLabel = (opts && opts.cancel) || 'Cancelar';
       const safeMsg = String(message || '').replace(/<[^>]*>/g, '');
+      // 23/09/2026 — `checkbox: 'texto'` põe uma caixa de ciência e SEGURA o
+      // botão principal até ela ser marcada. Serve pra aviso que a pessoa
+      // precisa ter LIDO (não é pergunta de sim/não). Aditivo: quem chama sem
+      // a opção continua com o diálogo de antes, byte a byte.
+      const checkLabel = (opts && opts.checkbox) || '';
 
       item.innerHTML = `
         <span class="toast-icon" aria-hidden="true">⚠</span>
         <div class="toast-body">
           <div class="toast-msg"></div>
+          <label class="toast-check" hidden>
+            <input type="checkbox"> <span></span>
+          </label>
           <div class="toast-actions">
             <button class="toast-primary" type="button"></button>
             <button type="button"></button>
@@ -156,12 +168,26 @@
       const [okBtn, cancelBtn] = item.querySelectorAll('.toast-actions button');
       okBtn.textContent = okLabel;
       cancelBtn.textContent = cancelLabel;
+      const wrap = item.querySelector('.toast-check');
+      const box = wrap.querySelector('input');
+      if (checkLabel) {
+        wrap.hidden = false;
+        // 🔒 textContent, nunca innerHTML: o rótulo pode vir de qualquer tela.
+        wrap.querySelector('span').textContent = String(checkLabel);
+        okBtn.disabled = true;
+        box.addEventListener('change', () => { okBtn.disabled = !box.checked; });
+      }
 
       const finish = (val) => {
         if (item.parentNode) item.parentNode.removeChild(item);
         resolve(val);
       };
-      okBtn.addEventListener('click', () => finish(true));
+      okBtn.addEventListener('click', () => {
+        // 🪤 O `disabled` é a porta; isto é a tranca. Um clique programático
+        // (ou CSS quebrado) não pode passar por cima da ciência da pessoa.
+        if (checkLabel && !box.checked) return;
+        finish(true);
+      });
       cancelBtn.addEventListener('click', () => finish(false));
 
       region.appendChild(item);

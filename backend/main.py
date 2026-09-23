@@ -33620,6 +33620,21 @@ def admin_liberar_filhote(eval_job_id: str, request: Request):
     """
     _require_admin(request)
     revogar = str(request.query_params.get("revogar", "")).strip() in ("1", "true", "sim")
+    # 💡 23/09/2026, pedido do Pedro: "ou a gente bloqueia esse e-mail
+    # automático e manda explicando tudo".
+    # 🩸 O caso: job b48999f0 (cliente NOVO, 1ª tentativa). O DWG dele não abriu
+    # por defeito NOSSO, ele recebeu "problema técnico do nosso lado —
+    # reprocessar não resolve", e ficou com zero item. Consertado o motor, a
+    # releitura deu 93 itens e 21 medidos. Só que o aviso automático diz
+    # "refizemos a leitura do seu projeto" e NÃO menciona o erro — para quem
+    # leu "não adianta tentar de novo", a história fica pela metade.
+    # 🪤 E mandar o automático + um escrito são DOIS e-mails em minutos: é a
+    # doença de 29/08 (uma cliente recebeu três num dia), com a agravante de
+    # os dois dizerem a mesma coisa.
+    # 🔑 Esta porta NÃO enfraquece nada: o padrão continua sendo enviar, e o
+    # motivo volta na resposta pra quem liberou saber que o aviso foi segurado
+    # DE PROPÓSITO — igual às outras três travas.
+    sem_email = str(request.query_params.get("sem_email", "")).strip() in ("1", "true", "sim")
     # 23/08: o Pedro clicou em vários e a tela deu "Load failed" (Safari) sem
     # nada chegar ao banco. Sem log de ENTRADA não dá pra saber se a requisição
     # chegou. Best-effort, nunca falha a rota.
@@ -33704,6 +33719,11 @@ def admin_liberar_filhote(eval_job_id: str, request: Request):
     #  3. nunca no `revogar`.
     email_enviado, email_motivo = False, None
     if not revogar:
+        # 🩸 23/09 (o guarda pegou): `sem_email` NÃO pode vir antes das travas
+        # de revisão. Elas não são só "não mandar e-mail" — elas avisam quem
+        # liberou que existe TRABALHO HUMANO em risco (regra dura nº7), e a
+        # versão nova não tem as correções dele. Silenciar o e-mail é decisão
+        # sobre o canal; a revisão é decisão sobre o conteúdo, e vem primeiro.
         if revisoes < 0:
             email_motivo = ("NÃO enviado: não consegui LER as revisões do original — "
                             "na dúvida não mando e-mail. Confira e avise à mão.")
@@ -33711,6 +33731,11 @@ def admin_liberar_filhote(eval_job_id: str, request: Request):
             email_motivo = (f"NÃO enviado: o cliente revisou {revisoes} item(ns) à mão. "
                             f"A versão nova não tem essas correções — fale com ele você, "
                             f"pessoalmente.")
+        elif sem_email:
+            email_motivo = ("NÃO enviado: pedido explicitamente (sem_email=1) — "
+                            "quem liberou vai escrever à mão. Use isso quando o "
+                            "automático contaria só metade da história (ex.: job "
+                            "que falhou por defeito nosso).")
         # 🩸 22/09/2026: era "medidos E itens não subiram" — item a mais passava
         # por melhora. O motivo diz a régua, pra quem clicou entender por que o
         # aviso não saiu mesmo com "mais itens" na tela.

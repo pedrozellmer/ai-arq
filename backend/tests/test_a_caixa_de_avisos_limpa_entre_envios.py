@@ -94,6 +94,13 @@ def _cena(respostas, sem_limpeza=False):
           # pé-direito). Sem elas o JS real para em ReferenceError.
           bloco_a_partir_de(site, "function _premissasEmBranco(", "dashboard.html", fecho=""),
           bloco_a_partir_de(site, "function _confirmarPremissasVazias(", "dashboard.html", fecho=""),
+          # 🪤 `_soPdfNoEnvio` lê `selectedFiles`, que nesta cena não existe:
+          # o assunto aqui é a CAIXA de avisos, não o envio. Lista vazia =
+          # o aviso de só-PDF não abre, e o `startProcessing` segue reto.
+          "var selectedFiles = [];",
+          "var _ehPdf = function (f) { return /[.]pdf$/i.test((f && f.name) || ''); };",
+          bloco_a_partir_de(site, "function _soPdfNoEnvio(", "dashboard.html", fecho=""),
+          bloco_a_partir_de(site, "function _confirmarSoPdf(", "dashboard.html", fecho=""),
           "function startProcessing__real() {}",
           iniciar,
           "function _enviar(dados) { DADOS = dados; (function () { %s })(); }" % despacho]

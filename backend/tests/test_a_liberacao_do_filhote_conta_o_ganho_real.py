@@ -120,8 +120,12 @@ class _ThreadJa(object):
 
 
 class _Req(object):
-    def __init__(self, revogar=False):
-        self.query_params = {"revogar": "1"} if revogar else {}
+    def __init__(self, revogar=False, sem_email=False):
+        self.query_params = {}
+        if revogar:
+            self.query_params["revogar"] = "1"
+        if sem_email:
+            self.query_params["sem_email"] = "1"
         self.headers = {"user-agent": "bancada"}
 
 
@@ -410,3 +414,59 @@ def test_CONTROLE_a_esteira_ve_projeto_de_verdade_de_40_dias(monkeypatch):
     retorno_30d."""
     r = _esteira(monkeypatch, [_projeto(PAI_ID, 70), _projeto("f8d8e6d8", 40)])
     assert r["por_tipo"].get("retorno_30d") == 1, r
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  Liberar EM SILÊNCIO — quando o automático contaria metade da história
+#  💡 23/09/2026, pedido do Pedro: "ou a gente bloqueia esse e-mail automático
+#     e manda explicando tudo".
+#  🩸 O caso: job que FALHOU por defeito nosso. O cliente leu "problema
+#     técnico do nosso lado — reprocessar não resolve" e ficou com zero item.
+#     Consertado o motor, a releitura entrega a planilha; mas o automático diz
+#     "refizemos a leitura do seu projeto" e não menciona o erro. E mandar os
+#     dois é a doença de 29/08 — dois e-mails em minutos dizendo o mesmo.
+# ══════════════════════════════════════════════════════════════════════════
+def test_sem_email_LIBERA_e_nao_manda_nada(bancada):
+    bancada["monta"](_filho_bom())
+    r = main.admin_liberar_filhote(FILHO_ID, _Req(sem_email=True))
+    assert bancada["emails"] == [], "mandou o automático mesmo com sem_email=1"
+    assert r["melhorou"] is True, "a liberação em si tem que acontecer: %r" % r
+
+
+def test_sem_email_DIZ_por_que_nao_mandou(bancada):
+    """🔑 Igual às outras três travas: o motivo volta na resposta, pra quem
+    liberou saber que o silêncio foi de propósito — e não um e-mail perdido."""
+    bancada["monta"](_filho_bom())
+    m = main.admin_liberar_filhote(FILHO_ID, _Req(sem_email=True))["email_motivo"]
+    assert "NÃO enviado" in m, m
+    assert "sem_email" in m and "à mão" in m, m
+
+
+def test_CONTROLE_sem_a_opcao_o_automatico_CONTINUA_saindo(bancada):
+    """🧪 O padrão não mudou: liberar sem pedir silêncio avisa o cliente, que
+    é o ponto do mecanismo desde 08/08 (1 de 44 voltava ao site sozinho)."""
+    bancada["monta"](_filho_bom())
+    main.admin_liberar_filhote(FILHO_ID, _Req())
+    assert len(bancada["emails"]) == 1, "a opção nova calou o caminho normal"
+
+
+def test_CONTROLE_sem_email_nao_atropela_a_trava_de_quem_REVISOU(bancada,
+                                                                 monkeypatch):
+    """A trava do cliente que revisou à mão é regra dura nº7 e NÃO depende
+    desta opção: com ou sem ela, o automático não sai. E o motivo devolvido
+    tem que ser o DA REVISÃO — quem liberou precisa saber que existe trabalho
+    humano em risco, não só que ele pediu silêncio."""
+    bancada["monta"](_filho_bom())
+    _real = main._supa_rest_service
+
+    def _com_revisoes(method, path, *a, **k):
+        if method == "GET" and str(path).strip("/").startswith("item_reviews"):
+            return 200, [{"id": 1}, {"id": 2}, {"id": 3}]
+        return _real(method, path, *a, **k)
+
+    monkeypatch.setattr(main, "_supa_rest_service", _com_revisoes)
+    for req in (_Req(), _Req(sem_email=True)):
+        bancada["emails"].clear()
+        r = main.admin_liberar_filhote(FILHO_ID, req)
+        assert bancada["emails"] == [], "empurrou a versão nova por cima da revisão dele"
+        assert "revisou" in r["email_motivo"], r["email_motivo"]
