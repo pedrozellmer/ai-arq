@@ -37209,7 +37209,7 @@ def token_tick(request: Request, force: int = 0, dry: int = 0):
 
 
 @app.post("/api/metricas/tick")
-def metricas_tick(request: Request):
+def metricas_tick(request: Request, dias: int = 3):
     """Grava a foto de ONTEM (o dia fechado). Chamado pelo pg_cron.
 
     🪤 Ontem, não hoje: dia pela metade compara mal com dia inteiro, e foi assim
@@ -37217,6 +37217,13 @@ def metricas_tick(request: Request):
     🪤 O Cloudflare só guarda o detalhe por ~7 dias — se este tick ficar parado
     uma semana, aquele pedaço da série some PRA SEMPRE. Por isso ele reescreve
     os últimos 3 dias a cada rodada: uma falha de 1 ou 2 dias se cura sozinha.
+
+    🔑 22/09/2026 — `dias` existe para RECOLETAR quando a régua da medição muda.
+    O teto de grupos subiu nesse dia e os dias antigos ficaram subestimados;
+    recolher o que o Cloudflare ainda guarda é a única forma de curar a série,
+    porque o detalhe morre em ~7 dias e não volta.
+    🪤 Teto de 8: pedir mais é gastar consulta para receber dia vazio, e dia
+    vazio sobrescrito por cima de um dia gravado seria PERDER o que já tínhamos.
     """
     _require_tick_secret(request)
     import metricas_site as _ms
@@ -37236,12 +37243,22 @@ def metricas_tick(request: Request):
     # 🪤 02/09/2026: `date.today()` aqui é o relógio do Render (UTC). Disparado à
     # mão às 22h de Brasília, "ontem" virava o dia que ainda estava em curso.
     # O dia de referência é o de Brasília, como no resto da casa.
-    for atras in (1, 2, 3):
+    for atras in range(1, max(1, min(int(dias or 3), 8)) + 1):
         dia = _hoje_br() - _td(days=atras)
         try:
             linha = _ms.coletar(dia, ips_da_casa=_casa)
         except Exception as e:
             falhas.append("%s: %s" % (dia, e))
+            continue
+        # 🚨 DIA VAZIO NÃO SOBRESCREVE DIA GRAVADO. Fora da janela de ~7 dias o
+        # Cloudflare responde 200 com zero grupos — que é "não tenho mais esse
+        # dia", não "não houve movimento". Gravar isso apagaria a medida boa com
+        # zeros, e zero some no gráfico igualzinho a um dia fraco de verdade.
+        # 🪤 O site tem robô batendo todo dia; zero grupo em 24h é sempre o
+        # instrumento falando, nunca o público.
+        if not linha.get("grupos_recebidos"):
+            falhas.append("%s: veio com 0 grupos (fora da janela do Cloudflare) "
+                          "— dia NÃO foi sobrescrito" % dia)
             continue
         # 🪤 Só grava o que soube contar. `None` deixa a coluna nula, e nulo no
         # gráfico é buraco visível; zero seria uma mentira silenciosa.
@@ -37273,7 +37290,12 @@ def metricas_tick(request: Request):
             falhas.append("%s gravação: %s" % (dia, e))
     if falhas:
         _log_error("metricas:tick", "falhas: %s" % falhas[:3], severity="error")
-    return {"status": "ok", "gravados": gravados, "falhas": len(falhas)}
+    # 🪤 22/09/2026: a resposta dizia só QUANTAS falhas, nunca QUAIS. Quem
+    # dispara à mão (recoleta) precisa saber que o dia não foi atualizado e por
+    # quê — contador sozinho é recusa silenciosa dentro de uma rodada que
+    # responde "ok".
+    return {"status": "ok", "gravados": gravados, "falhas": len(falhas),
+            "motivos": falhas[:8]}
 
 
 # 🔑 Páginas da ÁREA LOGADA: quem chega nelas JÁ é cliente. Na lista "páginas

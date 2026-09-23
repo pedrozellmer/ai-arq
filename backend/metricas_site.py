@@ -386,11 +386,44 @@ def veredito(serie: list) -> dict:
                           "incompleto — não é queda de movimento."
                           % (_qual, hoje.get("grupos_recebidos") or "?",
                              hoje.get("ips_gente")))}
+    # 🚨 22/09/2026 — SEM MARCA NÃO É "COLETA LIMPA", É MEDIDA COM A RÉGUA
+    # VELHA. Até hoje esta função só recusava `is True` e deixava o NULL passar
+    # como se fosse dia inteiro. Isso era razoável enquanto TODOS os dias eram
+    # medidos com o mesmo teto de 400 — o erro era igual em todo mundo e a
+    # comparação ainda dizia alguma coisa.
+    #
+    # 📏 Deixou de ser: recoletados com o teto perguntado à zona, 19, 20 e 21/09
+    # passaram de 19→65, 34→72 e 13→120 endereços. Um dia novo (medida inteira)
+    # contra um dia velho (medida cortada) não é comparação, é armadilha: o
+    # painel diria "disparou" só porque a régua mudou.
+    #
+    # 🔑 Agora só entra quem tem `coleta_truncada is False` — ou seja, quem foi
+    # medido depois da mudança E não bateu em teto nenhum. O preço é o painel
+    # dizer "ainda não sei" por algumas semanas, até juntar 3 dias iguais da
+    # régua nova. É o preço certo: não-sei é uma resposta, "disparou" seria
+    # mentira.
+    # 🪤 A frase fala da RÉGUA, não da data do dia: o que eu sei é que esta
+    # linha não tem a marca, logo saiu do teto antigo. Dizer "este dia é de
+    # antes de 22/09" seria afirmar sobre a linha o que medi sobre o método.
+    if hoje.get("coleta_truncada") is None:
+        return {"status": "regua_antiga", "hoje": hoje.get("ips_gente"),
+                "frase": ("%s foi medido com o teto antigo de 400 grupos (a "
+                          "régua mudou em 22/09): o número (%s) saiu cortado e "
+                          "não dá pra comparar com os dias novos."
+                          % (_qual, hoje.get("ips_gente")))}
     dow = date.fromisoformat(str(hoje["dia"])).weekday()
-    iguais = [d for d in serie[:-1]
-              if date.fromisoformat(str(d["dia"])).weekday() == dow
-              and d.get("ips_gente") is not None
-              and d.get("coleta_truncada") is not True]
+    _do_dia = [d for d in serie[:-1]
+               if date.fromisoformat(str(d["dia"])).weekday() == dow
+               and d.get("ips_gente") is not None]
+    iguais = [d for d in _do_dia if d.get("coleta_truncada") is False]
+    # 🔑 Quantos ficaram de fora por causa da RÉGUA VELHA (sem marca), para a
+    # frase EXPLICAR o silêncio. Painel que emudece sem dizer por quê parece
+    # quebrado — e painel que parece quebrado não é lido.
+    # 🪤 Só os sem marca entram nesta conta: dia truncado também fica de fora,
+    # mas por outro motivo (bateu no teto), e juntar os dois numa frase só
+    # diria de um deles uma coisa que não é verdade.
+    _com_regua_velha = sum(1 for d in _do_dia
+                           if d.get("coleta_truncada") is None)
     nome, plural, masculino = _COMO_FALAR[dow]
     # 🪤 Frase INTEIRA por gênero, com preposição e tudo. Tentei montar colando
     # letras ("d%s mai%s") e saiu "acima DA MAIS CHEIO"; tentei recortar
@@ -404,10 +437,19 @@ def veredito(serie: list) -> dict:
         fraco, cheio, outros = "a mais fraca", "da mais cheia", "as outras"
 
     if len(iguais) < 3:
+        _porque = ""
+        if _com_regua_velha:
+            _porque = (" (%d %s ficaram de fora: foram medidos com o teto "
+                       "antigo de 400 grupos, que mudou em 22/09, e saíram "
+                       "cortados)"
+                       % (_com_regua_velha,
+                          nome if _com_regua_velha == 1 else plural))
         return {"status": "nao_sei", "comparaveis": len(iguais),
+                "regua_velha": _com_regua_velha,
                 "frase": ("só tenho %d %s no histórico — preciso de 3 pra dizer se "
-                          "hoje é normal. Volte em algumas semanas."
-                          % (len(iguais), nome if len(iguais) == 1 else plural))}
+                          "hoje é normal%s. Volte em algumas semanas."
+                          % (len(iguais), nome if len(iguais) == 1 else plural,
+                             _porque))}
     vals = sorted(d["ips_gente"] for d in iguais)
     piso, teto = vals[0], vals[-1]
     atual = hoje.get("ips_gente") or 0

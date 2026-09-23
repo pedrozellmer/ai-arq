@@ -5545,9 +5545,12 @@ async function carregarMovimentoDoSite() {
   // seria repetir o erro que isto veio corrigir, que era mandar o Pedro olhar
   // o movimento quando o que quebrou foi a régua. Está no mapa e não no
   // default para ficar escrito que a escolha foi feita.
+  // 🪤 `regua_antiga` (22/09) entra pelo mesmo motivo: dia medido com o teto de
+  // 400, antes de o teto passar a ser perguntado à zona. O número saiu cortado
+  // — não é veredito sobre o público, é aviso sobre o instrumento.
   const cor = { normal: 'bg-emerald-500', abaixo: 'bg-amber-500',
                 acima: 'bg-indigo-400', nao_sei: 'bg-gray-300',
-                coleta_truncada: 'bg-gray-300',
+                coleta_truncada: 'bg-gray-300', regua_antiga: 'bg-gray-300',
                 sem_dados: 'bg-gray-300' }[v.status] || 'bg-gray-300';
   if (farol) farol.className = 'inline-block h-3 w-3 rounded-full shrink-0 ' + cor;
 
@@ -5717,6 +5720,13 @@ function barrasDoMovimento(serie) {
     // não-sei não apaga o dia nem o acusa.
     const truncado = x => (x.coleta_truncada === true);
     const semMedida = x => semIps(x) || truncado(x);
+    // 🚨 22/09/2026 — DIA SEM A MARCA FOI MEDIDO COM O TETO ANTIGO (400) e saiu
+    // cortado: recoletados com o teto perguntado à zona, 19, 20 e 21/09 pularam
+    // de 19→65, 34→72 e 13→120 endereços. A barra continua com o número (apagar
+    // metade do gráfico esconderia o histórico), mas fica esmaecida e o hover
+    // DIZ que aquele número não se compara com os novos — o mesmo tratamento
+    // que os dias contados no relógio de Greenwich já tinham.
+    const reguaVelha = x => (x.coleta_truncada === null || x.coleta_truncada === undefined);
     // 🔑 Dia truncado sai da conta do TETO também: senão ele continua
     // comprimindo a escala das barras boas com um número que não é medida.
     const vals = serie.map(x => semMedida(x) ? 0 : (Number(x.ips_gente) || 0));
@@ -5758,10 +5768,14 @@ function barrasDoMovimento(serie) {
         ? 'contagem incompleta — a coleta bateu no teto de ' +
           (x.grupos_recebidos || '?') + ' grupos do Cloudflare; não é queda de movimento'
         : (semIps(x) ? 'sem medição de endereços' : vals[i] + ' endereços');
+      const apagado = velho || (!semIps(x) && reguaVelha(x));
       const rotulo = dia + ': ' + quanto + partes +
-                     (velho ? ' · dia contado no relógio de Greenwich (virava às 21h) — série antiga' : '');
+                     (velho ? ' · dia contado no relógio de Greenwich (virava às 21h) — série antiga' : '') +
+                     (!semIps(x) && reguaVelha(x)
+                       ? ' · medido com o teto antigo de 400 grupos — número cortado, não compare com os dias novos'
+                       : '');
       return '<div class="flex-1" title="' + rotulo + '">' +
-             '<div class="rounded-t ' + corBarra + '" style="height:' + h + 'px' + (velho ? ';opacity:.4' : '') + '"></div>' +
+             '<div class="rounded-t ' + corBarra + '" style="height:' + h + 'px' + (apagado ? ';opacity:.4' : '') + '"></div>' +
              faixa + '</div>';
     }).join('');
   }

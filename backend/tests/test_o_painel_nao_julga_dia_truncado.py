@@ -39,13 +39,21 @@ import metricas_site as ms  # noqa: E402
 
 
 # ── uma série de sábados, o formato que o veredito recebe ───────────────────
-def _serie(valores, truncado_no_ultimo=None, truncado_em=()):
-    """Sábados consecutivos; `valores[-1]` é o dia julgado."""
+def _serie(valores, truncado_no_ultimo=None, truncado_em=(), sem_marca=False):
+    """Sábados consecutivos; `valores[-1]` é o dia julgado.
+
+    🪤 22/09/2026: o padrão passou a ser `coleta_truncada=False` — "medido
+    inteiro, com a régua nova". Antes era a AUSÊNCIA da chave, e a ausência
+    deixou de significar "dia normal": significa "medido com o teto de 400", que
+    saía cortado. Quem quer o dia velho pede `sem_marca=True`.
+    """
     base = date(2026, 8, 1)          # 01/08/2026 é um sábado
     fora = []
     for i, v in enumerate(valores):
         d = {"dia": (base + timedelta(days=7 * i)).isoformat(), "ips_gente": v}
-        if i in truncado_em:
+        if not sem_marca:
+            d["coleta_truncada"] = i in truncado_em
+        elif i in truncado_em:
             d["coleta_truncada"] = True
         fora.append(d)
     if truncado_no_ultimo is not None:
@@ -79,14 +87,54 @@ def test_CONTROLE_dia_limpo_e_baixo_CONTINUA_alarmando():
     assert "Vale olhar" in v["frase"], v["frase"]
 
 
-def test_dia_SEM_a_informacao_nao_e_tratado_como_limpo_nem_como_truncado():
-    """🪤 Os dias antigos não têm a chave. `None` é "não sei" — e o código
-    decide com `is True`, não com verdade/falsidade solta."""
-    s = _serie([63, 55, 48, 29, 19])          # ninguém tem a chave
+def test_dia_SEM_a_informacao_nao_e_comparado_com_os_dias_da_REGUA_NOVA():
+    """🚨 22/09/2026 — ESTE GUARDA DIZIA O CONTRÁRIO, e estava certo até hoje.
+
+    Enquanto todos os dias eram medidos com o mesmo teto de 400, o erro era
+    igual em todo mundo e comparar ainda dizia alguma coisa; o guarda antigo
+    protegia isso ("dia sem a informação continua sendo julgado").
+
+    📏 O teto virou perguntado à zona e os mesmos dias mudaram de tamanho:
+    19, 20 e 21/09 foram de 19→65, 34→72 e 13→120 endereços ao serem
+    recoletados. Dia velho contra dia novo virou comparação entre réguas
+    diferentes — e o painel diria "disparou" por causa da nossa medição.
+
+    🔑 Agora sem marca é "medido com a régua velha", que é um estado de
+    instrumento, não um veredito sobre o público.
+    """
+    s = _serie([63, 55, 48, 29, 19], sem_marca=True)   # ninguém tem a chave
     v = ms.veredito(s)
-    assert v["status"] == "abaixo", (
-        "dia sem a informação deixou de ser julgado — isso apagaria o alarme "
-        "de todo o histórico: %r" % v)
+    assert v["status"] == "regua_antiga", (
+        "dia medido com o teto antigo voltou a ser comparado com os novos: %r" % v)
+    assert "Vale olhar" not in v["frase"], v["frase"]
+    assert "22/09" in v["frase"], (
+        "a frase não diz QUANDO a régua mudou — sem isso o aviso não ensina "
+        "nada a quem lê: %r" % v["frase"])
+
+
+def test_dia_da_REGUA_VELHA_nao_serve_de_regua_pros_novos():
+    """🔑 A outra ponta, a que engana de verdade: hoje está medido inteiro
+    (120), e os sábados do histórico foram medidos cortados (63, 55, 48). Se
+    eles entrarem como faixa, o painel anuncia "acima do mais cheio que já vi"
+    — uma alta que é só a régua tendo mudado."""
+    s = _serie([63, 55, 48, 120], truncado_no_ultimo=False, sem_marca=True)
+    v = ms.veredito(s)
+    assert v["status"] == "nao_sei", (
+        "os dias da régua velha entraram na faixa e inventaram uma alta: %r" % v)
+    assert v["regua_velha"] == 3, v
+    assert "22/09" in v["frase"] and "cortados" in v["frase"], (
+        "o painel se calou sem dizer por quê — painel que parece quebrado não "
+        "é lido: %r" % v["frase"])
+
+
+def test_CONTROLE_tres_dias_da_REGUA_NOVA_voltam_a_dar_veredito():
+    """🧪 Sem isto, uma régua que recusasse tudo passaria nos dois testes
+    acima e o painel ficaria mudo para sempre — que é exatamente a doença que
+    este conserto veio curar."""
+    s = _serie([63, 55, 48, 29])              # padrão: todos com a régua nova
+    v = ms.veredito(s)
+    assert v["status"] == "abaixo", v
+    assert "Vale olhar" in v["frase"], v["frase"]
 
 
 def test_dia_truncado_nao_serve_de_REGUA_pros_outros():
@@ -454,3 +502,101 @@ def test_dia_SEM_a_coluna_continua_somando_nas_paginas(monkeypatch):
     topo = {p["pagina"]: p["enderecos"] for p in out["top_paginas_7d"]}
     assert topo.get("/faq.html") == 9, topo
     assert out["top_paginas_7d_meta"]["dias_truncados_fora"] == 0
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  🔧 CURAR A SÉRIE: recoletar o que o Cloudflare ainda guarda
+# ══════════════════════════════════════════════════════════════════════════
+# 🚨 22/09/2026. Quando a régua muda, os dias velhos não se consertam sozinhos
+# — e o detalhe (IP, navegador) morre em ~7 dias. Ou se recolhe dentro da
+# janela, ou aquele pedaço da série fica cortado PARA SEMPRE.
+def _tick(monkeypatch, coletados, **kw):
+    """Roda `/api/metricas/tick` de verdade, com Cloudflare e banco de mentira.
+
+    `coletados` é um dict {dias_atras: linha} — o que a coleta devolveria.
+    Devolve (resposta, gravados_no_banco).
+    """
+    import main
+    import metricas_site as _ms
+    from datetime import date as _d
+
+    hoje = _d(2026, 9, 22)
+    gravado = []
+
+    def _coletar(dia, **k):
+        atras = (hoje - dia).days
+        if atras not in coletados:
+            raise RuntimeError("o dublê não tem o dia %s" % dia)
+        linha = dict(coletados[atras])
+        linha["dia"] = dia.isoformat()
+        return linha
+
+    def _rest(metodo, caminho, *a, **k):
+        if caminho == "metricas_diarias" and metodo == "POST":
+            gravado.append(dict(k.get("body") or {}))
+        return 200, []
+
+    monkeypatch.setattr(main, "_require_tick_secret", lambda *a, **k: None)
+    monkeypatch.setattr(main, "_hoje_br", lambda: hoje)
+    monkeypatch.setattr(main, "_ips_da_casa", lambda *a, **k: set())
+    monkeypatch.setattr(main, "_contar_do_dia", lambda *a, **k: None)
+    monkeypatch.setattr(main, "_supa_rest_service", _rest)
+    monkeypatch.setattr(_ms, "token", lambda: "fingindo")
+    monkeypatch.setattr(_ms, "coletar", _coletar)
+    return main.metricas_tick(request=None, **kw), gravado
+
+
+def _linha(grupos, ips):
+    return {"grupos_recebidos": grupos, "coleta_truncada": False,
+            "ips_gente": ips, "req_total": 900}
+
+
+def test_o_tick_RECOLHE_mais_dias_quando_pedido(monkeypatch):
+    """🔑 Sem isto, curar a série exigiria esperar o tick passar por cima de 3
+    dias por rodada — e o Cloudflare apaga o detalhe antes disso."""
+    out, gravado = _tick(monkeypatch,
+                         {i: _linha(800, 60) for i in range(1, 9)}, dias=7)
+    dias = sorted(l["dia"] for l in gravado)
+    assert len(gravado) == 7, (out, dias)
+    assert dias[0] == "2026-09-15" and dias[-1] == "2026-09-21", dias
+
+
+def test_CONTROLE_sem_pedir_nada_o_tick_continua_nos_3_dias(monkeypatch):
+    """🧪 O padrão é o do pg_cron. Se `dias` tivesse virado obrigatório ou
+    mudado o default, o cron passaria a reescrever a série inteira toda noite
+    — sete vezes mais consulta ao Cloudflare por nada."""
+    out, gravado = _tick(monkeypatch, {i: _linha(800, 60) for i in range(1, 9)})
+    assert len(gravado) == 3, (out, [l["dia"] for l in gravado])
+
+
+def test_o_tick_NAO_sobrescreve_dia_gravado_com_coleta_VAZIA(monkeypatch):
+    """🚨 Fora da janela de ~7 dias o Cloudflare responde 200 com ZERO grupos:
+    "não tenho mais esse dia", não "não houve movimento". Gravar isso apagaria
+    a medida boa com zeros — e zero, no gráfico, tem a mesma cara de um dia
+    fraco de verdade.
+
+    🪤 É o irmão exato da lição de que evidência não sobrevive calada: a perda
+    aconteceria dentro de uma rodada que responde "ok"."""
+    out, gravado = _tick(monkeypatch,
+                         {1: _linha(800, 60), 2: _linha(0, 0), 3: _linha(0, 0)},
+                         dias=3)
+    dias = [l["dia"] for l in gravado]
+    assert dias == ["2026-09-21"], (
+        "dia vazio foi gravado por cima do que já estava medido: %r" % dias)
+    assert any("0 grupos" in f for f in out.get("motivos") or []), (
+        "a rodada engoliu a recusa: quem lê a resposta não fica sabendo que "
+        "dois dias não foram atualizados: %r" % out)
+
+
+def test_a_BARRA_do_dia_da_REGUA_VELHA_avisa_no_hover():
+    """🔑 O número continua (apagar metade do gráfico esconderia o histórico),
+    mas quem passa o mouse tem que saber que aquele 63 não se compara com o
+    120 de agora."""
+    html = _barras([_dia("2026-09-16", 63),
+                    _dia("2026-09-21", 120, coleta_truncada=False)])
+    assert "63 endere" in html and "120 endere" in html, html[-400:]
+    assert "teto antigo de 400" in html, (
+        "a barra do dia velho não avisa que o número saiu cortado: %r" % html[-400:])
+    assert html.count("teto antigo de 400") == 1, (
+        "o aviso vazou para o dia medido com a régua nova: %r" % html[-400:])
+    assert "opacity:.4" in html, "o dia da régua velha não ficou esmaecido"

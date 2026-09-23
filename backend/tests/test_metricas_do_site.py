@@ -34,8 +34,17 @@ _MAIN = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
 
 
 def _dias(pares):
-    """[(data, ips_gente)] → série no formato que o veredito espera."""
-    return [{"dia": d, "ips_gente": n} for d, n in pares]
+    """[(data, ips_gente)] → série no formato que o veredito espera.
+
+    🪤 22/09/2026: `coleta_truncada=False` passou a ser obrigatório para o dia
+    entrar em comparação. A ausência da chave deixou de significar "dia
+    normal" e passou a significar "medido com o teto de 400", que saía cortado
+    — recoletados com o teto perguntado à zona, 19, 20 e 21/09 pularam de
+    19→65, 34→72 e 13→120 endereços. Estes guardas falam de comparação, então
+    a série deles é toda da régua nova.
+    """
+    return [{"dia": d, "ips_gente": n, "coleta_truncada": False}
+            for d, n in pares]
 
 
 # ───────────────────── o veredito compara DIA COM DIA IGUAL ──────────────────
@@ -175,12 +184,21 @@ def test_o_painel_avisa_quando_a_coleta_esta_desligada():
 
 def test_o_tick_reescreve_os_ultimos_dias_e_nao_so_ontem():
     """🪤 O Cloudflare só guarda o detalhe por ~7 dias. Se o tick falhar um dia,
-    aquele pedaço some PRA SEMPRE — a menos que a próxima rodada reescreva."""
-    i = _MAIN.find('@app.post("/api/metricas/tick")')
-    bloco = _MAIN[i:i + 2200]
-    assert "for atras in (1, 2, 3)" in bloco, (
-        "o tick voltou a gravar só um dia — uma falha de 24h vira buraco "
-        "permanente na série")
+    aquele pedaço some PRA SEMPRE — a menos que a próxima rodada reescreva.
+
+    🔑 22/09/2026: este guarda procurava o literal `for atras in (1, 2, 3)` no
+    fonte e reprovou quando o laço virou `range` para aceitar recoleta. Guarda
+    que lê texto erra dos dois jeitos — agora ele pergunta à FUNÇÃO quantos
+    dias ela grava por padrão. Quem executa o laço de verdade é
+    `test_CONTROLE_sem_pedir_nada_o_tick_continua_nos_3_dias`, em
+    test_o_painel_nao_julga_dia_truncado.py.
+    """
+    import inspect
+    import main as _main
+    padrao = inspect.signature(_main.metricas_tick).parameters["dias"].default
+    assert padrao >= 3, (
+        "o tick voltou a gravar menos de 3 dias por rodada — uma falha de 24h "
+        "vira buraco permanente na série: padrão=%r" % padrao)
 
 
 def test_falha_ao_contar_projetos_vira_NULO_e_nao_zero():
