@@ -71,7 +71,35 @@ _MARCA_DE_ROBO = ("unknown", "bot", "crawler", "spider", "curl", "python", "wget
 # saber que a conta veio no teto. Por isso quem coleta devolve
 # `grupos_recebidos` e `coleta_truncada`, e o veredito se recusa a comparar um
 # dia truncado com os outros.
-TETO_DE_GRUPOS = 400
+#
+# 🚨 22/09/2026 — O TETO DE 400 BATIA TODO DIA, E A TRAVA VIROU MORDAÇA.
+# Medido na `metricas_diarias`: os três únicos dias que têm a medida (19, 20 e
+# 21/09) vieram com 400 grupos CRAVADOS. Inclusive 20/09, que teve o robô
+# CALMO (680 requisições, contra 6.543 em 19/09) — ou seja, 400 nunca foi
+# "exceção de onda de robô", era pouco para o movimento normal do site. E com
+# `coleta_truncada` ligado todo dia, a trava acima (que existe pra não acusar
+# queda falsa) fazia o painel se calar PARA SEMPRE.
+#
+# 🔑 O teto agora é PERGUNTADO ao Cloudflare (`settings.maxPageSize` da zona),
+# não escolhido por mim. Qualquer número que eu cravasse hoje quebraria de novo
+# no primeiro dia mais cheio — é a armadilha de escolher o piso no olho em vez
+# de medir o acervo.
+#
+# 🪤 O 400 continua aqui como REDE: se a pergunta falhar, a coleta usa o valor
+# que comprovadamente funciona. Chutar alto sem confirmar faz o GraphQL recusar
+# a consulta INTEIRA, e o dia recusado não volta — o Cloudflare só guarda esse
+# detalhe por ~7 dias.
+TETO_PADRAO_DE_GRUPOS = 400
+
+# 🪤 E um limite NOSSO por cima do que a zona oferecer. Não é régua de medida:
+# é não deixar uma resposta de tamanho imprevisível entrar num processo que ao
+# mesmo tempo atende o site. O gargalo aqui é TEMPO (a consulta tem timeout e o
+# tick pede 3 dias seguidos), não memória — o Render é plano PAGO, com 4 GB, e
+# 10.000 grupos cabem com folga.
+# 🔑 Se um dia a coleta encostar neste número, `coleta_truncada` acende e o
+# painel DIZ que não dá pra comparar. Limite que existe por nossa causa tem que
+# aparecer igual, não virar silêncio.
+_MAXIMO_QUE_AGUENTAMOS = 10000
 
 
 def _e_robo(navegador: str) -> bool:
@@ -92,6 +120,41 @@ def _graphql(query: str, timeout: int = 25) -> dict:
                  "Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.loads(r.read().decode("utf-8"))
+
+
+# 🪤 Só o SUCESSO fica guardado. Se a primeira pergunta do processo falhar e eu
+# cacheasse o fracasso, o 400 ficaria congelado até o próximo deploy — o
+# instrumento pioraria sozinho e em silêncio.
+_teto_lembrado = None
+
+
+def teto_de_grupos() -> int:
+    """Quantos grupos o Cloudflare aceita devolver PRA ESTA ZONA.
+
+    🔑 Pergunta em vez de reimplementar a régua: o limite é do dataset e do
+    plano, muda sem avisar, e o valor certo não é opinião minha.
+    🪤 Uma pergunta por processo, não por dia coletado: o tick escreve 3 dias
+    por rodada e a resposta é a mesma para os três.
+    """
+    global _teto_lembrado
+    if _teto_lembrado:
+        return _teto_lembrado
+    try:
+        q = ("""query { viewer { zones(filter: {zoneTag: "%s"}) {
+          settings { httpRequestsAdaptiveGroups { maxPageSize } } } } }""" % _ZONA)
+        r = _graphql(q)
+        if not isinstance(r, dict) or r.get("errors"):
+            raise RuntimeError(str(r)[:200] if isinstance(r, dict) else type(r))
+        s = (((r.get("data") or {}).get("viewer") or {})
+             .get("zones") or [{}])[0].get("settings") or {}
+        n = int((s.get("httpRequestsAdaptiveGroups") or {}).get("maxPageSize") or 0)
+    except Exception as e:
+        print("[metricas] não consegui perguntar o teto de grupos: %s" % e)
+        n = 0
+    if n > 0:
+        _teto_lembrado = min(n, _MAXIMO_QUE_AGUENTAMOS)
+        return _teto_lembrado
+    return TETO_PADRAO_DE_GRUPOS
 
 
 # 🚨 02/09/2026 — O "DIA" DESTA SÉRIE ERA O DE GREENWICH. As consultas ao
@@ -181,14 +244,17 @@ def coletar(dia: date, ips_da_casa=None) -> dict:
     """
     d = dia.isoformat()
     ini, fim = bordas_do_dia_br(dia)
+    teto = teto_de_grupos()
     q = ("""query { viewer { zones(filter: {zoneTag: "%s"}) {
       httpRequestsAdaptiveGroups(limit: %d,
         filter: {datetime_geq: "%s", datetime_leq: "%s",
                  clientRequestHTTPHost: "ai.arq.br"}, orderBy: [count_DESC]) {
         count dimensions { clientIP userAgentBrowser clientRequestPath
                            edgeResponseStatus edgeResponseContentTypeName }
-      } } } }""" % (_ZONA, TETO_DE_GRUPOS, ini, fim))
-    dados = _graphql(q)
+      } } } }""" % (_ZONA, teto, ini, fim))
+    # 🪤 Teto maior é resposta maior: com 400 grupos 25s sobravam, com dezenas
+    # de milhares o timeout curto transformaria dia cheio em dia sem dado.
+    dados = _graphql(q, timeout=90)
     if dados.get("errors"):
         raise RuntimeError("Cloudflare recusou: %s" % dados["errors"][:1])
     grupos = (((dados.get("data") or {}).get("viewer") or {})
@@ -264,7 +330,7 @@ def coletar(dia: date, ips_da_casa=None) -> dict:
             # consegui contar direito" é indistinguível de "caiu o movimento" —
             # foi assim que três dias de robô viraram "vale olhar".
             "grupos_recebidos": len(grupos),
-            "coleta_truncada": len(grupos) >= TETO_DE_GRUPOS,
+            "coleta_truncada": len(grupos) >= teto,
             "top_paginas": topo, "fonte": "tick"}
 
 

@@ -106,12 +106,22 @@ def test_dia_truncado_nao_serve_de_REGUA_pros_outros():
 # ── a coleta marca o truncamento ────────────────────────────────────────────
 class _Cloudflare:
     """Dublê do GraphQL. 🪤 **k na assinatura: dublê com a cara exata desarma
-    guarda em silêncio (3× em setembro)."""
+    guarda em silêncio (3× em setembro).
 
-    def __init__(self, n_grupos):
+    `teto` é o que o Cloudflare responde quando perguntam o `maxPageSize` da
+    zona; `None` finge uma zona que não sabe responder.
+    """
+
+    def __init__(self, n_grupos, teto=None):
         self.n = n_grupos
+        self.teto = teto
 
     def __call__(self, query, *a, **k):
+        if "maxPageSize" in query:               # a pergunta do teto da zona
+            if self.teto is None:
+                return {"errors": [{"message": "sem settings"}]}
+            return {"data": {"viewer": {"zones": [{"settings": {
+                "httpRequestsAdaptiveGroups": {"maxPageSize": self.teto}}}]}}}
         if "httpRequests1dGroups" in query:      # a consulta do número cru
             return {"data": {"viewer": {"zones": [{"httpRequests1dGroups": []}]}}}
         grupos = [{"count": 1,
@@ -128,24 +138,106 @@ class _Cloudflare:
 @pytest.fixture
 def sem_rede(monkeypatch):
     monkeypatch.setattr(ms, "erros_5xx_do_dia", lambda *a, **k: 0)
+    # 🪤 O teto é lembrado por PROCESSO. Sem zerar, o primeiro teste que rodar
+    # escolhe o teto de todos os outros e os guardas passam a medir o cache.
+    monkeypatch.setattr(ms, "_teto_lembrado", None)
     return monkeypatch
 
 
 def test_a_coleta_avisa_quando_bate_no_teto(sem_rede):
-    sem_rede.setattr(ms, "_graphql", _Cloudflare(ms.TETO_DE_GRUPOS))
+    sem_rede.setattr(ms, "_graphql", _Cloudflare(1000, teto=1000))
     out = ms.coletar(date(2026, 9, 19))
     assert out["coleta_truncada"] is True, out
-    assert out["grupos_recebidos"] == ms.TETO_DE_GRUPOS, out
+    assert out["grupos_recebidos"] == 1000, out
 
 
 def test_CONTROLE_coleta_folgada_NAO_e_marcada(sem_rede):
     """🧪 Sem isto, um marcador que dissesse sempre True passaria no teste
     acima e o painel pararia de opinar para sempre."""
-    sem_rede.setattr(ms, "_graphql", _Cloudflare(12))
+    sem_rede.setattr(ms, "_graphql", _Cloudflare(12, teto=1000))
     out = ms.coletar(date(2026, 9, 19))
     assert out["coleta_truncada"] is False, out
     assert out["grupos_recebidos"] == 12, out
     assert out["ips_gente"] == 12, out
+
+
+def test_o_teto_vem_do_CLOUDFLARE_e_nao_do_numero_que_eu_ESCOLHI(sem_rede):
+    """🚨 22/09/2026 — os 400 batiam TODO DIA (3 de 3 dias medidos, inclusive
+    um com o robô calmo), e a trava do truncamento virava mordaça permanente.
+
+    🪤 Este guarda reprova quem voltar a cravar o número na consulta: com a
+    zona respondendo 10.000, pedir 400 é recusar 96% do dia de graça."""
+    vistas = []
+
+    def _espia(query, *a, **k):
+        vistas.append(query)
+        return _Cloudflare(500, teto=10000)(query)
+
+    sem_rede.setattr(ms, "_graphql", _espia)
+    out = ms.coletar(date(2026, 9, 19))
+    dos_grupos = [q for q in vistas if "httpRequestsAdaptiveGroups" in q
+                  and "maxPageSize" not in q]
+    assert "limit: 10000" in dos_grupos[0], (
+        "a consulta não usou o teto que a zona respondeu: %r" % dos_grupos[0][:200])
+    assert out["coleta_truncada"] is False, (
+        "500 grupos com teto de 10.000 é coleta FOLGADA: %r" % out)
+
+
+def test_se_o_CLOUDFLARE_nao_disser_o_teto_a_coleta_usa_o_PADRAO(sem_rede):
+    """🧪 O outro lado, executado. Chutar alto sem confirmação faz o GraphQL
+    recusar a consulta inteira — e dia recusado não volta, porque o detalhe
+    morre em ~7 dias. Sem resposta, vale o número que comprovadamente passa."""
+    vistas = []
+
+    def _espia(query, *a, **k):
+        vistas.append(query)
+        return _Cloudflare(3, teto=None)(query)
+
+    sem_rede.setattr(ms, "_graphql", _espia)
+    ms.coletar(date(2026, 9, 19))
+    dos_grupos = [q for q in vistas if "httpRequestsAdaptiveGroups" in q
+                  and "maxPageSize" not in q]
+    assert "limit: %d" % ms.TETO_PADRAO_DE_GRUPOS in dos_grupos[0], (
+        "sem resposta da zona a coleta tem que cair no padrão: %r"
+        % dos_grupos[0][:200])
+
+
+def test_o_teto_da_ZONA_nao_passa_do_que_esta_maquina_aguenta(sem_rede):
+    """🪤 Teto de fora não vira ordem de dentro. Se a zona oferecer um número
+    gigante, pedir tudo é uma resposta de tamanho imprevisível dentro de uma
+    consulta com timeout — e coleta que estoura o tempo não deixa nem o dado
+    truncado, deixa buraco."""
+    vistas = []
+
+    def _espia(query, *a, **k):
+        vistas.append(query)
+        return _Cloudflare(3, teto=999999)(query)
+
+    sem_rede.setattr(ms, "_graphql", _espia)
+    ms.coletar(date(2026, 9, 19))
+    dos_grupos = [q for q in vistas if "httpRequestsAdaptiveGroups" in q
+                  and "maxPageSize" not in q]
+    assert "limit: %d" % ms._MAXIMO_QUE_AGUENTAMOS in dos_grupos[0], (
+        "a coleta aceitou o número da zona sem olhar o que aguenta: %r"
+        % dos_grupos[0][:200])
+
+
+def test_a_pergunta_do_teto_nao_se_repete_a_cada_DIA(sem_rede):
+    """🪤 O tick reescreve 3 dias por rodada. Perguntar o teto uma vez por dia
+    coletado triplica a chamada à toa — e o limite do GraphQL é por janela de
+    5 minutos."""
+    contou = {"n": 0}
+
+    def _espia(query, *a, **k):
+        if "maxPageSize" in query:
+            contou["n"] += 1
+        return _Cloudflare(3, teto=5000)(query)
+
+    sem_rede.setattr(ms, "_graphql", _espia)
+    for atras in (1, 2, 3):
+        ms.coletar(date(2026, 9, 19) - timedelta(days=atras))
+    assert contou["n"] == 1, (
+        "o teto foi perguntado %d vezes para 3 dias" % contou["n"])
 
 
 def test_o_teto_da_consulta_e_o_MESMO_que_o_marcador_usa(sem_rede):
@@ -159,16 +251,19 @@ def test_o_teto_da_consulta_e_o_MESMO_que_o_marcador_usa(sem_rede):
 
     def _espia(query, *a, **k):
         vistas.append(query)
-        return _Cloudflare(3)(query)
+        return _Cloudflare(777, teto=777)(query)
 
     sem_rede.setattr(ms, "_graphql", _espia)
-    ms.coletar(date(2026, 9, 19))
-    dos_grupos = [q for q in vistas if "httpRequestsAdaptiveGroups" in q]
+    out = ms.coletar(date(2026, 9, 19))
+    dos_grupos = [q for q in vistas if "httpRequestsAdaptiveGroups" in q
+                  and "maxPageSize" not in q]
     assert dos_grupos, "a consulta dos grupos sumiu: %r" % [q[:60] for q in vistas]
-    assert "limit: %d" % ms.TETO_DE_GRUPOS in dos_grupos[0], (
-        "o teto da consulta não vem da constante — duas cópias do número "
-        "divergem em silêncio e nada é marcado como truncado: %r"
+    assert "limit: 777" in dos_grupos[0], (
+        "o teto da consulta não é o mesmo que o marcador usa — duas cópias do "
+        "número divergem em silêncio e nada é marcado como truncado: %r"
         % dos_grupos[0][:200])
+    assert out["coleta_truncada"] is True, (
+        "vieram 777 grupos para um teto de 777 e ninguém marcou: %r" % out)
 
 
 def test_a_tela_do_admin_sabe_pintar_o_status_novo():

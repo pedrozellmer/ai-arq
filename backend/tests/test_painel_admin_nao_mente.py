@@ -126,7 +126,16 @@ def test_a_medida_do_site_e_uma_consulta_PROPRIA_e_nao_o_topo_de_400():
     assert "_graphql(" in corpo and "edgeResponseStatus_geq: 500" in corpo, (
         "a medicao de 5xx voltou a depender da consulta com limite - 5xx fora "
         "do top 400 viraria 'site ok'")
-    assert "limit: 400" not in corpo, "a pergunta de 5xx pegou carona no teto de 400"
+    # 🪤 22/09/2026: a versão anterior deste guarda procurava o literal
+    # "limit: 400". O teto da coleta deixou de ser 400 (agora é perguntado à
+    # zona) e a asserção virou verdade vazia — passaria com a pergunta de 5xx
+    # pegando carona em qualquer teto. Ancorar no FATO: a consulta do 5xx tem
+    # limite próprio de 1 e não conhece o teto da coleta.
+    assert "limit: 1," in corpo, (
+        "a pergunta de 5xx deixou de ter limite próprio: %r" % corpo[:200])
+    assert "teto_de_grupos" not in corpo and "TETO_" not in corpo, (
+        "a pergunta de 5xx pegou carona no teto da coleta — um 5xx raro ficaria "
+        "fora do topo e o dia passaria por 'site ok'")
 
 
 def test_CONTROLE_se_a_pergunta_do_5xx_falhar_o_farol_fica_SEM_RESPOSTA(monkeypatch):
