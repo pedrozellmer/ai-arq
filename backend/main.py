@@ -33754,6 +33754,79 @@ def admin_listar_filhotes(request: Request):
         raise HTTPException(502, "Não consegui carregar os filhotes")
 
 
+def frase_do_arquivamento(eval_job_id: str, pai_id: str, motivo: str = "",
+                          desarquivar: bool = False) -> str:
+    """A linha que vai pro `error_log` e VIRA o estado do filhote.
+
+    🔑 23/09/2026 — arquivar NÃO ganhou coluna. O estado do filhote já é um
+    histórico de atos no `error_log` (stage `admin:filhote`): `liberado` e
+    `revogado` moram lá desde 08/08. Arquivar é mais um ato no mesmo lugar.
+
+    Pedido do Pedro (23/09), com as palavras dele:
+      *"arquivado é: a gente fez, ficou ruim, ficou pior que o original, e
+        arquivou. Só que o banco consegue ler de fato ainda se a gente
+        precisar."*
+    Marcar em vez de apagar é exatamente o que o log faz — e de quebra guarda
+    QUANDO e POR QUÊ, que coluna booleana não guardaria.
+
+    🪤 A RPC lê o começo da mensagem (`ilike 'arquivado%'`), então a primeira
+    palavra é o ato e não pode ser enfeitada. O motivo vem depois.
+
+    Função PURA: é o que o guarda consegue CHAMAR.
+    """
+    ato = "desarquivado" if desarquivar else "arquivado"
+    motivo = " ".join(str(motivo or "").split())[:160]
+    linha = "%s %s (pai %s)" % (ato, eval_job_id, pai_id or "?")
+    if motivo:
+        linha += " motivo=%s" % motivo
+    return linha
+
+
+@app.post("/api/admin/arquivar-filhote/{eval_job_id}")
+def admin_arquivar_filhote(eval_job_id: str, request: Request):
+    """ADMIN — arquiva um filhote que NÃO vai pro cliente (ou desarquiva).
+
+    Pedido do Pedro (23/09): a aba Filhotes misturava tudo numa lista só, e os
+    que a gente decidiu não usar ficavam lá pra sempre atrapalhando a leitura
+    dos que ainda precisam de decisão.
+
+    🚫 NÃO APAGA NADA. Registra o ato; o filhote, os itens e a comparação
+    continuam no banco e voltam com `desarquivar=1`.
+    🪤 Recusa arquivar filhote JÁ LIBERADO: ele está com o cliente, e sumir da
+    tela do admin um filhote que o cliente está vendo é perder o rastro de uma
+    entrega viva. Revogue primeiro, se for o caso.
+    """
+    _require_admin(request)
+    desarquivar = str(request.query_params.get("desarquivar", "")).strip() in ("1", "true", "sim")
+    motivo = str(request.query_params.get("motivo", "") or "")
+
+    _fil = _supa_rows("GET", "projects",
+                      params={"job_id": f"eq.{eval_job_id}",
+                              "select": "job_id,parent_job_id,is_eval,user_id"})
+    if not _fil:
+        raise HTTPException(404, "Filhote não encontrado")
+    fil = _fil[0]
+    if not fil.get("is_eval"):
+        raise HTTPException(400, "Este job não é um filhote (is_eval=false)")
+    pai_id = fil.get("parent_job_id") or ""
+    if not pai_id:
+        raise HTTPException(400, "Filhote sem parent_job_id — não sei de quem é")
+
+    if not desarquivar:
+        _pai = _supa_rows("GET", "projects",
+                          params={"job_id": f"eq.{pai_id}", "select": "job_id,user_id"})
+        _dono = (_pai[0].get("user_id") if _pai else None)
+        if _dono and fil.get("user_id") and fil.get("user_id") == _dono:
+            raise HTTPException(
+                409, "Este filhote já está liberado pro cliente — revogue antes de arquivar")
+
+    _log_error("admin:filhote",
+               frase_do_arquivamento(eval_job_id, pai_id, motivo, desarquivar),
+               eval_job_id)
+    return {"ok": True, "eval_job_id": eval_job_id, "parent_job_id": pai_id,
+            "arquivado": not desarquivar}
+
+
 @app.post("/api/admin/liberar-filhote/{eval_job_id}")
 def admin_liberar_filhote(eval_job_id: str, request: Request):
     """ADMIN — libera um job "filhote" (eval-reprocess) pro cliente VER no painel.

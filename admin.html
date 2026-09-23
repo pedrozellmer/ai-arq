@@ -724,12 +724,9 @@
         </div>
         <div id="filhotes-kpis" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5"></div>
         <div class="flex flex-wrap gap-2 mb-4" id="filhotes-filtros">
-          <button data-fil="pendentes" onclick="filtrarFilhotes('pendentes')" class="fil-btn px-3 py-1.5 rounded-lg text-xs font-medium border border-indigo-200 bg-indigo-50 text-indigo-700">Vale liberar<span id="fil-vale-n"></span></button>
-          <button data-fil="estimado" onclick="filtrarFilhotes('estimado')" class="fil-btn px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-300 text-gray-700 hover:bg-gray-50">S&oacute; item estimado<span id="fil-est-n"></span></button>
-          <button data-fil="segurados" onclick="filtrarFilhotes('segurados')" class="fil-btn px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-300 text-gray-700 hover:bg-gray-50">Segurados<span id="fil-seg-n"></span></button>
-          <button data-fil="liberados" onclick="filtrarFilhotes('liberados')" class="fil-btn px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-300 text-gray-700 hover:bg-gray-50">Liberados</button>
-          <button data-fil="mudos" onclick="filtrarFilhotes('mudos')" class="fil-btn px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-300 text-gray-700 hover:bg-gray-50">Liberados sem aviso<span id="fil-mudos-n" class="font-semibold"></span></button>
-          <button data-fil="todos" onclick="filtrarFilhotes('todos')" class="fil-btn px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-300 text-gray-700 hover:bg-gray-50">Todos</button>
+          <button data-fil="definir" onclick="filtrarFilhotes('definir')" class="fil-btn px-3 py-1.5 rounded-lg text-xs font-medium border border-indigo-200 bg-indigo-50 text-indigo-700">A definir<span id="fil-definir-n"></span></button>
+          <button data-fil="enviado" onclick="filtrarFilhotes('enviado')" class="fil-btn px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-300 text-gray-700 hover:bg-gray-50">Enviado pro cliente<span id="fil-enviado-n"></span></button>
+          <button data-fil="arquivado" onclick="filtrarFilhotes('arquivado')" class="fil-btn px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-300 text-gray-700 hover:bg-gray-50">Arquivado<span id="fil-arq-n"></span></button>
         </div>
         <!-- 🧬 24/08: estudo do merge (ideia do Pedro). Nasceu EMBAIXO da lista
              e o Pedro clicou, a página desceu até o fim e ele não soube dizer
@@ -2063,7 +2060,7 @@ function renderOndeErra(d){
 // avisa quando o original tem revisão do cliente (regra dura nº7 — nunca trocar
 // trabalho humano por medição de máquina calado) e dá pra revogar.
 let _filhotes = [];
-let _filFiltro = 'pendentes';
+let _filFiltro = 'definir';
 async function loadFilhotes(){
   const box = document.getElementById('filhotes');
   if (!box) return;
@@ -2098,6 +2095,29 @@ function _filPendente(f){ return !f.liberado && f.status === 'done' && f.melhoro
 // ganharam linha estimada (mais item pra revisar, sem mais certeza — e estimado é justamente o que
 // o cliente mais apaga), e os que NÃO devem ser liberados de jeito nenhum. Uma classificação só,
 // usada pelo KPI, pelas abas e pelo card — a mesma disciplina que consertou o KPI em 23/08.
+// ══ AS TRÊS ABAS (23/09/2026, pedido do Pedro em 23/09) ═══════════════════
+// Ele: "cria três abas dentro dessa aba filhote: A DEFINIR, ENVIADO PARA O
+// CLIENTE e ARQUIVADO". E a definição de arquivado, com as palavras dele:
+//   "a gente fez, ficou ruim, ficou pior do que o original e a gente
+//    arquivou. Só que o banco consegue ler de fato ainda se a gente precisar."
+//
+// 🔑 Antes eram SEIS filtros (Vale liberar · Só estimado · Segurados ·
+// Liberados · Liberados sem aviso · Todos) — seis recortes da mesma pilha,
+// sem dizer o que já foi DECIDIDO. Agora o corte é o ciclo de vida: o que
+// espera decisão, o que foi pro cliente, e o que a gente descartou.
+//
+// 🪤 Os "segurados" (erro/piorou/não melhorou/tem correção) caem em A DEFINIR
+// de propósito: são exatamente os candidatos a arquivar. O motivo continua no
+// card (`_FIL_MOTIVO`), então nada do recorte antigo se perde — muda o
+// agrupamento, não a informação.
+// 🚫 Arquivar NÃO apaga: é um ato no `error_log`, e `desarquivar` devolve.
+// Função PURA — é o que o guarda consegue CHAMAR.
+function _filAba(f){
+  if (!f) return 'definir';
+  if (f.arquivado) return 'arquivado';   // o ato ATUAL manda: desarquivar volta pra fila
+  if (f.liberado || f.ja_liberado) return 'enviado';
+  return 'definir';
+}
 function _filSituacao(f){
   if (f.liberado) return 'liberado';
   if (f.status !== 'done') return 'erro';
@@ -2137,25 +2157,35 @@ function pintarFilhotes(){
     + kpi(liberados.length + ' <span class="text-base text-gray-400">/ ' + avisados.length + ' avisados</span>', 'liberados pro cliente', 'text-emerald-700')
     + kpi(voltaram.length, 'voltaram ao site depois de avisados',
           voltaram.length ? 'text-emerald-700' : 'text-gray-400');
-  const nVale = document.getElementById('fil-vale-n'); if (nVale) nVale.textContent = vale.length ? ' (' + vale.length + ')' : '';
-  const nEst = document.getElementById('fil-est-n'); if (nEst) nEst.textContent = soEst.length ? ' (' + soEst.length + ')' : '';
-  const nSeg = document.getElementById('fil-seg-n'); if (nSeg) nSeg.textContent = segurados.length ? ' (' + segurados.length + ')' : '';
-  const bMudos = document.getElementById('fil-mudos-n');
-  if (bMudos) bMudos.textContent = mudos.length ? ' (' + mudos.length + ')' : '';
+  // 23/09: os contadores dos 6 filtros antigos saíram junto com os botões —
+  // `vale`, `soEst`, `segurados` e `mudos` continuam vivos porque alimentam os
+  // KPIs do topo, que não mudaram.
   // o número no menu passa a ser o que EXIGE decisão (ganhou medição), não a pilha inteira
   const badge = document.getElementById('menu-filhotes-badge');
   if (badge) badge.textContent = vale.length ? String(vale.length) : '';
-  const lista = _filFiltro === 'pendentes' ? vale
-              : (_filFiltro === 'estimado' ? soEst
-              : (_filFiltro === 'segurados' ? segurados
-              : (_filFiltro === 'liberados' ? liberados
-              : (_filFiltro === 'mudos' ? mudos : L))));
+  // As 3 abas. Dentro de "A definir", quem GANHOU MEDIÇÃO vem primeiro: é a
+  // decisão que paga. Os segurados (erro/piorou/não melhorou/tem correção)
+  // ficam no fim da mesma aba — são os candidatos naturais a arquivar.
+  const _ordemDefinir = { vale: 0, so_estimado: 1, tem_correcao: 2,
+                          nao_melhorou: 3, piorou: 4, erro: 5 };
+  const aDefinir = L.filter(f => _filAba(f) === 'definir')
+                    .sort((a, b) => (_ordemDefinir[_filSituacao(a)] ?? 9)
+                                  - (_ordemDefinir[_filSituacao(b)] ?? 9));
+  const enviados  = L.filter(f => _filAba(f) === 'enviado');
+  const arquivados = L.filter(f => _filAba(f) === 'arquivado');
+  const nDef = document.getElementById('fil-definir-n');
+  if (nDef) nDef.textContent = aDefinir.length ? ' (' + aDefinir.length + ')' : '';
+  const nEnv = document.getElementById('fil-enviado-n');
+  if (nEnv) nEnv.textContent = enviados.length ? ' (' + enviados.length + ')' : '';
+  const nArq = document.getElementById('fil-arq-n');
+  if (nArq) nArq.textContent = arquivados.length ? ' (' + arquivados.length + ')' : '';
+  const lista = _filFiltro === 'enviado' ? enviados
+              : (_filFiltro === 'arquivado' ? arquivados : aDefinir);
   const box = document.getElementById('filhotes');
   const vazio = {
-    pendentes: 'Nenhum filhote ganhou medição nova. Os que só acrescentam item estimado estão na aba do lado.',
-    estimado: 'Nenhum filhote nesta situação.',
-    segurados: 'Nenhum filhote segurado — todos os reprocessos melhoraram.',
-    mudos: 'Todos os filhotes liberados foram avisados.',
+    definir: 'Nada esperando decisão — todo filhote já foi enviado ou arquivado.',
+    enviado: 'Nenhum filhote foi pro cliente ainda.',
+    arquivado: 'Nada arquivado. Filhote que não presta vai pra cá pelo botão Arquivar do card — e volta quando você quiser.',
   }[_filFiltro];
   if (box) box.innerHTML = (!lista.length && vazio)
     ? `<p class="text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded-xl p-4">${vazio}</p>`
@@ -2219,7 +2249,10 @@ function renderFilhotes(L){
               : '')}
         </div>
         <div class="flex items-center gap-2">
-          ${f.liberado
+          ${f.arquivado
+            ? `<span class="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-600 border border-gray-300">🗄️ arquivado</span>
+               <button onclick="arquivarFilhote('${f.job_id}', true)" style="min-height:40px" class="px-3 py-2 text-xs rounded-lg border border-gray-300 hover:bg-gray-50">Desarquivar</button>`
+          : f.liberado
             ? `<span class="text-xs px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">✓ liberado pro cliente</span>
                <button onclick="liberarFilhote('${f.job_id}', true)" style="min-height:40px" class="px-3 py-2 text-xs rounded-lg border border-gray-300 hover:bg-gray-50">Revogar</button>`
             : (!pronto
@@ -2231,7 +2264,8 @@ function renderFilhotes(L){
               : `${f.melhorou
                 ? `<button onclick="liberarFilhote('${f.job_id}', false)" style="min-height:40px" class="px-3 py-2 text-xs rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-medium">Liberar pro cliente</button>`
                 : `<span class="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-500 border">não vale liberar</span>`}
-               <button onclick="mergeEstudar('${f.job_id}')" title="Compara as duas leituras prancha por prancha e monta a melhor de cada. Só LÊ — não cria nada." style="min-height:40px" class="px-3 py-2 text-xs rounded-lg border border-violet-300 text-violet-800 bg-violet-50 font-medium">&#129516; Estudar merge (só lê)</button>`)}
+               <button onclick="mergeEstudar('${f.job_id}')" title="Compara as duas leituras prancha por prancha e monta a melhor de cada. Só LÊ — não cria nada." style="min-height:40px" class="px-3 py-2 text-xs rounded-lg border border-violet-300 text-violet-800 bg-violet-50 font-medium">&#129516; Estudar merge (só lê)</button>
+               <button onclick="arquivarFilhote('${f.job_id}', false)" title="Tira da fila de decisão. NÃO apaga nada — o filhote continua no banco e volta pelo botão Desarquivar." style="min-height:40px" class="px-3 py-2 text-xs rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50">🗄️ Arquivar</button>`)}
         </div>
       </div>
       ${(() => {
@@ -2644,6 +2678,30 @@ async function rodarSeloHistorico(){
   }
 }
 
+// 23/09/2026 - ARQUIVAR (pedido do Pedro no mesmo dia): tirar da fila de
+// filhote que nao vai pro cliente, sem perder o registro.
+// Ele: "a gente fez, ficou ruim, ficou pior do que o original e a gente
+//       arquivou. So que o banco consegue ler de fato ainda se a gente precisar."
+// CHAVE: nao apaga. Vira um ato no error_log, igual liberado/revogado. E volta.
+async function arquivarFilhote(jobId, desarquivar){
+  const _txt = desarquivar
+    ? 'DESARQUIVAR o filhote ' + jobId + '.\n\nEle volta pra aba "A definir".'
+    : 'ARQUIVAR o filhote ' + jobId + '.\n\nSai da fila de decisao e vai pra aba "Arquivado".'
+      + '\n\nNADA e apagado - o filhote, os itens e a comparacao continuam no'
+      + ' banco, e o botao Desarquivar traz de volta.';
+  if (!_confirmaOuAvisa(_txt)) return;
+  try {
+    const res = await authFetch(
+      API_BASE + '/api/admin/arquivar-filhote/' + jobId + (desarquivar ? '?desarquivar=1' : ''),
+      {method:'POST'});
+    const d = await res.json().catch(function(){ return {}; });
+    if (!res.ok) throw new Error(d.detail || ('HTTP ' + res.status));
+    _adminToast(desarquivar ? 'Desarquivado - voltou pra "A definir"' : 'Arquivado', 'success');
+    loadFilhotes();
+  } catch(e){
+    _adminToast('Nao consegui: ' + (e && e.message ? e.message : e), 'error');
+  }
+}
 async function liberarFilhote(jobId, revogar){
   const acao = revogar ? 'REVOGAR (esconder do cliente)' : 'LIBERAR pro cliente ver no painel dele';
   // 23/08: este texto dizia "nenhum e-mail e enviado" - falso desde 08/08.
