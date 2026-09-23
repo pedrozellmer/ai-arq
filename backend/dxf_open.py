@@ -39,7 +39,29 @@ def recuperar_dxf(filepath: str, motivo: str = ""):
     18/08: a causa real morreu em dois cortes de log).
     """
     import ezdxf.recover as _rec
-    doc, auditor = _rec.readfile(filepath)
+    try:
+        doc, auditor = _rec.readfile(filepath)
+    except Exception as _erec:
+        # 🚨 23/09/2026 — O 3º DEGRAU MORA AQUI, NÃO NO `abrir_dxf`.
+        # Eu escrevi este conserto primeiro lá em cima e ele NÃO RODOU no
+        # caso do cliente: `dwg_extractor.extract_from_file` — o caminho que
+        # o motor usa de verdade, dentro do worker isolado — chama
+        # `recuperar_dxf` DIRETO, sem passar pelo `abrir_dxf`. É a armadilha
+        # que este arquivo documenta no topo desde 24/08 ("o backend abre DXF
+        # em 6 lugares; consertar 'o' lugar não é consertar") e na qual eu caí
+        # mesmo assim. Aqui é o ponto que TODAS as portas compartilham.
+        if not _pode_ser_sortentstable(_erec):
+            raise
+        limpo = f"{filepath}.sem_sortents.dxf"
+        n = _dxf_sem_sortentstable(filepath, limpo)
+        if not n:
+            raise
+        print(f"[dxf] {filepath}: {n} SORTENTSTABLE removida(s) — tabela de "
+              f"ORDEM DE EXIBIÇÃO, sem geometria; relendo")
+        try:
+            return ezdxf.readfile(limpo)
+        except Exception:
+            doc, auditor = _rec.readfile(limpo)
     n_erros = len(getattr(auditor, "errors", []) or [])
     n_fix = len(getattr(auditor, "fixes", []) or [])
     print(f"[dxf] readfile falhou ({motivo}); ezdxf.recover ABRIU o arquivo — "
@@ -51,6 +73,20 @@ def recuperar_dxf(filepath: str, motivo: str = ""):
 #: entidades no CAD: não tem geometria, não tem medida, não entra em
 #: quantitativo nenhum. Por isso dá pra jogar fora sem perder nada do desenho.
 _SORTENTSTABLE = b"SORTENTSTABLE"
+
+
+def _pode_ser_sortentstable(exc) -> bool:
+    """A exceção do ezdxf é a da SORTENTSTABLE desemparelhada?
+
+    🪤 Reescrever 110 MB é caro: só vale quando a causa é ESTA. A mensagem do
+    ezdxf fala em "sort handle" e no código de grupo 331.
+    🪤 E ela tem um engano de texto no próprio ezdxf (`entities/dxfobj.py`):
+    imprime `handle.code` onde queria `sort_handle.code`, então diz sempre
+    "331, expected 5". Por isso o reconhecimento é pela PALAVRA, não pelo
+    número.
+    """
+    t = str(exc or "").lower()
+    return "sort handle" in t or "sortentstable" in t
 
 
 def _dxf_sem_sortentstable(origem: str, destino: str) -> int:
@@ -111,21 +147,9 @@ def abrir_dxf(filepath: str):
             return recuperar_dxf(filepath, motivo)
         except Exception as erec:
             rec = f"{type(erec).__name__}: {erec}"
-            # 3º degrau (23/09): tirar a SORTENTSTABLE e tentar de novo. Só
-            # entra quando os dois primeiros já falharam — reescrever 110 MB
-            # não é barato, e o caminho normal não pode pagar por isso.
-            try:
-                limpo = f"{filepath}.sem_sortents.dxf"
-                n = _dxf_sem_sortentstable(filepath, limpo)
-                if n:
-                    print(f"[dxf] {filepath}: {n} SORTENTSTABLE removida(s) — "
-                          f"tabela de ORDEM DE EXIBIÇÃO, sem geometria")
-                    try:
-                        return ezdxf.readfile(limpo)
-                    except Exception:
-                        return recuperar_dxf(limpo, "sem sortentstable")
-            except Exception as elimp:
-                rec += f" | sem-sortents: {type(elimp).__name__}: {elimp}"
+            # 🔑 O 3º degrau NÃO mora aqui: mora dentro de `recuperar_dxf`,
+            # que é o ponto que todas as portas compartilham. Ver o comentário
+            # lá — foi a armadilha de 23/09.
             raise RuntimeError(
                 f"não abriu nem com ezdxf.recover: {filepath} — "
                 f"normal: {motivo} | recover: {rec}")

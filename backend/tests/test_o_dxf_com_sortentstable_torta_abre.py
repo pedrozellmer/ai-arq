@@ -177,3 +177,58 @@ def test_CONTROLE_quando_o_RECOVER_salva_o_3o_degrau_nem_roda(tmp_path,
         "o 3º degrau rodou mesmo com o recover tendo aberto o arquivo")
     assert not os.path.exists(bom + ".sem_sortents.dxf")
     monkeypatch.setattr(_mod.ezdxf, "readfile", real_readfile)
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  🩸 A PORTA QUE O MOTOR USA DE VERDADE
+#  Este bloco existe porque o conserto da 1ª versão NÃO RODOU no caso do
+#  cliente. Eu o escrevi em `abrir_dxf`, subi, rodei o filhote com os
+#  arquivos reais — e o log voltou IGUAL, sem sinal nenhum do degrau novo.
+#  Motivo: `dwg_extractor.extract_from_file`, que é o caminho do motor
+#  dentro do worker isolado, chama `recuperar_dxf` DIRETO. O `dxf_open.py`
+#  avisa isso no topo desde 24/08 — "o backend abre DXF em 6 lugares;
+#  consertar 'o' lugar não é consertar" — e eu caí assim mesmo.
+#  🔑 Guarda que prova o conserto na função que EU escolhi não prova nada
+#     sobre o caminho que o cliente percorre.
+# ══════════════════════════════════════════════════════════════════════════
+def test_o_RECUPERAR_DXF_sozinho_salva_o_arquivo_torto(tmp_path):
+    """É este o ponto compartilhado: quem chama `recuperar_dxf` direto —
+    como o `dwg_extractor` faz — tem que ganhar o resgate também."""
+    from dxf_open import recuperar_dxf
+    ruim = _injeta(_dxf_bom(tmp_path), str(tmp_path / "ruim_rec.dxf"))
+    doc = recuperar_dxf(ruim, "DXFStructureError: Invalid sort handle code 331")
+    assert doc is not None
+    assert [e.dxftype() for e in doc.modelspace()] == ["LINE", "LWPOLYLINE"]
+
+
+def test_o_caminho_do_MOTOR_abre_o_arquivo_torto(tmp_path):
+    """🚨 O guarda que faltava: `dwg_extractor.extract_from_file` é o que roda
+    no worker isolado, e é ele que precisava abrir. Sem este teste, o conserto
+    passou verde na bancada e falhou no cliente."""
+    from dwg_extractor import extract_from_file
+    ruim = _injeta(_dxf_bom(tmp_path), str(tmp_path / "ruim_motor.dxf"))
+    extraction = extract_from_file(ruim)
+    assert extraction is not None, "o caminho do motor continua sem abrir"
+
+
+def test_CONTROLE_o_resgate_so_roda_na_causa_CERTA(tmp_path, monkeypatch):
+    """🪤 Reescrever 110 MB é caro. Se o recover cai por OUTRO motivo, a
+    reescrita não pode acontecer — a exceção original tem que subir."""
+    import dxf_open as _mod
+    import ezdxf.recover as _rec
+    bom = _dxf_bom(tmp_path)
+    chamou = {"n": 0}
+
+    def _recover_que_cai(caminho, *a, **k):
+        raise ValueError("outra causa qualquer")
+
+    def _espiao(origem, destino):
+        chamou["n"] += 1
+        return 0
+
+    monkeypatch.setattr(_rec, "readfile", _recover_que_cai)
+    monkeypatch.setattr(_mod, "_dxf_sem_sortentstable", _espiao)
+    with pytest.raises(ValueError):
+        _mod.recuperar_dxf(bom, "motivo qualquer")
+    assert chamou["n"] == 0, (
+        "reescreveu 110 MB por uma causa que não é a da SORTENTSTABLE")
