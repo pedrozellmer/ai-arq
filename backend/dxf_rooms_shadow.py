@@ -46,6 +46,11 @@ import time
 # Tetos de segurança — a sombra NUNCA pode atrapalhar o cliente nem o servidor.
 BUDGET_S = float(os.environ.get("DXFROOMS_BUDGET_S", "90"))   # tempo total
 MAX_FILES = int(os.environ.get("DXFROOMS_MAX_FILES", "4"))    # pranchas por job
+#: Quanto a sombra espera depois do `done` antes de começar. Era um `10` cravado
+#: dentro do `_run`; virou constante em 23/09/2026 porque é a principal suspeita
+#: do silêncio — o job apaga os `arq_dxf_*` durante o processamento, e quem
+#: dorme 10 s pode acordar sem arquivo nenhum pra medir.
+ESPERA_S = float(os.environ.get("DXFROOMS_ESPERA_S", "10"))
 MAX_SEGS = int(os.environ.get("DXFROOMS_MAX_SEGS", "40000"))  # desiste acima disso
 SNAP_M = 0.01     # 1 cm — cola pontas que quase se encontram
 BRIDGE_M = 0.02   # 2 cm — sela resíduo de arredondamento, não vão de porta
@@ -194,20 +199,78 @@ def medir_um(dxf_path: str, fator: float) -> dict:
     return out
 
 
+def diagnostico_do_silencio(n_pedidos: int, n_sumiram: int,
+                            pasta_existe: bool | None = None) -> dict:
+    """POR QUE a sombra não mediu nada. Função PURA — é o que o guarda chama.
+
+    🩸 23/09/2026 — MEDIDO: desde 31/07 a sombra rodou em **18 de 87 jobs com
+    CAD (20,7%)**. Os outros 69 não têm UMA LINHA de log: não é que ela falhou,
+    é que ela saía MUDA. `if not os.path.exists(path): continue` seguido de
+    `if not results: return` — dois silêncios em sequência.
+
+    🔑 A suspeita que este diagnóstico existe pra confirmar ou derrubar: a
+    sombra dorme 10 s antes de começar ("deixa o pós-done respirar") e o job
+    apaga os `arq_dxf_*` durante o processamento. Quando ela acorda, o arquivo
+    já não está lá. Se for isso, `motivo` vem `arquivo-apagado` nos 69.
+
+    🪤 Sem este log, "a sombra não rodou" e "a sombra rodou e não achou nada"
+    são indistinguíveis — e zero no log já fez esta casa construir um segundo
+    mecanismo em cima do zero do primeiro.
+    """
+    if n_pedidos <= 0:
+        return {"motivo": "sem-dxf",
+                "explica": "nenhum DXF chegou na sombra"}
+    if n_sumiram >= n_pedidos:
+        return {"motivo": "arquivo-apagado", "pedidos": n_pedidos,
+                "sumiram": n_sumiram, "pasta_existe": pasta_existe,
+                "explica": ("os %d DXF ja nao existiam quando a sombra acordou "
+                            "(ela espera %ds depois do done)" % (n_pedidos, ESPERA_S))}
+    if n_sumiram > 0:
+        return {"motivo": "parte-apagada", "pedidos": n_pedidos,
+                "sumiram": n_sumiram,
+                "explica": "sobraram arquivos, mas nenhum produziu medicao"}
+    return {"motivo": "medicao-vazia", "pedidos": n_pedidos,
+            "explica": "os arquivos estavam la e a montagem nao devolveu nada"}
+
+
 def _run(dxf_units: list, job_id: str, log_fn,
          area_declarada: float | None = None,
          regua_fonte: str | None = None) -> None:
-    time.sleep(10)  # deixa o pós-done (e-mail/DB) respirar antes do trabalho pesado
+    time.sleep(ESPERA_S)  # deixa o pós-done (e-mail/DB) respirar antes do pesado
     deadline = time.time() + BUDGET_S
     results = []
-    for path, fator in dxf_units[:MAX_FILES]:
+    _sumiram = []           # 🔑 o que o silêncio escondia: arquivo que já era
+    _pedidos = dxf_units[:MAX_FILES]
+    for path, fator in _pedidos:
         if time.time() > deadline:
             results.append({"file": os.path.basename(path)[:34], "skip": "budget"})
             break
         if not os.path.exists(path):
+            _sumiram.append(os.path.basename(path)[:34])
             continue
         results.append(medir_um(path, fator))
     if not results:
+        # 🚨 ANTES ISTO ERA `return` SECO — 69 jobs com CAD sem uma linha.
+        # 🪤 Mas job SEM DXF nenhum não é silêncio a explicar: é projeto só de
+        # PDF, onde a sombra não tem o que medir. Registrar isso encheria o log
+        # de alarme falso — o guarda pegou isto na 1ª rodada.
+        if not _pedidos:
+            return
+        _pasta = None
+        try:
+            _p = os.path.dirname(_pedidos[0][0]) if _pedidos else ""
+            _pasta = os.path.isdir(_p) if _p else None
+        except Exception:
+            pass
+        _d = diagnostico_do_silencio(len(_pedidos), len(_sumiram), _pasta)
+        if _sumiram:
+            _d["exemplos"] = _sumiram[:3]
+        try:
+            log_fn("dxfrooms:nao-mediu",
+                   json.dumps(_d, ensure_ascii=False)[:1000], job_id,
+                   severity="info")
+        except Exception as e:
+            print(f"[dxfrooms] nao consegui registrar o silencio: {e}")
         return
     try:
         tot = 0.0

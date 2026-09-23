@@ -119,6 +119,126 @@ def _iter_orcamento_rows(wb):
         }
 
 
+def resumo_por_disciplina(linhas, titulos=None) -> dict:
+    """A planilha INTEIRA agregada por disciplina. Sem IA, sem teto, sem corte.
+
+    🩸 POR QUE ESTA FUNÇÃO EXISTE — 23/09/2026, medido nas 26 conversas reais
+    do chat. *"Me dá um resumo dos itens da planilha por disciplina"* é a
+    pergunta MAIS FEITA (4 de 26) e é **sugestão do próprio produto** — o texto
+    chega idêntico nas 4 vezes, é botão. **Duas das quatro falharam**:
+
+        "A lista veio incompleta — a planilha tem mais de 200 itens e o
+         resultado foi cortado, então não consigo dar um resumo por disciplina"
+
+    O cliente com a maior planilha do dia (609 itens) clicou na sugestão que a
+    gente oferece e levou um "não consigo".
+
+    🔑 A causa não é o modelo: é que `list_items` manda a planilha inteira pro
+    modelo LER, e ela não cabe. Medido no job `9fa1fed7`: **477.640 caracteres,
+    60× o teto** de 8.000 — 742 por item, porque a observação carrega a prova
+    da medição. O chat enxergava **47 de 609 linhas** e resumia por cima disso.
+    🚫 Aumentar o teto não resolve: a RESPOSTA do modelo também tem teto, e
+    uma já foi cortada no meio da frase (15/09). O próprio código avisa que
+    "teto maior sozinho só empurra o problema".
+
+    🔑 E a resposta certa tem DEZ LINHAS. Agregar é trabalho de contagem, não
+    de leitura — some 609 números aqui e o modelo recebe um resumo pronto,
+    completo, de graça, em milissegundos. Mesma lição da escala escrita no PDF
+    (23/09): não pagar IA pra fazer o que o dado já responde sozinho.
+
+    🪤 A fonte é a PLANILHA, a mesma que `_iter_orcamento_rows` lê e a mesma
+    que o cliente abre. Agregar do banco daria outro número quando a planilha
+    foi refeita — e resumo que diverge da planilha é pior que resumo nenhum.
+
+    Função PURA: recebe as linhas já lidas. É o que o guarda consegue CHAMAR.
+    """
+    titulos = titulos or {}
+    por_disc = {}
+    total = medidos = estimados = metadados = 0
+    for r in linhas:
+        num = str(r.get("item_num") or "").strip()
+        cap = num.split(".")[0] if "." in num else num
+        if not cap:
+            continue
+        d = por_disc.setdefault(cap, {
+            "n": cap, "nome": titulos.get(cap) or "(sem título)",
+            "itens": 0, "medidos": 0, "estimados": 0, "metadados": 0,
+            "unidades": {}, "sem_quantidade": 0,
+        })
+        d["itens"] += 1
+        total += 1
+        selo = r.get("selo") or "estimado"
+        if selo == "medido":
+            d["medidos"] += 1; medidos += 1
+        elif selo == "metadado":
+            d["metadados"] += 1; metadados += 1
+        else:
+            d["estimados"] += 1; estimados += 1
+        u = (r.get("unit") or "").strip() or "—"
+        d["unidades"][u] = d["unidades"].get(u, 0) + 1
+        try:
+            if not float(r.get("quantity") or 0):
+                d["sem_quantidade"] += 1
+        except (TypeError, ValueError):
+            d["sem_quantidade"] += 1
+
+    def _ordem(c):
+        try:
+            return (0, int(c["n"]))
+        except (TypeError, ValueError):
+            return (1, 0)
+
+    return {
+        "fonte": "planilha-inteira",
+        "total_itens": total,
+        "medidos": medidos,
+        "estimados": estimados,
+        "metadados": metadados,
+        "n_disciplinas": len(por_disc),
+        "disciplinas": sorted(por_disc.values(), key=_ordem),
+    }
+
+
+#: Cabeçalho de disciplina na planilha: `1. SERVIÇOS GERAIS` (spreadsheet.py
+#: escreve `f'{disc_num}. {disc_name.upper()}'` numa célula mesclada).
+#: 🪤 `\d+\.\s` com o espaço OBRIGATÓRIO é o que separa do item `1.1` — sem ele
+#: o título comeria a primeira linha de cada disciplina.
+_RE_TITULO_DISCIPLINA = re.compile(r"^(\d+)\.\s+(\S.*)$")
+
+
+def titulos_de_disciplina(wb) -> dict:
+    """{"1": "SERVIÇOS GERAIS", ...} lidos dos cabeçalhos da aba Orçamento."""
+    fora = {}
+    if not wb or "Orçamento" not in wb.sheetnames:
+        return fora
+    for row in wb["Orçamento"].iter_rows(min_row=1, max_col=2, values_only=True):
+        if not row:
+            continue
+        a = str(row[0] or "").strip()
+        if not a:
+            continue
+        m = _RE_TITULO_DISCIPLINA.match(a)
+        # 🪤 Não repetir aqui um `not re.match(r"^\d+\.\d")`: o `\.\s+` do
+        # padrão JÁ recusa `1.1`, e a sabotagem provou que a segunda checagem
+        # era inalcançável — removê-la não fazia nenhum guarda cair. Defesa que
+        # nenhum teste consegue exercitar é código morto, não segurança.
+        if m:
+            fora[m.group(1)] = m.group(2).strip()[:60]
+    return fora
+
+
+def tool_resumo_por_disciplina(job_id: str) -> dict:
+    """O resumo da planilha INTEIRA, agregado aqui — nunca truncado."""
+    wb = _open_planilha(job_id)
+    if wb is None:
+        return {"error": f"planilha do job {job_id} não encontrada"}
+    try:
+        titulos = titulos_de_disciplina(wb)
+        return resumo_por_disciplina(list(_iter_orcamento_rows(wb)), titulos)
+    finally:
+        wb.close()
+
+
 def tool_list_items(job_id: str, max_items: int = 200) -> dict:
     """Lista itens da planilha — número, descrição (80 chars), unit, qty e o
     SELO (medido/estimado/metadado). Sem o selo o resumo chutava ✓ (15/09)."""
@@ -697,6 +817,16 @@ def _supabase_select_project(job_id: str) -> Optional[dict]:
 
 TOOLS = [
     {
+        "name": "resumo_por_disciplina",
+        "description": ("O RESUMO DA PLANILHA INTEIRA, agregado no servidor: quantos itens por disciplina, "
+                        "quantos medidos, quantos estimados, quais unidades e quantas linhas estao sem "
+                        "quantidade. USE SEMPRE que pedirem resumo/visao geral/panorama por disciplina, "
+                        "capitulo ou secao — NUNCA use list_items pra isso. Este resumo conta a planilha "
+                        "toda e nunca vem truncado; list_items corta em 8.000 caracteres e numa planilha "
+                        "grande mostra menos de 10% das linhas."),
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
         "name": "list_items",
         "description": "Lista itens da planilha de quantitativos (número, descrição, unidade, quantidade e selo). O campo `selo` é o que a PLANILHA marcou em cada linha: 'medido' (branco, medido do CAD), 'estimado' (laranja, pra revisar) ou 'metadado' (linhas 0.x da capa, não é serviço). Use pra ter visão geral do que existe.",
         "input_schema": {
@@ -794,6 +924,8 @@ TOOLS = [
 
 
 def _dispatch_tool(name: str, job_id: str, tool_input: dict) -> Any:
+    if name == "resumo_por_disciplina":
+        return tool_resumo_por_disciplina(job_id)
     if name == "list_items":
         return tool_list_items(job_id, tool_input.get("max_items", 200))
     if name == "get_item_details":
