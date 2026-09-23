@@ -36737,6 +36737,56 @@ def admin_voz_do_cliente(request: Request, limit: int = 12):
     return out
 
 
+def retrato_do_item_revisado(review, desc_da_tabela=None):
+    """(descrição, disciplina, era_medido) do item que o cliente revisou.
+
+    🩸 POR QUE ISTO EXISTE — 23/09/2026. O painel "Itens mais rejeitados —
+    indicam alucinação do motor" mostrava **"Nenhum padrão de rejeição ainda"**
+    com **432 rejeições** no período. Não era falta de dado: era o painel
+    procurando no lugar de onde o dado tinha sido removido.
+
+    O código fazia:
+
+        item_desc = item_descs.get(item_id)     # busca em project_items
+        if action == "reject" and item_desc:    # nunca entra
+            rejected_patterns[key] += 1
+
+    🔑 **REJEITAR APAGA O ITEM** de `project_items`. Medido: dos 432 rejeitados,
+    **432 já não existiam** na tabela. `item_desc` vinha `None` nos 432, o `if`
+    nunca era satisfeito e o contador ficava vazio — pra sempre.
+
+    🔑 E o dado estava guardado o tempo todo: `edits._antes` traz o item
+    INTEIRO no momento da rejeição (description, unit, quantity, confidence,
+    discipline, observations, ref_sheet). Nos 432.
+
+    📊 Uma consulta nesse campo revelou o que o painel devia ter mostrado há 30
+    dias: **82 rejeições de mobiliário, 71 delas com selo MEDIDO**; **117 linhas
+    "a confirmar"** onde o motor acha o código (PA1/RT1/RP1) e não lê o quadro.
+
+    🪤 A tabela continua vindo PRIMEIRO: `approve` e `edit` não apagam o item,
+    e ali a descrição é a ATUAL — que pode ter sido corrigida pelo cliente
+    depois. O retrato só entra quando a tabela não tem mais.
+
+    Função PURA — é o que o guarda consegue CHAMAR.
+    """
+    if desc_da_tabela:
+        d = (review or {}).get("edits") or {}
+        antes = d.get("_antes") if isinstance(d, dict) else None
+        antes = antes if isinstance(antes, dict) else {}
+        return (desc_da_tabela, antes.get("discipline") or None,
+                antes.get("confidence") == "confirmado")
+    edits = (review or {}).get("edits") or {}
+    if not isinstance(edits, dict):
+        return (None, None, False)
+    antes = edits.get("_antes")
+    if not isinstance(antes, dict):
+        return (None, None, False)
+    desc = antes.get("description")
+    return ((str(desc).strip() or None) if desc else None,
+            antes.get("discipline") or None,
+            antes.get("confidence") == "confirmado")
+
+
 @app.get("/api/admin/review-insights")
 def admin_review_insights(request: Request, days: int = 30, limit: int = 30):
     """Agrega revisões recentes pra identificar padrões de erro do motor:
@@ -36773,6 +36823,11 @@ def admin_review_insights(request: Request, days: int = 30, limit: int = 30):
     edit_patterns = Counter()
     comments = []
     by_typology = Counter()
+    # 23/09: o que o painel nao mostrava. Disciplina separa "o motor inventou"
+    # de "o cliente cortou escopo"; `rejeitado_medido` e o mais grave — linha
+    # que saiu com selo BRANCO e o cliente apagou (regra dura no1).
+    rejeitado_por_disciplina = Counter()
+    rejeitado_medido = Counter()
 
     # Pré-busca descrições em batch
     item_descs = {}
@@ -36806,12 +36861,17 @@ def admin_review_insights(request: Request, days: int = 30, limit: int = 30):
             })
 
         item_id = r.get("item_id")
-        item_desc = item_descs.get(item_id) if item_id else None
+        item_desc, item_disc, era_medido = retrato_do_item_revisado(
+            r, item_descs.get(item_id) if item_id else None)
 
         if action == "reject" and item_desc:
             # Normaliza pra primeiras 3 palavras significativas
             key = " ".join(item_desc.lower().split()[:3])
             rejected_patterns[key] += 1
+            if item_disc:
+                rejeitado_por_disciplina[item_disc] += 1
+            if era_medido:
+                rejeitado_medido[item_disc or "(sem disciplina)"] += 1
 
         if action == "edit":
             edits = r.get("edits") or {}
@@ -36826,6 +36886,17 @@ def admin_review_insights(request: Request, days: int = 30, limit: int = 30):
             {"pattern": k, "count": v}
             for k, v in rejected_patterns.most_common(limit)
         ],
+        "rejected_por_disciplina": [
+            {"disciplina": k, "count": v}
+            for k, v in rejeitado_por_disciplina.most_common(limit)
+        ],
+        # 🚨 linha que saiu com selo MEDIDO e o cliente apagou: e onde a
+        # credibilidade da regra dura no1 esta sendo gasta.
+        "rejeitado_com_selo_medido": [
+            {"disciplina": k, "count": v}
+            for k, v in rejeitado_medido.most_common(limit)
+        ],
+        "rejeitados_total": sum(rejected_patterns.values()),
         "edit_fields_top": [
             {"field": k, "count": v}
             for k, v in edit_patterns.most_common(limit)
