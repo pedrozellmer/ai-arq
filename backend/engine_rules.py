@@ -754,6 +754,18 @@ _RE_PARCELA_ESQ = _re.compile(r"\d[\s\w²º°)\-]{0,8}$")
 #: cauda longa — cada rodada de medição contra o acervo achou um jeito novo de o
 #: modelo escrever a mesma soma.
 _RE_PARCELA_DIR = _re.compile(r"[\s\w²º°()'\"\-]{0,20}\d")
+#: 🪤 22/09/2026 — O "+" DE UMA FÓRMULA DE DIMENSÃO NÃO É SOMA DE PARCELAS.
+#: "perímetro 2×(0,18+0,40) m × 3,20 m" e "fôrma por metro = 0,14 + 2×0,40"
+#: são a conta que o orçamentista faria à mão, e as parcelas são LADOS DA MESMA
+#: PEÇA — não itens contados. Esta régua rebaixava as duas: a geometria
+#: elementar derrubava o próprio selo. Medido no job 64fa324b (1 DWG de
+#: estrutura, pé-direito informado): 24 linhas COM número, ZERO medidas; o
+#: pilar detectado por retângulo fechado caía pelo "+" do perímetro.
+#: 🔑 O que separa fórmula de soma é a MULTIPLICAÇÃO COLADA no termo somado.
+#: Sem ela, "ESTAR 18,65 + 20,10 + 12,30" e "tipo1=5 + tipo2=1" continuam
+#: sendo soma de parcelas e continuam caindo — são o controle positivo.
+_RE_TERMO_MULTIPLICADO = _re.compile(r"(?:\d\s*[×x*]|[×x*]\s*[\d(])")
+
 #: "tomada 2P+T": nome de produto, não adição.
 _RE_PRODUTO_P_MAIS_T = (_re.compile(r"\dP\s*$", _re.IGNORECASE),
                         _re.compile(r"\s*T\b", _re.IGNORECASE))
@@ -785,6 +797,9 @@ def _tem_aritmetica_de_parcelas(texto: str) -> bool:
             continue                      # sem número à direita
         if _RE_PRODUTO_P_MAIS_T[0].search(esq) and _RE_PRODUTO_P_MAIS_T[1].match(dir_):
             continue                      # "2P+T"
+        if (_RE_TERMO_MULTIPLICADO.search(esq)
+                or _RE_TERMO_MULTIPLICADO.search(dir_)):
+            continue                      # fórmula de dimensão, não parcelas
         return True
     return False
 

@@ -14405,14 +14405,32 @@ REGRA CRÍTICA DE CONFIANÇA — NUNCA ESTIMAR, SÓ MEDIR OU SUGERIR
 
 O campo "confidence" TEM apenas duas categorias possíveis:
 
-1. "confirmado" — SÓ quando a quantidade corresponde EXATAMENTE a uma medição objetiva do DXF:
+1. "confirmado" — quando TODO INSUMO da quantidade foi MEDIDO, mesmo que você
+   tenha feito conta. MEDIR É FAZER CONTA: comprimento × pé-direito, contagem ×
+   seção, área × espessura. Um quantitativo quase nunca está pronto dentro do
+   arquivo — ele é a conta que o orçamentista faria à mão sobre os números do
+   arquivo. O que decide o selo é DE ONDE VEM CADA INSUMO, não se houve conta.
+
+   São insumos MEDIDOS:
    - Contagem literal de blocos (INSERT) que aparece em "CONTAGEM DE BLOCOS"
    - Contagem literal de esquadrias na seção "ESQUADRIAS" (com dimensão W×H)
    - Comprimento calculado em "COMPRIMENTOS POR LAYER" (valor em metros)
    - Área calculada em "ÁREAS HACHURADAS POR LAYER" (valor em m²)
    - Cota numérica que aparece em "COTAS/DIMENSÕES"
-   A quantidade do item TEM que bater com o número extraído. Se você multiplicou, somou
-   ou fez qualquer cálculo além de copiar o valor, NÃO é confirmado.
+   - Seção ou dimensão escrita no próprio desenho, no texto ou no nome do bloco
+     ("P12 18×40", "h=10 cm", "V3 20×50")
+   - Dado que o CLIENTE informou nas PREMISSAS (pé-direito, área construída)
+
+   Se TODOS os insumos da sua conta estão nessa lista → "confirmado", e a
+   observação mostra a conta INTEIRA dizendo de onde saiu cada número.
+   ✅ EXEMPLO DE CONFIRMADO: "16 pilares (CONTAGEM DE BLOCOS, layer FO-Pilares)
+      × perímetro 2×(0,18+0,40) m (seção no nome do bloco) × 3,20 m (pé-direito
+      das PREMISSAS) = 59,39 m²".
+
+   Se QUALQUER insumo foi ADOTADO POR VOCÊ — seção que o desenho não diz,
+   espessura de praxe, índice, "considerei 10 cm" — então é "estimado", e a
+   observação diz QUAL insumo você adotou. É o insumo adotado que rebaixa a
+   linha, nunca a multiplicação.
 
    🚨 MAS O NÚMERO SER MEDIDO NÃO BASTA — O LAYER TEM QUE SER DE OBRA.
    Layers de TEXTO/COTA/LEGENDA/TÍTULO/CHAMADA/HACHURA DE ANOTAÇÃO (nomes tipo
@@ -14437,14 +14455,19 @@ de portas/janelas com dimensão REAL extraída do CAD. Use para:
 2. "estimado" — para todo o resto, SEM EXCEÇÃO:
    - Quantidades derivadas de texto/legenda ("demolir X" → qtd=1)
    - Itens sugeridos de práxis (administração local, limpeza final, instalação de placa)
-   - Qualquer item cuja quantidade você não conseguiu ler DIRETO dos dados extraídos
+   - Qualquer item cuja quantidade você não conseguiu ler NEM CALCULAR a partir dos
+     dados extraídos (calcular com insumo medido é medir — ver a regra 1)
    - Itens "vb" (verba) de valor único
    - Composições inferidas ("se tem drywall, precisa de montante" sem count no CAD)
 
-REGRA DE OURO: **NA DÚVIDA, MARQUE "estimado".** É preferível 100 itens laranja que o
-usuário confirma um a um, do que 1 item branco com número inventado. O usuário quer
-poder confiar que "branco = aprovado direto", então só marque branco quando não houver
-NENHUMA dúvida.
+REGRA DE OURO: **A DÚVIDA QUE IMPORTA É SOBRE O INSUMO, NÃO SOBRE A CONTA.**
+Se você não sabe de onde saiu um dos números, marque "estimado" e diga na
+observação qual número é — item branco com insumo inventado quebra a confiança
+de que "branco = aprovado direto".
+Mas NÃO rebaixe uma conta cujos insumos você leu do arquivo só porque houve
+multiplicação: isso é exatamente o que o orçamentista ia fazer à mão. Linha
+laranja com a conta certa dentro da observação é trabalho que a gente fez, e
+não entregou.
 
 Não existe "verificar" nesta fase — use "estimado" pra qualquer incerteza.
 

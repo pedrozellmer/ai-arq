@@ -157,6 +157,19 @@ def test_contagem_direta_NAO_e_confundida_com_soma(obs):
     ("Fonte: 12 INSERTs do bloco 'QF6'. A soma das áreas do layer de hachura "
      "serve só de referência cruzada.",
      "a palavra está numa frase POSTERIOR — a fonte declarada é a contagem"),
+    # 🩸 22/09/2026, job 64fa324b — A GEOMETRIA ELEMENTAR DERRUBAVA O SELO.
+    # O cliente mandou 1 DWG de estrutura e informou o pé-direito. O motor
+    # mediu (3.716 m de parede, 207,84 m² de área, pilar por retângulo
+    # fechado) e a planilha saiu com 24 linhas COM número e ZERO medidas.
+    # Uma das travas era esta régua: o "+" que ela lia como parcela é o do
+    # PERÍMETRO. As parcelas aqui são LADOS DA MESMA PEÇA, não itens contados.
+    ("Estimado. 1 pilar × perímetro 2×(0,46+0,46) m × 3,20 m = 5,89 m². "
+     "Fonte: geometria layer FO-Pilares (1 retângulo 46×46 cm medido).",
+     "o '+' é a fórmula do perímetro — medir É fazer conta"),
+    ("Fôrma por metro linear = fundo + 2 faces = 0,14 + 2×0,40 = 0,94 m/m",
+     "'fundo + 2 faces' é a seção da viga, não duas parcelas contadas"),
+    ("Área de parede = perímetro (3,50 + 4,20) × 2 × pé-direito 2,80 m",
+     "perímetro de ambiente multiplicado pelo pé-direito informado"),
 ])
 def test_o_que_PARECE_soma_e_nao_e(obs, porque):
     """🪤 Os quatro padrões de falso positivo que sobraram depois de conferir
@@ -353,3 +366,37 @@ def test_a_regra_NAO_foi_reimplementada_no_motor():
     corpo = "".join(ast.dump(n) for n in fn.body)
     assert "SOMA, não leitura direta" not in corpo, \
         "o texto do aviso voltou pro motor — régua duplicada"
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  22/09/2026 — a fórmula de dimensão não é soma de parcelas
+#  🔑 O que separa as duas é a MULTIPLICAÇÃO COLADA no termo somado. Os
+#     controles positivos abaixo não têm multiplicação nenhuma e continuam
+#     caindo: sem eles, a exceção viraria porta aberta pra qualquer "+".
+# ══════════════════════════════════════════════════════════════════════════
+@pytest.mark.parametrize("obs, porque", [
+    ("ESTAR 18,65 + 20,10 + 12,30 = 51,05 m²",
+     "áreas de AMBIENTES somadas — parcelas de verdade, sem multiplicação"),
+    ("Fonte: soma dos INSERTs: tipo1=5 + tipo2=1 = 6 un",
+     "contagem montada de duas parcelas, não leitura direta"),
+    ("Fonte: (1 un) + 'PORTA - PADRÃO-2100514-FACHADA'",
+     "parcelas de contagem com nome de bloco no meio"),
+])
+def test_CONTROLE_soma_SEM_multiplicacao_continua_caindo(obs, porque):
+    assert fonte_e_soma(obs) is True, porque
+
+
+def test_o_selo_do_pilar_medido_SOBREVIVE_a_regra_da_soma():
+    """Ponta a ponta: o item que o motor mediu por geometria sai MEDIDO.
+
+    🩸 Era esta linha que chegava laranja ao cliente do job 64fa324b, com a
+    conta inteira escrita na observação e o retângulo do pilar medido no
+    layer. A trava da soma a derrubava pelo '+' do perímetro."""
+    obs = ("Estimado. 1 pilar × perímetro 2×(0,46+0,46) m × 3,20 m = 5,89 m². "
+           "Pé-direito informado por você = 3,20 m. Fonte: geometria layer "
+           "FO-Pilares (1 retângulo 46×46 cm medido).")
+    conf, nova_obs, rebaixou = aplicar("confirmado", obs)
+    assert rebaixou is False, "geometria medida não pode cair pela régua da soma"
+    assert conf == "confirmado"
+    assert "SOMA, não leitura direta" not in nova_obs, (
+        "a observação do cliente não pode ganhar o aviso de soma")
