@@ -7008,6 +7008,47 @@ def _pick_best_unit(units: list[str], description: str) -> str:
     return units[0] if units else "vb"
 
 
+def quadro_de_areas_do_texto_do_pdf(texto, arq: str = "", pagina=None) -> str:
+    """O quadro de áreas do AUTOR, lido do TEXTO de uma página de PDF.
+
+    🚨 23/09/2026 — POR QUE ISTO EXISTE. A régua do recorte de ambientes (passo
+    1 da inversão) compara o que a GEOMETRIA recortou com o quadro de áreas que
+    o AUTOR escreveu. Medido no acervo: 89 projetos têm recorte de ambientes com
+    número, 26 têm o quadro do autor — e só **2** têm os dois. Não é falta de
+    tráfego: é que os dois lados viviam em POPULAÇÕES DIFERENTES.
+
+    📊 A geometria recorta ambiente em **73 projetos por PDF** contra 16 por
+    CAD; e o quadro do autor só era lido dentro do laço de DXF. Ou seja: 73
+    projetos com o lado da geometria pronto, e nenhum com o outro lado.
+
+    🔑 A régua NÃO é reimplementada aqui: `areas_do_texto_da_prancha_rotuladas`
+    já recebe uma lista de textos e não sabe de onde eles vêm. O que faltava era
+    alguém passar o texto do PDF pra ela — e ele já é extraído inteiro na página
+    (o mesmo `_texto_inteiro` que alimenta a prova do quadro impresso).
+
+    🪤 Só LEITURA: devolve a linha de log e mais nada. Não entra no consenso de
+    área, não toca em item, não muda nada pro cliente. Inverter o motor é outra
+    obra; esta função só monta a comparação que decide se ela pode começar.
+
+    🔒 Vai número e rótulo normalizado — `linha_do_quadro_de_areas` cuida disso.
+    """
+    try:
+        from engine_rules import (areas_do_texto_da_prancha_rotuladas
+                                  as _areas_rot)
+    except Exception:
+        return ""
+    _linhas = str(texto or "").splitlines()
+    if not _linhas:
+        return ""
+    _pares = _areas_rot(_linhas)
+    if not _pares:
+        return ""
+    _nome = "%s p.%s" % (arq or "?",
+                         (pagina + 1) if isinstance(pagina, int) else "?")
+    return linha_do_quadro_de_areas(_nome, [_v for _r, _v in _pares],
+                                    [_r for _r, _v in _pares])
+
+
 def linha_do_quadro_de_areas(arq: str, areas: list, rotulos=None) -> str:
     """A linha de log do quadro de áreas do autor — a RÉGUA da inversão.
 
@@ -15553,6 +15594,19 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 text = _texto_inteiro[:6000]
                 _guarda_numeros_do_texto(_numeros_do_texto_por_prancha, filename,
                                          page_index, _texto_inteiro)
+                # 🔑 23/09/2026 — A RÉGUA DA INVERSÃO, AGORA TAMBÉM NO PDF.
+                # O quadro de áreas do autor só era lido do CAD, e a geometria
+                # recorta ambiente em 73 projetos por PDF contra 16 por CAD: os
+                # dois lados da comparação nunca se encontravam (2 casos em
+                # todo o acervo). Só leitura — não entra no consenso.
+                try:
+                    _lin_quadro = quadro_de_areas_do_texto_do_pdf(
+                        _texto_inteiro, filename, page_index)
+                    if _lin_quadro:
+                        _log_error("motor:area-regra", _lin_quadro, job_id,
+                                   severity="info")
+                except Exception as _eqp:
+                    print(f"[area-regra/pdf] {filename} p{page_index}: {_eqp}")
                 del _texto_inteiro
 
                 # 2. Renderizar crops (1 página de cada vez; stem único por página)
