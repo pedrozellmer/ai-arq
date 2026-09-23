@@ -127,6 +127,26 @@ def test_dia_da_REGUA_VELHA_nao_serve_de_regua_pros_novos():
         "é lido: %r" % v["frase"])
 
 
+def test_a_frase_da_REGUA_VELHA_concorda_em_GENERO():
+    """🪤 A primeira versão saiu "3 segundas-feiras ficaram de fora: foram
+    MEDIDOS". Este texto o Pedro lê todo dia, e frase torta faz o painel
+    parecer descuidado — painel descuidado não é lido. Mesma lição das outras
+    frases deste módulo: escrever as duas versões, nunca colar letras."""
+    # segundas: feminino
+    segundas = [{"dia": d, "ips_gente": n} for d, n in
+                [("2026-08-03", 60), ("2026-08-10", 55), ("2026-08-17", 48)]]
+    segundas.append({"dia": "2026-08-24", "ips_gente": 120,
+                     "coleta_truncada": False})
+    f = ms.veredito(segundas)["frase"]
+    assert "foram medidas" in f and "cortadas" in f, (
+        "concordância errada no feminino: %r" % f)
+    # sábados: masculino
+    sabados = _serie([63, 55, 48, 120], truncado_no_ultimo=False, sem_marca=True)
+    g = ms.veredito(sabados)["frase"]
+    assert "foram medidos" in g and "cortados" in g, (
+        "concordância errada no masculino: %r" % g)
+
+
 def test_CONTROLE_tres_dias_da_REGUA_NOVA_voltam_a_dar_veredito():
     """🧪 Sem isto, uma régua que recusasse tudo passaria nos dois testes
     acima e o painel ficaria mudo para sempre — que é exatamente a doença que

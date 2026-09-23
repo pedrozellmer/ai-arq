@@ -439,11 +439,19 @@ def veredito(serie: list) -> dict:
     if len(iguais) < 3:
         _porque = ""
         if _com_regua_velha:
-            _porque = (" (%d %s ficaram de fora: foram medidos com o teto "
-                       "antigo de 400 grupos, que mudou em 22/09, e saíram "
-                       "cortados)"
+            # 🪤 Frase INTEIRA por gênero, de novo. "3 segundas-feiras ficaram
+            # de fora: foram MEDIDOS" foi o que saiu na primeira versão — e
+            # este texto o Pedro lê todo dia. Colar letras ("medid%s") é a
+            # armadilha que já custou três tentativas na frase de cima.
+            if masculino:
+                _oque = ("foram medidos com o teto antigo de 400 grupos, que "
+                         "mudou em 22/09, e saíram cortados")
+            else:
+                _oque = ("foram medidas com o teto antigo de 400 grupos, que "
+                         "mudou em 22/09, e saíram cortadas")
+            _porque = (" (%d %s ficaram de fora: %s)"
                        % (_com_regua_velha,
-                          nome if _com_regua_velha == 1 else plural))
+                          nome if _com_regua_velha == 1 else plural, _oque))
         return {"status": "nao_sei", "comparaveis": len(iguais),
                 "regua_velha": _com_regua_velha,
                 "frase": ("só tenho %d %s no histórico — preciso de 3 pra dizer se "
