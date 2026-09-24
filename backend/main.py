@@ -964,6 +964,22 @@ def _descarte_de_blocos(extraction) -> str:
     return txt
 
 
+def _blocos_colados_abertos(extraction) -> str:
+    """Quanto desenho colado como bloco (A$C) foi aberto nesta prancha.
+
+    🔑 24/09/2026, job 09e2e640: sem esta linha, "o desenho estava dentro do
+    bloco" só se descobria baixando o arquivo. Vazio quando não havia A$C."""
+    try:
+        d = dict(getattr(extraction, "blocos_colados", None) or {})
+    except Exception:
+        return ""
+    if not d:
+        return ""
+    return " colados=[" + " ".join(f"{k}={d[k]}" for k in
+                                   ("abertos", "entidades", "niveis", "falhas", "teto")
+                                   if k in d) + "]"
+
+
 def _descarte_de_pilares(extraction) -> str:
     """Sufixo do log de geometria: por que cada pilar candidato foi recusado.
 
@@ -14418,6 +14434,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                                 # blocos=0 — se for filtro nosso, é o defeito
                                 # mais caro do motor.
                                 f"{_descarte_de_blocos(extraction)}"
+                                f"{_blocos_colados_abertos(extraction)}"
                                 # 🔬 27/08: POR QUE `pilares` deu esse número.
                                 # Prancha de FÔRMA com 2.545 linhas e 198 cotas
                                 # devolvia `pilares=0` sem dizer se o desenho

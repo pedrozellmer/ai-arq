@@ -167,6 +167,10 @@ class DXFExtraction:
     # 🔬 27/08: por que `pilares` deu o número que deu. {nome_do_layer,
     # nao_e_4_lados, nao_e_retangulo, fora_de_escala, ilegivel, amostra_layers}
     pilares_descartados: dict = field(default_factory=dict)
+    # 🔑 24/09: o desenho que veio COLADO COMO BLOCO (A$C…) e foi aberto na
+    # entrada. {abertos, entidades, niveis, falhas, teto} — ver
+    # `abrir_blocos_colados`. Vazio quando o arquivo não tinha nenhum.
+    blocos_colados: dict = field(default_factory=dict)
 
     # -- convenience helpers ------------------------------------------------
 
@@ -2521,6 +2525,86 @@ def _shoelace_area(points: list) -> float:
     return area / 2.0
 
 
+#: Nome que o AutoCAD dá ao bloco criado por "Colar como bloco" (PASTEBLOCK):
+#: "A$C" + hexadecimal. Não é bloco de biblioteca (porta, louça): é um pedaço
+#: do DESENHO que alguém colou. O nome não diz nada — o conteúdo diz tudo.
+_RE_BLOCO_COLADO = re.compile(r"^A\$C[0-9A-F]+$", re.IGNORECASE)
+
+#: Teto de entidades criadas ao abrir (anti-explosão de memória). O caso que
+#: motivou tem 75.472; o teto é o mesmo da explosão de parede (~400k).
+_MAX_ENTIDADES_COLADAS = 400000
+#: Colado dentro de colado: o caso real tinha 2.700 A$C aninhados.
+_MAX_NIVEIS_COLADOS = 12
+
+
+def abrir_blocos_colados(doc) -> dict:
+    """Abre (EXPLODE) no modelspace todo bloco `A$C…` — o desenho colado como
+    bloco — nível por nível, até não sobrar nenhum.
+
+    🩸 24/09/2026, job 09e2e640. Um prédio de 12 pavimentos em 10 pranchas
+    chegou com 2.070 entidades soltas e **75.472 dentro de 140 blocos A$C**
+    (2.700 deles aninhados): portas P70/P80/P90 centenas de vezes, 5.985
+    cotas, 2.206 hachuras, layer de pilar. O motor só lê o modelspace e
+    descarta `A$C` na contagem (`$` no nome = "lixo do AutoCAD") — saiu com
+    0 medidas e 36 de 42 linhas em branco, com o desenho INTEIRO no arquivo.
+    Em 120 dias: 15 de 74 jobs com CAD tinham A$C (10 clientes).
+
+    🔑 Abre SÓ `A$C`. Bloco com nome de gente (P80, CAMA80) continua INSERT —
+    é assim que ele é CONTADO pelo nome; a explosão só leva ele pro lugar
+    certo, com a transformação do pai. Abrir na ENTRADA (antes das réguas de
+    unidade e de tudo que lê o modelspace) faz o desenho colado valer igual
+    ao desenho solto — nem mais, nem menos: nenhuma régua ganha exceção.
+
+    🪤 Não há contagem dobrada com a explosão de parede de infra (~3160): ela
+    varre os INSERTs do modelspace, e depois daqui não sobra INSERT de A$C.
+
+    Kill switch: DXF_ABRIR_BLOCOS_COLADOS=0. Nunca levanta.
+    """
+    info = {"abertos": 0, "entidades": 0, "niveis": 0, "falhas": 0, "teto": False}
+    if os.getenv("DXF_ABRIR_BLOCOS_COLADOS", "1").strip() == "0":
+        return {}
+    # O ezdxf avisa "copy process ignored DIMASSOC" a cada cota copiada — no
+    # caso real, centenas de linhas. Mesmo silêncio (e mesmo finally) da
+    # explosão de parede: o nível do logger global SEMPRE volta.
+    _ezlog = logging.getLogger("ezdxf")
+    _ez_prev = _ezlog.level
+    _ezlog.setLevel(max(_ez_prev or logging.WARNING, logging.ERROR))
+    # quem não abriu não volta pra fila: sem isto o mesmo bloco era tentado
+    # (e contado como falha) em cada um dos 12 níveis — achado do guarda.
+    _recusados = set()
+    try:
+        msp = doc.modelspace()
+        for nivel in range(_MAX_NIVEIS_COLADOS):
+            colados = [e for e in msp.query("INSERT")
+                       if id(e) not in _recusados
+                       and _RE_BLOCO_COLADO.match(str(e.dxf.get("name", "") or ""))]
+            if not colados:
+                break
+            info["niveis"] = nivel + 1
+            for ins in colados:
+                if info["entidades"] >= _MAX_ENTIDADES_COLADAS:
+                    info["teto"] = True
+                    break
+                try:
+                    novos = ins.explode()
+                    info["abertos"] += 1
+                    info["entidades"] += len(novos)
+                except Exception:
+                    # bloco que o ezdxf não explode (escala não-uniforme em
+                    # entidade que não aceita): fica como estava — o mesmo
+                    # resultado de antes deste conserto, nunca pior.
+                    info["falhas"] += 1
+                    _recusados.add(id(ins))
+            if info["teto"]:
+                break
+    except Exception as e:
+        logger.warning("abrir_blocos_colados: %s", e)
+        info["falhas"] += 1
+    finally:
+        _ezlog.setLevel(_ez_prev)
+    return info if (info["abertos"] or info["falhas"]) else {}
+
+
 def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> DXFExtraction:
     """Main extraction function — reads a .dxf file and returns structured data.
 
@@ -2635,6 +2719,9 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
     if doc is None:
         raise RuntimeError(f"Não foi possível abrir o DXF com nenhum encoding: {filepath}")
 
+    # 🔑 24/09: desenho colado como bloco vira desenho solto ANTES de qualquer
+    # leitura — inclusive das réguas de unidade, que ganham as cotas de dentro.
+    _colados = abrir_blocos_colados(doc)
     msp = doc.modelspace()
     unit_factor = _detect_unit_factor(doc)
     unit_factor, unit_warnings = _validate_unit_factor(doc, unit_factor)
@@ -3756,6 +3843,7 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         struct_rects=struct_rects,
         block_attributes=block_attributes,
         blocos_descartados=dict(_desc, amostra_anonimo=list(_amostra_anonimo)),
+        blocos_colados=dict(_colados or {}),
         pilares_descartados=dict(
             _desc_pil,
             amostra_layers=sorted(_amostra_layers.items(),
