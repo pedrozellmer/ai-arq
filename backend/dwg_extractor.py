@@ -1986,10 +1986,17 @@ def _try_libredwg_convert(dwg_path: str, output_dir: str) -> Optional[str]:
     out_path = os.path.join(output_dir, stem + "_libredwg.dxf")
 
     try:
+        # 🩸 24/09/2026 (jobs a62f7ae3, 09e2e640): o dwg2dxf escreve na tela os
+        # nomes dos estilos de texto do DWG, que em arquivo brasileiro vêm em
+        # cp1252. Sem `errors`, ler essa conversa levantava UnicodeDecodeError
+        # e o DXF que ele JÁ tinha gerado ia pro lixo — erro terminal pro
+        # cliente. A conversa só serve pro log; o arquivo é o que importa.
         result = subprocess.run(
             [dwg2dxf, "-y", "-o", out_path, dwg_path],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=300,
         )
         if result.returncode == 0 and os.path.isfile(out_path):

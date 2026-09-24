@@ -25,6 +25,8 @@ import subprocess
 import sys
 import types
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import dwg_extractor as dx  # noqa: E402
@@ -109,6 +111,39 @@ def test_plano_B_que_estoura_o_tempo_e_o_que_quebra_tambem(monkeypatch):
     assert dx._try_libredwg_convert(_DWG, "/tmp") is None
     _det = dx.libredwg_failure_detail(_DWG)
     assert "OSError" in _det and "Permission denied" in _det, _det
+
+
+#: 🪤 No Windows o `communicate` decodifica numa THREAD: o erro vira só um aviso
+#: e o teste passava cego sem o conserto. No Linux (Render e CI) ele sobe na
+#: chamada. Transformar o aviso em erro deixa o guarda vermelho nos dois.
+@pytest.mark.filterwarnings("error::pytest.PytestUnhandledThreadExceptionWarning")
+def test_plano_B_que_FALA_com_acento_estranho_nao_perde_o_DXF(monkeypatch, tmp_path):
+    """🩸 24/09/2026 (job 09e2e640; antes, a62f7ae3 em 22/09). O dwg2dxf escreve
+    na tela os nomes dos estilos de texto do DWG, e em arquivo brasileiro eles
+    vêm em cp1252. Com `text=True` sem `errors`, o `subprocess.run` LEVANTAVA
+    UnicodeDecodeError ao ler essa conversa — e o DXF que o conversor já tinha
+    gerado era jogado fora: o cliente recebia erro terminal.
+
+    Dublê que roda um processo DE VERDADE, com os mesmos argumentos nomeados
+    que o código passa: é a decodificação real que está em teste, não a forma."""
+    _limpa()
+    monkeypatch.setattr("shutil.which", lambda _n: "/usr/bin/dwg2dxf")
+    monkeypatch.setenv("LIBREDWG_FALLBACK", "1")
+    _real = subprocess.run
+
+    def _dwg2dxf_falante(cmd, **kw):
+        _saida = cmd[cmd.index("-o") + 1]
+        # 0x81/0x8D não existem em cp1252 NEM em UTF-8: quebra nos dois lados
+        _py = ("import sys; open(%r, 'w').write('0\\nEOF\\n'); "
+               "sys.stderr.buffer.write(b'Warning: style ESTILO_\\x81\\x8d\\xc7\\xe3O\\n')"
+               % _saida)
+        return _real([sys.executable, "-c", _py], **kw)
+
+    monkeypatch.setattr(subprocess, "run", _dwg2dxf_falante)
+    _out = dx._try_libredwg_convert(str(tmp_path / "prancha-de-teste.dwg"), str(tmp_path))
+    assert _out and os.path.isfile(_out), (
+        "o conversor gerou o DXF e o plano B jogou fora: %r" % dx._FALHA_LIBREDWG)
+    assert dx.libredwg_failure_detail(str(tmp_path / "prancha-de-teste.dwg")) == ""
 
 
 def test_o_rastro_cabe_em_uma_linha_e_tem_teto():
