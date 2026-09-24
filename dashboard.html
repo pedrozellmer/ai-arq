@@ -219,7 +219,7 @@
         </div>
 
         <!-- 🏢 ESCRITÓRIO (piloto DTZ, 23/09/2026): a porta só aparece pra quem está no
-             piloto (profiles.piloto_escritorio, ligado por SQL) ou já participa de um
+             piloto (tabela escritorio_piloto, só o servidor escreve) ou já participa de um
              projeto do escritório. Pra todo o resto, este bloco nem existe na tela. -->
         <a id="escritorio-entrada" href="escritorio.html" hidden
            class="flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-5 mb-6 hover:border-indigo-300 transition">
@@ -2255,7 +2255,14 @@
     } catch (_) {}
     // 🏢 23/09/2026 — convite do escritório ainda não aceito: volta pra ele.
     // A convite.html apaga o pendente quando o servidor diz que não vale mais.
-    try { if (window.aiarqConvite && window.aiarqConvite.pendente()) { window.location.href = 'convite.html'; return; } } catch (_) {}
+    // 🩸 revisão adversarial 24/09: sem o "uma vez por sessão", quem abriu um convite e não aceitou
+    // (link reencaminhado, computador compartilhado) ficava preso: todo painel voltava pro convite.
+    try {
+      if (window.aiarqConvite && window.aiarqConvite.pendente() && !sessionStorage.getItem('aiarq_convite_levado')) {
+        sessionStorage.setItem('aiarq_convite_levado', '1');
+        window.location.href = 'convite.html'; return;
+      }
+    } catch (_) {}
     const user = currentUser;
     const meta = user.user_metadata || {};
 
@@ -2314,10 +2321,10 @@
     (async () => {
       try {
         const [p, m] = await Promise.all([
-          sbClient.from('profiles').select('piloto_escritorio').eq('user_id', currentUser.id).maybeSingle(),
+          sbClient.rpc('escritorio_no_piloto'),
           sbClient.from('escritorio_membros').select('id', { count: 'exact', head: true }).eq('user_id', currentUser.id).eq('status', 'ativo'),
         ]);
-        const noPiloto = !p.error && p.data && p.data.piloto_escritorio === true;
+        const noPiloto = !p.error && p.data === true;
         const temProjeto = !m.error && (m.count || 0) > 0;
         const porta = document.getElementById('escritorio-entrada');
         if (porta && (noPiloto || temProjeto)) porta.hidden = false;
@@ -2433,6 +2440,7 @@
   if (btnLogout) {
     btnLogout.addEventListener('click', async () => {
       localStorage.removeItem('aiarq_profile_complete');
+      try { window.aiarqConvite && window.aiarqConvite.limpar(); } catch (_) {}
       await sbClient.auth.signOut();
       window.location.href = 'login.html';
     });

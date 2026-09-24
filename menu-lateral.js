@@ -805,6 +805,9 @@
     if (!b || EH_PAINEL) return;
     b.addEventListener('click', function () {
       try { localStorage.removeItem('aiarq_profile_complete'); } catch (_) {}
+      // 🔒 A5 (24/09): o convite pendente fica no navegador; sem limpar, a PRÓXIMA conta que
+      // entrar aqui herdaria o convite de outra pessoa.
+      try { window.aiarqConvite && window.aiarqConvite.limpar(); } catch (_) {}
       if (window.sbClient && window.sbClient.auth) {
         window.sbClient.auth.signOut().finally(function () {
           window.location.href = 'login.html';

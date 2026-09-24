@@ -337,9 +337,32 @@
   // sessão morreu e o `clearDraft()` calcularia outra chave (ou nenhuma). A
   // limpeza passaria verde e o nome, o WhatsApp e o CPF continuariam no disco
   // — que é o defeito que este botão, sozinho, deixou fácil de alcançar.
+  // desfaz a marca "abriu o convite" desta conta antes de sair (o servidor só desliga a marca se for
+  // DESTA conta); no máximo 3 s, sair nunca fica preso no servidor (checagem 5, 24/09)
+  async function desligarDoConvite() {
+    try {
+      const _p = window.aiarqConvite && window.aiarqConvite.pendente();
+      let _tAba = null;
+      try { _tAba = sessionStorage.getItem('aiarq_convite_aba'); } catch (_) {}
+      const _toks = [...new Set([_tAba, _p && _p.t].filter(Boolean))];
+      const { data: { session: _s } } = await sbClient.auth.getSession();
+      if (_toks.length && _s && window.API_BASE) await Promise.race([
+        Promise.all(_toks.map((t) => fetch(`${window.API_BASE}/api/escritorio/convite/visto`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + _s.access_token },
+          body: JSON.stringify({ token: t, dispensar: true }),
+          keepalive: true,
+        }).catch(() => {}))),
+        new Promise((r) => setTimeout(r, 3000)),
+      ]);
+    } catch (_) {}
+    try { sessionStorage.removeItem('aiarq_convite_aba'); } catch (_) {}
+  }
   async function sairDoCadastro() {
     if (window.trackEvent) trackEvent('clique:sair-do-cadastro');
     clearDraft();
+    await desligarDoConvite();
+    try { window.aiarqConvite && window.aiarqConvite.limpar(); } catch (_) {}   // como o Sair do painel (A5)
     try { await sbClient.auth.signOut(); } catch (_) {}
     window.location.href = 'index.html';
   }
@@ -532,6 +555,25 @@
 
     // Chegou aqui = precisa preencher (ou não deu pra confirmar).
     if (_convite) {
+      // 🏢 liga ESTA conta ao convite no servidor já aqui: o login pelo Google devolve pro cadastro,
+      // não pro convite, e quem para antes de terminar a ficha levava a esteira de cliente novo
+      // (3ª revisão, 24/09). 🔒 Só com o convite aberto NESTA aba (a cópia da aba que o convite.html
+      // guarda): o pendente do navegador pode ser de OUTRA pessoa num computador compartilhado
+      // (4ª revisão). Sem a cópia (a confirmação do e-mail abre ABA NOVA), vale o pendente se a conta
+      // nasceu DEPOIS da 1ª visita ao convite neste navegador — quase sempre a mesma pessoa (rodada seca 2).
+      // 🪤 Num computador compartilhado pode ser OUTRA: aí o efeito é só atrasar os e-mails de cliente
+      // novo dela até o convite vencer ("na dúvida, não envia"), e o Sair daqui desfaz (checagem 5, 24/09).
+      // Quem confere o token é o servidor. Falha não trava o cadastro.
+      try {
+        const _tAba = sessionStorage.getItem('aiarq_convite_aba')
+          || (_convite.em && Date.parse(session.user.created_at || '') >= _convite.em ? _convite.t : null);
+        if (_tAba && window.API_BASE) fetch(`${window.API_BASE}/api/escritorio/convite/visto`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + session.access_token },
+          body: JSON.stringify({ token: _tAba }),
+          keepalive: true,
+        }).catch(() => {});
+      } catch (_) {}
       // o mesmo formulário, com o contexto do convite no topo
       const _h1 = document.querySelector('#bloco-cadastro h1'), _sub = _h1 && _h1.nextElementSibling;
       if (_sub) _sub.textContent = 'Menos de um minuto e você entra no projeto'

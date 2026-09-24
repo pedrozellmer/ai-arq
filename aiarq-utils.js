@@ -64,9 +64,17 @@
       return null;
     },
     guardar: function (t, extra) {
-      try { localStorage.setItem('aiarq_convite', JSON.stringify(Object.assign({ t: t, em: Date.now() }, extra || {}))); } catch (_) {}
+      try {
+        var antes = null;
+        try { antes = JSON.parse(localStorage.getItem('aiarq_convite') || 'null'); } catch (_) {}
+        // o prazo conta da 1ª visita: revisitar a página não renova os 14 dias
+        var em = (antes && antes.t === t && antes.em) ? antes.em : Date.now();
+        localStorage.setItem('aiarq_convite', JSON.stringify(Object.assign({ t: t, em: em }, extra || {})));
+      } catch (_) {}
     },
     limpar: function () { try { localStorage.removeItem('aiarq_convite'); } catch (_) {} },
+    // só apaga se o pendente for ESTE convite (um link velho não derruba o convite novo)
+    limparSe: function (t) { var p = this.pendente(); if (!p || p.t === t) this.limpar(); },
   };
 
 

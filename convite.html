@@ -90,6 +90,20 @@
         </p>
       </div>
 
+      <!-- 🔒 A5 (24/09): aceitar é um CLIQUE, mostrando com qual conta. Antes aceitava sozinho
+           ao abrir a página — e o convite pendente sobrevivia ao "Sair", então a próxima
+           conta que entrasse naquele navegador ficava com o convite de outra pessoa. -->
+      <div id="st-confirmar" hidden class="text-center">
+        <h1 class="text-2xl font-bold text-gray-900 mt-6 mb-2">Entrar no projeto</h1>
+        <p class="text-base text-gray-700 mb-2"><b id="cf-projeto" class="text-indigo-700">—</b></p>
+        <p class="text-sm text-gray-600 mb-6">Você vai entrar como <b id="cf-conta">—</b>.</p>
+        <button id="btn-aceitar" type="button" onclick="aceitarAgora()"
+                class="w-full inline-flex items-center justify-center rounded-xl gradient-main text-white font-semibold py-3.5 shadow-btn hover:scale-[1.01] transition">Entrar no projeto</button>
+        <button type="button" onclick="sairEUsarOutraConta()"
+                class="mt-3 w-full inline-flex items-center justify-center rounded-xl border border-gray-300 bg-white text-gray-800 font-semibold py-3 hover:bg-gray-50 transition">Não sou eu · usar outra conta</button>
+        <button type="button" onclick="agoraNao()" class="mt-4 text-sm text-gray-500 hover:text-gray-900 underline">Agora não · voltar ao painel</button>
+      </div>
+
       <!-- deu certo -->
       <div id="st-pronto" hidden class="text-center">
         <div class="mx-auto mt-6 mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50 text-emerald-600" aria-hidden="true">
@@ -135,7 +149,7 @@
   // ══════════════════════════════════════════════════════════════════
   const sb = window.sbClient;
   const $ = (id) => document.getElementById(id);
-  const estados = ['st-carregando', 'st-convite', 'st-pronto', 'st-erro'];
+  const estados = ['st-carregando', 'st-convite', 'st-confirmar', 'st-pronto', 'st-erro'];
   function mostrar(id) { estados.forEach((e) => { $(e).hidden = e !== id; }); }
 
   function erro(titulo, texto, podeTentar) {
@@ -147,17 +161,37 @@
 
   // 1) O token: vem no fragmento (#t=…) na 1ª visita; depois, do navegador.
   //    Tira do endereço na hora — não fica no histórico nem em print de tela.
-  let token = '';
+  //    🩸 2ª revisão (24/09): NÃO guarda antes do servidor dizer que vale. Guardar um link morto
+  //    por cima apagava o convite pendente BOM (o `recusado` limpava o que acabara de guardar).
+  //    O token AINDA NÃO conferido mora só nesta aba (sessionStorage): recarregar (F5, soluço de rede)
+  //    acha ele de novo, e ele nunca passa por cima do convite pendente bom (3ª revisão, 24/09).
+  //    A cópia da aba fica até o convite ser aceito, recusado ou dispensado: ela sobrevive à ida ao
+  //    login/Google e é a PROVA de que o convite foi aberto nesta aba (4ª revisão, 24/09).
+  let token = '', daAba = '';
   const m = /(?:^#|&)t=([A-Za-z0-9_-]{20,})/.exec(location.hash || '');
   if (m) {
-    token = m[1];
-    const antes = window.aiarqConvite.pendente();
-    window.aiarqConvite.guardar(token, antes && antes.t === token ? { projeto: antes.projeto, por: antes.por } : {});
+    token = daAba = m[1];
+    try { sessionStorage.setItem('aiarq_convite_aba', token); } catch (_) {}
     history.replaceState(null, '', location.pathname);
   } else {
+    try { daAba = sessionStorage.getItem('aiarq_convite_aba') || ''; } catch (_) {}
     const p = window.aiarqConvite.pendente();
-    token = p ? p.t : '';
+    token = daAba || (p ? p.t : '');
   }
+  // 🔒 o convite veio por ESTA aba (link aberto aqui), e não de um pendente deixado no navegador por
+  // outra pessoa (computador compartilhado): só assim o "visto" sai sem a tela de confirmação.
+  const destaAba = !!token && token === daAba;
+  function esquecerAba() { try { sessionStorage.removeItem('aiarq_convite_aba'); } catch (_) {} }
+  // link novo colado NESTA aba: só o fragmento muda e a página não recarrega — recarrega pra ler
+  window.addEventListener('hashchange', () => { if (/(?:^#|&)t=/.test(location.hash)) location.reload(); });
+
+  // Quem veio de login.html?redirect=convite.html pelo Google/cadastro chega aqui sem passar pelo
+  // painel: o pedido de volta já foi cumprido. Sem apagar, o "Agora não" ia pro painel e o painel
+  // mandava de volta pra cá, já sem convite ("Não achei o convite") (3ª revisão, 24/09).
+  try {
+    const _r = JSON.parse(localStorage.getItem('aiarq_redirect') || 'null');
+    if (_r && /^convite\.html/i.test(_r.para || '')) localStorage.removeItem('aiarq_redirect');
+  } catch (_) {}
 
   async function api(caminho, corpo, sessao) {
     const h = { 'Content-Type': 'application/json' };
@@ -175,13 +209,49 @@
 
   // Convite que o servidor recusou (não existe / já usado / vencido): apaga o
   // pendente, senão o painel mandaria a pessoa pra cá pra sempre.
+  let SESSAO = null;
   function recusado(r) {
-    window.aiarqConvite.limpar();
-    erro(r.status === 410 ? 'Este convite venceu' : 'Este convite não vale mais',
+    // a cópia da aba ficou velha (a admin reenviou/cancelou o convite enquanto esta aba esperava o
+    // login) e há OUTRO convite guardado: tenta o guardado em vez de dizer "não vale mais".
+    // Sem laço: na nova carga a cópia não existe mais (rodada seca 2, 24/09).
+    const _p = window.aiarqConvite.pendente();
+    if (!m && daAba === token && _p && _p.t !== token) { esquecerAba(); location.reload(); return; }
+    window.aiarqConvite.limparSe(token);
+    esquecerAba();
+    if (r.status === 409) {
+      // A13 (24/09): o servidor distingue "já foi usado" (409) de "trocado ou cancelado" (404).
+      erro('Este convite já foi usado', (r.dados && r.dados.detail) || 'Se foi você, entre na sua conta: o projeto está no seu Escritório.', false);
+      $('btn-site').textContent = SESSAO ? 'Abrir o Escritório' : 'Entrar na minha conta';
+      $('btn-site').href = SESSAO ? 'escritorio.html' : 'login.html?redirect=escritorio.html';
+      return;
+    }
+    erro(r.status === 410 ? 'Este convite venceu' : 'Este link não vale mais',
          (r.dados && r.dados.detail) || 'Peça um novo a quem te convidou.', false);
   }
 
+  // Esta conta NÃO vai aceitar agora: desliga ela do convite no servidor (volta pra esteira normal).
+  // 🩸 3ª revisão (24/09): espera o "visto" que ainda estiver no ar (senão ele chegava DEPOIS e
+  // religava a conta) e relê a sessão na hora (a da carga vence com a aba parada ~1 h → 401 calado).
+  // Nenhuma espera passa de 3 s: sair nunca fica preso no servidor (4ª revisão, 24/09).
+  let VISTO = null, desistiu = false;
+  const noMaximo = (p, ms) => Promise.race([p, new Promise((r) => setTimeout(r, ms))]);
+  async function desligarConta() {
+    desistiu = true;
+    try { if (VISTO) await noMaximo(VISTO, 3000); } catch (_) {}
+    let s = null;
+    try { s = (await sb.auth.getSession()).data.session; } catch (_) {}
+    try { if (s) await noMaximo(api('convite/visto', { token, dispensar: true }, s), 3000); } catch (_) {}
+  }
+
+  async function agoraNao() {
+    await desligarConta();
+    esquecerAba();
+    window.aiarqConvite.limparSe(token);   // o convite continua no e-mail; o painel para de trazer pra cá
+    location.href = 'dashboard.html';
+  }
+
   async function sairEUsarOutraConta() {
+    await desligarConta();
     try { await sb.auth.signOut(); } catch (_) {}
     location.reload();
   }
@@ -192,9 +262,12 @@
       return;
     }
 
+    try { SESSAO = (await sb.auth.getSession()).data.session; } catch (_) {}
+
     // 2) O que é o convite (público, sem login; e-mail mascarado).
     const v = await api('convite/ver', { token });
-    if (v.status === 404 || v.status === 410) return recusado(v);
+    if (v.status === 404 || v.status === 409 || v.status === 410) return recusado(v);
+    // soluço (rede/servidor): o token não conferido segue só na aba, e o "Tentar de novo" acha ele lá
     if (v.status !== 200) return erro('Não deu pra abrir o convite agora', v.dados.detail || 'Tente de novo em instantes.', true);
     if (v.dados.expirado) return recusado({ status: 410, dados: {} });
     const projeto = v.dados.projeto || 'um projeto', por = v.dados.convidado_por || 'Alguém';
@@ -205,10 +278,13 @@
     if (window.trackEvent) trackEvent('convite_visto');
 
     // 3) Tem sessão? Sem sessão: a porta (login/criar conta), que volta pra cá.
-    let sessao = null;
-    try { sessao = (await sb.auth.getSession()).data.session; } catch (_) {}
+    const sessao = SESSAO;
     if (!sessao) return mostrar('st-convite');
     $('btn-sair').hidden = false;
+    // o servidor liga ESTA conta ao convite já aqui, antes da ficha: quem para no cadastro também
+    // conta (3ª revisão, 24/09). Até aceitar, ela não leva e-mail de "cliente novo". Falha não trava nada.
+    // Pendente que NÃO veio desta aba espera a confirmação, que mostra a conta e tem "Não sou eu".
+    if (destaAba && !desistiu) VISTO = api('convite/visto', { token }, sessao);
 
     // 4) Com sessão mas sem ficha: a ficha é a MESMA do site (termos + idade). Volta pra cá no fim.
     $('txt-carregando').textContent = 'Conferindo seu cadastro…';
@@ -220,21 +296,38 @@
         temFicha = !!data;
       } catch (_) { if (tentativa === 1) await new Promise((r) => setTimeout(r, 800)); }
     }
+    if (desistiu) return;                 // clicou "Usar outra conta" enquanto conferia a ficha
     if (temFicha === null) return erro('Não consegui conferir seu cadastro', 'Foi um soluço de conexão. Tente de novo em instantes.', true);
     if (!temFicha) { location.href = 'cadastro.html'; return; }
 
-    // 5) Aceita.
+    // 5) Confirma com um clique, mostrando a conta.
+    $('cf-projeto').textContent = projeto;
+    $('cf-conta').textContent = sessao.user.email || 'esta conta';
+    mostrar('st-confirmar');
+    if (!VISTO && !desistiu) VISTO = api('convite/visto', { token }, sessao);
+  }
+
+  async function aceitarAgora() {
+    $('btn-aceitar').disabled = true;
     $('txt-carregando').textContent = 'Entrando no projeto…';
-    const a = await api('convite/aceitar', { token }, sessao);
-    if (a.status === 404 || a.status === 410) return recusado(a);
-    if (a.status === 409) {  // já está no projeto com esta conta: não é erro pra pessoa
-      window.aiarqConvite.limpar();
-      $('btn-projeto').href = 'escritorio.html';
-      mostrar('st-pronto');
+    mostrar('st-carregando');
+    // sessão lida NA HORA do clique: a da carga pode ter vencido se a aba ficou parada (~1 h)
+    let s = null;
+    try { s = (await sb.auth.getSession()).data.session; } catch (_) {}
+    if (!s) { location.reload(); return; }
+    SESSAO = s;
+    const a = await api('convite/aceitar', { token }, s);
+    if (a.status === 404 || a.status === 409 || a.status === 410) return recusado(a);
+    if (a.status !== 200) return erro('Não deu pra entrar no projeto agora', a.dados.detail || 'Tente de novo em instantes.', true);
+    window.aiarqConvite.limparSe(token);   // o aceite de uma aba não apaga o convite que outra aba guardou
+    esquecerAba();
+    if (a.dados.ja_membro) {
+      erro('Você já está neste projeto', 'Esta conta já faz parte do projeto. Se você abriu o link pra conferir, '
+        + 'ele continua valendo pra pessoa convidada.', false);
+      $('btn-site').textContent = 'Abrir o projeto';
+      $('btn-site').href = 'escritorio.html#/p/' + a.dados.projeto_id + '/capa';
       return;
     }
-    if (a.status !== 200) return erro('Não deu pra entrar no projeto agora', a.dados.detail || 'Tente de novo em instantes.', true);
-    window.aiarqConvite.limpar();
     $('btn-projeto').href = 'escritorio.html#/p/' + a.dados.projeto_id + '/capa';
     $('p-outra-conta').hidden = !a.dados.email_da_conta_diferente;
     if (window.trackEvent) trackEvent('convite_aceito');

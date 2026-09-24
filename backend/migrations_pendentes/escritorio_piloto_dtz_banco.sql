@@ -458,3 +458,261 @@ grant execute on function public.escritorio_contatos(uuid) to authenticated;
 revoke select on public.escritorio_membros from authenticated;
 grant select (id, projeto_id, user_id, nome, papel, funcao, status, convidado_em, aceito_em, removido_em)
   on public.escritorio_membros to authenticated;
+
+-- ── 17. (24/09) URGENTES da varredura (A1, A3, A4, A7) ──
+-- A1: o piloto era só o card do painel; o banco deixava QUALQUER conta criar projeto e,
+--     pela rota, mandar convite pelo nosso SMTP. Agora a lista do piloto mora no banco e
+--     só o servidor/manutenção escreve nela.
+create table public.escritorio_piloto (
+  user_id     uuid primary key references auth.users(id) on delete cascade,
+  liberado_em timestamptz not null default now()
+);
+comment on table public.escritorio_piloto is
+  'Quem pode CRIAR projeto no Escritório (piloto). Só servidor/manutenção escreve. Convidado não precisa estar aqui.';
+alter table public.escritorio_piloto enable row level security;
+revoke all on public.escritorio_piloto from anon, authenticated;
+
+create or replace function public.escritorio_no_piloto()
+returns boolean language sql stable security definer set search_path = '' as $$
+  select exists (select 1 from public.escritorio_piloto p where p.user_id = (select auth.uid()))
+$$;
+revoke all on function public.escritorio_no_piloto() from public, anon;
+grant execute on function public.escritorio_no_piloto() to authenticated, service_role;
+
+drop policy escritorio_projetos_criar on public.escritorio_projetos;
+create policy escritorio_projetos_criar on public.escritorio_projetos for insert to authenticated
+  with check (dono = (select auth.uid()) and public.escritorio_no_piloto());
+
+-- A3: o teto contava LINHAS (reenvio contava 1, cancelar zerava). Agora conta ENVIOS, numa
+--     tabela que só o servidor escreve; o destino guardado é o SHA-256 do e-mail, não o e-mail.
+create table public.escritorio_convites_enviados (
+  id           bigint generated always as identity primary key,
+  admin        uuid not null references auth.users(id) on delete cascade,
+  projeto_id   uuid references public.escritorio_projetos(id) on delete set null,
+  destino_hash text not null check (char_length(destino_hash) = 64),
+  enviado_em   timestamptz not null default now()
+);
+create index escritorio_convites_enviados_admin on public.escritorio_convites_enviados (admin, enviado_em desc);
+create index escritorio_convites_enviados_destino on public.escritorio_convites_enviados (destino_hash, enviado_em desc);
+comment on table public.escritorio_convites_enviados is
+  'Cada envio de convite (teto por admin e por destinatário). Só o servidor escreve; destino = sha256(email).';
+alter table public.escritorio_convites_enviados enable row level security;
+revoke all on public.escritorio_convites_enviados from anon, authenticated;
+
+-- A3: convite só nasce pelo servidor (que conta, limita e manda o e-mail).
+drop policy escritorio_membros_convidar on public.escritorio_membros;
+
+-- A3/A7: datas do convite e e-mail não mudam pela tela; só o servidor.
+create or replace function public.escritorio_membro_guarda()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  if public.escritorio_eh_servidor() then
+    return case when tg_op = 'DELETE' then old else new end;
+  end if;
+  if tg_op = 'DELETE' then
+    if old.papel = 'dono'
+       and exists (select 1 from public.escritorio_projetos p where p.id = old.projeto_id)
+       and public.escritorio_conta_existe(old.user_id) then
+      raise exception 'o dono não sai do próprio projeto' using errcode = '42501';
+    end if;
+    return old;
+  end if;
+  if old.papel = 'dono' then
+    raise exception 'a linha do dono não se edita' using errcode = '42501';
+  end if;
+  if new.projeto_id <> old.projeto_id or new.papel <> old.papel
+     or new.user_id is distinct from old.user_id
+     or new.convite_hash is distinct from old.convite_hash
+     or (new.status = 'ativo' and old.status <> 'ativo')
+     or (old.status = 'removido' and new.status <> 'removido') then
+    raise exception 'só o aceite do convite (servidor) ativa ou liga uma pessoa' using errcode = '42501';
+  end if;
+  if new.email is distinct from old.email
+     or new.convite_expira is distinct from old.convite_expira
+     or new.convidado_em is distinct from old.convidado_em
+     or new.aceito_em is distinct from old.aceito_em then
+    raise exception 'e-mail e datas do convite só mudam por um convite novo' using errcode = '42501';
+  end if;
+  if new.status = 'removido' and old.status <> 'removido' then new.removido_em := coalesce(new.removido_em, now()); end if;
+  return new;
+end $$;
+revoke all on function public.escritorio_membro_guarda() from public, anon, authenticated;
+
+-- A7: apagar linha de membro só enquanto NÃO está ativo (cancelar convite; quem saiu).
+drop policy escritorio_membros_apagar on public.escritorio_membros;
+create policy escritorio_membros_apagar on public.escritorio_membros for delete to authenticated
+  using (public.escritorio_papel(projeto_id) = 'dono' and papel = 'freela' and status <> 'ativo');
+
+-- A4: autoria e datas da tarefa não mudam pela tela; a equipe só apaga cartão nas colunas dela.
+create or replace function public.escritorio_tarefa_guarda()
+returns trigger language plpgsql set search_path = '' as $$
+declare v_papel text;
+begin
+  if tg_op = 'UPDATE' then
+    if new.projeto_id <> old.projeto_id then
+      raise exception 'tarefa não muda de projeto' using errcode = '42501';
+    end if;
+    new.atualizado_em := now();
+    if new.status is distinct from old.status then new.status_mudou_em := now();
+    else new.status_mudou_em := old.status_mudou_em; end if;
+  end if;
+  if public.escritorio_eh_servidor() then return new; end if;
+  if tg_op = 'INSERT' then
+    new.criado_em := now(); new.atualizado_em := now(); new.status_mudou_em := now();
+  elsif new.criado_por is distinct from old.criado_por or new.criado_em is distinct from old.criado_em then
+    raise exception 'autoria e data de criação da tarefa não mudam' using errcode = '42501';
+  end if;
+  v_papel := public.escritorio_papel(new.projeto_id);
+  if v_papel = 'dono' then return new; end if;
+  if tg_op = 'INSERT' then
+    if not (new.status in ('afazer','dev','revdtz') or (new.do_cliente and new.status = 'cliente')) then
+      raise exception 'freela cria tarefa em A fazer, Em desenvolvimento ou Aguardando revisão DTZ' using errcode = '42501';
+    end if;
+  elsif new.status is distinct from old.status then
+    if old.status not in ('afazer','dev','revdtz','revsol') or new.status not in ('afazer','dev','revdtz') then
+      raise exception 'daqui pra frente quem move é a dona do projeto' using errcode = '42501';
+    end if;
+  end if;
+  return new;
+end $$;
+revoke all on function public.escritorio_tarefa_guarda() from public, anon, authenticated;
+
+create or replace function public.escritorio_tarefa_apagar_guarda()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  if public.escritorio_eh_servidor() then return old; end if;
+  -- papel NULO (projeto já sumindo na cascata, ou não-membro que a RLS já barra) não trava.
+  if public.escritorio_papel(old.projeto_id) = 'freela'
+     and old.status not in ('afazer','dev','revdtz') then
+    raise exception 'cartão nesta coluna só a admin do projeto apaga' using errcode = '42501';
+  end if;
+  return old;
+end $$;
+revoke all on function public.escritorio_tarefa_apagar_guarda() from public, anon, authenticated;
+create trigger escritorio_tarefas_apagar_guarda before delete on public.escritorio_tarefas
+  for each row execute function public.escritorio_tarefa_apagar_guarda();
+
+-- A4 (irmão): comentário não muda de autor, tarefa nem data; editar o texto carimba editado_em.
+create or replace function public.escritorio_comentario_guarda()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  if public.escritorio_eh_servidor() then return new; end if;
+  if tg_op = 'INSERT' then
+    new.criado_em := now(); new.editado_em := null;
+    return new;
+  end if;
+  if new.autor is distinct from old.autor or new.tarefa_id <> old.tarefa_id
+     or new.projeto_id <> old.projeto_id or new.criado_em is distinct from old.criado_em then
+    raise exception 'autor, tarefa e data do comentário não mudam' using errcode = '42501';
+  end if;
+  if new.texto is distinct from old.texto then new.editado_em := now();
+  else new.editado_em := old.editado_em; end if;
+  return new;
+end $$;
+revoke all on function public.escritorio_comentario_guarda() from public, anon, authenticated;
+create trigger escritorio_comentarios_guarda before insert or update on public.escritorio_comentarios
+  for each row execute function public.escritorio_comentario_guarda();
+-- (piloto: Pedro e a arquiteta do piloto inseridos por SQL à parte; ids não entram no repo)
+
+-- ── 18. (24/09, revisão adversarial) o cartão LEMBRA que passou pela admin ──
+-- A equipe contornava a trava de apagar em duas jogadas (revsol → afazer → apagar).
+-- A marca liga quando o cartão entra em revsol/cliente/aprov/ok e nunca desliga; cartão marcado só a admin apaga.
+alter table public.escritorio_tarefas add column passou_pela_admin boolean not null default false;
+comment on column public.escritorio_tarefas.passou_pela_admin is
+  'Liga quando o cartão entra em revsol/cliente/aprov/ok e nunca desliga. Cartão marcado só a admin apaga.';
+
+create or replace function public.escritorio_tarefa_guarda()
+returns trigger language plpgsql set search_path = '' as $$
+declare v_papel text;
+begin
+  if tg_op = 'UPDATE' then
+    if new.projeto_id <> old.projeto_id then
+      raise exception 'tarefa não muda de projeto' using errcode = '42501';
+    end if;
+    new.atualizado_em := now();
+    if new.status is distinct from old.status then new.status_mudou_em := now();
+    else new.status_mudou_em := old.status_mudou_em; end if;
+  end if;
+  if new.status in ('revsol','cliente','aprov','ok') then new.passou_pela_admin := true;
+  elsif tg_op = 'UPDATE' then new.passou_pela_admin := new.passou_pela_admin or old.passou_pela_admin; end if;
+  if public.escritorio_eh_servidor() then return new; end if;
+  if tg_op = 'INSERT' then
+    new.criado_em := now(); new.atualizado_em := now(); new.status_mudou_em := now();
+    new.passou_pela_admin := new.status in ('revsol','cliente','aprov','ok');
+  else
+    if new.criado_por is distinct from old.criado_por or new.criado_em is distinct from old.criado_em then
+      raise exception 'autoria e data de criação da tarefa não mudam' using errcode = '42501';
+    end if;
+    new.passou_pela_admin := old.passou_pela_admin or new.status in ('revsol','cliente','aprov','ok');
+  end if;
+  v_papel := public.escritorio_papel(new.projeto_id);
+  if v_papel = 'dono' then return new; end if;
+  if tg_op = 'INSERT' then
+    if not (new.status in ('afazer','dev','revdtz') or (new.do_cliente and new.status = 'cliente')) then
+      raise exception 'freela cria tarefa em A fazer, Em desenvolvimento ou Aguardando revisão DTZ' using errcode = '42501';
+    end if;
+  elsif new.status is distinct from old.status then
+    if old.status not in ('afazer','dev','revdtz','revsol') or new.status not in ('afazer','dev','revdtz') then
+      raise exception 'daqui pra frente quem move é a dona do projeto' using errcode = '42501';
+    end if;
+  end if;
+  return new;
+end $$;
+revoke all on function public.escritorio_tarefa_guarda() from public, anon, authenticated;
+
+create or replace function public.escritorio_tarefa_apagar_guarda()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  if public.escritorio_eh_servidor() then return old; end if;
+  if public.escritorio_papel(old.projeto_id) = 'freela'
+     and (old.status not in ('afazer','dev','revdtz') or old.passou_pela_admin) then
+    raise exception 'cartão que já passou pela admin só a admin apaga' using errcode = '42501';
+  end if;
+  return old;
+end $$;
+revoke all on function public.escritorio_tarefa_apagar_guarda() from public, anon, authenticated;
+
+-- ── 19. (24/09, 2ª revisão) o convite sabe QUAL CONTA o abriu ──
+-- A varredura de e-mails reconhecia o convidado pelo e-mail do convite (falha se ele entra com outro) ou por um
+-- texto livre do cadastro (pegava cliente comum por engano). Agora o servidor grava, com JWT + token, a conta que
+-- chegou na confirmação do convite; "Agora não" apaga; convite cancelado/vencido/aceito libera sozinho.
+-- A coluna NÃO entra no GRANT de SELECT por coluna de authenticated (seção 16): a tela não lê.
+alter table public.escritorio_membros add column visto_por uuid references auth.users(id) on delete set null;
+comment on column public.escritorio_membros.visto_por is
+  'Conta que abriu a confirmação deste convite pendente. Só o servidor escreve. Tira a pessoa da esteira de cliente.';
+
+create or replace function public.escritorio_membro_guarda()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  if public.escritorio_eh_servidor() then
+    return case when tg_op = 'DELETE' then old else new end;
+  end if;
+  if tg_op = 'DELETE' then
+    if old.papel = 'dono'
+       and exists (select 1 from public.escritorio_projetos p where p.id = old.projeto_id)
+       and public.escritorio_conta_existe(old.user_id) then
+      raise exception 'o dono não sai do próprio projeto' using errcode = '42501';
+    end if;
+    return old;
+  end if;
+  if old.papel = 'dono' then
+    raise exception 'a linha do dono não se edita' using errcode = '42501';
+  end if;
+  if new.projeto_id <> old.projeto_id or new.papel <> old.papel
+     or new.user_id is distinct from old.user_id
+     or new.convite_hash is distinct from old.convite_hash
+     or new.visto_por is distinct from old.visto_por
+     or (new.status = 'ativo' and old.status <> 'ativo')
+     or (old.status = 'removido' and new.status <> 'removido') then
+    raise exception 'só o aceite do convite (servidor) ativa ou liga uma pessoa' using errcode = '42501';
+  end if;
+  if new.email is distinct from old.email
+     or new.convite_expira is distinct from old.convite_expira
+     or new.convidado_em is distinct from old.convidado_em
+     or new.aceito_em is distinct from old.aceito_em then
+    raise exception 'e-mail e datas do convite só mudam por um convite novo' using errcode = '42501';
+  end if;
+  if new.status = 'removido' and old.status <> 'removido' then new.removido_em := coalesce(new.removido_em, now()); end if;
+  return new;
+end $$;
+revoke all on function public.escritorio_membro_guarda() from public, anon, authenticated;

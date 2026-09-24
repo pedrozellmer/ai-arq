@@ -21455,7 +21455,9 @@ def notify_welcome(request: Request):
     # (leva o "sua área também", pela varredura). Falha de leitura = segue o normal.
     try:
         _conv = _convidados_do_escritorio()
-        if _conv and str(user["id"]) in _conv:
+        _pend = _convites_pendentes()
+        if (_conv and str(user["id"]) in _conv) or (
+                _pend and (email.strip().lower() in _pend[0] or str(user["id"]) in _pend[1])):
             return {"status": "ok", "sent": False, "reason": "convidado_do_escritorio"}
     except Exception:
         pass
@@ -22153,6 +22155,39 @@ def _convidados_do_escritorio():
     return out
 
 
+def _convites_pendentes():
+    """(e-mails minúsculos, user_ids) com convite do Escritório ainda NÃO aceito e no prazo.
+    None = não consegui ler.
+
+    🩸 A17 (24/09): `_convidados_do_escritorio` só enxerga quem JÁ aceitou. Quem abriu o
+    convite, criou a conta e parou no cadastro (ou terminou e não clicou em entrar) caía
+    na esteira de cliente — "boas-vindas", "suba a 1ª prancha" — sobre outro produto.
+    O e-mail do convite pega quem entrou com ele; `visto_por` (gravado pelo SERVIDOR quando a
+    conta chega na confirmação do convite) pega quem entrou com OUTRO e-mail (2ª revisão, 24/09)."""
+    st, linhas = _supa_rest_tudo(
+        "escritorio_membros",
+        params={"select": "email,convite_expira,visto_por", "status": "eq.convidado", "papel": "eq.freela"},
+        ordem="id.asc", timeout=15)
+    if st != 200:
+        return None
+    from datetime import timezone as _tz_pend
+    agora = datetime.now(_tz_pend.utc)
+    emails, ids = set(), set()
+    for l in linhas:
+        e = str(l.get("email") or "").strip().lower()
+        try:
+            exp = datetime.fromisoformat(str(l.get("convite_expira") or "").replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if exp <= agora:
+            continue
+        if e:
+            emails.add(e)
+        if l.get("visto_por"):
+            ids.add(str(l["visto_por"]))
+    return emails, ids
+
+
 def _send_email_proximo_projeto(email: str, name: str, project_name: str) -> bool:
     name = _resolve_client_name(email, hint=name)
     subject, html = _build_proximo_projeto_email(name, project_name)
@@ -22650,6 +22685,11 @@ def emails_auto_tick(request: Request, dry: int = 0):
     except Exception as _ec:
         print(f"[emails-auto] convidados do escritório falhou: {_ec}")
         convidados = None
+    try:
+        pendentes = _convites_pendentes()
+    except Exception as _ep:
+        print(f"[emails-auto] convites pendentes falhou: {_ep}")
+        pendentes = None
 
     acoes: list[dict] = []
     H = 3600.0
@@ -22675,7 +22715,9 @@ def emails_auto_tick(request: Request, dry: int = 0):
 
         tem_perfil = (str(u.get("id") or "") in ids_com_perfil) or (email in emails_com_perfil)
         conv = (convidados or {}).get(str(u.get("id") or ""))
-        pode_regra_de_cliente_novo = convidados is not None and conv is None
+        pode_regra_de_cliente_novo = (convidados is not None and conv is None
+                                      and pendentes is not None and email not in pendentes[0]
+                                      and str(u.get("id") or "") not in pendentes[1])
 
         # 0) RESGATE DO BOAS-VINDAS (02/08/2026). O welcome só saía quando a
         #    pessoa abria o dashboard na PRIMEIRA HORA de conta — quem criava
@@ -22705,7 +22747,7 @@ def emails_auto_tick(request: Request, dry: int = 0):
         # 🪤 `email not in emails_com_welcome_cadastro`: quem já recebeu o
         # combinado JÁ foi avisado do cadastro. Sem isto ele levaria o mesmo
         # recado duas vezes — e o 2º chegaria 7 dias depois, parecendo cobrança.
-        elif (not tem_perfil and 24 <= idade_h and recente_cadastro
+        elif (pode_regra_de_cliente_novo and not tem_perfil and 24 <= idade_h and recente_cadastro
               and email not in emails_com_welcome_cadastro):
             acoes.append({"kind": "nudge_cadastro", "email": email, "nome": nome})
         # 2) Completou o cadastro, mas nunca subiu prancha.

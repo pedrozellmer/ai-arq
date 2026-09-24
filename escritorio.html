@@ -183,6 +183,7 @@ const stT = (k) => (ST.find((s) => s.k === k) || {}).t || k;
 
 const COLS_MEMBRO = 'id,projeto_id,user_id,nome,papel,funcao,status,convidado_em,aceito_em,removido_em';
 // ── estado ──
+let NO_PILOTO = false;
 let EU = null, PROJETOS = [], PROJ = null, MEMBROS = [], PAPEL = null, TAR = [], PESSOAS_T = [], ATAS = [], NOTAS = {};
 let VIEW = 'lista', FILTRO = 'todas', FILTRO_E = '', ETAPA_SEL = null;
 
@@ -248,9 +249,14 @@ window.addEventListener('hashchange', () => navegar());
 
 // ── dados ──
 async function carregarProjetos() {
-  const { data, error } = await sb.from('escritorio_projetos').select('*').order('criado_em', { ascending: false });
-  if (error) throw error;
-  PROJETOS = data || [];
+  const [r, pil] = await Promise.all([
+    sb.from('escritorio_projetos').select('*').order('criado_em', { ascending: false }),
+    // 🔒 A1: criar projeto é só pra quem está no piloto — o BANCO decide (tabela escritorio_piloto)
+    sb.rpc('escritorio_no_piloto'),
+  ]);
+  if (r.error) throw r.error;
+  PROJETOS = r.data || [];
+  NO_PILOTO = !pil.error && pil.data === true;
 }
 async function carregarProjeto(id) {
   PROJ = PROJETOS.find((p) => p.id === id) || null;
@@ -332,8 +338,13 @@ async function recarregar() { await carregarProjeto(PROJ.id); render(); }
 
 // ══════════════ LISTA ══════════════
 function telaLista() {
+  if (!NO_PILOTO && !PROJETOS.length) {
+    return `<div class="card"><p class="h2" style="font-size:16px">O Escritório está em piloto fechado</p>
+      <p class="sub">Por enquanto, quem usa o Escritório entra por convite de um projeto. Se você recebeu um convite, abra o link do e-mail.</p>
+      <p class="sub" style="margin-top:10px"><a href="dashboard.html">Voltar ao painel</a></p></div>`;
+  }
   return `<div class="linha"><h2 class="h2" style="flex:1">${PROJETOS.length ? PROJETOS.length + ' projeto' + (PROJETOS.length > 1 ? 's' : '') : 'Seus projetos'}</h2>
-      <button class="btn btn-g" onclick="novoProjeto()">+ Novo projeto</button></div>
+      ${NO_PILOTO ? '<button class="btn btn-g" onclick="novoProjeto()">+ Novo projeto</button>' : ''}</div>
     ${PROJETOS.length ? `<div class="grade g3">${PROJETOS.map((p) => `<a class="card" style="text-decoration:none;color:inherit;display:flex;flex-direction:column;gap:10px" href="#/p/${p.id}/capa">
         <div class="linha" style="justify-content:space-between;align-items:flex-start"><b style="color:#111827">${esc(p.nome)}</b>${p.etapa_atual ? `<span class="pill p-ind">${esc(p.etapa_atual)}</span>` : ''}</div>
         ${p.cliente_nome ? `<span class="sub" style="margin:0">Cliente: ${esc(p.cliente_nome)}</span>` : ''}
@@ -508,7 +519,8 @@ async function abrirCartao(id) {
   CART = { id, pessoas: pessoasDa(t).map((m) => m.id) };
   const gente = MEMBROS.filter((m) => m.status === 'ativo');
   const opc = ST.filter((s) => podeLevar(t, s.k)).map((s) => `<option value="${s.k}" ${s.k === t.status ? 'selected' : ''}>${s.t}</option>`).join('');
-  const podeApagar = souAdmin() || t.criado_por === EU.id;
+  // o mesmo que o banco (escritorio_tarefa_apagar_guarda): a equipe só apaga o que criou e nunca passou pela admin
+  const podeApagar = souAdmin() || (t.criado_por === EU.id && ST_EQUIPE.includes(t.status) && !t.passou_pela_admin);
   abrirModal('Tarefa', `
     <input id="ct-t" class="in" style="font-size:15px;font-weight:600" maxlength="300" value="${esc(t.titulo)}" aria-label="Título">
     <div class="grade g3"><div><label class="lbl" for="ct-st">Coluna</label><select id="ct-st" class="in">${opc}</select></div>
@@ -640,9 +652,15 @@ function telaEquipe() {
       <ul class="lista" style="margin-top:8px">${vis.map((m) => `<li style="flex-wrap:wrap">${av(m)}<div style="flex:1;min-width:180px"><b style="font-size:14px">${esc(nomeDe(m))}${m.user_id === EU.id ? ' <span style="font-weight:400;color:#64748B">(você)</span>' : ''}</b>
         <span class="sub" style="display:block;margin:0">${esc(m.funcao || (m.papel === 'dono' ? 'Admin do projeto' : ''))}${m.email ? ' · ' + esc(m.email) : ''}${m.telefone ? ' · ' + esc(m.telefone) : ''}</span>
         ${NOTAS[m.id] ? `<span class="sub" style="display:block;margin:0">${esc(NOTAS[m.id])}</span>` : ''}</div>
-        ${m.papel === 'dono' ? '<span class="pill p-ind">admin · vê tudo</span>' : m.status === 'ativo' ? '<span class="pill p-ok"><i></i>no projeto</span>' : `<span class="pill p-warn"><i></i>convite enviado ${dBR(m.convidado_em)}</span>`}
+        ${m.papel === 'dono' ? '<span class="pill p-ind">admin · vê tudo</span>' : m.status === 'ativo' ? '<span class="pill p-ok"><i></i>no projeto</span>' : pillConvite(m)}
         ${souAdmin() && m.papel !== 'dono' ? `<button class="btn btn-s" onclick="editarPessoa('${m.id}')">Editar</button>${m.status === 'convidado' ? `<button class="btn btn-s" onclick="reenviar('${m.id}')">Reenviar convite</button>` : ''}<button class="btn btn-s" onclick="tirar('${m.id}')">${m.status === 'convidado' ? 'Cancelar convite' : 'Tirar do projeto'}</button>` : ''}
       </li>`).join('')}</ul></section>`;
+}
+// A14: 14 dias contados de convidado_em (a mesma validade do servidor)
+function pillConvite(m) {
+  const vence = new Date(new Date(m.convidado_em).getTime() + 14 * 864e5);
+  if (vence < new Date()) return `<span class="pill p-late"><i></i>convite venceu ${dBR(vence.toISOString())}</span>`;
+  return `<span class="pill p-warn"><i></i>aguardando · vence ${dBR(vence.toISOString())}</span>`;
 }
 function convidar(pre) {
   pre = pre || {};
@@ -666,8 +684,15 @@ async function enviarConvite() {
   } catch (_) { $('cv-ok').disabled = false; return toast('Sem conexão com o servidor. Tente de novo.', true); }
   $('cv-ok').disabled = false;
   if (!r.ok) return toast(d.detail || 'Não deu pra convidar agora.', true);
-  await recarregar();
-  abrirModal('Convite enviado', `<p style="margin:0;font-size:14px">${d.email_enviado ? 'O e-mail saiu para <b>' + esc(corpo.email) + '</b>.' : '<b>O e-mail não saiu agora.</b> Mande o link abaixo pela conversa que vocês já usam.'}</p>
+  // A11: o link não pode se perder se a releitura falhar
+  try { await recarregar(); } catch (e) { console.error(e); }
+  const porque = {
+    teto_conta: 'Hoje você já mandou muitos convites por e-mail (limite contra spam).',
+    teto_destino: 'Esse e-mail já recebeu convites deste projeto hoje.',
+    nao_contou: 'Não consegui conferir o limite de e-mails agora.',
+    email_falhou: 'O e-mail não saiu agora.',
+  }[d.motivo_sem_email] || 'O e-mail não saiu agora.';
+  abrirModal(d.email_enviado ? 'Convite enviado' : 'Convite criado, e-mail não saiu', `<p style="margin:0;font-size:14px">${d.email_enviado ? 'O e-mail saiu para <b>' + esc(corpo.email) + '</b>.' : '<b>' + esc(porque) + '</b> O convite foi criado: mande o link abaixo pela conversa que vocês já usam.'}</p>
     <div><label class="lbl" for="cv-link">Link do convite (vale 14 dias, serve uma vez)</label><input id="cv-link" class="in" readonly value="${esc(d.link)}" onclick="this.select()"></div>
     <p class="sub" style="margin:0">Pode mandar pelo WhatsApp também. Quem abrir o link entra neste projeto — mande só pra pessoa certa.</p>
     <div class="rodape"><button class="btn" onclick="copiarLink()">Copiar link</button><button class="btn btn-d" onclick="fecharModal()">Pronto</button></div>`);
@@ -703,12 +728,17 @@ function tirar(id) {
 }
 async function confirmarTirar(id) {
   const m = MEMBROS.find((x) => x.id === id);
+  // 🔒 A7: "cancelar convite" numa tela velha apagava quem JÁ tinha entrado. Só apaga se
+  // ainda for convite (o banco também só deixa apagar quem não está ativo) e confere a contagem.
   const q = m.status === 'convidado'
-    ? sb.from('escritorio_membros').delete().eq('id', id)
-    : sb.from('escritorio_membros').update({ status: 'removido', removido_em: new Date().toISOString() }).eq('id', id);
-  const { error } = await q;
+    ? sb.from('escritorio_membros').delete({ count: 'exact' }).eq('id', id).eq('status', 'convidado')
+    : sb.from('escritorio_membros').update({ status: 'removido', removido_em: new Date().toISOString() }, { count: 'exact' }).eq('id', id);
+  const { error, count } = await q;
   if (error) return falhou(error, 'Não deu');
-  fecharModal(); await recarregar(); toast(m.status === 'convidado' ? 'Convite cancelado' : curto(m) + ' saiu do projeto');
+  fecharModal();
+  try { await recarregar(); } catch (e) { return falhou(e, 'Feito, mas não consegui atualizar a lista'); }
+  if (!count) return toast(m.status === 'convidado' ? 'Essa pessoa já tinha entrado no projeto. Atualizei a lista.' : 'Nada mudou: atualizei a lista.', true);
+  toast(m.status === 'convidado' ? 'Convite cancelado' : curto(m) + ' saiu do projeto');
 }
 
 // ══════════════ início ══════════════
