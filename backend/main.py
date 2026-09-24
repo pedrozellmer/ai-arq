@@ -580,6 +580,8 @@ _STAGES_DIAGNOSTICO = frozenset({
     "motor:prancha-dona",
     # 24/09: linhas que o cliente rejeitou e não voltaram na releitura
     "motor:fusao-rejeicao",
+    # 24/09: verbas gerais de obra juntadas numa linha a definir
+    "motor:verbas-preliminares",
     "motor:pe-direito", "motor:escala-aviso", "motor:concordancia-rotulo",
     "motor:parede-medida",
     # 15/09: os trechos de perfil e escala H/V que a prancha escreve. Só
@@ -2661,6 +2663,53 @@ def _aplicar_admin_local(all_items) -> int:
 
 
 _MARCA_ADMIN_JUNTADA = "Uma obra tem uma administração local só"
+
+
+def _juntar_verbas_preliminares(all_items) -> int:
+    """As verbas gerais de obra viram UMA linha, a definir. Devolve quantas juntou.
+
+    Decisão do Pedro, 24/09/2026 ("uma linha só, a definir"): 25 das 440
+    rejeições de cliente em 90 dias eram administração local, mobilização,
+    limpeza final, proteção… sugeridas pela IA como "1 vb" em várias
+    pranchas, e os clientes apagavam uma a uma. Escopo e valor dependem do
+    contrato e do canteiro, não do desenho — a linha única sai SEM quantidade
+    e a observação lista, no começo, o que foi juntado.
+    A régua (o que é verba geral e o que nunca junta) mora em
+    `engine_rules.e_verba_preliminar`. Muta a lista no lugar; kill switch
+    VERBAS_NUMA_LINHA=0.
+    """
+    if os.getenv("VERBAS_NUMA_LINHA", "1").strip() == "0":
+        return 0
+    from engine_rules import e_verba_preliminar as _e_verba
+    from models import BudgetItem as _BI, Confidence as _Cf
+    idx = [i for i, it in enumerate(all_items)
+           if _e_verba(getattr(it, "description", ""), getattr(it, "unit", ""),
+                       getattr(it, "confidence", ""), getattr(it, "observations", ""))]
+    if not idx:
+        return 0
+    juntas = [all_items[i] for i in idx]
+    _lista = " · ".join(str(getattr(x, "description", "") or "").split(" — ")[0][:60]
+                        for x in juntas)
+    primeira = juntas[0]
+    unica = _BI(
+        item_num=getattr(primeira, "item_num", "") or "",
+        description="Serviços preliminares e administração da obra — verba a definir "
+                    "pelo orçamentista",
+        unit="vb",
+        quantity=0.0,
+        observations=_observacao_que_cabe(
+            f"Juntei aqui {len(juntas)} verba(s) geral(is) de obra que a leitura sugeriu: "
+            f"{_lista}. Escopo e valor dependem do contrato e do canteiro, não do "
+            f"desenho — por isso a quantidade fica em branco pro orçamentista definir."),
+        ref_sheet=getattr(primeira, "ref_sheet", "") or "",
+        confidence=_Cf.ESTIMADO,
+        discipline="Serviços Preliminares",
+        origem=getattr(primeira, "origem", "") or "",
+    )
+    fora = set(idx[1:])
+    all_items[idx[0]] = unica
+    all_items[:] = [it for k, it in enumerate(all_items) if k not in fora]
+    return len(juntas)
 
 
 def _juntar_admin_local(all_items) -> int:
@@ -17559,6 +17608,16 @@ bloco — só cite os que estão no inventário deste arquivo."""
                            job_id, severity="info")
         except Exception as _eal:
             print(f"[admin-local] nao-fatal: {_eal}")
+        # ── 24/09: as verbas gerais de obra viram UMA linha, a definir (Pedro) ──
+        try:
+            _n_vp = _juntar_verbas_preliminares(all_items)
+            if _n_vp:
+                _log_error("motor:verbas-preliminares",
+                           f"{_n_vp} verba(s) geral(is) de obra juntada(s) numa linha "
+                           f"'a definir pelo orçamentista', sem quantidade", job_id,
+                           severity="info")
+        except Exception as _evp:
+            print(f"[verbas-preliminares] nao-fatal: {_evp}")
 
         # ── PAREDE MENOR QUE O PERÍMETRO POSSÍVEL (regra nº1) ───────────────
         # 🩸 04/09/2026, no 1º projeto da cliente-22: 17,18 m de

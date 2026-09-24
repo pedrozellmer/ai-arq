@@ -5261,3 +5261,48 @@ def par_da_linha_rejeitada(rejeitada, itens, usados=None):
     if len(melhores) > 1 and abs(melhores[0][0] - melhores[1][0]) < 1e-9:
         return None                        # empate: não adivinha
     return melhores[0][1]
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  VERBAS PRELIMINARES NUMA LINHA SÓ, A DEFINIR (24/09/2026, decisão do Pedro)
+# ══════════════════════════════════════════════════════════════════════════
+#: 📊 90 dias: 25 das 440 rejeições de cliente são estas verbas gerais
+#: (administração local, mobilização, limpeza final, proteção, canteiro,
+#: placa), em 8 dos 43 projetos revisados — e dois clientes em dois dias
+#: apagaram as MESMAS quatro, uma a uma. A IA sugere cada uma como "1 vb" em
+#: várias pranchas; escopo e valor dependem do contrato e do canteiro, não do
+#: desenho. Pedro, 24/09: "uma linha só, a definir".
+#:
+#: 🚫 Nunca junta o que EMBALA outro serviço (a revisão de 15/09 do
+#: `_juntar_admin_local` pegou um sprinkler engolido) nem demolição/remoção —
+#: essas saem do DESENHO (prancha de demolir), não são verba genérica.
+
+_RE_VERBA_PRELIMINAR = _re.compile(
+    r"administra[cç][aã]o\s+local|\bmobiliza|\bdesmobiliza|\bcanteiro|\btapume|"
+    r"limpeza\s+(?:final|geral|permanente|fina|de\s+obra|da\s+obra)|"
+    r"prote[cç][aã]o\s+(?:de|das|dos|do|da)\s+(?:[aá]reas?|pisos?|superf|mobili|esquadri|revestiment|existente)|"
+    r"placa\s+de\s+obra|instala[cç][oõ]es\s+provis|liga[cç][oõ]es\s+provis|"
+    r"servi[cç]os\s+preliminares",
+    _re.IGNORECASE)
+_RE_NAO_E_VERBA_GERAL = _re.compile(
+    r"sprinkler|inc[eê]ndio|el[eé]tric|hidr[aá]ulic|estrutur|concret|impermeab|"
+    r"demoli|remo[cç]|retirad|arranc|pintura|porcelan|cer[aâ]mic|lumin",
+    _re.IGNORECASE)
+
+
+def e_verba_preliminar(desc, unit, confidence="", observations=""):
+    """A linha é verba GERAL de obra (vai pra linha única)?
+
+    Só o NOME do serviço (antes do travessão) decide o que é; a descrição
+    inteira decide o que NÃO pode ser (serviço embalado junto)."""
+    if str(unit or "").strip().lower() != "vb":
+        return False
+    if str(getattr(confidence, "value", confidence) or "").strip().lower() == "confirmado":
+        return False
+    if str(observations or "").startswith("✏"):
+        return False                       # ✏️ o cliente mexeu: é dele
+    d = str(desc or "")
+    nome = _re.split(r"\s[—–-]\s", d, maxsplit=1)[0]
+    if not _RE_VERBA_PRELIMINAR.search(nome):
+        return False
+    return not _RE_NAO_E_VERBA_GERAL.search(d)
