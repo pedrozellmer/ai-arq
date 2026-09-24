@@ -55,7 +55,7 @@
 
       <!-- Heading -->
       <h1 class="text-2xl font-bold text-gray-900 mb-2">Bem-vindo ao AI.arq</h1>
-      <p class="text-gray-600 text-sm mb-8"><strong>Grátis durante o beta</strong> — quantos projetos quiser, sem cartão. Entre com o Google (cria a conta na hora) ou com e-mail. É novo por aqui? Clique em Cadastre-se logo abaixo.</p>
+      <p class="text-gray-600 text-sm mb-8"><strong>Grátis durante o beta</strong> — quantos projetos quiser, sem cartão. Entre com um dos botões abaixo (cria a conta na hora) ou com e-mail. É novo por aqui? Clique em Cadastre-se logo abaixo.</p>
 
       <!-- Google Button -->
       <button id="btn-google-login" data-track="login-google" class="w-full flex items-center justify-center gap-3 bg-white border border-gray-300 rounded-xl px-6 py-4 text-base font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-400 hover:shadow-md transition-all duration-200 shadow-sm">
@@ -66,6 +66,28 @@
           <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
         </svg>
         Entrar com Google
+      </button>
+
+      <!-- Microsoft e LinkedIn (23/09/2026). NASCEM ESCONDIDOS e só aparecem se o
+           provedor estiver LIGADO no painel do Supabase (o script lê
+           /auth/v1/settings). Assim o botão nunca aparece antes de funcionar,
+           e desligar lá tira o botão daqui sem novo deploy.
+           Por que a Microsoft: na base de 23/09, 6 contas Hotmail/Outlook e 4
+           empresas no Microsoft 365 — e isso é só quem CONSEGUIU entrar sem ela. -->
+      <button id="btn-microsoft-login" data-provedor="azure" data-track="login-microsoft" class="hidden mt-3 w-full flex items-center justify-center gap-3 bg-white border border-gray-300 rounded-xl px-6 py-4 text-base font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-400 hover:shadow-md transition-all duration-200 shadow-sm">
+        <svg width="20" height="20" viewBox="0 0 21 21" aria-hidden="true">
+          <rect x="1" y="1" width="9" height="9" fill="#F25022"/>
+          <rect x="11" y="1" width="9" height="9" fill="#7FBA00"/>
+          <rect x="1" y="11" width="9" height="9" fill="#00A4EF"/>
+          <rect x="11" y="11" width="9" height="9" fill="#FFB900"/>
+        </svg>
+        Entrar com Microsoft
+      </button>
+      <button id="btn-linkedin-login" data-provedor="linkedin_oidc" data-track="login-linkedin" class="hidden mt-3 w-full flex items-center justify-center gap-3 bg-white border border-gray-300 rounded-xl px-6 py-4 text-base font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-400 hover:shadow-md transition-all duration-200 shadow-sm">
+        <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
+          <path fill="#0A66C2" d="M20.45 20.45h-3.56v-5.57c0-1.33-.02-3.04-1.85-3.04-1.85 0-2.14 1.45-2.14 2.94v5.67H9.35V9h3.41v1.56h.05c.48-.9 1.64-1.85 3.37-1.85 3.6 0 4.27 2.37 4.27 5.46v6.28zM5.34 7.43a2.06 2.06 0 110-4.13 2.06 2.06 0 010 4.13zM7.12 20.45H3.56V9h3.56v11.45zM22.22 0H1.77C.79 0 0 .77 0 1.73v20.54C0 23.23.79 24 1.77 24h20.45c.98 0 1.78-.77 1.78-1.73V1.73C24 .77 23.2 0 22.22 0z"/>
+        </svg>
+        Entrar com LinkedIn
       </button>
 
       <!-- Divider -->
@@ -105,6 +127,14 @@
            do lado de fora e s&oacute; voltava se pedisse link manual pro Pedro. -->
       <p class="mt-2 text-sm text-gray-500">
         Esqueceu a senha? <a href="#" id="link-forgot" class="text-indigo-500 hover:text-indigo-700 underline font-medium">Recuperar acesso</a>
+      </p>
+
+      <!-- Link por e-mail, sem senha (23/09/2026): serve pra QUALQUER e-mail —
+           inclusive os 5 clientes de 23/09 com e-mail de empresa fora do Google
+           e da Microsoft, que só tinham a senha. Se a conta não existe, o link
+           cria (e a volta cai no cadastro.html, igual ao Google). -->
+      <p class="mt-2 text-sm text-gray-500">
+        Prefere sem senha? <a href="#" id="link-magico" data-track="login-link-email" class="text-indigo-500 hover:text-indigo-700 underline font-medium">Receber link de acesso por e-mail</a>
       </p>
 
       <!-- Terms -->
@@ -216,6 +246,58 @@
   });
 
   // ══════════════════════════════════════════════
+  //  MICROSOFT E LINKEDIN (23/09/2026)
+  // ══════════════════════════════════════════════
+  // Os botões nascem com `hidden` e só aparecem se o provedor estiver LIGADO
+  // no Supabase. `/auth/v1/settings` é público (só pede a anon key) e diz
+  // quais provedores estão ativos. Sem resposta, ficam escondidos: Google e
+  // e-mail continuam lá, e botão que não funciona é pior que botão nenhum.
+  (async function mostrarProvedoresLigados() {
+    try {
+      const r = await fetch(window.SUPABASE_URL + '/auth/v1/settings',
+                            { headers: { apikey: window.SUPABASE_ANON_KEY } });
+      if (!r.ok) return;
+      const ligados = ((await r.json()) || {}).external || {};
+      document.querySelectorAll('[data-provedor]').forEach((btn) => {
+        if (ligados[btn.getAttribute('data-provedor')] === true) btn.classList.remove('hidden');
+      });
+    } catch (_) {}
+  })();
+
+  function avisaFalhaDoProvedor(nome, error) {
+    console.error('Erro ao fazer login com ' + nome + ':', error && error.message);
+    const msg = 'Não rolou o login com ' + nome + '. Tenta de novo ou usa o Google ou e-mail/senha.';
+    (window.toast?.error(msg) || alert(msg));
+  }
+
+  document.getElementById('btn-microsoft-login').addEventListener('click', async () => {
+    const { error } = await sbClient.auth.signInWithOAuth({
+      provider: 'azure',
+      options: {
+        // Mesma volta do Google: cai no cadastro, que manda pro painel quem já tem perfil.
+        redirectTo: 'https://ai.arq.br/cadastro.html',
+        // O Supabase EXIGE o escopo `email` da Microsoft — sem ele a conta
+        // chega sem e-mail e o login é recusado.
+        scopes: 'email',
+        // Mesmo motivo do Google: quem tem a conta pessoal E a do escritório
+        // abertas precisa escolher, não entrar calado na errada.
+        queryParams: { prompt: 'select_account' }
+      }
+    });
+    if (error) avisaFalhaDoProvedor('Microsoft', error);
+  });
+
+  document.getElementById('btn-linkedin-login').addEventListener('click', async () => {
+    const { error } = await sbClient.auth.signInWithOAuth({
+      provider: 'linkedin_oidc',
+      options: {
+        redirectTo: 'https://ai.arq.br/cadastro.html'
+      }
+    });
+    if (error) avisaFalhaDoProvedor('LinkedIn', error);
+  });
+
+  // ══════════════════════════════════════════════
   //  EMAIL LOGIN / SIGNUP
   // ══════════════════════════════════════════════
   const formEmailLogin = document.getElementById('form-email-login');
@@ -273,6 +355,49 @@
     });
   }
 
+  // ── Link de acesso por e-mail, sem senha (23/09/2026) ──
+  // Mesmo desenho do "Recuperar acesso": usa o e-mail já digitado e responde
+  // IGUAL exista a conta ou não (se não existe, o link cria).
+  // 🪤 O remetente do Supabase tem limite de envios POR HORA para o site todo
+  // (confirmação, senha e este link somam juntos). Estourou = aviso claro e
+  // os outros caminhos, nunca um "enviado!" que não chega.
+  const linkMagico = document.getElementById('link-magico');
+  if (linkMagico) {
+    linkMagico.addEventListener('click', async (e) => {
+      e.preventDefault();
+      hideEmailMessages();
+      const email = (loginEmail.value || '').trim();
+      if (!email || !email.includes('@')) {
+        showEmailError('Digite seu e-mail no campo acima e clique de novo em "Receber link de acesso por e-mail".');
+        loginEmail.focus();
+        return;
+      }
+      const textoOriginal = linkMagico.textContent;
+      linkMagico.textContent = 'Enviando...';
+      let erro = null;
+      try {
+        const { error } = await sbClient.auth.signInWithOtp({
+          email,
+          options: { emailRedirectTo: 'https://ai.arq.br/cadastro.html' },
+        });
+        erro = error || null;
+      } catch (err) {
+        erro = err;
+      }
+      linkMagico.textContent = textoOriginal;
+      if (erro) {
+        console.warn('[login] link por e-mail falhou:', erro);
+        if (/rate limit|security purposes|too many/i.test(String(erro.message || ''))) {
+          showEmailError('Muitos pedidos de link agora. Espere alguns minutos e tente de novo, ou entre com a senha ou com o Google.');
+        } else {
+          showEmailError('Não consegui mandar o link agora. Tente de novo em instantes, ou entre com a senha ou com o Google.');
+        }
+        return;
+      }
+      showEmailSuccess('Pronto! Se o e-mail estiver certo, o link de acesso chega em instantes. Confira também a caixa de spam.');
+    });
+  }
+
   linkSignup.addEventListener('click', (e) => {
     e.preventDefault();
     hideEmailMessages();
@@ -297,7 +422,7 @@
       btnEmailLogin.innerHTML = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg> Entrar com E-mail';
       linkSignup.textContent = 'N\u00e3o tem conta? Cadastre-se';
       if (tituloEl) tituloEl.textContent = 'Bem-vindo ao AI.arq';
-      if (subtituloEl) subtituloEl.innerHTML = '<strong>Gr\u00e1tis durante o beta</strong> \u2014 quantos projetos quiser, sem cart\u00e3o. Entre com o Google (cria a conta na hora) ou com e-mail. \u00c9 novo por aqui? Clique em Cadastre-se logo abaixo.';
+      if (subtituloEl) subtituloEl.innerHTML = '<strong>Gr\u00e1tis durante o beta</strong> \u2014 quantos projetos quiser, sem cart\u00e3o. Entre com um dos botões abaixo (cria a conta na hora) ou com e-mail. \u00c9 novo por aqui? Clique em Cadastre-se logo abaixo.';
       loginPassword.placeholder = 'Sua senha';
       loginPassword.setAttribute('autocomplete', 'current-password');
       loginPassword.removeAttribute('minlength');

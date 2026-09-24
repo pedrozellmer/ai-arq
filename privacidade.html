@@ -106,6 +106,10 @@
               </li>
               <li class="flex items-start gap-2">
                 <span class="mt-1.5 h-1.5 w-1.5 rounded-full bg-indigo-400 shrink-0"></span>
+                <span class="text-sm text-gray-600"><strong>Via Microsoft ou LinkedIn (OAuth), se voc&ecirc; escolher entrar por eles:</strong> nome completo e endere&ccedil;o de e-mail associados &agrave; conta &mdash; e, no LinkedIn, tamb&eacute;m a foto de perfil</span>
+              </li>
+              <li class="flex items-start gap-2">
+                <span class="mt-1.5 h-1.5 w-1.5 rounded-full bg-indigo-400 shrink-0"></span>
                 <span class="text-sm text-gray-600"><strong>Via e-mail/senha:</strong> endere&ccedil;o de e-mail e senha (armazenada com hash pelo Supabase; n&atilde;o temos acesso &agrave; senha em texto)</span>
               </li>
             </ul>
@@ -471,6 +475,24 @@
               <div>
                 <p class="text-sm font-semibold text-gray-800">Google</p>
                 <p class="text-sm text-gray-600 mt-1"><strong>O que recebe/envia:</strong> protocolo OAuth 2.0 para autentica&ccedil;&atilde;o segura (o AI.arq recebe nome, e-mail e foto).</p>
+                <p class="text-sm text-gray-600 mt-1"><strong>Finalidade:</strong> login simplificado e seguro.</p>
+              </div>
+            </div>
+
+            <div class="flex items-start gap-3 bg-gray-50 rounded-lg p-4">
+              <span class="mt-0.5 text-lg shrink-0">&#128275;</span>
+              <div>
+                <p class="text-sm font-semibold text-gray-800">Microsoft</p>
+                <p class="text-sm text-gray-600 mt-1"><strong>O que recebe/envia:</strong> protocolo OAuth 2.0 para autentica&ccedil;&atilde;o segura (o AI.arq recebe nome e e-mail). S&oacute; para quem escolhe entrar por ele.</p>
+                <p class="text-sm text-gray-600 mt-1"><strong>Finalidade:</strong> login simplificado e seguro.</p>
+              </div>
+            </div>
+
+            <div class="flex items-start gap-3 bg-gray-50 rounded-lg p-4">
+              <span class="mt-0.5 text-lg shrink-0">&#128275;</span>
+              <div>
+                <p class="text-sm font-semibold text-gray-800">LinkedIn</p>
+                <p class="text-sm text-gray-600 mt-1"><strong>O que recebe/envia:</strong> protocolo OAuth 2.0 para autentica&ccedil;&atilde;o segura (o AI.arq recebe nome, e-mail e foto). S&oacute; para quem escolhe entrar por ele.</p>
                 <p class="text-sm text-gray-600 mt-1"><strong>Finalidade:</strong> login simplificado e seguro.</p>
               </div>
             </div>
