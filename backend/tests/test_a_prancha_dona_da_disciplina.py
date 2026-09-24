@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """A linha lida FORA da prancha dona da sua disciplina é repetição — e sai.
 
-🩸 24/09/2026, "Regina e Ronaldo" (job b6df4f3d, 6 pranchas DTZ): o piso saiu
+🩸 24/09/2026, job b6df4f3d (6 pranchas): o piso saiu
 por ambiente lido na planta de PONTOS (28,7 m²) e de novo como porcelanato na
 planta de PISO; o forro, 28,7 m² na PONTOS e 36 m² na FORRO.
 
@@ -45,15 +45,15 @@ LAYOUT = "1026.ARR.200.LAYOUT.00.dxf"
     ("PROJETO 10 - PLANTA DE PISO - 1O PISO_LIBREDWG", {"piso"}, "1PAV"),
     ("FORMA.PDF (PRANCHA PISO 2 — FÔRMAS)", set(), "2PAV"),
     ("VIGA.PDF (PISO 1 — DESENHO DE VIGAS)", set(), "1PAV"),
-    ("08.18_P PISO_LUANA_09.04.PDF (08/18 — PLAN", {"piso"}, ""),
-    ("11.18_P RODAPE_LUANA_09.04.PDF", {"rodape"}, ""),
+    ("08.18_P PISO_CLIENTE_09.04.PDF (08/18 — PLAN", {"piso"}, ""),
+    ("11.18_P RODAPE_CLIENTE_09.04.PDF", {"rodape"}, ""),
     ("CC_AP_PAGINACAO TERREO_R00.PDF", {"piso"}, "TERREO"),
     ("CC_AP_FORRO E CLIMATIZACAO 1O PAV._R00.PDF", {"forro"}, "1PAV"),
-    ("KFC-ITU-ARQ-EXE-R03-FL04-PLANTA DE PISOS_1", {"piso"}, ""),
+    ("OBRA-ARQ-EXE-R03-FL04-PLANTA DE PISOS_1", {"piso"}, ""),
     ("2600575-01-BRA-PRIN-MACAE-EXE-04-PIS-R02.PDF", {"piso"}, ""),
     ("03-PISCINA_ARQUITETONICO_PRANCHA-11-12.PDF", set(), ""),
     ("MEMORIAL DESCRITIVO RESIDENCIAL CONDOMINIO (PISOS)", set(), ""),
-    ("RA-BVAR (Prancha 5 — Planta de Demolição Forro 2º Pav)", set(), "2PAV"),
+    ("PROJ (Prancha 5 — Planta de Demolição Forro 2º Pav)", set(), "2PAV"),
 ])
 def test_a_prancha_pelo_nome(nome, donas, andar):
     assert disciplinas_da_prancha(nome) == donas
@@ -61,7 +61,7 @@ def test_a_prancha_pelo_nome(nome, donas, andar):
 
 
 # ── o caso real: sai o que a planta de PONTOS repetiu ──────────────────────
-def _projeto_dtz():
+def _projeto_seis_pranchas():
     return [
         _it(PISO, "Pisos e Rodapés", "Porcelanato Portobello Posto 12 — 28,39 m²"),
         _it(PISO, "Pisos e Rodapés", "Piso vinílico — 1,73 m²"),
@@ -73,15 +73,15 @@ def _projeto_dtz():
     ]
 
 
-def test_o_caso_DTZ_tira_o_piso_e_o_forro_da_planta_de_pontos():
-    itens = _projeto_dtz()
+def test_o_caso_real_tira_o_piso_e_o_forro_da_planta_de_pontos():
+    itens = _projeto_seis_pranchas()
     fora, det = repetidos(itens)
     assert fora == {3, 4, 5}, det
     assert all(d["de"] == PONTOS for d in det)
 
 
 def test_a_tomada_da_planta_de_pontos_NUNCA_sai():
-    fora, _ = repetidos(_projeto_dtz())
+    fora, _ = repetidos(_projeto_seis_pranchas())
     assert 6 not in fora
 
 
@@ -158,8 +158,8 @@ def test_rodape_sem_prancha_propria_pertence_a_de_piso():
 
 
 def test_sublinhado_nao_mata_a_borda_do_nome():
-    """'_P PISO_LUANA': o '_' é letra pro regex."""
-    assert disciplinas_da_prancha("08.18_P PISO_LUANA_09.04.PDF") == {"piso"}
+    """'_P PISO_CLIENTE': o '_' é letra pro regex."""
+    assert disciplinas_da_prancha("08.18_P PISO_CLIENTE_09.04.PDF") == {"piso"}
 
 
 # ── o motor CHAMA a régua antes de consolidar, com chave de desligar ──────

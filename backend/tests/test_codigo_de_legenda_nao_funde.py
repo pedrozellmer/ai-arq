@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Código de legenda colado (LMN02, LMN05A, AL004) é item DIFERENTE.
 
-🩸 24/09/2026, job b6df4f3d (DTZ): 23 luminárias distintas — LMN02 a LMN24,
+🩸 24/09/2026, job b6df4f3d: 23 luminárias distintas — LMN02 a LMN24,
 1 un cada — viraram "Luminária tipo Lum_2_PL — 23 variantes consolidadas",
 23 un. O reconhecedor de código só aceitava prefixos fixos (PM, LM, P, V…) e
 "LMN" (3 letras) passava despercebido: a trava de atributo achou que era o

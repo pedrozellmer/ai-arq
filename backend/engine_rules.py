@@ -1954,7 +1954,7 @@ _ATRIB_POR_CATEGORIA = (
     ("codigo", (_re.compile(
         r"\b((?:pm|pv|pe|lm|ln|lum|dry|dw|div|pd|ve|vm|p|j|v)[\s\-]?\d{1,3})\b",
         _re.I),
-        # 🩸 24/09/2026 (job b6df4f3d, DTZ): "LMN02"…"LMN24" — 23 luminárias
+        # 🩸 24/09/2026 (job b6df4f3d): "LMN02"…"LMN24" — 23 luminárias
         # DIFERENTES, 1 un cada — viraram "Lum_2_PL — 23 variantes
         # consolidadas, 23 un": o prefixo de 3 letras não casava acima e a
         # trava achou que eram o mesmo item. Código de legenda colado:
@@ -4983,7 +4983,7 @@ def selo_da_tabela_impressa(linhas, numeros_por_prancha=None):
 #  A PRANCHA DONA DA DISCIPLINA — leitura por PROJETO, não por prancha
 #  (24/09/2026)
 # ══════════════════════════════════════════════════════════════════════════
-#: 🩸 O caso: "Regina e Ronaldo" (DTZ, job b6df4f3d), 6 pranchas — DEMOLIR,
+#: 🩸 O caso: job b6df4f3d, 6 pranchas — DEMOLIR,
 #: LAYOUT, ARQUITETURA, PONTOS, PISO, FORRO. Cada prancha é lida sozinha e
 #: TODAS repetem a planta-base: o piso saiu por ambiente (lido na PONTOS,
 #: 28,7 m²) E como porcelanato (lido na PISO, 28,39 m²); o forro saiu 28,7 m²
@@ -5056,7 +5056,7 @@ _RE_TETO_ITEM = _re.compile(r"\bteto\b|\bforro\b", _re.IGNORECASE)
 
 
 def _nome_limpo(nome):
-    # "08.18_P PISO_LUANA": o "_" é letra pro regex e matava a borda de PISO
+    # "08.18_P PISO_CLIENTE": o "_" é letra pro regex e matava a borda de PISO
     return _sem_acento(str(nome or "")).upper().replace("_", " ")
 
 
