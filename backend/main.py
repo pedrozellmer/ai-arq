@@ -24738,7 +24738,8 @@ def _render_email_by_type_raw(key: str):
     if key == "escritorio_convite":
         # o MESMO builder do envio (escritorio.py), com link de exemplo
         _as, _html, _txt = _escritorio.email_do_convite(
-            "Admin Exemplo", "admin@exemplo.com", projeto, "https://ai.arq.br/convite.html#t=EXEMPLO")
+            "Admin Exemplo", "admin@exemplo.com", projeto, "https://ai.arq.br/convite.html#t=EXEMPLO",
+            moldura=_email_wrap)
         return _as, _html
     if key in ("leitura_nova", "leitura_combinada"):
         # Exemplo com ganho E com uma prancha que piorou, pra o preview mostrar

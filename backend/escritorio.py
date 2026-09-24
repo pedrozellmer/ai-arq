@@ -119,7 +119,8 @@ def assunto_do_convite(quem_convida: str, projeto: str) -> str:
     return a if len(a) <= TETO_ASSUNTO else a[:TETO_ASSUNTO - 1].rstrip() + "…"
 
 
-def email_do_convite(quem_convida: str, email_de_quem_convida: str, projeto: str, link: str):
+def email_do_convite(quem_convida: str, email_de_quem_convida: str, projeto: str, link: str,
+                     moldura=None):
     """(assunto, html, texto). Sem Reply-To trocado: a porta única de e-mail não
     tem esse parâmetro e não vale mexer nela por isso — o e-mail de quem convida
     vai escrito no corpo."""
@@ -134,7 +135,8 @@ def email_do_convite(quem_convida: str, email_de_quem_convida: str, projeto: str
         f'<p style="margin:0;color:#64748b;font-size:13px;">O convite vale {VALIDADE_DIAS} dias. '
         f'Dúvida sobre o projeto? Fale com {q}'
         + (f' em {_escapar(email_de_quem_convida)}' if email_de_quem_convida else '') + '.</p>')
-    html = _MOLDURA(f"Convite para {projeto}", corpo, cta_text="Aceitar convite", cta_url=link,
+    # a prévia do painel passa a moldura de verdade: não depende de quem configurou o módulo por último
+    html = (moldura or _MOLDURA)(f"Convite para {projeto}", corpo, cta_text="Aceitar convite", cta_url=link,
                     reason=f"Você recebeu este e-mail porque {quem_convida} digitou seu endereço num convite.",
                     preheader=f"{quem_convida} te chamou para o projeto {projeto}.")
     texto = (f"{quem_convida} te convidou para o projeto {projeto} no AI.arq.\n\n"

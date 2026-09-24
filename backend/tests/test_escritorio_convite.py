@@ -28,6 +28,16 @@ sys.path.insert(0, os.path.dirname(_AQUI))
 import escritorio as esc  # noqa: E402
 from fastapi import HTTPException  # noqa: E402
 
+
+@pytest.fixture(autouse=True)
+def _devolve_as_pecas_do_modulo():
+    """🩸 24/09: estes testes trocam as peças do módulo por dublês; sem devolver, a
+    PRÉVIA do painel (test_todo_email_que_sai_tem_ficha) rodava depois com a moldura
+    falsa e reprovava — só no CI, onde a ordem dos testes é outra."""
+    antes = (esc._SERVICO, esc._COMO_USUARIO, esc._USUARIO, esc._ENVIAR, esc._MOLDURA, esc._REGISTRAR)
+    yield
+    (esc._SERVICO, esc._COMO_USUARIO, esc._USUARIO, esc._ENVIAR, esc._MOLDURA, esc._REGISTRAR) = antes
+
 PROJ = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 REQ = types.SimpleNamespace(headers={"Authorization": "Bearer jwt"})
 ADMIN = {"id": "uid-admin", "email": "admin@exemplo.com"}
