@@ -82,3 +82,16 @@ def test_o_banco_so_deixa_o_dono_do_projeto_medido_ligar():
     assert "p.user_id = new.dono::text" in fn, "conferir VISIBILIDADE não basta: a admin lê projeto de cliente"
     assert "security definer" not in fn.lower(), "em DEFINER o escritorio_eh_servidor() diria 'servidor' pra todos"
     assert "before insert or update of job_id on public.escritorio_projetos" in sec
+
+
+def test_trazer_projeto_medido_pelo_escritorio_lista_so_os_da_conta():
+    # 24/09 — Pedro: "eu vi o escritório, mas como levar um projeto feito pro escritório?"
+    h = _ler("escritorio.html")
+    tr = _funcao(h, "async function trazerMedido() {", "\n}\n")
+    assert ".eq('user_id', EU.id)" in tr, "sem o filtro, a conta de administração listaria projeto de cliente"
+    assert "!ligados.has(p.job_id)" in tr and "!p.archived" in tr
+    assert "href=\"#/job/${encodeURIComponent(p.job_id)}/capa\"" in tr
+    lista = _funcao(h, "function telaLista() {", "\n}\n")
+    assert "${NO_PILOTO ? '<button class=\"btn\" onclick=\"trazerMedido()\">Trazer projeto medido</button>" in lista
+    assert "vem na próxima etapa" not in h[h.index("function telaCapa"):h.index("function telaCapa") + 6000]
+

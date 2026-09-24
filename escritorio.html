@@ -347,13 +347,31 @@ function telaLista() {
       <p class="sub" style="margin-top:10px"><a href="dashboard.html">Voltar ao painel</a></p></div>`;
   }
   return `<div class="linha"><h2 class="h2" style="flex:1">${PROJETOS.length ? PROJETOS.length + ' projeto' + (PROJETOS.length > 1 ? 's' : '') : 'Seus projetos'}</h2>
-      ${NO_PILOTO ? '<button class="btn btn-g" onclick="novoProjeto()">+ Novo projeto</button>' : ''}</div>
+      ${NO_PILOTO ? '<button class="btn" onclick="trazerMedido()">Trazer projeto medido</button><button class="btn btn-g" onclick="novoProjeto()">+ Novo projeto</button>' : ''}</div>
     ${PROJETOS.length ? `<div class="grade g3">${PROJETOS.map((p) => `<a class="card" style="text-decoration:none;color:inherit;display:flex;flex-direction:column;gap:10px" href="#/p/${p.id}/capa">
         <div class="linha" style="justify-content:space-between;align-items:flex-start"><b style="color:#111827">${esc(p.nome)}</b>${p.etapa_atual ? `<span class="pill p-ind">${esc(p.etapa_atual)}</span>` : ''}</div>
         ${p.cliente_nome ? `<span class="sub" style="margin:0">Cliente: ${esc(p.cliente_nome)}</span>` : ''}
         <span class="sub" style="margin:0">${p.dono === EU.id ? 'Você é admin' : 'Você faz parte da equipe'}</span></a>`).join('')}</div>`
-      : `<div class="card"><p class="h2" style="font-size:16px">Comece pelo primeiro projeto</p><p class="sub">Um projeto aqui nasce sem prancha: tarefas, atas, equipe e (em breve) a pasta do Drive. Se quiser medir, o quantitativo continua no painel como sempre.</p></div>`}`;
+      : `<div class="card"><p class="h2" style="font-size:16px">Comece pelo primeiro projeto</p><p class="sub">Um projeto aqui nasce sem prancha: tarefas, atas, equipe e (em breve) a pasta do Drive. Já mediu o projeto no AI.arq? Use <b>Trazer projeto medido</b>: a equipe trabalha nele e vê o quantitativo.</p></div>`}`;
 }
+// 🏢 Trazer um projeto MEDIDO pro Escritório (24/09 — Pedro: "como levar um projeto feito pro escritório?").
+// Lista só os projetos DA CONTA — 🪤 o filtro user_id é obrigatório: a conta de administração do site LÊ os
+// projetos de todos os clientes (política "Admin reads all projects") — que ainda não estão aqui. Escolher leva
+// a #/job/<id>, que cria o projeto do Escritório ligado a ele (e o banco confere o dono de novo).
+async function trazerMedido() {
+  abrirModal('Trazer projeto medido', '<p class="sub" style="margin:0">Carregando seus projetos…</p>');
+  const { data, error } = await sb.from('projects').select('job_id,project_name,typology,items_count,created_at,archived')
+    .eq('user_id', EU.id).order('created_at', { ascending: false }).limit(80);
+  if (error) { fecharModal(); return falhou(error, 'Não consegui ler seus projetos'); }
+  const ligados = new Set(PROJETOS.map((p) => p.job_id).filter(Boolean));
+  const livres = (data || []).filter((p) => p.job_id && !p.archived && !ligados.has(p.job_id));
+  const fechar = '<div class="rodape"><button class="btn" onclick="fecharModal()">Fechar</button></div>';
+  abrirModal('Trazer projeto medido', livres.length
+    ? `<p class="sub" style="margin:0 0 10px">Escolha o projeto. Ele vira um projeto do Escritório, com equipe, tarefas e atas, e quem você convidar vê o quantitativo, o cronograma e o memorial dele (baixar, só quem você liberar).</p>
+       <ul class="lista">${livres.map((p) => `<li><a href="#/job/${encodeURIComponent(p.job_id)}/capa" onclick="fecharModal()" style="flex:1;color:inherit;text-decoration:none"><b style="font-size:14px">${esc((window.tituloProjeto || String)(p.project_name || 'Projeto'))}</b><span class="sub" style="display:block;margin:0">${esc([p.typology, (p.items_count || 0) + ' itens', p.created_at ? dBR(p.created_at) : ''].filter(Boolean).join(' · '))}</span></a></li>`).join('')}</ul>${fechar}`
+    : `<p class="sub" style="margin:0">Todos os seus projetos medidos já estão no Escritório, ou você ainda não mediu nenhum.</p>${fechar}`);
+}
+
 // 🏢 Veio do menu de um projeto MEDIDO (24/09): abre o projeto do Escritório ligado a ele; no 1º clique, cria.
 // Quem garante que o projeto medido é DESTA conta é o banco (gatilho escritorio_projeto_job_guarda), não
 // esta tela: a conta de administração do site lê projetos de todos os clientes. Aqui é só a mensagem clara.
@@ -443,7 +461,7 @@ function telaCapa() {
       <a class="tool" href="#/p/${p.id}/equipe"><span class="ti">${svg('eq')}</span><span><b>Equipe</b><span>${ativos.length} pessoas</span></span></a>
     </div>
     ${p.job_id ? `<p class="sub" style="margin-top:12px">Ligado ao quantitativo: <a href="projeto.html?job=${encodeURIComponent(p.job_id)}">abrir quantitativo, cronograma e memorial</a>.</p>`
-      : `<p class="sub" style="margin-top:12px">Quantitativo, cronograma, memorial e financeiro continuam no painel, por projeto medido. Ligar um projeto medido a este vem na próxima etapa.</p>`}
+      : `<p class="sub" style="margin-top:12px">Este projeto nasceu sem prancha. Pra trabalhar um projeto que você já mediu, use <b>Trazer projeto medido</b> na lista do Escritório.</p>`}
   </section>
   <section class="card"><div class="linha" style="justify-content:space-between"><h2 class="h2">${souAdmin() ? 'Precisa de você' : 'Suas tarefas'}</h2><a class="btn btn-s" href="#/p/${p.id}/tarefas">Abrir o quadro</a></div>
     ${foco.length ? `<ul class="lista" style="margin-top:8px">${foco.slice(0, 8).map((t) => `<li style="cursor:pointer" onclick="ir('tarefas');setTimeout(()=>abrirCartao('${t.id}'),50)"><span style="width:8px;height:8px;border-radius:50%;background:${(ST.find((s) => s.k === t.status) || {}).cor}"></span><span style="flex:1;min-width:0;font-size:13.5px">${esc(t.titulo)}<span class="sub" style="display:block;margin:0">${stT(t.status)}</span></span>${pillPrazo(t)}${avs(t)}</li>`).join('')}</ul>` : '<p class="vazio" style="margin-top:8px">Nada parado com você.</p>'}
