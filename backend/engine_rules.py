@@ -5167,3 +5167,97 @@ def repetidos_entre_pranchas(items):
         det.append({"indice": i, "familia": fam, "de": ref, "dona": dona,
                     "descricao": str(_campo_do_item(items[i], "description", "") or "")[:70]})
     return fora, det
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  A RELEITURA RESPEITA O QUE O CLIENTE REJEITOU (24/09/2026) — regra nº7
+# ══════════════════════════════════════════════════════════════════════════
+#: 🩸 O caso: job b6df4f3d. A cliente rejeitou 4 linhas às 17:23
+#: (administração local, limpeza final, mobilização, proteção); o filhote das
+#: 17:35 trouxe as 4 de volta. `_fundir_revisoes_do_cliente` só lê
+#: `action=edit` — rejeição era ignorada em TODA releitura.
+#: 📊 90 dias: 104 releituras (8 reprocessos do cliente, 96 filhotes), 6 com
+#: rejeição no pai, 19 linhas rejeitadas que voltariam.
+#:
+#: 🪤 A IA reescreve a descrição a cada leitura ("Administração local — equipe
+#: de gestão…" virou "Administração local — mobilização, desmobilização…"):
+#: casar pela frase exata, como a fusão das edições, não acha nada. Casa por
+#: PALAVRAS PRINCIPAIS — e por isso as travas abaixo, porque aqui o erro é
+#: APAGAR, e apagar errado é invisível pro cliente (duplicar ele vê).
+
+_PALAVRAS_SEM_PESO_REJ = {
+    "para", "com", "sem", "conforme", "area", "areas", "tipo", "especificacao",
+    "material", "fornecimento", "instalacao", "execucao", "definir", "confirmar",
+    "projeto", "obra", "obras", "durante", "incluindo", "variantes", "varias",
+    "servico", "servicos", "todos", "todas", "geral", "total", "item", "itens"}
+_SIMILARIDADE_MIN_REJ = 0.6
+_TOL_QTD_REJ = 0.05
+
+
+def _palavras_principais(desc):
+    t = _sem_acento(str(desc or "")).lower()
+    return {w for w in _re.findall(r"[a-z]{4,}", t)[:14] if w not in _PALAVRAS_SEM_PESO_REJ}
+
+
+def _nome_do_servico(desc):
+    """Palavras principais ANTES do travessão — o nome do serviço. A cauda
+    ("— equipe de gestão…") é o que a IA reescreve a cada leitura."""
+    return _palavras_principais(_re.split(r"\s[—–-]\s", str(desc or ""), maxsplit=1)[0])
+
+
+def par_da_linha_rejeitada(rejeitada, itens, usados=None):
+    """Índice da linha da leitura NOVA que é a mesma que o cliente REJEITOU, ou None.
+
+    `rejeitada`: {description, unit, quantity} — a foto `_antes` da rejeição.
+    Só casa quando TUDO vale: mesma unidade; nenhum atributo distintivo
+    diferente (`pode_fundir`: PM1 ≠ PM2, 80x210 ≠ 90x210); quantidade igual
+    (±5%) — exceto verba, que é genérica por natureza e é o que os clientes
+    mais rejeitam; ≥60% das palavras principais em comum; linha que o cliente
+    EDITOU (✏️) nunca; e UM vencedor só — empate não adivinha.
+    """
+    usados = usados or set()
+    un = str((rejeitada or {}).get("unit") or "").strip().lower()
+    desc_r = str((rejeitada or {}).get("description") or "")
+    pal_r = _palavras_principais(desc_r)
+    nome_r = _nome_do_servico(desc_r)
+    if not un or len(pal_r) < 2:
+        return None
+    try:
+        q_r = float((rejeitada or {}).get("quantity") or 0)
+    except (TypeError, ValueError):
+        q_r = 0.0
+    melhores = []
+    for i, it in enumerate(itens or []):
+        if i in usados:
+            continue
+        if str(_campo_do_item(it, "unit", "") or "").strip().lower() != un:
+            continue
+        if str(_campo_do_item(it, "observations", "") or "").startswith("✏"):
+            continue                       # ✏️ o cliente editou: é dele, fica
+        d = str(_campo_do_item(it, "description", "") or "")
+        if not pode_fundir(desc_r, d):
+            continue
+        if un != "vb":
+            try:
+                q = float(_campo_do_item(it, "quantity", 0) or 0)
+            except (TypeError, ValueError):
+                continue
+            if q <= 0 or q_r <= 0 or abs(q - q_r) > _TOL_QTD_REJ * max(q, q_r):
+                continue
+        pal = _palavras_principais(d)
+        if not pal:
+            continue
+        sim = len(pal_r & pal) / float(min(len(pal_r), len(pal)))
+        # nome do serviço (antes do travessão) IGUAL, com 2+ palavras que pesam:
+        # "Administração local de obra — <cauda que a IA reescreve>"
+        nome = _nome_do_servico(d)
+        if len(nome_r) >= 2 and len(nome) >= 2 and nome_r == nome:
+            sim = max(sim, 1.0)
+        if sim >= _SIMILARIDADE_MIN_REJ:
+            melhores.append((sim, i))
+    if not melhores:
+        return None
+    melhores.sort(reverse=True)
+    if len(melhores) > 1 and abs(melhores[0][0] - melhores[1][0]) < 1e-9:
+        return None                        # empate: não adivinha
+    return melhores[0][1]

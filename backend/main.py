@@ -578,6 +578,8 @@ _STAGES_DIAGNOSTICO = frozenset({
     "motor:area-regra-vazia",
     # 24/09: linhas tiradas por repetirem a prancha dona da disciplina
     "motor:prancha-dona",
+    # 24/09: linhas que o cliente rejeitou e não voltaram na releitura
+    "motor:fusao-rejeicao",
     "motor:pe-direito", "motor:escala-aviso", "motor:concordancia-rotulo",
     "motor:parede-medida",
     # 15/09: os trechos de perfil e escala H/V que a prancha escreve. Só
@@ -2321,6 +2323,63 @@ def _fundir_revisoes_do_cliente(items: list, parent_job_id: str):
     print(f"[fusao-revisao] pai={parent_job_id} revisoes={resumo['revisoes']} "
           f"casadas={resumo['casadas']} acrescentadas={resumo['acrescentadas']} "
           f"ambiguas={resumo['ambiguas']}")
+    return items, resumo
+
+
+def _tirar_rejeitadas_pelo_cliente(items: list, parent_job_id: str):
+    """A releitura NÃO traz de volta o que o cliente rejeitou (regra dura nº7).
+
+    🩸 24/09/2026, job b6df4f3d: 4 linhas rejeitadas às 17:23 voltaram no
+    filhote das 17:35 — `_fundir_revisoes_do_cliente` só lê `action=edit`.
+    A régua de casamento (e o porquê de cada trava) mora em
+    `engine_rules.par_da_linha_rejeitada`: aqui o erro é APAGAR, então na
+    dúvida a linha fica e o cliente rejeita de novo.
+
+    🪤 Rejeição DESFEITA não conta: se o item ainda existe no pai, o cliente
+    voltou atrás (ou o item nunca saiu) — nada é tirado.
+    Devolve (items, resumo). Nunca levanta; kill switch
+    RELEITURA_RESPEITA_REJEICAO=0.
+    """
+    resumo = {"rejeicoes": 0, "tiradas": 0, "sem_par": 0, "desfeitas": 0, "tiradas_desc": []}
+    if not parent_job_id or os.getenv("RELEITURA_RESPEITA_REJEICAO", "1").strip() == "0":
+        return items, resumo
+    from engine_rules import par_da_linha_rejeitada as _par
+    _st, _revs = _supa_rest_service("GET", "item_reviews", params={
+        "job_id": f"eq.{parent_job_id}", "action": "eq.reject",
+        "select": "item_id,edits,reviewed_at", "order": "reviewed_at.asc"})
+    if _st != 200:
+        resumo["erro_leitura"] = f"HTTP {_st}"
+        return items, resumo
+    if not _revs:
+        return items, resumo
+    _st_i, _linhas = _supa_rest_tudo("project_items", params={
+        "job_id": f"eq.{parent_job_id}", "select": "id"})
+    if _st_i != 200:
+        resumo["erro_leitura"] = f"project_items HTTP {_st_i}"
+        return items, resumo
+    _vivos = {str((l or {}).get("id")) for l in (_linhas or [])}
+    _vistos, _usados, _fora = set(), set(), set()
+    for r in _revs:
+        _iid = str((r or {}).get("item_id") or "")
+        ed = (r or {}).get("edits") or {}
+        _antes = ed.get("_antes") if isinstance(ed, dict) and isinstance(ed.get("_antes"), dict) else {}
+        if not _antes.get("description") or (_iid and _iid in _vistos):
+            continue
+        _vistos.add(_iid)
+        resumo["rejeicoes"] += 1
+        if _iid and _iid in _vivos:
+            resumo["desfeitas"] += 1
+            continue
+        _i = _par(_antes, items, _usados)
+        if _i is None:
+            resumo["sem_par"] += 1
+            continue
+        _usados.add(_i)
+        _fora.add(_i)
+        resumo["tiradas"] += 1
+        resumo["tiradas_desc"].append(str(getattr(items[_i], "description", "") or "")[:50])
+    if _fora:
+        items = [it for _k, it in enumerate(items) if _k not in _fora]
     return items, resumo
 
 
@@ -18828,6 +18887,31 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                  + ". Confira essas antes de somar a coluna — pode haver a "
                                    "linha do motor e a sua lado a lado.")
                     project_data.warnings = (getattr(project_data, "warnings", None) or []) + [_txt]
+                # 🔑 24/09: e o que ele REJEITOU não volta (try próprio: falhar
+                # aqui não pode desfazer a fusão das edições acima).
+                try:
+                    all_items, _rej = _tirar_rejeitadas_pelo_cliente(all_items, _pai_id)
+                    _fusao["rejeitadas_tiradas"] = _rej["tiradas"]
+                    if _rej["rejeicoes"] or _rej.get("erro_leitura"):
+                        _log_error("motor:fusao-rejeicao",
+                                   f"pai={_pai_id} rejeicoes={_rej['rejeicoes']} "
+                                   f"tiradas={_rej['tiradas']} sem_par={_rej['sem_par']} "
+                                   f"desfeitas={_rej['desfeitas']}"
+                                   + (f" erro={_rej['erro_leitura']}" if _rej.get("erro_leitura") else "")
+                                   + (" | " + " · ".join(_rej["tiradas_desc"][:6]) if _rej["tiradas_desc"] else ""),
+                                   job_id, severity="info")
+                    if _rej["tiradas"] or _rej["sem_par"]:
+                        _txt_r = (f"🗑️ {_rej['tiradas']} linha(s) que você rejeitou na versão "
+                                  f"anterior não voltaram nesta releitura.")
+                        if _rej["sem_par"]:
+                            _txt_r += (f" Outras {_rej['sem_par']} não tiveram par seguro na "
+                                       f"leitura nova e podem ter voltado com outro texto — "
+                                       f"é só rejeitar de novo.")
+                        project_data.warnings = (getattr(project_data, "warnings", None) or []) + [_txt_r]
+                except Exception as _erj:
+                    print(f"[fusao-rejeicao] nao-fatal: {_erj}")
+                    _log_error("motor:fusao-rejeicao", f"NÃO apliquei: {type(_erj).__name__}: {_erj}",
+                               job_id, severity="warning")
         except Exception as _ef:
             print(f"[fusao-revisao] nao-fatal: {_ef}")
             # Regra dura nº7: se isto falha, a releitura sai SEM as correções do
@@ -18857,6 +18941,11 @@ bloco — só cite os que estão no inventário deste arquivo."""
             _refazer_planilha.append(
                 f"{_fusao['revisoes']} correção(ões) do cliente "
                 f"(casadas={_fusao['casadas']} acrescentadas={_fusao['acrescentadas']})")
+        # 🔑 24/09: a planilha nasceu ANTES de tirar o que o cliente rejeitou —
+        # sem isto a tela sai sem a linha e o .xlsx que ele baixa, com ela.
+        if _fusao.get("rejeitadas_tiradas"):
+            _refazer_planilha.append(
+                f"{_fusao['rejeitadas_tiradas']} linha(s) rejeitada(s) pelo cliente tirada(s)")
 
         # ─────────────────────────────────────────────────────────────────
         # 🔑 A CHAVE DO SELO (22/09/2026) — a ÚNICA régua que promove.
