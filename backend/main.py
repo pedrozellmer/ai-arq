@@ -21451,6 +21451,14 @@ def notify_welcome(request: Request):
     # dela diz "evita e-mail duplicado", e só o caminho de RESGATE a chamava.
     if _ja_recebeu_kind(email, "boas_vindas"):
         return {"status": "ok", "sent": False, "reason": "ja_recebeu"}
+    # 🏢 quem veio por convite do Escritório não leva o boas-vindas de cliente
+    # (leva o "sua área também", pela varredura). Falha de leitura = segue o normal.
+    try:
+        _conv = _convidados_do_escritorio()
+        if _conv and str(user["id"]) in _conv:
+            return {"status": "ok", "sent": False, "reason": "convidado_do_escritorio"}
+    except Exception:
+        pass
     import html as _hw
     sent = _send_welcome_email(email, name)
     # Alerta interno pro Pedro: novo cliente (em thread)
@@ -22074,6 +22082,77 @@ def _build_proximo_projeto_email(name: str, project_name: str):
     return subject, html
 
 
+def _build_convidado_area_propria_email(name: str, project_name: str, quem_convidou: str):
+    """Monta (subject, html) do e-mail de quem entrou no AI.arq POR CONVITE do Escritório.
+
+    🏢 24/09/2026 (Pedro): quem vem por convite não é cliente do quantitativo — veio
+    trabalhar no projeto de outra pessoa. A esteira de cliente ("boas-vindas", "suba
+    a 1ª prancha") falava de outro produto (achado nº12 do parecer jurídico). Este
+    e-mail diz as duas coisas na ordem certa: o acesso ao projeto continua igual, E a
+    mesma conta serve pros projetos DELA. Sai UMA vez, 3 dias depois do aceite, só
+    pra quem ainda não subiu projeto próprio (a varredura horária decide)."""
+    import html as _hc
+    pn = _hc.escape(project_name or "o projeto")
+    qc = _hc.escape(quem_convidou or "quem te convidou")
+    greet = _greeting_line(_hc.escape(name or ""))
+    body = (f"{greet}<br><br>"
+            f"Você entrou no AI.arq pra trabalhar no projeto <b>{pn}</b>, a convite de "
+            f"<b>{qc}</b>. Esse acesso continua do mesmo jeito."
+            + _email_img("convidado-area.png",
+                         "Uma conta, dois lugares: o projeto da equipe e os seus projetos")
+            + "<br>"
+            f"Com a mesma conta, você também tem a <b>sua própria área</b>: suba as "
+            f"pranchas de um projeto seu (DWG, DXF ou PDF) e o AI.arq levanta o "
+            f"quantitativo direto do desenho, numa planilha que você revisa e baixa.<br><br>"
+            f"Estamos em beta: é grátis e ilimitado, sem cartão.")
+    subject = "Seus projetos também cabem no AI.arq"
+    html = _email_wrap("Além do projeto, uma área sua", body,
+                       "Abrir minha área", "https://ai.arq.br/dashboard.html",
+                       preheader="A conta que você criou pro convite serve pros seus projetos também.",
+                       reason=(f"Você está recebendo este e-mail porque entrou no AI.arq por um "
+                               f"convite para o projeto {pn}. É um aviso único."))
+    return subject, html
+
+
+def _send_email_convidado_area_propria(email: str, name: str, project_name: str,
+                                       quem_convidou: str) -> bool:
+    name = _resolve_client_name(email, hint=name)
+    subject, html = _build_convidado_area_propria_email(name, project_name, quem_convidou)
+    return _send_email_smtp(email, subject, html, log_kind="convidado_area_propria")
+
+
+def _convidados_do_escritorio():
+    """{user_id: {"aceito_em", "projeto", "quem"}} de quem está no Escritório SÓ como
+    equipe (nunca como admin de projeto próprio). None = não consegui ler.
+
+    🪤 None ≠ {}: quem chama PULA as regras de boas-vindas/1ª prancha quando é None —
+    sem saber quem é convidado, mandar "suba sua 1ª prancha" pode ir pra quem veio
+    trabalhar no projeto de outra pessoa."""
+    st, linhas = _supa_rest_tudo(
+        "escritorio_membros",
+        params={"select": "user_id,papel,status,aceito_em,nome,projeto_id", "status": "eq.ativo"},
+        ordem="id.asc", timeout=15)
+    if st != 200:
+        return None
+    st2, projs = _supa_rest_tudo("escritorio_projetos", params={"select": "id,nome"},
+                                 ordem="id.asc", timeout=15)
+    if st2 != 200:
+        return None
+    nome_proj = {p["id"]: p.get("nome") or "" for p in projs}
+    admin_do = {l["projeto_id"]: (l.get("nome") or "") for l in linhas if l.get("papel") == "dono"}
+    admins = {str(l["user_id"]) for l in linhas if l.get("papel") == "dono" and l.get("user_id")}
+    out = {}
+    for l in linhas:
+        uid = str(l.get("user_id") or "")
+        if not uid or l.get("papel") != "freela" or uid in admins:
+            continue
+        atual = out.get(uid)
+        if atual is None or str(l.get("aceito_em") or "") < str(atual["aceito_em"] or ""):
+            out[uid] = {"aceito_em": l.get("aceito_em"), "projeto": nome_proj.get(l["projeto_id"], ""),
+                        "quem": admin_do.get(l["projeto_id"], "")}
+    return out
+
+
 def _send_email_proximo_projeto(email: str, name: str, project_name: str) -> bool:
     name = _resolve_client_name(email, hint=name)
     subject, html = _build_proximo_projeto_email(name, project_name)
@@ -22563,6 +22642,15 @@ def emails_auto_tick(request: Request, dry: int = 0):
         print(f"[emails-auto] projetos falhou: {e}")
         return {"status": "erro", "detail": "não consegui ler projetos — abortando por segurança"}
 
+    # 🏢 24/09/2026 — quem entrou por CONVITE do Escritório não leva a esteira de
+    # cliente; leva o e-mail próprio ("sua área também"). None = não consegui ler:
+    # aí as duas regras de cliente-novo esperam o próximo tick (na dúvida, não envia).
+    try:
+        convidados = _convidados_do_escritorio()
+    except Exception as _ec:
+        print(f"[emails-auto] convidados do escritório falhou: {_ec}")
+        convidados = None
+
     acoes: list[dict] = []
     H = 3600.0
     for u in users:
@@ -22586,6 +22674,8 @@ def emails_auto_tick(request: Request, dry: int = 0):
                 or (u.get("user_metadata") or {}).get("name") or "")
 
         tem_perfil = (str(u.get("id") or "") in ids_com_perfil) or (email in emails_com_perfil)
+        conv = (convidados or {}).get(str(u.get("id") or ""))
+        pode_regra_de_cliente_novo = convidados is not None and conv is None
 
         # 0) RESGATE DO BOAS-VINDAS (02/08/2026). O welcome só saía quando a
         #    pessoa abria o dashboard na PRIMEIRA HORA de conta — quem criava
@@ -22596,7 +22686,8 @@ def emails_auto_tick(request: Request, dry: int = 0):
         #    🪤 A checagem "já recebeu?" tem que estar NESTA condição (e não só
         #    no filtro lá embaixo): como o encadeamento é elif, um candidato
         #    descartado depois bloquearia o lembrete da mesma pessoa pra sempre.
-        if _welcome_ok and 3 <= idade_h and recente and email not in emails_com_welcome:
+        if (_welcome_ok and pode_regra_de_cliente_novo and 3 <= idade_h and recente
+                and email not in emails_com_welcome):
             # 🚨 25/08 (decisão do Pedro): quem AINDA NÃO TEM PERFIL recebe UM
             # e-mail só — boas-vindas + "falta terminar o cadastro", com o link
             # de 1 clique. Antes eram dois: o welcome em 3h e o lembrete só 7
@@ -22618,8 +22709,18 @@ def emails_auto_tick(request: Request, dry: int = 0):
               and email not in emails_com_welcome_cadastro):
             acoes.append({"kind": "nudge_cadastro", "email": email, "nome": nome})
         # 2) Completou o cadastro, mas nunca subiu prancha.
-        elif tem_perfil and confirmado and 48 <= idade_h and recente and email not in proj_by_email:
+        elif (pode_regra_de_cliente_novo and tem_perfil and confirmado and 48 <= idade_h
+              and recente and email not in proj_by_email):
             acoes.append({"kind": "nudge_onboarding", "email": email, "nome": nome})
+        # 3) 🏢 Entrou por CONVITE do Escritório e não tem projeto próprio: 3 dias
+        #    depois do aceite, UM e-mail dizendo que a conta serve pros projetos dela
+        #    também. Janela de 30 dias pelo aceite (não pela idade da conta: quem já
+        #    tinha conta antiga e foi convidado conta igual).
+        elif conv and tem_perfil and email not in proj_by_email and conv.get("aceito_em"):
+            _ac = _parse(conv["aceito_em"])
+            if _ac and 3 * 24 <= (now - _ac).total_seconds() / H <= 30 * 24:
+                acoes.append({"kind": "convidado_area_propria", "email": email, "nome": nome,
+                              "projeto": conv.get("projeto") or "", "quem": conv.get("quem") or ""})
 
     # retorno 30d: tem projeto concluído, último movimento entre 30 e 60 dias atrás
     for email, plist in proj_by_email.items():
@@ -22890,6 +22991,9 @@ def emails_auto_tick(request: Request, dry: int = 0):
                                                 int(a.get("n_projetos") or 0))
             elif a["kind"] == "retorno_30d":
                 ok = _send_email_retorno30(a["email"], a["nome"])
+            elif a["kind"] == "convidado_area_propria":
+                ok = _send_email_convidado_area_propria(a["email"], a["nome"],
+                                                        a.get("projeto") or "", a.get("quem") or "")
             else:
                 # 🪤 31/08: aqui era `else: retorno30`. Qualquer tipo NOVO caía
                 # nesse ramo e o cliente recebia o e-mail ERRADO — silenciosamente,
@@ -24520,6 +24624,14 @@ _EMAIL_CATALOG = [
      "gatilho": "auto: reprocesso do mesmo projeto (pelo cliente ou resgate nosso), "
                 "1x por job",
      "sem_preview": "o texto nasce no processamento, com os números do job"},
+    # 🏢 24/09/2026 — Escritório (piloto). O convite sai de escritorio.py; a ficha
+    # faltava porque o guarda de fichas só lê main.py.
+    {"key": "escritorio_convite", "nome": "Convite do Escritório", "grupo": "auto",
+     "gatilho": "auto: a admin de um projeto do Escritório convida alguém por e-mail "
+                "(teto de 40 por dia por conta)"},
+    {"key": "convidado_area_propria", "nome": "Convidado: sua área também", "grupo": "auto",
+     "gatilho": "auto (tick horário): entrou por convite do Escritório, 3 dias depois do "
+                "aceite, sem projeto próprio (1x na vida) — no lugar do boas-vindas e da 1ª prancha"},
     {"key": "newsletter", "nome": "Newsletter mensal", "grupo": "manual",
      "gatilho": "manual: aba Newsletter — último dia útil do mês, cada edição "
                 "aprovada pelo Pedro",
@@ -24621,6 +24733,13 @@ def _render_email_by_type_raw(key: str):
                                           so_pdf=True, area_informada_serve=False)
     if key == "boas_vindas_cadastro":
         return _build_welcome_email(nome, True, fake_link)
+    if key == "convidado_area_propria":
+        return _build_convidado_area_propria_email(nome, projeto, "Admin Exemplo")
+    if key == "escritorio_convite":
+        # o MESMO builder do envio (escritorio.py), com link de exemplo
+        _as, _html, _txt = _escritorio.email_do_convite(
+            "Admin Exemplo", "admin@exemplo.com", projeto, "https://ai.arq.br/convite.html#t=EXEMPLO")
+        return _as, _html
     if key in ("leitura_nova", "leitura_combinada"):
         # Exemplo com ganho E com uma prancha que piorou, pra o preview mostrar
         # o quadro de honestidade dos dois lados.

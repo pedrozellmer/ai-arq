@@ -351,6 +351,45 @@ def news_banner():
         d.rectangle((px + 20, y, px + 20 + larg, y + 12), fill=(226, 232, 240) if not laranja else LARANJA_BG)
     img.save(f"{OUT}/news-banner.png", optimize=True)
 
+
+# ── CONVIDADO: uma conta, dois lugares (24/09/2026) ─────────────
+# Quem entrou por convite do Escritório: à esquerda o quadro do projeto da
+# equipe, à direita a área própria (CAD → planilha). Sem nome de ninguém.
+def convidado():
+    W, H = 1200, 400
+    img = Image.new("RGB", (W, H), FUNDO_CLARO)
+    d = ImageDraw.Draw(img)
+    rr(d, (24, 24, W - 24, H - 24), 20, fill=BRANCO, outline=CINZA_CLARO, width=2)
+    gradiente_h(d, 24, 24, W - 24, 30, INDIGO, CYAN)
+    d.text((64, 58), "Uma conta, dois lugares", font=F("Bold", 40), fill=SLATE)
+    # esquerda: o projeto da equipe (quadro de tarefas)
+    rr(d, (64, 132, 560, 346), 16, fill=(238, 242, 255))
+    d.text((88, 148), "Projeto da equipe", font=F("SemiBold", 24), fill=INDIGO)
+    cores = [(148, 163, 184), INDIGO, (16, 185, 129)]
+    for i, x in enumerate((88, 240, 392)):
+        rr(d, (x, 192, x + 136, 330), 10, fill=BRANCO)
+        d.ellipse((x + 12, 204, x + 24, 216), fill=cores[i])
+        for j in range(2 if i != 1 else 3):
+            y = 226 + j * 34
+            rr(d, (x + 10, y, x + 126, y + 26), 7, fill=(241, 245, 249))
+            d.ellipse((x + 102, y + 5, x + 118, y + 21), fill=(199, 210, 254))
+    # o "+"
+    d.line((580, 239, 620, 239), fill=CINZA_TXT, width=7)
+    d.line((600, 219, 600, 259), fill=CINZA_TXT, width=7)
+    # direita: a área própria (CAD vira planilha)
+    rr(d, (640, 132, 1136, 346), 16, fill=(236, 254, 255))
+    d.text((664, 148), "Seus projetos", font=F("SemiBold", 24), fill=(8, 145, 178))
+    rr(d, (664, 198, 780, 322), 12, fill=BRANCO, outline=(203, 213, 225), width=3)
+    d.text((684, 240), "DWG", font=F("Bold", 32), fill=(148, 163, 184))
+    d.line((800, 260, 868, 260), fill=CINZA_TXT, width=6)
+    d.polygon([(868, 246), (894, 260), (868, 274)], fill=CINZA_TXT)
+    rr(d, (910, 192, 1112, 328), 12, fill=BRANCO, outline=(203, 213, 225), width=2)
+    for j in range(4):
+        y = 210 + j * 28
+        d.line((930, y + 8, 1040, y + 8), fill=(203, 213, 225), width=8)
+        check(d, 1060, y + 1, cor=VERDE, t=4, s_=11)
+    img.save(f"{OUT}/convidado-area.png", optimize=True)
+
 if __name__ == "__main__":
     import os
     os.makedirs(OUT, exist_ok=True)
@@ -364,6 +403,7 @@ if __name__ == "__main__":
     calibracao()
     falha_retry()
     news_banner()
+    convidado()
     fotos()
     for f in sorted(os.listdir(OUT)):
         if f.endswith(".png"):

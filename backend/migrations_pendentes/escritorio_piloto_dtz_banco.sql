@@ -453,7 +453,8 @@ language sql stable security definer set search_path = '' as $$
 $$;
 revoke all on function public.escritorio_contatos(uuid) from public, anon;
 grant execute on function public.escritorio_contatos(uuid) to authenticated;
--- ⏭️ DEPOIS que a tela que pede colunas por nome estiver no ar:
---   revoke select on public.escritorio_membros from authenticated;
---   grant select (id,projeto_id,user_id,nome,papel,funcao,status,convidado_em,aceito_em,removido_em)
---     on public.escritorio_membros to authenticated;
+-- ── 16. (24/09, aplicado DEPOIS do deploy 4b1afcc da tela que pede colunas por nome) ──
+-- e-mail, telefone e hash do convite fora do alcance de quem está logado (9/9 provado em transação desfeita)
+revoke select on public.escritorio_membros from authenticated;
+grant select (id, projeto_id, user_id, nome, papel, funcao, status, convidado_em, aceito_em, removido_em)
+  on public.escritorio_membros to authenticated;

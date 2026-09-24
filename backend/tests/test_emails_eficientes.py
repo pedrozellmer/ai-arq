@@ -217,6 +217,7 @@ _DEPOIS = {"itens": 12, "medidos": 9}
 _EMAILS = {
     "_build_calibracao_email": (_NOME, _PROJ, _JOB),
     "_build_cronograma_checkin_email": (_NOME, _PROJ, 3, _JOB),
+    "_build_convidado_area_propria_email": (_NOME, _PROJ, "Admin Exemplo"),
     "_build_falha_email": (_NOME, _PROJ, True, "dxf ilegivel"),
     "_build_leitura_combinada_email": (_NOME, _PROJ, _JOB, _ANTES, _DEPOIS, ["aviso"]),
     "_build_leitura_nova_email": (_NOME, _PROJ, _JOB, _ANTES, _DEPOIS),
