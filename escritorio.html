@@ -239,8 +239,10 @@ const IC = {
 };
 const svg = (k, s = 18) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${IC[k]}</svg>`;
 
-// ── rotas: #/ (lista) · #/p/<id>/<tela> ──
+// ── rotas: #/ (lista) · #/p/<id>/<tela> · #/job/<job_id>/<tela> (vindo do menu de um projeto medido) ──
 function lerRota() {
+  const j = /^#\/job\/([A-Za-z0-9_-]{6,80})(?:\/(\w+))?/.exec(location.hash);
+  if (j) return { job: j[1], id: null, view: j[2] || 'capa' };
   const m = /^#\/p\/([0-9a-f-]{36})(?:\/(\w+))?/.exec(location.hash);
   return m ? { id: m[1], view: m[2] || 'capa' } : { id: null, view: 'lista' };
 }
@@ -316,6 +318,7 @@ async function navegar() {
   const r = lerRota();
   menu(false);
   try {
+    if (r.job) { await abrirPeloJob(r.job, r.view); return; }
     if (!r.id) { VIEW = 'lista'; PROJ = null; await carregarProjetos(); }
     else {
       if (!PROJETOS.length || !PROJETOS.find((p) => p.id === r.id)) await carregarProjetos();
@@ -351,6 +354,39 @@ function telaLista() {
         <span class="sub" style="margin:0">${p.dono === EU.id ? 'Você é admin' : 'Você faz parte da equipe'}</span></a>`).join('')}</div>`
       : `<div class="card"><p class="h2" style="font-size:16px">Comece pelo primeiro projeto</p><p class="sub">Um projeto aqui nasce sem prancha: tarefas, atas, equipe e (em breve) a pasta do Drive. Se quiser medir, o quantitativo continua no painel como sempre.</p></div>`}`;
 }
+// 🏢 Veio do menu de um projeto MEDIDO (24/09): abre o projeto do Escritório ligado a ele; no 1º clique, cria.
+// Quem garante que o projeto medido é DESTA conta é o banco (gatilho escritorio_projeto_job_guarda), não
+// esta tela: a conta de administração do site lê projetos de todos os clientes. Aqui é só a mensagem clara.
+async function abrirPeloJob(job, view) {
+  await carregarProjetos();
+  const destino = (p) => location.replace(`#/p/${p.id}/${['tarefas', 'atas', 'equipe'].includes(view) ? view : 'capa'}`);
+  const ja = PROJETOS.find((p) => p.job_id === job && p.dono === EU.id);
+  if (ja) return destino(ja);
+  if (!NO_PILOTO) return avisoJob('O Escritório está em piloto fechado', 'Por enquanto ele está ligado só pra algumas contas.');
+  const { data: med, error: e1 } = await sb.from('projects').select('job_id,project_name,user_id').eq('job_id', job).maybeSingle();
+  if (e1) throw e1;
+  if (!med || med.user_id !== EU.id) return avisoJob('Esse projeto não é da sua conta', 'Só quem subiu o projeto medido pode levar ele pro Escritório.');
+  const nome = String((window.tituloProjeto || String)(med.project_name || 'Projeto')).slice(0, 160);
+  const { data, error } = await sb.from('escritorio_projetos')
+    .insert({ dono: EU.id, nome, job_id: job, etapas: MODELO_DTZ, etapa_atual: MODELO_DTZ[0] }).select().single();
+  if (error) {
+    if (error.code === '23505') {            // duas abas / clique duplo: o outro já criou — abre o dele
+      await carregarProjetos();
+      const outro = PROJETOS.find((p) => p.job_id === job && p.dono === EU.id);
+      if (outro) return destino(outro);
+    }
+    if (error.code === '42501') return avisoJob('Esse projeto não é da sua conta', 'Só quem subiu o projeto medido pode levar ele pro Escritório.');
+    throw error;
+  }
+  PROJETOS.unshift(data); PROJ = null;
+  toast('Projeto criado no Escritório, ligado ao projeto medido');
+  destino(data);
+}
+function avisoJob(titulo, texto) {
+  VIEW = 'lista'; PROJ = null; renderMoldura();
+  $('main').innerHTML = `<div class="card"><p class="h2">${esc(titulo)}</p><p class="sub">${esc(texto)}</p><p style="margin-top:12px"><a class="btn" href="dashboard.html">Voltar ao painel</a></p></div>`;
+}
+
 function novoProjeto() {
   abrirModal('Novo projeto', `
     <div class="grade g2"><div><label class="lbl" for="np-nome">Nome do projeto</label><input id="np-nome" class="in" maxlength="160" placeholder="ex.: Residência Alto da Boa Vista"></div>

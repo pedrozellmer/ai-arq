@@ -208,6 +208,8 @@
     cartao: '<rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19M6.5 14.8h3"/>',
     duvida: '<circle cx="12" cy="12" r="9"/><path d="M9.6 9.4a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.7"/><path d="M12 17.2h.01"/>',
     sair: '<path d="M15 17l5-5-5-5M20 12H9M12 20H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h6"/>',
+    equipe: '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.6c2.7.2 5 2 5 4.9"/>',
+    quadro: '<rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="11" rx="1.5"/><rect x="17" y="4" width="4" height="7" rx="1.5"/>',
     engrenagem: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>'
   };
 
@@ -787,6 +789,8 @@
         ini.textContent = (nome || '?').trim().split(/\s+/).slice(0, 2)
           .map(function (p) { return p[0]; }).join('').toUpperCase() || '?';
       }
+      // menu da conta: a porta do Escritório (no projeto, quem chama é o atualizarSelo, que sabe se é da conta)
+      if (!FIXADO) montarEscritorio();
       // Botão admin: quem autoriza de verdade é o backend. Isto é só a UI.
       if (window.aiarqEmailMatches) {
         window.aiarqEmailMatches(u.email, '97bda6eb7aa5b5426da844969ef4d756a77595bc18d12e5a49240598e89b74c2')
@@ -814,6 +818,43 @@
         });
       } else { window.location.href = 'login.html'; }
     });
+  }
+
+  // 🏢 ESCRITÓRIO (piloto, 24/09/2026). Quem decide o piloto é o BANCO; pra quem não está, nada nasce.
+  //  • menu da CONTA: um item "Escritório" logo depois de "Meus projetos". 🩸 A única porta era o cartão
+  //    da aba Início do painel, e o "← Todos os projetos" leva pra aba Meus projetos: o Pedro e a Dani
+  //    nunca passaram por ele;
+  //  • dentro de um projeto medido DA PRÓPRIA CONTA: Equipe · Tarefas · Atas; o 1º clique cria o
+  //    projeto do Escritório ligado a este (escritorio.html#/job/...).
+  // 🪤 Nada de `hidden` aqui: nesta folha ele perde pra classe de display (o cartão do painel de 24/09).
+  // Acessório: falhou, o menu segue igual.
+  function montarEscritorio() {
+    if (document.getElementById('aiarq-grp-escritorio')) return;
+    if (!window.sbClient || typeof window.sbClient.rpc !== 'function') return;
+    window.sbClient.rpc('escritorio_no_piloto').then(function (r) {
+      if (!r || r.error || r.data !== true) return;
+      if (document.getElementById('aiarq-grp-escritorio')) return;
+      var side = document.getElementById('aiarq-side');
+      var primeiro = side && side.querySelector('.side-grp');
+      if (!primeiro) return;
+      if (!FIXADO) {
+        var meus = primeiro.querySelector('a[data-tab="meus-projetos"]');
+        var porta = '<a class="side-it" id="aiarq-grp-escritorio" href="escritorio.html" data-track="menu-escritorio">'
+                  + svg('quadro') + 'Escritório<span class="side-nota">piloto</span></a>';
+        if (meus) meus.insertAdjacentHTML('afterend', porta);
+        else primeiro.insertAdjacentHTML('beforeend', porta);
+        return;
+      }
+      var base = 'escritorio.html#/job/' + encodeURIComponent(JOB) + '/';
+      var item = function (tela, ic, rotulo) {
+        return '<a class="side-it" href="' + base + tela + '" data-track="menu-escritorio-' + tela + '">'
+             + svg(ic) + rotulo + '</a>';
+      };
+      primeiro.insertAdjacentHTML('afterend',
+        '<div class="side-grp" id="aiarq-grp-escritorio"><p class="side-grp-t">Escritório</p>'
+        + item('equipe', 'equipe', 'Equipe') + item('tarefas', 'quadro', 'Tarefas') + item('atas', 'memorial', 'Atas')
+        + '</div>');
+    }, function () {});
   }
 
   // Uma chamada só alimenta o contador do menu da conta E o bloco do projeto
@@ -849,6 +890,9 @@
           if (nx) nx.textContent = 'Projeto não encontrado';
           return;
         }
+        // só aqui se sabe que o projeto aberto é DESTA conta (a lista vem de /api/meus-entregaveis):
+        // a conta de administração abre projeto de cliente e não pode ligar ele ao Escritório dela
+        montarEscritorio();
         var nm = document.getElementById('aiarq-proj-nome');
         // Vitrine: primeira letra maiúscula. O dado no banco não muda.
         if (nm) nm.textContent = (window.tituloProjeto || String)(p.nome);

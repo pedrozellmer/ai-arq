@@ -716,3 +716,31 @@ begin
   return new;
 end $$;
 revoke all on function public.escritorio_membro_guarda() from public, anon, authenticated;
+
+-- ── 20. (24/09, depois do deploy 524f67c) a flag antiga do piloto sai de profiles ──
+-- O próprio usuário podia ligar `profiles.piloto_escritorio` (achado A1). A lista do piloto mora em
+-- escritorio_piloto (só o servidor escreve). Os 2 marcados já estavam lá; nenhuma política/função/view
+-- nem página no ar lia a coluna. Aplicada como migração `profiles_drop_piloto_escritorio`.
+alter table public.profiles drop column if exists piloto_escritorio;
+
+-- ── 21. (24/09) projeto do Escritório LIGADO a um projeto medido (grupo "Escritório" no menu do projeto) ──
+-- Um projeto medido liga no máximo UM projeto do Escritório, e só o DONO do projeto medido liga.
+-- 🪤 A conta de administração do site LÊ os projetos de todos os clientes (política "Admin reads all
+-- projects" em public.projects): "consigo ver o projeto" não prova "o projeto é meu". A trava confere
+-- projects.user_id = dono. A função é INVOKER de propósito: dentro de SECURITY DEFINER o current_user
+-- vira o dono da função e escritorio_eh_servidor() diria "servidor" pra todo mundo.
+create unique index escritorio_projetos_um_por_job on public.escritorio_projetos (job_id) where job_id is not null;
+
+create or replace function public.escritorio_projeto_job_guarda()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  if new.job_id is null or public.escritorio_eh_servidor() then return new; end if;
+  if tg_op = 'UPDATE' and new.job_id is not distinct from old.job_id then return new; end if;
+  if not exists (select 1 from public.projects p where p.job_id = new.job_id and p.user_id = new.dono::text) then
+    raise exception 'só o dono do projeto medido liga ele ao Escritório' using errcode = '42501';
+  end if;
+  return new;
+end $$;
+revoke all on function public.escritorio_projeto_job_guarda() from public, anon, authenticated;
+create trigger escritorio_projetos_job before insert or update of job_id on public.escritorio_projetos
+  for each row execute function public.escritorio_projeto_job_guarda();
