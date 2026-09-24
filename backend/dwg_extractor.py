@@ -2525,6 +2525,48 @@ def _shoelace_area(points: list) -> float:
     return area / 2.0
 
 
+#: Amostra de legenda: quadradinho de material, pequeno e repetido.
+_AMOSTRA_MAX_M2 = 5.0
+_AMOSTRA_MIN_LAYERS = 3
+_AMOSTRA_TOL = 0.005
+_AMOSTRA_RETANGULO = 0.98      # preenchimento do bbox: retângulo ≈ 1
+
+
+def separar_amostras_de_legenda(hatches):
+    """Tira das hachuras as AMOSTRAS DA LEGENDA. Devolve (hachuras, amostras).
+
+    🩸 24/09/2026, job b6df4f3d (prancha de PISO): 15 hachuras de
+    exatamente 1,73 m², em 15 layers diferentes (PIS-CAR-01..09,
+    PIS-CER-01..03, PIS-VINIL, PIS-EXT, ARQ-ALV-HTC) — os quadradinhos que
+    mostram cada material na legenda. O motor mediu como piso: a planilha
+    saiu com "Piso vinílico 1,73 m² ✓ MEDIDO" (não existe vinílico na obra)
+    e o porcelanato com 28,39 m² (a geometria real é 24,92; o resto eram
+    duas amostras).
+
+    🔑 O retrato da legenda: ≥3 layers DIFERENTES com hachura RETANGULAR da
+    MESMA área (±0,5%), pequena (≤ 5 m²). Piso de ambiente real não se
+    repete assim em três materiais. Mesma área no MESMO layer (os 10
+    banheiros iguais de um hotel) não conta — é um layer só.
+    """
+    cand = [h for h in (hatches or [])
+            if 0 < float(getattr(h, "area", 0) or 0) <= _AMOSTRA_MAX_M2
+            and float(getattr(h, "preenchimento", 0) or 0) >= _AMOSTRA_RETANGULO]
+    fora = set()
+    usados = set()
+    for h in cand:
+        if id(h) in usados:
+            continue
+        a = float(h.area)
+        grupo = [x for x in cand if abs(float(x.area) - a) <= _AMOSTRA_TOL * max(a, float(x.area))]
+        if len({x.layer for x in grupo}) >= _AMOSTRA_MIN_LAYERS:
+            fora.update(id(x) for x in grupo)
+        usados.update(id(x) for x in grupo)
+    if not fora:
+        return list(hatches or []), []
+    return ([h for h in hatches if id(h) not in fora],
+            [h for h in hatches if id(h) in fora])
+
+
 #: Nome que o AutoCAD dá ao bloco criado por "Colar como bloco" (PASTEBLOCK):
 #: "A$C" + hexadecimal. Não é bloco de biblioteca (porta, louça): é um pedaço
 #: do DESENHO que alguém colou. O nome não diz nada — o conteúdo diz tudo.
@@ -3638,6 +3680,12 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
                 ))
         except Exception:
             continue
+    hatches, _amostras = separar_amostras_de_legenda(hatches)
+    if _amostras:
+        # rastro: sem isto "a legenda virou piso" só se descobre baixando o arquivo
+        metadata["amostras_legenda"] = "%d em %d layer(s), %.2f m2" % (
+            len(_amostras), len({h.layer for h in _amostras}),
+            sum(h.area for h in _amostras))
 
     # ---- Texts ------------------------------------------------------------
     texts: list[TextAnnotation] = []

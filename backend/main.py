@@ -14438,6 +14438,8 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                                 # mais caro do motor.
                                 f"{_descarte_de_blocos(extraction)}"
                                 f"{_blocos_colados_abertos(extraction)}"
+                                # 🔑 24/09: hachuras de AMOSTRA DA LEGENDA tiradas da medição
+                                f"{(' amostras_legenda=[' + str((getattr(extraction, 'metadata', None) or {}).get('amostras_legenda')) + ']') if (getattr(extraction, 'metadata', None) or {}).get('amostras_legenda') else ''}"
                                 # 🔬 27/08: POR QUE `pilares` deu esse número.
                                 # Prancha de FÔRMA com 2.545 linhas e 198 cotas
                                 # devolvia `pilares=0` sem dizer se o desenho
