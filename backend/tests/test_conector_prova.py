@@ -566,10 +566,23 @@ def test_CONTROLE_antes_do_prazo_responde(cli, monkeypatch):
     assert cli.get("/.well-known/oauth-protected-resource/mcp-teste").status_code == 200
 
 
-def test_o_prazo_e_curto():
-    """Prova é prova: se alguém esquecer de apagar, ela some sozinha em dias."""
+def test_a_prova_TEM_prazo_pra_morrer_sozinha():
+    """A prova some sozinha se a gente esquecer dela.
+
+    🔑 23/09: o prazo era 05/10 porque a prova era de 1–2 dias. Ela PASSOU em
+    23/09 e o Pedro decidiu *"esquece 05/10, vamos fazer no nosso tempo"* —
+    então virou 31/12/2026. O que NÃO muda é existir um prazo: a tela de
+    permissão ainda não pede conta, e o Pedro aceitou o risco com a razão de
+    que *"ninguém vai ter o link"*. Prazo é a rede pra quando essa premissa
+    deixar de valer sem ninguém perceber.
+    🪤 Este guarda existe pra impedir que alguém empurre a data pra sempre.
+    Quando a Fase 1 entrar (login de verdade), a prova inteira sai.
+    """
     from datetime import datetime, timezone
-    assert ct.PROVA_ATE <= datetime(2026, 10, 31, tzinfo=timezone.utc)
+    assert ct.PROVA_ATE <= datetime(2027, 1, 31, tzinfo=timezone.utc), (
+        "prazo longo demais: a prova tem que morrer sozinha")
+    assert ct.PROVA_ATE > datetime(2026, 9, 23, tzinfo=timezone.utc), (
+        "prazo no passado: a prova estaria morta")
 
 
 def test_as_rotas_da_prova_nao_bloqueiam_o_laco(cli):

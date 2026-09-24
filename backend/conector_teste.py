@@ -82,8 +82,114 @@ HOST_PADRAO = HOSTS[0]
 CAMINHO_MCP = "/mcp-teste"
 NOME = "AI.arq (teste)"
 
+SOBRE = ("Quantitativo de obra a partir de PDF, DWG e DXF. Ambiente de TESTE: nao le projeto nem dado de ninguem.")
+
+# 23/09: o Claude mostrava o conector com um icone generico. O nosso mora
+# em ai.arq.br (GitHub Pages) e o host do backend nao serve favicon; pior,
+# a zona ai.arq.br bloqueia crawler de TREINO. A spec 2025-11-25 resolve
+# pelo caminho certo: `Implementation extends BaseMetadata, Icons`, entao o
+# serverInfo anuncia `icons` -- e `src` aceita `data:` URI, que nao depende
+# de rota nova, de DNS nem de passar pelo Cloudflare.
+#
+# 🎨 Desenho pedido pelo Pedro: "AI" grande e "AI.Arq" pequeno embaixo.
+# 🪤 O nome SO entra no 128: em 32x32 ele teria ~4 px de altura e viraria
+# uma mancha. Cada tamanho mostra o que cabe -- por isso sao DOIS icones,
+# e o cliente escolhe pelo `sizes`.
+_ICONE_B64 = (
+    "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAACXElEQVR4nGNkwAK8A5/+/8/E"
+    "wPCfiZGBgRlEQzAyG10OVR673JF6CUZ0uxiROT7+MIupbzlMDkQfrxSH28tEb8tBfIuel/9R"
+    "HOBDR8thcuYTIY5gAhH0thzGBqcBWiU4QpbD5JgG0nIQn2kgLQeHwEBajhQFA2M5CLOQYjkX"
+    "FxPD+jpRBjYWSDlSt+ojw/4bP1As6A8XYDBXZGO4/foPQ+zyd3gtB6cBUnzuZMgBtxwE3A04"
+    "MCyAl62M+H0O4TMiooCYYHc35gSbffruLzBtrsLOwMfDjKoWqXAnZDnObIjNcilRZgYdOVaw"
+    "wQuPfGX4/fc/AwsTA4OLNjtqnCMBQpZjzYa4EpyHEcT3rz/9Zbjw+BfDhUe/IdGgA4sGzCgg"
+    "ZDlGNsRlOYh2M+AAm3vk9i+w3FFoNGhLsjLICjOjFK/IIYDPcpRsiC+rGSixMUgIgLzHwHD0"
+    "zk+w2JH7P+EWeWghJUZoCIBoQpbDsyGhfO5hCPE9CPSEC6C3KRg8NDgYZpz5BjEHJRHitxya"
+    "BvBbzsHByOCgiXAANiDFx8ygJ8UKSQPIgIDlIDkWQiWcvTY7AycbxFvduz8zrLv0HS6nJcnK"
+    "MC9UECznpc7BcOHtb7RygArZ0FMPkvq///7PsBNa6sHkrrz+w3DrzR+wvIsSOwMLC64owG45"
+    "CDPal774T82ynZhgR0kDDANoOd5sSA/LURwwEJZjzYb0tBxcGw6k5eBcAMouVq0v/w+E5bct"
+    "hRnB1cdAWA7mMyAVG6DuEj0tv2MuzIjROQV1l+hpOYYDYMBk+iscpSPlcY5uFwBHMt3pEFUB"
+    "9gAAAABJRU5ErkJggg=="
+)
+_ICONE_128_B64 = (
+    "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"
+)
+_ICONES = [{"src": "data:image/png;base64," + _ICONE_B64,
+            "mimeType": "image/png", "sizes": ["32x32"]},
+           {"src": "data:image/png;base64," + _ICONE_128_B64,
+            "mimeType": "image/png", "sizes": ["128x128"]}]
+
 #: a prova se desliga sozinha: depois disto, tudo aqui responde 404
-PROVA_ATE = datetime(2026, 10, 5, 3, 0, tzinfo=timezone.utc)   # 05/10 00:00 Brasília
+# 23/09: era 05/10 (prova de 1–2 dias). A prova PASSOU em 23/09 — chave chega,
+# protocolo 2025-11-25, CIMD, renovação rotativa e chamada real do celular —
+# e o Pedro decidiu: *"esquece 05/10, vamos fazer no nosso tempo"*.
+# 🪤 A trava FICA, só com folga: a tela de permissão ainda NÃO pede conta
+# (quem tem o link recebe um token), então uma validade é o que garante que
+# isto morre sozinho se a gente esquecer. Some junto quando a Fase 1 entrar.
+PROVA_ATE = datetime(2026, 12, 31, 3, 0, tzinfo=timezone.utc)  # 31/12 00:00 Brasília
 
 #: versões da era 2025 (com initialize). 2025-03-26 fica de fora: aceitá-la
 #: traz junto a obrigação de aceitar lote JSON-RPC (removido na 2025-06-18).
@@ -843,7 +949,11 @@ def _responder(msg: dict, chave: dict, versao: str):
         pedida = str(params.get("protocolVersion") or "")
         return ok({"protocolVersion": pedida if pedida in VERSOES else VERSAO_PADRAO,
                    "capabilities": {"tools": {"listChanged": False}},
-                   "serverInfo": {"name": "aiarq-teste", "title": NOME, "version": "0.1.0"}})
+                   "serverInfo": {"name": "aiarq-teste", "title": NOME,
+                                  "version": "0.1.0",
+                                  "description": SOBRE,
+                                  "websiteUrl": "https://ai.arq.br",
+                                  "icons": _ICONES}})
     if metodo == "ping":
         return ok({})
     if metodo == "tools/list":
