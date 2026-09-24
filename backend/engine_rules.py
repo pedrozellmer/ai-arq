@@ -5037,6 +5037,11 @@ _PALAVRAS_VAZIAS = {
     "memorial", "descritivo", "prancha", "quadro", "item", "itens", "servico"}
 
 
+#: assunto = a própria disciplina: a linha fala do piso/forro INTEIRO
+_CABECAS_DA_FAMILIA = {"piso", "pisos", "forro", "forros", "rodape", "rodapes",
+                       "revestimento", "revestimentos", "pavimentacao"}
+
+
 def _palavras_do_item(desc):
     """A palavra que diz O QUE é a linha — a 1ª que importa ("sanca",
     "piso", "forro", "sinalizacao"). 🪤 Comparar QUALQUER palavra era frouxo:
@@ -5147,8 +5152,15 @@ def repetidos_entre_pranchas(items):
         # diz o que é, em comum). Sanca só na prancha de luminotécnico, sem
         # sanca nenhuma na de forro, é a ÚNICA sanca do projeto: fica.
         _pal = _palavras_do_item(_campo_do_item(items[i], "description", ""))
+        # 🩸 24/09 (filhote evb74149): "Piso — revestimento de piso do ambiente
+        # SALA" na planta de LAYOUT não casava com "Fornecimento e assentamento
+        # de porcelanato" da de PISO — e o piso saiu duas vezes de novo. Linha
+        # cujo assunto é a PRÓPRIA disciplina ("piso", "forro"…) é a disciplina
+        # inteira: basta a dona ter linha da família. Sanca continua exigindo sanca.
+        _generica = bool(_pal & _CABECAS_DA_FAMILIA)
         dona = next((p for p, a in donas[fam].items()
-                     if a == andar and (_pal & trouxe.get((fam, p), set()))), None)
+                     if a == andar and (fam, p) in trouxe
+                     and (_generica or (_pal & trouxe[(fam, p)]))), None)
         if dona is None:
             continue
         fora.add(i)

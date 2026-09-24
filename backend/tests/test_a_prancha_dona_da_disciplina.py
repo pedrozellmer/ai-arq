@@ -151,6 +151,16 @@ def test_CONTROLE_demolicao_remocao_e_existente_nunca_saem(desc):
     assert 2 not in repetidos(itens)[0]
 
 
+def test_piso_por_ambiente_no_LAYOUT_sai_mesmo_com_palavras_diferentes():
+    """Filhote evb74149: a de PISO dizia 'Fornecimento e assentamento de
+    porcelanato'; a de LAYOUT, 'Piso — revestimento de piso do ambiente SALA'.
+    Assunto = a própria disciplina: é o piso inteiro de novo."""
+    itens = [_it(PISO, "Pisos e Rodapés", "Fornecimento e assentamento de porcelanato Portobello"),
+             _it(LAYOUT, "Pisos e Rodapés", "Piso — revestimento de piso do ambiente SALA"),
+             _it(LAYOUT, "Pisos e Rodapés", "Piso — revestimento de piso do ambiente QUARTO")]
+    assert repetidos(itens)[0] == {1, 2}
+
+
 def test_rodape_sem_prancha_propria_pertence_a_de_piso():
     itens = [_it(PISO, "Pisos e Rodapés", "Rodapé poliestireno 10 cm"),
              _it(LAYOUT, "Pisos e Rodapés", "Rodapé — material a definir")]
