@@ -1953,7 +1953,14 @@ _ATRIB_POR_CATEGORIA = (
     # trechos DIFERENTES da obra e não devem ser deduplicados entre si.
     ("codigo", (_re.compile(
         r"\b((?:pm|pv|pe|lm|ln|lum|dry|dw|div|pd|ve|vm|p|j|v)[\s\-]?\d{1,3})\b",
-        _re.I),)),
+        _re.I),
+        # 🩸 24/09/2026 (job b6df4f3d, DTZ): "LMN02"…"LMN24" — 23 luminárias
+        # DIFERENTES, 1 un cada — viraram "Lum_2_PL — 23 variantes
+        # consolidadas, 23 un": o prefixo de 3 letras não casava acima e a
+        # trava achou que eram o mesmo item. Código de legenda colado:
+        # 2–4 letras + 2–3 dígitos (+ letra de variante: LMN05A, AL004).
+        _re.compile(r"\b([a-z]{2,4}\d{2,3}[a-z]?)\b", _re.I),
+    )),
 )
 
 
