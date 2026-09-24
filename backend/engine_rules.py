@@ -4970,3 +4970,181 @@ def selo_da_tabela_impressa(linhas, numeros_por_prancha=None):
                        "prancha conferidas" % (distintos - 1)),
         })
     return promovidos
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  A PRANCHA DONA DA DISCIPLINA — leitura por PROJETO, não por prancha
+#  (24/09/2026)
+# ══════════════════════════════════════════════════════════════════════════
+#: 🩸 O caso: "Regina e Ronaldo" (DTZ, job b6df4f3d), 6 pranchas — DEMOLIR,
+#: LAYOUT, ARQUITETURA, PONTOS, PISO, FORRO. Cada prancha é lida sozinha e
+#: TODAS repetem a planta-base: o piso saiu por ambiente (lido na PONTOS,
+#: 28,7 m²) E como porcelanato (lido na PISO, 28,39 m²); o forro saiu 28,7 m²
+#: na PONTOS E 36 m² em 5 linhas na FORRO. Quem soma a coluna paga duas vezes.
+#: 📊 90 dias: 24 de 175 projetos, 216 linhas de piso e 89 de forro lidas
+#: FORA da prancha própria, num projeto que TINHA a prancha própria.
+#:
+#: 🔑 NÃO É LER TUDO JUNTO: as pranchas continuam lidas uma por vez (memória
+#: do servidor). Isto roda DEPOIS, sobre a lista de linhas — sem arquivo,
+#: sem IA.
+#:
+#: 🪤 As três armadilhas, tiradas dos nomes REAIS dos 24 projetos:
+#:   1. "PISO" também é ANDAR ("PLANTA DE PISO - 1O PISO", "VIGA (PISO 1)");
+#:      o andar sai do nome ANTES de classificar.
+#:   2. Projeto de vários andares ("PAGINACAO TERREO" × "LAYOUT 1O PAV"):
+#:      só é repetição dentro do MESMO andar.
+#:   3. Rodapé e soco têm prancha própria ("P RODAPE", "P SOCALO").
+
+_RE_ANDAR = [
+    (_re.compile(r"\b(\d{1,2})\s*[Oºª°]?\s*(?:PAVTO|PAVIMENTO|PAV|ANDAR|PISO)\b"), r"\1PAV"),
+    (_re.compile(r"\bPISO\s*(\d{1,2})\b"), r"\1PAV"),
+    (_re.compile(r"\b(TERREO|SUBSOLO|SUPERIOR|INFERIOR|MEZANINO)\b"), r"\1"),
+    (_re.compile(r"\bPAV(?:TO|IMENTO)?\.?\s*TIPO\b"), "TIPO"),
+]
+_RE_DONA = {
+    "piso": _re.compile(r"\bPISOS?\b|\bPAGINAC|\bPAG\.?\s*PISO|\bPIS\b"),
+    "rodape": _re.compile(r"\bRODAPES?\b|\bSOCALOS?\b|\bSOCULOS?\b"),
+    "forro": _re.compile(r"\bFORROS?\b"),
+}
+#: 🔑 24/09 (simulação em 90 dias): a regra LARGA ("fora da dona = repetido")
+#: tirava 274 linhas de 19 projetos, e muitas eram legítimas — piso tátil da
+#: prancha de acessibilidade, piso da copa no DETALHE, calçada e rampa da
+#: implantação, e o MEMORIAL virava "dono" de piso por falar de piso. A linha
+#: só sai quando a prancha de onde ela veio é claramente de OUTRA disciplina
+#: (pontos, elétrica, layout, demolição…) — que é o caso de verdade: a planta
+#: de pontos repetindo o piso da planta-base.
+_RE_OUTRA_DISCIPLINA = _re.compile(
+    r"\bPONTOS?\b|\bELETRIC|\bHIDRAUL|\bLUMINOTEC|\bILUMINAC|\bLAYOUT\b|"
+    r"\bDEMOLI|\bDEMOLIR\b|\bINTERRUPTOR|\bSPLIT\b|\bCLIMATIZ|\bAR\s*CONDIC|"
+    r"\bINCENDIO\b|\bSPDA\b|\bLOGICA\b|\bMOBILIARIO\b|\bLUMINARIAS?\b")
+#: nunca é DONA: fala de tudo sem ser planta de nada
+_RE_NUNCA_DONA = _re.compile(r"\bMEMORIAL\b|\bDESCRITIVO\b|\bESPECIFICAC|\bCADERNO\b|"
+                             # "Planta de DEMOLIÇÃO Forro" não é dona do forro NOVO
+                             r"\bDEMOLI")
+#: palavras que não dizem O QUE é a linha (pra conferir se a dona já tem igual)
+_PALAVRAS_VAZIAS = {
+    "para", "com", "sem", "conforme", "area", "areas", "tipo", "tipos", "especificacao",
+    "material", "novo", "nova", "novos", "novas", "fornecimento", "instalacao",
+    "execucao", "definir", "confirmar", "planta", "layer", "projeto", "legenda",
+    "referencia", "acabamento", "total", "geral", "ambiente", "identificada",
+    "memorial", "descritivo", "prancha", "quadro", "item", "itens", "servico"}
+
+
+def _palavras_do_item(desc):
+    """A palavra que diz O QUE é a linha — a 1ª que importa ("sanca",
+    "piso", "forro", "sinalizacao"). 🪤 Comparar QUALQUER palavra era frouxo:
+    "Sanca … perfil LED" casava com "Acabamento … perfil" da prancha de forro
+    e a única sanca do projeto ia embora (simulação de 24/09)."""
+    t = _sem_acento(str(desc or "")).lower()
+    for w in _re.findall(r"[a-z]{4,}", t):
+        if w not in _PALAVRAS_VAZIAS:
+            return {w}
+    return set()
+#: nunca sai daqui: é outro serviço (demolir, remover) ou o que já existe
+_RE_NAO_E_REPETICAO = _re.compile(
+    r"demol|remo[cç]|remov|retirad|retirar|arranc|remanej|existente|reaproveit",
+    _re.IGNORECASE)
+_RE_RODAPE_ITEM = _re.compile(r"rodap|s[oó]culo|s[oó]calo", _re.IGNORECASE)
+_RE_TETO_ITEM = _re.compile(r"\bteto\b|\bforro\b", _re.IGNORECASE)
+
+
+def _nome_limpo(nome):
+    # "08.18_P PISO_LUANA": o "_" é letra pro regex e matava a borda de PISO
+    return _sem_acento(str(nome or "")).upper().replace("_", " ")
+
+
+def andar_da_prancha(nome):
+    """O andar que o nome da prancha declara ("TERREO", "1PAV", "TIPO"…), ou ""."""
+    t = _nome_limpo(nome)
+    for rx, rep in _RE_ANDAR:
+        m = rx.search(t)
+        if m:
+            return m.expand(rep)
+    return ""
+
+
+def disciplinas_da_prancha(nome):
+    """As disciplinas de que a prancha é DONA pelo nome: {'piso','rodape','forro'}.
+
+    O andar é tirado ANTES ("PLANTA DE PISO - 1O PISO" é dona de piso;
+    "VIGA (PISO 1)" não é)."""
+    t = _nome_limpo(nome)
+    if _RE_NUNCA_DONA.search(t):
+        return set()
+    for rx, _rep in _RE_ANDAR:
+        t = rx.sub(" ", t)
+    return {d for d, rx in _RE_DONA.items() if rx.search(t)}
+
+
+def prancha_de_outra_disciplina(nome):
+    """A prancha é, pelo nome, de uma disciplina que NÃO é piso/forro/rodapé
+    (pontos, elétrica, layout, demolição…)? Só dessas sai repetição."""
+    return bool(_RE_OUTRA_DISCIPLINA.search(_nome_limpo(nome)))
+
+
+def familia_do_item(discipline, description):
+    """'piso' | 'rodape' | 'forro' | None — a que prancha dona a linha pertence.
+
+    Demolição, remoção e o que já existe NUNCA são repetição: são outro
+    serviço, e a prancha de piso não os traz."""
+    desc = str(description or "")
+    if _RE_NAO_E_REPETICAO.search(desc):
+        return None
+    disc = _sem_acento(str(discipline or "")).lower()
+    if "piso" in disc or "rodape" in disc:
+        return "rodape" if _RE_RODAPE_ITEM.search(desc) else "piso"
+    if "forro" in disc:
+        return "forro"
+    if "revestiment" in disc and _RE_TETO_ITEM.search(desc) and "pintura" in desc.lower():
+        return "forro"      # pintura de teto é serviço do forro
+    return None
+
+
+def repetidos_entre_pranchas(items):
+    """Índices das linhas lidas FORA da prancha dona da sua disciplina.
+
+    Uma linha só sai quando: (a) o projeto tem uma prancha DONA daquela
+    disciplina pelo nome; (b) do MESMO andar da prancha da linha; (c) essa
+    dona trouxe uma linha do MESMO ASSUNTO (palavra em comum) — dona sem a
+    linha não manda ninguém embora; e (d) a prancha da linha é, pelo nome, de
+    OUTRA disciplina (pontos, layout…). Devolve (indices, detalhes), detalhes =
+    [{indice, familia, de, dona, descricao}].
+    """
+    linhas = []
+    for i, it in enumerate(items or []):
+        ref = str(_campo_do_item(it, "ref_sheet", "") or "")
+        fam = familia_do_item(_campo_do_item(it, "discipline", ""),
+                              _campo_do_item(it, "description", ""))
+        linhas.append((i, ref, fam))
+    donas = {}                         # familia -> {prancha: andar}
+    for _i, ref, _f in linhas:
+        for d in disciplinas_da_prancha(ref):
+            donas.setdefault(d, {})[ref] = andar_da_prancha(ref)
+    if "rodape" not in donas and "piso" in donas:
+        donas["rodape"] = dict(donas["piso"])      # sem prancha de rodapé, a de piso é a dona
+    if not donas:
+        return set(), []
+    trouxe = {}                        # (familia, prancha dona) -> palavras das linhas dela
+    for _i, ref, fam in linhas:
+        if fam and ref in donas.get(fam, {}):
+            trouxe.setdefault((fam, ref), set()).update(
+                _palavras_do_item(_campo_do_item(items[_i], "description", "")))
+    fora, det = set(), []
+    for i, ref, fam in linhas:
+        if not fam or fam not in donas or ref in donas[fam]:
+            continue
+        if not prancha_de_outra_disciplina(ref):
+            continue       # planta baixa, detalhe, memorial, nome mudo: fica
+        andar = andar_da_prancha(ref)
+        # 🔑 a dona tem que JÁ TER uma linha do mesmo assunto (uma palavra que
+        # diz o que é, em comum). Sanca só na prancha de luminotécnico, sem
+        # sanca nenhuma na de forro, é a ÚNICA sanca do projeto: fica.
+        _pal = _palavras_do_item(_campo_do_item(items[i], "description", ""))
+        dona = next((p for p, a in donas[fam].items()
+                     if a == andar and (_pal & trouxe.get((fam, p), set()))), None)
+        if dona is None:
+            continue
+        fora.add(i)
+        det.append({"indice": i, "familia": fam, "de": ref, "dona": dona,
+                    "descricao": str(_campo_do_item(items[i], "description", "") or "")[:70]})
+    return fora, det

@@ -576,6 +576,8 @@ _STAGES_DIAGNOSTICO = frozenset({
     # seria filtrado e o silêncio continuaria ambíguo, que é o defeito
     # que ele existe pra matar.
     "motor:area-regra-vazia",
+    # 24/09: linhas tiradas por repetirem a prancha dona da disciplina
+    "motor:prancha-dona",
     "motor:pe-direito", "motor:escala-aviso", "motor:concordancia-rotulo",
     "motor:parede-medida",
     # 15/09: os trechos de perfil e escala H/V que a prancha escreve. Só
@@ -16529,6 +16531,29 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # ("199 linhas sumiram e o único registro era um print() que ninguém
         # lê") — o conserto tinha pegado um quinto do problema.
         # 🔑 Agora cada passo registra QUANTO tirou, no error_log, com nome.
+        # 🔑 24/09/2026 — A PRANCHA DONA DA DISCIPLINA. Cada prancha é lida
+        # sozinha (memória do servidor) e todas repetem a planta-base: o piso
+        # lido na planta de PONTOS duplicava o da planta de PISO. Isto roda
+        # sobre a LISTA de linhas — sem arquivo, sem IA. Regra e o porquê de
+        # cada trava em `engine_rules.repetidos_entre_pranchas`.
+        if os.getenv("LEITURA_POR_PROJETO", "1").strip() != "0":
+            try:
+                from engine_rules import repetidos_entre_pranchas as _repetidos
+                _fora_idx, _fora_det = _repetidos(all_items)
+                if _fora_idx:
+                    all_items = [it for _k, it in enumerate(all_items) if _k not in _fora_idx]
+                    _log_error("motor:prancha-dona",
+                               "%d linha(s) lida(s) fora da prancha dona, tiradas: %s"
+                               % (len(_fora_idx), " | ".join(
+                                   "%s de '%s' (dona '%s'): %s" % (
+                                       d["familia"], os.path.basename(d["de"])[:40],
+                                       os.path.basename(d["dona"])[:40], d["descricao"][:45])
+                                   for d in _fora_det[:8])),
+                               job_id, severity="info")
+            except Exception as _epd:
+                print(f"[prancha-dona] nao-fatal: {_epd}")
+                _log_error("motor:prancha-dona", f"FALHOU (segue sem): {_epd}", job_id,
+                           severity="info")
         _n0 = len(all_items)
         _fusoes: list = []
         all_items = _consolidate_items(all_items, registro=_fusoes)
