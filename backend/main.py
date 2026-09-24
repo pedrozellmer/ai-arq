@@ -10343,6 +10343,9 @@ def _anotar_area_parede_pe_direito(items, pe_direito: float) -> int:
     """
     if not pe_direito or pe_direito <= 0:
         return 0
+    # 🩸 24/09 (job 0a999117): a palavra na CAUDA ("tubo de gás … recomposição
+    # de alvenaria") fazia do tubo uma parede. Quem decide é a cabeça do nome.
+    from engine_rules import e_parede_pelo_nome as _e_parede
     n = 0
     for it in items:
         d = (getattr(it, "description", "") or "").lower()
@@ -10350,6 +10353,8 @@ def _anotar_area_parede_pe_direito(items, pe_direito: float) -> int:
         if u not in ("m", "ml"):
             continue
         if not ("parede" in d or "alvenaria" in d or "drywall" in d or "divisória" in d):
+            continue
+        if not _e_parede(d):
             continue
         try:
             q = float(getattr(it, "quantity", 0) or 0)
@@ -10621,10 +10626,16 @@ def _derive_pintura_pe_direito(items, pe_direito: float,
     ref = ""
     _dobra_faces = 2.0
     _layers_vistos = {}
+    # 🩸 24/09/2026 — a 1ª linha PD.1 da base inteira (job 0a999117, projeto de
+    # GÁS) saiu com 6.530 m²: "Tubulação de gás … recomposição de ALVENARIA" em
+    # metro entrou como parede. A palavra na cauda não faz parede — a cabeça do
+    # nome faz (`engine_rules.e_parede_pelo_nome`). Import LOCAL (ver acima).
+    from engine_rules import e_parede_pelo_nome as _e_parede
     for i in items:
         d = (getattr(i, "description", "") or "").lower()
         u = (getattr(i, "unit", "") or "").strip().lower()
-        if u in ("m", "ml") and ("parede" in d or "alvenaria" in d or "drywall" in d):
+        if (u in ("m", "ml") and ("parede" in d or "alvenaria" in d or "drywall" in d)
+                and _e_parede(d)):
             # 🪤 O acessório se reconhece pelo NOME do item, não pelo texto
             # inteiro: "Parede drywall tipo DRY 01 — espessura 82,5 mm,
             # **montante** 70 mm" é parede de verdade e a palavra está na
@@ -10836,10 +10847,13 @@ def _derivacao_vai_repor(items, descricao: str, pe_direito: float) -> bool:
                 if i is not None and getattr(i, "description", "") != descricao:
                     return False      # outra pintura com número bloqueia a derivação
         total_m = 0.0
+        # mesma régua de parede da _derive_pintura_pe_direito (cabeça do nome)
+        from engine_rules import e_parede_pelo_nome as _e_parede
         for i in items:
             _dd = (getattr(i, "description", "") or "").lower()
             _u = (getattr(i, "unit", "") or "").strip().lower()
-            if _u in ("m", "ml") and ("parede" in _dd or "alvenaria" in _dd or "drywall" in _dd):
+            if (_u in ("m", "ml") and ("parede" in _dd or "alvenaria" in _dd or "drywall" in _dd)
+                    and _e_parede(_dd)):
                 total_m += max(0.0, _q(i))
         return total_m > 0
 

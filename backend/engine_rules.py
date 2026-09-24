@@ -5306,3 +5306,48 @@ def e_verba_preliminar(desc, unit, confidence="", observations=""):
     if not _RE_VERBA_PRELIMINAR.search(nome):
         return False
     return not _RE_NAO_E_VERBA_GERAL.search(d)
+
+
+# ── Parede pelo NOME do serviço (derivações com o pé-direito) ─────────────────
+# 🩸 24/09/2026 — job `0a999117` (projeto de GÁS): "Tubulação de gás natural
+# embutida em tubo MMC — … inclui … recomposição de ALVENARIA/reboco" em metro
+# virou 1.088 m de parede, e a derivação de pintura escreveu 6.530 m² de
+# "Pintura látex sobre paredes internas" num projeto sem uma parede sequer. Foi
+# a 1ª linha PD.1 da base inteira. A regra aceitava a palavra em QUALQUER ponto
+# do texto.
+# 📊 Medido antes (120 dias, m/ml, qtd>0): palavra de parede só na CAUDA = 36
+# linhas em 25 projetos e NENHUMA é parede (eletroduto até 2.200 m, rodapé,
+# demolição, rufo, corrimão, "geometria de linhas de plantas" 3.852 m). Com a
+# palavra no nome ainda entram "Demolição de alvenaria" (9 linhas) e "Eletroduto
+# embutido no piso ou parede" (6) — por isso a regra é a CABEÇA do nome, não a
+# presença da palavra.
+_RE_SERVICO_ANTES_DA_PAREDE = _re.compile(
+    r"^(?:(?:fornecimento|instala[çc][ãa]o|execu[çc][ãa]o|constru[çc][ãa]o|"
+    r"levantamento|comprimento|metragem|extens[ãa]o|total|linear|e|de|da|do|"
+    r"das|dos|em)\s+)+")
+_RE_CABECA_PAREDE = _re.compile(
+    r"^(?:paredes?|alvenarias?|divis[óo]rias?|drywall|meia[- ]paredes?|"
+    r"tabiques?)\b")
+# Cabeça FRACA só vale com a palavra de parede no próprio nome:
+# "Fechamento vertical / parede" é parede; "Vedação de juntas com silicone" não.
+# "Mureta em alvenaria" é; "Muro de arrimo em concreto armado" (150 m na base)
+# e "Mureta em concreto" (222 m) não — a regra antiga também não os contava.
+_RE_CABECA_FRACA_PAREDE = _re.compile(r"^(?:fechamento|veda[çc][ãa]o|muros?|muretas?)\b")
+_RE_PALAVRA_PAREDE = _re.compile(r"\b(?:paredes?|alvenarias?|divis[óo]rias?|drywall)\b")
+
+
+def e_parede_pelo_nome(descricao):
+    """A linha É parede? Decide a CABEÇA do nome do serviço (antes do travessão).
+
+    "Alvenaria de vedação — bloco cerâmico"            → sim
+    "Comprimento total de paredes drywall — layer …"   → sim (pula o serviço)
+    "Tubulação de gás — … recomposição de alvenaria"   → NÃO (palavra na cauda)
+    "Demolição de alvenaria existente"                 → NÃO (é demolição)
+    "Eletroduto embutido no piso ou parede"            → NÃO (é eletroduto)
+    """
+    nome = _re.split(r"\s*[—–]\s*", descricao or "", maxsplit=1)[0]
+    nome = " ".join(nome.replace("_", " ").lower().split())
+    resto = _RE_SERVICO_ANTES_DA_PAREDE.sub("", nome)
+    if _RE_CABECA_PAREDE.match(resto):
+        return True
+    return bool(_RE_CABECA_FRACA_PAREDE.match(resto) and _RE_PALAVRA_PAREDE.search(resto))
