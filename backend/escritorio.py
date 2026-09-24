@@ -31,6 +31,9 @@ router = APIRouter(prefix="/api/escritorio", tags=["Escritório"])
 
 SITE = "https://ai.arq.br"
 VALIDADE_DIAS = 14
+# 🔒 o convite sai pelo NOSSO e-mail: sem teto, uma conta viraria canal de spam.
+# Piloto: uma pessoa convidando a equipe cabe folgado em 40 por dia.
+CONVITES_POR_DIA = 40
 _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _TETO = {"nome": 120, "funcao": 60, "telefone": 40}
 
@@ -74,7 +77,8 @@ def texto_curto(bruto, campo: str):
     """None/vazio → None; acima do teto → 400 em português ANTES do CHECK do banco."""
     if bruto is None:
         return None
-    t = str(bruto).strip()
+    # 🔒 sem caractere de controle: nome com quebra de linha entraria no ASSUNTO do e-mail
+    t = re.sub(r"[\x00-\x1f\x7f]+", " ", str(bruto)).strip()
     if not t:
         return None
     if len(t) > _TETO[campo]:
@@ -111,7 +115,7 @@ TETO_ASSUNTO = 52  # a régua da casa (tests/test_emails_eficientes.py): o que c
 def assunto_do_convite(quem_convida: str, projeto: str) -> str:
     """'Admin te convidou: Projeto Exemplo', cortado com '…' no teto."""
     primeiro = (str(quem_convida or "").split() or ["Alguém"])[0]
-    a = f"{primeiro} te convidou: {projeto}"
+    a = re.sub(r"[\x00-\x1f\x7f]+", " ", f"{primeiro} te convidou: {projeto}").strip()
     return a if len(a) <= TETO_ASSUNTO else a[:TETO_ASSUNTO - 1].rstrip() + "…"
 
 
@@ -125,7 +129,8 @@ def email_do_convite(quem_convida: str, email_de_quem_convida: str, projeto: str
         f'<p style="margin:0 0 12px;"><b>{q}</b> te convidou para trabalhar no projeto '
         f'<b>{p}</b> no AI.arq: tarefas, atas de reunião e os arquivos do projeto num lugar só.</p>'
         '<p style="margin:0 0 12px;">Pra entrar, clique no botão. Dá pra usar a conta Google '
-        'ou criar uma senha com este mesmo e-mail — não precisa preencher cadastro.</p>'
+        'ou criar uma senha com este mesmo e-mail. Antes de entrar, você preenche um cadastro rápido '
+        'e aceita os Termos de Uso e a Política de Privacidade do AI.arq.</p>'
         f'<p style="margin:0;color:#64748b;font-size:13px;">O convite vale {VALIDADE_DIAS} dias. '
         f'Dúvida sobre o projeto? Fale com {q}'
         + (f' em {_escapar(email_de_quem_convida)}' if email_de_quem_convida else '') + '.</p>')
@@ -156,6 +161,25 @@ def _papel(request, projeto_id: str):
     if status >= 500 or status == 0:
         raise HTTPException(502, "O banco não respondeu agora. Tente de novo em instantes.")
     return dados if isinstance(dados, str) else None
+
+
+def convites_nas_ultimas_24h(user_id: str, agora=None) -> int:
+    """Convites que esta conta mandou (em todos os projetos em que é admin) nas últimas 24 h.
+    🪤 Banco fora aqui é 502, não "0": contar zero liberaria o envio exatamente quando não sei."""
+    agora = agora or datetime.now(timezone.utc)
+    status, projs = _SERVICO("GET", "escritorio_projetos", params={"dono": f"eq.{user_id}", "select": "id"})
+    if status >= 500 or status == 0 or projs is None:
+        raise HTTPException(502, "O banco não respondeu agora. Tente de novo em instantes.")
+    ids = [p["id"] for p in projs if p.get("id")]
+    if not ids:
+        return 0
+    desde = (agora - timedelta(hours=24)).isoformat()
+    status, linhas = _SERVICO("GET", "escritorio_membros",
+                              params={"projeto_id": "in.(" + ",".join(ids) + ")",
+                                      "convidado_em": f"gte.{desde}", "papel": "eq.freela", "select": "id"})
+    if status >= 500 or status == 0 or linhas is None:
+        raise HTTPException(502, "O banco não respondeu agora. Tente de novo em instantes.")
+    return len(linhas)
 
 
 def _exige_login(request):
@@ -189,8 +213,10 @@ def convidar(projeto_id: str, request: Request, corpo: dict):
     if atual and atual["status"] == "ativo":
         raise HTTPException(409, "Essa pessoa já está no projeto.")
 
-    token = novo_token()
     agora = datetime.now(timezone.utc)
+    if convites_nas_ultimas_24h(eu["id"], agora) >= CONVITES_POR_DIA:
+        raise HTTPException(429, f"Limite de {CONVITES_POR_DIA} convites por dia atingido. Tente amanhã.")
+    token = novo_token()
     linha = {"convite_hash": hash_do_token(token),
              "convite_expira": (agora + timedelta(days=VALIDADE_DIAS)).isoformat(),
              "convidado_em": agora.isoformat(),

@@ -181,6 +181,7 @@ const ST = [
 const ST_EQUIPE = ['afazer', 'dev', 'revdtz'];   // o mesmo que o gatilho escritorio_tarefa_guarda
 const stT = (k) => (ST.find((s) => s.k === k) || {}).t || k;
 
+const COLS_MEMBRO = 'id,projeto_id,user_id,nome,papel,funcao,status,convidado_em,aceito_em,removido_em';
 // ── estado ──
 let EU = null, PROJETOS = [], PROJ = null, MEMBROS = [], PAPEL = null, TAR = [], PESSOAS_T = [], ATAS = [], NOTAS = {};
 let VIEW = 'lista', FILTRO = 'todas', FILTRO_E = '', ETAPA_SEL = null;
@@ -255,7 +256,8 @@ async function carregarProjeto(id) {
   PROJ = PROJETOS.find((p) => p.id === id) || null;
   if (!PROJ) return false;
   const [m, t, tp, a, papel] = await Promise.all([
-    sb.from('escritorio_membros').select('*').eq('projeto_id', id).order('convidado_em'),
+    // 🔒 colunas POR NOME: e-mail e telefone da equipe não vêm daqui (só o admin, pelo RPC abaixo)
+    sb.from('escritorio_membros').select(COLS_MEMBRO).eq('projeto_id', id).order('convidado_em'),
     sb.from('escritorio_tarefas').select('*').eq('projeto_id', id).order('posicao'),
     sb.from('escritorio_tarefa_pessoas').select('*').eq('projeto_id', id),
     sb.from('escritorio_atas').select('*').eq('projeto_id', id).order('data', { ascending: false }),
@@ -264,6 +266,10 @@ async function carregarProjeto(id) {
   for (const r of [m, t, tp, a, papel]) if (r.error) throw r.error;
   MEMBROS = m.data; TAR = t.data; PESSOAS_T = tp.data; ATAS = a.data; PAPEL = papel.data;
   NOTAS = {};
+  if (PAPEL === 'dono') {   // contatos da equipe: só o admin (LGPD — a equipe não precisa do telefone do colega)
+    const c = await sb.rpc('escritorio_contatos', { p_projeto: id });
+    if (!c.error) c.data.forEach((x) => { const m = MEMBROS.find((y) => y.id === x.membro_id); if (m) { m.email = x.email; m.telefone = x.telefone; } });
+  }
   if (PAPEL === 'dono') {   // a anotação sobre cada pessoa: tabela própria, só o admin lê
     const n = await sb.from('escritorio_membro_notas').select('membro_id,observacao').eq('projeto_id', id);
     if (!n.error) n.data.forEach((x) => { NOTAS[x.membro_id] = x.observacao; });
@@ -513,7 +519,7 @@ async function abrirCartao(id) {
     <div><label class="lbl" for="ct-d">Descrição</label><textarea id="ct-d" rows="2" class="in" maxlength="5000" placeholder="Detalhes, links, referências…">${esc(t.descricao || '')}</textarea></div>
     <div><p class="lbl">Comentários</p><ul class="lista" id="ct-coms"><li class="vazio">Carregando…</li></ul>
       <textarea id="ct-com" rows="2" class="in" maxlength="5000" placeholder="Escreva… use @ pra chamar alguém" style="margin-top:8px"></textarea>
-      <div class="linha" style="margin-top:6px;gap:6px">${gente.filter((m) => m.user_id !== EU.id).map((m) => `<button type="button" class="chip" onclick="mencionar('${esc(curto(m))}')">@${esc(curto(m))}</button>`).join('')}<span style="flex:1"></span><button class="btn btn-p btn-s" onclick="comentar('${id}')">Comentar</button></div></div>
+      <div class="linha" style="margin-top:6px;gap:6px">${gente.filter((m) => m.user_id !== EU.id).map((m) => `<button type="button" class="chip" onclick="mencionar('${m.id}')">@${esc(curto(m))}</button>`).join('')}<span style="flex:1"></span><button class="btn btn-p btn-s" onclick="comentar('${id}')">Comentar</button></div></div>
     <div class="rodape" style="justify-content:space-between"><div class="linha" style="gap:6px"><button class="btn btn-s" onclick="subirDescer('${id}',-1)">↑ Subir</button><button class="btn btn-s" onclick="subirDescer('${id}',1)">↓ Descer</button>${podeApagar ? `<button class="btn btn-r btn-s" onclick="apagarCartao('${id}')">Excluir</button>` : ''}</div>
       <div class="linha" style="gap:6px"><button class="btn" onclick="fecharModal()">Fechar</button><button class="btn btn-d" onclick="salvarCartao('${id}')">Salvar</button></div></div>`);
   carregarComentarios(id);
@@ -525,7 +531,9 @@ async function carregarComentarios(id) {
   ul.innerHTML = data.length ? data.map((c) => { const m = MEMBROS.find((x) => x.user_id === c.autor); return `<li style="align-items:flex-start">${av(m)}<div style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;padding:8px 10px"><p class="sub" style="margin:0"><b style="color:#334155">${esc(curto(m))}</b> · ${new Date(c.criado_em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: FUSO })}</p><p style="margin:2px 0 0;font-size:13.5px;white-space:pre-wrap">${esc(c.texto).replace(/@([A-Za-zÀ-ÿ]+)/g, '<span class="men">@$1</span>')}</p></div></li>`; }).join('') : '<li class="vazio">Nenhum comentário ainda.</li>';
 }
 function togP(id, b) { const i = CART.pessoas.indexOf(id); if (i >= 0) CART.pessoas.splice(i, 1); else CART.pessoas.push(id); b.setAttribute('aria-pressed', String(i < 0)); }
-function mencionar(n) { const ta = $('ct-com'); ta.value = (ta.value && !ta.value.endsWith(' ') ? ta.value + ' ' : ta.value) + '@' + n + ' '; ta.focus(); }
+// 🔒 recebe o ID, nunca o nome: nome vem do cadastro da pessoa e, dentro de onclick, esc() não protege
+// (o navegador desfaz &#39; em ' ANTES de rodar o JS do atributo — era XSS guardado pro admin).
+function mencionar(id) { const n = curto(MEMBROS.find((x) => x.id === id)); const ta = $('ct-com'); ta.value = (ta.value && !ta.value.endsWith(' ') ? ta.value + ' ' : ta.value) + '@' + n + ' '; ta.focus(); }
 async function comentar(id) {
   const txt = $('ct-com').value.trim(); if (!txt) return;
   const mencoes = MEMBROS.filter((m) => m.status === 'ativo' && m.user_id !== EU.id && new RegExp('@' + curto(m) + '(?![A-Za-zÀ-ÿ])').test(txt)).map((m) => m.id);
@@ -627,7 +635,7 @@ async function salvarAta() {
 function telaEquipe() {
   const vis = MEMBROS.filter((m) => m.status !== 'removido');
   return `<div class="aviso"><b>Quem você convida entra no projeto, não no escritório.</b><br>
-      <span style="font-size:12.5px;color:#475569">Vê e edita: as tarefas e as atas deste projeto (e, na próxima etapa, a pasta do Drive). Não vê: os outros projetos, o financeiro e o resto do seu Drive.</span></div>
+      <span style="font-size:12.5px;color:#475569">Vê e edita: as tarefas e as atas deste projeto (e, na próxima etapa, a pasta do Drive). Vê o nome e a função dos colegas, mas não o e-mail nem o telefone. Não vê: os outros projetos, o financeiro e o resto do seu Drive.</span></div>
     <section class="card"><div class="linha" style="justify-content:space-between"><h2 class="h2">${vis.length} pessoa${vis.length > 1 ? 's' : ''}</h2>${souAdmin() ? '<button class="btn btn-p" onclick="convidar()">+ Convidar pessoa</button>' : ''}</div>
       <ul class="lista" style="margin-top:8px">${vis.map((m) => `<li style="flex-wrap:wrap">${av(m)}<div style="flex:1;min-width:180px"><b style="font-size:14px">${esc(nomeDe(m))}${m.user_id === EU.id ? ' <span style="font-weight:400;color:#64748B">(você)</span>' : ''}</b>
         <span class="sub" style="display:block;margin:0">${esc(m.funcao || (m.papel === 'dono' ? 'Admin do projeto' : ''))}${m.email ? ' · ' + esc(m.email) : ''}${m.telefone ? ' · ' + esc(m.telefone) : ''}</span>

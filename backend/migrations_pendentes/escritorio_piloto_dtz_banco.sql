@@ -424,3 +424,36 @@ begin
 end $$;
 revoke all on function public.escritorio_dono_vira_membro() from public, anon, authenticated;
 alter table public.profiles add column if not exists piloto_escritorio boolean not null default false;
+
+-- ── 14. (24/09, revisão de segurança) apagar a conta NÃO pode travar num projeto de terceiro ──
+-- 🩸 user_id ON DELETE SET NULL batia no CHECK "ativo exige user_id"; e a guarda do dono barrava a
+-- exclusão da conta do próprio admin. Direito de apagar a conta (LGPD) não trava.
+alter table public.escritorio_membros drop constraint escritorio_membros_user_id_fkey;
+alter table public.escritorio_membros
+  add constraint escritorio_membros_user_id_fkey foreign key (user_id) references auth.users(id) on delete cascade;
+create or replace function public.escritorio_conta_existe(p_user uuid)
+returns boolean language sql stable security definer set search_path = '' as $$
+  select exists (select 1 from auth.users u where u.id = p_user)
+$$;
+revoke all on function public.escritorio_conta_existe(uuid) from public, anon;
+grant execute on function public.escritorio_conta_existe(uuid) to authenticated, service_role, supabase_auth_admin;
+-- (escritorio_membro_guarda: o bloqueio do DELETE da linha do dono passa a exigir escritorio_conta_existe(old.user_id))
+-- a exclusão de conta roda como supabase_auth_admin: não é gente usando a tela
+create or replace function public.escritorio_eh_servidor()
+returns boolean language sql stable set search_path = '' as $$
+  select current_user in ('service_role','postgres','supabase_admin','supabase_auth_admin')
+$$;
+
+-- ── 15. (24/09) contato da equipe só o admin vê (minimização): RPC do admin ──
+create or replace function public.escritorio_contatos(p_projeto uuid)
+returns table (membro_id uuid, email text, telefone text)
+language sql stable security definer set search_path = '' as $$
+  select m.id, m.email, m.telefone from public.escritorio_membros m
+   where m.projeto_id = p_projeto and public.escritorio_papel(p_projeto) = 'dono'
+$$;
+revoke all on function public.escritorio_contatos(uuid) from public, anon;
+grant execute on function public.escritorio_contatos(uuid) to authenticated;
+-- ⏭️ DEPOIS que a tela que pede colunas por nome estiver no ar:
+--   revoke select on public.escritorio_membros from authenticated;
+--   grant select (id,projeto_id,user_id,nome,papel,funcao,status,convidado_em,aceito_em,removido_em)
+--     on public.escritorio_membros to authenticated;
