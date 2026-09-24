@@ -4660,12 +4660,43 @@ _RE_ADOCAO = _re.compile(
 #: propósito: o motor não mede volume nem peso — ele mede comprimento, área e
 #: contagem. Volume é sempre área×espessura ou seção×comprimento, e a
 #: espessura/seção vem de texto, não de geometria.
+#:
+#: 🩸 23/09/2026 — CONTAGEM SAIU. A 1ª versão aceitava "un" e promoveu 564
+#: linhas em 7 jobs em 23 h, quase todas por COINCIDÊNCIA: contagem é inteiro
+#: pequeno (1, 2, 4, 6) e sempre há algum bloco com o mesmo número. Porta
+#: corta-fogo = 6 "medido no layer Vaga estacionamento"; elevador = 2 "Pilar
+#: 27×100"; seis itens = 1 no mesmo pilar 25×90 (job 686981c9). É o mesmo
+#: aviso que a régua da tabela, logo abaixo, já fazia — e a chave não herdou.
 _PROVA_POR_UNIDADE = {
     "m": "comprimento", "ml": "comprimento", "m.l.": "comprimento",
     "m²": "area", "m2": "area", "m^2": "area",
-    "un": "contagem", "und": "contagem", "unid": "contagem", "pç": "contagem",
-    "pc": "contagem", "peça": "contagem", "pecas": "contagem",
 }
+
+#: Rótulo curto demais pra ser identidade: layer "0", "E", "J", "p1" aparecem
+#: em qualquer texto e "citar" um deles não diz de onde veio o número.
+_ROTULO_MINIMO = 3
+
+
+def _rotulo_citado(rotulo, obs):
+    """A observação da PRÓPRIA linha cita o layer/bloco que mediu o número?
+
+    🔑 A prova é o par (número, dono do número). Bater só o número com
+    qualquer rótulo do arquivo é coincidência com cara de medição.
+    """
+    r = str(rotulo or "").strip().lower()
+    if len(r) < _ROTULO_MINIMO:
+        return False
+    t = str(obs or "").lower()
+    ini = t.find(r)
+    while ini >= 0:
+        antes = t[ini - 1] if ini > 0 else " "
+        depois = t[ini + len(r)] if ini + len(r) < len(t) else " "
+        # borda: "A-WALL" não pode valer dentro de "A-WALL-PATT"
+        if not (antes.isalnum() or antes in "-_") and \
+                not (depois.isalnum() or depois in "-_"):
+            return True
+        ini = t.find(r, ini + 1)
+    return False
 
 
 def _bate(a, b, tol=0.005):
@@ -4690,6 +4721,10 @@ def prova_da_geometria(quantity, unit, obs, indice):
     🪤 Só a prova DIRETA mora aqui: a quantidade da linha é, ela mesma, um
     número que o motor mediu. É a prova que não depende de interpretar texto
     nenhum — e por isso é a única que basta sozinha.
+
+    🩸 23/09: "um número que o motor mediu" tem que ser medido NO layer que a
+    própria linha cita. A 1ª versão aceitava o número de qualquer layer — e
+    promoveu por acaso. Contagem saiu de vez (ver `_PROVA_POR_UNIDADE`).
     """
     grandeza = _PROVA_POR_UNIDADE.get(str(unit or "").strip().lower())
     if not grandeza:
@@ -4699,6 +4734,8 @@ def prova_da_geometria(quantity, unit, obs, indice):
     for rotulo, valor in (indice or {}).get(grandeza, []):
         if layer_is_anotacao(rotulo):
             continue          # letras e setas não são obra (rede de 24/08)
+        if not _rotulo_citado(rotulo, obs):
+            continue          # número igual de OUTRO layer é acaso (23/09)
         if _bate(quantity, valor):
             return "%s medido no layer '%s' = %s" % (
                 grandeza, rotulo, ("%.2f" % float(valor)).replace(".", ","))

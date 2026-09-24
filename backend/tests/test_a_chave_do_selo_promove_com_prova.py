@@ -30,37 +30,94 @@ from engine_rules import (  # noqa: E402
     selo_com_prova_da_geometria as chave,
 )
 
-#: o que o motor mediu num envio real de estrutura (job 64fa324b)
+#: o que o motor mediu num envio real de estrutura (job 64fa324b), com um
+#: layer de piso nomeado no lugar do "0" — rótulo curto demais pra ser dono
+#: de número nenhum (ver o controle do rótulo curto, abaixo).
 INDICE = {
-    "area": [("0", 194.08), ("FO-Textos das lajes", 88.0)],
+    "area": [("A-FLOR-PATT", 194.08), ("FO-Textos das lajes", 88.0), ("0", 55.5)],
     "comprimento": [("FO-Vigas", 1041.24), ("FO-Textos dos pilares", 312.5)],
     "contagem": [("PILAR-18x40", 16), ("PORTA-80", 7)],
 }
 
+#: a observação que a IA escreve quando diz de onde tirou o número
+CITA_PISO = "Fonte: hachura do layer A-FLOR-PATT."
+CITA_VIGA = "Fonte: soma das linhas do layer FO-Vigas."
 
-def _it(q, unit="m²", obs="", conf="estimado", origem="dxf_geom", desc="Item"):
+
+def _it(q, unit="m²", obs=CITA_PISO, conf="estimado", origem="dxf_geom",
+        desc="Item"):
     return {"description": desc, "unit": unit, "quantity": q,
             "confidence": conf, "observations": obs, "origem": origem}
 
 
 # ── o que a geometria prova ────────────────────────────────────────────────
-@pytest.mark.parametrize("q, unit, porque", [
-    (194.08, "m²", "área hachurada medida no layer 0"),
-    (1041.24, "m", "comprimento somado do layer FO-Vigas"),
-    (1041.24, "ml", "ml é a mesma grandeza que m"),
-    (16, "un", "contagem literal de blocos"),
-    (194.0799, "m²", "0,5% de tolerância — arredondamento não derruba prova"),
+@pytest.mark.parametrize("q, unit, obs, porque", [
+    (194.08, "m²", CITA_PISO, "área hachurada medida no layer que a linha cita"),
+    (1041.24, "m", CITA_VIGA, "comprimento somado do layer FO-Vigas"),
+    (1041.24, "ml", CITA_VIGA, "ml é a mesma grandeza que m"),
+    (194.0799, "m²", CITA_PISO, "0,5% de tolerância — arredondamento não derruba prova"),
+    (194.08, "m²", "layer a-flor-patt", "caixa não muda o nome do layer"),
 ])
-def test_a_quantidade_que_o_motor_MEDIU_sobe(q, unit, porque):
-    achados = chave([_it(q, unit)], INDICE)
+def test_a_quantidade_que_o_motor_MEDIU_sobe(q, unit, obs, porque):
+    achados = chave([_it(q, unit, obs)], INDICE)
     assert len(achados) == 1, porque
     assert achados[0]["motivo"]
 
 
 def test_a_observacao_diz_de_ONDE_veio_a_prova():
     """O motivo vira rastro: sem ele ninguém audita a promoção depois."""
-    motivo = prova_da_geometria(194.08, "m²", "", INDICE)
-    assert "layer '0'" in motivo and "194,08" in motivo
+    motivo = prova_da_geometria(194.08, "m²", CITA_PISO, INDICE)
+    assert "layer 'A-FLOR-PATT'" in motivo and "194,08" in motivo
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  🩸 23/09 — o número tem DONO. A 1ª versão aceitava o número de QUALQUER
+#  layer e promoveu 564 contagens por acaso em 7 jobs (job 686981c9: porta
+#  corta-fogo = 6 "medido no layer Vaga estacionamento").
+# ══════════════════════════════════════════════════════════════════════════
+def test_CONTROLE_numero_igual_de_OUTRO_layer_nao_sobe():
+    """A linha cita A-WALL; o 1041,24 é do FO-Vigas. Mesmo número, outro dono."""
+    assert chave([_it(1041.24, "m", "Fonte: layer A-WALL.")], INDICE) == []
+
+
+def test_CONTROLE_linha_que_nao_cita_layer_nenhum_nao_sobe():
+    assert chave([_it(194.08, "m²", "")], INDICE) == []
+    assert chave([_it(194.08, "m²", "Área de piso conforme planta.")], INDICE) == []
+
+
+@pytest.mark.parametrize("q, obs", [
+    (16, "Fonte: 16 INSERTs do bloco 'PILAR-18x40'."),
+    (7, "Fonte: bloco PORTA-80."),
+])
+def test_CONTROLE_CONTAGEM_nunca_sobe_pela_chave(q, obs):
+    """Contagem é inteiro pequeno: sempre há um bloco com o mesmo número. Nem
+    citando o bloco certo ela sobe aqui."""
+    assert chave([_it(q, "un", obs)], INDICE) == []
+
+
+def test_CONTROLE_o_caso_686981c9_nao_sobe():
+    """Itens reais: nenhum cita o pilar/vaga cujo número 'bateu'."""
+    idx = {"contagem": [
+        ("RFA_Vaga estacionamento1 - VAGAS PEQUENAS _2_30X4_50_-11356552-GARAGEM 04", 6),
+        ("Pilar retangular - 25X90-11982910-GARAGEM 04", 1),
+        ("Pilar retangular - 27 X 100-11982911-GARAGEM 04", 2)]}
+    itens = [
+        _it(6, "un", "Porta corta-fogo PCF1 conforme legenda da prancha.",
+            desc="Porta corta-fogo PCF1"),
+        _it(2, "un", "Elevador identificado no poço.", desc="Elevador"),
+        _it(1, "un", "Reservatório de incêndio RTI.", desc="Reservatório RTI"),
+    ]
+    assert chave(itens, idx) == []
+
+
+def test_CONTROLE_rotulo_CURTO_nao_e_dono_de_numero():
+    """Layer '0' aparece em qualquer texto ('10 cm', 'R01'): citar não prova."""
+    assert chave([_it(55.5, "m²", "Área do layer 0, pavimento 01.")], INDICE) == []
+
+
+def test_CONTROLE_layer_citado_por_PREFIXO_nao_vale():
+    """'A-FLOR-PATT-2' não é 'A-FLOR-PATT': a borda do nome conta."""
+    assert chave([_it(194.08, "m²", "Fonte: layer A-FLOR-PATT-2.")], INDICE) == []
 
 
 # ── controles positivos: o que NÃO pode subir ──────────────────────────────
@@ -80,7 +137,7 @@ def test_CONTROLE_insumo_que_a_IA_ADOTOU_nao_sobe(obs, porque):
 def test_CONTROLE_layer_de_ANOTACAO_nao_sobe():
     """A rede de 24/08: 61 itens em 19 projetos saíram medidos a partir de
     texto de prancha. O comprimento das letras é real e não é serviço."""
-    assert chave([_it(88.0, "m²")], INDICE) == [], (
+    assert chave([_it(88.0, "m²", "layer FO-Textos das lajes")], INDICE) == [], (
         "'FO-Textos das lajes' é anotação — não pode virar medida")
 
 
@@ -112,8 +169,8 @@ def test_CONTROLE_numero_que_NAO_bate_com_nada_nao_sobe():
 
 def test_CONTROLE_a_grandeza_tem_que_casar_com_a_unidade():
     """1041,24 é comprimento medido; a mesma quantidade em m² não é prova."""
-    assert chave([_it(1041.24, "m²")], INDICE) == []
-    assert len(chave([_it(1041.24, "m")], INDICE)) == 1
+    assert chave([_it(1041.24, "m²", CITA_VIGA)], INDICE) == []
+    assert len(chave([_it(1041.24, "m", CITA_VIGA)], INDICE)) == 1
 
 
 def test_a_chave_NUNCA_rebaixa():
