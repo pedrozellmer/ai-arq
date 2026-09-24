@@ -30,8 +30,8 @@ from fastapi import HTTPException  # noqa: E402
 
 PROJ = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 REQ = types.SimpleNamespace(headers={"Authorization": "Bearer jwt"})
-DANI = {"id": "uid-dani", "email": "daniela@dtz.exemplo"}
-RAFA = {"id": "uid-rafa", "email": "rafael@exemplo.com"}
+ADMIN = {"id": "uid-admin", "email": "admin@exemplo.com"}
+EQUIPE = {"id": "uid-equipe", "email": "equipe@exemplo.com"}
 FUTURO = (datetime.now(timezone.utc) + timedelta(days=3)).isoformat()
 PASSADO = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
 
@@ -55,7 +55,7 @@ class _Banco:
         return [c for c in self.chamadas if c["m"] in ("POST", "PATCH", "DELETE")]
 
 
-def _montar(banco, usuario=DANI, papel="dono", enviados=None):
+def _montar(banco, usuario=ADMIN, papel="dono", enviados=None):
     enviados = enviados if enviados is not None else []
 
     def como_usuario(request, method, path, body=None, **_k):
@@ -71,8 +71,8 @@ def _montar(banco, usuario=DANI, papel="dono", enviados=None):
     return enviados
 
 
-_PROJETO = ("GET", "escritorio_projetos", {}, (200, [{"id": PROJ, "nome": "Residência ABV", "dono": DANI["id"]}]))
-_ADMIN = ("GET", "escritorio_membros", {"papel": "eq.dono"}, (200, [{"nome": "Daniela Teixeira", "email": DANI["email"]}]))
+_PROJETO = ("GET", "escritorio_projetos", {}, (200, [{"id": PROJ, "nome": "Projeto Exemplo", "dono": ADMIN["id"]}]))
+_ADMIN = ("GET", "escritorio_membros", {"papel": "eq.dono"}, (200, [{"nome": "Admin Exemplo", "email": ADMIN["email"]}]))
 _CRIADO = ("POST", "escritorio_membros", {}, (201, [{"id": "m-novo"}]))
 
 
@@ -90,11 +90,11 @@ def test_o_token_tem_256_bits_e_o_hash_e_sha256():
 
 
 def test_mascara_nao_mostra_o_email_inteiro():
-    assert esc.mascarar("rafael.souza@exemplo.com") == "ra***@exemplo.com"
+    assert esc.mascarar("pessoa.equipe@exemplo.com") == "pe***@exemplo.com"
     assert esc.mascarar("sem-arroba") == ""
 
 
-@pytest.mark.parametrize("ruim", ["", "rafael", "rafael@", "a b@c.com", "x" * 250 + "@a.com"])
+@pytest.mark.parametrize("ruim", ["", "pessoa", "pessoa@", "a b@c.com", "x" * 250 + "@a.com"])
 def test_email_ruim_reprova_em_portugues(ruim):
     with pytest.raises(HTTPException) as e:
         esc.normalizar_email(ruim)
@@ -102,7 +102,7 @@ def test_email_ruim_reprova_em_portugues(ruim):
 
 
 def test_email_e_normalizado():
-    assert esc.normalizar_email("  Rafael@Exemplo.COM ") == "rafael@exemplo.com"
+    assert esc.normalizar_email("  Equipe@Exemplo.COM ") == "equipe@exemplo.com"
 
 
 def test_expirado():
@@ -113,22 +113,22 @@ def test_expirado():
 def test_convite_novo_grava_so_o_hash_e_manda_o_token_por_email():
     banco = _Banco([_PROJETO, _ADMIN, _CRIADO])
     enviados = _montar(banco)
-    r = esc.convidar(PROJ, REQ, {"email": " Rafael@Exemplo.com ", "nome": "Rafael Souza", "telefone": "(11) 9 0000-0002"})
+    r = esc.convidar(PROJ, REQ, {"email": " Equipe@Exemplo.com ", "nome": "Pessoa Equipe", "telefone": "(11) 9 0000-0002"})
     assert r["ok"] and r["email_enviado"] and r["membro_id"] == "m-novo"
     token = r["link"].split("#t=")[1]
     post = [c for c in banco.escritas() if c["m"] == "POST"][0]
     assert post["body"]["convite_hash"] == esc.hash_do_token(token)
     assert token not in str(post["body"])                      # o token em si NÃO vai pro banco
-    assert post["body"]["email"] == "rafael@exemplo.com"
+    assert post["body"]["email"] == "equipe@exemplo.com"
     assert post["body"]["papel"] == "freela" and post["body"]["status"] == "convidado"
-    assert post["body"]["nome"] == "Rafael Souza" and post["body"]["telefone"] == "(11) 9 0000-0002"
-    assert enviados[0]["to"] == "rafael@exemplo.com" and enviados[0]["kind"] == "escritorio_convite"
-    assert token in enviados[0]["html"] and enviados[0]["assunto"] == "Daniela te convidou: Residência ABV"
+    assert post["body"]["nome"] == "Pessoa Equipe" and post["body"]["telefone"] == "(11) 9 0000-0002"
+    assert enviados[0]["to"] == "equipe@exemplo.com" and enviados[0]["kind"] == "escritorio_convite"
+    assert token in enviados[0]["html"] and enviados[0]["assunto"] == "Admin te convidou: Projeto Exemplo"
 
 
 def test_quem_nao_e_admin_nao_convida_e_nada_e_escrito():
     banco = _Banco([_PROJETO, _ADMIN, _CRIADO])
-    enviados = _montar(banco, usuario=RAFA, papel="freela")
+    enviados = _montar(banco, usuario=EQUIPE, papel="freela")
     with pytest.raises(HTTPException) as e:
         esc.convidar(PROJ, REQ, {"email": "x@y.com"})
     assert e.value.status_code == 403 and banco.escritas() == [] and enviados == []
@@ -145,24 +145,24 @@ def test_sem_login_e_401():
 def test_nao_convida_o_proprio_email():
     _montar(_Banco([_PROJETO]))
     with pytest.raises(HTTPException) as e:
-        esc.convidar(PROJ, REQ, {"email": "DANIELA@dtz.exemplo"})
+        esc.convidar(PROJ, REQ, {"email": "ADMIN@exemplo.com"})
     assert e.value.status_code == 400
 
 
 def test_quem_ja_esta_ativo_e_409():
-    banco = _Banco([_PROJETO, ("GET", "escritorio_membros", {"email": "eq.rafael@exemplo.com"}, (200, [{"id": "m1", "status": "ativo"}]))])
+    banco = _Banco([_PROJETO, ("GET", "escritorio_membros", {"email": "eq.equipe@exemplo.com"}, (200, [{"id": "m1", "status": "ativo"}]))])
     _montar(banco)
     with pytest.raises(HTTPException) as e:
-        esc.convidar(PROJ, REQ, {"email": "rafael@exemplo.com"})
+        esc.convidar(PROJ, REQ, {"email": "equipe@exemplo.com"})
     assert e.value.status_code == 409 and banco.escritas() == []
 
 
 def test_reconvite_troca_o_token_e_zera_a_conta_ligada():
     banco = _Banco([_PROJETO, _ADMIN,
-                    ("GET", "escritorio_membros", {"email": "eq.rafael@exemplo.com"}, (200, [{"id": "m1", "status": "removido"}])),
+                    ("GET", "escritorio_membros", {"email": "eq.equipe@exemplo.com"}, (200, [{"id": "m1", "status": "removido"}])),
                     ("PATCH", "escritorio_membros", {}, (200, [{"id": "m1"}]))])
     _montar(banco)
-    r = esc.convidar(PROJ, REQ, {"email": "rafael@exemplo.com"})
+    r = esc.convidar(PROJ, REQ, {"email": "equipe@exemplo.com"})
     patch = banco.escritas()[0]
     assert patch["m"] == "PATCH" and patch["params"]["id"] == "eq.m1" and patch["params"]["projeto_id"] == f"eq.{PROJ}"
     assert patch["body"]["status"] == "convidado" and patch["body"]["user_id"] is None
@@ -187,14 +187,14 @@ def test_banco_fora_e_502_e_nao_404():
 # ── ver e aceitar ──
 def _convite(status="convidado", expira=FUTURO):
     return ("GET", "escritorio_membros", {"convite_hash": f"eq.{esc.hash_do_token('T' * 43)}"},
-            (200, [{"id": "m1", "projeto_id": PROJ, "email": "rafael@exemplo.com", "nome": None,
+            (200, [{"id": "m1", "projeto_id": PROJ, "email": "equipe@exemplo.com", "nome": None,
                     "status": status, "convite_expira": expira}]))
 
 
 def test_ver_convite_mostra_projeto_e_email_mascarado():
-    _montar(_Banco([_convite(), ("GET", "escritorio_projetos", {}, (200, [{"nome": "Residência ABV"}])), _ADMIN]))
+    _montar(_Banco([_convite(), ("GET", "escritorio_projetos", {}, (200, [{"nome": "Projeto Exemplo"}])), _ADMIN]))
     r = esc.ver_convite({"token": "T" * 43})
-    assert r == {"projeto": "Residência ABV", "convidado_por": "Daniela Teixeira", "email": "ra***@exemplo.com", "expirado": False}
+    assert r == {"projeto": "Projeto Exemplo", "convidado_por": "Admin Exemplo", "email": "eq***@exemplo.com", "expirado": False}
 
 
 def test_token_que_nao_existe_e_404_e_banco_fora_e_502():
@@ -210,31 +210,31 @@ def test_token_que_nao_existe_e_404_e_banco_fora_e_502():
 
 def test_aceitar_ativa_com_a_conta_logada_e_apaga_o_hash():
     banco = _Banco([_convite(), ("PATCH", "escritorio_membros", {}, (200, [{"id": "m1"}]))])
-    _montar(banco, usuario=RAFA)
+    _montar(banco, usuario=EQUIPE)
     r = esc.aceitar_convite(REQ, {"token": "T" * 43})
     assert r == {"ok": True, "projeto_id": PROJ, "email_da_conta_diferente": False}
     patch = banco.escritas()[0]
-    assert patch["body"]["user_id"] == RAFA["id"] and patch["body"]["status"] == "ativo"
+    assert patch["body"]["user_id"] == EQUIPE["id"] and patch["body"]["status"] == "ativo"
     assert patch["body"]["convite_hash"] is None
     assert patch["params"] == {"id": "eq.m1", "status": "eq.convidado"}   # dois aceites não ativam duas contas
 
 
 def test_aceitar_com_outra_conta_vale_mas_avisa():
     banco = _Banco([_convite(), ("PATCH", "escritorio_membros", {}, (200, [{"id": "m1"}]))])
-    _montar(banco, usuario={"id": "uid-x", "email": "rafael.outro@gmail.com"})
+    _montar(banco, usuario={"id": "uid-x", "email": "outra.conta@exemplo.com"})
     assert esc.aceitar_convite(REQ, {"token": "T" * 43})["email_da_conta_diferente"] is True
 
 
 def test_convite_vencido_e_410_e_nao_escreve():
     banco = _Banco([_convite(expira=PASSADO)])
-    _montar(banco, usuario=RAFA)
+    _montar(banco, usuario=EQUIPE)
     with pytest.raises(HTTPException) as e:
         esc.aceitar_convite(REQ, {"token": "T" * 43})
     assert e.value.status_code == 410 and banco.escritas() == []
 
 
 def test_convite_ja_usado_e_404():
-    _montar(_Banco([_convite(status="ativo")]), usuario=RAFA)
+    _montar(_Banco([_convite(status="ativo")]), usuario=EQUIPE)
     with pytest.raises(HTTPException) as e:
         esc.aceitar_convite(REQ, {"token": "T" * 43})
     assert e.value.status_code == 404
@@ -257,28 +257,28 @@ def test_as_rotas_estao_no_app():
 
 def test_assunto_cabe_no_celular_e_o_email_tem_previa():
     # o guarda de e-mails da casa só lê main.py; o convite mora em escritorio.py e se guarda aqui
-    longo = esc.assunto_do_convite("Daniela Teixeira", "Residência Alto da Boa Vista — reforma completa")
-    assert len(longo) <= esc.TETO_ASSUNTO and longo.endswith("…") and longo.startswith("Daniela te convidou:")
+    longo = esc.assunto_do_convite("Admin Exemplo", "Projeto de nome bem comprido — reforma completa da casa")
+    assert len(longo) <= esc.TETO_ASSUNTO and longo.endswith("…") and longo.startswith("Admin te convidou:")
     vistos = {}
     esc.configurar(servico=None, como_usuario=None, usuario=None, enviar=None,
                    moldura=lambda titulo, corpo, **k: vistos.update(k) or "", registrar=None)
-    esc.email_do_convite("Daniela Teixeira", "d@x.com", "ABV", "https://ai.arq.br/convite.html#t=x")
+    esc.email_do_convite("Admin Exemplo", "d@x.com", "ABV", "https://ai.arq.br/convite.html#t=x")
     assert vistos.get("preheader") and vistos["preheader"] != "Convite para ABV"
 
 
 def test_aceitar_sem_nome_pega_o_nome_do_cadastro_e_com_nome_nao_mexe():
-    banco = _Banco([_convite(), ("GET", "profiles", {}, (200, [{"full_name": "Rafael Souza"}])),
+    banco = _Banco([_convite(), ("GET", "profiles", {}, (200, [{"full_name": "Pessoa Equipe"}])),
                     ("PATCH", "escritorio_membros", {}, (200, [{"id": "m1"}]))])
-    _montar(banco, usuario=RAFA)
+    _montar(banco, usuario=EQUIPE)
     esc.aceitar_convite(REQ, {"token": "T" * 43})
-    assert banco.escritas()[0]["body"]["nome"] == "Rafael Souza"
+    assert banco.escritas()[0]["body"]["nome"] == "Pessoa Equipe"
     # o admin já tinha dado nome: o do cadastro NÃO passa por cima
     ja_tem = ("GET", "escritorio_membros", {"convite_hash": f"eq.{esc.hash_do_token('T' * 43)}"},
-              (200, [{"id": "m1", "projeto_id": PROJ, "email": "rafael@exemplo.com", "nome": "Rafa (estrutura)",
+              (200, [{"id": "m1", "projeto_id": PROJ, "email": "equipe@exemplo.com", "nome": "Apelido dado pelo admin",
                       "status": "convidado", "convite_expira": FUTURO}]))
-    banco2 = _Banco([ja_tem, ("GET", "profiles", {}, (200, [{"full_name": "Rafael Souza"}])),
+    banco2 = _Banco([ja_tem, ("GET", "profiles", {}, (200, [{"full_name": "Pessoa Equipe"}])),
                      ("PATCH", "escritorio_membros", {}, (200, [{"id": "m1"}]))])
-    _montar(banco2, usuario=RAFA)
+    _montar(banco2, usuario=EQUIPE)
     esc.aceitar_convite(REQ, {"token": "T" * 43})
     assert "nome" not in banco2.escritas()[0]["body"]
 
@@ -286,6 +286,6 @@ def test_aceitar_sem_nome_pega_o_nome_do_cadastro_e_com_nome_nao_mexe():
 def test_perfil_ilegivel_nao_impede_o_aceite():
     banco = _Banco([_convite(), ("GET", "profiles", {}, (500, None)),
                     ("PATCH", "escritorio_membros", {}, (200, [{"id": "m1"}]))])
-    _montar(banco, usuario=RAFA)
+    _montar(banco, usuario=EQUIPE)
     assert esc.aceitar_convite(REQ, {"token": "T" * 43})["ok"] is True
     assert "nome" not in banco.escritas()[0]["body"]

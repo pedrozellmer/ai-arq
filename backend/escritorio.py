@@ -83,7 +83,7 @@ def texto_curto(bruto, campo: str):
 
 
 def mascarar(email: str) -> str:
-    """'rafael.souza@exemplo.com' → 'ra***@exemplo.com' (a página pública do convite não expõe o e-mail inteiro)."""
+    """'pessoa.equipe@exemplo.com' → 'pe***@exemplo.com' (a página pública do convite não expõe o e-mail inteiro)."""
     nome, _, dominio = (email or "").partition("@")
     if not dominio:
         return ""
@@ -109,7 +109,7 @@ TETO_ASSUNTO = 52  # a régua da casa (tests/test_emails_eficientes.py): o que c
 
 
 def assunto_do_convite(quem_convida: str, projeto: str) -> str:
-    """'Daniela te convidou: Residência Alto da Boa Vista', cortado com '…' no teto."""
+    """'Admin te convidou: Projeto Exemplo', cortado com '…' no teto."""
     primeiro = (str(quem_convida or "").split() or ["Alguém"])[0]
     a = f"{primeiro} te convidou: {projeto}"
     return a if len(a) <= TETO_ASSUNTO else a[:TETO_ASSUNTO - 1].rstrip() + "…"

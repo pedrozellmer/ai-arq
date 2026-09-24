@@ -357,7 +357,7 @@ create policy escritorio_comentarios_apagar on public.escritorio_comentarios for
   using (public.escritorio_papel(projeto_id) = 'dono'
          or (autor = (select auth.uid()) and public.escritorio_papel(projeto_id) is not null));
 
--- emissões e eventos do cliente: membro lê; só o dono escreve ("Emitir" é da Daniela)
+-- emissões e eventos do cliente: membro lê; só o dono escreve ("Emitir" é do admin)
 create policy escritorio_emissoes_ver on public.escritorio_emissoes for select to authenticated
   using (public.escritorio_papel(projeto_id) is not null);
 create policy escritorio_emissoes_dono on public.escritorio_emissoes for all to authenticated
