@@ -4742,6 +4742,58 @@ def prova_da_geometria(quantity, unit, obs, indice):
     return ""
 
 
+#: Unidades em que a quantidade É uma contagem de bloco.
+_UNIDADES_DE_BLOCO = {"un", "und", "unid", "unidade", "unidades", "pç", "pc",
+                      "peca", "peça", "pecas", "peças", "cj", "conj", "par"}
+_RE_CITA_BLOCO = _re.compile(r"\b(bloco|blocos|insert|inserts)\b", _re.IGNORECASE)
+
+
+def contagem_de_bloco_citada(obs, quantity, unit, blocos):
+    """A linha é a CONTAGEM de um bloco que a extração contou — com o mesmo
+    número? Devolve o nome do bloco, ou "".
+
+    🩸 24/09/2026 (filhote ev900daf, job 09e2e640). A IA escreveu "bloco P70,
+    72 un. Texto layer TEXTO-02 confirma '0,70 x 2,10'" — o NÚMERO veio do
+    bloco; o layer de texto só confirmou a ESPECIFICAÇÃO. A trava de anotação
+    (main.py, "LAYER DE ANOTAÇÃO NÃO É OBRA") olha só os LAYERS citados: o
+    único era TEXTO-02, e ela rebaixou 72/57/34 portas que batiam com o bloco.
+    Em 90 dias: 39 linhas de contagem citando bloco, em 10 projetos.
+
+    🔑 Não basta a palavra "bloco" na observação — a IA escreveria pra fugir
+    da trava. A prova é o PAR: o nome de um bloco que a extração contou E a
+    quantidade da linha IGUAL à contagem dele. Contagem é número exato: sem
+    tolerância.
+    """
+    if str(unit or "").strip().lower() not in _UNIDADES_DE_BLOCO:
+        return ""
+    t = str(obs or "")
+    if not _RE_CITA_BLOCO.search(t):
+        return ""
+    try:
+        q = float(quantity)
+    except (TypeError, ValueError):
+        return ""
+    if q <= 0 or q != int(q):
+        return ""
+    tl = t.lower()
+    for nome, n in (blocos or {}).items():
+        nm = str(nome or "").strip().lower()
+        if len(nm) < 2:
+            continue
+        try:
+            if int(n) != int(q):
+                continue
+        except (TypeError, ValueError):
+            continue
+        for m in _re.finditer(_re.escape(nm), tl):
+            antes = tl[m.start() - 1] if m.start() > 0 else " "
+            depois = tl[m.end()] if m.end() < len(tl) else " "
+            if not (antes.isalnum() or antes in "_-") and \
+                    not (depois.isalnum() or depois in "_-"):
+                return str(nome)
+    return ""
+
+
 def selo_com_prova_da_geometria(items, indice):
     """Promove a 'confirmado' as linhas que a geometria do arquivo prova.
 

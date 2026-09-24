@@ -61,6 +61,7 @@ from engine_rules import (
     corrigir_comprimento_medido as _corrigir_comprimento_medido,
     layer_is_carimbo as _layer_is_carimbo,
     layer_is_anotacao as _layer_is_anotacao,
+    contagem_de_bloco_citada as _contagem_de_bloco_citada,
     medida_de_comprimento_na_observacao as _medida_comprimento_obs,
     medida_e_base_de_calculo as _medida_e_base_de_calculo,
     AREA_UNITS_HONESTY as _AREA_UNITS_HONESTY,
@@ -15105,6 +15106,13 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                          if not _layer_is_anotacao(k)}
                         except Exception:
                             _areas_ly, _compr_ly = {}, {}
+                        # 🔑 24/09: a contagem de bloco da extração — é a prova
+                        # que livra da trava de anotação a linha cujo NÚMERO
+                        # veio do bloco (ver `contagem_de_bloco_citada`).
+                        try:
+                            _blocos_n = extraction.get_block_summary() or {}
+                        except Exception:
+                            _blocos_n = {}
                         _n_resgate_proc = 0
                         # Extrair itens
                         _n_item_perdido = 0   # quantos morreram no except do laço
@@ -15238,7 +15246,13 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                 # é o par "layer de anotação + selo de medido".
                                 # Rebaixa e DIZ POR QUÊ; não apaga a linha (o
                                 # ponteiro pro layer é deliberado em infra linear).
-                                elif _lys and all(_layer_is_anotacao(_l) for _l in _lys):
+                                # 🩸 24/09/2026 (ev900daf): "bloco P70, 72 un. Texto
+                                # layer TEXTO-02 confirma '0,70 x 2,10'" — o número é
+                                # do BLOCO, o texto só confirma a especificação. Se a
+                                # contagem bate com a extração, a fonte não é anotação.
+                                elif _lys and all(_layer_is_anotacao(_l) for _l in _lys) \
+                                        and not _contagem_de_bloco_citada(
+                                            obs_raw, qty, normalized_unit, _blocos_n):
                                     conf = "estimado"
                                     _rebaixado_pela_fonte = True
                                     obs_raw = ("⚠ FONTE = ANOTAÇÃO DO DESENHO (texto/cota/legenda/"
