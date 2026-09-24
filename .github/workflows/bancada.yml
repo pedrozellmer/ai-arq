@@ -202,7 +202,12 @@ jobs:
           # guarda de 75% passou a cobrar 3923. Mesma decisão do Pedro de 21/09
           # (subir o número), mesmo critério: 4500 é 86% dos 5231, aguenta até
           # 6.000 e pega qualquer queda maior que 14%.
-          PISO: 4500
+          # 24/09/2026, 11ª vez: 4500 -> 5200. Piloto do escritório + consertos do
+          # motor (blocos colados, prancha dona, amostra da legenda) levaram a
+          # colheita a 6019 e o guarda de 75% cobrou 4515. Mesma decisão do Pedro
+          # (subir o número), mesmo critério: 5200 é 86% dos 6019, aguenta até
+          # ~6.900 e pega qualquer queda maior que 14%.
+          PISO: 5200
         run: |
           N=$(python -m pytest tests/ -q --collect-only 2>/dev/null | tail -1 | grep -oE '^[0-9]+' || echo 0)
           echo "testes colhidos: $N (piso: $PISO)"
