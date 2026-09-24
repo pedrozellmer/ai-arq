@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="icon" type="image/x-icon" href="favicon-v2.ico">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Escritório — AI.arq</title>
+<meta name="robots" content="noindex,nofollow">
+<link rel="stylesheet" href="/tailwind.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js" integrity="sha384-qafw21c/iciq0VXsi9FzkfoQv5I/V0iqE4lSNcKXPnW9/UTJLnv5CcN4FHxVLnKg" crossorigin="anonymous"></script>
+<script src="aiarq-utils.js"></script>
+<!--
+  ESCRITÓRIO (piloto DTZ, 23/09/2026) — a tela.
+  Lê e grava DIRETO no banco com o login da pessoa (supabase-js). Quem decide
+  quem pode o quê é o banco: RLS + gatilhos das tabelas escritorio_* (34
+  situações provadas). A tela só esconde o que a pessoa não pode fazer — se
+  esconder errado, o banco recusa e a mensagem dele aparece aqui.
+  Servidor só no convite (/api/escritorio/...). Drive e IA das atas: próximas etapas.
+  🪤 O Tailwind do site é um build ESTÁTICO: componente desta tela mora no <style>
+  abaixo (classes próprias), não em utilitário que pode não existir no build.
+-->
+<style>
+  html { color-scheme: light; }
+  body { font-family: 'Inter', -apple-system, sans-serif; background:#F9FAFB; color:#111827; min-height:100vh; margin:0; }
+  .gradient-main { background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); }
+  [hidden] { display:none !important; }
+  .tab { font-variant-numeric: tabular-nums; }
+  /* menu lateral: o CSS do menu-lateral.js */
+  #side{position:fixed;top:0;left:0;height:100%;width:248px;background:#fff;border-right:1px solid #E2E8F0;display:flex;flex-direction:column;padding:14px 12px;overflow-y:auto;transform:translateX(-100%);transition:transform .28s ease;z-index:10000;box-sizing:border-box}
+  #side.aberto{transform:translateX(0)}
+  #scrim{position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:9999;opacity:0;pointer-events:none;transition:opacity .28s ease}
+  #scrim.aberto{opacity:1;pointer-events:auto}
+  .s-topo{display:flex;align-items:center;justify-content:space-between;padding:2px 8px 14px;border-bottom:1px solid #E2E8F0;margin-bottom:14px}
+  .s-marca{display:flex;align-items:center;gap:9px;text-decoration:none}
+  .s-logo{width:32px;height:32px;border-radius:9px;background:linear-gradient(135deg,#4F46E5,#22D3EE);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px}
+  .s-nome{font-weight:700;font-size:16px;color:#0F172A}
+  .s-grp{margin-bottom:14px}
+  .s-grp-t{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:#94A3B8;font-weight:700;padding:0 10px;margin-bottom:5px}
+  .s-it{display:flex;align-items:center;gap:11px;width:100%;padding:8px 10px;border-radius:9px;font-size:14px;color:#334155;text-align:left;cursor:pointer;text-decoration:none;border:0;background:transparent;font-family:inherit;box-sizing:border-box}
+  .s-it:hover{background:#F1F5F9}
+  .s-it.on{background:#EEF2FF;color:#4F46E5;font-weight:600}
+  .s-it svg{width:19px;height:19px;flex:none;stroke:currentColor;fill:none;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;color:#94A3B8}
+  .s-it.on svg{color:#4F46E5}
+  .s-est{margin-left:auto;font-size:10px;font-weight:700;padding:1px 6px;border-radius:99px;white-space:nowrap;background:#F1F5F9;color:#475569}
+  .s-est.pend{background:#FEF3C7;color:#92400E}
+  .s-fix{background:#F8FAFC;border:1px solid #E2E8F0;border-left:3px solid #4F46E5;border-radius:8px;padding:9px 11px;margin:0 2px 14px}
+  .s-fix .tag{font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#94A3B8}
+  .s-fix b{display:block;font-size:13.5px;font-weight:600;margin-top:3px;line-height:1.35;color:#0F172A}
+  .s-fix span{font-size:11.5px;color:#64748B}
+  .s-rod{margin-top:auto;border-top:1px solid #E2E8F0;padding-top:12px;font-size:13px;color:#334155;display:flex;align-items:center;gap:9px;padding-left:6px}
+  #burger,#fechar{display:inline-flex;align-items:center;justify-content:center;background:transparent;border:0;cursor:pointer;padding:6px;border-radius:8px;min-width:44px;min-height:44px}
+  @media (min-width:1024px){ #side{transform:translateX(0);z-index:40} #scrim{display:none} #burger,#fechar{display:none} body{padding-left:248px} }
+  /* cabeçalho */
+  .cab{background:#fff;border-bottom:1px solid #E5E7EB;position:sticky;top:0;z-index:30}
+  .cab-in{max-width:72rem;margin:0 auto;padding:8px 16px;display:flex;align-items:center;gap:12px}
+  .trilha{font-size:11px;color:#6B7280;display:flex;gap:4px;flex-wrap:wrap}
+  .trilha a{color:inherit;text-decoration:none} .trilha a:hover{color:#4F46E5}
+  .titulo{font-weight:600;color:#1F2937;margin:0;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .beta{font-size:12px;background:#EEF2FF;color:#4338CA;padding:4px 10px;border-radius:99px;font-weight:500;white-space:nowrap}
+  main{max-width:72rem;margin:0 auto;padding:24px 16px 48px;display:flex;flex-direction:column;gap:20px;box-sizing:border-box}
+  /* peças */
+  .card{background:#fff;border:1px solid #E2E8F0;border-radius:16px;box-shadow:0 1px 2px rgba(15,23,42,.04);padding:22px}
+  .h2{font-size:18px;font-weight:700;color:#111827;margin:0}
+  .sub{font-size:12px;color:#6B7280;margin:4px 0 0}
+  .lbl{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#64748B;margin:0 0 6px}
+  .in{border:1px solid #CBD5E1;border-radius:8px;padding:8px 10px;font-size:13px;color:#1E293B;background:#fff;width:100%;min-width:0;font-family:inherit;box-sizing:border-box}
+  .in:focus-visible,button:focus-visible,a:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid #4F46E5;outline-offset:2px}
+  .btn{padding:8px 14px;border-radius:8px;border:1px solid #CBD5E1;background:#fff;color:#334155;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;text-decoration:none}
+  .btn:hover{background:#F8FAFC}
+  .btn:disabled{opacity:.55;cursor:wait}
+  .btn-p{background:#4F46E5;border-color:#4F46E5;color:#fff;font-weight:600} .btn-p:hover{background:#4338CA}
+  .btn-d{background:#1E293B;border-color:#1E293B;color:#fff;font-weight:600} .btn-d:hover{background:#0F172A}
+  .btn-g{background:linear-gradient(135deg,#4f46e5,#06b6d4);border:0;color:#fff;font-weight:600;padding:9px 16px}
+  .btn-r{border-color:#FECACA;background:#FEF2F2;color:#B91C1C;font-weight:600}
+  .btn-s{padding:5px 10px;font-size:12px}
+  .pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:2px 9px;border-radius:99px;border:1px solid;white-space:nowrap}
+  .pill i{width:6px;height:6px;border-radius:50%;background:currentColor;opacity:.8}
+  .p-ok{background:#ECFDF5;color:#065F46;border-color:#A7F3D0} .p-warn{background:#FFFBEB;color:#92400E;border-color:#FDE68A}
+  .p-late{background:#FEF2F2;color:#991B1B;border-color:#FECACA} .p-ind{background:#EEF2FF;color:#4338CA;border-color:#C7D2FE}
+  .p-mut{background:#F8FAFC;color:#475569;border-color:#E2E8F0}
+  .chip{font-size:12px;padding:5px 11px;border-radius:99px;border:1px solid #E2E8F0;color:#475569;background:#fff;cursor:pointer;font-family:inherit;font-weight:500;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+  .chip[aria-pressed="true"]{border-color:#C7D2FE;color:#4338CA;background:#EEF2FF;font-weight:600}
+  .chip .n{font-size:10.5px;opacity:.7}
+  .av{width:26px;height:26px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex:none;background:#EEF2FF;color:#4338CA}
+  .avs{display:flex;margin-left:auto} .avs .av{margin-left:-6px;box-shadow:0 0 0 2px #fff} .avs .av:first-child{margin-left:0}
+  .linha{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .grade{display:grid;gap:14px}
+  @media (min-width:640px){ .g2{grid-template-columns:repeat(2,minmax(0,1fr))} }
+  @media (min-width:900px){ .g3{grid-template-columns:repeat(3,minmax(0,1fr))} .g4{grid-template-columns:repeat(4,minmax(0,1fr))} }
+  .kpi{position:relative;overflow:hidden;background:#fff;border:1px solid #E2E8F0;border-radius:16px;padding:16px}
+  .kpi::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(135deg,#4f46e5,#22d3ee)}
+  .kpi.alerta::before{background:linear-gradient(135deg,#f59e0b,#fbbf24)}
+  .kpi .rot{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748B;margin:0 0 6px}
+  .kpi .val{font-size:18px;font-weight:700;margin:0} .kpi .det{font-size:12px;color:#64748B;margin:4px 0 0}
+  .voltar{align-self:flex-start;display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:#4338CA;background:#fff;border:1px solid #C7D2FE;border-radius:8px;padding:6px 12px;cursor:pointer;font-family:inherit}
+  .etapas{display:flex;gap:4px;overflow-x:auto;padding-bottom:4px}
+  .etp{flex:1 0 auto;min-width:96px;text-align:center;font-size:11px;font-weight:600;padding:7px 8px 6px;border-radius:8px;background:#F1F5F9;color:#64748B;border:0;border-bottom:3px solid #E2E8F0;cursor:pointer;font-family:inherit}
+  .etp.feita{background:#ECFDF5;color:#065F46;border-bottom-color:#10B981}
+  .etp.atual{background:#EEF2FF;color:#3730A3;border-bottom-color:#4F46E5}
+  .etp[aria-pressed="true"]{box-shadow:inset 0 0 0 2px #4F46E5}
+  .etp small{display:block;font-size:10px;font-weight:500;opacity:.7}
+  .tool{display:flex;gap:12px;align-items:flex-start;text-align:left;padding:14px;border:1px solid #E2E8F0;border-radius:14px;background:#fff;cursor:pointer;font-family:inherit;text-decoration:none;color:inherit}
+  .tool:hover{border-color:#A5B4FC}
+  .tool .ti{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex:none;background:#EEF2FF;color:#4F46E5}
+  .tool b{display:block;font-size:14px;color:#0F172A} .tool span{display:block;font-size:12px;color:#64748B;margin-top:2px}
+  /* quadro */
+  .board{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(236px,1fr);gap:12px;overflow-x:auto;padding-bottom:8px}
+  .col{background:#F1F5F9;border-radius:14px;padding:10px;display:flex;flex-direction:column;gap:8px;min-height:120px}
+  .col.alvo{background:#E0E7FF}
+  .col-h{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;color:#334155;padding:2px 4px 4px}
+  .col-h i{width:8px;height:8px;border-radius:50%;flex:none} .col-h .n{margin-left:auto;font-weight:600;color:#64748B;font-size:11px}
+  .cards{display:flex;flex-direction:column;gap:8px;min-height:12px}
+  .tc{background:#fff;border:1px solid #E2E8F0;border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px;cursor:grab;box-shadow:0 1px 2px rgba(15,23,42,.05)}
+  .tc:hover{box-shadow:0 4px 12px -4px rgba(15,23,42,.18)}
+  .tc.late{border-left:3px solid #EF4444} .tc.arr{opacity:.35}
+  .tc p{margin:0;font-size:13px;font-weight:500;color:#1E293B;line-height:1.35}
+  .drop{height:3px;border-radius:3px;background:#4F46E5}
+  .add{text-align:left;font-size:12.5px;color:#475569;background:transparent;border:0;padding:6px;border-radius:8px;cursor:pointer;font-family:inherit}
+  .add:hover{background:#E2E8F0}
+  .lista{list-style:none;margin:0;padding:0} .lista li{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid #F1F5F9} .lista li:first-child{border-top:0}
+  .men{color:#4338CA;font-weight:600;background:#EEF2FF;border-radius:4px;padding:0 3px}
+  .vazio{font-size:13px;color:#64748B;margin:0}
+  .aviso{border-radius:12px;border:2px solid #C7D2FE;background:linear-gradient(90deg,#EEF2FF,#ECFEFF);padding:14px 16px;font-size:13px;color:#1F2937}
+  .modal{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(15,23,42,.45)}
+  .modal-c{background:#fff;border-radius:16px;box-shadow:0 20px 50px -12px rgba(15,23,42,.4);width:100%;max-width:36rem;max-height:92vh;overflow-y:auto}
+  .modal-h{display:flex;align-items:center;justify-content:space-between;padding:18px 22px 12px;border-bottom:1px solid #F1F5F9}
+  .modal-b{padding:18px 22px;display:flex;flex-direction:column;gap:14px}
+  .rodape{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;padding-top:12px;border-top:1px solid #F1F5F9}
+  .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(10px);background:#1E293B;color:#fff;font-size:13px;font-weight:500;padding:10px 16px;border-radius:10px;opacity:0;transition:all .25s;z-index:80;pointer-events:none;max-width:calc(100% - 32px)}
+  .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+  .toast.erro{background:#991B1B}
+  .gira{border:2px solid #c7d2fe;border-top-color:#4f46e5;border-radius:9999px;width:2rem;height:2rem;animation:spin 1s linear infinite;margin:40px auto}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @media (prefers-reduced-motion: reduce){ *{animation-duration:.01ms!important;transition-duration:.01ms!important} }
+</style>
+</head>
+<body>
+<div id="scrim" onclick="menu(false)"></div>
+<aside id="side" aria-label="Menu do escritório">
+  <div class="s-topo">
+    <a class="s-marca" href="dashboard.html"><span class="s-logo">AI</span><span class="s-nome">AI.arq</span></a>
+    <button id="fechar" aria-label="Fechar menu" onclick="menu(false)">✕</button>
+  </div>
+  <div id="side-c"></div>
+  <div class="s-rod"><span class="av" id="eu-ini">·</span><span id="eu-nome" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">…</span></div>
+</aside>
+
+<header class="cab">
+  <div class="cab-in">
+    <button id="burger" aria-label="Abrir menu" onclick="menu(true)"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#334155" stroke-width="1.9" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+    <div style="flex:1;min-width:0;padding:4px 0"><nav class="trilha" id="trilha"></nav><h1 class="titulo" id="titulo">Escritório</h1></div>
+    <span class="beta">Piloto</span>
+  </div>
+</header>
+
+<main id="main"><div class="gira" role="status" aria-label="Carregando"></div></main>
+<div id="modal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="modal-t" onclick="if(event.target===this)fecharModal()">
+  <div class="modal-c"><div class="modal-h"><h2 id="modal-t" class="h2" style="font-size:17px"></h2><button class="btn btn-s" onclick="fecharModal()" aria-label="Fechar">✕</button></div><div class="modal-b" id="modal-b"></div></div>
+</div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<script>
+const sb = window.sbClient;
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const MODELO_DTZ = ['Briefing', 'Levantamento', 'Estudo preliminar', 'Anteprojeto', 'Executivo', 'Compatibilização', 'Orçamentos e compras', 'Obra', 'Entrega'];
+const ST = [
+  { k: 'afazer', t: 'A fazer', cor: '#94A3B8' },
+  { k: 'dev', t: 'Em desenvolvimento', cor: '#4F46E5' },
+  { k: 'revdtz', t: 'Aguardando revisão', cor: '#8B5CF6' },
+  { k: 'revsol', t: 'Revisão solicitada', cor: '#EF4444' },
+  { k: 'cliente', t: 'Aguardando cliente', cor: '#F59E0B' },
+  { k: 'aprov', t: 'Aprovado', cor: '#10B981' },
+  { k: 'ok', t: 'Concluído', cor: '#475569' },
+];
+const ST_EQUIPE = ['afazer', 'dev', 'revdtz'];   // o mesmo que o gatilho escritorio_tarefa_guarda
+const stT = (k) => (ST.find((s) => s.k === k) || {}).t || k;
+
+// ── estado ──
+let EU = null, PROJETOS = [], PROJ = null, MEMBROS = [], PAPEL = null, TAR = [], PESSOAS_T = [], ATAS = [], NOTAS = {};
+let VIEW = 'lista', FILTRO = 'todas', FILTRO_E = '', ETAPA_SEL = null;
+
+// ── utilidades ──
+function toast(t, erro) { const el = $('toast'); el.textContent = t; el.className = 'toast on' + (erro ? ' erro' : ''); clearTimeout(toast._t); toast._t = setTimeout(() => (el.className = 'toast'), erro ? 6000 : 3800); }
+function falhou(e, oque) {
+  // a mensagem do banco (gatilho/RLS) já vem em português quando é regra nossa
+  const m = String((e && (e.message || e.details)) || '');
+  const nossa = /(dono|admin|freela|convite|quem move|não muda|não sai|não se edita|A fazer)/i.test(m);
+  toast((oque ? oque + ': ' : '') + (nossa ? m : /row-level security|permission/i.test(m) ? 'você não tem permissão pra isso neste projeto.' : 'não deu certo agora. Tente de novo.'), true);
+  console.error(oque, e);
+}
+function menu(abre) { $('side').classList.toggle('aberto', abre); $('scrim').classList.toggle('aberto', abre); }
+function abrirModal(t, html) { $('modal-t').textContent = t; $('modal-b').innerHTML = html; $('modal').hidden = false; const f = $('modal-b').querySelector('input,textarea,select'); if (f) f.focus(); }
+function fecharModal() { $('modal').hidden = true; }
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('modal').hidden) fecharModal(); });
+const hoje = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; };
+const dISO = (s) => { const [y, m, d] = String(s).slice(0, 10).split('-').map(Number); return new Date(y, m - 1, d); };
+// data pura (2026-09-23) é o dia; com horário (timestamptz do banco, em UTC) vira a hora LOCAL antes de virar dia
+const FUSO = 'America/Sao_Paulo';
+const dBR = (s) => (!s ? '' : String(s).length > 10
+  ? new Date(s).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', timeZone: FUSO })
+  : dISO(s).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }));
+// 🪤 FUSO: toISOString() é UTC — depois das 21h em Brasília já é amanhã. A data do dia é a LOCAL.
+const hojeISO = () => new Intl.DateTimeFormat('en-CA', { timeZone: FUSO, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+const dias = (s) => Math.round((dISO(s) - hoje()) / 864e5);
+const souAdmin = () => PAPEL === 'dono';
+const meuMembro = () => MEMBROS.find((m) => m.user_id === EU.id);
+const nomeDe = (m) => (m && (m.nome || (m.email || '').split('@')[0])) || '—';
+const curto = (m) => nomeDe(m).split(' ')[0];
+const iniciais = (m) => nomeDe(m).split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0].toUpperCase()).join('') || '·';
+const av = (m) => `<span class="av" title="${esc(nomeDe(m))}">${esc(iniciais(m))}</span>`;
+const pessoasDa = (t) => PESSOAS_T.filter((p) => p.tarefa_id === t.id).map((p) => MEMBROS.find((m) => m.id === p.membro_id)).filter(Boolean);
+const avs = (t) => `<span class="avs">${pessoasDa(t).map(av).join('')}</span>`;
+const aberta = (t) => !['aprov', 'ok'].includes(t.status);
+const atrasada = (t) => aberta(t) && t.prazo && dias(t.prazo) < 0;
+const eMinha = (t) => { const eu = meuMembro(); return !!eu && pessoasDa(t).some((m) => m.id === eu.id); };
+function pillPrazo(t) {
+  if (!t.prazo) return '';
+  const d = dias(t.prazo);
+  if (!aberta(t)) return `<span style="font-size:11px;color:#64748B">${dBR(t.prazo)}</span>`;
+  if (d < 0) return `<span class="pill p-late"><i></i>${-d} dia${d < -1 ? 's' : ''} atrasada</span>`;
+  if (d <= 3) return `<span class="pill p-warn"><i></i>${d === 0 ? 'hoje' : dBR(t.prazo)}</span>`;
+  return `<span class="tab" style="font-size:11px;color:#475569">${dBR(t.prazo)}</span>`;
+}
+const IC = {
+  capa: '<path d="M3 12l9-8 9 8M5 10v10h14V10"/>',
+  tar: '<rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="11" rx="1.5"/><rect x="17" y="4" width="4" height="7" rx="1.5"/>',
+  arq: '<path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>',
+  atas: '<path d="M6 3h9l5 5v13H6zM15 3v5h5M9 13h6M9 17h6"/>',
+  eq: '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.6c2.7.2 5 2 5 4.9"/>',
+  pastas: '<path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>',
+};
+const svg = (k, s = 18) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${IC[k]}</svg>`;
+
+// ── rotas: #/ (lista) · #/p/<id>/<tela> ──
+function lerRota() {
+  const m = /^#\/p\/([0-9a-f-]{36})(?:\/(\w+))?/.exec(location.hash);
+  return m ? { id: m[1], view: m[2] || 'capa' } : { id: null, view: 'lista' };
+}
+function ir(view) { location.hash = view === 'lista' ? '#/' : `#/p/${PROJ.id}/${view}`; }
+window.addEventListener('hashchange', () => navegar());
+
+// ── dados ──
+async function carregarProjetos() {
+  const { data, error } = await sb.from('escritorio_projetos').select('*').order('criado_em', { ascending: false });
+  if (error) throw error;
+  PROJETOS = data || [];
+}
+async function carregarProjeto(id) {
+  PROJ = PROJETOS.find((p) => p.id === id) || null;
+  if (!PROJ) return false;
+  const [m, t, tp, a, papel] = await Promise.all([
+    sb.from('escritorio_membros').select('*').eq('projeto_id', id).order('convidado_em'),
+    sb.from('escritorio_tarefas').select('*').eq('projeto_id', id).order('posicao'),
+    sb.from('escritorio_tarefa_pessoas').select('*').eq('projeto_id', id),
+    sb.from('escritorio_atas').select('*').eq('projeto_id', id).order('data', { ascending: false }),
+    sb.rpc('escritorio_papel', { p_projeto: id }),
+  ]);
+  for (const r of [m, t, tp, a, papel]) if (r.error) throw r.error;
+  MEMBROS = m.data; TAR = t.data; PESSOAS_T = tp.data; ATAS = a.data; PAPEL = papel.data;
+  NOTAS = {};
+  if (PAPEL === 'dono') {   // a anotação sobre cada pessoa: tabela própria, só o admin lê
+    const n = await sb.from('escritorio_membro_notas').select('membro_id,observacao').eq('projeto_id', id);
+    if (!n.error) n.data.forEach((x) => { NOTAS[x.membro_id] = x.observacao; });
+  }
+  return true;
+}
+
+// ── moldura ──
+function renderMoldura() {
+  const eu = PROJ && meuMembro();
+  $('eu-nome').textContent = (eu && nomeDe(eu)) || EU.email;
+  $('eu-ini').textContent = eu ? iniciais(eu) : (EU.email || '·')[0].toUpperCase();
+  if (VIEW === 'lista' || !PROJ) {
+    $('side-c').innerHTML = `<a class="s-it" href="dashboard.html">← Painel do AI.arq</a>
+      <div class="s-grp" style="margin-top:12px"><div class="s-grp-t">Projetos do escritório</div>
+      ${PROJETOS.map((p) => `<a class="s-it" href="#/p/${p.id}/capa">${svg('pastas')}${esc(p.nome)}</a>`).join('') || '<p class="vazio" style="padding:0 10px">Nenhum ainda.</p>'}</div>`;
+    $('trilha').innerHTML = '<a href="dashboard.html">Início</a><span>›</span><span>Escritório</span>';
+    $('titulo').textContent = 'Escritório';
+    return;
+  }
+  const revisar = TAR.filter((t) => t.status === 'revdtz').length, minhasAt = TAR.filter((t) => eMinha(t) && atrasada(t)).length;
+  const it = (v, ic, txt, est) => `<a class="s-it ${VIEW === v ? 'on' : ''}" ${VIEW === v ? 'aria-current="page"' : ''} href="#/p/${PROJ.id}/${v}">${svg(ic)}${txt}${est || ''}</a>`;
+  $('side-c').innerHTML = `<a class="s-it" href="#/" style="font-size:12px;color:#64748B">← Todos os projetos</a>
+    <div class="s-fix"><span class="tag">Projeto aberto</span><b>${esc(PROJ.nome)}</b><span>${esc(PROJ.etapa_atual || '')} · ${MEMBROS.filter((m) => m.status === 'ativo').length} pessoas</span></div>
+    <div class="s-grp">
+      ${it('capa', 'capa', 'Página do projeto')}
+      ${it('tarefas', 'tar', 'Tarefas', souAdmin() ? (revisar ? `<span class="s-est pend">${revisar} pra revisar</span>` : '') : (minhasAt ? `<span class="s-est pend">${minhasAt} atrasada</span>` : ''))}
+      ${it('arquivos', 'arq', 'Arquivos', '<span class="s-est">em breve</span>')}
+      ${it('atas', 'atas', 'Atas', `<span class="s-est">${ATAS.length}</span>`)}
+      ${it('equipe', 'eq', 'Equipe', `<span class="s-est">${MEMBROS.filter((m) => m.status === 'ativo').length}</span>`)}
+    </div>`;
+  const nomes = { capa: 'Página do projeto', tarefas: 'Tarefas', arquivos: 'Arquivos', atas: 'Atas', equipe: 'Equipe' };
+  $('trilha').innerHTML = `<a href="dashboard.html">Início</a><span>›</span><a href="#/">Escritório</a><span>›</span><a href="#/p/${PROJ.id}/capa">${esc(PROJ.nome)}</a>`;
+  $('titulo').textContent = nomes[VIEW] || PROJ.nome;
+}
+
+async function navegar() {
+  const r = lerRota();
+  menu(false);
+  try {
+    if (!r.id) { VIEW = 'lista'; PROJ = null; await carregarProjetos(); }
+    else {
+      if (!PROJETOS.length || !PROJETOS.find((p) => p.id === r.id)) await carregarProjetos();
+      if (!PROJ || PROJ.id !== r.id || !MEMBROS.length) { if (!(await carregarProjeto(r.id))) { location.hash = '#/'; return; } }
+      VIEW = ['capa', 'tarefas', 'arquivos', 'atas', 'equipe'].includes(r.view) ? r.view : 'capa';
+    }
+  } catch (e) {
+    $('main').innerHTML = `<div class="card"><p class="h2">Não consegui carregar agora</p><p class="sub">Foi um soluço de conexão com o banco. Recarregue a página em instantes.</p></div>`;
+    console.error(e); return;
+  }
+  render();
+}
+function render() {
+  renderMoldura();
+  const T = { lista: telaLista, capa: telaCapa, tarefas: telaTarefas, arquivos: telaArquivos, atas: telaAtas, equipe: telaEquipe };
+  const volta = VIEW !== 'lista' && VIEW !== 'capa' ? `<button class="voltar" onclick="ir('capa')">← Página do projeto</button>` : '';
+  $('main').innerHTML = volta + T[VIEW]();
+}
+async function recarregar() { await carregarProjeto(PROJ.id); render(); }
+
+// ══════════════ LISTA ══════════════
+function telaLista() {
+  return `<div class="linha"><h2 class="h2" style="flex:1">${PROJETOS.length ? PROJETOS.length + ' projeto' + (PROJETOS.length > 1 ? 's' : '') : 'Seus projetos'}</h2>
+      <button class="btn btn-g" onclick="novoProjeto()">+ Novo projeto</button></div>
+    ${PROJETOS.length ? `<div class="grade g3">${PROJETOS.map((p) => `<a class="card" style="text-decoration:none;color:inherit;display:flex;flex-direction:column;gap:10px" href="#/p/${p.id}/capa">
+        <div class="linha" style="justify-content:space-between;align-items:flex-start"><b style="color:#111827">${esc(p.nome)}</b>${p.etapa_atual ? `<span class="pill p-ind">${esc(p.etapa_atual)}</span>` : ''}</div>
+        ${p.cliente_nome ? `<span class="sub" style="margin:0">Cliente: ${esc(p.cliente_nome)}</span>` : ''}
+        <span class="sub" style="margin:0">${p.dono === EU.id ? 'Você é admin' : 'Você faz parte da equipe'}</span></a>`).join('')}</div>`
+      : `<div class="card"><p class="h2" style="font-size:16px">Comece pelo primeiro projeto</p><p class="sub">Um projeto aqui nasce sem prancha: tarefas, atas, equipe e (em breve) a pasta do Drive. Se quiser medir, o quantitativo continua no painel como sempre.</p></div>`}`;
+}
+function novoProjeto() {
+  abrirModal('Novo projeto', `
+    <div class="grade g2"><div><label class="lbl" for="np-nome">Nome do projeto</label><input id="np-nome" class="in" maxlength="160" placeholder="ex.: Residência Alto da Boa Vista"></div>
+    <div><label class="lbl" for="np-cli">Cliente</label><input id="np-cli" class="in" maxlength="160" placeholder="nome do cliente"></div></div>
+    <div><p class="lbl">Etapas · modelo DTZ</p><p class="sub" style="margin:0 0 8px">Desmarque o que este projeto não tem, ou acrescente.</p>
+      <div class="linha" id="np-et" style="gap:6px">${MODELO_DTZ.map((e) => `<label class="chip"><input type="checkbox" checked value="${esc(e)}">${esc(e)}</label>`).join('')}</div>
+      <div class="linha" style="margin-top:8px;flex-wrap:nowrap"><input id="np-nova" class="in" maxlength="80" placeholder="ex.: Aprovação na prefeitura"><button class="btn" onclick="addEt()">Acrescentar</button></div></div>
+    <div class="rodape"><button class="btn" onclick="fecharModal()">Cancelar</button><button class="btn btn-d" id="np-ok" onclick="criarProjeto()">Criar projeto</button></div>`);
+}
+function addEt() { const v = $('np-nova').value.trim(); if (!v) return; $('np-et').insertAdjacentHTML('beforeend', `<label class="chip"><input type="checkbox" checked value="${esc(v)}">${esc(v)}</label>`); $('np-nova').value = ''; }
+async function criarProjeto() {
+  const nome = $('np-nome').value.trim(); if (!nome) { toast('Dê um nome ao projeto.', true); return; }
+  const etapas = [...document.querySelectorAll('#np-et input:checked')].map((i) => i.value);
+  $('np-ok').disabled = true;
+  const { data, error } = await sb.from('escritorio_projetos').insert({ dono: EU.id, nome, cliente_nome: $('np-cli').value.trim() || null, etapas, etapa_atual: etapas[0] || null }).select().single();
+  $('np-ok').disabled = false;
+  if (error) return falhou(error, 'Não criei o projeto');
+  fecharModal(); PROJETOS.unshift(data); PROJ = null; location.hash = `#/p/${data.id}/capa`;
+  toast('Projeto criado');
+}
+
+// ══════════════ CAPA ══════════════
+function telaCapa() {
+  const p = PROJ, et = p.etapas || [], iA = et.indexOf(p.etapa_atual);
+  const abertas = TAR.filter(aberta), revisar = TAR.filter((t) => t.status === 'revdtz'), doCli = abertas.filter((t) => t.do_cliente);
+  const foco = souAdmin() ? [...revisar, ...TAR.filter((t) => atrasada(t) && t.status !== 'revdtz')] : TAR.filter((t) => eMinha(t) && aberta(t));
+  const kpi = (alerta, rot, val, det) => `<div class="kpi ${alerta ? 'alerta' : ''}"><p class="rot">${rot}</p><p class="val tab">${val}</p><p class="det">${det}</p></div>`;
+  const ativos = MEMBROS.filter((m) => m.status === 'ativo');
+  return `
+  <section class="card">
+    <div class="linha" style="align-items:flex-start">
+      <div style="flex:1;min-width:240px">
+        <p class="lbl" style="margin:0">${esc(p.etapa_atual || 'Projeto')}</p>
+        <h2 class="h2" style="font-size:22px;margin-top:2px">${esc(p.nome)}</h2>
+        <p class="sub">${p.cliente_nome ? 'Cliente: <b>' + esc(p.cliente_nome) + '</b> · ' : ''}Equipe: ${ativos.map((m) => esc(curto(m))).join(', ')}</p>
+      </div>
+      ${souAdmin() ? `<button class="btn btn-s" onclick="editarProjeto()">Editar projeto</button>` : ''}
+    </div>
+    ${et.length ? `<div style="margin-top:16px"><p class="lbl">Etapas</p><div class="etapas" role="tablist">
+      ${et.map((e, i) => { const n = TAR.filter((t) => t.etapa === e).length; return `<button role="tab" class="etp ${i < iA ? 'feita' : i === iA ? 'atual' : ''}" aria-pressed="${ETAPA_SEL === e}" onclick="verEtapa(${i})">${esc(e)}<small>${n} tarefa${n === 1 ? '' : 's'}</small></button>`; }).join('')}</div>
+      ${ETAPA_SEL ? painelEtapa() : '<p class="sub">Clique numa etapa pra ver o que tem nela.</p>'}</div>` : ''}
+  </section>
+  <div class="grade g2 g4">
+    ${kpi(abertas.some(atrasada), 'Tarefas abertas', abertas.length, `${abertas.filter(atrasada).length} atrasada(s) · ${revisar.length} aguardando revisão`)}
+    ${kpi(doCli.some(atrasada), 'Com o cliente', doCli.length, doCli.length ? 'pendências do cliente' : 'nada com o cliente')}
+    ${kpi(false, 'Atas', ATAS.length, ATAS[0] ? 'última em ' + dBR(ATAS[0].data) : 'nenhuma ainda')}
+    ${kpi(false, 'Equipe', ativos.length, MEMBROS.filter((m) => m.status === 'convidado').length + ' convite(s) aguardando')}
+  </div>
+  <section class="card"><h2 class="h2">Tudo do projeto</h2>
+    <div class="grade g2 g4" style="margin-top:14px">
+      <a class="tool" href="#/p/${p.id}/tarefas"><span class="ti">${svg('tar')}</span><span><b>Tarefas</b><span>${abertas.length} abertas</span></span></a>
+      <a class="tool" href="#/p/${p.id}/arquivos"><span class="ti">${svg('arq')}</span><span><b>Arquivos</b><span>Pasta do Drive · em breve</span></span></a>
+      <a class="tool" href="#/p/${p.id}/atas"><span class="ti">${svg('atas')}</span><span><b>Atas</b><span>${ATAS.length} reuniões</span></span></a>
+      <a class="tool" href="#/p/${p.id}/equipe"><span class="ti">${svg('eq')}</span><span><b>Equipe</b><span>${ativos.length} pessoas</span></span></a>
+    </div>
+    ${p.job_id ? `<p class="sub" style="margin-top:12px">Ligado ao quantitativo: <a href="projeto.html?job=${encodeURIComponent(p.job_id)}">abrir quantitativo, cronograma e memorial</a>.</p>`
+      : `<p class="sub" style="margin-top:12px">Quantitativo, cronograma, memorial e financeiro continuam no painel, por projeto medido. Ligar um projeto medido a este vem na próxima etapa.</p>`}
+  </section>
+  <section class="card"><div class="linha" style="justify-content:space-between"><h2 class="h2">${souAdmin() ? 'Precisa de você' : 'Suas tarefas'}</h2><a class="btn btn-s" href="#/p/${p.id}/tarefas">Abrir o quadro</a></div>
+    ${foco.length ? `<ul class="lista" style="margin-top:8px">${foco.slice(0, 8).map((t) => `<li style="cursor:pointer" onclick="ir('tarefas');setTimeout(()=>abrirCartao('${t.id}'),50)"><span style="width:8px;height:8px;border-radius:50%;background:${(ST.find((s) => s.k === t.status) || {}).cor}"></span><span style="flex:1;min-width:0;font-size:13.5px">${esc(t.titulo)}<span class="sub" style="display:block;margin:0">${stT(t.status)}</span></span>${pillPrazo(t)}${avs(t)}</li>`).join('')}</ul>` : '<p class="vazio" style="margin-top:8px">Nada parado com você.</p>'}
+  </section>`;
+}
+function verEtapa(i) { const e = PROJ.etapas[i]; ETAPA_SEL = ETAPA_SEL === e ? null : e; render(); }
+function painelEtapa() {
+  const e = ETAPA_SEL, i = PROJ.etapas.indexOf(e), iA = PROJ.etapas.indexOf(PROJ.etapa_atual);
+  const ts = TAR.filter((t) => t.etapa === e);
+  return `<div style="margin-top:12px;border:1px solid #C7D2FE;border-radius:12px;padding:14px">
+    <div class="linha"><b style="font-size:14px">${esc(e)}</b>${i < iA ? '<span class="pill p-ok"><i></i>concluída</span>' : i === iA ? '<span class="pill p-ind"><i></i>etapa atual</span>' : '<span class="pill p-mut">ainda não começou</span>'}
+      <span style="flex:1"></span>${souAdmin() && i !== iA ? `<button class="btn btn-s" onclick="marcarAtual(${i})">Marcar como etapa atual</button>` : ''}
+      <button class="btn btn-s" onclick="FILTRO_E=PROJ.etapas[${i}];ir('tarefas')">Abrir no quadro</button></div>
+    ${ts.length ? `<ul class="lista">${ts.map((t) => `<li><span style="width:8px;height:8px;border-radius:50%;background:${(ST.find((s) => s.k === t.status) || {}).cor}"></span><span style="flex:1;font-size:13px">${esc(t.titulo)}</span>${pillPrazo(t)}${avs(t)}</li>`).join('')}</ul>` : '<p class="vazio" style="margin-top:8px">Nenhuma tarefa nesta etapa.</p>'}
+  </div>`;
+}
+async function marcarAtual(i) {
+  const { error } = await sb.from('escritorio_projetos').update({ etapa_atual: PROJ.etapas[i] }).eq('id', PROJ.id);
+  if (error) return falhou(error, 'Não mudei a etapa');
+  PROJ.etapa_atual = PROJ.etapas[i]; render(); toast('Etapa atual: ' + PROJ.etapa_atual);
+}
+function editarProjeto() {
+  const p = PROJ;
+  abrirModal('Editar projeto', `
+    <div class="grade g2"><div><label class="lbl" for="ep-n">Nome</label><input id="ep-n" class="in" maxlength="160" value="${esc(p.nome)}"></div>
+    <div><label class="lbl" for="ep-c">Cliente</label><input id="ep-c" class="in" maxlength="160" value="${esc(p.cliente_nome || '')}"></div>
+    <div><label class="lbl" for="ep-pe">Próxima entrega</label><input id="ep-pe" class="in" maxlength="200" value="${esc(p.proxima_entrega || '')}" placeholder="ex.: Executivo — cozinha"></div>
+    <div><label class="lbl" for="ep-pd">Data da próxima entrega</label><input id="ep-pd" type="date" class="in" value="${esc(p.proxima_entrega_data || '')}"></div></div>
+    <div class="rodape"><button class="btn" onclick="fecharModal()">Cancelar</button><button class="btn btn-d" onclick="salvarProjeto()">Salvar</button></div>`);
+}
+async function salvarProjeto() {
+  const nome = $('ep-n').value.trim(); if (!nome) return toast('O projeto precisa de um nome.', true);
+  const mud = { nome, cliente_nome: $('ep-c').value.trim() || null, proxima_entrega: $('ep-pe').value.trim() || null, proxima_entrega_data: $('ep-pd').value || null };
+  const { error } = await sb.from('escritorio_projetos').update(mud).eq('id', PROJ.id);
+  if (error) return falhou(error, 'Não salvei');
+  Object.assign(PROJ, mud); fecharModal(); render(); toast('Salvo');
+}
+
+// ══════════════ TAREFAS (quadro estilo Trello) ══════════════
+const FILT = { todas: () => true, minhas: eMinha, cliente: (t) => t.do_cliente };
+const visivel = (t) => FILT[FILTRO](t) && (!FILTRO_E || t.etapa === FILTRO_E);
+const podeLevar = (t, st) => souAdmin() || st === t.status || (['afazer', 'dev', 'revdtz', 'revsol'].includes(t.status) && ST_EQUIPE.includes(st));
+function telaTarefas() {
+  const ch = (k, t) => `<button class="chip" aria-pressed="${FILTRO === k}" onclick="FILTRO='${k}';render()">${t}<span class="n">${TAR.filter(FILT[k]).filter(aberta).length}</span></button>`;
+  return `<div class="linha">${ch('todas', 'Todas')}${ch('minhas', 'Minhas')}${ch('cliente', 'Do cliente')}
+      <select class="in" style="width:auto;padding:5px 8px;font-size:12px" aria-label="Filtrar por etapa" onchange="FILTRO_E=this.value;render()"><option value="">Todas as etapas</option>${(PROJ.etapas || []).map((e) => `<option ${e === FILTRO_E ? 'selected' : ''}>${esc(e)}</option>`).join('')}</select>
+      <span style="flex:1"></span><button class="btn btn-p" onclick="novaTarefa()">+ Nova tarefa</button></div>
+    <p class="sub" style="margin:-8px 0 0">Arraste os cartões pra cima, pra baixo ou pra outra coluna. Clique num cartão pra marcar pessoas e comentar. ${souAdmin() ? 'A equipe leva até <b>Aguardando revisão</b>; dali pra frente é você.' : 'Você leva até <b>Aguardando revisão</b>; dali pra frente é a admin do projeto.'}</p>
+    <div class="board">${ST.map((s) => { const ts = TAR.filter((t) => t.status === s.k && visivel(t)).sort((a, b) => a.posicao - b.posicao); return `
+      <div class="col" data-st="${s.k}" ondragover="sobre(event)" ondrop="soltar(event)" aria-label="${s.t}">
+        <div class="col-h"><i style="background:${s.cor}"></i>${s.t}<span class="n">${ts.length}</span></div>
+        <div class="cards">${ts.map(cartao).join('')}</div>
+        <div><button class="add" onclick="addCartao('${s.k}',this)">+ Adicionar cartão</button></div>
+      </div>`; }).join('')}</div>`;
+}
+function cartao(t) {
+  return `<div class="tc ${atrasada(t) ? 'late' : ''}" draggable="true" data-id="${t.id}" tabindex="0" ondragstart="pegar(event)" ondragend="largar(event)" onclick="abrirCartao('${t.id}')" onkeydown="if(event.key==='Enter')abrirCartao('${t.id}')">
+    <p>${esc(t.titulo)}</p><div class="linha" style="gap:6px">${pillPrazo(t)}${t.do_cliente ? '<span class="pill p-warn">cliente</span>' : ''}${t.etapa ? `<span style="font-size:10.5px;color:#64748B">${esc(t.etapa)}</span>` : ''}${avs(t)}</div></div>`;
+}
+let ARR = null;
+function pegar(e) { ARR = e.currentTarget.dataset.id; e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', ARR); } catch (_) {} e.currentTarget.classList.add('arr'); }
+function largar(e) { e.currentTarget.classList.remove('arr'); limpaAlvo(); ARR = null; }
+function limpaAlvo() { document.querySelectorAll('.col').forEach((c) => c.classList.remove('alvo')); document.querySelectorAll('.drop').forEach((d) => d.remove()); }
+function idxSob(col, y) { const cs = [...col.querySelectorAll('.tc:not(.arr)')]; for (let i = 0; i < cs.length; i++) { const r = cs[i].getBoundingClientRect(); if (y < r.top + r.height / 2) return i; } return cs.length; }
+function sobre(e) {
+  if (!ARR) return; e.preventDefault();
+  const col = e.currentTarget, i = idxSob(col, e.clientY);
+  document.querySelectorAll('.col').forEach((c) => c.classList.toggle('alvo', c === col));
+  document.querySelectorAll('.drop').forEach((d) => d.remove());
+  const cs = [...col.querySelectorAll('.tc:not(.arr)')], l = document.createElement('div'); l.className = 'drop';
+  if (cs[i]) cs[i].before(l); else col.querySelector('.cards').append(l);
+}
+function soltar(e) { e.preventDefault(); const col = e.currentTarget, i = idxSob(col, e.clientY), id = ARR; limpaAlvo(); if (id) mover(id, col.dataset.st, i); }
+async function mover(id, st, i) {
+  const t = TAR.find((x) => x.id === id);
+  if (!podeLevar(t, st)) { toast('Daqui pra frente quem move é a admin do projeto.', true); return render(); }
+  const viz = TAR.filter((x) => x.status === st && x.id !== id && visivel(x)).sort((a, b) => a.posicao - b.posicao);
+  const antes = viz[i - 1], depois = viz[i];
+  const pos = antes && depois ? (antes.posicao + depois.posicao) / 2 : antes ? antes.posicao + 1 : depois ? depois.posicao - 1 : 1;
+  const velho = { status: t.status, posicao: t.posicao };
+  Object.assign(t, { status: st, posicao: pos }); render();                        // otimista
+  const { error } = await sb.from('escritorio_tarefas').update({ status: st, posicao: pos }).eq('id', id);
+  if (error) { Object.assign(t, velho); render(); return falhou(error, 'Não movi'); }
+  if (velho.status !== st) toast('Movido para ' + stT(st));
+}
+function addCartao(st, btn) {
+  if (!souAdmin() && !ST_EQUIPE.includes(st)) return toast('Nesta coluna quem cria é a admin do projeto.', true);
+  const slot = btn.parentElement;
+  slot.innerHTML = `<div class="tc" style="cursor:auto"><textarea class="in" rows="2" maxlength="300" placeholder="O que precisa ser feito?" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();criarCartao('${st}',this.value)}if(event.key==='Escape')render()"></textarea>
+    <div class="linha"><button class="btn btn-p btn-s" onclick="criarCartao('${st}',this.closest('.tc').querySelector('textarea').value)">Adicionar</button><button class="btn btn-s" onclick="render()">Cancelar</button></div></div>`;
+  slot.querySelector('textarea').focus();
+}
+function novaTarefa() { const b = document.querySelector('.col[data-st="afazer"] .add'); if (b) addCartao('afazer', b); }
+async function criarCartao(st, txt) {
+  txt = String(txt || '').trim(); if (!txt) return render();
+  const max = Math.max(0, ...TAR.filter((x) => x.status === st).map((x) => x.posicao));
+  const { data, error } = await sb.from('escritorio_tarefas').insert({ projeto_id: PROJ.id, titulo: txt, status: st, posicao: max + 1, etapa: FILTRO_E || PROJ.etapa_atual || null, do_cliente: st === 'cliente', criado_por: EU.id }).select().single();
+  if (error) return falhou(error, 'Não criei o cartão');
+  TAR.push(data);
+  const eu = meuMembro();
+  if (eu && st !== 'cliente') { const r = await sb.from('escritorio_tarefa_pessoas').insert({ tarefa_id: data.id, membro_id: eu.id, projeto_id: PROJ.id }); if (!r.error) PESSOAS_T.push({ tarefa_id: data.id, membro_id: eu.id, projeto_id: PROJ.id }); }
+  render(); toast('Cartão criado');
+}
+
+// ── o cartão aberto ──
+let CART = null;
+async function abrirCartao(id) {
+  const t = TAR.find((x) => x.id === id); if (!t) return;
+  CART = { id, pessoas: pessoasDa(t).map((m) => m.id) };
+  const gente = MEMBROS.filter((m) => m.status === 'ativo');
+  const opc = ST.filter((s) => podeLevar(t, s.k)).map((s) => `<option value="${s.k}" ${s.k === t.status ? 'selected' : ''}>${s.t}</option>`).join('');
+  const podeApagar = souAdmin() || t.criado_por === EU.id;
+  abrirModal('Tarefa', `
+    <input id="ct-t" class="in" style="font-size:15px;font-weight:600" maxlength="300" value="${esc(t.titulo)}" aria-label="Título">
+    <div class="grade g3"><div><label class="lbl" for="ct-st">Coluna</label><select id="ct-st" class="in">${opc}</select></div>
+      <div><label class="lbl" for="ct-e">Etapa</label><select id="ct-e" class="in"><option value="">—</option>${(PROJ.etapas || []).map((e) => `<option ${e === t.etapa ? 'selected' : ''}>${esc(e)}</option>`).join('')}</select></div>
+      <div><label class="lbl" for="ct-p">Prazo</label><input id="ct-p" type="date" class="in" value="${esc(t.prazo || '')}"></div></div>
+    <div><p class="lbl">Pessoas no cartão</p><div class="linha" id="ct-pes" style="gap:6px">${gente.map((m) => `<button type="button" class="chip" aria-pressed="${CART.pessoas.includes(m.id)}" onclick="togP('${m.id}',this)">${av(m)}${esc(curto(m))}</button>`).join('')}</div>
+      <label class="linha" style="margin-top:8px;font-size:13px;color:#334155;gap:6px"><input type="checkbox" id="ct-cli" ${t.do_cliente ? 'checked' : ''}> Pendência do cliente</label></div>
+    <div><label class="lbl" for="ct-d">Descrição</label><textarea id="ct-d" rows="2" class="in" maxlength="5000" placeholder="Detalhes, links, referências…">${esc(t.descricao || '')}</textarea></div>
+    <div><p class="lbl">Comentários</p><ul class="lista" id="ct-coms"><li class="vazio">Carregando…</li></ul>
+      <textarea id="ct-com" rows="2" class="in" maxlength="5000" placeholder="Escreva… use @ pra chamar alguém" style="margin-top:8px"></textarea>
+      <div class="linha" style="margin-top:6px;gap:6px">${gente.filter((m) => m.user_id !== EU.id).map((m) => `<button type="button" class="chip" onclick="mencionar('${esc(curto(m))}')">@${esc(curto(m))}</button>`).join('')}<span style="flex:1"></span><button class="btn btn-p btn-s" onclick="comentar('${id}')">Comentar</button></div></div>
+    <div class="rodape" style="justify-content:space-between"><div class="linha" style="gap:6px"><button class="btn btn-s" onclick="subirDescer('${id}',-1)">↑ Subir</button><button class="btn btn-s" onclick="subirDescer('${id}',1)">↓ Descer</button>${podeApagar ? `<button class="btn btn-r btn-s" onclick="apagarCartao('${id}')">Excluir</button>` : ''}</div>
+      <div class="linha" style="gap:6px"><button class="btn" onclick="fecharModal()">Fechar</button><button class="btn btn-d" onclick="salvarCartao('${id}')">Salvar</button></div></div>`);
+  carregarComentarios(id);
+}
+async function carregarComentarios(id) {
+  const { data, error } = await sb.from('escritorio_comentarios').select('*').eq('tarefa_id', id).order('criado_em');
+  const ul = $('ct-coms'); if (!ul) return;
+  if (error) { ul.innerHTML = '<li class="vazio">Não consegui carregar os comentários.</li>'; return; }
+  ul.innerHTML = data.length ? data.map((c) => { const m = MEMBROS.find((x) => x.user_id === c.autor); return `<li style="align-items:flex-start">${av(m)}<div style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;padding:8px 10px"><p class="sub" style="margin:0"><b style="color:#334155">${esc(curto(m))}</b> · ${new Date(c.criado_em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: FUSO })}</p><p style="margin:2px 0 0;font-size:13.5px;white-space:pre-wrap">${esc(c.texto).replace(/@([A-Za-zÀ-ÿ]+)/g, '<span class="men">@$1</span>')}</p></div></li>`; }).join('') : '<li class="vazio">Nenhum comentário ainda.</li>';
+}
+function togP(id, b) { const i = CART.pessoas.indexOf(id); if (i >= 0) CART.pessoas.splice(i, 1); else CART.pessoas.push(id); b.setAttribute('aria-pressed', String(i < 0)); }
+function mencionar(n) { const ta = $('ct-com'); ta.value = (ta.value && !ta.value.endsWith(' ') ? ta.value + ' ' : ta.value) + '@' + n + ' '; ta.focus(); }
+async function comentar(id) {
+  const txt = $('ct-com').value.trim(); if (!txt) return;
+  const mencoes = MEMBROS.filter((m) => m.status === 'ativo' && m.user_id !== EU.id && new RegExp('@' + curto(m) + '(?![A-Za-zÀ-ÿ])').test(txt)).map((m) => m.id);
+  const { error } = await sb.from('escritorio_comentarios').insert({ tarefa_id: id, projeto_id: PROJ.id, texto: txt, mencoes, autor: EU.id });
+  if (error) return falhou(error, 'Não comentei');
+  $('ct-com').value = ''; carregarComentarios(id); toast('Comentado');
+}
+async function salvarCartao(id) {
+  const t = TAR.find((x) => x.id === id);
+  const titulo = $('ct-t').value.trim(); if (!titulo) return toast('A tarefa precisa de um título.', true);
+  const mud = { titulo, etapa: $('ct-e').value || null, prazo: $('ct-p').value || null, descricao: $('ct-d').value || null, do_cliente: $('ct-cli').checked };
+  const st = $('ct-st').value;
+  if (st !== t.status) mud.status = st;
+  const { error } = await sb.from('escritorio_tarefas').update(mud).eq('id', id);
+  if (error) return falhou(error, 'Não salvei');
+  const antes = pessoasDa(t).map((m) => m.id), entram = CART.pessoas.filter((p) => !antes.includes(p)), saem = antes.filter((p) => !CART.pessoas.includes(p));
+  const ops = [];
+  if (entram.length) ops.push(sb.from('escritorio_tarefa_pessoas').insert(entram.map((m) => ({ tarefa_id: id, membro_id: m, projeto_id: PROJ.id }))));
+  if (saem.length) ops.push(sb.from('escritorio_tarefa_pessoas').delete().eq('tarefa_id', id).in('membro_id', saem));
+  const res = await Promise.all(ops);
+  fecharModal(); await recarregar();
+  if (res.some((r) => r.error)) toast('Salvei a tarefa, mas não consegui atualizar as pessoas. Tente de novo.', true); else toast('Salvo');
+}
+async function subirDescer(id, d) {
+  const t = TAR.find((x) => x.id === id), viz = TAR.filter((x) => x.status === t.status).sort((a, b) => a.posicao - b.posicao), k = viz.indexOf(t), o = viz[k + d];
+  if (!o) return;
+  const [a, b] = [o.posicao, t.posicao];
+  const r = await Promise.all([sb.from('escritorio_tarefas').update({ posicao: a }).eq('id', t.id), sb.from('escritorio_tarefas').update({ posicao: b }).eq('id', o.id)]);
+  if (r.some((x) => x.error)) return falhou(r.find((x) => x.error).error, 'Não mudei a ordem');
+  t.posicao = a; o.posicao = b; render(); abrirCartao(id);
+}
+async function apagarCartao(id) {
+  const { error, count } = await sb.from('escritorio_tarefas').delete({ count: 'exact' }).eq('id', id);
+  if (error) return falhou(error, 'Não excluí');
+  if (!count) return toast('Só quem criou o cartão ou a admin pode excluir.', true);
+  TAR = TAR.filter((x) => x.id !== id); fecharModal(); render(); toast('Cartão excluído');
+}
+
+// ══════════════ ARQUIVOS (próxima etapa) ══════════════
+function telaArquivos() {
+  return `<div class="card"><h2 class="h2">Arquivos do projeto</h2><p class="sub" style="font-size:13.5px;line-height:1.6;margin-top:8px">
+    A pasta do projeto no <b>Google Drive</b> aparece aqui na próxima etapa: a admin escolhe a pasta, a equipe recebe acesso só a ela,
+    e o botão <b>Emitir</b> cria a cópia com a revisão no nome (R00, R01…), com o histórico do cliente. Enquanto isso, a pasta continua no Drive como hoje.</p></div>`;
+}
+
+// ══════════════ ATAS ══════════════
+function telaAtas() {
+  return `<div class="linha"><p class="sub" style="flex:1;min-width:240px;font-size:13.5px;margin:0">Registre o que foi decidido e quem ficou de fazer o quê. As tarefas entram direto no quadro.</p>
+    <button class="btn btn-g" onclick="novaAta()">+ Nova ata</button></div>
+    ${ATAS.length ? ATAS.map((a) => { const ts = TAR.filter((t) => t.ata_id === a.id); return `<section class="card">
+      <p class="lbl" style="margin:0">${dBR(a.data)}</p><h2 class="h2">${esc(a.titulo)}</h2>
+      ${(a.participantes || []).length ? `<p class="sub">Presentes: ${a.participantes.map(esc).join(', ')}</p>` : ''}
+      <div class="grade g2" style="margin-top:12px"><div><p class="lbl">Decisões</p>${(a.decisoes || []).length ? `<ul style="margin:0;padding-left:18px;font-size:13.5px;color:#334155">${a.decisoes.map((d) => `<li>${esc(d)}</li>`).join('')}</ul>` : '<p class="vazio">—</p>'}</div>
+      <div><p class="lbl">Tarefas que saíram daqui</p>${ts.length ? `<ul class="lista">${ts.map((t) => `<li><span style="width:8px;height:8px;border-radius:50%;background:${(ST.find((s) => s.k === t.status) || {}).cor}"></span><span style="flex:1;font-size:13px">${esc(t.titulo)}<span class="sub" style="display:block;margin:0">${stT(t.status)}</span></span>${pillPrazo(t)}${avs(t)}</li>`).join('')}</ul>` : '<p class="vazio">Nenhuma.</p>'}</div></div>
+      ${a.proxima_reuniao ? `<p class="sub" style="margin-top:10px">Próxima reunião: <b>${esc(a.proxima_reuniao)}</b></p>` : ''}</section>`; }).join('')
+      : '<div class="card"><p class="vazio">Nenhuma ata ainda.</p></div>'}`;
+}
+function linhaTarefaAta(i) {
+  const gente = MEMBROS.filter((m) => m.status === 'ativo');
+  return `<div class="grade g3" data-l="${i}" style="align-items:end"><div><input class="in" data-c="t" maxlength="300" placeholder="O que ficou de ser feito"></div>
+    <div><select class="in" data-c="q"><option value="">Quem?</option>${gente.map((m) => `<option value="${m.id}">${esc(curto(m))}</option>`).join('')}<option value="cliente">O cliente</option></select></div>
+    <div><input class="in" data-c="p" type="date" aria-label="Prazo"></div></div>`;
+}
+function novaAta() {
+  abrirModal('Nova ata', `
+    <div class="grade g2"><div><label class="lbl" for="na-t">Título</label><input id="na-t" class="in" maxlength="200" placeholder="ex.: Reunião na obra — cozinha"></div>
+      <div><label class="lbl" for="na-d">Data</label><input id="na-d" type="date" class="in" value="${hojeISO()}"></div></div>
+    <div><label class="lbl" for="na-p">Quem estava</label><input id="na-p" class="in" placeholder="nomes separados por vírgula (pode incluir o cliente)"></div>
+    <div><label class="lbl" for="na-dec">Decisões</label><textarea id="na-dec" rows="3" class="in" placeholder="uma por linha"></textarea></div>
+    <div><p class="lbl">Tarefas</p><div id="na-tar" style="display:flex;flex-direction:column;gap:8px">${linhaTarefaAta(0)}${linhaTarefaAta(1)}</div>
+      <button class="add" onclick="$('na-tar').insertAdjacentHTML('beforeend', linhaTarefaAta(document.querySelectorAll('#na-tar [data-l]').length))">+ mais uma tarefa</button></div>
+    <div><label class="lbl" for="na-px">Próxima reunião</label><input id="na-px" class="in" maxlength="200" placeholder="ex.: 07/10, na obra"></div>
+    <p class="sub" style="margin:0">Em breve: colar o texto solto da reunião e a IA separar decisões e tarefas pra você conferir.</p>
+    <div class="rodape"><button class="btn" onclick="fecharModal()">Cancelar</button><button class="btn btn-d" id="na-ok" onclick="salvarAta()">Salvar ata</button></div>`);
+}
+async function salvarAta() {
+  const titulo = $('na-t').value.trim(); if (!titulo) return toast('Dê um título à ata.', true);
+  $('na-ok').disabled = true;
+  const linha = (s) => s.split(/\n+/).map((x) => x.trim()).filter(Boolean);
+  const { data: ata, error } = await sb.from('escritorio_atas').insert({
+    projeto_id: PROJ.id, titulo, data: $('na-d').value || hojeISO(),
+    participantes: $('na-p').value.split(',').map((x) => x.trim()).filter(Boolean),
+    decisoes: linha($('na-dec').value), proxima_reuniao: $('na-px').value.trim() || null, criado_por: EU.id,
+  }).select().single();
+  if (error) { $('na-ok').disabled = false; return falhou(error, 'Não salvei a ata'); }
+  const linhas = [...document.querySelectorAll('#na-tar [data-l]')].map((l) => ({ t: l.querySelector('[data-c=t]').value.trim(), q: l.querySelector('[data-c=q]').value, p: l.querySelector('[data-c=p]').value })).filter((l) => l.t);
+  let falhas = 0, pos = Math.max(0, ...TAR.map((x) => x.posicao));
+  for (const l of linhas) {
+    const cli = l.q === 'cliente';
+    const r = await sb.from('escritorio_tarefas').insert({ projeto_id: PROJ.id, titulo: l.t, status: cli ? 'cliente' : 'afazer', do_cliente: cli, prazo: l.p || null, etapa: PROJ.etapa_atual || null, ata_id: ata.id, posicao: ++pos, criado_por: EU.id }).select().single();
+    if (r.error) { falhas++; continue; }
+    if (l.q && !cli) { const p = await sb.from('escritorio_tarefa_pessoas').insert({ tarefa_id: r.data.id, membro_id: l.q, projeto_id: PROJ.id }); if (p.error) falhas++; }
+  }
+  fecharModal(); await recarregar();
+  toast(falhas ? `Ata salva, mas ${falhas} tarefa(s) não entraram. Confira no quadro.` : `Ata salva${linhas.length ? ' · ' + linhas.length + ' tarefa(s) no quadro' : ''}`, !!falhas);
+}
+
+// ══════════════ EQUIPE ══════════════
+function telaEquipe() {
+  const vis = MEMBROS.filter((m) => m.status !== 'removido');
+  return `<div class="aviso"><b>Quem você convida entra no projeto, não no escritório.</b><br>
+      <span style="font-size:12.5px;color:#475569">Vê e edita: as tarefas e as atas deste projeto (e, na próxima etapa, a pasta do Drive). Não vê: os outros projetos, o financeiro e o resto do seu Drive.</span></div>
+    <section class="card"><div class="linha" style="justify-content:space-between"><h2 class="h2">${vis.length} pessoa${vis.length > 1 ? 's' : ''}</h2>${souAdmin() ? '<button class="btn btn-p" onclick="convidar()">+ Convidar pessoa</button>' : ''}</div>
+      <ul class="lista" style="margin-top:8px">${vis.map((m) => `<li style="flex-wrap:wrap">${av(m)}<div style="flex:1;min-width:180px"><b style="font-size:14px">${esc(nomeDe(m))}${m.user_id === EU.id ? ' <span style="font-weight:400;color:#64748B">(você)</span>' : ''}</b>
+        <span class="sub" style="display:block;margin:0">${esc(m.funcao || (m.papel === 'dono' ? 'Admin do projeto' : ''))}${m.email ? ' · ' + esc(m.email) : ''}${m.telefone ? ' · ' + esc(m.telefone) : ''}</span>
+        ${NOTAS[m.id] ? `<span class="sub" style="display:block;margin:0">${esc(NOTAS[m.id])}</span>` : ''}</div>
+        ${m.papel === 'dono' ? '<span class="pill p-ind">admin · vê tudo</span>' : m.status === 'ativo' ? '<span class="pill p-ok"><i></i>no projeto</span>' : `<span class="pill p-warn"><i></i>convite enviado ${dBR(m.convidado_em)}</span>`}
+        ${souAdmin() && m.papel !== 'dono' ? `<button class="btn btn-s" onclick="editarPessoa('${m.id}')">Editar</button>${m.status === 'convidado' ? `<button class="btn btn-s" onclick="reenviar('${m.id}')">Reenviar convite</button>` : ''}<button class="btn btn-s" onclick="tirar('${m.id}')">${m.status === 'convidado' ? 'Cancelar convite' : 'Tirar do projeto'}</button>` : ''}
+      </li>`).join('')}</ul></section>`;
+}
+function convidar(pre) {
+  pre = pre || {};
+  abrirModal('Convidar pessoa para ' + PROJ.nome, `
+    <div class="grade g2"><div><label class="lbl" for="cv-e">E-mail</label><input id="cv-e" type="email" class="in" maxlength="254" value="${esc(pre.email || '')}" placeholder="nome@exemplo.com"></div>
+      <div><label class="lbl" for="cv-n">Nome</label><input id="cv-n" class="in" maxlength="120" value="${esc(pre.nome || '')}" placeholder="como você chama a pessoa"></div>
+      <div><label class="lbl" for="cv-f">Função</label><input id="cv-f" class="in" maxlength="60" list="cv-fs" value="${esc(pre.funcao || '')}"><datalist id="cv-fs"><option>Arquiteto(a)</option><option>Estagiário(a)</option><option>Projetista</option><option>Renderista</option></datalist></div>
+      <div><label class="lbl" for="cv-t">Telefone / WhatsApp</label><input id="cv-t" class="in" maxlength="40" inputmode="tel" value="${esc(pre.telefone || '')}"></div></div>
+    <div class="aviso" style="font-size:12.5px">A pessoa recebe um e-mail com o botão <b>Aceitar convite</b>, entra com Google ou cria uma senha, preenche o cadastro do AI.arq e aceita os termos. Depois disso ela já está no projeto.</div>
+    <div class="rodape"><button class="btn" onclick="fecharModal()">Cancelar</button><button class="btn btn-d" id="cv-ok" onclick="enviarConvite()">Enviar convite</button></div>`);
+}
+async function enviarConvite() {
+  const corpo = { email: $('cv-e').value.trim(), nome: $('cv-n').value.trim() || null, funcao: $('cv-f').value.trim() || null, telefone: $('cv-t').value.trim() || null };
+  if (!corpo.email) return toast('Informe o e-mail.', true);
+  $('cv-ok').disabled = true;
+  const { data: { session } } = await sb.auth.getSession();
+  let r, d = {};
+  try {
+    r = await fetch(`${window.API_BASE}/api/escritorio/projetos/${PROJ.id}/convites`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + session.access_token }, body: JSON.stringify(corpo) });
+    try { d = await r.json(); } catch (_) {}
+  } catch (_) { $('cv-ok').disabled = false; return toast('Sem conexão com o servidor. Tente de novo.', true); }
+  $('cv-ok').disabled = false;
+  if (!r.ok) return toast(d.detail || 'Não deu pra convidar agora.', true);
+  await recarregar();
+  abrirModal('Convite enviado', `<p style="margin:0;font-size:14px">${d.email_enviado ? 'O e-mail saiu para <b>' + esc(corpo.email) + '</b>.' : '<b>O e-mail não saiu agora.</b> Mande o link abaixo pela conversa que vocês já usam.'}</p>
+    <div><label class="lbl" for="cv-link">Link do convite (vale 14 dias, serve uma vez)</label><input id="cv-link" class="in" readonly value="${esc(d.link)}" onclick="this.select()"></div>
+    <p class="sub" style="margin:0">Pode mandar pelo WhatsApp também. Quem abrir o link entra neste projeto — mande só pra pessoa certa.</p>
+    <div class="rodape"><button class="btn" onclick="copiarLink()">Copiar link</button><button class="btn btn-d" onclick="fecharModal()">Pronto</button></div>`);
+}
+function copiarLink() { const i = $('cv-link'); try { navigator.clipboard.writeText(i.value).then(() => toast('Link copiado'), () => { i.select(); toast('Selecionei o link: copie com Ctrl+C'); }); } catch (_) { i.select(); } }
+function reenviar(id) { const m = MEMBROS.find((x) => x.id === id); convidar({ email: m.email, nome: m.nome, funcao: m.funcao, telefone: m.telefone }); }
+function editarPessoa(id) {
+  const m = MEMBROS.find((x) => x.id === id);
+  abrirModal('Dados de ' + curto(m), `
+    <div class="grade g2"><div><label class="lbl" for="pe-n">Nome</label><input id="pe-n" class="in" maxlength="120" value="${esc(m.nome || '')}"></div>
+      <div><label class="lbl" for="pe-f">Função</label><input id="pe-f" class="in" maxlength="60" value="${esc(m.funcao || '')}"></div>
+      <div><label class="lbl">E-mail</label><input class="in" readonly value="${esc(m.email || '')}" style="background:#F8FAFC"><span class="sub" style="display:block">${m.status === 'ativo' ? 'É o e-mail do convite. Pra trocar, convide o e-mail novo.' : 'Pra trocar, cancele e convide o e-mail certo.'}</span></div>
+      <div><label class="lbl" for="pe-t">Telefone / WhatsApp</label><input id="pe-t" class="in" maxlength="40" inputmode="tel" value="${esc(m.telefone || '')}"></div></div>
+    <div><label class="lbl" for="pe-o">Observação (só você vê)</label><textarea id="pe-o" rows="2" class="in" maxlength="1000">${esc(NOTAS[id] || '')}</textarea>
+      <span class="sub" style="display:block">Valor combinado fica no financeiro, não aqui.</span></div>
+    <div class="rodape"><button class="btn" onclick="fecharModal()">Cancelar</button><button class="btn btn-d" onclick="salvarPessoa('${id}')">Salvar</button></div>`);
+}
+async function salvarPessoa(id) {
+  const mud = { nome: $('pe-n').value.trim() || null, funcao: $('pe-f').value.trim() || null, telefone: $('pe-t').value.trim() || null };
+  const { error } = await sb.from('escritorio_membros').update(mud).eq('id', id);
+  if (error) return falhou(error, 'Não salvei');
+  const obs = $('pe-o').value.trim();
+  const n = obs
+    ? await sb.from('escritorio_membro_notas').upsert({ membro_id: id, projeto_id: PROJ.id, observacao: obs, atualizado_em: new Date().toISOString() })
+    : await sb.from('escritorio_membro_notas').delete().eq('membro_id', id);
+  if (n.error) return falhou(n.error, 'Salvei os dados, mas não a observação');
+  fecharModal(); await recarregar(); toast('Dados salvos');
+}
+function tirar(id) {
+  const m = MEMBROS.find((x) => x.id === id), conv = m.status === 'convidado';
+  abrirModal(conv ? 'Cancelar convite' : 'Tirar ' + curto(m) + ' do projeto', `<p style="margin:0;font-size:14px">${conv ? 'O link do convite de <b>' + esc(nomeDe(m)) + '</b> deixa de funcionar.' : '<b>' + esc(nomeDe(m)) + '</b> perde o acesso a este projeto na hora. As tarefas continuam no quadro, pra você passar a outra pessoa.'}</p>
+    <div class="rodape"><button class="btn" onclick="fecharModal()">Voltar</button><button class="btn btn-r" onclick="confirmarTirar('${id}')">${conv ? 'Cancelar convite' : 'Tirar do projeto'}</button></div>`);
+}
+async function confirmarTirar(id) {
+  const m = MEMBROS.find((x) => x.id === id);
+  const q = m.status === 'convidado'
+    ? sb.from('escritorio_membros').delete().eq('id', id)
+    : sb.from('escritorio_membros').update({ status: 'removido', removido_em: new Date().toISOString() }).eq('id', id);
+  const { error } = await q;
+  if (error) return falhou(error, 'Não deu');
+  fecharModal(); await recarregar(); toast(m.status === 'convidado' ? 'Convite cancelado' : curto(m) + ' saiu do projeto');
+}
+
+// ══════════════ início ══════════════
+(async function () {
+  let sessao = null;
+  try { sessao = (await sb.auth.getSession()).data.session; } catch (_) {}
+  if (!sessao) { location.href = 'login.html?redirect=escritorio.html'; return; }
+  EU = { id: sessao.user.id, email: sessao.user.email };
+  if (window.trackEvent) trackEvent('view_escritorio');
+  navegar();
+})();
+</script>
+<script src="cookie-consent.js" defer></script>
+</body>
+</html>

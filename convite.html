@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<!-- 🔒 no-referrer: o token do convite mora no fragmento (#t=), que o navegador
+     já não manda a ninguém; esta política garante que nem o endereço da página
+     vaze pros links do rodapé. -->
+<meta name="referrer" content="no-referrer">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="icon" type="image/x-icon" href="favicon-v2.ico">
+<link rel="apple-touch-icon" href="apple-touch-icon-v2.png">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Convite para um projeto — AI.arq</title>
+<meta name="description" content="Você foi convidado para trabalhar num projeto no AI.arq.">
+<meta name="robots" content="noindex,nofollow">
+<link rel="stylesheet" href="/tailwind.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js" integrity="sha384-qafw21c/iciq0VXsi9FzkfoQv5I/V0iqE4lSNcKXPnW9/UTJLnv5CcN4FHxVLnKg" crossorigin="anonymous"></script>
+<script src="aiarq-utils.js"></script>
+<style>
+  body { font-family: 'Inter', sans-serif; }
+  .gradient-main { background: linear-gradient(135deg, #4f46e5 0%, #0e7490 100%); }
+  .gradient-text { background: linear-gradient(135deg, #4f46e5 0%, #0e7490 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .shadow-gradient { box-shadow: 0 20px 60px -15px rgba(79,70,229,0.15); }
+  .shadow-btn { box-shadow: 0 8px 30px -8px rgba(79,70,229,0.4); }
+  @keyframes card-rise { from { opacity:0; transform:translateY(14px) } to { opacity:1; transform:none } }
+  .card-enter { animation: card-rise .4s cubic-bezier(.22,.61,.36,1) both; }
+  @media (prefers-reduced-motion: reduce) { .card-enter { animation: none !important; } }
+  /* 🪤 como no cadastro: cor da borda no estilo direto, o build estático não tem border-t-indigo-600 */
+  .gira { border:2px solid #c7d2fe; border-top-color:#4f46e5; border-radius:9999px; width:2rem; height:2rem; animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg) } }
+  [hidden] { display:none !important; }
+</style>
+</head>
+<body class="bg-gray-50 text-gray-900 antialiased min-h-screen flex flex-col">
+<a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:bg-white focus:px-4 focus:py-2 focus:rounded focus:shadow z-50">Pular pro conteúdo</a>
+
+<nav class="sticky top-0 z-50 border-b bg-white/80 backdrop-blur-md">
+  <div class="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
+    <a href="index.html" class="flex items-center gap-2">
+      <div class="flex h-9 w-9 items-center justify-center rounded-lg gradient-main text-white font-bold text-sm">AI</div>
+      <span class="text-xl font-bold text-gray-900">AI<span class="gradient-text">.arq</span></span>
+    </a>
+    <button id="btn-sair" type="button" hidden onclick="sairEUsarOutraConta()"
+            class="text-sm text-gray-600 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 transition">Usar outra conta</button>
+  </div>
+</nav>
+
+<main id="main" class="flex-1 flex items-center justify-center px-4 py-10">
+  <div class="w-full max-w-lg">
+    <div class="card-enter rounded-2xl border bg-white p-8 md:p-10 shadow-gradient">
+      <div class="flex items-center justify-center gap-3 mb-2">
+        <div class="flex h-14 w-14 items-center justify-center rounded-xl gradient-main text-white font-bold text-xl shadow-lg shadow-indigo-500/25">AI</div>
+        <span class="text-3xl font-extrabold text-gray-900">AI<span class="gradient-text">.arq</span></span>
+      </div>
+
+      <!-- carregando -->
+      <div id="st-carregando" class="py-10 text-center" role="status" aria-live="polite">
+        <div class="gira mx-auto" aria-hidden="true"></div>
+        <p id="txt-carregando" class="text-sm text-gray-500 mt-4">Abrindo seu convite&#8230;</p>
+      </div>
+
+      <!-- o convite, pra quem ainda não entrou -->
+      <div id="st-convite" hidden>
+        <h1 class="text-2xl font-bold text-gray-900 text-center mt-6 mb-2">Você foi convidado</h1>
+        <p class="text-base text-gray-700 text-center mb-6">
+          <b id="c-por">Alguém</b> te chamou para trabalhar no projeto<br>
+          <b id="c-projeto" class="text-indigo-700">—</b>
+        </p>
+        <div class="rounded-xl bg-indigo-50 border border-indigo-100 px-4 py-3 mb-6 text-sm text-indigo-900">
+          Lá você vê as <b>tarefas</b>, as <b>atas de reunião</b> e os <b>arquivos</b> do projeto, num lugar só.
+          <span class="block text-xs text-indigo-800 mt-1">Convite enviado para <b id="c-email">—</b>.</span>
+        </div>
+        <div class="space-y-3">
+          <a id="btn-criar" href="login.html?novo=1&amp;redirect=convite.html"
+             class="w-full inline-flex items-center justify-center gap-2 rounded-xl gradient-main text-white font-semibold py-3.5 shadow-btn hover:scale-[1.01] transition">
+            Criar minha conta e entrar
+          </a>
+          <a id="btn-entrar" href="login.html?redirect=convite.html"
+             class="w-full inline-flex items-center justify-center rounded-xl border border-gray-300 bg-white text-gray-800 font-semibold py-3 hover:bg-gray-50 transition">
+            Já tenho conta no AI.arq — entrar
+          </a>
+        </div>
+        <p class="text-xs text-gray-500 text-center mt-5 leading-relaxed">
+          Dá pra entrar com a conta Google ou com e-mail e senha. Antes de entrar no projeto você
+          preenche o cadastro e aceita os <a href="termos.html" target="_blank" rel="noopener noreferrer" class="text-indigo-600 underline">Termos de Uso</a>
+          e a <a href="privacidade.html" target="_blank" rel="noopener noreferrer" class="text-indigo-600 underline">Política de Privacidade</a> do AI.arq.
+        </p>
+      </div>
+
+      <!-- deu certo -->
+      <div id="st-pronto" hidden class="text-center">
+        <div class="mx-auto mt-6 mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50 text-emerald-600" aria-hidden="true">
+          <svg class="w-7 h-7" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
+        </div>
+        <h1 class="text-2xl font-bold text-gray-900 mb-2">Você entrou no projeto</h1>
+        <p class="text-base text-gray-700 mb-6"><b id="p-projeto" class="text-indigo-700">—</b></p>
+        <p id="p-outra-conta" hidden class="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 mb-6 text-sm text-amber-900 text-left">
+          Você entrou com uma conta de e-mail diferente da que recebeu o convite. Tudo certo pro projeto —
+          só lembre que a pasta de arquivos vai ser compartilhada com <b>esta</b> conta.
+        </p>
+        <a id="btn-projeto" href="escritorio.html" class="w-full inline-flex items-center justify-center rounded-xl gradient-main text-white font-semibold py-3.5 shadow-btn hover:scale-[1.01] transition">Abrir o projeto</a>
+      </div>
+
+      <!-- não deu -->
+      <div id="st-erro" hidden class="text-center">
+        <h1 class="text-2xl font-bold text-gray-900 mt-6 mb-2" id="e-titulo">Não deu pra abrir o convite</h1>
+        <p class="text-sm text-gray-600 mb-6" id="e-texto">—</p>
+        <button id="btn-tentar" type="button" hidden onclick="location.reload()"
+                class="w-full inline-flex items-center justify-center rounded-xl gradient-main text-white font-semibold py-3.5 shadow-btn hover:scale-[1.01] transition">Tentar de novo</button>
+        <a id="btn-site" href="index.html" class="mt-3 w-full inline-flex items-center justify-center rounded-xl border border-gray-300 bg-white text-gray-800 font-semibold py-3 hover:bg-gray-50 transition">Conhecer o AI.arq</a>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer class="border-t bg-gray-50 py-8">
+  <div class="mx-auto max-w-6xl px-4 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-gray-500">
+    <a href="termos.html" class="hover:text-gray-900 transition">Termos de Uso</a>
+    <a href="privacidade.html" class="hover:text-gray-900 transition">Privacidade</a>
+    <a href="faq.html" class="hover:text-gray-900 transition">FAQ</a>
+    <a href="mailto:contato@ai.arq.br" class="hover:text-gray-900 transition">contato@ai.arq.br</a>
+  </div>
+</footer>
+
+<script>
+  // ══════════════════════════════════════════════════════════════════
+  //  CONVITE DO ESCRITÓRIO (piloto DTZ, 23/09/2026)
+  //  A porta da frente do convite. Quem não tem conta passa pelo login e pela
+  //  MESMA ficha de cadastro do site (com os Termos e a idade); o cadastro e o
+  //  painel devolvem a pessoa pra cá enquanto houver convite pendente
+  //  (window.aiarqConvite). Aqui, com sessão e ficha, o convite é aceito.
+  // ══════════════════════════════════════════════════════════════════
+  const sb = window.sbClient;
+  const $ = (id) => document.getElementById(id);
+  const estados = ['st-carregando', 'st-convite', 'st-pronto', 'st-erro'];
+  function mostrar(id) { estados.forEach((e) => { $(e).hidden = e !== id; }); }
+
+  function erro(titulo, texto, podeTentar) {
+    $('e-titulo').textContent = titulo;
+    $('e-texto').textContent = texto;
+    $('btn-tentar').hidden = !podeTentar;
+    mostrar('st-erro');
+  }
+
+  // 1) O token: vem no fragmento (#t=…) na 1ª visita; depois, do navegador.
+  //    Tira do endereço na hora — não fica no histórico nem em print de tela.
+  let token = '';
+  const m = /(?:^#|&)t=([A-Za-z0-9_-]{20,})/.exec(location.hash || '');
+  if (m) {
+    token = m[1];
+    const antes = window.aiarqConvite.pendente();
+    window.aiarqConvite.guardar(token, antes && antes.t === token ? { projeto: antes.projeto, por: antes.por } : {});
+    history.replaceState(null, '', location.pathname);
+  } else {
+    const p = window.aiarqConvite.pendente();
+    token = p ? p.t : '';
+  }
+
+  async function api(caminho, corpo, sessao) {
+    const h = { 'Content-Type': 'application/json' };
+    if (sessao) h.Authorization = 'Bearer ' + sessao.access_token;
+    let r;
+    try {
+      r = await fetch(window.API_BASE + '/api/escritorio/' + caminho, { method: 'POST', headers: h, body: JSON.stringify(corpo) });
+    } catch (_) {
+      return { status: 0, dados: { detail: 'Sem conexão com o servidor. Confira a internet e tente de novo.' } };
+    }
+    let dados = null;
+    try { dados = await r.json(); } catch (_) {}
+    return { status: r.status, dados: dados || {} };
+  }
+
+  // Convite que o servidor recusou (não existe / já usado / vencido): apaga o
+  // pendente, senão o painel mandaria a pessoa pra cá pra sempre.
+  function recusado(r) {
+    window.aiarqConvite.limpar();
+    erro(r.status === 410 ? 'Este convite venceu' : 'Este convite não vale mais',
+         (r.dados && r.dados.detail) || 'Peça um novo a quem te convidou.', false);
+  }
+
+  async function sairEUsarOutraConta() {
+    try { await sb.auth.signOut(); } catch (_) {}
+    location.reload();
+  }
+
+  async function iniciar() {
+    if (!token) {
+      erro('Não achei o convite', 'Abra o link do e-mail de convite de novo — ele leva o código que identifica o seu convite.', false);
+      return;
+    }
+
+    // 2) O que é o convite (público, sem login; e-mail mascarado).
+    const v = await api('convite/ver', { token });
+    if (v.status === 404 || v.status === 410) return recusado(v);
+    if (v.status !== 200) return erro('Não deu pra abrir o convite agora', v.dados.detail || 'Tente de novo em instantes.', true);
+    if (v.dados.expirado) return recusado({ status: 410, dados: {} });
+    const projeto = v.dados.projeto || 'um projeto', por = v.dados.convidado_por || 'Alguém';
+    window.aiarqConvite.guardar(token, { projeto, por });   // o cadastro mostra "a convite de…"
+    $('c-projeto').textContent = projeto; $('p-projeto').textContent = projeto;
+    $('c-por').textContent = por;
+    $('c-email').textContent = v.dados.email || 'o seu e-mail';
+    if (window.trackEvent) trackEvent('convite_visto');
+
+    // 3) Tem sessão? Sem sessão: a porta (login/criar conta), que volta pra cá.
+    let sessao = null;
+    try { sessao = (await sb.auth.getSession()).data.session; } catch (_) {}
+    if (!sessao) return mostrar('st-convite');
+    $('btn-sair').hidden = false;
+
+    // 4) Com sessão mas sem ficha: a ficha é a MESMA do site (termos + idade). Volta pra cá no fim.
+    $('txt-carregando').textContent = 'Conferindo seu cadastro…';
+    let temFicha = null;
+    for (let tentativa = 1; tentativa <= 2 && temFicha === null; tentativa++) {
+      try {
+        const { data, error } = await sb.from('profiles').select('user_id').eq('user_id', sessao.user.id).maybeSingle();
+        if (error) throw error;
+        temFicha = !!data;
+      } catch (_) { if (tentativa === 1) await new Promise((r) => setTimeout(r, 800)); }
+    }
+    if (temFicha === null) return erro('Não consegui conferir seu cadastro', 'Foi um soluço de conexão. Tente de novo em instantes.', true);
+    if (!temFicha) { location.href = 'cadastro.html'; return; }
+
+    // 5) Aceita.
+    $('txt-carregando').textContent = 'Entrando no projeto…';
+    const a = await api('convite/aceitar', { token }, sessao);
+    if (a.status === 404 || a.status === 410) return recusado(a);
+    if (a.status === 409) {  // já está no projeto com esta conta: não é erro pra pessoa
+      window.aiarqConvite.limpar();
+      $('btn-projeto').href = 'escritorio.html';
+      mostrar('st-pronto');
+      return;
+    }
+    if (a.status !== 200) return erro('Não deu pra entrar no projeto agora', a.dados.detail || 'Tente de novo em instantes.', true);
+    window.aiarqConvite.limpar();
+    $('btn-projeto').href = 'escritorio.html#/p/' + a.dados.projeto_id + '/capa';
+    $('p-outra-conta').hidden = !a.dados.email_da_conta_diferente;
+    if (window.trackEvent) trackEvent('convite_aceito');
+    mostrar('st-pronto');
+  }
+
+  iniciar();
+</script>
+<script src="cookie-consent.js" defer></script>
+</body>
+</html>

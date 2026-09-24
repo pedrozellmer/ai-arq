@@ -50,6 +50,25 @@
   window.API_BASE          = API_BASE;
   window.API_UPLOAD_BASE   = API_UPLOAD_BASE;
 
+  // ─── Convite do escritório (piloto DTZ, 23/09/2026) ───────────
+  // convite.html guarda o token aqui; o cadastro e o painel devolvem a pessoa
+  // pro convite até ela aceitar. Vale o mesmo que o convite (14 dias); quando o
+  // servidor diz que o convite não vale mais, a própria convite.html apaga —
+  // sem isso a pessoa ficaria presa num vai-e-volta com o painel.
+  window.aiarqConvite = {
+    pendente: function () {
+      try {
+        var o = JSON.parse(localStorage.getItem('aiarq_convite') || 'null');
+        if (o && o.t && (Date.now() - (o.em || 0)) < 14 * 864e5) return o;
+      } catch (_) {}
+      return null;
+    },
+    guardar: function (t, extra) {
+      try { localStorage.setItem('aiarq_convite', JSON.stringify(Object.assign({ t: t, em: Date.now() }, extra || {}))); } catch (_) {}
+    },
+    limpar: function () { try { localStorage.removeItem('aiarq_convite'); } catch (_) {} },
+  };
+
 
   // ═══════════════════════════════════════════════════════════════
   //  TELEMETRIA — FICA ANTES DO GUARDA DO SUPABASE, DE PROPÓSITO

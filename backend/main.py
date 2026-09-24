@@ -42,6 +42,7 @@ from spreadsheet import generate_spreadsheet
 from instagram_webhook import router as instagram_router
 from whatsapp_notify import router as whatsapp_router, send_whatsapp_template
 import conector_teste as _conector_teste  # PROVA do conector no Claude (Fase 0, 21/09) — apagar no fim
+import escritorio as _escritorio  # piloto DTZ (23/09/2026): convite do escritório; o resto a tela faz direto no banco (RLS)
 from engine_rules import (
     salvage_truncated_json as _salvage_truncated_json,
     normalize_items_payload as _normalize_items_payload,
@@ -3506,6 +3507,9 @@ app.include_router(whatsapp_router)  # WhatsApp Cloud API (webhook); envio dorme
 # sem dado nenhum. Desliga sozinha em conector_teste.PROVA_ATE. Apagar no fim.
 app.include_router(_conector_teste.router)
 _conector_teste.configurar(registrar=_log_error)
+# ESCRITÓRIO (piloto DTZ, 23/09/2026): só o convite passa pelo servidor.
+# As peças (banco, e-mail) são entregues lá no fim do arquivo, depois de definidas.
+app.include_router(_escritorio.router)
 
 # Armazenamento de jobs em arquivo JSON (sobrevive a restarts)
 import json as _json
@@ -31431,6 +31435,8 @@ _TRACK_ALLOWED = {
     # instrumento nasceria morto — exatamente o que aconteceu com 9 eventos
     # em 23/08.
     "signup_saiu_da_tela",
+    # 🏢 23/09/2026 — escritório (piloto DTZ): o convite mede desde o 1º dia.
+    "convite_visto", "convite_aceito", "view_escritorio",
     # 📊 28/08/2026 — O BLOG PASSOU A MEDIR. Ele é a MAIOR porta de entrada:
     # no dia 28/08, TODAS as páginas que gente de verdade abriu eram post de
     # blog (zero na home, zero no cadastro) — e os 26 posts não mediam nada.
@@ -37493,6 +37499,12 @@ def admin_cleanup_log(request: Request, limit: int = 30):
     except Exception as e:
         raise HTTPException(500, f"Erro: {e}")
 
+
+# ESCRITÓRIO: entrega as peças ao módulo do convite. Aqui no fim porque as funções
+# de e-mail são definidas no meio do arquivo — e por REFERÊNCIA, sem chamar.
+_escritorio.configurar(servico=_supa_rest_service, como_usuario=_supa_rest_as_user,
+                       usuario=_get_user_from_request, enviar=_send_email_smtp,
+                       moldura=_email_wrap, registrar=_log_error)
 
 if __name__ == "__main__":
     import uvicorn

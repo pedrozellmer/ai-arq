@@ -320,6 +320,11 @@
   //  SUPABASE CONFIG — vem de aiarq-utils.js
   // ══════════════════════════════════════════════
   const sbClient = window.sbClient;
+  // 🏢 23/09/2026 — quem chega de um convite do escritório faz ESTA MESMA ficha
+  // (decisão do Pedro: o cadastro não enxuga; os termos valem pra todo mundo) e,
+  // no fim, volta pro convite em vez de ir pro painel.
+  const _convite = window.aiarqConvite && window.aiarqConvite.pendente();
+  const destinoDepois = () => (_convite ? 'convite.html' : 'dashboard.html');
   // Rastreio anônimo do funil (chegou na página de cadastro).
   if (window.trackEvent) trackEvent('view_cadastro');
 
@@ -513,7 +518,7 @@
         if (profile) {
           clearDraft();
           localStorage.setItem('aiarq_profile_complete', 'true');
-          window.location.href = 'dashboard.html';
+          window.location.href = destinoDepois();
           return;
         }
         erroDaChecagem = null;
@@ -526,6 +531,17 @@
     }
 
     // Chegou aqui = precisa preencher (ou não deu pra confirmar).
+    if (_convite) {
+      // o mesmo formulário, com o contexto do convite no topo
+      const _h1 = document.querySelector('#bloco-cadastro h1'), _sub = _h1 && _h1.nextElementSibling;
+      if (_sub) _sub.textContent = 'Menos de um minuto e você entra no projeto'
+        + (_convite.projeto ? ' ' + _convite.projeto : '') + (_convite.por ? ', a convite de ' + _convite.por : '') + '.';
+      if (!referralSourceSelect.value) {
+        referralSourceSelect.value = 'indicacao';
+        referralSourceSelect.dispatchEvent(new Event('change'));
+        if (!referralDetailInput.value) referralDetailInput.value = 'Convite do escritório' + (_convite.por ? ' — ' + _convite.por : '');
+      }
+    }
     mostrarFormulario(erroDaChecagem
       ? 'Não consegui confirmar se você já tem cadastro. Se já preencheu antes, '
         + 'atualize a página; se não, é só continuar daqui.'
@@ -821,7 +837,7 @@
         if (error.code === '23505') {
           clearDraft();
           localStorage.setItem('aiarq_profile_complete', 'true');
-          window.location.href = 'dashboard.html';
+          window.location.href = destinoDepois();
           return;
         }
         throw error;
@@ -852,8 +868,11 @@
       // - o mesmo flag do dashboard é setado ANTES, pra ele não repetir.
       // - o backend confere o JWT e a idade do perfil (recém-criado = novo),
       //   então não dá pra disparar pra terceiros nem pra conta antiga.
-      try {
-        localStorage.setItem('aiarq_welcomed', 'true');
+      // 🏢 Quem veio de convite NÃO recebe o boas-vindas de cliente ("envie sua
+      // primeira prancha"): o convite já é a porta dele, e o e-mail falaria de outro produto.
+      // (o flag vale pros dois caminhos: sem ele o painel dispararia o boas-vindas depois)
+      try { localStorage.setItem('aiarq_welcomed', 'true'); } catch (_) {}
+      if (!_convite) try {
         const { data: { session: _sess } } = await sbClient.auth.getSession();
         if (_sess && window.API_BASE) {
           fetch(`${window.API_BASE}/api/notify/welcome`, {
@@ -864,8 +883,9 @@
         }
       } catch (e) { /* e-mail nunca bloqueia o cadastro */ }
 
-      if (window.trackEvent) trackEvent('signup_done');
-      window.location.href = 'dashboard.html';
+      // 🏢 convidado conta como cadastro, mas MARCADO: senão infla o funil de cliente.
+      if (window.trackEvent) trackEvent('signup_done', { tela: _convite ? 'convite' : 'cadastro' });
+      window.location.href = destinoDepois();
 
     } catch (err) {
       console.error('Erro ao salvar perfil:', err);
