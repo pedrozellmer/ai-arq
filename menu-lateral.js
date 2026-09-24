@@ -790,7 +790,7 @@
           .map(function (p) { return p[0]; }).join('').toUpperCase() || '?';
       }
       // menu da conta: a porta do Escritório (no projeto, quem chama é o atualizarSelo, que sabe se é da conta)
-      if (!FIXADO) montarEscritorio();
+      if (!FIXADO) montarEscritorio(u.id);
       // Botão admin: quem autoriza de verdade é o backend. Isto é só a UI.
       if (window.aiarqEmailMatches) {
         window.aiarqEmailMatches(u.email, '97bda6eb7aa5b5426da844969ef4d756a77595bc18d12e5a49240598e89b74c2')
@@ -828,11 +828,20 @@
   //    projeto do Escritório ligado a este (escritorio.html#/job/...).
   // 🪤 Nada de `hidden` aqui: nesta folha ele perde pra classe de display (o cartão do painel de 24/09).
   // Acessório: falhou, o menu segue igual.
-  function montarEscritorio() {
+  function montarEscritorio(uid) {
     if (document.getElementById('aiarq-grp-escritorio')) return;
     if (!window.sbClient || typeof window.sbClient.rpc !== 'function') return;
-    window.sbClient.rpc('escritorio_no_piloto').then(function (r) {
-      if (!r || r.error || r.data !== true) return;
+    // menu da CONTA: piloto OU já é de algum projeto (o freela convidado não está no piloto — Parte 2);
+    // dentro do projeto medido, o grupo é só de quem está no piloto (é o dono ligando o projeto dele)
+    var sera = window.sbClient.rpc('escritorio_no_piloto').then(function (r) {
+      if (r && !r.error && r.data === true) return true;
+      if (FIXADO || !uid || typeof window.sbClient.from !== 'function') return false;
+      return window.sbClient.from('escritorio_membros').select('id', { count: 'exact', head: true })
+        .eq('user_id', uid).eq('status', 'ativo')
+        .then(function (m) { return !!(m && !m.error && (m.count || 0) > 0); });
+    });
+    sera.then(function (ok) {
+      if (!ok) return;
       if (document.getElementById('aiarq-grp-escritorio')) return;
       var side = document.getElementById('aiarq-side');
       var primeiro = side && side.querySelector('.side-grp');
@@ -854,6 +863,31 @@
         '<div class="side-grp" id="aiarq-grp-escritorio"><p class="side-grp-t">Escritório</p>'
         + item('equipe', 'equipe', 'Equipe') + item('tarefas', 'quadro', 'Tarefas') + item('atas', 'memorial', 'Atas')
         + '</div>');
+    }, function () {});
+  }
+
+  // 🏢 Parte 2 (24/09): projeto medido aberto por alguém da EQUIPE do Escritório. O menu fala do que ela
+  // pode: Visão geral, Quantitativo, Cronograma, Memorial — e o caminho de volta pro Escritório.
+  function montarEquipe() {
+    if (!FIXADO || typeof window.aiarqAcesso !== 'function') return;
+    window.aiarqAcesso(JOB).then(function (a) {
+      if (!a || !a.so_leitura) return;
+      var nx = document.getElementById('aiarq-proj-nome');
+      if (nx) nx.textContent = (window.tituloProjeto || String)(a.nome || 'Projeto');
+      var sub = document.getElementById('aiarq-proj-sub');
+      if (sub) sub.textContent = 'equipe · só leitura · ' + (a.itens || 0) + ' itens';
+      ['revisao', 'financeiro', 'comparativo'].forEach(function (k) {
+        var e = document.querySelector('#aiarq-side .side-it[data-chave="' + k + '"]');
+        if (e && e.parentNode) e.parentNode.removeChild(e);
+      });
+      var proc = document.querySelector('#aiarq-side .side-it[data-track="menu-processamento"]');
+      if (proc && proc.parentNode) proc.parentNode.removeChild(proc);
+      var fix = document.querySelector('#aiarq-side .aiarq-fixado');
+      if (fix && a.escritorio_id && !document.getElementById('aiarq-volta-escritorio')) {
+        fix.insertAdjacentHTML('afterend', '<a class="side-it" id="aiarq-volta-escritorio" href="escritorio.html#/p/'
+          + encodeURIComponent(a.escritorio_id) + '/capa" data-track="menu-volta-escritorio">'
+          + svg('quadro') + 'Voltar ao Escritório</a>');
+      }
     }, function () {});
   }
 
@@ -888,6 +922,7 @@
           // nome: diga o que se sabe e deixe a saída à mão.
           var nx = document.getElementById('aiarq-proj-nome');
           if (nx) nx.textContent = 'Projeto não encontrado';
+          montarEquipe();
           return;
         }
         // só aqui se sabe que o projeto aberto é DESTA conta (a lista vem de /api/meus-entregaveis):

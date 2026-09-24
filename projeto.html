@@ -63,7 +63,18 @@
       animation-iteration-count: infinite !important;
     }
   }
-  </style>
+  
+  /* 🏢 Escritório, Parte 2 (24/09): a EQUIPE vê só leitura. O servidor barra toda escrita; aqui só some
+     o que daria erro. `sem-baixar` = a admin ainda não liberou os downloads pra esta pessoa. */
+  .so-leitura #btn-edit-client, .so-leitura #client-edit, .so-leitura #client-data, .so-leitura #btn-reprocess,
+  .so-leitura #reprocess-box, .so-leitura #btn-upload-quote, .so-leitura #cotacoes-section,
+  .so-leitura #btn-upload-rev, .so-leitura #cad-upload-btn, .so-leitura #cad-upload-status,
+  .so-leitura #area-prompt, .so-leitura #feedback-card, .so-leitura #chat-quant,
+  .so-leitura [onclick^="saveProjectAndClient"], .so-leitura [onclick^="enviarRespostasProc"],
+  .so-leitura [onclick^="submitInformed"], .so-leitura [onclick^="switchUploadTab"],
+  .so-leitura [onclick^="sendFeedback"], .so-leitura [onclick^="openClientEdit"],
+  .sem-baixar [onclick^="downloadProtected"], .sem-baixar [onclick^="openPdfProtected"] { display: none !important; }
+</style>
 </head>
 <body class="bg-gray-50 min-h-screen">
 <a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:bg-white focus:px-4 focus:py-2 focus:rounded focus:shadow z-50">Pular pro conteúdo</a>
@@ -1146,6 +1157,8 @@ async function carregarStatsEntregas() {
   const { data: { session } } = await sb.auth.getSession();
   if (!session) { window.location.href = 'login.html'; return; }
   document.getElementById('gate').classList.add('hidden');
+  // 🏢 equipe do Escritório: só leitura (Parte 2, 24/09) — não espera: marca quando a resposta chegar
+  try { window.aiarqMarcarSoLeitura && window.aiarqMarcarSoLeitura(jobId); } catch (_) {}
 
   // ── (A) ESTADO VIVO (18/07): os botões de entrega SÓ habilitam com o
   // projeto PRONTO. Antes eles ligavam direto após o auth sem olhar o status —

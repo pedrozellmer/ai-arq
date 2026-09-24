@@ -262,7 +262,11 @@ def test_a_trava_vem_DEPOIS_do_guarda_de_dono():
         if not m:
             continue
         vistas += 1
-        i_dono = corpo.find("_require_project_owner(")
+        # 24/09 (Escritório, Parte 2): rota que entrega arquivo pode conferir com
+        # `_require_project_viewer(..., baixar=True)` — que É o `_require_project_owner` por dentro
+        # e só acrescenta a equipe que a admin autorizou a baixar. A ordem continua valendo.
+        achados = [i for i in (corpo.find("_require_project_owner("), corpo.find("_require_project_viewer(")) if i >= 0]
+        i_dono = min(achados) if achados else -1
         assert i_dono >= 0, "%s trava pagamento mas não confere dono" % nome
         assert i_dono < m.start(), (
             "%s pergunta o pagamento ANTES de saber se é o dono" % nome)

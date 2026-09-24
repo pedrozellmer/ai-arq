@@ -844,3 +844,40 @@
   window.aiArqGuardaDeCliqueDuplo = _guardaDeCliqueDuplo;
 
 })();
+
+// 🏢 ESCRITÓRIO, Parte 2 (24/09/2026): quem abriu um projeto medido é o dono ou a EQUIPE do Escritório
+// (só leitura)? Uma pergunta por página. null = não deu pra saber → a tela segue como sempre: quem barra
+// de verdade é o servidor; isto só esconde o que daria erro.
+(function () {
+  var cache = {};
+  window.aiarqAcesso = function (jobId) {
+    if (!jobId || !window.authFetch || !window.API_BASE) return Promise.resolve(null);
+    if (!cache[jobId]) {
+      cache[jobId] = window.authFetch(window.API_BASE + '/api/projeto/' + encodeURIComponent(jobId) + '/acesso')
+        .then(function (r) { return r && r.ok ? r.json() : null; })
+        .catch(function () { return null; });
+    }
+    return cache[jobId];
+  };
+  // Marca a página: `so-leitura` (equipe) e `sem-baixar` (equipe que a admin não liberou pra baixar),
+  // e põe a faixa explicando. Cada página esconde as próprias ações com essas duas classes.
+  window.aiarqMarcarSoLeitura = function (jobId) {
+    return window.aiarqAcesso(jobId).then(function (a) {
+      if (!a || !a.so_leitura) return a;
+      var h = document.documentElement;
+      h.classList.add('so-leitura');
+      if (!a.pode_baixar) h.classList.add('sem-baixar');
+      if (document.body && !document.getElementById('aiarq-faixa-equipe')) {
+        var f = document.createElement('div');
+        f.id = 'aiarq-faixa-equipe';
+        f.setAttribute('role', 'status');
+        f.style.cssText = 'background:#EFF6FF;border-bottom:1px solid #BFDBFE;color:#1E3A8A;'
+          + 'font:500 13.5px Inter,sans-serif;padding:9px 16px;text-align:center';
+        f.textContent = 'Você está vendo este projeto como equipe do Escritório: só leitura.'
+          + (a.pode_baixar ? '' : ' Baixar arquivos depende da liberação de quem é dono do projeto.');
+        document.body.insertBefore(f, document.body.firstChild);
+      }
+      return a;
+    });
+  };
+})();

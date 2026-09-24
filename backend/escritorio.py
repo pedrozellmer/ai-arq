@@ -287,6 +287,7 @@ def convidar(projeto_id: str, request: Request, corpo: dict):
         linha.update({"status": "convidado", "user_id": None, "aceito_em": None, "removido_em": None})
         if atual["status"] != "convidado":
             linha["visto_por"] = None   # quem saiu e volta: a conta que abriu o convite antigo não vale mais
+            linha["pode_baixar"] = False  # e a permissão de baixar recomeça desligada (a admin libera de novo)
         status, dados = _SERVICO("PATCH", "escritorio_membros", body=linha,
                                  params={"id": f"eq.{atual['id']}", "projeto_id": f"eq.{projeto_id}"},
                                  prefer="return=representation")

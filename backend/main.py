@@ -1944,6 +1944,79 @@ def _usuario_ja_validado(request):
         return None
 
 
+# 🏢 ESCRITÓRIO, Parte 2 (24/09/2026): a EQUIPE do projeto do Escritório ligado a um projeto medido
+# VÊ o quantitativo, as pranchas, o cronograma e o memorial — e baixa (decisão do Pedro, 24/09).
+# Só leitura: toda rota que ESCREVE continua em `_require_project_owner`. Quem liga um projeto medido
+# ao Escritório é só o dono dele (gatilho escritorio_projeto_job_guarda no banco) — é isso que impede
+# alguém de se pendurar no projeto de outra pessoa.
+def _equipe_do_projeto_medido(job_id: str, user_id: str):
+    """{"escritorio_id", "pode_baixar"} se `user_id` é membro ATIVO do projeto do Escritório ligado a
+    `job_id`; senão None. Confere a cada chamada: tirou a pessoa da equipe (ou desligou o "pode baixar"),
+    vale na hora.
+    🪤 Banco fora é 503, não "não é da equipe": na dúvida não abre, mas também não diz que ela saiu."""
+    if not job_id or not user_id:
+        return None
+    st, eps = _supa_rest_service("GET", "/escritorio_projetos",
+                                 params={"job_id": f"eq.{job_id}", "select": "id"})
+    if st != 200 or eps is None:
+        raise HTTPException(503, "Não consegui conferir o acesso agora. Tente de novo em instantes.")
+    if not eps:
+        return None
+    ep = eps[0].get("id")
+    st, ms = _supa_rest_service("GET", "/escritorio_membros",
+                                params={"projeto_id": f"eq.{ep}", "user_id": f"eq.{user_id}",
+                                        "status": "eq.ativo", "select": "id,pode_baixar"})
+    if st != 200 or ms is None:
+        raise HTTPException(503, "Não consegui conferir o acesso agora. Tente de novo em instantes.")
+    if not ms:
+        return None
+    return {"escritorio_id": ep, "pode_baixar": bool(ms[0].get("pode_baixar"))}
+
+
+def _require_project_viewer(request, job_id: str, baixar: bool = False):
+    """Quem pode VER um projeto medido: o dono e o admin — exatamente `_require_project_owner` — e a
+    equipe do projeto do Escritório ligado a ele (marca `request.state.so_leitura`).
+    `baixar=True` (rota que ENTREGA arquivo): da equipe, só quem a admin liberou ("pode baixar", por
+    pessoa — decisão do Pedro, 24/09).
+    🔒 SÓ em rota de LEITURA: o guarda test_escritorio_equipe_ve_o_medido.py tem a lista exata.
+    Projeto sem dono (beta antigo) continua só do admin."""
+    try:
+        return _require_project_owner(request, job_id)
+    except HTTPException as negado:
+        if negado.status_code != 403:
+            raise
+        user = _usuario_ja_validado(request)
+        owner = _get_project_owner(job_id)
+        if not user or not owner or owner == "anonymous":
+            raise
+        eq = _equipe_do_projeto_medido(job_id, str(user.get("id") or ""))
+        if not eq:
+            raise
+        if baixar and not eq["pode_baixar"]:
+            raise HTTPException(403, "Quem é dono do projeto ainda não liberou o download pra você. "
+                                     "Peça na equipe do projeto, no Escritório.")
+        try:
+            request.state.so_leitura = True
+            request.state.escritorio_id = eq["escritorio_id"]
+            request.state.pode_baixar = eq["pode_baixar"]
+        except Exception:
+            pass
+        return owner
+
+
+def _so_leitura(request) -> bool:
+    """Quem chamou é a EQUIPE (já conferida por `_require_project_viewer`), não o dono nem o admin."""
+    return bool(getattr(getattr(request, "state", None), "so_leitura", False))
+
+
+def _req_de_leitura(request):
+    """O request a repassar pras leituras com RLS. As tabelas do projeto (cronogramas…) só conhecem o
+    DONO: com o JWT da equipe a leitura voltaria vazia e a tela diria "ainda não gerado". A equipe já foi
+    conferida aqui no servidor, então lê com a chave do servidor (None). Mesmo padrão do financeiro
+    pro admin (`req_leitura = None if eh_admin else request`)."""
+    return None if _so_leitura(request) else request
+
+
 _DISCIPLINE_TO_SECTION = {
     "Estrutura":                   "0. Estrutura",
     "Serviços Preliminares":       "1. Serviços Preliminares",
@@ -21407,7 +21480,7 @@ async def get_status(job_id: str, request: Request):
     o nome do arquivo enviado. A linha do projeto é inserida de forma síncrona no
     /api/process antes de devolver o job_id, então o owner já existe quando o
     frontend começa a pollar. Projetos anônimos ficam livres via _require_project_owner."""
-    _require_project_owner(request, job_id)
+    _require_project_viewer(request, job_id)
     if job_id not in jobs:
         raise HTTPException(404, "Job não encontrado")
     return jobs[job_id]
@@ -21525,7 +21598,7 @@ async def respostas_processamento(job_id: str, request: Request):
 
 @app.get("/api/download/{job_id}")
 async def download_file(job_id: str, request: Request):
-    _require_project_owner(request, job_id)
+    _require_project_viewer(request, job_id, baixar=True)
     await _require_entregavel_pago_async(job_id)
     """Baixa a planilha gerada. Tenta cache local primeiro; se sumiu
     (Render redeploy), busca no Supabase Storage."""
@@ -21543,6 +21616,10 @@ async def download_file(job_id: str, request: Request):
         # `finalize_review` já faz exatamente a reconstrução certa: busca
         # projeto+itens (com as revisões do cliente aplicadas), gera o xlsx e
         # sobe pro Storage. Reusar em vez de duplicar.
+        if _so_leitura(request):
+            # refazer a planilha aplica as revisões do DONO e é ação dele (rebuild exige o dono)
+            raise HTTPException(409, "A planilha deste projeto precisa ser gerada de novo por quem é dono dele. "
+                                     "Peça pra abrir o projeto uma vez e tente baixar depois.")
         try:
             await rebuild_planilha_from_review(job_id, request)
             output_path = get_planilha_path(job_id)
@@ -21592,7 +21669,8 @@ async def download_file(job_id: str, request: Request):
     # `run_in_threadpool` pelo mesmo motivo do registro abaixo: valida sessão
     # com urllib bloqueante. Ver `_rotulo_de_quem_baixou`.
     try:
-        _quem = await run_in_threadpool(_rotulo_de_quem_baixou, request)
+        # a EQUIPE do Escritório não é "o cliente levou a planilha" (métrica de 15/09)
+        _quem = "equipe" if _so_leitura(request) else await run_in_threadpool(_rotulo_de_quem_baixou, request)
     except Exception:
         _quem = "desconhecido"
     try:
@@ -28667,7 +28745,7 @@ async def calibration_benchmarks(request: Request, typology: Optional[str] = Non
 def get_project_items(job_id: str, request: Request):
     """Retorna lista de itens individuais de um job pra revisão inline.
     Usa RPC `list_project_items` pra bypassar RLS."""
-    _require_project_owner(request, job_id)
+    _require_project_viewer(request, job_id)
     import urllib.request, urllib.error, json
     try:
         # 🩸 08/09/2026: era uma chamada só, sem paginar — e o PostgREST corta
@@ -28729,7 +28807,7 @@ async def memorial_docx(job_id: str, request: Request):
     invenção. v1.1: se o cliente EDITOU na tela (memorial.html), o .docx sai
     da versão salva em project_memorial. Download exige downloadProtected no
     frontend (armadilha nº9: <a href> não manda Authorization)."""
-    _require_project_owner(request, job_id)
+    _require_project_viewer(request, job_id, baixar=True)
     await _require_entregavel_pago_async(job_id)
     import tempfile
     try:
@@ -29004,7 +29082,7 @@ def _memorial_carregar_salvo(job_id: str):
 async def memorial_pdf(job_id: str, request: Request):
     """Memorial em PDF (WeasyPrint, mesmo motor do cronograma). Prefere a
     versão editada/salva, igual ao .docx."""
-    _require_project_owner(request, job_id)
+    _require_project_viewer(request, job_id, baixar=True)
     await _require_entregavel_pago_async(job_id)
     import tempfile
     try:
@@ -29041,7 +29119,7 @@ async def memorial_estrutura(job_id: str, request: Request):
     `?fresco=1` ignora a salva e remonta com os números de agora — é o botão
     'atualizar' de quando o cliente corrige o quantitativo depois. Não grava
     nada: o texto novo só entra no lugar quando ele salvar."""
-    _require_project_owner(request, job_id)
+    _require_project_viewer(request, job_id)
     fresco = str(request.query_params.get("fresco") or "") in ("1", "true", "sim")
     try:
         salvo = None if fresco else _memorial_carregar_salvo(job_id)
@@ -29408,11 +29486,28 @@ def projetos_desatualizados(request: Request):
         return {"projetos": []}
 
 
+@app.get("/api/projeto/{job_id}/acesso")
+def projeto_acesso(job_id: str, request: Request):
+    """O que o menu e as telas precisam saber de quem abre um projeto medido: dono (edita) ou equipe
+    do Escritório (só leitura, com o nome do projeto e o caminho de volta pro Escritório)."""
+    _require_project_viewer(request, job_id)
+    if not _so_leitura(request):
+        return {"so_leitura": False, "pode_baixar": True}
+    st, rows = _supa_rest_service("GET", "/projects",
+                                  params={"job_id": f"eq.{job_id}",
+                                          "select": "project_name,typology,items_count,linhas_medidas"})
+    p = rows[0] if st == 200 and rows else {}
+    return {"so_leitura": True, "escritorio_id": getattr(request.state, "escritorio_id", None),
+            "pode_baixar": bool(getattr(request.state, "pode_baixar", False)),
+            "nome": p.get("project_name") or "", "tipologia": p.get("typology") or "",
+            "itens": p.get("items_count") or 0, "medido": p.get("linhas_medidas") or 0}
+
+
 @app.get("/api/projeto/{job_id}/coerencia")
 async def projeto_coerencia(job_id: str, request: Request):
     """Diz quais entregáveis salvos ficaram velhos depois que o cliente mexeu
     no quantitativo. Só leitura — quem refaz é o cliente, com um clique."""
-    _require_project_owner(request, job_id)
+    _require_project_viewer(request, job_id)
     try:
         return _coerencia_do_projeto(job_id)
     except Exception as e:
@@ -29792,11 +29887,11 @@ def get_cronograma(job_id: str, request: Request):     # `def`: zero await no co
     cliente ainda não gerou cronograma. Frontend usa essa info pra decidir
     se mostra inputs (gerar primeiro) ou já renderiza o salvo.
     """
-    _require_project_owner(request, job_id)
+    _require_project_viewer(request, job_id)
     # 🩸 auditoria 06/09: `_supabase_get_cronograma` engole erro de leitura e devolve None — a resposta
     # saía `200 empty` e quem lê (financeiro, cronograma) afirmava "este projeto não tem cronograma".
     # Falha de leitura é 502; "não existe" continua sendo `empty`.
-    st, saved = _fin_cronograma_salvo(request, job_id)
+    st, saved = _fin_cronograma_salvo(_req_de_leitura(request), job_id)
     if st != 200:
         _log_error("cronograma:ler", f"cronogramas HTTP {st}", job_id, severity="warning")
         raise HTTPException(502, "não consegui ler o cronograma agora — recarregue em instantes")
@@ -29875,12 +29970,12 @@ def get_cronograma_full(job_id: str, request: Request):
     `def`, não `async def`: a checagem do dono e a leitura do cronograma já eram
     3 chamadas de rede SÍNCRONAS antes do primeiro await — com --workers 1 isso
     segurava o laço de eventos do site inteiro (auditoria 06/09)."""
-    _require_project_owner(request, job_id)
+    _require_project_viewer(request, job_id)
     saved = _supabase_get_cronograma(job_id)
     if not saved:
         raise HTTPException(404, "Cronograma ainda não gerado para este projeto")
     try:
-        cron, _branding = _build_cronograma_for_export(job_id, request=request)
+        cron, _branding = _build_cronograma_for_export(job_id, request=_req_de_leitura(request))
         return cron
     except HTTPException:
         raise
@@ -30011,12 +30106,12 @@ async def export_cronograma_pdf(job_id: str, request: Request,
                                 template: str = "", accent: str = ""):
     """Exporta cronograma como PDF co-branded. Usa os novos templates (WeasyPrint,
     5 direcoes, cor da marca); se falhar, cai no gerador antigo (reportlab)."""
-    _require_project_owner(request, job_id)
+    _require_project_viewer(request, job_id, baixar=True)
     await _require_entregavel_pago_async(job_id)
     import tempfile
     from fastapi.responses import FileResponse
     cron, branding = await run_in_threadpool(
-        _build_cronograma_for_export, job_id, request=request)
+        _build_cronograma_for_export, job_id, request=_req_de_leitura(request))
     tmpl = (template or "").strip().lower()
     if tmpl not in _CRONO_TEMPLATES:
         tmpl = "escuro"
@@ -30060,12 +30155,12 @@ async def export_cronograma_xlsx(job_id: str, request: Request):
 
     Vira "físico-FINANCEIRO" só quando o cliente informou valor; sem valor sai
     o cronograma físico de sempre, sem falar em dinheiro em lugar nenhum."""
-    _require_project_owner(request, job_id)
+    _require_project_viewer(request, job_id, baixar=True)
     await _require_entregavel_pago_async(job_id)
     import tempfile
     from fastapi.responses import FileResponse
     cron, branding = await run_in_threadpool(
-        _build_cronograma_for_export, job_id, request=request)
+        _build_cronograma_for_export, job_id, request=_req_de_leitura(request))
     tem_fin = bool((cron.get("financeiro") or {}).get("total_informado"))
     sufixo = "fisico_financeiro" if tem_fin else "fisico"
     fname = f"cronograma_{sufixo}_{_slug_filename(branding['project_name'])}.xlsx"
@@ -30087,12 +30182,12 @@ async def export_cronograma_pptx(job_id: str, request: Request,
                                  template: str = "", accent: str = ""):
     """Exporta cronograma como PPTX (5 slides). Novo: renderiza o PDF dos templates
     e insere 1 imagem full-bleed por slide (A4 paisagem). Fallback: gerador antigo."""
-    _require_project_owner(request, job_id)
+    _require_project_viewer(request, job_id, baixar=True)
     await _require_entregavel_pago_async(job_id)
     import tempfile
     from fastapi.responses import FileResponse
     cron, branding = await run_in_threadpool(
-        _build_cronograma_for_export, job_id, request=request)
+        _build_cronograma_for_export, job_id, request=_req_de_leitura(request))
     tmpl = (template or "").strip().lower()
     if tmpl not in _CRONO_TEMPLATES:
         tmpl = "escuro"
@@ -32797,7 +32892,7 @@ async def get_sheet_pdf(job_id: str, request: Request, ref: str = ""):
     Antes (até 2026-06-02) o endpoint era público — qualquer um com job_id
     válido baixava a prancha. Fix IDOR aplicado adicionando
     _require_project_owner."""
-    _require_project_owner(request, job_id)
+    _require_project_viewer(request, job_id)
     from fastapi.responses import Response
 
     if not ref:
@@ -32889,7 +32984,7 @@ async def pranchas_com_imagem(job_id: str, request: Request):
     ninguém recebe promessa que a gente não pode cumprir. O contrário — mostrar
     tudo quando não sei — é justamente a promessa quebrada que isto evita.
     """
-    _require_project_owner(request, job_id)
+    _require_project_viewer(request, job_id)
     try:
         _corpo = await request.json()
     except Exception:

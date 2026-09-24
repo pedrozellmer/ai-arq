@@ -64,6 +64,10 @@
       scroll-behavior: auto !important;
     }
   }
+
+  /* 🏢 Escritório, Parte 2 (24/09): a EQUIPE vê só leitura; baixar só com a liberação da admin */
+  .so-leitura #btn-add-fase, .so-leitura #btn-edit, .so-leitura #btn-gerar, .so-leitura #btn-save,
+  .sem-baixar #btn-export-pdf, .sem-baixar #btn-export-pptx, .sem-baixar #btn-export-xlsx { display: none !important; }
 </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -376,6 +380,8 @@ const params = new URLSearchParams(window.location.search);
 // apontar pra cronograma.html?job_id=, a página dizia "Falta job_id" com o
 // job_id ali na barra de endereço. Aceitar os dois mantém link antigo vivo.
 const jobId = params.get('job') || params.get('job_id') || '';
+// 🏢 equipe do Escritório: só leitura (Parte 2, 24/09)
+try { window.aiarqMarcarSoLeitura && window.aiarqMarcarSoLeitura(jobId); } catch (_) {}
 
 if (!jobId) {
   document.body.innerHTML = '<div class="p-8 text-center text-gray-600">Falta job_id. Volte ao <a href="dashboard.html" class="text-indigo-600 underline">dashboard</a> e abra um projeto.</div>';

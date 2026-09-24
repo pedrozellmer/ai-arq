@@ -181,6 +181,7 @@ def test_reconvite_troca_o_token_e_zera_a_conta_ligada():
     assert patch["m"] == "PATCH" and patch["params"]["id"] == "eq.m1" and patch["params"]["projeto_id"] == f"eq.{PROJ}"
     assert patch["body"]["status"] == "convidado" and patch["body"]["user_id"] is None
     assert patch["body"]["visto_por"] is None           # a conta que abriu o convite ANTIGO não vale mais
+    assert patch["body"]["pode_baixar"] is False        # a permissão de baixar recomeça desligada
     assert patch["body"]["convite_hash"] == esc.hash_do_token(r["link"].split("#t=")[1])
 
 

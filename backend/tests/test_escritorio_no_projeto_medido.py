@@ -33,9 +33,12 @@ def _funcao(fonte, cabeca, fim="\n  }\n"):
 
 def test_o_grupo_so_nasce_pra_projeto_da_conta_e_no_piloto():
     js = _ler("menu-lateral.js")
-    corpo = _funcao(js, "function montarEscritorio()")
+    corpo = _funcao(js, "function montarEscritorio(uid)")
     assert "window.sbClient.rpc('escritorio_no_piloto')" in corpo
-    assert "if (!r || r.error || r.data !== true) return;" in corpo
+    assert "if (r && !r.error && r.data === true) return true;" in corpo
+    # dentro do projeto medido, só o PILOTO (é o dono ligando o projeto dele); membro de equipe é só na conta
+    assert "if (FIXADO || !uid || typeof window.sbClient.from !== 'function') return false;" in corpo
+    assert "if (!ok) return;" in corpo
     assert "hidden" not in corpo, "nesta folha o hidden perde pra classe de display (cartão do painel, 24/09)"
     assert "var base = 'escritorio.html#/job/' + encodeURIComponent(JOB) + '/';" in corpo
     sel = js[js.index("function atualizarSelo()"):]
@@ -47,11 +50,15 @@ def test_o_grupo_so_nasce_pra_projeto_da_conta_e_no_piloto():
 def test_a_porta_do_escritorio_esta_no_menu_da_conta():
     # 🩸 24/09: a única porta era o cartão da aba Início, e o "← Todos os projetos" leva pra Meus projetos
     js = _ler("menu-lateral.js")
-    corpo = _funcao(js, "function montarEscritorio()")
+    corpo = _funcao(js, "function montarEscritorio(uid)")
     conta = corpo[corpo.index("if (!FIXADO) {"):corpo.index("var base")]
     assert "href=\"escritorio.html\"" in conta and "a[data-tab=\"meus-projetos\"]" in conta
     pu = _funcao(js, "function preencherUsuario()")
-    assert "if (!FIXADO) montarEscritorio();" in pu
+    assert "if (!FIXADO) montarEscritorio(u.id);" in pu
+    # 🩸 Parte 2: o freela convidado não está no piloto — a porta da conta vale pra quem é de algum projeto
+    corpo_m = _funcao(js, "function montarEscritorio(uid)")
+    assert ".from('escritorio_membros').select('id', { count: 'exact', head: true })" in corpo_m
+    assert ".eq('user_id', uid).eq('status', 'ativo')" in corpo_m
 
 
 def test_o_escritorio_abre_o_ligado_ou_cria_no_primeiro_clique():

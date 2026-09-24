@@ -32,7 +32,11 @@
     @keyframes m-rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
     .m-ready section { animation: m-rise .4s cubic-bezier(.22,.61,.36,1) both; }
     @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; } }
-  </style>
+  
+  /* 🏢 Escritório, Parte 2 (24/09): a EQUIPE vê só leitura; baixar só com a liberação da admin */
+  .so-leitura #btn-ia, .so-leitura #btn-salvar,
+  .sem-baixar #btn-docx, .sem-baixar #btn-pdf { display: none !important; }
+</style>
 </head>
 <body class="bg-gray-50 min-h-screen">
 <a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:bg-white focus:px-4 focus:py-2 focus:rounded focus:shadow z-50">Pular pro conteúdo</a>
@@ -114,6 +118,8 @@ const urlParams = new URLSearchParams(window.location.search);
 // link do próprio mecanismo da regra nº7 não abria o memorial. Defeito anterior
 // ao menu do projeto, achado em 04/08 quando o cronograma deu o mesmo sintoma.
 const jobId = urlParams.get('job_id') || urlParams.get('job');
+// 🏢 equipe do Escritório: só leitura (Parte 2, 24/09)
+try { window.aiarqMarcarSoLeitura && window.aiarqMarcarSoLeitura(jobId); } catch (_) {}
 if (!jobId) { window.location.href = 'dashboard.html'; }
 
 let estrutura = null;   // objeto vivo — o DOM edita, o save serializa daqui

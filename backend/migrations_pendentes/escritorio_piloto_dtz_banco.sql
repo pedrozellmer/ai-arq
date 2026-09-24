@@ -744,3 +744,14 @@ end $$;
 revoke all on function public.escritorio_projeto_job_guarda() from public, anon, authenticated;
 create trigger escritorio_projetos_job before insert or update of job_id on public.escritorio_projetos
   for each row execute function public.escritorio_projeto_job_guarda();
+
+-- ── 22. (24/09, Parte 2) quem da EQUIPE pode BAIXAR arquivos do projeto medido ligado ──
+-- A equipe VÊ o quantitativo, as pranchas, o cronograma e o memorial do projeto medido ligado (servidor:
+-- `_require_project_viewer`). BAIXAR (planilha, exports do cronograma, memorial .docx/.pdf) só com
+-- autorização da admin, POR PESSOA (decisão do Pedro, 24/09). Só quem é dono do projeto edita linha de
+-- membro (política escritorio_membros_editar): ensaio em transação desfeita — o freela tentou se liberar
+-- e 0 linhas mudaram; a admin liberou e 1 mudou. Aplicada como `escritorio_membros_pode_baixar`.
+alter table public.escritorio_membros add column pode_baixar boolean not null default false;
+comment on column public.escritorio_membros.pode_baixar is
+  'A admin autoriza esta pessoa a baixar planilha/cronograma/memorial do projeto medido ligado. Padrão: não.';
+grant select (pode_baixar) on public.escritorio_membros to authenticated;

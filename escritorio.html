@@ -181,7 +181,7 @@ const ST = [
 const ST_EQUIPE = ['afazer', 'dev', 'revdtz'];   // o mesmo que o gatilho escritorio_tarefa_guarda
 const stT = (k) => (ST.find((s) => s.k === k) || {}).t || k;
 
-const COLS_MEMBRO = 'id,projeto_id,user_id,nome,papel,funcao,status,convidado_em,aceito_em,removido_em';
+const COLS_MEMBRO = 'id,projeto_id,user_id,nome,papel,funcao,status,convidado_em,aceito_em,removido_em,pode_baixar';
 // ── estado ──
 let NO_PILOTO = false;
 let EU = null, PROJETOS = [], PROJ = null, MEMBROS = [], PAPEL = null, TAR = [], PESSOAS_T = [], ATAS = [], NOTAS = {};
@@ -683,14 +683,23 @@ async function salvarAta() {
 function telaEquipe() {
   const vis = MEMBROS.filter((m) => m.status !== 'removido');
   return `<div class="aviso"><b>Quem você convida entra no projeto, não no escritório.</b><br>
-      <span style="font-size:12.5px;color:#475569">Vê e edita: as tarefas e as atas deste projeto (e, na próxima etapa, a pasta do Drive). Vê o nome e a função dos colegas, mas não o e-mail nem o telefone. Não vê: os outros projetos, o financeiro e o resto do seu Drive.</span></div>
+      <span style="font-size:12.5px;color:#475569">Vê e edita: as tarefas e as atas deste projeto (e, na próxima etapa, a pasta do Drive). Vê o nome e a função dos colegas, mas não o e-mail nem o telefone. Não vê: os outros projetos, o financeiro e o resto do seu Drive.${PROJ.job_id ? ' <b>Projeto medido ligado:</b> a equipe vê o quantitativo, o cronograma e o memorial, só leitura; <b>baixar arquivos</b> só quem você liberar abaixo.' : ''}</span></div>
     <section class="card"><div class="linha" style="justify-content:space-between"><h2 class="h2">${vis.length} pessoa${vis.length > 1 ? 's' : ''}</h2>${souAdmin() ? '<button class="btn btn-p" onclick="convidar()">+ Convidar pessoa</button>' : ''}</div>
       <ul class="lista" style="margin-top:8px">${vis.map((m) => `<li style="flex-wrap:wrap">${av(m)}<div style="flex:1;min-width:180px"><b style="font-size:14px">${esc(nomeDe(m))}${m.user_id === EU.id ? ' <span style="font-weight:400;color:#64748B">(você)</span>' : ''}</b>
         <span class="sub" style="display:block;margin:0">${esc(m.funcao || (m.papel === 'dono' ? 'Admin do projeto' : ''))}${m.email ? ' · ' + esc(m.email) : ''}${m.telefone ? ' · ' + esc(m.telefone) : ''}</span>
         ${NOTAS[m.id] ? `<span class="sub" style="display:block;margin:0">${esc(NOTAS[m.id])}</span>` : ''}</div>
         ${m.papel === 'dono' ? '<span class="pill p-ind">admin · vê tudo</span>' : m.status === 'ativo' ? '<span class="pill p-ok"><i></i>no projeto</span>' : pillConvite(m)}
+        ${souAdmin() && PROJ.job_id && m.papel !== 'dono' ? `<label class="chip" title="Planilha, cronograma e memorial do projeto medido ligado"><input type="checkbox" ${m.pode_baixar ? 'checked' : ''} onchange="mudarBaixar('${m.id}', this.checked, this)"> pode baixar arquivos</label>` : ''}
         ${souAdmin() && m.papel !== 'dono' ? `<button class="btn btn-s" onclick="editarPessoa('${m.id}')">Editar</button>${m.status === 'convidado' ? `<button class="btn btn-s" onclick="reenviar('${m.id}')">Reenviar convite</button>` : ''}<button class="btn btn-s" onclick="tirar('${m.id}')">${m.status === 'convidado' ? 'Cancelar convite' : 'Tirar do projeto'}</button>` : ''}
       </li>`).join('')}</ul></section>`;
+}
+// 🏢 Parte 2 (24/09, decisão do Pedro): baixar arquivos do projeto medido ligado é POR PESSOA, e só a admin
+// liga. O banco garante (só quem é dono edita linha de membro); aqui é a chave.
+async function mudarBaixar(id, v, el) {
+  const { error } = await sb.from('escritorio_membros').update({ pode_baixar: v }).eq('id', id).eq('projeto_id', PROJ.id);
+  if (error) { if (el) el.checked = !v; return falhou(error, 'Não mudei a permissão'); }
+  const m = MEMBROS.find((x) => x.id === id); if (m) m.pode_baixar = v;
+  toast(v ? 'Liberado pra baixar arquivos' : 'Download desligado pra essa pessoa');
 }
 // A14: 14 dias contados de convidado_em (a mesma validade do servidor)
 function pillConvite(m) {
