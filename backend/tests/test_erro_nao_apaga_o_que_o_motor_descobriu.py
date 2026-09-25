@@ -108,6 +108,11 @@ def _rodar_o_except(project_data=..., log_error=None, erro=None,
         "_avisos_com": m._avisos_com,          # 🔑 o de produção
         "_TRANSIENT_ERR_RX": re.compile("sobrecarregad|timeout", re.I),
         "_email_falha_cliente": lambda *a, **k: None,
+        # 25/09: o except lê o TIPO da falha (catálogo) — o de produção, que é
+        # puro; o registro vai pro mesmo log de mentira
+        "_tipo_e_tela_da_falha": m._tipo_e_tela_da_falha,
+        "_registrar_tipo_da_falha": lambda job_id, tipo, arquivo="":
+            _log("falha:tipo", "tipo=%s arquivo=%s" % (tipo, arquivo), job_id, "info"),
         "print": lambda *a, **k: None,
     }
     if project_data is not ...:

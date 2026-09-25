@@ -141,6 +141,8 @@ class _Banco(object):
         self.projetos = [dict(projeto)] if projeto else []
         self.itens = [dict(i) for i in itens]
         self.storage = {JOB: list(storage)}
+        #: linhas de `error_log` — 25/09: o aviso da varredura lê o TIPO da falha
+        self.erros = []
         self.diario = []          # (metodo, tabela, filtros, corpo)
         self.inesperados = []
         self.falha = {}           # (metodo, tabela) -> código HTTP ou "rede"
@@ -212,6 +214,12 @@ class _Banco(object):
                            "created_at": l["created_at"]}
                           for l in self.projetos
                           if l.get("status") in ("queued", "processing")])
+
+        if tabela == "error_log" and metodo == "GET":
+            alvo = self._filtra(self.erros, filtros)
+            if "limit" in opcoes:
+                alvo = alvo[:int(opcoes["limit"])]
+            return _json([_projeta(l, opcoes.get("select")) for l in alvo])
 
         if tabela not in ("projects", "project_items"):
             return None

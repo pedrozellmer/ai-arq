@@ -5027,7 +5027,10 @@ def _linha_do_email_ao_cliente(email: str, criado_em: str) -> str:
     try:
         q = (f"{SUPABASE_URL}/rest/v1/email_sent_log?select=kind,sent_at"
              f"&email=ilike.{_up.quote(email, safe='')}"
-             f"&kind=in.(erro_trocar,erro_reprocessar)"
+             # 🩸 25/09: `erro_nosso` (19/09) nunca entrou nesta lista — o dia
+             # em que saísse, o alerta diria "não há e-mail". E o catálogo
+             # (`falhas.py`) grava `falha:<tipo>`.
+             f"&or=(kind.in.(erro_trocar,erro_reprocessar,erro_nosso),kind.like.falha*)"
              f"&sent_at=gte.{_up.quote(_desde, safe='')}"
              f"&order=sent_at.asc&limit=1")
         req = _u.Request(q, method="GET")
@@ -5368,7 +5371,8 @@ def _ref_do_anexo_que_falhou(job_id: str) -> str:
 
 
 def _email_falha_cliente(job_id: str, reprocessavel: bool = True,
-                         culpa_nossa: bool = False, anexo_ref: str = "") -> bool:
+                         culpa_nossa: bool = False, anexo_ref: str = "",
+                         tipo: str = "", arquivo: str = "", terminal: bool = False) -> bool:
     """Avisa o cliente que o projeto falhou. Best-effort, NUNCA levanta.
 
     - culpa_nossa=True    -> defeito do NOSSO código (exceção de programação).
@@ -5389,8 +5393,19 @@ def _email_falha_cliente(job_id: str, reprocessavel: bool = True,
     DXF, e o DXF também falhou) caía no dedup POR JOB — o job já tinha avisado
     a 1ª falha — e terminava calado. Regra do Pedro: "tem que receber e-mail
     em todos". Com `anexo_ref`, a chave é o PEDIDO de anexo (`job:marca`,
-    janela de 30 min) e as travas do job (pai, reprocesso, 15 min) não valem."""
+    janela de 30 min) e as travas do job (pai, reprocesso, 15 min) não valem.
+
+    📚 25/09/2026 — `tipo` (catálogo `falhas.py`): com `falhas.LIGADO` o e-mail sai
+    pelo tipo (`_build_email_de_falha`), não farejando o texto da tela. Tipo
+    AUTOMÁTICO (servidor, sobrecarga) NÃO avisa na 1ª queda — a varredura re-tenta
+    sozinha e só chama com `terminal=True` se esgotar (Pedro: "automático é pra
+    servidor caído"). Desligado, `tipo` é ignorado e tudo segue como antes."""
     try:
+        import falhas as _fa_em
+        _pelo_catalogo = bool(_fa_em.LIGADO and tipo)
+        if (_pelo_catalogo and (_fa_em.TIPOS.get(tipo) or {}).get("automatico")
+                and not terminal and not anexo_ref):
+            return False        # a varredura re-tenta; o cliente só sabe se não resolver
         if job_id in _falha_emailed and not anexo_ref:
             return False
         import html as _hf, urllib.request as _urf
@@ -5439,18 +5454,27 @@ def _email_falha_cliente(job_id: str, reprocessavel: bool = True,
         # BAIXADO o arquivo 19 minutos antes de receber "tivemos um problema" —
         # o aviso contradizia o que a casa tinha acabado de entregar.
         _ja_entregou = (int(_rows[0].get("items_count") or 0) > 0)
-        _subject, _html = _build_falha_email(
-            _nm,
-            _rows[0].get("project_name") or "seu projeto",
-            reprocessavel,
-            error_hint=(_rows[0].get("error_message") or ""),
-            job_id=job_id,
-            culpa_nossa=culpa_nossa,
-            ja_entregou=_ja_entregou)
-        ok = _send_email_smtp(_email, _subject, _html,
-                              log_kind=("erro_nosso" if culpa_nossa else
-                                        ("erro_reprocessar" if reprocessavel else "erro_trocar")),
-                              job_id=job_id)
+        if _pelo_catalogo:
+            _subject, _html = _build_email_de_falha(
+                tipo, _nm, _rows[0].get("project_name") or "", arquivo, job_id)
+        else:
+            _subject, _html = _build_falha_email(
+                _nm,
+                _rows[0].get("project_name") or "seu projeto",
+                reprocessavel,
+                error_hint=(_rows[0].get("error_message") or ""),
+                job_id=job_id,
+                culpa_nossa=culpa_nossa,
+                ja_entregou=_ja_entregou)
+        # 🪤 os kinds ficam LITERAIS aqui dentro: o guarda de
+        # test_o_email_registra_de_qual_job_veio lê a AST desta chamada
+        ok = _send_email_smtp(
+            _email, _subject, _html,
+            log_kind=(f"falha:{tipo if tipo in _fa_em.TIPOS else 'desconhecido'}"
+                      if _pelo_catalogo else
+                      "erro_nosso" if culpa_nossa else
+                      ("erro_reprocessar" if reprocessavel else "erro_trocar")),
+            job_id=job_id)
         _falha_emailed.add(job_id)
         if ok and _ref_af:
             _email_auto_registrar(_email, "complemento_falhou", ref=_ref_af)
@@ -6728,6 +6752,50 @@ _ERRO_DE_PROGRAMACAO_RX = _re_auto.compile(
     _re_auto.IGNORECASE)
 
 
+def _registrar_tipo_da_falha(job_id: str, tipo: str, arquivo: str = "") -> None:
+    """O TIPO da falha (catálogo `falhas.py`) vai pro log SEMPRE — ligado ou não.
+    É o dado da revisão: quais tipos acontecem de verdade, e com que frequência.
+    O aviso interno e a varredura de re-tentativa leem daqui. Nunca levanta."""
+    try:
+        _log_error("falha:tipo", f"tipo={tipo} arquivo={(arquivo or '')[:120]}",
+                   job_id, severity="info")
+    except Exception:
+        pass
+
+
+def _tipo_registrado(job_id: str) -> tuple:
+    """(tipo, arquivo) da ÚLTIMA falha registrada deste projeto, ou ('', '')."""
+    try:
+        _st, _rows = _supa_rest_service(
+            "GET", f"error_log?job_id=eq.{job_id}&stage=eq.falha:tipo"
+                   f"&select=message&order=created_at.desc&limit=1")
+        if _st and 200 <= _st < 300 and _rows:
+            _m = str(_rows[0].get("message") or "")
+            _mt = _re_auto.match(r"tipo=(\S+)(?: arquivo=(.*))?$", _m)
+            if _mt:
+                return _mt.group(1), (_mt.group(2) or "").strip()
+    except Exception:
+        pass
+    return "", ""
+
+
+def _tipo_e_tela_da_falha(e) -> tuple:
+    """(tipo, arquivo, texto da tela) de uma exceção que derrubou o job.
+
+    Com `falhas.LIGADO=False` o texto da tela é EXATAMENTE o de antes (`str(e)`):
+    nada muda pro cliente. Ligado, erro de programação deixa de aparecer cru na
+    tela ("'str' object has no attribute 'get'") e vira o texto do catálogo."""
+    import falhas as _fa
+    try:
+        tipo = _fa.tipo_da_excecao(e, como_classificar_a_falha(e))
+    except Exception:
+        tipo = "desconhecido"
+    arquivo = str(getattr(e, "arquivo", "") or "")
+    if not _fa.LIGADO or isinstance(e, _fa.Falha):
+        return tipo, arquivo, str(e)
+    return tipo, arquivo, _fa.texto_da_tela(tipo, "", arquivo)
+
+
 def como_classificar_a_falha(mensagem) -> str:
     """"nosso" | "passageiro" | "arquivo" — quem decide o tom do aviso.
 
@@ -6778,6 +6846,43 @@ def _filhote_do_projeto(job_id: str) -> str:
         return "?"
 
 
+def _re_tenta_sozinho(mensagem: str, tipo: str = "") -> bool:
+    """A varredura re-tenta este projeto sem ninguém olhar?
+
+    Desligado (`falhas.LIGADO=False`): EXATAMENTE como antes — o regex no texto
+    da tela. Ligado, quem decide é o TIPO registrado: só servidor e sobrecarga
+    re-tentam sozinhos (Pedro, 25/09: "automático é o servidor caiu; erro de
+    leitura, alguém entende antes"). 🪤 Ligado, o texto da tela vira o do
+    catálogo, e o regex pode casar em tipo que não é automático — por isso o
+    tipo vem ANTES do regex, e o regex só vale pra falha sem tipo."""
+    import falhas as _fa
+    if _fa.LIGADO and tipo in _fa.TIPOS:
+        return bool(_fa.TIPOS[tipo]["automatico"])
+    return bool(_TRANSIENT_ERR_RX.search(mensagem or ""))
+
+
+def _alerta_interno_da_falha(tipo: str, projeto: str) -> tuple:
+    """(assunto, bloco) do aviso interno de falha que ficou parada.
+
+    Pedro, 25/09: "erro terminal parece que acabou, é o fim". O assunto diz
+    QUEM age agora: problema nosso → "Precisa de você"; do cliente (ele já
+    recebeu o passo a passo) → "Para acompanhar". O bloco diz o que houve e o
+    que fazer, do catálogo."""
+    import html as _hx
+    import falhas as _fa
+    nome = projeto or "projeto sem nome"
+    t = _fa.TIPOS.get(tipo)
+    if not t:
+        return (f"Precisa de você: {nome} — falha sem tipo registrado",
+                "<b>O que aconteceu:</b> a falha não tem tipo no catálogo (veja a causa "
+                "técnica abaixo).<br>")
+    quem = "Para acompanhar" if t["quem"] == "cliente" else "Precisa de você"
+    return (f"{quem}: {nome} — {t['rotulo']}",
+            f"<b>O que aconteceu:</b> {_hx.escape(t['rotulo'])} "
+            f"(tipo <code>{_hx.escape(tipo)}</code>)<br>"
+            f"<b>O que fazer:</b> {_hx.escape(t['aviso'])}<br>")
+
+
 def _auto_retry_erros_transitorios():
     """REVISÃO AUTOMÁTICA (decisão Pedro 07/07): projeto que caiu por causa
     passageira re-tenta SOZINHO na varredura de 5min — o que antes era resgate
@@ -6808,7 +6913,11 @@ def _auto_retry_erros_transitorios():
             continue
         msg = row.get("error_message") or ""
         count = int(row.get("auto_resume_count") or 0)
-        transitorio = bool(_TRANSIENT_ERR_RX.search(msg))
+        import falhas as _fa_v
+        # desligado, o tipo só serve pro aviso interno — é lido lá embaixo, 1x
+        # por projeto, em vez de uma consulta a mais por linha a cada 5 min
+        _tipo_v, _arq_v = _tipo_registrado(job_id) if _fa_v.LIGADO else ("", "")
+        transitorio = _re_tenta_sozinho(msg, _tipo_v)
 
         # 🩸 16/09/2026 — DOIS MOTORES NO MESMO PROJETO. Cliente NOVO, primeiro
         # projeto, quatro quedas de conexão seguidas. Às 14:58 esta varredura
@@ -6858,9 +6967,25 @@ def _auto_retry_erros_transitorios():
                 continue
             # sem arquivo no Storage → cai pro alerta terminal abaixo
 
-        # TERMINAL: esgotou tentativas, não é transitório, ou não tem arquivo.
-        # Alerta interno 1x por job — o diagnóstico chega no email do Pedro.
+        # PARADO: esgotou tentativas, não re-tenta sozinho, ou não tem arquivo.
+        # Aviso interno 1x por job — o diagnóstico chega no email do Pedro.
+        # (A chave `alerta_erro_terminal` ficou: é só o dedup no banco, e trocar
+        # o nome re-avisaria todo projeto parado das últimas 24h.)
         if not _email_auto_ja_enviado(NOTIFY_EMAIL, "alerta_erro_terminal", ref=job_id):
+            if not _tipo_v:
+                _tipo_v, _arq_v = _tipo_registrado(job_id)
+            # Ligado: tipo automático que ESGOTOU as re-tentativas → o cliente
+            # recebe agora o "tentamos de novo e ainda não completou". Só com
+            # re-tentativa DE VERDADE (count ≥ 2): sem arquivo no Storage, ou na
+            # dúvida do reprocesso, a frase afirmaria o que não houve (regra nº1)
+            # — aí quem decide é o Pedro. Dedup no banco: a varredura passa aqui
+            # de novo se o aviso interno falhar, e o processo pode ter reiniciado.
+            _em_cli = row.get("user_email") or ""
+            if (_fa_v.LIGADO and transitorio and count >= 2 and _em_cli
+                    and (_fa_v.TIPOS.get(_tipo_v) or {}).get("automatico")
+                    and not _email_auto_ja_enviado(_em_cli, "falha_parada", ref=job_id)):
+                if _email_falha_cliente(job_id, tipo=_tipo_v, arquivo=_arq_v, terminal=True):
+                    _email_auto_registrar(_em_cli, "falha_parada", ref=job_id)
             # 🩸 11/09/2026: "problema no arquivo do cliente" era rótulo de TODO erro
             # não passageiro — inclusive tipo errado e defeito nosso. O rótulo diz só
             # o que se sabe; a causa técnica vem logo abaixo.
@@ -6868,19 +6993,24 @@ def _auto_retry_erros_transitorios():
                       "e por isso NÃO re-tentei — evitar dois motores no mesmo arquivo "
                       "vale mais que a tentativa" if _pulei_por_duvida
                       else "esgotou as 2 re-tentativas automáticas" if transitorio
-                      else "não é erro passageiro — reprocessar o mesmo arquivo do mesmo "
-                           "jeito não resolve (veja a causa técnica)")
+                      else "não re-tentei sozinho: não é falha passageira de servidor, "
+                           "e reprocessar do mesmo jeito não resolve (veja a causa técnica)")
             # QW3 (20/07): a causa TÉCNICA real (error_log) ao lado do rótulo que
             # o cliente viu — pro Pedro parar de investigar às cegas.
             _causa_real = _error_log_causa_real(job_id)
             _bloco_real = (f"<b>Causa técnica real:</b> {_causa_real[:600]}<br>"
                            if _causa_real else "")
+            # 25/09 (Pedro: "erro terminal é feio, parece o fim"): o assunto diz
+            # quem age agora, e o corpo diz o que houve e o que fazer.
+            _assunto_v, _bloco_tipo = _alerta_interno_da_falha(
+                _tipo_v, row.get("project_name") or job_id)
             _ok = _notify_admin(
-                f"Projeto com erro terminal: {job_id}",
+                _assunto_v,
                 f"<b>Projeto:</b> {row.get('project_name') or job_id}<br>"
                 f"<b>Cliente:</b> {row.get('user_email') or '—'}<br>"
-                f"<b>Classificação:</b> {_causa}<br>"
-                f"<b>Rótulo que o cliente viu:</b> {msg[:400]}<br>"
+                f"{_bloco_tipo}"
+                f"<b>Re-tentativa automática:</b> {_causa}<br>"
+                f"<b>O que o cliente vê na tela:</b> {msg[:400]}<br>"
                 f"{_bloco_real}<br>"
                 f"{_linha_do_email_ao_cliente(row.get('user_email') or '', row.get('created_at') or '')} "
                 f"Se for caso de resgate manual, o arquivo está no Storage "
@@ -6895,7 +7025,7 @@ def _auto_retry_erros_transitorios():
                 # SMTP voltar). A causa real vai junto pra não perder o diagnóstico.
                 _log_error(
                     "alert:admin",
-                    f"alerta de erro terminal NÃO entregue (SMTP fora) — job {job_id}; "
+                    f"aviso de projeto parado NÃO entregue (SMTP fora) — job {job_id}; "
                     f"cliente {row.get('user_email') or '—'}; rótulo: {msg[:200]}"
                     + (f"; causa real: {_causa_real[:400]}" if _causa_real else ""),
                     job_id, severity="critical")
@@ -7072,9 +7202,12 @@ def _recover_stuck_jobs_on_startup(skip_local_active: bool = False,
         # quantas já gastou — não retoma (evita loop infinito); marca erro pro
         # cliente reenviar.
         if prev_count is None:
+            import falhas as _fa_rn
+            _registrar_tipo_da_falha(job_id, "servidor-instavel")
             _supabase_update("projects", "job_id", job_id, {
                 "status": "error",
-                "error_message": "Processamento interrompido por reinício do servidor. Reenvie o projeto.",
+                "error_message": (_fa_rn.texto_da_tela("servidor-instavel") if _fa_rn.LIGADO else
+                                  "Processamento interrompido por reinício do servidor. Reenvie o projeto."),
                 "completed_at": now.isoformat(),
             })
             recovered += 1
@@ -7098,9 +7231,12 @@ def _recover_stuck_jobs_on_startup(skip_local_active: bool = False,
             recovered += 1
             continue
         if quarentenado:
+            import falhas as _fa_q
+            _registrar_tipo_da_falha(job_id, "isolado-para-analise")
             _supabase_update("projects", "job_id", job_id, {
                 "status": "error",
-                "error_message": ("Esse arquivo é pesado demais e derrubou o "
+                "error_message": (_fa_q.texto_da_tela("isolado-para-analise") if _fa_q.LIGADO else
+                                  "Esse arquivo é pesado demais e derrubou o "
                                   "processamento mais de uma vez. Envie só a "
                                   "prancha de arquitetura (sem 3D/imagens), ou "
                                   "divida o arquivo em partes menores."),
@@ -7112,7 +7248,8 @@ def _recover_stuck_jobs_on_startup(skip_local_active: bool = False,
             try:
                 # revisão dos consertos (21/09): anexo sem base em quarentena
                 # avisa pela chave do pedido (o dedup por job o calava)
-                _email_falha_cliente(job_id, reprocessavel=False, anexo_ref=_anexo_rec or "")
+                _email_falha_cliente(job_id, reprocessavel=False, anexo_ref=_anexo_rec or "",
+                                     tipo="isolado-para-analise")
             except Exception:
                 pass
             try:
@@ -7153,9 +7290,12 @@ def _recover_stuck_jobs_on_startup(skip_local_active: bool = False,
             continue
 
         # Não deu pra retomar (sem arquivo no Storage ou já retomou): marca erro
+        import falhas as _fa_rs
+        _registrar_tipo_da_falha(job_id, "servidor-instavel")
         ok = _supabase_update("projects", "job_id", job_id, {
             "status": "error",
-            "error_message": "Processamento interrompido por reinício do servidor. Reenvie o projeto.",
+            "error_message": (_fa_rs.texto_da_tela("servidor-instavel") if _fa_rs.LIGADO else
+                              "Processamento interrompido por reinício do servidor. Reenvie o projeto."),
             "completed_at": now.isoformat(),
         })
         if ok:
@@ -7174,14 +7314,18 @@ def _recover_stuck_jobs_on_startup(skip_local_active: bool = False,
                 if job_id in jobs:
                     jobs.update_field(job_id,
                                        status="error",
-                                       error_message="Processamento interrompido por reinício do servidor.",
+                                       error_message=(_fa_rs.texto_da_tela("servidor-instavel")
+                                                      if _fa_rs.LIGADO else
+                                                      "Processamento interrompido por reinício do servidor."),
                                        current_step="Erro: reinício do servidor")
             except Exception:
                 pass
             # Avisa o cliente que o projeto falhou por reinício (reprocessar
             # resolve). Best-effort; o helper tem dedup interno por job.
+            # 📚 25/09: com o catálogo ligado, servidor é tipo AUTOMÁTICO — o
+            # cliente só é avisado se a varredura não resolver (terminal).
             try:
-                _email_falha_cliente(job_id, reprocessavel=True)
+                _email_falha_cliente(job_id, reprocessavel=True, tipo="servidor-instavel")
             except Exception:
                 pass
 
@@ -9409,6 +9553,10 @@ def _abort_job_mem(job_id: str, done: int, total: int, motivo: str = "projeto",
         _msg = ("Seu projeto é grande demais pra processar de uma vez e chegou perto do "
                 "limite de memória do servidor. Divida em 2-3 envios menores (ex.: "
                 "metade das pranchas por vez) que processa tranquilo.")
+    import falhas as _fa_fr
+    _tipo_fr = "servidor-instavel" if motivo == "concorrencia" else "limite-memoria"
+    if _fa_fr.LIGADO:
+        _msg = _fa_fr.texto_da_tela(_tipo_fr)
     # 🩸 revisão final (21/09): num ANEXO, o freio gravava erro, mandava "deu
     # erro" e tirava da tela a planilha que o cliente já tinha — o mesmo
     # defeito que o except do motor deixou de ter. Com base, ela volta a valer.
@@ -9438,6 +9586,7 @@ def _abort_job_mem(job_id: str, done: int, total: int, motivo: str = "projeto",
         except Exception:
             pass
         return
+    _registrar_tipo_da_falha(job_id, _tipo_fr)
     try:
         jobs.update_field(job_id, status="error")
         jobs.update_field(job_id, error_message=_msg)
@@ -9483,7 +9632,8 @@ def _abort_job_mem(job_id: str, done: int, total: int, motivo: str = "projeto",
         # reprocessar É a resposta certa — o servidor estava ocupado, o arquivo não
         # tem nada. Então o e-mail usa o ramo que já existe e já diz a verdade.
         _email_falha_cliente(job_id, reprocessavel=(motivo == "concorrencia"),
-                             anexo_ref=(_ref_do_anexo_que_falhou(job_id) if is_complement else ""))
+                             anexo_ref=(_ref_do_anexo_que_falhou(job_id) if is_complement else ""),
+                             tipo=_tipo_fr)
     except Exception:
         pass
 
@@ -10097,6 +10247,10 @@ def _recusa_por_paginas(job_id, file_paths) -> bool:
         return False
 
     _msg = _mensagem_de_teto_de_paginas(soma, por_arquivo)
+    import falhas as _fa_pg
+    _registrar_tipo_da_falha(job_id, "limite-paginas")
+    if _fa_pg.LIGADO:
+        _msg = _fa_pg.texto_da_tela("limite-paginas")
     # 🪤 `_supabase_update` não levanta quando falha: devolve False (inclusive
     # em zero linhas afetadas). Engolir o retorno num try/except deixaria o
     # projeto preso em "processando" pra sempre, e o e-mail sem a âncora que
@@ -10130,7 +10284,8 @@ def _recusa_por_paginas(job_id, file_paths) -> bool:
     try:
         _leu_ap, _marca_ap = _ler_marca_do_anexo(job_id)
         _email_falha_cliente(job_id, reprocessavel=False,
-                             anexo_ref=(_marca_ap if _leu_ap and _marca_ap else ""))
+                             anexo_ref=(_marca_ap if _leu_ap and _marca_ap else ""),
+                             tipo="limite-paginas")
     except Exception:
         pass
     return True
@@ -14182,10 +14337,22 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                                 passo="Complemento não pôde ser lido — planilha anterior mantida"):
                             print(f"[add-file] complemento CAD falhou, base preservada → done+aviso (sem erro)")
                             return
-                    jobs.update_field(job_id, error_message=msg, current_step="❌ Arquivo CAD inválido — leia mensagem abaixo")
-                    raise RuntimeError(msg)
+                    # 📚 25/09: o tipo viaja com a falha (catálogo). Desligado, a
+                    # mensagem é a `msg` de sempre; ligado, a do catálogo — e o
+                    # DWG que o NOSSO leitor não abriu deixa de ser "arquivo inválido".
+                    import falhas as _fa_dwg
+                    _exc_dwg = _fa_dwg.Falha(
+                        _fa_dwg.tipo_do_dwg_que_nao_abriu(bool(_aec_failed), bool(_truncados)),
+                        msg, arquivo=arquivos)
+                    jobs.update_field(job_id, error_message=str(_exc_dwg),
+                                      current_step=("❌ Arquivo CAD inválido — leia mensagem abaixo"
+                                                    if not _fa_dwg.LIGADO else
+                                                    "Não conseguimos abrir o arquivo — leia abaixo"))
+                    raise _exc_dwg
             except Exception as e:
-                jobs.update_field(job_id, error_message=f"Erro DWG→DXF: {e}")
+                import falhas as _fa_dw2
+                jobs.update_field(job_id, error_message=(
+                    str(e) if isinstance(e, _fa_dw2.Falha) else f"Erro DWG→DXF: {e}"))
                 raise
 
         # Extrair dados de DXF e enviar pro Claude interpretar
@@ -17099,7 +17266,9 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 _verdict = classify_error_text(_errblob)
                 if _verdict == "transient":
                     # PROVA de sobrecarga/timeout — é do provedor, reprocessar resolve.
-                    raise RuntimeError(
+                    import falhas as _fa_ia
+                    raise _fa_ia.Falha(
+                        "leitura-sobrecarregada",
                         "⚠ Os servidores de IA estavam sobrecarregados neste "
                         "momento — é um problema temporário do provedor, NÃO do "
                         "seu arquivo. O sistema já tentou sozinho várias vezes "
@@ -17153,7 +17322,9 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         _saidas.append("mande uma prancha por vez")
                     _saidas.append("mande só a prancha (ou só a área) que você "
                                    "precisa medir agora")
-                    raise RuntimeError(
+                    import falhas as _fa_mem
+                    raise _fa_mem.Falha(
+                        "limite-prancha-grande",
                         "⚠ %s grande%s demais pro nosso limite de hoje — e "
                         "isso é limitação NOSSA, não defeito do seu arquivo. "
                         "Reprocessar do jeito que está vai dar no mesmo, e "
@@ -17184,7 +17355,12 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 _detalhe = ("um caractere inválido no arquivo do CAD"
                             if ("surrogate" in _low or "invalid high surrogate" in _low)
                             else "um problema técnico do nosso lado")
-                raise RuntimeError(
+                # 📚 25/09: o tipo sai da causa TÉCNICA (o erro de cada prancha),
+                # não do texto da tela — crédito, leitura da conversão, pedido
+                # inválido… 90 dias: 4 de 5 destes eram LEITURA nossa.
+                import falhas as _fa_perm
+                raise _fa_perm.Falha(
+                    _fa_perm.tipo_do_erro_de_leitura(_errblob, bool(dwg_via_libredwg)),
                     f"⚠ Tivemos um problema técnico ao processar este projeto "
                     f"({_detalhe}). Já estamos de olho nisso do nosso lado. "
                     f"Reprocesse — se persistir, fale com o suporte pelo botão "
@@ -17196,8 +17372,11 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 # a mensagem orienta a trocar o arquivo de entrada.
                 # 🩸 11/09/2026: o texto depende do que a gente SABE — tipo Estrutura
                 # ou PDF vetorial lido não podem virar "PDF escaneado" (ver o helper).
-                raise RuntimeError(_mensagem_sem_itens(
-                    is_structural, len(_pdfvec_por_prancha or {})))
+                import falhas as _fa_zero
+                raise _fa_zero.Falha(
+                    _fa_zero.tipo_sem_itens(is_structural, len(_pdfvec_por_prancha or {}),
+                                            bool(pdf_paths), bool(dxf_paths or dwg_failed)),
+                    _mensagem_sem_itens(is_structural, len(_pdfvec_por_prancha or {})))
 
         # ── Falha PARCIAL: vieram itens, mas pranchas/DXF falharam ──
         # O guard acima só pega o caso de ZERO itens. Se sobram itens mas uma
@@ -20027,9 +20206,13 @@ bloco — só cite os que estão no inventário deste arquivo."""
             print(f"[email] planilha-pronta nao enviada (nao-fatal): {_ee}")
 
     except Exception as e:
+        # 📚 25/09/2026 — catálogo de falhas: o TIPO desta falha vai pro log sempre
+        # (dado da revisão do Pedro); o texto da tela só muda com `falhas.LIGADO`.
+        _tipo_falha, _arq_falha, _msg_tela = _tipo_e_tela_da_falha(e)
+        _registrar_tipo_da_falha(job_id, _tipo_falha, _arq_falha)
         jobs.update_field(job_id, status="error")
-        jobs.update_field(job_id, error_message=str(e))
-        jobs.update_field(job_id, current_step=f"Erro: {str(e)[:200]}")
+        jobs.update_field(job_id, error_message=_msg_tela)
+        jobs.update_field(job_id, current_step=f"Erro: {_msg_tela[:200]}")
         import traceback as _tb_err
         _log_error("process_job", f"{type(e).__name__}: {e}\n{_tb_err.format_exc()[:1500]}", job_id)
 
@@ -20089,7 +20272,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 # morria em "1. Abra o arqui" -- ficava sabendo que deu errado e
                 # nao o que fazer. A coluna e `text`, sem limite; o teto so existe
                 # pra um traceback gigante nao virar mensagem de cliente.
-                "error_message": str(e)[:2000],
+                "error_message": _msg_tela[:2000],
             })
 
         # Email pro cliente (best-effort; sem jargão técnico). Distingue falha
@@ -20116,7 +20299,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                job_id, severity="error")
                 _email_falha_cliente(job_id, reprocessavel=_reproc, culpa_nossa=_nosso,
                                      anexo_ref=(_ref_do_anexo_que_falhou(job_id)
-                                                if _eh_anexo else ""))
+                                                if _eh_anexo else ""),
+                                     tipo=_tipo_falha, arquivo=_arq_falha)
             except Exception as _ee3:
                 print(f"[email] erro-cliente nao enviado (nao-fatal): {_ee3}")
 

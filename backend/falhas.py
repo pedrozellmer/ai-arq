@@ -141,6 +141,18 @@ TIPOS = {
                    "mesmo projeto."),
         "aviso": "Envio acima do teto de páginas. Dividir aqui e reprocessar.",
     },
+    # O freio de memória com o projeto SOZINHO no servidor (com outro rodando
+    # junto, a culpa é da concorrência: `servidor-instavel`, que re-tenta só).
+    "limite-memoria": {
+        "quem": "nosso", "automatico": False, "arte": "falha-nossa.png",
+        "rotulo": "Limite: projeto grande demais pra memória do servidor",
+        "o_que_houve": "O <b>{projeto}</b> é maior do que conseguimos processar de uma "
+                       "vez hoje.",
+        "atalho": ("<b>Se quiser adiantar:</b> envie as pranchas em duas ou três partes "
+                   "menores, no mesmo projeto."),
+        "aviso": "Freio de memória com o projeto sozinho no servidor (não foi "
+                 "concorrência). Dividir as pranchas aqui e reprocessar.",
+    },
     "isolado-para-analise": {
         "quem": "nosso", "automatico": False, "arte": "falha-nossa.png",
         "rotulo": "Isolado: derrubou o processamento mais de uma vez",
@@ -269,3 +281,73 @@ def _preenche(txt: str, projeto: str, arquivo: str) -> str:
 def _sem_tags(txt: str) -> str:
     import re as _r
     return " ".join(_r.sub(r"<[^>]+>", "", txt).split())
+
+
+# ── Ligação com o motor (25/09/2026) ─────────────────────────────────────────
+# O motor levanta `Falha(tipo, mensagem_antiga)` no ponto onde CONHECE a causa.
+# Com LIGADO=False a mensagem é EXATAMENTE a de antes (nada muda pro cliente) —
+# mas o tipo viaja junto e vai pro log, que é o dado da revisão do Pedro.
+
+class Falha(RuntimeError):
+    """Falha com o TIPO do catálogo. `str()` é o que a tela mostra."""
+
+    def __init__(self, tipo, mensagem_antiga="", arquivo="", projeto=""):
+        self.tipo = tipo if tipo in TIPOS else "desconhecido"
+        self.arquivo = (arquivo or "").strip()
+        if LIGADO or not mensagem_antiga:
+            texto = texto_da_tela(self.tipo, projeto, self.arquivo)
+        else:
+            texto = mensagem_antiga
+        super().__init__(texto)
+
+
+def tipo_da_excecao(e, classe_antiga: str = "") -> str:
+    """O tipo de uma exceção que chegou ao fim do job.
+
+    `Falha` já traz o tipo. O resto vem da classificação que já existia
+    (`main.como_classificar_a_falha`): erro de programação → erro-no-sistema;
+    passageiro (reinício, timeout…) → servidor-instavel; o resto → desconhecido
+    (NUNCA o balde que acusa o arquivo do cliente sem prova)."""
+    t = getattr(e, "tipo", None)
+    if t in TIPOS:
+        return t
+    return {"nosso": "erro-no-sistema",
+            "passageiro": "servidor-instavel"}.get(classe_antiga, "desconhecido")
+
+
+def tipo_do_erro_de_leitura(errblob: str, veio_da_conversao: bool = False) -> str:
+    """Todas as pranchas falharam com erro permanente/desconhecido: qual tipo?
+
+    Lê a causa TÉCNICA (o texto do erro de cada prancha), não o texto da tela."""
+    m = (errblob or "").lower()
+    if any(t in m for t in ("credit balance is too low", "purchase credits")):
+        return "interno-da-conta"
+    if "grande demais pra processar com segurança" in m:
+        return "limite-arquivo-grande"
+    if ("extração isolada falhou" in m or "dxfstructureerror" in m
+            or "invalid sort handle" in m):
+        return "leitor-conversao" if veio_da_conversao else "leitor-extracao"
+    if any(t in m for t in ("authentication_error", "permission_error", "not_found_error",
+                            "invalid_request", "status=401", "status=403", "status=404")):
+        return "interno-da-conta"
+    return "desconhecido"
+
+
+def tipo_sem_itens(is_structural: bool, paginas_vetoriais: int,
+                   tem_pdf: bool, tem_cad: bool) -> str:
+    """A leitura terminou sem NENHUM item: qual tipo? (o mesmo que o texto antigo dizia)."""
+    if is_structural:
+        return "tipo-errado-estrutura"
+    if tem_pdf and not tem_cad:
+        return "pdf-sem-quantidade" if paginas_vetoriais > 0 else "pdf-escaneado"
+    return "leitor-extracao"
+
+
+def tipo_do_dwg_que_nao_abriu(aec: bool, truncado: bool) -> str:
+    """DWG que nenhum conversor abriu: MEP é natureza do arquivo (o cliente age);
+    os outros dois são o nosso leitor (a casa age)."""
+    if aec:
+        return "dwg-autocad-mep"
+    if truncado:
+        return "leitor-dwg-parou"
+    return "leitor-dwg-versao"
