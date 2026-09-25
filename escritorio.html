@@ -112,11 +112,53 @@
   .etp.atual{background:#EEF2FF;color:#3730A3;border-bottom-color:#4F46E5}
   .etp[aria-pressed="true"]{box-shadow:inset 0 0 0 2px #4F46E5}
   .etp small{display:block;font-size:11px;font-weight:500;opacity:.7}
-  .tool{display:flex;gap:14px;align-items:flex-start;text-align:left;padding:18px;border:1px solid #E2E8F0;border-radius:14px;background:#fff;cursor:pointer;font-family:inherit;text-decoration:none;color:inherit}
-  .tool:hover{border-color:#A5B4FC}
-  .tool .ti{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex:none;background:#EEF2FF;color:#4F46E5}
+  /* cada ferramenta tem a sua cor (--c1/--c2 no style do cartão; --bg é o tom claro de fundo) */
+  .tool{--c1:#4F46E5;--c2:#818CF8;--bg:#EEF2FF;position:relative;display:flex;gap:14px;align-items:center;text-align:left;padding:18px 40px 18px 18px;border:1px solid #E2E8F0;border-radius:16px;background:linear-gradient(135deg,var(--bg) 0%,#fff 62%);cursor:pointer;font-family:inherit;text-decoration:none;color:inherit;transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease}
+  .tool:hover{transform:translateY(-3px);border-color:var(--c2);box-shadow:0 2px 4px rgba(15,23,42,.05),0 16px 32px -18px var(--c1)}
+  .tool .ti{width:46px;height:46px;border-radius:13px;display:flex;align-items:center;justify-content:center;flex:none;background:linear-gradient(135deg,var(--c1),var(--c2));color:#fff;box-shadow:0 8px 18px -8px var(--c1)}
+  .tool .ti svg{stroke:#fff}
+  .tool::after{content:"\2192";position:absolute;right:16px;top:50%;transform:translate(-4px,-50%);font-size:18px;font-weight:600;color:var(--c1);opacity:0;transition:opacity .18s ease,transform .18s ease}
+  .tool:hover::after{opacity:1;transform:translate(0,-50%)}
   .tool b{display:block;font-size:15.5px;color:#0F172A} .tool span{display:block;font-size:13px;color:#64748B;margin-top:3px}
-  .tool:hover{box-shadow:0 10px 24px -14px rgba(79,70,229,.35)}
+  @media (prefers-reduced-motion:reduce){ .tool,.tool:hover{transition:none;transform:none} }
+  /* faixa colorida do topo do projeto */
+  .banda{position:relative;overflow:hidden;margin:-26px -26px 22px;padding:24px 26px 26px;border-radius:18px 18px 0 0;background:linear-gradient(135deg,#4f46e5 0%,#6366f1 45%,#06b6d4 100%);color:#fff}
+  .banda::before,.banda::after{content:"";position:absolute;border-radius:50%;background:rgba(255,255,255,.10);pointer-events:none}
+  .banda::before{width:260px;height:260px;right:-60px;top:-120px} .banda::after{width:160px;height:160px;right:180px;bottom:-110px;background:rgba(255,255,255,.07)}
+  .banda > *{position:relative}
+  .banda .lbl{color:rgba(255,255,255,.82)} .banda h2{color:#fff;font-weight:700;font-size:30px;line-height:1.15;margin:6px 0 0}
+  .banda .btn{background:rgba(255,255,255,.16);border-color:rgba(255,255,255,.35);color:#fff}
+  .banda .btn:hover{background:rgba(255,255,255,.26)}
+  .banda .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+  .banda .chips span{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.28);border-radius:99px;padding:4px 11px}
+  @media (max-width:640px){ .banda{margin:-26px -26px 18px;padding:20px 20px 22px} .banda h2{font-size:24px} }
+  /* faixa do topo de cada tela, na cor da ferramenta */
+  .faixa{position:relative;overflow:hidden;display:flex;flex-wrap:wrap;align-items:center;gap:16px;padding:22px 24px;border-radius:18px;color:#fff;background:linear-gradient(135deg,var(--c1),var(--c2));box-shadow:0 14px 30px -20px var(--c1)}
+  .faixa::before{content:"";position:absolute;width:220px;height:220px;border-radius:50%;right:-50px;top:-110px;background:rgba(255,255,255,.12);pointer-events:none}
+  .faixa > *{position:relative}
+  .faixa h2,.faixa p{text-shadow:0 1px 2px rgba(15,23,42,.18)}
+  .faixa h2{margin:0;font-size:22px;font-weight:700;color:#fff} .faixa p{margin:4px 0 0;font-size:13.5px;color:rgba(255,255,255,.88)}
+  .faixa p b{color:#fff}
+  .fx-ico{width:48px;height:48px;border-radius:14px;flex:none;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.3)}
+  .fx-acoes .btn{background:rgba(255,255,255,.16);border-color:rgba(255,255,255,.4);color:#fff}
+  .fx-acoes .btn:hover{background:rgba(255,255,255,.28)}
+  .fx-acoes .btn-p,.fx-acoes .btn-g,.fx-acoes .btn-d{background:#fff;border-color:#fff;color:var(--c1)}
+  .fx-acoes .btn-p:hover,.fx-acoes .btn-g:hover,.fx-acoes .btn-d:hover{background:#F8FAFC}
+  /* cartão de projeto na lista */
+  .pj{position:relative;display:flex;flex-direction:column;gap:12px;padding:0;overflow:hidden;text-decoration:none;color:inherit;transition:transform .18s ease,box-shadow .18s ease}
+  .pj:hover{transform:translateY(-3px);box-shadow:0 2px 4px rgba(15,23,42,.05),0 18px 36px -20px var(--c1)}
+  .pj-topo{height:64px;background:linear-gradient(135deg,var(--c1),var(--c2));position:relative}
+  .pj-ini{position:absolute;left:20px;bottom:-22px;width:46px;height:46px;border-radius:13px;background:#fff;color:var(--c1);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px;box-shadow:0 6px 16px -6px rgba(15,23,42,.35)}
+  .pj-corpo{padding:28px 20px 20px;display:flex;flex-direction:column;gap:8px}
+  .pj-corpo b{font-size:16px;color:#0F172A}
+  .barra{height:6px;border-radius:99px;background:#F1F5F9;overflow:hidden} .barra i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--c1),var(--c2))}
+  @media (prefers-reduced-motion:reduce){ .pj,.pj:hover{transition:none;transform:none} }
+  .lista > li > .av{width:38px;height:38px;font-size:13px}
+  /* ata: data em destaque */
+  .ata{border-left:4px solid #10B981}
+  .ata-dia{width:54px;flex:none;text-align:center;border-radius:12px;background:#ECFDF5;color:#065F46;padding:6px 0}
+  .ata-dia b{display:block;font-size:20px;line-height:1.1} .ata-dia span{font-size:11px;font-weight:700;text-transform:uppercase}
+  .grupo-t i{display:inline-block;width:18px;height:4px;border-radius:4px;margin-right:8px;vertical-align:middle}
   .tool .so-voce{display:inline-flex;align-items:center;gap:4px;margin-left:6px;font-size:10.5px;font-weight:700;color:#475569;background:#F1F5F9;border-radius:99px;padding:1px 7px;vertical-align:2px}
   .tool .so-voce svg{width:10px;height:10px}
   .grupo-t{font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748B;margin:18px 0 10px}
@@ -235,7 +277,7 @@ const meuMembro = () => MEMBROS.find((m) => m.user_id === EU.id);
 const nomeDe = (m) => (m && (m.nome || (m.email || '').split('@')[0])) || '—';
 const curto = (m) => nomeDe(m).split(' ')[0];
 const iniciais = (m) => nomeDe(m).split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0].toUpperCase()).join('') || '·';
-const av = (m) => `<span class="av" title="${esc(nomeDe(m))}">${esc(iniciais(m))}</span>`;
+const av = (m) => { const c = corDe(m.id || nomeDe(m)); return `<span class="av" style="background:${c[2]};color:${c[0]}" title="${esc(nomeDe(m))}">${esc(iniciais(m))}</span>`; };
 const pessoasDa = (t) => PESSOAS_T.filter((p) => p.tarefa_id === t.id).map((p) => MEMBROS.find((m) => m.id === p.membro_id)).filter(Boolean);
 const avs = (t) => `<span class="avs">${pessoasDa(t).map(av).join('')}</span>`;
 const aberta = (t) => !['aprov', 'ok'].includes(t.status);
@@ -265,7 +307,17 @@ const IC = {
   cad: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/>',
   cli: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
 };
-const svg = (k, s = 18) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${IC[k]}</svg>`;
+// a cor de cada ferramenta (forte, clara, fundo) — a mesma no cartão da página do projeto e na faixa da tela dela
+const COR = { tar: ['#4F46E5', '#818CF8', '#EEF2FF'], arq: ['#D97706', '#F59E0B', '#FFFBEB'], atas: ['#059669', '#34D399', '#ECFDF5'], eq: ['#7C3AED', '#A78BFA', '#F5F3FF'],
+  plan: ['#0891B2', '#22D3EE', '#ECFEFF'], crono: ['#EA580C', '#FB923C', '#FFF7ED'], memo: ['#2563EB', '#60A5FA', '#EFF6FF'], rev: ['#E11D48', '#FB7185', '#FFF1F2'],
+  cot: ['#0D9488', '#2DD4BF', '#F0FDFA'], fin: ['#16A34A', '#4ADE80', '#F0FDF4'] };
+// faixa colorida no topo de cada tela (ícone, título, uma linha e os botões da tela)
+const faixa = (ic, titulo, sub, acoes = '') => `<section class="faixa rise" style="--c1:${COR[ic][0]};--c2:${COR[ic][1]}">
+  <span class="fx-ico">${svg(ic, 24)}</span><div style="flex:1 1 260px;min-width:0"><h2>${titulo}</h2>${sub ? `<p>${sub}</p>` : ''}</div>${acoes ? `<div class="linha fx-acoes">${acoes}</div>` : ''}</section>`;
+// cor estável por texto (projeto, pessoa): o mesmo nome sai sempre com a mesma cor
+const PALETA = ['tar', 'arq', 'atas', 'eq', 'plan', 'crono', 'memo', 'rev', 'cot', 'fin'];
+const corDe = (s) => { let h = 0; for (const c of String(s || '')) h = (h * 31 + c.charCodeAt(0)) >>> 0; return COR[PALETA[h % PALETA.length]]; };
+const svg = (k, s = 18) =>`<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${IC[k]}</svg>`;
 
 // ── rotas: #/ (lista) · #/p/<id>/<tela> · #/job/<job_id>/<tela> (vindo do menu de um projeto medido) ──
 function lerRota() {
@@ -374,12 +426,18 @@ function telaLista() {
       <p class="sub">Por enquanto, quem usa o Escritório entra por convite de um projeto. Se você recebeu um convite, abra o link do e-mail.</p>
       <p class="sub" style="margin-top:10px"><a href="dashboard.html">Voltar ao painel</a></p></div>`;
   }
-  return `<div class="linha"><h2 class="h2" style="flex:1">${PROJETOS.length ? PROJETOS.length + ' projeto' + (PROJETOS.length > 1 ? 's' : '') : 'Seus projetos'}</h2>
-      ${NO_PILOTO ? '<button class="btn" onclick="trazerMedido()">Trazer projeto medido</button><button class="btn btn-g" onclick="novoProjeto()">+ Novo projeto</button>' : ''}</div>
-    ${PROJETOS.length ? `<div class="grade g3">${PROJETOS.map((p) => `<a class="card" style="text-decoration:none;color:inherit;display:flex;flex-direction:column;gap:10px" href="#/p/${p.id}/capa">
-        <div class="linha" style="justify-content:space-between;align-items:flex-start"><b style="color:#111827">${esc(p.nome)}</b>${p.etapa_atual ? `<span class="pill p-ind">${esc(p.etapa_atual)}</span>` : ''}</div>
-        ${p.cliente_nome ? `<span class="sub" style="margin:0">Cliente: ${esc(p.cliente_nome)}</span>` : ''}
-        <span class="sub" style="margin:0">${p.dono === EU.id ? 'Você é admin' : 'Você faz parte da equipe'}</span></a>`).join('')}</div>`
+  const n = PROJETOS.length;
+  return `${faixa('tar', 'Escritório', n ? `${n} projeto${n > 1 ? 's' : ''}: tarefas, atas, equipe e a pasta do Drive de cada um.` : 'Tarefas, atas, equipe e a pasta do Drive de cada projeto.',
+      NO_PILOTO ? '<button class="btn" onclick="trazerMedido()">Trazer projeto medido</button><button class="btn btn-g" onclick="novoProjeto()">+ Novo projeto</button>' : '')}
+    ${n ? `<div class="grade g2 g3">${PROJETOS.map((p) => {
+      const c = corDe(p.id), et = p.etapas || [], i = et.indexOf(p.etapa_atual), pct = et.length && i >= 0 ? Math.round(((i + 1) / et.length) * 100) : 0;
+      return `<a class="card pj rise" style="--c1:${c[0]};--c2:${c[1]}" href="#/p/${p.id}/capa">
+        <div class="pj-topo"><span class="pj-ini">${esc(iniciais({ nome: String(p.nome || '').split(/\s+/).filter((w) => /^[A-Za-zÀ-ÿ0-9]/.test(w) && !/^(d[aeo]s?|e)$/i.test(w)).join(' ') || p.nome }))}</span></div>
+        <div class="pj-corpo">
+          <div class="linha" style="justify-content:space-between;align-items:flex-start"><b>${esc(p.nome)}</b>${p.job_id ? '<span class="pill p-ind">medido</span>' : ''}</div>
+          ${p.cliente_nome ? `<span class="sub" style="margin:0">Cliente: ${esc(p.cliente_nome)}</span>` : ''}
+          ${et.length ? `<div><div class="linha" style="justify-content:space-between;margin-bottom:6px"><span class="sub" style="margin:0;font-weight:600;color:#334155">${esc(p.etapa_atual || 'Sem etapa')}</span><span class="sub tab" style="margin:0">${i >= 0 ? `etapa ${i + 1} de ${et.length}` : ''}</span></div><div class="barra"><i style="width:${pct}%"></i></div></div>` : ''}
+          <span class="sub" style="margin:0">${p.dono === EU.id ? 'Você é admin' : 'Você faz parte da equipe'}</span></div></a>`; }).join('')}</div>`
       : `<div class="card"><p class="h2" style="font-size:16px">Comece pelo primeiro projeto</p><p class="sub">Um projeto aqui nasce sem prancha: tarefas, atas, equipe e a pasta do Drive. Já mediu o projeto no AI.arq? Use <b>Trazer projeto medido</b>: a equipe trabalha nele e vê o quantitativo.</p></div>`}`;
 }
 // 🏢 Trazer um projeto MEDIDO pro Escritório (24/09 — Pedro: "como levar um projeto feito pro escritório?").
@@ -463,22 +521,29 @@ function telaCapa() {
   const kpi = (estado, ic, rot, val, det) => `<div class="kpi ${estado}"><div class="kpi-top"><span class="kpi-ico">${svg(ic, 17)}</span><p class="rot">${rot}</p></div><p class="val tab">${val}</p><p class="det">${det}</p></div>`;
   const ativos = MEMBROS.filter((m) => m.status === 'ativo');
   const convidados = MEMBROS.filter((m) => m.status === 'convidado').length;
-  const tool = (href, ic, t, d, soVoce) => `<a class="tool" href="${href}"><span class="ti">${svg(ic)}</span><span><b>${t}${soVoce ? `<span class="so-voce">${svg('cad', 10)}só você</span>` : ''}</b><span>${d}</span></span></a>`;
+  const tool = (href, ic, t, d, soVoce) => `<a class="tool" href="${href}" style="--c1:${COR[ic][0]};--c2:${COR[ic][1]};--bg:${COR[ic][2]}"><span class="ti">${svg(ic, 22)}</span><span><b>${t}${soVoce ? `<span class="so-voce">${svg('cad', 10)}só você</span>` : ''}</b><span>${d}</span></span></a>`;
   const J = p.job_id ? encodeURIComponent(p.job_id) : '';
   const prox = p.proxima_entrega || p.proxima_entrega_data;
   return `
   <section class="card rise">
+    <div class="banda">
+      <div class="linha" style="justify-content:space-between;align-items:flex-start">
+        <p class="lbl" style="margin:0">${esc(p.etapa_atual || 'Projeto')}${p.job_id ? ' · ligado ao projeto medido' : ''}</p>
+        ${souAdmin() ? `<button class="btn btn-s" onclick="editarProjeto()">Editar projeto</button>` : ''}
+      </div>
+      <h2>${esc(p.nome)}</h2>
+      <div class="chips">
+        <span>${svg('tar', 13)}${abertas.length} tarefa${abertas.length === 1 ? '' : 's'} aberta${abertas.length === 1 ? '' : 's'}</span>
+        <span>${svg('eq', 13)}${ativos.length} na equipe</span>
+        ${et.length && iA >= 0 ? `<span>Etapa ${iA + 1} de ${et.length}</span>` : ''}
+        ${p.proxima_entrega_data ? `<span class="tab">Entrega ${dBR(p.proxima_entrega_data)}</span>` : ''}
+      </div>
+    </div>
     <div class="heroi">
       <div style="flex:1 1 380px;min-width:260px">
-        <div class="linha" style="justify-content:space-between;align-items:flex-start">
-          <p class="lbl" style="margin:0">${esc(p.etapa_atual || 'Projeto')}${p.job_id ? ' · ligado ao projeto medido' : ''}</p>
-          ${souAdmin() ? `<button class="btn btn-s" onclick="editarProjeto()">Editar projeto</button>` : ''}
-        </div>
-        <h2 class="h2">${esc(p.nome)}</h2>
-        <dl class="dl">
+        <dl class="dl" style="margin-top:0">
           ${p.cliente_nome ? `<dt>Cliente</dt><dd>${esc(p.cliente_nome)}</dd>` : ''}
           <dt>Equipe</dt><dd>${ativos.map((m) => `${av(m)}<span style="margin-right:6px">${esc(curto(m))}</span>`).join('')}${convidados ? `<span class="pill p-warn"><i></i>${convidados} convite${convidados > 1 ? 's' : ''} aguardando</span>` : ''}</dd>
-          ${p.proxima_entrega_data ? `<dt>Próxima entrega</dt><dd class="tab">${dBR(p.proxima_entrega_data)}</dd>` : ''}
         </dl>
       </div>
       <div class="lado">
@@ -498,14 +563,14 @@ function telaCapa() {
   </div>
   <section class="card rise"><h2 class="h2">Tudo do projeto</h2>
     <p class="sub">O escritório e as ferramentas que o AI.arq já tinha, no mesmo lugar.</p>
-    <p class="grupo-t">Escritório</p>
+    <p class="grupo-t"><i style="background:linear-gradient(90deg,#4F46E5,#A78BFA)"></i>Escritório</p>
     <div class="grade g2 g4">
       ${tool(`#/p/${p.id}/tarefas`, 'tar', 'Tarefas', `${abertas.length} abertas`)}
       ${tool(`#/p/${p.id}/arquivos`, 'arq', 'Arquivos', p.pasta_caminho ? 'Drive · ' + esc(p.pasta_caminho) : 'Ligar a pasta do Drive')}
-      ${tool(`#/p/${p.id}/atas`, 'atas', 'Atas', `${ATAS.length} reuniões`)}
-      ${tool(`#/p/${p.id}/equipe`, 'eq', 'Equipe', `${ativos.length} pessoas`)}
+      ${tool(`#/p/${p.id}/atas`, 'atas', 'Atas', `${ATAS.length} ${ATAS.length === 1 ? 'reunião' : 'reuniões'}`)}
+      ${tool(`#/p/${p.id}/equipe`, 'eq', 'Equipe', `${ativos.length} ${ativos.length === 1 ? 'pessoa' : 'pessoas'}`)}
     </div>
-    ${p.job_id ? `<p class="grupo-t">Quantitativo e obra</p>
+    ${p.job_id ? `<p class="grupo-t"><i style="background:linear-gradient(90deg,#0891B2,#FB923C)"></i>Quantitativo e obra</p>
     <div class="grade g2 g4">
       ${tool(`projeto.html?job_id=${J}#quantitativo`, 'plan', 'Quantitativo', souAdmin() ? 'Planilha do projeto medido' : 'Só leitura')}
       ${tool(`cronograma.html?job=${J}`, 'crono', 'Cronograma', souAdmin() ? 'Montar ou abrir' : 'Só leitura')}
@@ -559,12 +624,14 @@ const visivel = (t) => FILT[FILTRO](t) && (!FILTRO_E || t.etapa === FILTRO_E);
 const podeLevar = (t, st) => souAdmin() || st === t.status || (['afazer', 'dev', 'revdtz', 'revsol'].includes(t.status) && ST_EQUIPE.includes(st));
 function telaTarefas() {
   const ch = (k, t) => `<button class="chip" aria-pressed="${FILTRO === k}" onclick="FILTRO='${k}';render()">${t}<span class="n">${TAR.filter(FILT[k]).filter(aberta).length}</span></button>`;
-  return `<div class="linha">${ch('todas', 'Todas')}${ch('minhas', 'Minhas')}${ch('cliente', 'Do cliente')}
+  const ab = TAR.filter(aberta), atr = ab.filter(atrasada).length;
+  return `${faixa('tar', 'Tarefas', `${ab.length} aberta${ab.length === 1 ? '' : 's'}${atr ? ` · <b>${atr} atrasada${atr === 1 ? '' : 's'}</b>` : ''}. Arraste os cartões entre as colunas; clique num cartão pra marcar pessoas e comentar.`,
+      '<button class="btn btn-p" onclick="novaTarefa()">+ Nova tarefa</button>')}
+    <div class="linha">${ch('todas', 'Todas')}${ch('minhas', 'Minhas')}${ch('cliente', 'Do cliente')}
       <select class="in" style="width:auto;padding:5px 8px;font-size:12px" aria-label="Filtrar por etapa" onchange="FILTRO_E=this.value;render()"><option value="">Todas as etapas</option>${(PROJ.etapas || []).map((e) => `<option ${e === FILTRO_E ? 'selected' : ''}>${esc(e)}</option>`).join('')}</select>
-      <span style="flex:1"></span><button class="btn btn-p" onclick="novaTarefa()">+ Nova tarefa</button></div>
-    <p class="sub" style="margin:-8px 0 0">Arraste os cartões pra cima, pra baixo ou pra outra coluna. Clique num cartão pra marcar pessoas e comentar. ${souAdmin() ? 'A equipe leva até <b>Aguardando revisão</b>; dali pra frente é você.' : 'Você leva até <b>Aguardando revisão</b>; dali pra frente é a admin do projeto.'}</p>
+      <span class="sub" style="margin:0 0 0 auto">${souAdmin() ? 'A equipe leva até <b>Aguardando revisão</b>; dali pra frente é você.' : 'Você leva até <b>Aguardando revisão</b>; dali pra frente é a admin do projeto.'}</span></div>
     <div class="board">${ST.map((s) => { const ts = TAR.filter((t) => t.status === s.k && visivel(t)).sort((a, b) => a.posicao - b.posicao); return `
-      <div class="col" data-st="${s.k}" ondragover="sobre(event)" ondrop="soltar(event)" aria-label="${s.t}">
+      <div class="col" style="border-top:4px solid ${s.cor}" data-st="${s.k}" ondragover="sobre(event)" ondrop="soltar(event)" aria-label="${s.t}">
         <div class="col-h"><i style="background:${s.cor}"></i>${s.t}<span class="n">${ts.length}</span></div>
         <div class="cards">${ts.map(cartao).join('')}</div>
         <div><button class="add" onclick="addCartao('${s.k}',this)">+ Adicionar cartão</button></div>
@@ -709,8 +776,8 @@ const ehLinkDoGoogle = (u) => /^https:\/\/(docs|drive)\.google\.com\//.test(Stri
 const ehIconeDoGoogle = (u) => /^https:\/\/[a-z0-9.-]+\.googleusercontent\.com\//.test(String(u || ''));
 function telaArquivos() {
   setTimeout(carregarArquivos, 0);
-  return `<section class="card rise"><div class="linha" style="justify-content:space-between"><h2 class="h2">Arquivos do projeto</h2><span id="arq-acoes" class="linha"></span></div>
-    <div id="arq-corpo" style="margin-top:14px"><p class="sub">Abrindo a pasta do Drive…</p></div></section>`;
+  return `${faixa('arq', 'Arquivos do projeto', 'A pasta deste projeto no Google Drive. Cada pessoa da equipe tem acesso só a ela.', '<span id="arq-acoes" class="linha"></span>')}
+    <section class="card rise"><div id="arq-corpo"><p class="sub" style="margin:0">Abrindo a pasta do Drive…</p></div></section>`;
 }
 async function carregarArquivos() {
   const corpo = $('arq-corpo'); if (!corpo || VIEW !== 'arquivos') return;
@@ -802,11 +869,13 @@ async function sincronizarPasta(calado) {
 
 // ══════════════ ATAS ══════════════
 function telaAtas() {
-  return `<div class="linha"><p class="sub" style="flex:1;min-width:240px;font-size:13.5px;margin:0">Registre o que foi decidido e quem ficou de fazer o quê. As tarefas entram direto no quadro.</p>
-    <button class="btn btn-g" onclick="novaAta()">+ Nova ata</button></div>
-    ${ATAS.length ? ATAS.map((a) => { const ts = TAR.filter((t) => t.ata_id === a.id); return `<section class="card">
-      <p class="lbl" style="margin:0">${dBR(a.data)}</p><h2 class="h2">${esc(a.titulo)}</h2>
-      ${(a.participantes || []).length ? `<p class="sub">Presentes: ${a.participantes.map(esc).join(', ')}</p>` : ''}
+  const MES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+  const dia = (iso) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || ''); return m ? `<div class="ata-dia"><b class="tab">${m[3]}</b><span>${MES[+m[2] - 1] || ''}</span></div>` : ''; };
+  return `${faixa('atas', 'Atas', `${ATAS.length ? `${ATAS.length} reuni${ATAS.length === 1 ? 'ão registrada' : 'ões registradas'}. ` : ''}Registre o que foi decidido e quem ficou de fazer o quê: as tarefas entram direto no quadro.`,
+      '<button class="btn btn-g" onclick="novaAta()">+ Nova ata</button>')}
+    ${ATAS.length ? ATAS.map((a) => { const ts = TAR.filter((t) => t.ata_id === a.id); return `<section class="card ata rise">
+      <div class="linha" style="align-items:flex-start;flex-wrap:nowrap;gap:14px">${dia(a.data)}<div style="min-width:0">${dia(a.data) ? '' : `<p class="lbl" style="margin:0">${dBR(a.data)}</p>`}<h2 class="h2" style="margin-top:4px">${esc(a.titulo)}</h2>
+      ${(a.participantes || []).length ? `<p class="sub">Presentes: ${a.participantes.map(esc).join(', ')}</p>` : ''}</div></div>
       <div class="grade g2" style="margin-top:12px"><div><p class="lbl">Decisões</p>${(a.decisoes || []).length ? `<ul style="margin:0;padding-left:18px;font-size:13.5px;color:#334155">${a.decisoes.map((d) => `<li>${esc(d)}</li>`).join('')}</ul>` : '<p class="vazio">—</p>'}</div>
       <div><p class="lbl">Tarefas que saíram daqui</p>${ts.length ? `<ul class="lista">${ts.map((t) => `<li><span style="width:8px;height:8px;border-radius:50%;background:${(ST.find((s) => s.k === t.status) || {}).cor}"></span><span style="flex:1;font-size:13px">${esc(t.titulo)}<span class="sub" style="display:block;margin:0">${stT(t.status)}</span></span>${pillPrazo(t)}${avs(t)}</li>`).join('')}</ul>` : '<p class="vazio">Nenhuma.</p>'}</div></div>
       ${a.proxima_reuniao ? `<p class="sub" style="margin-top:10px">Próxima reunião: <b>${esc(a.proxima_reuniao)}</b></p>` : ''}</section>`; }).join('')
@@ -855,9 +924,12 @@ async function salvarAta() {
 // ══════════════ EQUIPE ══════════════
 function telaEquipe() {
   const vis = MEMBROS.filter((m) => m.status !== 'removido');
-  return `<div class="aviso"><b>Quem você convida entra no projeto, não no escritório.</b><br>
+  const at = vis.filter((m) => m.status === 'ativo').length, cv = vis.filter((m) => m.status === 'convidado').length;
+  return `${faixa('eq', 'Equipe', `${at} no projeto${cv ? ` · ${cv} convite${cv > 1 ? 's' : ''} aguardando` : ''}. Cada pessoa vê só este projeto.`,
+      souAdmin() ? '<button class="btn btn-p" onclick="convidar()">+ Convidar pessoa</button>' : '')}
+    <div class="aviso"><b>Quem você convida entra no projeto, não no escritório.</b><br>
       <span style="font-size:12.5px;color:#475569">Vê e edita: as tarefas, as atas e a pasta do Drive deste projeto (acesso de edição pela conta Google da pessoa). Vê o nome e a função dos colegas, mas não o e-mail nem o telefone. Não vê: os outros projetos, o financeiro e o resto do seu Drive.${PROJ.job_id ? ' <b>Projeto medido ligado:</b> a equipe vê o quantitativo, o cronograma e o memorial, só leitura; <b>baixar arquivos</b> só quem você liberar abaixo.' : ''}</span></div>
-    <section class="card"><div class="linha" style="justify-content:space-between"><h2 class="h2">${vis.length} pessoa${vis.length > 1 ? 's' : ''}</h2>${souAdmin() ? '<button class="btn btn-p" onclick="convidar()">+ Convidar pessoa</button>' : ''}</div>
+    <section class="card"><div class="linha" style="justify-content:space-between"><h2 class="h2">${vis.length} pessoa${vis.length > 1 ? 's' : ''}</h2></div>
       <ul class="lista" style="margin-top:8px">${vis.map((m) => `<li style="flex-wrap:wrap">${av(m)}<div style="flex:1;min-width:180px"><b style="font-size:14px">${esc(nomeDe(m))}${m.user_id === EU.id ? ' <span style="font-weight:400;color:#64748B">(você)</span>' : ''}</b>
         <span class="sub" style="display:block;margin:0">${esc(m.funcao || (m.papel === 'dono' ? 'Admin do projeto' : ''))}${m.email ? ' · ' + esc(m.email) : ''}${m.telefone ? ' · ' + esc(m.telefone) : ''}</span>
         ${NOTAS[m.id] ? `<span class="sub" style="display:block;margin:0">${esc(NOTAS[m.id])}</span>` : ''}</div>

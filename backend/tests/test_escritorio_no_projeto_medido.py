@@ -92,6 +92,6 @@ def test_trazer_projeto_medido_pelo_escritorio_lista_so_os_da_conta():
     assert "!ligados.has(p.job_id)" in tr and "!p.archived" in tr
     assert "href=\"#/job/${encodeURIComponent(p.job_id)}/capa\"" in tr
     lista = _funcao(h, "function telaLista() {", "\n}\n")
-    assert "${NO_PILOTO ? '<button class=\"btn\" onclick=\"trazerMedido()\">Trazer projeto medido</button>" in lista
+    assert "NO_PILOTO ? '<button class=\"btn\" onclick=\"trazerMedido()\">Trazer projeto medido</button>" in lista
     assert "vem na próxima etapa" not in h[h.index("function telaCapa"):h.index("function telaCapa") + 6000]
 
