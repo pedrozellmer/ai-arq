@@ -5381,14 +5381,23 @@ _RE_DESENHO_FORA_DA_SOMA = _re.compile(
     r"detalhamento|det\b|ampliacao|ampliad|situacao|localizacao|"
     # 25/09: "3D - Térreo - Banho" (vista 3D do Revit) é o isométrico da
     # tubulação — sem isto, o "térreo" do nome fazia dela uma PLANTA
-    r"3d\b|axonometric)")
-# 🚫 VISTA (corte, elevação, fachada) NÃO sai da soma — ainda. Medido no
-# acervo local em 24/09: nas elevações de um lavabo, tirar a vista levou a área
-# de 50,5 para 30,0 m². Elevação não é o mesmo objeto redesenhado: o
-# REVESTIMENTO DE PAREDE só existe nela. Fica como era até o log
-# (`motor:leitura-por-folha`) mostrar quanto a vista pesa.
+    r"3d\b|axonometric|"
+    # 25/09: PLANTA-CHAVE é o mapinha de onde a folha fica no conjunto — o
+    # contorno do prédio em escala pequena, desenhado no layer do leito
+    r"planta\s*-?\s*chave|key\s*-?\s*plan)")
+# VISTA (corte, elevação, fachada): o objeto visto DE LADO.
+# 24/09: ficava inteira na soma — nas elevações de um lavabo, tirar a vista
+# levava a ÁREA de 50,5 para 30,0 m² (o REVESTIMENTO DE PAREDE só existe nela).
+# 🩸 25/09 (job 53f0483f): nos cortes de uma subestação o COMPRIMENTO do leito
+# visto de lado somou ~1,4 km ao da planta. Linha em vista é contorno de peça
+# de pé ou o mesmo trecho da planta visto de novo — não é metro de nada.
+# Regra desde então (ver `dwg_extractor.aplicar_leitura_por_folha`): na vista
+# o comprimento sai; a área fica — menos, no CORTE, a faixa fina da seção
+# cortada (laje "31 m²" que era espessura × vão); bloco sai quando o mesmo
+# bloco aparece fora da vista no arquivo.
 _RE_DESENHO_VISTA = _re.compile(
     r"\b(?:corte|fachada|elevacao|elev|vista|perspectiva)\b")
+_RE_DESENHO_CORTE = _re.compile(r"\b(?:corte|secao|section)\b")
 _RE_DESENHO_PLANTA = _re.compile(
     r"\b(?:planta|pavimento|pav|terreo|subsolo|garagem|cobertura|telhado|"
     r"mezanino|andar)\b")
@@ -5425,7 +5434,8 @@ def tipo_do_desenho(titulo):
     "ELEVAÇÃO 1" / "CORTE AA"              → 'vista'  (revestimento de parede mora aqui)
     "LEGENDA"                              → ''
     """
-    t = _minusculo_sem_acento(titulo)
+    # %%U/%%O (sublinhado do AutoCAD) colado na palavra: "%%UCORTE" não é "corte"
+    t = _minusculo_sem_acento(_RE_SUBLINHADO_AUTOCAD.sub("", titulo or ""))
     if _RE_DESENHO_FORA_DA_SOMA.search(t):
         return "fora"
     if _RE_DESENHO_VISTA.search(t):
@@ -5433,6 +5443,13 @@ def tipo_do_desenho(titulo):
     if _RE_DESENHO_PLANTA.search(t):
         return "planta"
     return ""
+
+
+def vista_e_corte(titulo):
+    """True quando a vista é um CORTE (a faixa fina da seção cortada sai da
+    soma); False pra elevação/fachada (toda a área é revestimento, fica)."""
+    return bool(_RE_DESENHO_CORTE.search(
+        _minusculo_sem_acento(_RE_SUBLINHADO_AUTOCAD.sub("", titulo or ""))))
 
 
 _ORDINAIS = {

@@ -1018,8 +1018,8 @@ def _leitura_por_folha_resumo(extraction) -> str:
             for x in ds if x.get("tipo") == "planta" and (x.get("andares") or 1) > 1]
     n_fora = sum(1 for x in ds if x.get("tipo") == "fora")
     n_neutro = sum(1 for x in ds if not x.get("tipo"))
-    # vista (corte/elevação) fica na soma de propósito; contar é o que vai
-    # dizer se vale tratar — ver `engine_rules._RE_DESENHO_VISTA`
+    # vista (corte/elevação): desde 25/09 o comprimento sai (ver
+    # `engine_rules._RE_DESENHO_VISTA`); o `vista_fora` abaixo diz quanto
     n_vista = sum(1 for x in ds if x.get("tipo") == "vista")
     # 25/09: desenhos achados pelo TÍTULO no modelspace (sem janela por desenho)
     _orig = " origem=modelo" if f.get("origem") == "modelo" else ""
@@ -1029,6 +1029,10 @@ def _leitura_por_folha_resumo(extraction) -> str:
         _orig += (" repetidas=[%s] -%sm -%sm2 -%sbl" % (
             "; ".join("%s %sm×%d" % (g[0][:20], g[1], g[2]) for g in (_rp.get("grupos") or [])[:6]),
             _rp.get("m", 0), _rp.get("m2", 0), _rp.get("blocos", 0)))
+    # 25/09: o que a regra da vista tirou (comprimento; área de corte; bloco repetido)
+    _vt = f.get("vista") or {}
+    if _vt:
+        _orig += " vista_fora=[-%sm -%sm2 -%sbl]" % (_vt.get("m", 0), _vt.get("m2", 0), _vt.get("blocos", 0))
     return (f"aplicada=sim{_orig} desenhos={len(ds)} fora={n_fora} vistas={n_vista} neutros={n_neutro} "
             f"multiplicadas=[{'; '.join(mult)}] "
             f"comprimento {a.get('comprimento')}→{d.get('comprimento')} m "

@@ -12,7 +12,9 @@ e os leitos dos níveis 3 e 4, tudo "✓ MEDIDO". E os títulos vinham
 Regras que os guardas prendem:
 - título = começa pelo tipo + letra GRANDE (a bolha "DETALHE D" da planta não é);
 - o desenho é o bloco de geometria logo ACIMA do título; moldura não conta;
-- só 'fora' sai da soma; corte ('vista') fica e vai pro log (decisão de 24/09);
+- 'fora' sai da soma; do corte ('vista') sai o COMPRIMENTO (25/09 — a decisão
+  de 24/09 de deixar o corte na soma caiu neste mesmo caso: o leito visto de
+  lado somava ~1,4 km); o peso da vista continua indo pro log;
 - 'planta' só protege: bloco que é de detalhe E de planta fica com peso 1;
 - só entra quando nenhuma janela disse o que mostra; sem janela, nada muda.
 Medido: acervo local (27 DXF) sem nenhuma mudança; só o caso de origem muda.
@@ -178,11 +180,14 @@ def test_CONTROLE_sem_janela_nenhuma_nada_muda(tmp_path, monkeypatch):
     assert tubo == pytest.approx(23.0)
 
 
-def test_corte_no_modelo_fica_na_soma_mas_o_peso_vai_pro_log(tmp_path, monkeypatch):
+def test_corte_no_modelo_tira_o_comprimento_e_o_peso_vai_pro_log(tmp_path, monkeypatch):
+    """25/09: o comprimento visto de lado sai (ver `aplicar_leitura_por_folha`)."""
     tubo, ex = _tubo(tmp_path, monkeypatch, titulo_detalhe='%%UCORTE "A-A"')
-    assert tubo == pytest.approx(23.0), "decisão de 24/09: corte fica na soma"
+    assert tubo == pytest.approx(15.0), "o tubo do corte é o da planta visto de lado"
     # o peso da vista é TODA a geometria do corte: contorno 28 m + tubo 8 m
     assert ex.folhas["medida"]["vista"]["m"] == pytest.approx(36.0)
+    # e o que a regra da vista tirou, pro log
+    assert ex.folhas["vista"]["m"] == pytest.approx(36.0)
 
 
 # ── o código de sublinhado do AutoCAD ─────────────────────────────────────────

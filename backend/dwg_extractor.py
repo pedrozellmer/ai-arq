@@ -109,6 +109,11 @@ class WallSegment:
     # "4º/5º/6º" → 3). As SOMAS multiplicam; o segmento continua um só, porque
     # quem faz geometria (pareamento de faces, salas) precisa dele uma vez.
     peso: float = 1.0
+    # POLILINHA: start/end são o 1º e o último vértice — a forma de verdade
+    # (a caixa em "U", o retângulo fechado) só está aqui. Preenchido SÓ em
+    # layer candidato a linha dupla (duto/leito/legenda), pra não pesar a
+    # memória no resto: tupla de (x, y, bulge) crus, fechada repete o 1º.
+    pontos: tuple = ()
 
 
 @dataclass
@@ -253,6 +258,15 @@ class DXFExtraction:
                              f"situação — o mesmo objeto redesenhado ou recorte típico): " + "; ".join(
                                  (d.get("titulo") or d.get("folha"))[:50] for d in _fora[:8])
                              + ("…" if len(_fora) > 8 else ""))
+            _vis = [d for d in _ds if d.get("tipo") == "vista"]
+            if _vis and _fl.get("vista") is not None:
+                # 25/09: sem isto a IA vê o leito do corte sumir e "completa"
+                lines.append(f"  • {len(_vis)} corte(s)/elevação(ões) — o objeto visto DE LADO: o "
+                             f"COMPRIMENTO das linhas delas JÁ está fora das medidas (e, nos "
+                             f"cortes, a faixa fina da parede/laje CORTADA); a área de "
+                             f"revestimento que aparece nelas ficou: " + "; ".join(
+                                 (d.get("titulo") or d.get("folha"))[:40] for d in _vis[:8])
+                             + ("…" if len(_vis) > 8 else ""))
             if _fl.get("repetidas"):
                 _gr = _fl["repetidas"].get("grupos") or []
                 lines.append("  • plantas TEMÁTICAS do mesmo pavimento (layout, luminotécnica, pontos, "
@@ -714,7 +728,10 @@ _INSUNITS_TO_METERS[14] = 0.1
 # igualmente grave (regra nº1). Parede também é desenhada com duas linhas, mas
 # mexer nela mudaria todo projeto de arquitetura que hoje funciona: fora de
 # escopo, deliberadamente.
-_RE_DUTO_DUPLO = re.compile(r"(?<![a-z])duto|(?<![a-z])ducto", re.IGNORECASE)
+# 25/09: leito de cabos, eletrocalha e bandeja são desenhados do mesmo jeito
+# (as duas bordas). "eletroduto" continua de fora: é linha ÚNICA.
+_RE_DUTO_DUPLO = re.compile(
+    r"(?<![a-z])(?:duto|ducto|leito|eletrocalha|bandeja)", re.IGNORECASE)
 
 _DUTO_ANG_TOL = 3.0      # graus: paralelas de verdade
 _DUTO_SEP_MIN = 0.05     # m: abaixo disso é a mesma linha repetida, não um par
@@ -723,8 +740,137 @@ _DUTO_MIN_SEG = 0.25     # m: trecho menor é legenda/símbolo, não rede
 _DUTO_MAX_SEG_LAYER = 3000   # teto anti-O(n²) por layer
 
 
-def _corrigir_duto_linha_dupla(walls, unit_factor: float = 1.0):
+_RE_LEGENDA_LINHA_DUPLA = re.compile(
+    r"\b(?:leitos?|eletrocalhas?|bandejas?|calhas?|dutos?|ductos?)\b")
+
+
+def _legenda_de_linha_dupla(msp) -> dict:
+    """{layer: [descrição]} do que a LEGENDA diz ser leito/duto em DUAS linhas.
+
+    🩸 25/09/2026, job 53f0483f (subestação): o leito de cabos estava no layer
+    "K-04" — código do cliente, sem a palavra "leito". A IA escolheu o leito
+    pelo "layer de maior extensão" (palpite, em linha branca) e o comprimento
+    saiu com as DUAS bordas somadas. A SIMBOLOGIA da folha dizia tudo: ao lado
+    de "- LEITO PARA CABOS", duas linhas paralelas no layer K-04.
+
+    Linha de legenda = texto com a palavra (leito, eletrocalha, bandeja, calha,
+    duto), numa COLUNA de pelo menos 3 textos alinhados à esquerda, cada um
+    com amostra desenhada à esquerda — é o que distingue legenda de anotação
+    solta na planta (medido: "eletrocalha h=3,22m" solto no forro não conta).
+    Amostra de linha dupla = 2 segmentos quase horizontais do MESMO layer,
+    sobrepostos, afastados de 0,15 a 3 alturas de letra. Na dúvida, {}.
+    """
+    try:
+        textos = []
+        for e in msp.query("TEXT MTEXT"):
+            try:
+                p = e.dxf.insert
+                h = float((e.dxf.get("height", 0) if e.dxftype() == "TEXT"
+                           else e.dxf.get("char_height", 0)) or 0)
+                t = _texto_do_text(e) if e.dxftype() == "TEXT" else e.plain_text()
+                t = " ".join((t or "").split())
+                if t and h > 0 and len(t) <= 70:
+                    textos.append((t, float(p[0]), float(p[1]), h))
+            except Exception:
+                continue
+        from engine_rules import _minusculo_sem_acento, layer_is_anotacao
+        # 🔑 A palavra na CABEÇA: "- LEITO PARA CABOS" é o leito;
+        # "DIÂMETRO DO DUTO/LARGURA" (a explicação da etiqueta) não é duto.
+        chaves = [x for x in textos
+                  if _RE_LEGENDA_LINHA_DUPLA.match(_minusculo_sem_acento(x[0]).lstrip("-–—•* ").strip())]
+        if not chaves:
+            return {}
+
+        def faixa(x, y, h):
+            return (x - 60 * h, y - 1.2 * h, x + 0.5 * h, y + 2.2 * h)
+
+        # colunas: vizinhos alinhados à esquerda, mesma letra, perto em y
+        linhas = []                     # (texto_chave, [faixas da coluna], faixa_da_chave)
+        for t, x, y, h in chaves:
+            # 10 alturas: a 1ª linha só tem vizinhas embaixo (na SIMBOLOGIA do
+            # caso, a 2ª abaixo do leito estava a 8,01 alturas)
+            viz = [v for v in textos if v[0] != t and abs(v[1] - x) <= h
+                   and abs(v[2] - y) <= 10 * h and 0.7 * h <= v[3] <= 1.4 * h]
+            if len(viz) >= 2:
+                linhas.append((t, [faixa(v[1], v[2], v[3]) for v in viz], faixa(x, y, h), h))
+        if not linhas:
+            return {}
+        caixas = [f for _, fs, fk, _ in linhas for f in fs + [fk]]
+        gx0 = min(c[0] for c in caixas)
+        gy0 = min(c[1] for c in caixas)
+        gx1 = max(c[2] for c in caixas)
+        gy1 = max(c[3] for c in caixas)
+        segs, inserts = [], []
+        for e in msp.query("LINE LWPOLYLINE INSERT"):
+            try:
+                tp = e.dxftype()
+                if tp == "INSERT":
+                    p = e.dxf.insert
+                    if gx0 <= p[0] <= gx1 and gy0 <= p[1] <= gy1:
+                        inserts.append((float(p[0]), float(p[1])))
+                    continue
+                if tp == "LINE":
+                    pts = [(e.dxf.start[0], e.dxf.start[1]), (e.dxf.end[0], e.dxf.end[1])]
+                else:
+                    pts = [(q[0], q[1]) for q in e.get_points("xy")]
+                for a, b in zip(pts, pts[1:]):
+                    if (gx0 <= min(a[0], b[0]) and max(a[0], b[0]) <= gx1
+                            and gy0 <= min(a[1], b[1]) and max(a[1], b[1]) <= gy1):
+                        segs.append((e.dxf.layer, (float(a[0]), float(a[1])), (float(b[0]), float(b[1]))))
+            except Exception:
+                continue
+
+        def dentro(seg, f):
+            _, a, b = seg
+            return (f[0] <= min(a[0], b[0]) and max(a[0], b[0]) <= f[2]
+                    and f[1] <= min(a[1], b[1]) and max(a[1], b[1]) <= f[3])
+
+        def tem_amostra(f):
+            return (any(dentro(sg, f) for sg in segs)
+                    or any(f[0] <= p[0] <= f[2] and f[1] <= p[1] <= f[3] for p in inserts))
+
+        out = {}
+        for t, fs, fk, h in linhas:
+            if sum(1 for f in fs if tem_amostra(f)) < 2:
+                continue                                # não é coluna de legenda
+            horiz = [sg for sg in segs if dentro(sg, fk)
+                     and abs(sg[2][1] - sg[1][1]) <= 0.05 * abs(sg[2][0] - sg[1][0])
+                     and abs(sg[2][0] - sg[1][0]) >= 2 * h]
+            por_layer = {}
+            for sg in horiz:
+                por_layer.setdefault(sg[0], []).append(sg)
+            for lay, ss in por_layer.items():
+                if layer_is_anotacao(lay):
+                    continue                    # chamada/cota/texto não é o objeto
+                achou = False
+                for i, a in enumerate(ss):
+                    for b in ss[i + 1:]:
+                        dy = abs((a[1][1] + a[2][1]) / 2 - (b[1][1] + b[2][1]) / 2)
+                        ax0, ax1 = sorted((a[1][0], a[2][0]))
+                        bx0, bx1 = sorted((b[1][0], b[2][0]))
+                        sob = min(ax1, bx1) - max(ax0, bx0)
+                        if 0.15 * h <= dy <= 3 * h and sob >= 0.5 * min(ax1 - ax0, bx1 - bx0):
+                            achou = True
+                            break
+                    if achou:
+                        break
+                if achou:
+                    desc = t.lstrip("-–— ").strip().rstrip(".")
+                    out.setdefault(lay, [])
+                    if desc not in out[lay]:
+                        out[lay].append(desc)
+        return out
+    except Exception as e:                       # nunca derruba a extração
+        logger.warning("_legenda_de_linha_dupla: %s", e)
+        return {}
+
+
+def _corrigir_duto_linha_dupla(walls, unit_factor: float = 1.0, layers_extra=None):
     """Troca a soma das duas faces pelo comprimento do EIXO, em layer de duto.
+
+    `layers_extra`: layers que a LEGENDA da prancha diz serem leito/duto
+    desenhado em duas linhas (ver `_legenda_de_linha_dupla`) — o nome do layer
+    não precisa dizer.
 
     Devolve (walls_corrigidos, relato_eixo, ressalva_hachura).
     Sem par encontrado, devolve a lista original — na dúvida, não mexe.
@@ -736,92 +882,179 @@ def _corrigir_duto_linha_dupla(walls, unit_factor: float = 1.0):
     e NADA pareava. O conserto era inerte em quase todo DXF real — funcionou no
     arquivo de 04/08 só porque aquele estava em metro. Agora toda a geometria é
     feita em unidade bruta e só o resultado vira metro.
+
+    🩸 25/09/2026 (job 53f0483f, leito de subestação): a 2ª versão pareava
+    SEGMENTO INTEIRO com segmento inteiro e exigia comprimentos parecidos. No
+    desenho real uma borda corre inteira (9 m) e a do outro lado vem quebrada
+    em cada caixa de passagem (4,65 + 4,65): nada casava, e 207 m de bordas
+    viravam 147 m em vez de ~100. Agora é por TRECHO: ao longo da direção,
+    em cada pedaço, as linhas presentes são ordenadas pela distância lateral e
+    pareadas vizinha com vizinha (duas bordas de um leito; o do lado forma o
+    próprio par). Cada linha pareada num pedaço conta MEIO metro por metro.
+    Continua valendo: mesma direção, separação de seção, e o par só existe se
+    as duas linhas se sobrepõem em pelo menos metade da menor.
     """
     if not walls:
         return walls, "", ""
     try:
+        import copy as _copy
+        import dataclasses as _dcs
         from collections import defaultdict as _dd
         uf = float(unit_factor) if unit_factor else 1.0
+        extra = set(layers_extra or ())
         por_layer = _dd(list)
         for i, w in enumerate(walls):
-            if _RE_DUTO_DUPLO.search(str(getattr(w, "layer", "") or "")):
+            lay = str(getattr(w, "layer", "") or "")
+            if lay in extra or _RE_DUTO_DUPLO.search(lay):
                 por_layer[w.layer].append(i)
         if not por_layer:
             return walls, "", ""
 
-        def _geo(w):
-            """(ax, ay, dx, dy, comprimento_bruto) — tudo na unidade do desenho."""
-            (ax, ay), (bx, by) = w.start, w.end
-            dx, dy = bx - ax, by - ay
-            return ax, ay, dx, dy, math.hypot(dx, dy)
-
-        descartar = set()
+        sep_min, sep_max = _DUTO_SEP_MIN / uf, _DUTO_SEP_MAX / uf    # em bruto
+        fator = {}                     # índice -> fração do comprimento que fica
         relato, ressalva = [], []
+        pareados_no_layer = set()
         for layer, idxs in por_layer.items():
             # 🪤 Só pareia segmento com geometria de verdade. O caminho que mede
             # dentro de bloco grava start/end zerados — pareá-los casaria tudo
-            # com tudo e destruiria a medição.
-            uteis = [i for i in idxs
-                     if getattr(walls[i], "length", 0) >= _DUTO_MIN_SEG
-                     and walls[i].start != walls[i].end]
-            if len(uteis) < 2 or len(uteis) > _DUTO_MAX_SEG_LAYER:
+            # com tudo e destruiria a medição. ARCO fica fora (a corda não é a
+            # curva) — ver a ressalva abaixo.
+            # 🩸 25/09: POLILINHA vira os seus lados. Antes ia inteira como uma
+            # reta do 1º ao último vértice — a caixa de passagem em "U" de
+            # 4,65 m virava "uma reta de 1,44 m" e o retângulo fechado (início
+            # = fim) nem entrava.
+            sub = []                    # (índice do pai, a, b) — cru
+            for i in idxs:
+                w = walls[i]
+                if getattr(w, "curvo", False) or getattr(w, "length", 0) < _DUTO_MIN_SEG:
+                    continue
+                pts = getattr(w, "pontos", ()) or ()
+                if len(pts) >= 2:
+                    for p, q in zip(pts, pts[1:]):
+                        if len(p) > 2 and p[2]:
+                            continue            # lado em arco: fora (ressalva)
+                        if (p[0], p[1]) != (q[0], q[1]) and math.hypot(q[0] - p[0], q[1] - p[1]) * uf >= _DUTO_MIN_SEG:
+                            sub.append((i, (p[0], p[1]), (q[0], q[1])))
+                elif tuple(w.start) != tuple(w.end):
+                    sub.append((i, tuple(w.start), tuple(w.end)))
+            if len(sub) < 2 or len(sub) > _DUTO_MAX_SEG_LAYER:
                 continue
-            bruto = sum(walls[i].length for i in uteis)
-            usados = set()
-            pares = 0
-            for pos, i in enumerate(uteis):
-                if i in usados:
+            bruto = sum(walls[i].length for i in {s_[0] for s_ in sub})
+            uteis = list(range(len(sub)))
+            seg_a = {k: sub[k][1] for k in uteis}
+            seg_b = {k: sub[k][2] for k in uteis}
+            # direção (0–180°) de cada segmento; grupos de paralelas
+            ang = {}
+            for i in uteis:
+                (ax, ay), (bx, by) = seg_a[i], seg_b[i]
+                ang[i] = math.degrees(math.atan2(by - ay, bx - ax)) % 180.0
+            ordem = sorted(uteis, key=lambda i: ang[i])
+            grupos, atual = [], [ordem[0]]
+            for i in ordem[1:]:
+                if ang[i] - ang[atual[-1]] <= _DUTO_ANG_TOL:
+                    atual.append(i)
+                else:
+                    grupos.append(atual)
+                    atual = [i]
+            grupos.append(atual)
+            # quase 180° é a mesma direção que quase 0°
+            if len(grupos) > 1 and ang[grupos[0][0]] + 180.0 - ang[grupos[-1][-1]] <= _DUTO_ANG_TOL:
+                grupos[0] = grupos.pop() + grupos[0]
+            pares = set()
+            pareado = _dd(float)        # índice -> comprimento BRUTO pareado
+            for g in grupos:
+                if len(g) < 2:
                     continue
-                ax, ay, adx, ady, alen = _geo(walls[i])
-                if alen <= 0:
+                th = math.radians(ang[g[0]])
+                ux, uy = math.cos(th), math.sin(th)
+                nx, ny = -uy, ux
+                d, t0, t1 = {}, {}, {}
+                for i in g:
+                    (ax, ay), (bx, by) = seg_a[i], seg_b[i]
+                    d[i] = (ax * nx + ay * ny + bx * nx + by * ny) / 2.0
+                    sa, sb = ax * ux + ay * uy, bx * ux + by * uy
+                    t0[i], t1[i] = min(sa, sb), max(sa, sb)
+                # quem pode ser par de quem: separação de seção + sobreposição
+                # de pelo menos metade da menor (trecho que nem se olha não é par)
+                por_d = sorted(g, key=lambda i: d[i])
+                viz = _dd(set)
+                for a_pos, a in enumerate(por_d):
+                    for b in por_d[a_pos + 1:]:
+                        sep = d[b] - d[a]
+                        if sep >= sep_max:
+                            break
+                        if sep <= sep_min:
+                            continue
+                        sobrep = min(t1[a], t1[b]) - max(t0[a], t0[b])
+                        if sobrep >= 0.5 * min(t1[a] - t0[a], t1[b] - t0[b]) and sobrep > 0:
+                            viz[a].add(b)
+                            viz[b].add(a)
+                if not viz:
                     continue
-                ux, uy = adx / alen, ady / alen          # direção unitária de A
-                melhor, melhor_sobrep = None, 0.0
-                for j in uteis[pos + 1:]:
-                    if j in usados:
+                cand = list(viz)
+                cortes = sorted({t for i in cand for t in (t0[i], t1[i])})
+                for ta, tb in zip(cortes, cortes[1:]):
+                    if tb - ta <= 0:
                         continue
-                    bx0, by0, bdx, bdy, blen = _geo(walls[j])
-                    if blen <= 0:
-                        continue
-                    # mesma direção?
-                    d_ang = abs(math.degrees(math.atan2(ady, adx)) % 180.0
-                                - math.degrees(math.atan2(bdy, bdx)) % 180.0)
-                    if min(d_ang, 180.0 - d_ang) > _DUTO_ANG_TOL:
-                        continue
-                    if abs(walls[i].length - walls[j].length) > max(0.4, 0.3 * walls[i].length):
-                        continue
-                    # separação perpendicular, em METRO
-                    sep = abs(adx * (ay - by0) - (ax - bx0) * ady) / alen * uf
-                    if not (_DUTO_SEP_MIN < sep < _DUTO_SEP_MAX):
-                        continue
-                    # 🚨 SOBREPOSIÇÃO ao longo da direção. Sem isso, dois trechos
-                    # paralelos que nem se olham (um ramal 60cm ao lado de outro
-                    # tronco) viravam "par" e um deles era jogado fora. Pior: o
-                    # eixo tracejado desenhado no MESMO layer, por estar mais
-                    # perto, ganhava do outro lado do duto — as duas faces
-                    # ficavam de pé, o dobro continuava, e o relato ainda
-                    # anunciava um conserto que não aconteceu.
-                    t0 = 0.0
-                    t1 = alen
-                    s0 = (bx0 - ax) * ux + (by0 - ay) * uy
-                    s1 = (bx0 + bdx - ax) * ux + (by0 + bdy - ay) * uy
-                    if s0 > s1:
-                        s0, s1 = s1, s0
-                    sobrep = min(t1, s1) - max(t0, s0)
-                    if sobrep < 0.5 * min(alen, blen):
-                        continue
-                    # prefere quem mais se sobrepõe, não quem está mais perto
-                    if sobrep > melhor_sobrep:
-                        melhor, melhor_sobrep = j, sobrep
-                if melhor is not None:
-                    usados.add(i)
-                    usados.add(melhor)
-                    descartar.add(melhor)      # fica UMA das duas faces = o eixo
-                    pares += 1
-            if pares:
-                eixo = bruto - sum(walls[k].length for k in descartar if k in uteis)
-                relato.append(f"{layer}: {bruto:.1f}m de face -> {eixo:.1f}m de eixo "
-                              f"({pares} par(es))")
+                    tm = (ta + tb) / 2.0
+                    ativos = sorted((i for i in cand if t0[i] <= tm <= t1[i]), key=lambda i: d[i])
+                    k = 0
+                    while k + 1 < len(ativos):
+                        a, b = ativos[k], ativos[k + 1]
+                        if b in viz[a]:
+                            pareado[a] += tb - ta
+                            pareado[b] += tb - ta
+                            pares.add((min(a, b), max(a, b)))
+                            k += 2
+                        else:
+                            k += 1
+            if not pares:
+                continue
+            # TAMPA: lado curto sem par (até a largura de uma seção) com as
+            # DUAS pontas em cima de bordas pareadas — é o fecho do retângulo
+            # ou a divisa entre dois trechos, não metro de leito.
+            # 🪤 Limite conhecido (25/09, medido na planta do caso): lateral de
+            # caixa de passagem e chanfro NÃO são pegos (a ponta encosta em
+            # outra peça sem par) — ~30 dos 130 m daquela planta. Tentei "não
+            # corre na direção de nenhum trecho pareado": piorou (subida e
+            # conectores verticais também pareiam, e a tampa vertical voltou).
+            tol = 0.02 / uf
+
+            def _sobre(pt, k):
+                (ax, ay), (bx, by) = seg_a[k], seg_b[k]
+                vx, vy = bx - ax, by - ay
+                L2 = vx * vx + vy * vy
+                if L2 <= 0:
+                    return False
+                f = max(0.0, min(1.0, ((pt[0] - ax) * vx + (pt[1] - ay) * vy) / L2))
+                return math.hypot(ax + f * vx - pt[0], ay + f * vy - pt[1]) <= tol
+            com_par = [k for k in uteis if pareado.get(k)]
+            tampa = {}
+            for k in uteis:
+                if pareado.get(k):
+                    continue
+                (ax, ay), (bx, by) = seg_a[k], seg_b[k]
+                L = math.hypot(bx - ax, by - ay)
+                if L >= sep_max:
+                    continue
+                if (any(_sobre(seg_a[k], j) for j in com_par)
+                        and any(_sobre(seg_b[k], j) for j in com_par)):
+                    tampa[k] = L
+            # quanto sai de cada linha do desenho (em metro)
+            tira = _dd(float)
+            for k, p in pareado.items():
+                (ax, ay), (bx, by) = seg_a[k], seg_b[k]
+                L = math.hypot(bx - ax, by - ay)
+                tira[sub[k][0]] += 0.5 * min(p, L) * uf
+            for k, L in tampa.items():
+                tira[sub[k][0]] += L * uf
+            for i, t in tira.items():
+                if walls[i].length > 0:
+                    fator[i] = max(0.0, 1.0 - t / walls[i].length)
+            eixo = bruto - sum(tira.values())
+            pareados_no_layer.add(layer)
+            relato.append(f"{layer}: {bruto:.1f}m de face -> {eixo:.1f}m de eixo "
+                          f"({len(pares)} par(es))")
 
         # 🚨 Layer dominado por MICRO-SEGMENTO não mede rede, mede HACHURA.
         # No arquivo de 04/08 o layer 'IM DUCTO SUMINISTRO' somava 169 m — e
@@ -849,7 +1082,7 @@ def _corrigir_duto_linha_dupla(walls, unit_factor: float = 1.0):
         # o cliente não tem como saber. Enquanto não parear arco por
         # concentricidade, no mínimo ele fica sabendo.
         for layer, idxs in por_layer.items():
-            if not any(k in descartar for k in idxs):
+            if layer not in pareados_no_layer:
                 continue
             arcos = sum(walls[i].length for i in idxs
                         if getattr(walls[i], "curvo", False))
@@ -860,9 +1093,17 @@ def _corrigir_duto_linha_dupla(walls, unit_factor: float = 1.0):
 
         rel_eixo = " | ".join(relato)
         rel_ressalva = " | ".join(ressalva)
-        if not descartar:
+        if not fator:
             return walls, rel_eixo, rel_ressalva
-        novos = [w for i, w in enumerate(walls) if i not in descartar]
+
+        def _encurta(w, f):
+            try:
+                return _dcs.replace(w, length=w.length * f)
+            except TypeError:                      # não é dataclass (dublê)
+                n = _copy.copy(w)
+                n.length = w.length * f
+                return n
+        novos = [(_encurta(w, fator[i]) if i in fator else w) for i, w in enumerate(walls)]
         logger.warning("[duto-linha-dupla] %s %s", rel_eixo, rel_ressalva)
         return novos, rel_eixo, rel_ressalva
     except Exception as e:
@@ -2864,56 +3105,86 @@ def _desenhos_no_modelo(msp, caixa=None) -> list:
             return []
         cel = lado / 150.0
         # Moldura e linhas de carimbo atravessam a folha e colariam tudo.
-        longo = 0.4 * lado
+        # 🩸 25/09 (mesmo job): a 1ª régua era "mais de 40% do lado" — e o
+        # leito de um corte industrial corre 57% da folha. Sem as linhas
+        # compridas, o CORTE A-A virou um pedaço de 6 m de largura e 291 m de
+        # leito caíram fora dele. Moldura é o que atravessa a FOLHA TODA na
+        # sua direção (a de margem tem ~96%); desenho comprido não é moldura.
+        larg, alt = (x1 - x0) or 1.0, (y1 - y0) or 1.0
         ocup = set()
         for (ax, ay), (bx, by) in segs:
             L = math.hypot(bx - ax, by - ay)
-            if L > longo:
+            if abs(bx - ax) > 0.85 * larg or abs(by - ay) > 0.85 * alt:
                 continue
             n = max(1, int(L / cel) + 1)
             for k in range(n + 1):
                 f = k / n
                 ocup.add((int((ax + f * (bx - ax) - x0) / cel),
                           int((ay + f * (by - ay) - y0) / cel)))
-        # Blocos de desenho: células vizinhas (tolera 1 célula de vão).
-        comp_de, comps = {}, []
-        for c0 in ocup:
-            if c0 in comp_de:
-                continue
-            idx, pilha, cel_comp = len(comps), [c0], []
-            comp_de[c0] = idx
-            while pilha:
-                cx, cy = pilha.pop()
-                cel_comp.append((cx, cy))
-                for dx in (-2, -1, 0, 1, 2):
-                    for dy in (-2, -1, 0, 1, 2):
-                        v = (cx + dx, cy + dy)
-                        if v in ocup and v not in comp_de:
-                            comp_de[v] = idx
-                            pilha.append(v)
-            gx = [c[0] for c in cel_comp]
-            gy = [c[1] for c in cel_comp]
-            comps.append((x0 + min(gx) * cel, y0 + min(gy) * cel,
-                          x0 + (max(gx) + 1) * cel, y0 + (max(gy) + 1) * cel))
+        def _componentes(vao):
+            """Blocos de desenho: células vizinhas, tolerando `vao` células de vão."""
+            comp_de, comps = {}, []
+            passos = range(-vao, vao + 1)
+            for c0 in ocup:
+                if c0 in comp_de:
+                    continue
+                idx, pilha, cel_comp = len(comps), [c0], []
+                comp_de[c0] = idx
+                while pilha:
+                    cx, cy = pilha.pop()
+                    cel_comp.append((cx, cy))
+                    for dx in passos:
+                        for dy in passos:
+                            v = (cx + dx, cy + dy)
+                            if v in ocup and v not in comp_de:
+                                comp_de[v] = idx
+                                pilha.append(v)
+                gx = [c[0] for c in cel_comp]
+                gy = [c[1] for c in cel_comp]
+                comps.append((x0 + min(gx) * cel, y0 + min(gy) * cel,
+                              x0 + (max(gx) + 1) * cel, y0 + (max(gy) + 1) * cel))
+            return comp_de, comps
+        # 1 célula de vão tolerada (2 de passo); a de vão 0 só se precisar
+        malhas = {2: _componentes(2)}
         area_folha = (x1 - x0) * (y1 - y0) or 1.0
         out = []
         for t, x, y, h, tipo in titulos:
-            # O que está logo ACIMA do título (a coluna dele e as vizinhas).
+            # O que está logo ACIMA do título — ao longo da LARGURA dele, não só
+            # do ponto de inserção. 🩸 25/09 (mesmo job): o "CORTE 'D-D'" começa
+            # 1,4 m à esquerda do desenho; olhando só a coluna do 1º caractere,
+            # nada acima, e o corte inteiro ficou na soma. Mais perto em altura
+            # ganha; empate, a coluna mais perto do MEIO do título.
             ix, iy = int((x - x0) / cel), int((y + 0.5 * h - y0) / cel)
-            achado = None
-            for passo in range(0, 21):
-                for dx in (0, -1, 1, -2, 2):
-                    v = (ix + dx, iy + passo)
-                    if v in comp_de:
-                        achado = comp_de[v]
+            ifim = int((x + 0.75 * h * len(t) - x0) / cel)
+            meio = (ix + ifim) / 2.0
+            colunas = sorted(range(ix - 2, ifim + 3), key=lambda c: abs(c - meio))
+            caixa_t = None
+            # 🩸 25/09 (mesmo job): na folha da PLANTA, uma divisória da coluna
+            # de notas emendava planta, notas e planta-chave num bloco só (85%
+            # da folha) e a planta-chave — 30 m no layer do leito — ficava na
+            # soma. Se o 1º bloco é a folha toda, tenta de novo sem tolerar vão.
+            for vao in (2, 1):
+                if vao not in malhas:
+                    malhas[vao] = _componentes(vao)
+                comp_de, comps = malhas[vao]
+                achado = None
+                for passo in range(0, 21):
+                    for cx in colunas:
+                        v = (cx, iy + passo)
+                        if v in comp_de:
+                            achado = comp_de[v]
+                            break
+                    if achado is not None:
                         break
-                if achado is not None:
+                if achado is None:
                     break
-            if achado is None:
+                bx0, by0, bx1, by1 = comps[achado]
+                if (bx1 - bx0) * (by1 - by0) <= 0.6 * area_folha:
+                    caixa_t = (bx0, by0, bx1, by1)
+                    break                       # senão "o desenho" seria a folha toda
+            if caixa_t is None:
                 continue
-            bx0, by0, bx1, by1 = comps[achado]
-            if (bx1 - bx0) * (by1 - by0) > 0.6 * area_folha:
-                continue                        # "o desenho" seria a folha toda
+            bx0, by0, bx1, by1 = caixa_t
             out.append({"folha": "modelo", "caixa": (bx0, by0, bx1, by1),
                         "titulo": t[:160], "tipo": tipo, "andares": 1,
                         "como": "modelo"})
@@ -3218,8 +3489,21 @@ def aplicar_leitura_por_folha(walls, hatches, polygon_areas, blocks, mapa) -> di
     Muta as listas no lugar. Posição que cai em desenhos que DISCORDAM (um fora,
     outro planta; plantas com andares diferentes) fica peso 1 — como era antes.
     Posição desconhecida (segmento explodido de bloco, hachura sem caixa) fica 1.
+
+    VISTA (corte/elevação) — 🩸 25/09, job 53f0483f: os cortes de uma
+    subestação somaram ~1,4 km de leito visto de lado ao da planta. Onde SÓ
+    vista toca (nenhuma planta/fora junto — aí vale a regra de antes):
+    comprimento sai; área FICA (revestimento de parede só existe na vista,
+    24/09) — menos, no CORTE, a SEÇÃO CORTADA: faixa fina (lado curto ≤ 0,5 m,
+    6× mais comprida que larga) é parede/laje cortada, não superfície (a
+    "laje 31 m²" do caso). 🪤 Tirar TODA a área do corte levava junto o
+    azulejo e o painel que o corte de interiores mostra ao fundo (medido: 60
+    dos 81 m² de um arquivo de cortes). Bloco sai se o mesmo bloco aparece
+    fora de vista neste arquivo (senão é o único registro dele — a papeleira
+    que só a elevação mostra — e fica).
     """
-    regs = [f for f in (mapa or {}).get("folhas", []) if f.get("tipo") in ("fora", "planta")]
+    regs = [f for f in (mapa or {}).get("folhas", [])
+            if f.get("tipo") in ("fora", "planta", "vista")]
     res = {"aplicada": False, "motivo": "", "desenhos": len(regs)}
     if not regs:
         res["motivo"] = "nenhum desenho com título que diga o que é"
@@ -3236,60 +3520,113 @@ def aplicar_leitura_por_folha(walls, hatches, polygon_areas, blocks, mapa) -> di
     _rep = _descartar_plantas_repetidas(walls, hatches, polygon_areas, blocks, regs)
     if _rep["m"] or _rep["m2"] or _rep["blocos"]:
         res["repetidas"] = _rep
-    if not any(f["tipo"] == "fora" or f.get("andares", 1) > 1 for f in regs):
+    tem_vista = any(f["tipo"] == "vista" for f in regs)
+    if not tem_vista and not any(f["tipo"] == "fora" or f.get("andares", 1) > 1 for f in regs):
         if "repetidas" in res:
             res.update(aplicada=True, antes=antes, depois=_totais())
         else:
             res["motivo"] = "só plantas de um andar — nada muda"
         return res
+    from engine_rules import vista_e_corte
+    corte = {id(f): vista_e_corte(f.get("titulo", "")) for f in regs if f["tipo"] == "vista"}
+    _NA_VISTA = -1                  # bloco: decide depois, pelo resto do arquivo
 
-    def peso(p):
+    ultimo = {"vista": False}       # o peso que acabou de sair veio da regra da vista?
+
+    def peso(p, grandeza):
+        """grandeza: 'm' (comprimento), 'm2' (área) ou 'bl' (bloco)."""
+        ultimo["vista"] = False
         if p is None:
             return 1
         tocam = [f for f in regs if _dentro(p, f["caixa"])]
         if not tocam:
             return 1
         tipos = {f["tipo"] for f in tocam}
-        if tipos == {"fora"}:
+        # 🔒 Com planta/fora junto, a vista não opina: é a regra de antes.
+        sem_vista = [f for f in tocam if f["tipo"] != "vista"]
+        if sem_vista:
+            tipos = {f["tipo"] for f in sem_vista}
+            if tipos == {"fora"}:
+                return 0
+            if tipos == {"planta"}:
+                ns = {int(f.get("andares", 1) or 1) for f in sem_vista}
+                return ns.pop() if len(ns) == 1 else 1
+            return 1
+        ultimo["vista"] = True
+        if grandeza == "m":
             return 0
-        if tipos == {"planta"}:
-            ns = {int(f.get("andares", 1) or 1) for f in tocam}
-            return ns.pop() if len(ns) == 1 else 1
-        return 1
+        if grandeza == "m2":
+            return 0 if all(corte[id(f)] for f in tocam) else 1
+        return _NA_VISTA
 
+    tirou = {"m": 0.0, "m2": 0.0, "blocos": 0}
     novas = []
     for w in walls:
         if tuple(w.start) == (0, 0) and tuple(w.end) == (0, 0):
             novas.append(w)                          # sem posição: neutro
             continue
-        pk = peso(((w.start[0] + w.end[0]) / 2, (w.start[1] + w.end[1]) / 2))
+        pk = peso(((w.start[0] + w.end[0]) / 2, (w.start[1] + w.end[1]) / 2), "m")
         if pk == 0:
+            if ultimo["vista"]:
+                tirou["m"] += w.length
             continue
         w.peso = float(pk)
         novas.append(w)
     walls[:] = novas
+    def _secao_cortada(h):
+        """Faixa fina: lado curto ≤ 0,5 m e 6× mais comprida que larga.
+        O lado curto sai da ÁREA (m²) e da proporção da caixa — sem precisar
+        da unidade do desenho."""
+        bb = getattr(h, "bbox", ()) or ()
+        if len(bb) != 4:
+            return False
+        w, t = abs(bb[2] - bb[0]), abs(bb[3] - bb[1])
+        if min(w, t) <= 0:
+            return True
+        r = max(w, t) / min(w, t)
+        return r >= 6 and math.sqrt(max(float(h.area), 0.0) / r) <= 0.5
+
     for lista in (hatches, polygon_areas):
         novas = []
         for h in lista:
             bb = getattr(h, "bbox", ()) or ()
-            pk = peso(((bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2)) if len(bb) == 4 else 1
+            pk = peso(((bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2), "m2") if len(bb) == 4 else 1
+            if pk == 0 and ultimo["vista"] and not _secao_cortada(h):
+                pk = 1                               # corte: revestimento ao fundo fica
             if pk == 0:
+                if ultimo["vista"]:
+                    tirou["m2"] += h.area
                 continue
             h.peso = float(pk)
             novas.append(h)
         lista[:] = novas
-    novos = []
+    # Bloco na vista: sai se o MESMO bloco é contado fora de vista no arquivo.
+    pesos_de, fora_da_vista = {}, set()
     for b in blocks:
         pos = list(getattr(b, "positions", None) or [])
         if len(pos) != b.count:
+            fora_da_vista.add(b.name)                # posições incompletas: conta
+            continue
+        pesos_de[id(b)] = [peso(p, "bl") for p in pos]
+        if any(k > 0 for k in pesos_de[id(b)]):
+            fora_da_vista.add(b.name)
+    novos = []
+    for b in blocks:
+        if id(b) not in pesos_de:
             novos.append(b)                          # posições incompletas: neutro
             continue
-        pesos = [peso(p) for p in pos]
+        pos = list(b.positions)
+        na_vista = 0 if b.name in fora_da_vista else 1
+        pesos = [na_vista if k == _NA_VISTA else k for k in pesos_de[id(b)]]
+        tirou["blocos"] += sum(1 for k in pesos_de[id(b)] if k == _NA_VISTA) * (1 - na_vista)
         b.positions = [p for p, k in zip(pos, pesos) if k > 0]
         b.count = int(sum(pesos))
         if b.count > 0:
             novos.append(b)
     blocks[:] = novos
+    if tem_vista:
+        res["vista"] = {"m": round(float(tirou["m"]), 1), "m2": round(float(tirou["m2"]), 1),
+                        "blocos": tirou["blocos"]}
     depois = {"comprimento": round(sum(w.length * getattr(w, "peso", 1.0) for w in walls), 2),
               "area": round(sum(h.area * getattr(h, "peso", 1.0) for h in hatches)
                             + sum(p.area * getattr(p, "peso", 1.0) for p in polygon_areas), 2),
@@ -3890,6 +4227,10 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
 
     # ---- Lines / polylines (wall segments) --------------------------------
     walls: list[WallSegment] = []
+    # 25/09: o que a LEGENDA da prancha diz ser leito/duto desenhado em duas
+    # linhas (o nome do layer pode ser só um código, "K-04")
+    _legenda_dupla = _legenda_de_linha_dupla(msp)
+    _layers_linha_dupla = set(_legenda_dupla)
 
     for line in msp.query("LINE"):
         try:
@@ -3913,11 +4254,18 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
                 pts = list(lwpoly.get_points(format="xy"))
                 start = pts[0] if pts else (0, 0)
                 end = pts[-1] if pts else (0, 0)
+                _pontos = ()
+                if lwpoly.dxf.layer in _layers_linha_dupla or _RE_DUTO_DUPLO.search(str(lwpoly.dxf.layer)):
+                    _xyb = [(p[0], p[1], p[2]) for p in lwpoly.get_points(format="xyb")]
+                    if lwpoly.closed and _xyb:
+                        _xyb.append(_xyb[0])
+                    _pontos = tuple(_xyb)
                 walls.append(WallSegment(
                     layer=lwpoly.dxf.layer,
                     length=length,
                     start=start,
                     end=end,
+                    pontos=_pontos,
                 ))
         except Exception:
             continue
@@ -4492,9 +4840,17 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
     # 🪤 unit_factor é OBRIGATÓRIO aqui: start/end são coordenadas cruas e
     # length já está em metro. Sem o fator, a separação entre as faces sai
     # errada por ordens de grandeza e nada pareia em desenho de milímetro.
-    walls, _rel_duto, _ress_duto = _corrigir_duto_linha_dupla(walls, unit_factor)
+    walls, _rel_duto, _ress_duto = _corrigir_duto_linha_dupla(
+        walls, unit_factor, layers_extra=_layers_linha_dupla)
     if _rel_duto:
         metadata["duto_linha_dupla"] = _rel_duto
+    if _legenda_dupla:
+        # a IA precisa saber o que o layer É — antes era palpite ("o layer de
+        # maior extensão") — e que o comprimento dele JÁ é o eixo
+        metadata["legenda_linha_dupla"] = "; ".join(
+            "%s = %s (na legenda: desenhado com 2 linhas — o comprimento do layer "
+            "abaixo JÁ é o eixo)" % (lay, " / ".join(ds[:3]))
+            for lay, ds in sorted(_legenda_dupla.items()))
     # Chave SEPARADA e com leitor: entra em extraction_has_quality_caveat, que
     # rebaixa o desenho todo pra estimado. A de cima é informativa; esta é
     # ressalva de qualidade — sem leitor, o aviso morria no log e o número
