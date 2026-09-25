@@ -90,3 +90,5 @@ pydyf==0.10.0
 # cronograma; quem protege o texto do cliente e o escape no build_context
 # mais o url_fetcher de pdf_seguro.py, nao a versao do Jinja.
 Jinja2==3.1.6
+# 24/09/2026: cifra do acesso ao Google Drive do Escritório (antes vinha só de carona no pdfminer.six)
+cryptography==47.0.0

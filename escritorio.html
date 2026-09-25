@@ -331,7 +331,7 @@ function renderMoldura() {
     <div class="s-grp">
       ${it('capa', 'capa', 'Página do projeto')}
       ${it('tarefas', 'tar', 'Tarefas', souAdmin() ? (revisar ? `<span class="s-est pend">${revisar} pra revisar</span>` : '') : (minhasAt ? `<span class="s-est pend">${minhasAt} atrasada</span>` : ''))}
-      ${it('arquivos', 'arq', 'Arquivos', '<span class="s-est">em breve</span>')}
+      ${it('arquivos', 'arq', 'Arquivos', PROJ && PROJ.pasta_id ? '' : '<span class="s-est">Drive</span>')}
       ${it('atas', 'atas', 'Atas', `<span class="s-est">${ATAS.length}</span>`)}
       ${it('equipe', 'eq', 'Equipe', `<span class="s-est">${MEMBROS.filter((m) => m.status === 'ativo').length}</span>`)}
     </div>`;
@@ -378,7 +378,7 @@ function telaLista() {
         <div class="linha" style="justify-content:space-between;align-items:flex-start"><b style="color:#111827">${esc(p.nome)}</b>${p.etapa_atual ? `<span class="pill p-ind">${esc(p.etapa_atual)}</span>` : ''}</div>
         ${p.cliente_nome ? `<span class="sub" style="margin:0">Cliente: ${esc(p.cliente_nome)}</span>` : ''}
         <span class="sub" style="margin:0">${p.dono === EU.id ? 'Você é admin' : 'Você faz parte da equipe'}</span></a>`).join('')}</div>`
-      : `<div class="card"><p class="h2" style="font-size:16px">Comece pelo primeiro projeto</p><p class="sub">Um projeto aqui nasce sem prancha: tarefas, atas, equipe e (em breve) a pasta do Drive. Já mediu o projeto no AI.arq? Use <b>Trazer projeto medido</b>: a equipe trabalha nele e vê o quantitativo.</p></div>`}`;
+      : `<div class="card"><p class="h2" style="font-size:16px">Comece pelo primeiro projeto</p><p class="sub">Um projeto aqui nasce sem prancha: tarefas, atas, equipe e a pasta do Drive. Já mediu o projeto no AI.arq? Use <b>Trazer projeto medido</b>: a equipe trabalha nele e vê o quantitativo.</p></div>`}`;
 }
 // 🏢 Trazer um projeto MEDIDO pro Escritório (24/09 — Pedro: "como levar um projeto feito pro escritório?").
 // Lista só os projetos DA CONTA — 🪤 o filtro user_id é obrigatório: a conta de administração do site LÊ os
@@ -481,7 +481,7 @@ function telaCapa() {
       </div>
       <div class="lado">
         <div><p class="lbl" style="margin:0 0 4px">Próxima entrega</p>${prox ? `<p class="t">${esc(p.proxima_entrega || 'Entrega')}</p><p class="d">${p.proxima_entrega_data ? dBR(p.proxima_entrega_data) : 'sem data'}</p>` : `<p class="d" style="margin:0">Ainda não marcada.${souAdmin() ? ' Use <b>Editar projeto</b>.' : ''}</p>`}</div>
-        <div><p class="lbl" style="margin:0 0 4px">Pasta do projeto</p><p class="d" style="margin:0">${svg('pastas', 14)} Google Drive · em breve</p></div>
+        <div><p class="lbl" style="margin:0 0 4px">Pasta do projeto</p><p class="d" style="margin:0">${svg('pastas', 14)} ${p.pasta_caminho ? 'Drive · ' + esc(p.pasta_caminho) : 'Google Drive · ainda não ligada'}</p></div>
       </div>
     </div>
     ${et.length ? `<div style="margin-top:22px"><p class="lbl">Etapas</p><div class="etapas" role="tablist">
@@ -499,7 +499,7 @@ function telaCapa() {
     <p class="grupo-t">Escritório</p>
     <div class="grade g2 g4">
       ${tool(`#/p/${p.id}/tarefas`, 'tar', 'Tarefas', `${abertas.length} abertas`)}
-      ${tool(`#/p/${p.id}/arquivos`, 'arq', 'Arquivos', 'Pasta do Drive · em breve')}
+      ${tool(`#/p/${p.id}/arquivos`, 'arq', 'Arquivos', p.pasta_caminho ? 'Drive · ' + esc(p.pasta_caminho) : 'Ligar a pasta do Drive')}
       ${tool(`#/p/${p.id}/atas`, 'atas', 'Atas', `${ATAS.length} reuniões`)}
       ${tool(`#/p/${p.id}/equipe`, 'eq', 'Equipe', `${ativos.length} pessoas`)}
     </div>
@@ -689,11 +689,113 @@ async function apagarCartao(id) {
   TAR = TAR.filter((x) => x.id !== id); fecharModal(); render(); toast('Cartão excluído');
 }
 
-// ══════════════ ARQUIVOS (próxima etapa) ══════════════
+// ══════════════ ARQUIVOS: a pasta do projeto no Google Drive (24/09) ══════════════
+// Tudo pelo SERVIDOR (o site não carrega script nem janela do Google: a CSP barra, de propósito).
+// Nome de arquivo/pasta é texto de gente: vai em data-* e passa pelo esc(); nunca dentro de onclick.
+let ARQ_PASTA = '', ARQ_TRILHA = [];
+async function apiEsc(caminho, metodo, corpo) {
+  const { data: { session } } = await sb.auth.getSession();
+  const h = { Authorization: 'Bearer ' + (session ? session.access_token : '') };
+  if (corpo) h['Content-Type'] = 'application/json';
+  try {
+    const r = await fetch(`${window.API_BASE}/api/escritorio/${caminho}`, { method: metodo || 'GET', headers: h, body: corpo ? JSON.stringify(corpo) : undefined });
+    let d = {}; try { d = await r.json(); } catch (_) {}
+    return { ok: r.ok, status: r.status, dados: d || {} };
+  } catch (_) { return { ok: false, status: 0, dados: { detail: 'Sem conexão com o servidor. Tente de novo.' } }; }
+}
+const ehLinkDoGoogle = (u) => /^https:\/\/(docs|drive)\.google\.com\//.test(String(u || ''));
+const ehIconeDoGoogle = (u) => /^https:\/\/[a-z0-9.-]+\.googleusercontent\.com\//.test(String(u || ''));
 function telaArquivos() {
-  return `<div class="card"><h2 class="h2">Arquivos do projeto</h2><p class="sub" style="font-size:13.5px;line-height:1.6;margin-top:8px">
-    A pasta do projeto no <b>Google Drive</b> aparece aqui na próxima etapa: a admin escolhe a pasta, a equipe recebe acesso só a ela,
-    e o botão <b>Emitir</b> cria a cópia com a revisão no nome (R00, R01…), com o histórico do cliente. Enquanto isso, a pasta continua no Drive como hoje.</p></div>`;
+  setTimeout(carregarArquivos, 0);
+  return `<section class="card rise"><div class="linha" style="justify-content:space-between"><h2 class="h2">Arquivos do projeto</h2><span id="arq-acoes" class="linha"></span></div>
+    <div id="arq-corpo" style="margin-top:14px"><p class="sub">Abrindo a pasta do Drive…</p></div></section>`;
+}
+async function carregarArquivos() {
+  const corpo = $('arq-corpo'); if (!corpo || VIEW !== 'arquivos') return;
+  const q = ARQ_PASTA ? '?pasta=' + encodeURIComponent(ARQ_PASTA) : '';
+  const [st, l] = await Promise.all([souAdmin() ? apiEsc('drive/status') : Promise.resolve(null), apiEsc(`projetos/${PROJ.id}/arquivos${q}`)]);
+  if (!$('arq-corpo') || VIEW !== 'arquivos') return;
+  const drv = st && st.ok ? st.dados : null, acoes = $('arq-acoes');
+  if (!l.ok) { corpo.innerHTML = `<p class="vazio">${esc(l.dados.detail || 'Não consegui abrir a pasta agora.')}</p>`; return; }
+  const d = l.dados;
+  if (souAdmin() && drv && !drv.configurado) { corpo.innerHTML = '<p class="vazio">O Google Drive ainda está sendo configurado no servidor.</p>'; return; }
+  if (souAdmin() && drv && !drv.conectado) {
+    corpo.innerHTML = `<div class="aviso"><b>Conecte o seu Google Drive.</b><br><span style="font-size:13.5px;color:#475569">Você escolhe a pasta deste projeto, e cada pessoa da equipe recebe acesso só a ela. O Google mostra um aviso de "app não verificado" (estamos em piloto): é só seguir. Você pode cortar o acesso quando quiser, aqui ou na sua conta Google.</span></div>
+      <button class="btn btn-g" style="margin-top:14px" onclick="conectarDrive()">Conectar Google Drive</button>`;
+    return;
+  }
+  if (d.sem_pasta) {
+    corpo.innerHTML = souAdmin()
+      ? `<p class="sub" style="margin:0 0 12px">Drive conectado${drv && drv.email ? ' (' + esc(drv.email) + ')' : ''}. Agora escolha a pasta deste projeto.</p><button class="btn btn-g" onclick="escolherPasta('root')">Escolher a pasta do projeto</button>`
+      : '<p class="vazio">A admin ainda não ligou a pasta do Drive a este projeto.</p>';
+    return;
+  }
+  if (d.sem_conexao) {
+    corpo.innerHTML = souAdmin()
+      ? `<p class="vazio">A conexão com o Drive caiu. Conecte de novo pra equipe voltar a ver a pasta.</p><button class="btn btn-g" style="margin-top:12px" onclick="conectarDrive()">Conectar Google Drive</button>`
+      : '<p class="vazio">A conexão da admin com o Drive caiu. Ela precisa conectar de novo.</p>';
+    return;
+  }
+  const pasta = d.pasta || {}, arqs = d.arquivos || [];
+  if (acoes) acoes.innerHTML = `<a class="btn btn-s" href="https://drive.google.com/drive/folders/${encodeURIComponent(pasta.atual || pasta.id)}" target="_blank" rel="noopener">Abrir no Drive</a>`
+    + (souAdmin() ? '<button class="btn btn-s" onclick="sincronizarPasta()">Atualizar acesso da equipe</button><button class="btn btn-s" onclick="escolherPasta(\'root\')">Trocar pasta</button>' : '');
+  const trilha = `<div class="linha" style="gap:6px;font-size:13px;margin-bottom:8px"><a href="#" data-sub="" data-nome="" class="arq-sub">${esc(pasta.nome || 'Pasta do projeto')}</a>${ARQ_TRILHA.map((t) => `<span>›</span><a href="#" data-sub="${esc(t.id)}" data-nome="${esc(t.nome)}" class="arq-sub">${esc(t.nome)}</a>`).join('')}</div>`;
+  corpo.innerHTML = trilha + (arqs.length ? `<ul class="lista">${arqs.map((f) => {
+    const ic = ehIconeDoGoogle(f.icone) ? `<img src="${esc(f.icone)}" alt="" width="18" height="18">` : svg(f.pasta ? 'pastas' : 'arq', 18);
+    const quando = f.mudou_em ? dBR(f.mudou_em) + (f.por ? ' · ' + esc(f.por) : '') : '';
+    const nome = f.pasta
+      ? `<a href="#" class="arq-sub" data-sub="${esc(f.id)}" data-nome="${esc(f.nome)}" style="font-weight:600">${esc(f.nome)}</a>`
+      : (ehLinkDoGoogle(f.link) ? `<a href="${esc(f.link)}" target="_blank" rel="noopener">${esc(f.nome)}</a>` : esc(f.nome));
+    return `<li>${ic}<span style="flex:1;min-width:0;font-size:14.5px;overflow-wrap:anywhere">${nome}<span class="sub" style="display:block;margin:0">${quando}</span></span></li>`;
+  }).join('')}</ul>` : '<p class="vazio">Pasta vazia.</p>')
+    + (souAdmin() ? '' : '<p class="sub" style="margin-top:12px">Pra abrir e editar os arquivos, use a conta Google em que você recebeu o compartilhamento da pasta.</p>');
+}
+// um ouvinte só pras subpastas (o nome da pasta nunca vai dentro de onclick)
+document.addEventListener('click', (ev) => {
+  const a = ev.target.closest && ev.target.closest('.arq-sub'); if (!a) return;
+  ev.preventDefault();
+  const id = a.dataset.sub || '', nome = a.dataset.nome || '';
+  if (!id) { ARQ_PASTA = ''; ARQ_TRILHA = []; }
+  else { const k = ARQ_TRILHA.findIndex((t) => t.id === id); ARQ_TRILHA = k >= 0 ? ARQ_TRILHA.slice(0, k + 1) : [...ARQ_TRILHA, { id, nome }]; ARQ_PASTA = id; }
+  carregarArquivos();
+});
+async function conectarDrive() {
+  const r = await apiEsc('drive/iniciar', 'POST', { projeto_id: PROJ ? PROJ.id : '' });
+  if (!r.ok) return toast(r.dados.detail || 'Não deu pra conectar agora.', true);
+  location.href = r.dados.url;            // vai pro Google e volta pra esta aba do projeto
+}
+async function escolherPasta(pai) {
+  abrirModal('Escolher a pasta do projeto', '<p class="sub" style="margin:0">Lendo as suas pastas do Drive…</p>');
+  const r = await apiEsc('drive/pastas?pai=' + encodeURIComponent(pai || 'root'));
+  if (!r.ok) { fecharModal(); return toast(r.dados.detail || 'Não consegui ler as pastas agora.', true); }
+  const a = r.dados.atual || { id: 'root', nome: 'Meu Drive' }, ps = r.dados.pastas || [];
+  abrirModal('Escolher a pasta do projeto', `
+    <div class="linha" style="gap:6px;font-size:13.5px">${a.id !== 'root' ? `<button class="btn btn-s" data-pai="${esc(a.pai || 'root')}" id="ep-voltar">← Voltar</button>` : ''}<b>${esc(a.nome)}</b></div>
+    <ul class="lista" style="max-height:320px;overflow:auto">${ps.length ? ps.map((p) => `<li><span style="flex:1;font-size:14px">${svg('pastas', 16)} ${esc(p.nome)}</span><button class="btn btn-s ep-abrir" data-id="${esc(p.id)}">Abrir</button></li>`).join('') : '<li><span class="vazio">Nenhuma subpasta aqui.</span></li>'}</ul>
+    <div><label class="lbl" for="ep-link">Ou cole o link da pasta do Drive</label><input id="ep-link" class="in" placeholder="https://drive.google.com/drive/folders/…"></div>
+    <div class="rodape"><button class="btn" onclick="fecharModal()">Cancelar</button>
+      <button class="btn" onclick="usarPasta($('ep-link').value)">Usar o link</button>
+      ${a.id !== 'root' ? `<button class="btn btn-d" data-id="${esc(a.id)}" id="ep-usar">Usar esta pasta</button>` : ''}</div>`);
+  const v = $('ep-voltar'); if (v) v.onclick = () => escolherPasta(v.dataset.pai);
+  const u = $('ep-usar'); if (u) u.onclick = () => usarPasta(u.dataset.id);
+  document.querySelectorAll('.ep-abrir').forEach((b) => { b.onclick = () => escolherPasta(b.dataset.id); });
+}
+async function usarPasta(pasta) {
+  if (!String(pasta || '').trim()) return toast('Escolha uma pasta ou cole o link.', true);
+  const r = await apiEsc(`projetos/${PROJ.id}/pasta`, 'POST', { pasta: String(pasta).trim() });
+  if (!r.ok) return toast(r.dados.detail || 'Não consegui ligar a pasta.', true);
+  fecharModal();
+  PROJ.pasta_id = r.dados.pasta.id; PROJ.pasta_caminho = r.dados.pasta.nome; ARQ_PASTA = ''; ARQ_TRILHA = [];
+  const f = (r.dados.falhas || []).length;
+  toast('Pasta ligada' + (r.dados.compartilhados ? ` · compartilhada com ${r.dados.compartilhados} pessoa(s)` : '') + (f ? ` · ${f} não deu (sem conta Google?)` : ''));
+  render();
+}
+async function sincronizarPasta(calado) {
+  const r = await apiEsc(`projetos/${PROJ.id}/drive/sincronizar`, 'POST');
+  if (calado) return;
+  if (!r.ok) return toast(r.dados.detail || 'Não consegui atualizar o acesso.', true);
+  const f = (r.dados.falhas || []).length;
+  toast(`Acesso atualizado: ${r.dados.compartilhados || 0} entrou, ${r.dados.tirados || 0} saiu` + (f ? ` · ${f} não deu` : ''));
 }
 
 // ══════════════ ATAS ══════════════
@@ -752,7 +854,7 @@ async function salvarAta() {
 function telaEquipe() {
   const vis = MEMBROS.filter((m) => m.status !== 'removido');
   return `<div class="aviso"><b>Quem você convida entra no projeto, não no escritório.</b><br>
-      <span style="font-size:12.5px;color:#475569">Vê e edita: as tarefas e as atas deste projeto (e, na próxima etapa, a pasta do Drive). Vê o nome e a função dos colegas, mas não o e-mail nem o telefone. Não vê: os outros projetos, o financeiro e o resto do seu Drive.${PROJ.job_id ? ' <b>Projeto medido ligado:</b> a equipe vê o quantitativo, o cronograma e o memorial, só leitura; <b>baixar arquivos</b> só quem você liberar abaixo.' : ''}</span></div>
+      <span style="font-size:12.5px;color:#475569">Vê e edita: as tarefas, as atas e a pasta do Drive deste projeto (acesso de edição pela conta Google da pessoa). Vê o nome e a função dos colegas, mas não o e-mail nem o telefone. Não vê: os outros projetos, o financeiro e o resto do seu Drive.${PROJ.job_id ? ' <b>Projeto medido ligado:</b> a equipe vê o quantitativo, o cronograma e o memorial, só leitura; <b>baixar arquivos</b> só quem você liberar abaixo.' : ''}</span></div>
     <section class="card"><div class="linha" style="justify-content:space-between"><h2 class="h2">${vis.length} pessoa${vis.length > 1 ? 's' : ''}</h2>${souAdmin() ? '<button class="btn btn-p" onclick="convidar()">+ Convidar pessoa</button>' : ''}</div>
       <ul class="lista" style="margin-top:8px">${vis.map((m) => `<li style="flex-wrap:wrap">${av(m)}<div style="flex:1;min-width:180px"><b style="font-size:14px">${esc(nomeDe(m))}${m.user_id === EU.id ? ' <span style="font-weight:400;color:#64748B">(você)</span>' : ''}</b>
         <span class="sub" style="display:block;margin:0">${esc(m.funcao || (m.papel === 'dono' ? 'Admin do projeto' : ''))}${m.email ? ' · ' + esc(m.email) : ''}${m.telefone ? ' · ' + esc(m.telefone) : ''}</span>
@@ -853,6 +955,7 @@ async function confirmarTirar(id) {
   try { await recarregar(); } catch (e) { return falhou(e, 'Feito, mas não consegui atualizar a lista'); }
   if (!count) return toast(m.status === 'convidado' ? 'Essa pessoa já tinha entrado no projeto. Atualizei a lista.' : 'Nada mudou: atualizei a lista.', true);
   toast(m.status === 'convidado' ? 'Convite cancelado' : curto(m) + ' saiu do projeto');
+  if (m.status !== 'convidado' && PROJ.pasta_id) sincronizarPasta(true);   // tira o acesso à pasta do Drive
 }
 
 // ══════════════ início ══════════════
@@ -862,6 +965,15 @@ async function confirmarTirar(id) {
   if (!sessao) { location.href = 'login.html?redirect=escritorio.html'; return; }
   EU = { id: sessao.user.id, email: sessao.user.email };
   if (window.trackEvent) trackEvent('view_escritorio');
+  // voltou do Google (conectar o Drive): diz o que houve e limpa o endereço
+  const volta = new URLSearchParams(location.search).get('drive');
+  if (volta) {
+    const msg = { ok: ['Google Drive conectado', false], negado: ['Você não autorizou o Drive', true],
+      'sem-permissao': ['Faltou marcar a permissão do Drive na tela do Google. Tente de novo e marque a caixinha.', true],
+      erro: ['Não consegui conectar o Drive. Tente de novo.', true] }[volta] || ['Não consegui conectar o Drive.', true];
+    setTimeout(() => toast(msg[0], msg[1]), 400);
+    history.replaceState(null, '', location.pathname + location.hash);
+  }
   navegar();
 })();
 </script>

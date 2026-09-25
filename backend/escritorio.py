@@ -47,6 +47,7 @@ _USUARIO = None      # _get_user_from_request(request) -> {"id","email"} | None
 _ENVIAR = None       # _send_email_smtp(to, subject, html, text="", log_kind=..., job_id="") -> bool
 _MOLDURA = None      # _email_wrap(title, body_html, cta_text, cta_url, ..., reason=..., preheader=...)
 _REGISTRAR = None    # _log_error(stage, msg, severity=...)
+_DEPOIS_DO_ACEITE = None  # escritorio_drive: compartilha a pasta do projeto com quem acabou de entrar
 
 
 def configurar(servico, como_usuario, usuario, enviar, moldura, registrar=None):
@@ -450,6 +451,11 @@ def aceitar_convite(request: Request, corpo: dict):
                              prefer="return=representation")
     if status >= 300 or not dados:
         raise HTTPException(502, "Não consegui confirmar o convite agora. Tente de novo em instantes.")
+    if _DEPOIS_DO_ACEITE:          # a pasta do Drive do projeto (em segundo plano: nunca atrasa o aceite)
+        try:
+            _DEPOIS_DO_ACEITE(m["projeto_id"])
+        except Exception:
+            pass
     outro_email = (eu.get("email") or "").lower() != (m["email"] or "").lower()
     return {"ok": True, "projeto_id": m["projeto_id"],
             # conta com e-mail diferente do convite: vale (o token prova que o convite chegou

@@ -43,6 +43,7 @@ from instagram_webhook import router as instagram_router
 from whatsapp_notify import router as whatsapp_router, send_whatsapp_template
 import conector_teste as _conector_teste  # PROVA do conector no Claude (Fase 0, 21/09) — apagar no fim
 import escritorio as _escritorio  # piloto DTZ (23/09/2026): convite do escritório; o resto a tela faz direto no banco (RLS)
+import escritorio_drive as _escritorio_drive  # 24/09: a pasta do projeto no Google Drive (tudo pelo servidor)
 from engine_rules import (
     salvage_truncated_json as _salvage_truncated_json,
     normalize_items_payload as _normalize_items_payload,
@@ -3750,6 +3751,7 @@ _conector_teste.configurar(registrar=_log_error)
 # ESCRITÓRIO (piloto DTZ, 23/09/2026): só o convite passa pelo servidor.
 # As peças (banco, e-mail) são entregues lá no fim do arquivo, depois de definidas.
 app.include_router(_escritorio.router)
+app.include_router(_escritorio_drive.router)
 
 # Armazenamento de jobs em arquivo JSON (sobrevive a restarts)
 import json as _json

@@ -755,3 +755,34 @@ alter table public.escritorio_membros add column pode_baixar boolean not null de
 comment on column public.escritorio_membros.pode_baixar is
   'A admin autoriza esta pessoa a baixar planilha/cronograma/memorial do projeto medido ligado. Padrão: não.';
 grant select (pode_baixar) on public.escritorio_membros to authenticated;
+
+-- ── 23. (24/09) Escritório × Google Drive — as duas tabelas são SÓ do servidor ──
+-- RLS ligada sem política e sem grant pra anon/authenticated: a tela nunca vê a chave de acesso ao Drive.
+-- Ensaio em transação desfeita: authenticated e anon não leem; service_role lê e escreve.
+-- Aplicada como `escritorio_drive_tabelas`. Código: backend/escritorio_drive.py.
+create table public.escritorio_drive_conexoes (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  google_email text,
+  token_cifrado text not null,
+  conectado_em timestamptz not null default now(),
+  atualizado_em timestamptz not null default now()
+);
+comment on table public.escritorio_drive_conexoes is
+  'Conta do Google Drive ligada por quem administra projetos do Escritório. token_cifrado = refresh token cifrado pelo servidor (Fernet; chave derivada do segredo do servidor). Só o servidor lê e escreve.';
+alter table public.escritorio_drive_conexoes enable row level security;
+revoke all on public.escritorio_drive_conexoes from anon, authenticated;
+
+create table public.escritorio_drive_permissoes (
+  id bigint generated always as identity primary key,
+  projeto_id uuid not null references public.escritorio_projetos(id) on delete cascade,
+  membro_id uuid references public.escritorio_membros(id) on delete set null,
+  email text not null,
+  pasta_id text not null,
+  permission_id text not null,
+  criado_em timestamptz not null default now()
+);
+comment on table public.escritorio_drive_permissoes is
+  'Compartilhamentos da pasta do projeto que o SERVIDOR criou (um por membro ativo). Quem sai perde; o que a admin compartilhou à mão no Drive não passa por aqui.';
+create unique index escritorio_drive_permissoes_um on public.escritorio_drive_permissoes (projeto_id, membro_id, pasta_id) where membro_id is not null;
+alter table public.escritorio_drive_permissoes enable row level security;
+revoke all on public.escritorio_drive_permissoes from anon, authenticated;
