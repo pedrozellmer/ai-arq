@@ -1002,9 +1002,16 @@ def _leitura_por_folha_resumo(extraction) -> str:
     if not f:
         return ""
     ds = f.get("desenhos_lista") or []
+    # 📏 O que ficou como estava e QUANTO pesa (vista, desenho sem título, o que
+    # nenhuma folha mostra) — é o dado que decide o próximo conserto.
+    med = f.get("medida") or {}
+    peso = "".join(
+        f" {k}=[{v.get('m', 0)}m {v.get('m2', 0)}m2 {v.get('blocos', 0)}bl]"
+        for k, v in med.items() if v.get("m") or v.get("m2") or v.get("blocos"))
     if not f.get("aplicada"):
         return (f"aplicada=nao motivo='{f.get('motivo', '')}' desenhos={len(ds)} "
-                f"gerais={f.get('janelas_gerais', 0)} sem_janela={f.get('sem_janela', 0)}")
+                f"gerais={f.get('janelas_gerais', 0)} sem_janela={f.get('sem_janela', 0)}"
+                f"{peso}")
     a, d = f.get("antes") or {}, f.get("depois") or {}
     mult = [f"{(x.get('titulo') or x.get('folha'))[:40]}×{x['andares']}"
             for x in ds if x.get("tipo") == "planta" and (x.get("andares") or 1) > 1]
@@ -1017,7 +1024,7 @@ def _leitura_por_folha_resumo(extraction) -> str:
             f"multiplicadas=[{'; '.join(mult)}] "
             f"comprimento {a.get('comprimento')}→{d.get('comprimento')} m "
             f"area {a.get('area')}→{d.get('area')} m2 "
-            f"blocos {a.get('blocos')}→{d.get('blocos')}")
+            f"blocos {a.get('blocos')}→{d.get('blocos')}{peso}")
 
 
 def _descarte_de_pilares(extraction) -> str:

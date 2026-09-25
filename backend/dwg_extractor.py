@@ -2901,6 +2901,62 @@ def aplicar_leitura_por_folha(walls, hatches, polygon_areas, blocks, mapa) -> di
     return res
 
 
+def medir_por_folha(walls, hatches, polygon_areas, blocks, mapa) -> dict:
+    """Quanto pesa o que a leitura por folha deixa como estava — SÓ MEDE.
+
+    📏 24/09/2026 (Pedro: "segue"). O log contava QUANTAS vistas havia, não
+    quanto elas pesam; e o que nenhuma folha mostra (7 fogões num desenho solto,
+    no caso do gás) nem aparecia. Os arquivos são apagados depois do job, então
+    sem isto a próxima decisão seria no escuro. Chamar ANTES de
+    `aplicar_leitura_por_folha` (mede a geometria original). Não muta nada.
+
+    Devolve {'vista'|'neutro'|'sem_folha': {'m', 'm2', 'blocos'}}; vazio quando
+    o arquivo não tem janela de folha nenhuma (aí tudo seria "sem folha").
+    """
+    folhas = (mapa or {}).get("folhas") or []
+    if not folhas:
+        return {}
+    med = {k: {"m": 0.0, "m2": 0.0, "blocos": 0} for k in ("vista", "neutro", "sem_folha")}
+
+    def onde(p):
+        tocam = [f for f in folhas if _dentro(p, f["caixa"])]
+        if not tocam:
+            return "sem_folha"
+        tipos = {f.get("tipo", "") for f in tocam}
+        if tipos == {"vista"}:
+            return "vista"
+        if tipos == {""}:
+            return "neutro"
+        return None                     # planta/fora/mistura: já é da leitura
+
+    for w in walls:
+        if tuple(w.start) == (0, 0) and tuple(w.end) == (0, 0):
+            continue                    # sem posição: não sei onde está
+        k = onde(((w.start[0] + w.end[0]) / 2, (w.start[1] + w.end[1]) / 2))
+        if k:
+            med[k]["m"] += w.length
+    for lista in (hatches, polygon_areas):
+        for h in lista:
+            bb = getattr(h, "bbox", ()) or ()
+            if len(bb) != 4:
+                continue
+            k = onde(((bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2))
+            if k:
+                med[k]["m2"] += h.area
+    for b in blocks:
+        pos = list(getattr(b, "positions", None) or [])
+        if len(pos) != b.count:
+            continue
+        for p in pos:
+            k = onde(p)
+            if k:
+                med[k]["blocos"] += 1
+    for v in med.values():
+        # float() porque área de hachura pode chegar como np.float64
+        v["m"], v["m2"] = round(float(v["m"]), 1), round(float(v["m2"]), 1)
+    return med
+
+
 def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> DXFExtraction:
     """Main extraction function — reads a .dxf file and returns structured data.
 
@@ -4137,7 +4193,9 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
     if os.environ.get("LEITURA_POR_FOLHA", "1") != "0":
         try:
             _mapa = mapa_de_folhas(doc)
+            _medida = medir_por_folha(walls, hatches, polygon_areas, blocks, _mapa)
             _folhas = aplicar_leitura_por_folha(walls, hatches, polygon_areas, blocks, _mapa)
+            _folhas["medida"] = _medida
             _folhas["desenhos_lista"] = [
                 {"folha": f["folha"][:40], "titulo": f.get("titulo", "")[:90],
                  "tipo": f.get("tipo", ""), "andares": f.get("andares", 1),

@@ -101,7 +101,7 @@ def _titulo(msp, doc, texto, x, y):
 
 def _arquivo(tmp_path, titulo_planta="PLANTA BAIXA QUARTO/QUINTO/SEXTO PAVIMENTO",
              titulo_esquema="ESQUEMA VERTICAL DE GÁS", folhas=True, sobrepor=False,
-             elevacao=False):
+             elevacao=False, solto=False):
     doc = ezdxf.new("R2018")
     doc.header["$INSUNITS"] = 6                  # metros
     msp = doc.modelspace()
@@ -129,6 +129,9 @@ def _arquivo(tmp_path, titulo_planta="PLANTA BAIXA QUARTO/QUINTO/SEXTO PAVIMENTO
         _titulo(msp, doc, "ELEVAÇÃO 1", 84, 1)
         if folhas:
             _viewport(doc.layouts.new("ELEV"), (80, 0, 100, 15))
+    if solto:                                     # desenho que NENHUMA folha mostra
+        msp.add_line((120, 5), (125, 5), dxfattribs={"layer": "GAS-TUBO"})
+        msp.add_blockref("FOGAO", (122, 8), dxfattribs={"layer": "GAS-PONTO"})
     p = str(tmp_path / "gas.dxf")
     doc.saveas(p)
     return p
@@ -300,3 +303,28 @@ def test_CONTROLE_marcador_pequeno_nao_e_titulo(tmp_path, monkeypatch):
     p = str(tmp_path / "det.dxf")
     doc.saveas(p)
     assert dx.extract_dxf(p).get_walls_by_layer().get("PAREDE") == pytest.approx(10.0)
+
+
+def test_mede_o_peso_da_vista_e_do_que_nenhuma_folha_mostra(tmp_path, monkeypatch):
+    """📏 O log contava QUANTAS vistas havia, não quanto pesam; e o desenho solto
+    (7 fogões no caso do gás) nem aparecia. Só mede — a soma não muda."""
+    monkeypatch.delenv("LEITURA_POR_FOLHA", raising=False)
+    ex = dx.extract_dxf(_arquivo(tmp_path, elevacao=True, solto=True))
+    med = ex.folhas["medida"]
+    assert med["vista"]["m2"] == pytest.approx(12.0)
+    assert med["sem_folha"]["m"] == pytest.approx(5.0) and med["sem_folha"]["blocos"] == 1
+    # só mede: o solto continua somando (peso 1) e a elevação também
+    assert ex.get_walls_by_layer().get("GAS-TUBO") == pytest.approx(30.0 + 5.0)
+    assert ex.get_block_summary().get("FOGAO") == 6 + 1
+    assert ex.get_areas_by_layer().get("REVEST-PAREDE") == pytest.approx(12.0)
+    import main
+    linha = main._leitura_por_folha_resumo(ex)
+    # (o bloco de título "ELEVAÇÃO 1" está dentro da janela da vista e conta como bloco)
+    assert "vista=[0.0m 12.0m2" in linha and "sem_folha=[5.0m 0.0m2 1bl]" in linha, linha
+
+
+def test_CONTROLE_sem_folha_nenhuma_nao_mede_nada(tmp_path, monkeypatch):
+    """Sem janela de folha, tudo seria "sem folha" — número que não diz nada."""
+    monkeypatch.delenv("LEITURA_POR_FOLHA", raising=False)
+    ex = dx.extract_dxf(_arquivo(tmp_path, folhas=False, solto=True))
+    assert not (ex.folhas or {}).get("medida")
