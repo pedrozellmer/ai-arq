@@ -1199,6 +1199,12 @@
             <p class="text-xs text-gray-500 mb-4">Voc&ecirc; envia pelos bot&otilde;es na aba <b>Usu&aacute;rios</b>.</p>
             <div id="emails-manual" class="grid gap-3 sm:grid-cols-2"></div>
           </section>
+          <!-- 25/09/2026: catálogo de falhas — um e-mail por tipo de problema, em revisão -->
+          <section>
+            <h3 class="flex items-center gap-2 text-base font-bold text-gray-900 mb-1">&#129520; Falhas &mdash; cat&aacute;logo em revis&atilde;o</h3>
+            <p class="text-xs text-gray-500 mb-4">Um e-mail para cada tipo de problema. <b>Ainda n&atilde;o sai para ningu&eacute;m</b>: leia, mande um teste para voc&ecirc; e, quando aprovar, a gente liga. Problema <b>nosso</b> &rarr; &ldquo;n&atilde;o &eacute; o seu arquivo, j&aacute; estamos resolvendo&rdquo;; problema <b>do cliente</b> &rarr; o passo a passo.</p>
+            <div id="emails-falhas" class="grid gap-3 sm:grid-cols-2"></div>
+          </section>
           <!-- 05/09/2026: lista de supressão (Pedro: "tirar de qq envio" quem devolve tudo) -->
           <section>
             <h3 class="flex items-center gap-2 text-base font-bold text-gray-900 mb-1">&#128683; Endere&ccedil;os suprimidos</h3>
@@ -4227,8 +4233,10 @@ async function loadEmailCatalog() {
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
     const items = data.items || [];
-    const autos = items.filter(i => i.grupo !== 'manual');
+    const autos = items.filter(i => i.grupo !== 'manual' && i.grupo !== 'falha');
     const mans  = items.filter(i => i.grupo === 'manual');
+    // 25/09: catálogo de falhas em revisão — bloco próprio, não se mistura aos automáticos
+    const falhas = items.filter(i => i.grupo === 'falha');
     // 🪤 arrow, nunca `.map(_emailCard)`: o map injetaria o índice no lugar de `lido`.
     const lido = (data.retorno_lido === true), dias = data.retorno_dias;
     // 🚨 Com a leitura caída, os tipos "Fora do catálogo" somem da lista — e a
@@ -4238,6 +4246,8 @@ async function loadEmailCatalog() {
       : '';
     autoBox.innerHTML = avisoOrfaos + (autos.length ? autos.map(i => _emailCard(i, lido, dias)).join('') : '<p class="text-sm text-gray-400">Nenhum.</p>');
     manBox.innerHTML  = mans.length  ? mans.map(i => _emailCard(i, lido, dias)).join('')  : '<p class="text-sm text-gray-400">Nenhum.</p>';
+    const falBox = document.getElementById('emails-falhas');
+    if (falBox) falBox.innerHTML = falhas.length ? falhas.map(i => _emailCard(i, lido, dias)).join('') : '<p class="text-sm text-gray-400">Nenhum.</p>';
     loading.classList.add('hidden');
     groups.classList.remove('hidden');
     loadSuprimidos();

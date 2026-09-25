@@ -5057,6 +5057,49 @@ def _linha_do_email_ao_cliente(email: str, criado_em: str) -> str:
     return "O cliente recebeu e-mail de falha (%s) às %s UTC." % (_kind, _hora)
 
 
+def _build_email_de_falha(tipo: str, name: str, project_name: str,
+                          arquivo: str = "", job_id: str = ""):
+    """E-mail de falha pelo CATÁLOGO (`falhas.py`): um tipo, uma mensagem.
+
+    25/09/2026 — substitui (quando `falhas.LIGADO` virar True, depois da revisão
+    do Pedro na Central) o `_build_falha_email`, que adivinhava o motivo
+    farejando o texto da tela e contradizia a tela em 8 de 17 situações reais.
+    Voz: problema NOSSO → "não é o seu arquivo, já estamos resolvendo, você
+    recebe reprocessado" (+ atalho opcional); problema DO CLIENTE → o que houve
+    e o passo a passo. Devolve (subject, html).
+    """
+    import html as _hf
+    from urllib.parse import quote as _qf
+    import falhas as _fa
+    t = _fa.TIPOS.get(tipo) or _fa.TIPOS["desconhecido"]
+    greet = _greeting_line(_hf.escape(name or ""))
+    o_que = _fa._preenche(t["o_que_houve"], project_name, arquivo)
+    _url_proj = ("https://ai.arq.br/projeto.html?job_id=%s" % _qf(str(job_id), safe="")
+                 if job_id else "https://ai.arq.br/dashboard.html")
+    img = _email_img(t["arte"], _fa.titulo_do_email(tipo))
+    if t["quem"] == "nosso":
+        corpo = (f"{greet}<br><br>{o_que}<br>{img}{_fa.NOSSO_PROMESSA}"
+                 + (f"<br><br>{t['atalho']}" if t.get("atalho") else "")
+                 + "<br><br>Desculpa pelo transtorno — se quiser falar com a gente, é só "
+                   "responder este e-mail. 🙂")
+        cta_txt, badge, pre = ("Abrir meu projeto", "⚠ Estamos resolvendo",
+                               "Não é o seu arquivo — já estamos resolvendo, e você recebe "
+                               "o projeto reprocessado.")
+    else:
+        passos = "".join(f'<li style="margin:0 0 8px">{p}</li>' for p in t.get("passos") or [])
+        corpo = (f"{greet}<br><br>{o_que}<br>{img}<b>Como resolver:</b>"
+                 f'<ol style="margin:8px 0 12px 20px;padding:0">{passos}</ol>'
+                 + (f"{t['fecho']}<br><br>" if t.get("fecho") else "")
+                 + "Se travar em algum passo, é só responder este e-mail que a gente ajuda. 🙂")
+        cta_txt, badge, pre = ("Abrir meu projeto", "⚠ Falta um passo seu",
+                               "Veja o que aconteceu e como resolver em poucos passos.")
+    subject = _fa.assunto_do_email(tipo, project_name)
+    html = _email_wrap(_fa.titulo_do_email(tipo), corpo, cta_txt, _url_proj,
+                       badge=badge, badge_color="amber", preheader=pre,
+                       reason="Você está recebendo este e-mail porque enviou um projeto ao AI.arq.")
+    return subject, html
+
+
 def _build_falha_email(name: str, project_name: str, reprocessavel: bool,
                        error_hint: str = "", job_id: str = "",
                        culpa_nossa: bool = False, ja_entregou: bool = False):
@@ -25118,6 +25161,26 @@ _EMAIL_CATALOG = [
      "sem_preview": "o preview mora na aba Newsletter"},
 ]
 
+# 25/09/2026 — CATÁLOGO DE FALHAS: um modelo por tipo (`falhas.py`), na Central,
+# no grupo "falha" (bloco próprio "Falhas — em revisão"). Enquanto
+# `falhas.LIGADO` for False NENHUM deles sai pro cliente: é pra o Pedro ler,
+# mandar teste pra si e aprovar antes de ligar.
+try:
+    import falhas as _falhas_cat
+    for _tp_f, _t_f in _falhas_cat.TIPOS.items():
+        _EMAIL_CATALOG.append({
+            "key": f"falha:{_tp_f}",
+            "nome": f"Falha — {_t_f['rotulo']}",
+            "grupo": "falha",
+            "gatilho": (("EM REVISÃO — ainda não liga. " if not _falhas_cat.LIGADO else "")
+                        + ("Problema NOSSO" + (" (o sistema re-tenta sozinho antes)"
+                                               if _t_f.get("automatico") else "")
+                           if _t_f["quem"] == "nosso" else "Problema do CLIENTE")
+                        + " · o que a casa faz: " + _t_f["aviso"]),
+        })
+except Exception as _e_cat_f:
+    print(f"[email-catalogo] catálogo de falhas fora da Central: {_e_cat_f}")
+
 
 def _neutraliza_links_de_avaliacao(html: str) -> str:
     """Mata os links de nota de um e-mail de EXEMPLO.
@@ -25173,6 +25236,15 @@ def _render_email_by_type_raw(key: str):
         return _build_falha_email(nome, projeto, True)
     if key == "erro_trocar":
         return _build_falha_email(nome, projeto, False)
+    if key.startswith("falha:"):
+        import falhas as _fa_prev
+        _tp_prev = key.split(":", 1)[1]
+        if _tp_prev not in _fa_prev.TIPOS:
+            raise KeyError(key)
+        _arq_prev = ("Planta Baixa - Térreo.pdf" if _tp_prev.startswith("pdf-")
+                     else "Planta Baixa - Térreo.dxf" if _tp_prev == "leitor-extracao"
+                     else "Planta Baixa - Térreo.dwg")
+        return _build_email_de_falha(_tp_prev, nome, projeto, _arq_prev, fake_job)
     if key == "erro_nosso":
         return _build_falha_email(nome, projeto, False, culpa_nossa=True,
                                   ja_entregou=True, job_id=fake_job)

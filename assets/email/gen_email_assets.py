@@ -390,6 +390,85 @@ def convidado():
         check(d, 1060, y + 1, cor=VERDE, t=4, s_=11)
     img.save(f"{OUT}/convidado-area.png", optimize=True)
 
+# ── CATÁLOGO DE FALHAS (25/09/2026) ─────────────────────────────
+# Três artes novas pro catálogo de falhas (backend/falhas.py). Voz do Pedro:
+# problema NOSSO acalma e promete ("já estamos resolvendo"); problema do
+# CLIENTE aponta o caminho — nunca alarme vermelho.
+def _engrenagem(d, cx, cy, r, dentes=8, cor=INDIGO):
+    import math
+    pts = []
+    for i in range(dentes * 2):
+        ang = math.pi * i / dentes
+        rr_ = r + 18 if i % 2 == 0 else r
+        for da in (-0.16, 0.16):
+            a = ang + da
+            pts.append((cx + rr_ * math.cos(a), cy + rr_ * math.sin(a)))
+    d.polygon(pts, fill=cor)
+    d.ellipse((cx - r + 14, cy - r + 14, cx + r - 14, cy + r - 14), fill=BRANCO)
+
+
+def falha_nossa():
+    W, H = 1200, 360
+    img = Image.new("RGB", (W, H), FUNDO_CLARO)
+    d = ImageDraw.Draw(img)
+    rr(d, (24, 24, W - 24, H - 24), 20, fill=BRANCO, outline=CINZA_CLARO, width=2)
+    gradiente_h(d, 24, 24, W - 24, 30, INDIGO, CYAN)
+    _engrenagem(d, 230, 185, 78)
+    check(d, 206, 176, cor=VERDE, t=10, s_=30)
+    d.text((420, 105), "O problema foi nosso.", font=F("Bold", 38), fill=SLATE)
+    d.text((420, 170), "Já estamos resolvendo — você recebe", font=F("Regular", 28),
+           fill=CINZA_TXT)
+    d.text((420, 210), "o projeto reprocessado por e-mail.", font=F("Regular", 28),
+           fill=CINZA_TXT)
+    img.save(f"{OUT}/falha-nossa.png", optimize=True)
+
+
+def falha_pdf():
+    W, H = 1200, 360
+    img = Image.new("RGB", (W, H), FUNDO_CLARO)
+    d = ImageDraw.Draw(img)
+    rr(d, (24, 24, W - 24, H - 24), 20, fill=BRANCO, outline=CINZA_CLARO, width=2)
+    gradiente_h(d, 24, 24, W - 24, 30, (245, 158, 11), (253, 186, 116))
+    # a imagem escaneada: folha cinza com linhas tortas de "scan"
+    rr(d, (110, 80, 330, 300), 14, fill=FUNDO_CLARO, outline=(203, 213, 225), width=3)
+    d.text((140, 104), "PDF", font=F("Bold", 40), fill=(148, 163, 184))
+    for i, y in enumerate(range(170, 260, 18)):
+        d.line((140, y + (i % 2) * 3, 300 - (i % 3) * 22, y + ((i + 1) % 2) * 3),
+               fill=(203, 213, 225), width=6)
+    warn(d, 262, 222, r=30)
+    d.line((380, 190, 520, 190), fill=CINZA_TXT, width=8)
+    d.polygon([(520, 172), (556, 190), (520, 208)], fill=CINZA_TXT)
+    # o desenho: DXF com traço limpo
+    rr(d, (600, 80, 820, 300), 14, fill=(238, 242, 255), outline=INDIGO, width=3)
+    d.text((640, 104), "DXF", font=F("Bold", 40), fill=INDIGO)
+    d.rectangle((640, 175, 780, 255), outline=INDIGO, width=4)
+    d.line((710, 175, 710, 255), fill=INDIGO, width=4)
+    check(d, 742, 212, cor=VERDE, t=8, s_=22)
+    d.text((860, 150), "É do desenho", font=F("Medium", 28), fill=CINZA_TXT)
+    d.text((860, 190), "que sai a medida.", font=F("Medium", 28), fill=CINZA_TXT)
+    d.text((860, 230), "Veja como mandar.", font=F("Medium", 28), fill=CINZA_TXT)
+    img.save(f"{OUT}/falha-pdf.png", optimize=True)
+
+
+def falha_tipo():
+    W, H = 1200, 360
+    img = Image.new("RGB", (W, H), FUNDO_CLARO)
+    d = ImageDraw.Draw(img)
+    rr(d, (24, 24, W - 24, H - 24), 20, fill=BRANCO, outline=CINZA_CLARO, width=2)
+    gradiente_h(d, 24, 24, W - 24, 30, (245, 158, 11), INDIGO)
+    rr(d, (90, 150, 330, 230), 40, fill=FUNDO_CLARO, outline=(203, 213, 225), width=3)
+    d.text((128, 170), "Estrutura", font=F("SemiBold", 32), fill=(148, 163, 184))
+    d.line((370, 190, 470, 190), fill=CINZA_TXT, width=8)
+    d.polygon([(470, 172), (506, 190), (470, 208)], fill=CINZA_TXT)
+    rr(d, (540, 150, 870, 230), 40, fill=(238, 242, 255), outline=INDIGO, width=3)
+    d.text((578, 170), "Arquitetura", font=F("SemiBold", 32), fill=INDIGO)
+    check(d, 812, 184, cor=VERDE, t=7, s_=20)
+    d.text((905, 150), "É só trocar", font=F("Medium", 28), fill=CINZA_TXT)
+    d.text((905, 190), "o tipo e enviar", font=F("Medium", 28), fill=CINZA_TXT)
+    d.text((905, 230), "de novo.", font=F("Medium", 28), fill=CINZA_TXT)
+    img.save(f"{OUT}/falha-tipo.png", optimize=True)
+
+
 if __name__ == "__main__":
     import os
     os.makedirs(OUT, exist_ok=True)
