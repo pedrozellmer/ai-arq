@@ -582,6 +582,8 @@ _STAGES_DIAGNOSTICO = frozenset({
     "motor:fusao-rejeicao",
     # 24/09: verbas gerais de obra juntadas numa linha a definir
     "motor:verbas-preliminares",
+    # 24/09: esquema/detalhe fora da medição, planta-tipo × andares
+    "motor:leitura-por-folha",
     "motor:pe-direito", "motor:escala-aviso", "motor:concordancia-rotulo",
     "motor:parede-medida",
     # 15/09: os trechos de perfil e escala H/V que a prancha escreve. Só
@@ -985,6 +987,37 @@ def _blocos_colados_abertos(extraction) -> str:
     return " colados=[" + " ".join(f"{k}={d[k]}" for k in
                                    ("abertos", "entidades", "niveis", "falhas", "teto")
                                    if k in d) + "]"
+
+
+def _leitura_por_folha_resumo(extraction) -> str:
+    """Uma linha pro log: o que a leitura por folha fez nesta prancha.
+
+    🔑 24/09/2026, job 0a999117: sem isto, "o esquema vertical entrou na soma"
+    e "a planta do 4º/5º/6º valia por três" só se descobriam baixando o
+    arquivo. Diz também quando NÃO aplicou, e por quê."""
+    try:
+        f = dict(getattr(extraction, "folhas", None) or {})
+    except Exception:
+        return ""
+    if not f:
+        return ""
+    ds = f.get("desenhos_lista") or []
+    if not f.get("aplicada"):
+        return (f"aplicada=nao motivo='{f.get('motivo', '')}' desenhos={len(ds)} "
+                f"gerais={f.get('janelas_gerais', 0)} sem_janela={f.get('sem_janela', 0)}")
+    a, d = f.get("antes") or {}, f.get("depois") or {}
+    mult = [f"{(x.get('titulo') or x.get('folha'))[:40]}×{x['andares']}"
+            for x in ds if x.get("tipo") == "planta" and (x.get("andares") or 1) > 1]
+    n_fora = sum(1 for x in ds if x.get("tipo") == "fora")
+    n_neutro = sum(1 for x in ds if not x.get("tipo"))
+    # vista (corte/elevação) fica na soma de propósito; contar é o que vai
+    # dizer se vale tratar — ver `engine_rules._RE_DESENHO_VISTA`
+    n_vista = sum(1 for x in ds if x.get("tipo") == "vista")
+    return (f"aplicada=sim desenhos={len(ds)} fora={n_fora} vistas={n_vista} neutros={n_neutro} "
+            f"multiplicadas=[{'; '.join(mult)}] "
+            f"comprimento {a.get('comprimento')}→{d.get('comprimento')} m "
+            f"area {a.get('area')}→{d.get('area')} m2 "
+            f"blocos {a.get('blocos')}→{d.get('blocos')}")
 
 
 def _descarte_de_pilares(extraction) -> str:
@@ -14655,6 +14688,15 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                         # (escala H/V, título). Só registro — a trava que rebaixa
                         # comprimento de perfil espera os formatos reais daqui.
                         # Try próprio: falha aqui não pode apagar a linha acima.
+                        # 📄 24/09: o que a leitura por folha tirou e multiplicou.
+                        try:
+                            _lf = _leitura_por_folha_resumo(extraction)
+                            if _lf:
+                                _log_error("motor:leitura-por-folha",
+                                           f"arq={os.path.basename(dxf_path)} {_lf}",
+                                           job_id)
+                        except Exception as _elf:
+                            print(f"[leitura-por-folha] log falhou (nao-fatal): {_elf}")
                         try:
                             _vt = _textos_de_vista(extraction)
                             if _vt:

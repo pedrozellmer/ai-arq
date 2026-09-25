@@ -55,7 +55,12 @@ _KEEP = {
 # por TEXTO tem que manter esses três, senão a POLYLINE fica sem vértice e o DXF
 # vira lixo. O caminho do ezdxf não precisa disso porque lá a POLYLINE já vem
 # montada com os vértices dentro — armadilha exclusiva do filtro textual.
-_KEEP_TEXTO = _KEEP | {"VERTEX", "SEQEND", "ATTDEF"}
+# 📄 VIEWPORT (24/09/2026): a leitura por folha (`dwg_extractor.mapa_de_folhas`)
+# precisa das janelas das folhas pra saber o que é planta, esquema e detalhe.
+# As folhas INATIVAS ficam em BLOCKS (copiado intacto); as da folha ATIVA ficam
+# em ENTITIES — e sem isto o emagrecido perdia justamente essas. São poucas e
+# pequenas (54 num DXF de 81 MB).
+_KEEP_TEXTO = _KEEP | {"VERTEX", "SEQEND", "ATTDEF", "VIEWPORT"}
 
 
 def prever_ganho_textual(path: str) -> tuple:
@@ -243,6 +248,17 @@ def emagrecer_dxf_se_preciso(path: str, limiar_mb: int = LIMIAR_SLIM_MB,
                         mantidas += 1
                     else:
                         descartadas += 1
+                # 📄 As VIEWPORTs da folha ATIVA moram em ENTITIES com
+                # paperspace=1, e o `modelspace()` do iterdxf as pula. Sem elas
+                # a leitura por folha perde uma folha. Falhou? Segue sem — a
+                # leitura por folha só fica com as outras folhas.
+                try:
+                    for e in doc.load_entities(doc.sections["ENTITIES"] + 1, {"VIEWPORT"}):
+                        if e.dxftype() == "VIEWPORT" and e.dxf.paperspace == 1:
+                            exporter.write(e)
+                            mantidas += 1
+                except Exception:
+                    pass
             finally:
                 exporter.close()
         finally:

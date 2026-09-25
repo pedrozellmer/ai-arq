@@ -105,6 +105,10 @@ class WallSegment:
     # marca, o pareamento de faces de duto tratava curva como reta e o aviso
     # de "curva ficou de fora" nunca disparava.
     curvo: bool = False
+    # Leitura por folha: quantos andares esta linha representa (planta-tipo
+    # "4º/5º/6º" → 3). As SOMAS multiplicam; o segmento continua um só, porque
+    # quem faz geometria (pareamento de faces, salas) precisa dele uma vez.
+    peso: float = 1.0
 
 
 @dataclass
@@ -125,6 +129,8 @@ class HatchArea:
     # TextAnnotation.position. Dividir um pelo outro lá fora dava 0,000 em 310
     # de 310 hachuras — o mesmo erro de 1000× que persigo o dia todo.
     preenchimento: float = 0.0
+    # Leitura por folha: andares que esta região representa (ver WallSegment).
+    peso: float = 1.0
 
 
 @dataclass
@@ -171,6 +177,9 @@ class DXFExtraction:
     # entrada. {abertos, entidades, niveis, falhas, teto} — ver
     # `abrir_blocos_colados`. Vazio quando o arquivo não tinha nenhum.
     blocos_colados: dict = field(default_factory=dict)
+    # Leitura por folha: os desenhos do arquivo (planta/esquema/detalhe, andares)
+    # e o que mudou na medição. Vazio = não aplicada (ver `motivo`).
+    folhas: dict = field(default_factory=dict)
 
     # -- convenience helpers ------------------------------------------------
 
@@ -182,24 +191,24 @@ class DXFExtraction:
         return dict(summary)
 
     def get_walls_by_layer(self) -> dict:
-        """Returns {layer_name: total_length_meters}."""
+        """Returns {layer_name: total_length_meters} — × andares da planta (leitura por folha)."""
         result: dict[str, float] = defaultdict(float)
         for w in self.walls:
-            result[w.layer] += w.length
+            result[w.layer] += w.length * getattr(w, "peso", 1.0)
         return dict(result)
 
     def get_areas_by_layer(self) -> dict:
-        """Returns {layer_name: total_area_m2}."""
+        """Returns {layer_name: total_area_m2} — × andares da planta (leitura por folha)."""
         result: dict[str, float] = defaultdict(float)
         for h in self.hatches:
-            result[h.layer] += h.area
+            result[h.layer] += h.area * getattr(h, "peso", 1.0)
         return dict(result)
 
     def get_polygon_areas_by_layer(self) -> dict:
         """Returns {layer_name: total_area_m2} de polilinhas FECHADAS (ambientes)."""
         result: dict[str, float] = defaultdict(float)
         for p in self.polygon_areas:
-            result[p.layer] += p.area
+            result[p.layer] += p.area * getattr(p, "peso", 1.0)
         return dict(result)
 
     def get_texts_by_layer(self) -> dict:
@@ -221,6 +230,31 @@ class DXFExtraction:
             lines.append("METADADOS DO ARQUIVO:")
             for k, v in self.metadata.items():
                 lines.append(f"  {k}: {v}")
+            lines.append("")
+
+        # 📄 Leitura por folha: a IA precisa saber que as medidas abaixo JÁ vêm
+        # sem o esquema/detalhe e com a planta-tipo multiplicada — senão ela
+        # soma de novo o que tiramos, ou multiplica duas vezes.
+        _fl = self.folhas or {}
+        if _fl.get("aplicada"):
+            _ds = _fl.get("desenhos_lista") or []
+            _mult = [d for d in _ds if d.get("tipo") == "planta" and (d.get("andares") or 1) > 1]
+            _fora = [d for d in _ds if d.get("tipo") == "fora"]
+            _planta1 = [d for d in _ds if d.get("tipo") == "planta" and (d.get("andares") or 1) == 1]
+            lines.append("DESENHOS DESTE ARQUIVO (lidos pelas folhas — as medidas abaixo JÁ refletem isto):")
+            for d in _mult[:12]:
+                lines.append(f"  • {d.get('titulo') or d.get('folha')}: vale por {d['andares']} andares — "
+                             f"comprimentos, áreas e contagens desta planta JÁ estão × {d['andares']}")
+            if _planta1:
+                lines.append("  • plantas de um andar só: " + "; ".join(
+                    (d.get("titulo") or d.get("folha"))[:50] for d in _planta1[:12]))
+            if _fora:
+                lines.append(f"  • {len(_fora)} desenho(s) FORA das medidas (esquema, detalhe, corte, "
+                             f"situação — o mesmo objeto redesenhado ou recorte típico): " + "; ".join(
+                                 (d.get("titulo") or d.get("folha"))[:50] for d in _fora[:8])
+                             + ("…" if len(_fora) > 8 else ""))
+            lines.append("  Não some de novo o que está fora nem multiplique de novo a planta-tipo. "
+                         "Use o esquema e os detalhes só para ler diâmetro, material e especificação.")
             lines.append("")
 
         # Avisos de qualidade da extração — a IA DEVE reagir marcando 'estimado'.
@@ -2647,6 +2681,226 @@ def abrir_blocos_colados(doc) -> dict:
     return info if (info["abertos"] or info["falhas"]) else {}
 
 
+# ---------------------------------------------------------------------------
+# Leitura por FOLHA — cada desenho do modelspace pelo que ele é
+# ---------------------------------------------------------------------------
+# 🩸 24/09/2026 — job `0a999117`: 12 folhas num DWG só — plantas do térreo ao
+# 8º, ESQUEMA VERTICAL, detalhes. O modelspace tem todos esses desenhos lado a
+# lado e a extração somava o layer do arquivo inteiro: 1.088 m de tubo "✓
+# MEDIDO" = plantas UMA vez + 837 m do esquema vertical (o mesmo tubo de novo) +
+# 33 m de detalhes. Pelas plantas × andares o prédio tem ~518 m. E a planta
+# "QUARTO/QUINTO/SEXTO PAVIMENTO", desenhada uma vez, vale por três.
+# 🔑 O arquivo diz as duas coisas: cada VIEWPORT de folha mostra um retângulo do
+# modelspace (alvo + centro da vista ± tamanho/escala) e o TÍTULO do desenho diz
+# o que é. `engine_rules.tipo_do_desenho` e `andares_do_titulo` leem o título;
+# aqui fica só a geometria.
+# 🪤 A janela é `view_target_point + view_center_point`. Sem o alvo ela sai
+# deslocada (31 m no arquivo real) e o tubo cai na folha errada — foi o 1º erro
+# do estudo, e só apareceu porque os títulos não batiam com o que eu achava.
+_RE_TAG_TITULO = re.compile(r"TITUL|TITLE", re.IGNORECASE)
+
+
+def _janela_da_viewport(vp):
+    """(x0, y0, x1, y1) do modelspace que a viewport mostra, ou None."""
+    d = vp.dxf
+    if d.get("id", 2) == 1:              # a própria folha, não uma janela
+        return None
+    vh, h, w = d.get("view_height", 0), d.get("height", 0), d.get("width", 0)
+    if not (vh and h and w) or vh <= 0 or h <= 0 or w <= 0:
+        return None
+    if abs(d.get("view_twist_angle", 0) or 0) > 1e-6:
+        return None                      # vista girada: não sei o retângulo — neutro
+    dv = d.get("view_direction_vector", (0, 0, 1))
+    if abs(dv[0]) > 1e-6 or abs(dv[1]) > 1e-6:
+        return None                      # vista 3D/isométrica da viewport — neutro
+    esc = h / vh
+    alvo = d.get("view_target_point", (0, 0, 0))
+    c = d.get("view_center_point", (0, 0))
+    cx, cy = alvo[0] + c[0], alvo[1] + c[1]
+    mw, mh = w / esc, vh
+    return (cx - mw / 2, cy - mh / 2, cx + mw / 2, cy + mh / 2)
+
+
+def _dentro(p, cx):
+    return cx[0] <= p[0] <= cx[2] and cx[1] <= p[1] <= cx[3]
+
+
+def mapa_de_folhas(doc) -> dict:
+    """Os desenhos do modelspace, pelas folhas: [{folha, titulo, tipo, andares, caixa}].
+
+    tipo 'fora' = não entra na soma (esquema, detalhe, corte…); 'planta' = entra,
+    multiplicada por `andares`; '' = não sei, fica como está. Nunca levanta.
+    """
+    from engine_rules import andares_do_titulo, parece_titulo_de_desenho, tipo_do_desenho
+    out = {"folhas": [], "gerais": 0, "sem_janela": 0}
+    try:
+        janelas = []
+        for lay in doc.layouts:
+            if lay.name.lower() == "model":
+                continue
+            for vp in lay.query("VIEWPORT"):
+                cx = _janela_da_viewport(vp)
+                if cx is None:
+                    if vp.dxf.get("id", 2) != 1:
+                        out["sem_janela"] += 1
+                    continue
+                janelas.append({"folha": lay.name, "caixa": cx})
+        if not janelas:
+            return out
+        # Janela GERAL: a que mostra o desenho todo (contém o centro de 3+
+        # outras). No arquivo real, toda folha tinha uma, 1:1000, cobrindo tudo.
+        centros = [((j["caixa"][0] + j["caixa"][2]) / 2, (j["caixa"][1] + j["caixa"][3]) / 2)
+                   for j in janelas]
+        uteis = []
+        for i, j in enumerate(janelas):
+            dentro = sum(1 for k, c in enumerate(centros) if k != i and _dentro(c, j["caixa"]))
+            if dentro >= 3:
+                out["gerais"] += 1
+            else:
+                uteis.append(j)
+        # Títulos: atributo de bloco TITULO* primeiro; senão, o maior texto
+        # que diga o que é o desenho.
+        attrs, textos = [], []
+        msp = doc.modelspace()
+        for ins in msp.query("INSERT"):
+            try:
+                for a in ins.attribs:
+                    if _RE_TAG_TITULO.search(a.dxf.tag or "") and (a.dxf.text or "").strip():
+                        p = a.dxf.insert
+                        attrs.append((" ".join(a.dxf.text.split()), p[0], p[1]))
+            except Exception:
+                continue
+        alturas = []                     # (x, y, altura) de TODO texto
+        for e in msp.query("TEXT MTEXT"):
+            try:
+                p = e.dxf.insert
+                alt = float((e.dxf.get("height", 0) if e.dxftype() == "TEXT"
+                             else e.dxf.get("char_height", 0)) or 0)
+                alturas.append((p[0], p[1], alt))
+                t = e.dxf.text if e.dxftype() == "TEXT" else e.plain_text()
+                t = " ".join((t or "").split())
+                if t and len(t) <= 90 and parece_titulo_de_desenho(t) and tipo_do_desenho(t):
+                    textos.append((t, p[0], p[1], alt))
+            except Exception:
+                continue
+        n_plantas_na_folha = {}
+        for j in uteis:
+            x0, y0, x1, y1 = j["caixa"]
+            m = 0.12 * (y1 - y0)                 # título costuma ficar logo abaixo
+            larga = (x0, y0 - m, x1, y1)
+            tits = [a[0] for a in attrs if _dentro((a[1], a[2]), j["caixa"])]
+            if not tits:
+                tits = [a[0] for a in attrs if _dentro((a[1], a[2]), larga)]
+            if not tits:
+                # 🩸 Título é a LETRA GRANDE da janela. No acervo, o marcador
+                # "DET.XX" (altura 0,1, numa legenda cuja maior letra é 0,3)
+                # virou título e tirou 448 m. Compara com TODO texto da janela,
+                # não só com os que parecem título.
+                hs = [a[2] for a in alturas if _dentro((a[0], a[1]), j["caixa"])]
+                hmax = max(hs) if hs else 0.0
+                cand = [t for t in textos if _dentro((t[1], t[2]), j["caixa"])]
+                tits = [t[0] for t in cand if hmax > 0 and t[3] >= 0.8 * hmax]
+            tipos = {tipo_do_desenho(t) for t in tits} - {""}
+            j["titulo"] = " | ".join(dict.fromkeys(tits))[:160]
+            j["tipo"] = tipos.pop() if len(tipos) == 1 else ""
+            j["andares"], j["como"] = 1, ""
+            if j["tipo"] == "planta":
+                n_plantas_na_folha[j["folha"]] = n_plantas_na_folha.get(j["folha"], 0) + 1
+                if len(tits) == 1:
+                    j["andares"], j["como"] = andares_do_titulo(tits[0])
+        # O NOME da folha ("4 - 5 E 6 PAV.") também diz os andares — mas só
+        # vale pra planta se ela for a ÚNICA planta daquela folha.
+        for j in uteis:
+            if j["tipo"] != "planta" or n_plantas_na_folha.get(j["folha"]) != 1:
+                continue
+            nf, como_f = andares_do_titulo(j["folha"])
+            if nf <= 1:
+                continue
+            if j["como"] == "":                 # o título não diz andar nenhum
+                j["andares"], j["como"] = nf, "nome da folha"
+            elif j["andares"] != nf:            # título diz 1 (ou outro N), folha diz N
+                j["andares"], j["como"] = 1, "conflito folha×titulo"
+        out["folhas"] = uteis
+    except Exception as e:                   # nunca derruba a extração
+        logger.warning("mapa_de_folhas: %s", e)
+        out["erro"] = str(e)[:200]
+    return out
+
+
+def aplicar_leitura_por_folha(walls, hatches, polygon_areas, blocks, mapa) -> dict:
+    """Tira da medição o que está em desenho 'fora' e dá peso N à planta de N andares.
+
+    Muta as listas no lugar. Posição que cai em desenhos que DISCORDAM (um fora,
+    outro planta; plantas com andares diferentes) fica peso 1 — como era antes.
+    Posição desconhecida (segmento explodido de bloco, hachura sem caixa) fica 1.
+    """
+    regs = [f for f in (mapa or {}).get("folhas", []) if f.get("tipo") in ("fora", "planta")]
+    res = {"aplicada": False, "motivo": "", "desenhos": len(regs)}
+    if not regs:
+        res["motivo"] = "nenhum desenho com título que diga o que é"
+        return res
+    if not any(f["tipo"] == "fora" or f.get("andares", 1) > 1 for f in regs):
+        res["motivo"] = "só plantas de um andar — nada muda"
+        return res
+
+    def peso(p):
+        if p is None:
+            return 1
+        tocam = [f for f in regs if _dentro(p, f["caixa"])]
+        if not tocam:
+            return 1
+        tipos = {f["tipo"] for f in tocam}
+        if tipos == {"fora"}:
+            return 0
+        if tipos == {"planta"}:
+            ns = {int(f.get("andares", 1) or 1) for f in tocam}
+            return ns.pop() if len(ns) == 1 else 1
+        return 1
+
+    antes = {"comprimento": round(sum(w.length for w in walls), 2),
+             "area": round(sum(h.area for h in hatches) + sum(p.area for p in polygon_areas), 2),
+             "blocos": sum(b.count for b in blocks)}
+    novas = []
+    for w in walls:
+        if tuple(w.start) == (0, 0) and tuple(w.end) == (0, 0):
+            novas.append(w)                          # sem posição: neutro
+            continue
+        pk = peso(((w.start[0] + w.end[0]) / 2, (w.start[1] + w.end[1]) / 2))
+        if pk == 0:
+            continue
+        w.peso = float(pk)
+        novas.append(w)
+    walls[:] = novas
+    for lista in (hatches, polygon_areas):
+        novas = []
+        for h in lista:
+            bb = getattr(h, "bbox", ()) or ()
+            pk = peso(((bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2)) if len(bb) == 4 else 1
+            if pk == 0:
+                continue
+            h.peso = float(pk)
+            novas.append(h)
+        lista[:] = novas
+    novos = []
+    for b in blocks:
+        pos = list(getattr(b, "positions", None) or [])
+        if len(pos) != b.count:
+            novos.append(b)                          # posições incompletas: neutro
+            continue
+        pesos = [peso(p) for p in pos]
+        b.positions = [p for p, k in zip(pos, pesos) if k > 0]
+        b.count = int(sum(pesos))
+        if b.count > 0:
+            novos.append(b)
+    blocks[:] = novos
+    depois = {"comprimento": round(sum(w.length * getattr(w, "peso", 1.0) for w in walls), 2),
+              "area": round(sum(h.area * getattr(h, "peso", 1.0) for h in hatches)
+                            + sum(p.area * getattr(p, "peso", 1.0) for p in polygon_areas), 2),
+              "blocos": sum(b.count for b in blocks)}
+    res.update(aplicada=True, antes=antes, depois=depois)
+    return res
+
+
 def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> DXFExtraction:
     """Main extraction function — reads a .dxf file and returns structured data.
 
@@ -3875,6 +4129,26 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
     except Exception as _e5:
         logger.warning("[unit-rotulo] falhou (não-fatal): %s", _e5)
 
+    # 📄 LEITURA POR FOLHA (24/09/2026, Pedro: "vamos ensinar ele a fazer
+    # isso"). O esquema/detalhe sai da medição; a planta-tipo vale por N
+    # andares. Ver `mapa_de_folhas`. Chave: LEITURA_POR_FOLHA=0 desliga sem
+    # deploy. Qualquer falha aqui deixa a medição como estava.
+    _folhas = {}
+    if os.environ.get("LEITURA_POR_FOLHA", "1") != "0":
+        try:
+            _mapa = mapa_de_folhas(doc)
+            _folhas = aplicar_leitura_por_folha(walls, hatches, polygon_areas, blocks, _mapa)
+            _folhas["desenhos_lista"] = [
+                {"folha": f["folha"][:40], "titulo": f.get("titulo", "")[:90],
+                 "tipo": f.get("tipo", ""), "andares": f.get("andares", 1),
+                 "como": f.get("como", "")}
+                for f in _mapa.get("folhas", [])]
+            _folhas["janelas_gerais"] = _mapa.get("gerais", 0)
+            _folhas["sem_janela"] = _mapa.get("sem_janela", 0)
+        except Exception as _efl:
+            logger.warning("[leitura-por-folha] falhou (não-fatal): %s", _efl)
+            _folhas = {"aplicada": False, "motivo": "erro: %s" % str(_efl)[:120]}
+
     return DXFExtraction(
         filename=os.path.basename(filepath),
         blocks=blocks,
@@ -3892,6 +4166,7 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         block_attributes=block_attributes,
         blocos_descartados=dict(_desc, amostra_anonimo=list(_amostra_anonimo)),
         blocos_colados=dict(_colados or {}),
+        folhas=_folhas,
         pilares_descartados=dict(
             _desc_pil,
             amostra_layers=sorted(_amostra_layers.items(),

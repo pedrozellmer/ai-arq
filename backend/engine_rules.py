@@ -5351,3 +5351,141 @@ def e_parede_pelo_nome(descricao):
     if _RE_CABECA_PAREDE.match(resto):
         return True
     return bool(_RE_CABECA_FRACA_PAREDE.match(resto) and _RE_PALAVRA_PAREDE.search(resto))
+
+
+# ── Leitura por FOLHA: o que é cada desenho do arquivo ────────────────────────
+# 🩸 24/09/2026 — job `0a999117` (projeto de gás de um prédio de 7 andares): um
+# DWG com 12 folhas — plantas, ESQUEMA VERTICAL e detalhes lado a lado no mesmo
+# modelspace. O motor somava o layer de tubo do arquivo inteiro: 1.088 m "✓
+# MEDIDO" = plantas UMA vez + 837 m do esquema vertical (o mesmo tubo redesenhado,
+# "SEM ESCALA") + 33 m de detalhes. O certo, pelas plantas × andares, era ~518 m.
+# E "PLANTA BAIXA QUARTO/QUINTO/SEXTO PAVIMENTO" desenhada uma vez vale por três.
+# Fogões: 31 contados, 42 no prédio. É a mesma raiz do "TIPO 6X" do mesmo dia.
+# O arquivo já diz tudo isso: a folha diz QUE PEDAÇO do modelspace mostra e o
+# título diz O QUE é. Estas duas funções leem o título; a geometria fica no
+# extrator (`dwg_extractor.mapa_de_folhas`).
+
+def _minusculo_sem_acento(s):
+    return "".join(c for c in _ud.normalize("NFD", s or "")
+                   if _ud.category(c) != "Mn").lower()
+
+
+# Desenho que NÃO entra na soma: é o mesmo objeto redesenhado de outro jeito
+# (esquema, isométrico, diagrama) ou um recorte ampliado (detalhe, ampliação).
+# Situação/localização são a planta do terreno em escala pequena, com o prédio
+# de novo dentro.
+_RE_DESENHO_FORA_DA_SOMA = _re.compile(
+    r"\b(?:esquema|isometric|diagrama|unifilar|multifilar|trifilar|detalhe|"
+    r"detalhamento|det\b|ampliacao|ampliad|situacao|localizacao)")
+# 🚫 VISTA (corte, elevação, fachada) NÃO sai da soma — ainda. Medido no
+# acervo local em 24/09: nas elevações de um lavabo, tirar a vista levou a área
+# de 50,5 para 30,0 m². Elevação não é o mesmo objeto redesenhado: o
+# REVESTIMENTO DE PAREDE só existe nela. Fica como era até o log
+# (`motor:leitura-por-folha`) mostrar quanto a vista pesa.
+_RE_DESENHO_VISTA = _re.compile(
+    r"\b(?:corte|fachada|elevacao|elev|vista|perspectiva)\b")
+_RE_DESENHO_PLANTA = _re.compile(
+    r"\b(?:planta|pavimento|pav|terreo|subsolo|garagem|cobertura|telhado|"
+    r"mezanino|andar)\b")
+
+
+# 🩸 Medido no acervo local (24/09): o texto de LEGENDA "SIGLA DE AMPLIAÇÃO I
+# 'XX' número da ampliação" virou título e tirou 448 m de uma planta inteira.
+# Texto solto só é título quando COMEÇA pelo que o desenho é (o atributo
+# TITULO* do carimbo não precisa disto — ele já é título por definição).
+_RE_COMECO_DE_TITULO = _re.compile(
+    r"^\s*(?:\d{1,3}\s*[.\-–:)]?\s*)?(?:planta|esquema|isometric|diagrama|unifilar|"
+    r"detalhe|detalhamento|det\b|ampliacao|ampliad|situacao|localizacao|corte|"
+    r"fachada|elevacao|elev\b|vista|perspectiva|pavimento|terreo|subsolo|garagem|"
+    r"cobertura|telhado|mezanino)")
+
+
+def parece_titulo_de_desenho(texto):
+    """Um TEXTO solto pode ser o título do desenho? Só se começar pelo que ele é."""
+    return bool(_RE_COMECO_DE_TITULO.match(_minusculo_sem_acento(texto)))
+
+
+def tipo_do_desenho(titulo):
+    """'fora' (não soma), 'vista' (fica como está), 'planta' (soma) ou '' (não sei).
+
+    "PLANTA BAIXA TÉRREO"                  → 'planta'
+    "ESQUEMA VERTICAL DE GÁS"              → 'fora'
+    "DETALHE PLANTA BAIXA TÍPICA DO PI"    → 'fora'   (detalhe ganha de planta)
+    "ELEVAÇÃO 1" / "CORTE AA"              → 'vista'  (revestimento de parede mora aqui)
+    "LEGENDA"                              → ''
+    """
+    t = _minusculo_sem_acento(titulo)
+    if _RE_DESENHO_FORA_DA_SOMA.search(t):
+        return "fora"
+    if _RE_DESENHO_VISTA.search(t):
+        return "vista"
+    if _RE_DESENHO_PLANTA.search(t):
+        return "planta"
+    return ""
+
+
+_ORDINAIS = {
+    "primeiro": 1, "segundo": 2, "terceiro": 3, "quarto": 4, "quinto": 5,
+    "sexto": 6, "setimo": 7, "oitavo": 8, "nono": 9, "decimo": 10,
+}
+_ORD = r"(?:primeiro|segundo|terceiro|quarto|quinto|sexto|setimo|oitavo|nono|decimo)"
+_NUM = r"\d{1,2}\s*[ºª°o]?"
+_SEP = r"\s*(?:,|/|-|–|\be\b)\s*"
+_RE_PAV = r"\s*(?:pav|andar|pisos?\b)"
+_RE_LISTA_NUM = _re.compile(r"((?:" + _NUM + _SEP + r")+" + _NUM + r")" + _RE_PAV)
+_RE_LISTA_ORD = _re.compile(r"((?:" + _ORD + _SEP + r")+" + _ORD + r")" + _RE_PAV)
+_RE_FAIXA_NUM = _re.compile(r"(\d{1,2})\s*[ºª°o]?\s*(?:ao|a|ate)\s*(\d{1,2})\s*[ºª°o]?" + _RE_PAV)
+_RE_FAIXA_ORD = _re.compile("(" + _ORD + r")\s*(?:ao|a|ate)\s*(" + _ORD + ")" + _RE_PAV)
+_RE_UM_ANDAR = _re.compile(
+    r"(?:\b" + _ORD + r"|\b\d{1,2}\s*[ºª°o]?)" + _RE_PAV
+    + r"|\b(?:terreo|subsolo|mezanino|cobertura|telhado|garagem)\b")
+_RE_TIPO_VEZES = _re.compile(
+    r"\btipo\b[^0-9]{0,20}?\(?\s*(\d{1,2})\s*x\b|\btipo\b[^0-9]{0,20}?\bx\s*(\d{1,2})\b|"
+    r"\b(\d{1,2})\s*x\s*\)?\s*$")
+
+
+def andares_do_titulo(titulo):
+    """Quantos andares um desenho representa → (n, como). n=1 quando não dá pra saber.
+
+    "PLANTA BAIXA PRIMEIRO E SEGUNDO PAVIMENTO"      → (2, 'lista')
+    "PLANTA BAIXA QUARTO/QUINTO/SEXTO PAVIMENTO"     → (3, 'lista')
+    "4 - 5 E 6 PAV."                                 → (3, 'lista')
+    "2º AO 7º PAVIMENTO"                             → (6, 'faixa')
+    "PAVIMENTO TIPO (6X)"                            → (6, 'tipo')
+    "2 - 7 PAV"                                      → (1, 'ambiguo')  faixa ou lista?
+    "PLANTA BAIXA TERCEIRO PAVIMENTO"                → (1, '')
+    """
+    # escala não é andar: "1:50 - 2 E 3 PAV" são 2 andares, não 3
+    t = _re.sub(r"\d+\s*:\s*\d+", " ", _minusculo_sem_acento(titulo))
+    if not t.strip():
+        return 1, ""
+    m = _RE_TIPO_VEZES.search(t)
+    if m and "tipo" in t:
+        n = int(next(g for g in m.groups() if g))
+        return (n, "tipo") if 2 <= n <= 60 else (1, "")
+    m = _RE_FAIXA_NUM.search(t)
+    if m:
+        a, b = int(m.group(1)), int(m.group(2))
+        return (b - a + 1, "faixa") if 2 <= b - a + 1 <= 60 else (1, "")
+    m = _RE_FAIXA_ORD.search(t)
+    if m:
+        a, b = _ORDINAIS[m.group(1)], _ORDINAIS[m.group(2)]
+        return (b - a + 1, "faixa") if b > a else (1, "")
+    m = _RE_LISTA_ORD.search(t)
+    if m:
+        n = len(set(_re.findall(_ORD, m.group(1))))
+        return (n, "lista") if n >= 2 else (1, "")
+    m = _RE_LISTA_NUM.search(t)
+    if m:
+        cadeia = m.group(1)
+        nums = [int(x) for x in _re.findall(r"\d{1,2}", cadeia)]
+        so_hifen = not _re.search(r",|/|\be\b", cadeia)
+        if len(set(nums)) == 2 and so_hifen and abs(nums[1] - nums[0]) != 1:
+            return 1, "ambiguo"         # "2 - 7": do 2º ao 7º, ou 2º e 7º?
+        n = len(set(nums))
+        return (n, "lista") if n >= 2 else (1, "")
+    # UM andar dito com todas as letras ("TERCEIRO PAVIMENTO", "7 PAV", "TÉRREO")
+    # não é "não sei": o nome da folha não pode passar por cima dele.
+    if _RE_UM_ANDAR.search(t):
+        return 1, "um"
+    return 1, ""
