@@ -20844,6 +20844,9 @@ def _avisos_da_medicao_pdfvec(falhas, por_prancha=None) -> tuple:
 
 _RX_ESTRUT_NOME = None
 _RX_NEGACAO_ANTES = None
+#: 25/09: o CÓDIGO de disciplina em nome de prancha codificada ("…-EST-FUN-…").
+#: Sensível a maiúscula de propósito — ver `_nome_parece_estrutural`.
+_RX_CODIGO_EST = _re_escala.compile(r"(?:^|(?<=[-_ .]))EST(?=[-_ .]|$)")
 
 
 def _nome_parece_estrutural(nome: str) -> bool:
@@ -20903,6 +20906,16 @@ def _nome_parece_estrutural(nome: str) -> bool:
         _RX_NEGACAO_ANTES = _re.compile(
             r"(?<![a-zà-ü])(?:sem|s/|n[aã]o|exceto|menos)[ _./-]*$", _re.IGNORECASE)
     m = _RX_ESTRUT_NOME.search(nome or "")
+    if not m:
+        # 🩸 25/09/2026 — job `e9b9a8a0` (incorporação): 4 DWG
+        # "…-AP-EST-LOCFUN-R01.dwg", "…-EST-FORTER-…" enviados como
+        # arquitetura, e o aviso calado: a regra só via a PALAVRA. Em prancha
+        # codificada a disciplina é o CÓDIGO "EST". Medido no Storage: 27
+        # projetos com "EST" maiúsculo entre separadores — TODOS estrutura
+        # (24 enviados como estrutura; 3 como arquitetura, um deles reenviado
+        # depois como estrutura). 🔒 Só maiúsculo e entre separadores: "LESTE",
+        # "ESTUDO", "ESTAR" e o "est" minúsculo não entram.
+        m = _RX_CODIGO_EST.search(nome or "")
     if not m:
         return False
     antes = (nome or "")[max(0, m.start() - 12):m.start()]
