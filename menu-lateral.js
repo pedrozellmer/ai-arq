@@ -296,7 +296,36 @@
     ];
   }
 
-  var GRUPOS = FIXADO ? gruposProjeto() : GRUPOS_CONTA;
+  // 🏢 ESCRITÓRIO (25/09, Pedro: "clico em financeiro e ele volta pro menu antigo, como se eu fosse pra um
+  // projeto sem escritório"). Quem chega aqui PELO Escritório continua no menu dele. Quem avisa é a
+  // escritorio.html (sessionStorage 'aiarq_esc_ctx', só desta aba) e só vale pro MESMO job da URL — o
+  // projeto fixado continua morando na URL. Abrir o painel da conta apaga a marca: o painel volta limpo.
+  // O id vai pra um href: só UUID passa. O nome entra por textContent, nunca como HTML.
+  var ESC = (function () {
+    try {
+      if (!FIXADO) { sessionStorage.removeItem('aiarq_esc_ctx'); return null; }
+      var c = JSON.parse(sessionStorage.getItem('aiarq_esc_ctx') || 'null');
+      return c && c.job === JOB && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(c.id || '') ? c : null;
+    } catch (_) { return null; }
+  })();
+
+  // O menu do Escritório: as telas dele em cima e as do projeto medido embaixo (as mesmas de gruposProjeto,
+  // menos Visão geral — quem faz esse papel é a Página do projeto — e Processamento).
+  function gruposEscritorio() {
+    var e = 'escritorio.html#/p/' + ESC.id + '/';
+    return [
+      { titulo: '', itens: [
+        { href: e + 'capa',     rotulo: 'Página do projeto', ic: 'painel',   track: 'menu-esc-capa' },
+        { href: e + 'tarefas',  rotulo: 'Tarefas',           ic: 'quadro',   track: 'menu-esc-tarefas' },
+        { href: e + 'arquivos', rotulo: 'Arquivos',          ic: 'pasta',    track: 'menu-esc-arquivos' },
+        { href: e + 'atas',     rotulo: 'Atas',              ic: 'memorial', track: 'menu-esc-atas' },
+        { href: e + 'equipe',   rotulo: 'Equipe',            ic: 'equipe',   track: 'menu-esc-equipe' }
+      ]},
+      { titulo: 'Quantitativo e obra', itens: gruposProjeto()[0].itens.filter(function (it) { return !!it.chave; }) }
+    ];
+  }
+
+  var GRUPOS = FIXADO ? (ESC ? gruposEscritorio() : gruposProjeto()) : GRUPOS_CONTA;
 
   // ── CSS próprio ─────────────────────────────────────────────────────────
   var CSS = [
@@ -509,11 +538,11 @@
           // 🚨 A SAÍDA VEM PRIMEIRO, não escondida no fim. Cliente preso dentro
           // de um projeto sem achar como voltar é pior que o problema que isto
           // resolve.
-          ? '<a class="aiarq-sair-proj" href="dashboard.html#meus-projetos">'
+          ? '<a class="aiarq-sair-proj" href="' + (ESC ? 'escritorio.html#/' : 'dashboard.html#meus-projetos') + '">'
             + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>'
-            + 'Todos os projetos</a>'
+            + (ESC ? 'Projetos do Escritório' : 'Todos os projetos') + '</a>'
             + '<div class="aiarq-fixado">'
-            + '<span class="tag">Projeto aberto</span>'
+            + '<span class="tag">' + (ESC ? 'Escritório · projeto aberto' : 'Projeto aberto') + '</span>'
             + '<b id="aiarq-proj-nome">Carregando…</b>'
             + '<span id="aiarq-proj-sub"></span></div>'
           : '<a class="side-cta" href="dashboard.html#novo-projeto" data-tab="novo-projeto">'
@@ -533,6 +562,11 @@
 
     document.body.appendChild(scrim);
     document.body.appendChild(side);
+    if (ESC) {                         // nome e resumo do projeto do Escritório (texto, nunca HTML)
+      var escNome = side.querySelector('#aiarq-proj-nome'), escSub = side.querySelector('#aiarq-proj-sub');
+      if (escNome) escNome.textContent = String(ESC.nome || 'Projeto').slice(0, 160);
+      if (escSub) escSub.textContent = String(ESC.sub || '').slice(0, 120);
+    }
 
     side.querySelector('#aiarq-fechar').addEventListener('click', function (ev) {
       if (_fantasma(ev)) return;
@@ -829,6 +863,7 @@
   // 🪤 Nada de `hidden` aqui: nesta folha ele perde pra classe de display (o cartão do painel de 24/09).
   // Acessório: falhou, o menu segue igual.
   function montarEscritorio(uid) {
+    if (ESC) return;                   // o menu inteiro já é o do Escritório
     if (document.getElementById('aiarq-grp-escritorio')) return;
     if (!window.sbClient || typeof window.sbClient.rpc !== 'function') return;
     // menu da CONTA: piloto OU já é de algum projeto (o freela convidado não está no piloto — Parte 2);
@@ -873,9 +908,9 @@
     window.aiarqAcesso(JOB).then(function (a) {
       if (!a || !a.so_leitura) return;
       var nx = document.getElementById('aiarq-proj-nome');
-      if (nx) nx.textContent = (window.tituloProjeto || String)(a.nome || 'Projeto');
+      if (nx && !ESC) nx.textContent = (window.tituloProjeto || String)(a.nome || 'Projeto');
       var sub = document.getElementById('aiarq-proj-sub');
-      if (sub) sub.textContent = 'equipe · só leitura · ' + (a.itens || 0) + ' itens';
+      if (sub) sub.textContent = ESC ? 'equipe · só leitura' : 'equipe · só leitura · ' + (a.itens || 0) + ' itens';
       ['revisao', 'financeiro', 'comparativo'].forEach(function (k) {
         var e = document.querySelector('#aiarq-side .side-it[data-chave="' + k + '"]');
         if (e && e.parentNode) e.parentNode.removeChild(e);
@@ -883,7 +918,7 @@
       var proc = document.querySelector('#aiarq-side .side-it[data-track="menu-processamento"]');
       if (proc && proc.parentNode) proc.parentNode.removeChild(proc);
       var fix = document.querySelector('#aiarq-side .aiarq-fixado');
-      if (fix && a.escritorio_id && !document.getElementById('aiarq-volta-escritorio')) {
+      if (fix && !ESC && a.escritorio_id && !document.getElementById('aiarq-volta-escritorio')) {
         fix.insertAdjacentHTML('afterend', '<a class="side-it" id="aiarq-volta-escritorio" href="escritorio.html#/p/'
           + encodeURIComponent(a.escritorio_id) + '/capa" data-track="menu-volta-escritorio">'
           + svg('quadro') + 'Voltar ao Escritório</a>');
@@ -930,9 +965,9 @@
         montarEscritorio();
         var nm = document.getElementById('aiarq-proj-nome');
         // Vitrine: primeira letra maiúscula. O dado no banco não muda.
-        if (nm) nm.textContent = (window.tituloProjeto || String)(p.nome);
+        if (nm && !ESC) nm.textContent = (window.tituloProjeto || String)(p.nome);
         var sb = document.getElementById('aiarq-proj-sub');
-        if (sb) {
+        if (sb && !ESC) {
           sb.textContent = [p.tipologia, (p.itens || 0) + ' itens']
             .filter(Boolean).join(' · ');
         }

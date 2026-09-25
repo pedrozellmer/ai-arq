@@ -106,12 +106,21 @@
   .kpi .rot{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748B;margin:0}
   .kpi .val{font-size:28px;font-weight:700;margin:0;line-height:1.1} .kpi .det{font-size:13px;color:#64748B;margin:6px 0 0}
   .voltar{align-self:flex-start;display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:#4338CA;background:#fff;border:1px solid #C7D2FE;border-radius:8px;padding:6px 12px;cursor:pointer;font-family:inherit}
-  .etapas{display:flex;gap:4px;overflow-x:auto;padding-bottom:4px}
-  .etp{flex:1 0 auto;min-width:112px;text-align:center;font-size:12.5px;font-weight:600;padding:10px 10px 8px;border-radius:8px;background:#F1F5F9;color:#64748B;border:0;border-bottom:3px solid #E2E8F0;cursor:pointer;font-family:inherit}
-  .etp.feita{background:#ECFDF5;color:#065F46;border-bottom-color:#10B981}
-  .etp.atual{background:#EEF2FF;color:#3730A3;border-bottom-color:#4F46E5}
-  .etp[aria-pressed="true"]{box-shadow:inset 0 0 0 2px #4F46E5}
-  .etp small{display:block;font-size:11px;font-weight:500;opacity:.7}
+  /* etapas: linha do tempo (bolinha numerada; feita = verde com ✓; atual = degradê com halo) */
+  .etapas{display:flex;overflow-x:auto;padding:6px 2px 10px}
+  .etp{position:relative;flex:1 0 108px;text-align:center;padding:0 6px;background:transparent;border:0;cursor:pointer;font-family:inherit;color:#64748B}
+  .etp::before{content:"";position:absolute;top:17px;left:-50%;width:100%;height:3px;background:#E2E8F0}
+  .etp:first-child::before{display:none}
+  .etp.feita::before,.etp.atual::before{background:linear-gradient(90deg,#10B981,#34D399)}
+  .etp .num{position:relative;z-index:1;width:36px;height:36px;border-radius:50%;margin:0 auto 9px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;background:#fff;border:2px solid #CBD5E1;color:#64748B;transition:transform .15s ease}
+  .etp:hover .num{transform:scale(1.08)}
+  .etp.feita .num{background:#10B981;border-color:#10B981;color:#fff}
+  .etp.atual .num{background:linear-gradient(135deg,#4f46e5,#06b6d4);border:0;color:#fff;box-shadow:0 0 0 5px #E0E7FF}
+  .etp[aria-pressed="true"] .num{outline:2px solid #4F46E5;outline-offset:4px}
+  .etp b{display:block;font-size:12.5px;font-weight:600;color:#334155;line-height:1.25}
+  .etp.atual b{color:#3730A3} .etp.feita b{color:#065F46}
+  .etp small{display:block;font-size:11px;font-weight:500;color:#94A3B8;margin-top:2px}
+  @media (prefers-reduced-motion:reduce){ .etp .num{transition:none} .etp:hover .num{transform:none} }
   /* cada ferramenta tem a sua cor (--c1/--c2 no style do cartão; --bg é o tom claro de fundo) */
   .tool{--c1:#4F46E5;--c2:#818CF8;--bg:#EEF2FF;position:relative;display:flex;gap:14px;align-items:center;text-align:left;padding:18px 40px 18px 18px;border:1px solid #E2E8F0;border-radius:16px;background:linear-gradient(135deg,var(--bg) 0%,#fff 62%);cursor:pointer;font-family:inherit;text-decoration:none;color:inherit;transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease}
   .tool:hover{transform:translateY(-3px);border-color:var(--c2);box-shadow:0 2px 4px rgba(15,23,42,.05),0 16px 32px -18px var(--c1)}
@@ -154,6 +163,34 @@
   .barra{height:6px;border-radius:99px;background:#F1F5F9;overflow:hidden} .barra i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--c1),var(--c2))}
   @media (prefers-reduced-motion:reduce){ .pj,.pj:hover{transition:none;transform:none} }
   .lista > li > .av{width:38px;height:38px;font-size:13px}
+  /* resumo do andamento (página do projeto) */
+  .resumo{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+  .rs{border:1px solid #E2E8F0;border-radius:14px;padding:14px 16px;background:linear-gradient(180deg,#fff,#F8FAFC)}
+  .rs .lbl{margin-bottom:4px} .rs-n{font-size:24px;font-weight:700;color:#0F172A;margin:0 0 8px;line-height:1.1}
+  .pilha{display:flex;height:8px;border-radius:99px;overflow:hidden;gap:2px;background:#F1F5F9}
+  .pilha i{display:block;height:100%}
+  .leg{display:flex;flex-wrap:wrap;gap:4px 10px;margin-top:8px;font-size:11.5px;color:#64748B}
+  .leg span{display:inline-flex;align-items:center;gap:5px} .leg i{width:7px;height:7px;border-radius:50%} .leg b{color:#334155}
+  .rs-lista{list-style:none;margin:2px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
+  .rs-lista li{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:5px 6px;margin:0 -6px;border-radius:8px}
+  .rs-lista li:hover{background:#EEF2FF} .rs-lista .pill{flex:none}
+  .rs-lista li span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#1E293B}
+  /* arquivos */
+  .passo{display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;padding:26px 16px;max-width:560px;margin:0 auto}
+  .passo-ic{width:64px;height:64px;border-radius:18px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#FEF3C7,#FFFBEB);color:#D97706;box-shadow:inset 0 0 0 1px #FDE68A}
+  .passo b{font-size:17px;color:#0F172A} .passo p{margin:0;font-size:13.5px;color:#64748B;line-height:1.55} .passo .btn{margin-top:6px}
+  .arq-trilha{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:12px;font-size:13px;color:#94A3B8}
+  .arq-trilha a{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:99px;background:#FFFBEB;border:1px solid #FDE68A;color:#92400E;text-decoration:none;font-weight:600}
+  .arq-trilha a:hover{background:#FEF3C7}
+  .arq-lista{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+  .arq-lista li{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid #F1F5F9;border-radius:12px;transition:background .15s,border-color .15s}
+  .arq-lista li:hover{background:#FFFBEB;border-color:#FDE68A}
+  .arq-ic{width:38px;height:38px;border-radius:10px;flex:none;display:flex;align-items:center;justify-content:center;background:#F1F5F9;color:#64748B}
+  .arq-lista li.e-pasta .arq-ic{background:#FEF3C7;color:#D97706}
+  .arq-n{flex:1;min-width:0;font-size:14.5px;overflow-wrap:anywhere} .arq-n a{color:#0F172A;text-decoration:none} .arq-n a:hover{color:#B45309;text-decoration:underline}
+  .arq-lista li.e-pasta .arq-n a{font-weight:600}
+  .arq-q{font-size:12.5px;color:#94A3B8;white-space:nowrap}
+  @media (max-width:640px){ .arq-q{display:none} }
   /* ata: data em destaque */
   .ata{border-left:4px solid #10B981}
   .ata-dia{width:54px;flex:none;text-align:center;border-radius:12px;background:#ECFDF5;color:#065F46;padding:6px 0}
@@ -171,19 +208,25 @@
   .rise{animation:rise .35s ease both} @keyframes rise{from{opacity:.001;transform:translateY(6px)}to{opacity:1;transform:none}}
   @media (prefers-reduced-motion:reduce){ .rise{animation:none} .kpi,.kpi:hover{transition:none;transform:none} }
   /* quadro */
-  .board{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(236px,1fr);gap:12px;overflow-x:auto;padding-bottom:8px}
-  .col{background:#F1F5F9;border-radius:14px;padding:10px;display:flex;flex-direction:column;gap:8px;min-height:120px}
-  .col.alvo{background:#E0E7FF}
-  .col-h{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;color:#334155;padding:2px 4px 4px}
-  .col-h i{width:8px;height:8px;border-radius:50%;flex:none} .col-h .n{margin-left:auto;font-weight:600;color:#64748B;font-size:11px}
+  /* quadro: cada coluna no tom da cor do status (--sc no style da coluna) */
+  .board{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(252px,1fr);gap:14px;overflow-x:auto;padding-bottom:10px}
+  .col{--sc:#94A3B8;background:color-mix(in srgb,var(--sc) 7%,#F8FAFC);border:1px solid color-mix(in srgb,var(--sc) 22%,#E2E8F0);border-top:4px solid var(--sc);border-radius:16px;padding:12px;display:flex;flex-direction:column;gap:10px;min-height:170px;transition:background .15s}
+  .col.alvo{background:color-mix(in srgb,var(--sc) 16%,#fff)}
+  .col-h{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;color:#1E293B;padding:2px 2px 2px}
+  .col-h i{width:9px;height:9px;border-radius:50%;flex:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--sc) 22%,transparent)}
+  .col-h .n{margin-left:auto;font-weight:700;font-size:11.5px;color:var(--sc);background:#fff;border:1px solid color-mix(in srgb,var(--sc) 30%,#fff);border-radius:99px;padding:1px 9px}
   .cards{display:flex;flex-direction:column;gap:8px;min-height:12px}
-  .tc{background:#fff;border:1px solid #E2E8F0;border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px;cursor:grab;box-shadow:0 1px 2px rgba(15,23,42,.05)}
-  .tc:hover{box-shadow:0 4px 12px -4px rgba(15,23,42,.18)}
+  .cards:empty::before{content:"Solte um cartão aqui";display:block;text-align:center;font-size:12px;color:#94A3B8;border:1.5px dashed color-mix(in srgb,var(--sc) 35%,#CBD5E1);border-radius:12px;padding:16px 8px}
+  .tc{background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px;cursor:grab;box-shadow:0 1px 2px rgba(15,23,42,.05);transition:transform .15s ease,box-shadow .15s ease}
+  .tc:hover{transform:translateY(-2px);box-shadow:0 10px 22px -12px rgba(15,23,42,.35)}
+  @media (prefers-reduced-motion:reduce){ .tc,.tc:hover{transition:none;transform:none} }
   .tc.late{border-left:3px solid #EF4444} .tc.arr{opacity:.35}
   .tc p{margin:0;font-size:13px;font-weight:500;color:#1E293B;line-height:1.35}
   .drop{height:3px;border-radius:3px;background:#4F46E5}
   .add{text-align:left;font-size:12.5px;color:#475569;background:transparent;border:0;padding:6px;border-radius:8px;cursor:pointer;font-family:inherit}
-  .add:hover{background:#E2E8F0}
+  .add:hover{background:#fff}
+  .col .add{width:100%;font-weight:600;color:#64748B}
+  .col .add:hover{color:var(--sc);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--sc) 30%,#fff)}
   .lista{list-style:none;margin:0;padding:0} .lista li{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid #F1F5F9} .lista li:first-child{border-top:0}
   .men{color:#4338CA;font-weight:600;background:#EEF2FF;border-radius:4px;padding:0 3px}
   .vazio{font-size:13px;color:#64748B;margin:0}
@@ -192,6 +235,22 @@
   .modal-c{background:#fff;border-radius:16px;box-shadow:0 20px 50px -12px rgba(15,23,42,.4);width:100%;max-width:36rem;max-height:92vh;overflow-y:auto}
   .modal-h{display:flex;align-items:center;justify-content:space-between;padding:18px 22px 12px;border-bottom:1px solid #F1F5F9}
   .modal-b{padding:18px 22px;display:flex;flex-direction:column;gap:14px}
+  /* cartão aberto, no jeito do Trello */
+  .modal-c.largo{max-width:56rem}
+  .cart{display:grid;grid-template-columns:minmax(0,1fr) 220px;gap:22px}
+  @media (max-width:720px){ .cart{grid-template-columns:1fr} }
+  .cart-main{display:flex;flex-direction:column;gap:18px;min-width:0}
+  .cart-tit{display:flex;gap:10px;align-items:center;color:#64748B}
+  .cart-in{font-size:18px;font-weight:700;color:#0F172A;border-color:transparent;padding:6px 8px}
+  .cart-in:hover{background:#F8FAFC} .cart-in:focus{border-color:#CBD5E1;background:#fff}
+  .cart-meta{display:flex;flex-wrap:wrap;gap:18px 26px}
+  .cart-lado{display:flex;flex-direction:column;gap:10px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:14px;padding:14px;align-self:start}
+  .cart-lado .btn{justify-content:flex-start;width:100%}
+  .lbl.sec{display:flex;align-items:center;gap:8px;font-size:12px;color:#334155;margin-bottom:8px}
+  .coment{display:flex;gap:10px;align-items:flex-start}
+  .etq{display:inline-flex;align-items:center;font-size:12px;font-weight:700;color:#fff;border-radius:6px;padding:3px 10px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .etq.mini{font-size:10.5px;padding:2px 8px;align-self:flex-start}
+  .tc-ico{display:inline-flex;color:#94A3B8}
   .rodape{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;padding-top:12px;border-top:1px solid #F1F5F9}
   .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(10px);background:#1E293B;color:#fff;font-size:13px;font-weight:500;padding:10px 16px;border-radius:10px;opacity:0;transition:all .25s;z-index:80;pointer-events:none;max-width:calc(100% - 32px)}
   .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
@@ -259,7 +318,7 @@ function falhou(e, oque) {
   console.error(oque, e);
 }
 function menu(abre) { $('side').classList.toggle('aberto', abre); $('scrim').classList.toggle('aberto', abre); }
-function abrirModal(t, html) { $('modal-t').textContent = t; $('modal-b').innerHTML = html; $('modal').hidden = false; const f = $('modal-b').querySelector('input,textarea,select'); if (f) f.focus(); }
+function abrirModal(t, html, largo) { $('modal-t').textContent = t; $('modal-b').innerHTML = html; const mc = document.querySelector('#modal .modal-c'); if (mc) mc.classList.toggle('largo', !!largo); $('modal').hidden = false; const f = $('modal-b').querySelector('input,textarea,select'); if (f) f.focus(); }
 function fecharModal() { $('modal').hidden = true; }
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('modal').hidden) fecharModal(); });
 const hoje = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; };
@@ -277,7 +336,7 @@ const meuMembro = () => MEMBROS.find((m) => m.user_id === EU.id);
 const nomeDe = (m) => (m && (m.nome || (m.email || '').split('@')[0])) || '—';
 const curto = (m) => nomeDe(m).split(' ')[0];
 const iniciais = (m) => nomeDe(m).split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0].toUpperCase()).join('') || '·';
-const av = (m) => { const c = corDe(m.id || nomeDe(m)); return `<span class="av" style="background:${c[2]};color:${c[0]}" title="${esc(nomeDe(m))}">${esc(iniciais(m))}</span>`; };
+const av = (m) => { const c = corDe((m && m.id) || nomeDe(m)); /* m some quando o autor saiu do projeto */ return `<span class="av" style="background:${c[2]};color:${c[0]}" title="${esc(nomeDe(m))}">${esc(iniciais(m))}</span>`; };
 const pessoasDa = (t) => PESSOAS_T.filter((p) => p.tarefa_id === t.id).map((p) => MEMBROS.find((m) => m.id === p.membro_id)).filter(Boolean);
 const avs = (t) => `<span class="avs">${pessoasDa(t).map(av).join('')}</span>`;
 const aberta = (t) => !['aprov', 'ok'].includes(t.status);
@@ -411,8 +470,21 @@ async function navegar() {
   }
   render();
 }
+// 🏢 25/09 (Pedro: "clico em financeiro e ele volta pro menu antigo"): Quantitativo, Financeiro etc. são as
+// páginas do projeto medido, com o menu-lateral.js. Esta marca diz a ELE que a pessoa veio do Escritório,
+// neste projeto: lá o menu vira o do Escritório. Só nesta aba (sessionStorage) e só pro job gravado aqui.
+function marcarContexto() {
+  try {
+    if (PROJ && PROJ.job_id) {
+      const ativos = MEMBROS.filter((m) => m.status === 'ativo').length;
+      sessionStorage.setItem('aiarq_esc_ctx', JSON.stringify({ job: PROJ.job_id, id: PROJ.id, nome: PROJ.nome,
+        sub: [PROJ.etapa_atual, ativos + ' pessoa' + (ativos === 1 ? '' : 's')].filter(Boolean).join(' · ') }));
+    } else if (PROJ) sessionStorage.removeItem('aiarq_esc_ctx');
+  } catch (_) {}
+}
 function render() {
   renderMoldura();
+  marcarContexto();
   const T = { lista: telaLista, capa: telaCapa, tarefas: telaTarefas, arquivos: telaArquivos, atas: telaAtas, equipe: telaEquipe };
   const volta = VIEW !== 'lista' && VIEW !== 'capa' ? `<button class="voltar" onclick="ir('capa')">← Página do projeto</button>` : '';
   $('main').innerHTML = volta + T[VIEW]();
@@ -541,7 +613,8 @@ function telaCapa() {
     </div>
     <div class="heroi">
       <div style="flex:1 1 380px;min-width:260px">
-        <dl class="dl" style="margin-top:0">
+        ${resumoAndamento(et, iA, abertas)}
+        <dl class="dl">
           ${p.cliente_nome ? `<dt>Cliente</dt><dd>${esc(p.cliente_nome)}</dd>` : ''}
           <dt>Equipe</dt><dd>${ativos.map((m) => `${av(m)}<span style="margin-right:6px">${esc(curto(m))}</span>`).join('')}${convidados ? `<span class="pill p-warn"><i></i>${convidados} convite${convidados > 1 ? 's' : ''} aguardando</span>` : ''}</dd>
         </dl>
@@ -552,7 +625,7 @@ function telaCapa() {
       </div>
     </div>
     ${et.length ? `<div style="margin-top:22px"><p class="lbl">Etapas</p><div class="etapas" role="tablist">
-      ${et.map((e, i) => { const n = TAR.filter((t) => t.etapa === e).length; return `<button role="tab" class="etp ${i < iA ? 'feita' : i === iA ? 'atual' : ''}" aria-pressed="${ETAPA_SEL === e}" onclick="verEtapa(${i})">${esc(e)}<small>${n} tarefa${n === 1 ? '' : 's'}</small></button>`; }).join('')}</div>
+      ${et.map((e, i) => { const n = TAR.filter((t) => t.etapa === e).length; return `<button role="tab" class="etp ${i < iA ? 'feita' : i === iA ? 'atual' : ''}" aria-pressed="${ETAPA_SEL === e}" onclick="verEtapa(${i})"><span class="num">${i < iA ? '✓' : i + 1}</span><b>${esc(e)}</b><small>${n} tarefa${n === 1 ? '' : 's'}</small></button>`; }).join('')}</div>
       ${ETAPA_SEL ? painelEtapa() : '<p class="sub">Clique numa etapa pra ver o que tem nela.</p>'}</div>` : ''}
   </section>
   <div class="grade g2 g4 rise">
@@ -584,6 +657,24 @@ function telaCapa() {
   <section class="card rise"><div class="linha" style="justify-content:space-between"><h2 class="h2">${souAdmin() ? 'Precisa de você' : 'Suas tarefas'}</h2><a class="btn btn-s" href="#/p/${p.id}/tarefas">Abrir o quadro</a></div>
     ${foco.length ? `<ul class="lista" style="margin-top:8px">${foco.slice(0, 8).map((t) => `<li style="cursor:pointer" onclick="ir('tarefas');setTimeout(()=>abrirCartao('${t.id}'),50)"><span style="width:9px;height:9px;border-radius:50%;background:${(ST.find((s) => s.k === t.status) || {}).cor}"></span><span style="flex:1;min-width:0;font-size:14.5px">${esc(t.titulo)}<span class="sub" style="display:block;margin:0">${stT(t.status)}</span></span>${pillPrazo(t)}${avs(t)}</li>`).join('')}</ul>` : '<p class="vazio" style="margin-top:8px">Nada parado com você.</p>'}
   </section>`;
+}
+// 25/09 (Pedro: "essa parte branca fica muito vazia"): o resumo do andamento, ao lado da próxima entrega.
+// Tudo contado das tarefas e etapas que a tela já tem; nada estimado.
+function resumoAndamento(et, iA, abertas) {
+  const pct = et.length && iA >= 0 ? Math.round(((iA + 1) / et.length) * 100) : 0;
+  const porSt = ST.map((s) => ({ s, n: TAR.filter((t) => t.status === s.k).length })).filter((x) => x.n);
+  const total = porSt.reduce((a, x) => a + x.n, 0);
+  const prox = abertas.filter((t) => t.prazo).sort((a, b) => String(a.prazo).localeCompare(String(b.prazo))).slice(0, 3);
+  return `<div class="resumo">
+    <div class="rs"><p class="lbl">Andamento do projeto</p>
+      ${et.length ? `<p class="rs-n tab">${pct}%</p><div class="barra" style="--c1:#4f46e5;--c2:#06b6d4"><i style="width:${pct}%"></i></div>
+        <p class="sub" style="margin:6px 0 0">${iA >= 0 ? `etapa ${iA + 1} de ${et.length} · ${esc(et[iA])}` : 'etapa atual não marcada'}</p>` : '<p class="sub" style="margin:0">Sem etapas neste projeto.</p>'}</div>
+    <div class="rs"><p class="lbl">Tarefas por coluna</p>
+      ${total ? `<p class="rs-n tab">${total}</p><div class="pilha">${porSt.map((x) => `<i style="flex:${x.n};background:${x.s.cor}" title="${esc(x.s.t)}: ${x.n}"></i>`).join('')}</div>
+        <div class="leg">${porSt.map((x) => `<span><i style="background:${x.s.cor}"></i>${esc(x.s.t)} <b class="tab">${x.n}</b></span>`).join('')}</div>` : '<p class="sub" style="margin:0">Nenhuma tarefa ainda.</p>'}</div>
+    <div class="rs"><p class="lbl">Próximos prazos</p>
+      ${prox.length ? `<ul class="rs-lista">${prox.map((t) => `<li onclick="ir('tarefas');setTimeout(()=>abrirCartao('${t.id}'),50)"><span>${esc(t.titulo)}</span>${pillPrazo(t)}</li>`).join('')}</ul>` : '<p class="sub" style="margin:0">Nenhuma tarefa aberta com prazo.</p>'}</div>
+  </div>`;
 }
 function verEtapa(i) { const e = PROJ.etapas[i]; ETAPA_SEL = ETAPA_SEL === e ? null : e; render(); }
 function painelEtapa() {
@@ -631,15 +722,20 @@ function telaTarefas() {
       <select class="in" style="width:auto;padding:5px 8px;font-size:12px" aria-label="Filtrar por etapa" onchange="FILTRO_E=this.value;render()"><option value="">Todas as etapas</option>${(PROJ.etapas || []).map((e) => `<option ${e === FILTRO_E ? 'selected' : ''}>${esc(e)}</option>`).join('')}</select>
       <span class="sub" style="margin:0 0 0 auto">${souAdmin() ? 'A equipe leva até <b>Aguardando revisão</b>; dali pra frente é você.' : 'Você leva até <b>Aguardando revisão</b>; dali pra frente é a admin do projeto.'}</span></div>
     <div class="board">${ST.map((s) => { const ts = TAR.filter((t) => t.status === s.k && visivel(t)).sort((a, b) => a.posicao - b.posicao); return `
-      <div class="col" style="border-top:4px solid ${s.cor}" data-st="${s.k}" ondragover="sobre(event)" ondrop="soltar(event)" aria-label="${s.t}">
+      <div class="col" style="--sc:${s.cor}" data-st="${s.k}" ondragover="sobre(event)" ondrop="soltar(event)" aria-label="${s.t}">
         <div class="col-h"><i style="background:${s.cor}"></i>${s.t}<span class="n">${ts.length}</span></div>
         <div class="cards">${ts.map(cartao).join('')}</div>
         <div><button class="add" onclick="addCartao('${s.k}',this)">+ Adicionar cartão</button></div>
       </div>`; }).join('')}</div>`;
 }
+// a etapa vira a etiqueta colorida do cartão (como no Trello): a cor segue a ORDEM da etapa no projeto,
+// então etapas vizinhas nunca saem iguais (por hash do nome, duas colidiam)
+const corEtapa = (e) => { const i = ((PROJ && PROJ.etapas) || []).indexOf(e); return i >= 0 ? COR[PALETA[i % PALETA.length]] : corDe(e); };
+const etiqueta = (e, mini) => `<span class="etq${mini ? ' mini' : ''}" style="background:${corEtapa(e)[0]}">${esc(e)}</span>`;
 function cartao(t) {
   return `<div class="tc ${atrasada(t) ? 'late' : ''}" draggable="true" data-id="${t.id}" tabindex="0" ondragstart="pegar(event)" ondragend="largar(event)" onclick="abrirCartao('${t.id}')" onkeydown="if(event.key==='Enter')abrirCartao('${t.id}')">
-    <p>${esc(t.titulo)}</p><div class="linha" style="gap:6px">${pillPrazo(t)}${t.do_cliente ? '<span class="pill p-warn">cliente</span>' : ''}${t.etapa ? `<span style="font-size:10.5px;color:#64748B">${esc(t.etapa)}</span>` : ''}${avs(t)}</div></div>`;
+    ${t.etapa ? etiqueta(t.etapa, true) : ''}<p>${esc(t.titulo)}</p>
+    <div class="linha" style="gap:6px">${pillPrazo(t)}${t.do_cliente ? '<span class="pill p-warn">cliente</span>' : ''}${t.descricao ? `<span class="tc-ico" title="Tem descrição">${svg('memo', 14)}</span>` : ''}${avs(t)}</div></div>`;
 }
 let ARR = null;
 function pegar(e) { ARR = e.currentTarget.dataset.id; e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', ARR); } catch (_) {} e.currentTarget.classList.add('arr'); }
@@ -695,19 +791,36 @@ async function abrirCartao(id) {
   const opc = ST.filter((s) => podeLevar(t, s.k)).map((s) => `<option value="${s.k}" ${s.k === t.status ? 'selected' : ''}>${s.t}</option>`).join('');
   // o mesmo que o banco (escritorio_tarefa_apagar_guarda): a equipe só apaga o que criou e nunca passou pela admin
   const podeApagar = souAdmin() || (t.criado_por === EU.id && ST_EQUIPE.includes(t.status) && !t.passou_pela_admin);
-  abrirModal('Tarefa', `
-    <input id="ct-t" class="in" style="font-size:15px;font-weight:600" maxlength="300" value="${esc(t.titulo)}" aria-label="Título">
-    <div class="grade g3"><div><label class="lbl" for="ct-st">Coluna</label><select id="ct-st" class="in">${opc}</select></div>
+  // 🗂️ 25/09 (Pedro: "o Trello é a referência"): conteúdo à esquerda (título, pessoas, etiqueta, prazo,
+  // descrição, comentários) e, à direita, onde o cartão está e o que dá pra fazer com ele.
+  const s = ST.find((x) => x.k === t.status) || {}, eu = meuMembro();
+  abrirModal('Tarefa', `<div class="cart">
+    <div class="cart-main">
+      <div class="cart-tit">${svg('tar', 20)}<input id="ct-t" class="in cart-in" maxlength="300" value="${esc(t.titulo)}" aria-label="Título"></div>
+      <p class="sub" style="margin:-10px 0 0 32px">na coluna <b style="color:${s.cor || '#334155'}">${esc(s.t || stT(t.status))}</b></p>
+      <div class="cart-meta">
+        <div><p class="lbl">Pessoas no cartão</p><div class="linha" id="ct-pes" style="gap:6px">${gente.map((m) => `<button type="button" class="chip" aria-pressed="${CART.pessoas.includes(m.id)}" onclick="togP('${m.id}',this)">${av(m)}${esc(curto(m))}</button>`).join('')}</div>
+          <p class="sub" style="margin:6px 0 0;font-size:12px">Clique pra marcar ou desmarcar quem faz.</p></div>
+        ${t.etapa ? `<div><p class="lbl">Etiqueta</p>${etiqueta(t.etapa)}</div>` : ''}
+        ${t.prazo ? `<div><p class="lbl">Prazo</p>${pillPrazo(t)}</div>` : ''}
+      </div>
+      <div><p class="lbl sec">${svg('memo', 16)}Descrição</p><textarea id="ct-d" rows="4" class="in" maxlength="5000" placeholder="Detalhes, links, referências…">${esc(t.descricao || '')}</textarea></div>
+      <div><p class="lbl sec">${svg('atas', 16)}Comentários</p>
+        <div class="coment">${eu ? av(eu) : ''}<div style="flex:1;min-width:0"><textarea id="ct-com" rows="2" class="in" maxlength="5000" placeholder="Escreva um comentário… use @ pra chamar alguém"></textarea>
+          <div class="linha" style="margin-top:6px;gap:6px">${gente.filter((m) => m.user_id !== EU.id).map((m) => `<button type="button" class="chip" onclick="mencionar('${m.id}')">@${esc(curto(m))}</button>`).join('')}<span style="flex:1"></span><button class="btn btn-p btn-s" onclick="comentar('${id}')">Comentar</button></div></div></div>
+        <ul class="lista" id="ct-coms" style="margin-top:10px"><li class="vazio">Carregando…</li></ul></div>
+    </div>
+    <aside class="cart-lado">
+      <p class="lbl" style="margin:0">No cartão</p>
+      <div><label class="lbl" for="ct-st">Coluna</label><select id="ct-st" class="in">${opc}</select></div>
       <div><label class="lbl" for="ct-e">Etapa</label><select id="ct-e" class="in"><option value="">—</option>${(PROJ.etapas || []).map((e) => `<option ${e === t.etapa ? 'selected' : ''}>${esc(e)}</option>`).join('')}</select></div>
-      <div><label class="lbl" for="ct-p">Prazo</label><input id="ct-p" type="date" class="in" value="${esc(t.prazo || '')}"></div></div>
-    <div><p class="lbl">Pessoas no cartão</p><div class="linha" id="ct-pes" style="gap:6px">${gente.map((m) => `<button type="button" class="chip" aria-pressed="${CART.pessoas.includes(m.id)}" onclick="togP('${m.id}',this)">${av(m)}${esc(curto(m))}</button>`).join('')}</div>
-      <label class="linha" style="margin-top:8px;font-size:13px;color:#334155;gap:6px"><input type="checkbox" id="ct-cli" ${t.do_cliente ? 'checked' : ''}> Pendência do cliente</label></div>
-    <div><label class="lbl" for="ct-d">Descrição</label><textarea id="ct-d" rows="2" class="in" maxlength="5000" placeholder="Detalhes, links, referências…">${esc(t.descricao || '')}</textarea></div>
-    <div><p class="lbl">Comentários</p><ul class="lista" id="ct-coms"><li class="vazio">Carregando…</li></ul>
-      <textarea id="ct-com" rows="2" class="in" maxlength="5000" placeholder="Escreva… use @ pra chamar alguém" style="margin-top:8px"></textarea>
-      <div class="linha" style="margin-top:6px;gap:6px">${gente.filter((m) => m.user_id !== EU.id).map((m) => `<button type="button" class="chip" onclick="mencionar('${m.id}')">@${esc(curto(m))}</button>`).join('')}<span style="flex:1"></span><button class="btn btn-p btn-s" onclick="comentar('${id}')">Comentar</button></div></div>
-    <div class="rodape" style="justify-content:space-between"><div class="linha" style="gap:6px"><button class="btn btn-s" onclick="subirDescer('${id}',-1)">↑ Subir</button><button class="btn btn-s" onclick="subirDescer('${id}',1)">↓ Descer</button>${podeApagar ? `<button class="btn btn-r btn-s" onclick="apagarCartao('${id}')">Excluir</button>` : ''}</div>
-      <div class="linha" style="gap:6px"><button class="btn" onclick="fecharModal()">Fechar</button><button class="btn btn-d" onclick="salvarCartao('${id}')">Salvar</button></div></div>`);
+      <div><label class="lbl" for="ct-p">Prazo</label><input id="ct-p" type="date" class="in" value="${esc(t.prazo || '')}"></div>
+      <label class="linha" style="font-size:13px;color:#334155;gap:6px;flex-wrap:nowrap"><input type="checkbox" id="ct-cli" ${t.do_cliente ? 'checked' : ''}> Pendência do cliente</label>
+      <p class="lbl" style="margin:8px 0 0">Ações</p>
+      <button class="btn btn-s" onclick="subirDescer('${id}',-1)">↑ Subir na coluna</button><button class="btn btn-s" onclick="subirDescer('${id}',1)">↓ Descer na coluna</button>
+      ${podeApagar ? `<button class="btn btn-r btn-s" onclick="apagarCartao('${id}')">Excluir cartão</button>` : ''}
+    </aside></div>
+    <div class="rodape"><button class="btn" onclick="fecharModal()">Fechar</button><button class="btn btn-d" onclick="salvarCartao('${id}')">Salvar</button></div>`, true);
   carregarComentarios(id);
 }
 async function carregarComentarios(id) {
@@ -788,35 +901,38 @@ async function carregarArquivos() {
   if (!l.ok) { corpo.innerHTML = `<p class="vazio">${esc(l.dados.detail || 'Não consegui abrir a pasta agora.')}</p>`; return; }
   const d = l.dados;
   if (souAdmin() && drv && !drv.configurado) { corpo.innerHTML = '<p class="vazio">O Google Drive ainda está sendo configurado no servidor.</p>'; return; }
+  // estado sem lista (conectar, escolher pasta, conexão caiu): um bloco centrado, com o próximo passo
+  const passo = (ic, titulo, texto, botao) => `<div class="passo"><span class="passo-ic">${svg(ic, 28)}</span><b>${titulo}</b><p>${texto}</p>${botao || ''}</div>`;
   if (souAdmin() && drv && !drv.conectado) {
-    corpo.innerHTML = `<div class="aviso"><b>Conecte o seu Google Drive.</b><br><span style="font-size:13.5px;color:#475569">Você escolhe a pasta deste projeto, e cada pessoa da equipe recebe acesso só a ela. O Google mostra um aviso de "app não verificado" (estamos em piloto): é só seguir. Você pode cortar o acesso quando quiser, aqui ou na sua conta Google.</span></div>
-      <button class="btn btn-g" style="margin-top:14px" onclick="conectarDrive()">Conectar Google Drive</button>`;
+    corpo.innerHTML = passo('arq', 'Conecte o seu Google Drive', 'Você escolhe a pasta deste projeto, e cada pessoa da equipe recebe acesso só a ela. O Google mostra um aviso de "app não verificado" (estamos em piloto): é só clicar em <b>Avançado</b> e seguir. Você pode cortar o acesso quando quiser, aqui ou na sua conta Google.',
+      '<button class="btn btn-g" onclick="conectarDrive()">Conectar Google Drive</button>');
     return;
   }
   if (d.sem_pasta) {
     corpo.innerHTML = souAdmin()
-      ? `<p class="sub" style="margin:0 0 12px">Drive conectado${drv && drv.email ? ' (' + esc(drv.email) + ')' : ''}. Agora escolha a pasta deste projeto.</p><button class="btn btn-g" onclick="escolherPasta('root')">Escolher a pasta do projeto</button>`
-      : '<p class="vazio">A admin ainda não ligou a pasta do Drive a este projeto.</p>';
+      ? passo('pastas', 'Escolha a pasta deste projeto', `Drive conectado${drv && drv.email ? ' (' + esc(drv.email) + ')' : ''}. Agora aponte qual pasta é a deste projeto: só ela fica visível pra equipe.`, `<button class="btn btn-g" onclick="escolherPasta('root')">Escolher a pasta do projeto</button>`)
+      : passo('pastas', 'Pasta ainda não ligada', 'A admin ainda não ligou a pasta do Drive a este projeto.');
     return;
   }
   if (d.sem_conexao) {
     corpo.innerHTML = souAdmin()
-      ? `<p class="vazio">A conexão com o Drive caiu. Conecte de novo pra equipe voltar a ver a pasta.</p><button class="btn btn-g" style="margin-top:12px" onclick="conectarDrive()">Conectar Google Drive</button>`
-      : '<p class="vazio">A conexão da admin com o Drive caiu. Ela precisa conectar de novo.</p>';
+      ? passo('arq', 'A conexão com o Drive caiu', 'Conecte de novo pra equipe voltar a ver a pasta.', '<button class="btn btn-g" onclick="conectarDrive()">Conectar Google Drive</button>')
+      : passo('arq', 'A conexão com o Drive caiu', 'A admin precisa conectar o Drive de novo.');
     return;
   }
   const pasta = d.pasta || {}, arqs = d.arquivos || [];
   if (acoes) acoes.innerHTML = `<a class="btn btn-s" href="https://drive.google.com/drive/folders/${encodeURIComponent(pasta.atual || pasta.id)}" target="_blank" rel="noopener">Abrir no Drive</a>`
     + (souAdmin() ? '<button class="btn btn-s" onclick="sincronizarPasta()">Atualizar acesso da equipe</button><button class="btn btn-s" onclick="escolherPasta(\'root\')">Trocar pasta</button>' : '');
-  const trilha = `<div class="linha" style="gap:6px;font-size:13px;margin-bottom:8px"><a href="#" data-sub="" data-nome="" class="arq-sub">${esc(pasta.nome || 'Pasta do projeto')}</a>${ARQ_TRILHA.map((t) => `<span>›</span><a href="#" data-sub="${esc(t.id)}" data-nome="${esc(t.nome)}" class="arq-sub">${esc(t.nome)}</a>`).join('')}</div>`;
-  corpo.innerHTML = trilha + (arqs.length ? `<ul class="lista">${arqs.map((f) => {
-    const ic = ehIconeDoGoogle(f.icone) ? `<img src="${esc(f.icone)}" alt="" width="18" height="18">` : svg(f.pasta ? 'pastas' : 'arq', 18);
+  const trilha = `<div class="arq-trilha"><a href="#" data-sub="" data-nome="" class="arq-sub">${svg('pastas', 14)}${esc(pasta.nome || 'Pasta do projeto')}</a>${ARQ_TRILHA.map((t) => `<span>›</span><a href="#" data-sub="${esc(t.id)}" data-nome="${esc(t.nome)}" class="arq-sub">${esc(t.nome)}</a>`).join('')}</div>`;
+  const nP = arqs.filter((f) => f.pasta).length, nA = arqs.length - nP;
+  corpo.innerHTML = trilha + (arqs.length ? `<p class="sub" style="margin:0 0 10px">${nP ? `${nP} pasta${nP > 1 ? 's' : ''}` : ''}${nP && nA ? ' · ' : ''}${nA ? `${nA} arquivo${nA > 1 ? 's' : ''}` : ''}</p><ul class="arq-lista">${arqs.map((f) => {
+    const ic = ehIconeDoGoogle(f.icone) ? `<img src="${esc(f.icone)}" alt="" width="20" height="20">` : svg(f.pasta ? 'pastas' : 'arq', 20);
     const quando = f.mudou_em ? dBR(f.mudou_em) + (f.por ? ' · ' + esc(f.por) : '') : '';
     const nome = f.pasta
-      ? `<a href="#" class="arq-sub" data-sub="${esc(f.id)}" data-nome="${esc(f.nome)}" style="font-weight:600">${esc(f.nome)}</a>`
+      ? `<a href="#" class="arq-sub" data-sub="${esc(f.id)}" data-nome="${esc(f.nome)}">${esc(f.nome)}</a>`
       : (ehLinkDoGoogle(f.link) ? `<a href="${esc(f.link)}" target="_blank" rel="noopener">${esc(f.nome)}</a>` : esc(f.nome));
-    return `<li>${ic}<span style="flex:1;min-width:0;font-size:14.5px;overflow-wrap:anywhere">${nome}<span class="sub" style="display:block;margin:0">${quando}</span></span></li>`;
-  }).join('')}</ul>` : '<p class="vazio">Pasta vazia.</p>')
+    return `<li class="${f.pasta ? 'e-pasta' : ''}"><span class="arq-ic">${ic}</span><span class="arq-n">${nome}</span><span class="arq-q">${quando}</span></li>`;
+  }).join('')}</ul>` : passo('pastas', 'Pasta vazia', 'Os arquivos que você puser nesta pasta do Drive aparecem aqui.'))
     + (souAdmin() ? '' : '<p class="sub" style="margin-top:12px">Pra abrir e editar os arquivos, use a conta Google em que você recebeu o compartilhamento da pasta.</p>');
 }
 // um ouvinte só pras subpastas (o nome da pasta nunca vai dentro de onclick)
