@@ -11255,6 +11255,10 @@ _FONTE_DA_ESCALA = {
               "o rótulo da vista DECLARA a escala — declaração não é medida, e "
               "nesta prancha o carimbo dizia 'escalas indicadas', ou seja, cada "
               "desenho tem a sua"),
+    # 25/09/2026 — fonte nova (pdf_vector: "ESCALA 1:N" escrito na folha, lido
+    # do texto). Entra no MESMO commit da fonte, pela regra de 09/09 acima.
+    "texto": ("da escala escrita na própria folha",
+              "a folha DECLARA a escala por escrito — declaração não é medida"),
 }
 
 

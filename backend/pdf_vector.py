@@ -298,6 +298,32 @@ def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
             out["err_escala_vista"] = f"{type(e).__name__}: {e}"[:120]
         _marca("escala_vista", _t_et)
 
+    if not den and not out.get("indicadas"):
+        # 📄 25/09/2026 — a escala ESCRITA na folha, lida do TEXTO (de graça).
+        # Job `87adfbde` (projeto de interiores, 2 PDF): "ESCALA 1 : 75" logo
+        # abaixo do título da planta, e o log dizia "sem escala". A leitura ao
+        # lado da vista (acima) só roda quando o carimbo diz "indicadas" — o
+        # gatilho é de quando isso custava uma chamada de Vision; o carimbo
+        # desta folha nem tinha campo de escala. Medido numa amostra de 131
+        # páginas mortas "sem escala": 18 (de 5 clientes) traziam "ESC… 1:N"
+        # escrito. 🔒 Só o rótulo COM a palavra ("esc"); a razão solta (1:100
+        # sem "ESC") fica de fora — proporção de armadura e referência de
+        # detalhe também têm "a:b". E continua sem prova por medida: entra
+        # como estimado, igual ao carimbo.
+        _t_et = time.time()
+        try:
+            import fitz as _fitz_esc
+            from pdfvec_escala_por_vista import escala_do_rotulo
+            with _fitz_esc.open(pdf_path) as _doc_esc:
+                _texto_folha = _doc_esc[page_index].get_text()
+            _den_txt, _fonte_txt = escala_do_rotulo(_texto_folha)
+            if _den_txt and _fonte_txt == "esc":
+                den = float(_den_txt)
+                out["scale_src"] = "texto"
+        except Exception as e:
+            out["err_escala_texto"] = f"{type(e).__name__}: {e}"[:120]
+        _marca("escala_texto", _t_et)
+
     if not den:
         # 4ª fonte: DERIVAR a escala das cotas escritas (01/08/2026).
         # Medido nas 30 pranchas da sombra: 47% morriam aqui, mesmo tendo cota
