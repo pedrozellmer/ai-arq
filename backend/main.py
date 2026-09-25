@@ -1023,6 +1023,12 @@ def _leitura_por_folha_resumo(extraction) -> str:
     n_vista = sum(1 for x in ds if x.get("tipo") == "vista")
     # 25/09: desenhos achados pelo TÍTULO no modelspace (sem janela por desenho)
     _orig = " origem=modelo" if f.get("origem") == "modelo" else ""
+    # 25/09: a base repetida nas plantas temáticas do mesmo pavimento, contada 1×
+    _rp = f.get("repetidas") or {}
+    if _rp:
+        _orig += (" repetidas=[%s] -%sm -%sm2 -%sbl" % (
+            "; ".join("%s %sm×%d" % (g[0][:20], g[1], g[2]) for g in (_rp.get("grupos") or [])[:6]),
+            _rp.get("m", 0), _rp.get("m2", 0), _rp.get("blocos", 0)))
     return (f"aplicada=sim{_orig} desenhos={len(ds)} fora={n_fora} vistas={n_vista} neutros={n_neutro} "
             f"multiplicadas=[{'; '.join(mult)}] "
             f"comprimento {a.get('comprimento')}→{d.get('comprimento')} m "

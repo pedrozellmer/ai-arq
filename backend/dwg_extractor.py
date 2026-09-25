@@ -253,6 +253,13 @@ class DXFExtraction:
                              f"situação — o mesmo objeto redesenhado ou recorte típico): " + "; ".join(
                                  (d.get("titulo") or d.get("folha"))[:50] for d in _fora[:8])
                              + ("…" if len(_fora) > 8 else ""))
+            if _fl.get("repetidas"):
+                _gr = _fl["repetidas"].get("grupos") or []
+                lines.append("  • plantas TEMÁTICAS do mesmo pavimento (layout, luminotécnica, pontos, "
+                             "forro, original…): a base repetida em todas JÁ foi contada UMA vez"
+                             + (" — ex.: " + "; ".join("%s %s m em %d plantas" % (g[0], g[1], g[2])
+                                                       for g in _gr[:4]) if _gr else "")
+                             + ". Não some as plantas entre si.")
             lines.append("  Não some de novo o que está fora nem multiplique de novo a planta-tipo. "
                          "Use o esquema e os detalhes só para ler diâmetro, material e especificação.")
             lines.append("")
@@ -3003,6 +3010,154 @@ def mapa_de_folhas(doc) -> dict:
     return out
 
 
+# Título de planta TEMÁTICA do mesmo pavimento (layout, luminotécnica, pontos,
+# forro, piso, demolir/construir, original…) — a base do pavimento redesenhada
+# pra outro assunto. E o que diz que são pavimentos/unidades DIFERENTES.
+_RE_PLANTA_TEMATICA = re.compile(
+    r"(?i)layout|lumin|el[eé]tric|pontos|tomada|forro|piso|pagina[cç]|demoli|constru|"
+    r"original|existente|reforma|hidr[aá]ul|mobili|ilumina|\bop\.|op[cç][aã]o|"
+    r"acabamento|gesso|marcenaria|revestimento|ar.?condicionado|climatiza")
+_RE_PAVIMENTO_OU_UNIDADE = re.compile(
+    r"(?i)t[eé]rreo|superior|subsolo|cobertura|mezanino|\d+\s*[ºª°o]?\s*(?:pav|andar)|"
+    r"pavimento\s+\d|\bbloco\b|\btorre\b|\bcasa\s+\d|\bunidade\b|\bapto?\.?\s*\d")
+
+
+def _mesmo_pavimento(t1, t2) -> bool:
+    """Dois títulos de planta falam do MESMO pavimento redesenhado?
+
+    Só quando nenhum dos dois diz pavimento/unidade (andar diferente é quantidade
+    de verdade, nunca repetição) E os títulos são iguais ou um deles é temático."""
+    t1, t2 = (t1 or "").strip(), (t2 or "").strip()
+    if not t1 or not t2:
+        return False
+    if _RE_PAVIMENTO_OU_UNIDADE.search(t1) or _RE_PAVIMENTO_OU_UNIDADE.search(t2):
+        return False
+    return t1.upper() == t2.upper() or bool(
+        _RE_PLANTA_TEMATICA.search(t1) or _RE_PLANTA_TEMATICA.search(t2))
+
+
+def _descartar_plantas_repetidas(walls, hatches, polygon_areas, blocks, regs) -> dict:
+    """A base do pavimento redesenhada em várias plantas temáticas conta UMA vez.
+
+    🩸 25/09/2026 — job `befab5aa` (projeto de interiores, 1 DWG): 5 plantas do
+    MESMO apartamento — original, luminotécnica, pontos elétricos e duas opções
+    de layout —, todas 'planta' de um andar, então a leitura por folha dizia
+    "nada muda" e o motor SOMAVA as cinco. O guarda-corpo tinha 25,93 m em CADA
+    planta e saiu 129,64 m "✓ MEDIDO" (5×); janela 42,32 m ×3; parede ×2.
+    Medido no acervo local: o mesmo acontece nas plantas-chave "PONTOS / FORRO /
+    PISO / PLANTA BAIXA" de folhas de elevação (18–22% do comprimento).
+
+    🔑 Regra: um layer (ou bloco) com o MESMO comprimento (±0,5%, ≥ 1 m; área
+    ≥ 1 m²; contagem igual) em 2+ plantas do mesmo pavimento é a base repetida:
+    fica a da primeira planta, as outras saem. O que muda de uma planta pra
+    outra (o que só a luminotécnica tem, a parede nova do layout) FICA — não é
+    igual, não é repetição. Pavimento/unidade diferente no título nunca junta.
+    Muta as listas; devolve o que tirou. Nunca levanta.
+    """
+    out = {"m": 0.0, "m2": 0.0, "blocos": 0, "grupos": []}
+    try:
+        plantas = [f for f in regs if f.get("tipo") == "planta" and int(f.get("andares", 1) or 1) == 1]
+        if len(plantas) < 2:
+            return out
+
+        def dona(p):
+            """Índice da ÚNICA planta que contém p (ou None)."""
+            if p is None:
+                return None
+            ks = [k for k, f in enumerate(plantas) if _dentro(p, f["caixa"])]
+            return ks[0] if len(ks) == 1 else None
+
+        def iguais(vals, tol, minimo):
+            """Grupos de índices com valor igual (±tol) e títulos do mesmo pavimento."""
+            ordem = sorted((v, k) for k, v in vals.items() if v >= minimo)
+            grupos, usados = [], set()
+            for i, (v, k) in enumerate(ordem):
+                if k in usados:
+                    continue
+                g = [k] + [k2 for v2, k2 in ordem[i + 1:]
+                           if k2 not in usados and abs(v2 - v) <= tol * max(v, 1e-9)
+                           and _mesmo_pavimento(plantas[k].get("titulo"), plantas[k2].get("titulo"))]
+                if len(g) >= 2:
+                    usados.update(g)
+                    grupos.append(sorted(g))
+            return grupos
+
+        def _meio(w):
+            if tuple(w.start) == (0, 0) and tuple(w.end) == (0, 0):
+                return None
+            return ((w.start[0] + w.end[0]) / 2, (w.start[1] + w.end[1]) / 2)
+
+        # comprimento por layer × planta
+        por = {}
+        for w in walls:
+            k = dona(_meio(w))
+            if k is not None:
+                por.setdefault(w.layer, {}).setdefault(k, 0.0)
+                por[w.layer][k] += w.length
+        tirar_w = set()
+        for lay, vals in por.items():
+            for g in iguais(vals, 0.005, 1.0):
+                tirar_w.update((lay, k) for k in g[1:])
+                out["grupos"].append((lay, round(vals[g[0]], 2), len(g)))
+        if tirar_w:
+            novas = []
+            for w in walls:
+                if (w.layer, dona(_meio(w))) in tirar_w:
+                    out["m"] += w.length
+                    continue
+                novas.append(w)
+            walls[:] = novas
+        # área por layer × planta
+        for lista in (hatches, polygon_areas):
+            por_a = {}
+            for h in lista:
+                bb = getattr(h, "bbox", ()) or ()
+                k = dona(((bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2)) if len(bb) == 4 else None
+                if k is not None:
+                    por_a.setdefault(h.layer, {}).setdefault(k, 0.0)
+                    por_a[h.layer][k] += h.area
+            tirar_a = set()
+            for lay, vals in por_a.items():
+                for g in iguais(vals, 0.005, 1.0):
+                    tirar_a.update((lay, k) for k in g[1:])
+            if tirar_a:
+                novas = []
+                for h in lista:
+                    bb = getattr(h, "bbox", ()) or ()
+                    k = dona(((bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2)) if len(bb) == 4 else None
+                    if (h.layer, k) in tirar_a:
+                        out["m2"] += h.area
+                        continue
+                    novas.append(h)
+                lista[:] = novas
+        # contagem por bloco × planta
+        novos = []
+        for b in blocks:
+            pos = list(getattr(b, "positions", None) or [])
+            if len(pos) != b.count:
+                novos.append(b)                          # posições incompletas: neutro
+                continue
+            cont = {}
+            for p in pos:
+                k = dona(p)
+                if k is not None:
+                    cont[k] = cont.get(k, 0) + 1
+            tirar_b = set()
+            for g in iguais({k: float(v) for k, v in cont.items()}, 0.0, 1.0):
+                tirar_b.update(g[1:])
+            if tirar_b:
+                fica = [p for p in pos if dona(p) not in tirar_b]
+                out["blocos"] += b.count - len(fica)
+                b.positions, b.count = fica, len(fica)
+            if b.count > 0:
+                novos.append(b)
+        blocks[:] = novos
+    except Exception as e:                       # nunca derruba a extração
+        logger.warning("_descartar_plantas_repetidas: %s", e)
+    out["m"], out["m2"] = round(float(out["m"]), 2), round(float(out["m2"]), 2)
+    return out
+
+
 def aplicar_leitura_por_folha(walls, hatches, polygon_areas, blocks, mapa) -> dict:
     """Tira da medição o que está em desenho 'fora' e dá peso N à planta de N andares.
 
@@ -3015,8 +3170,23 @@ def aplicar_leitura_por_folha(walls, hatches, polygon_areas, blocks, mapa) -> di
     if not regs:
         res["motivo"] = "nenhum desenho com título que diga o que é"
         return res
+
+    def _totais():
+        return {"comprimento": round(sum(w.length * getattr(w, "peso", 1.0) for w in walls), 2),
+                "area": round(sum(h.area * getattr(h, "peso", 1.0) for h in hatches)
+                              + sum(p.area * getattr(p, "peso", 1.0) for p in polygon_areas), 2),
+                "blocos": sum(b.count for b in blocks)}
+
+    # 25/09: a base do pavimento redesenhada em plantas temáticas conta 1×
+    antes = _totais()
+    _rep = _descartar_plantas_repetidas(walls, hatches, polygon_areas, blocks, regs)
+    if _rep["m"] or _rep["m2"] or _rep["blocos"]:
+        res["repetidas"] = _rep
     if not any(f["tipo"] == "fora" or f.get("andares", 1) > 1 for f in regs):
-        res["motivo"] = "só plantas de um andar — nada muda"
+        if "repetidas" in res:
+            res.update(aplicada=True, antes=antes, depois=_totais())
+        else:
+            res["motivo"] = "só plantas de um andar — nada muda"
         return res
 
     def peso(p):
@@ -3033,9 +3203,6 @@ def aplicar_leitura_por_folha(walls, hatches, polygon_areas, blocks, mapa) -> di
             return ns.pop() if len(ns) == 1 else 1
         return 1
 
-    antes = {"comprimento": round(sum(w.length for w in walls), 2),
-             "area": round(sum(h.area for h in hatches) + sum(p.area for p in polygon_areas), 2),
-             "blocos": sum(b.count for b in blocks)}
     novas = []
     for w in walls:
         if tuple(w.start) == (0, 0) and tuple(w.end) == (0, 0):
