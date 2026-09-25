@@ -1338,6 +1338,33 @@ def _textos_de_vista(extraction) -> str:
     return f" vista_textos={len(achados)} " + " | ".join(unicos[:3])
 
 
+def _sem_email_no_log(texto) -> str:
+    """Troca todo e-mail do texto por um apelido ESTÁVEL `u:<8 hex>`.
+
+    🔒 Regra dura nº6 (22/09/2026). O `error_log` é log TÉCNICO: leva
+    identificador opaco (user_id, job_id), nunca endereço. A varredura da
+    tabela nesse dia achou 32 linhas com e-mail em 7 stages — mascaradas no
+    banco no mesmo dia.
+
+    🔑 Por que apelido e não simplesmente apagar: o apelido nasce do endereço
+    em minúsculas, então a MESMA pessoa dá o MESMO apelido em linhas
+    diferentes. Era exatamente o que as 2 linhas de `upload:recusado` de 13/09
+    ensinavam (a mesma pessoa tentou duas vezes) — e isso a gente não perde.
+
+    🪤 Isto é pro que FICA GRAVADO. O e-mail ao cliente e o aviso ao Pedro
+    continuam levando o endereço de verdade: sem ele não há a quem responder.
+    """
+    _t = str(texto)
+    if "@" not in _t:
+        return _t
+    import hashlib as _hl
+    import re as _re
+    return _re.sub(
+        r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}",
+        lambda m: "u:" + _hl.sha256(m.group(0).lower().encode("utf-8")).hexdigest()[:8],
+        _t)
+
+
 def _log_error(stage, message, job_id=None, severity="error"):
     """Grava um erro técnico do motor na tabela error_log do Supabase, pra ser
     lido via MCP/admin SEM precisar abrir o log do Render. Best-effort, NUNCA
@@ -20965,10 +20992,18 @@ def _recusa_no_upload(status: int, mensagem: str, motivo: str,
     pessoa tentou, quantos MB, quantos arquivos. "Recusado" sozinho não ensina
     nada sobre o que ela queria fazer.
     """
+    # 🔒 LGPD (22/09/2026): e-mail não entra no `error_log`. Os chamadores
+    # passam o user_id; quando o que sobra é um endereço — a porta `sem-login`
+    # não tem token de onde tirar id — ele vira apelido (ver `_sem_email_no_log`).
+    # A troca mora AQUI, na porta única por onde as 10 recusas passam, e não em
+    # cada chamador: assim vale pro próximo que chegar.
+    # 🪤 `.strip()` antes da máscara: sem ele, um `quem` com espaço nas pontas
+    # vira `quem=  u:abc  ` e quebra quem lê o log por campo.
+    _quem = _sem_email_no_log(str(quem or "?").strip()[:80]) or "?"
     try:
         _log_error("upload:recusado",
                    "motivo=%s http=%d quem=%s%s"
-                   % (motivo, status, (quem or "?")[:80],
+                   % (motivo, status, _quem,
                       (" | " + detalhe[:200]) if detalhe else ""),
                    None, severity="warning")
     except Exception:
@@ -21032,12 +21067,14 @@ async def process_files(
     jwt_user = _get_user_from_request(request)
     if not jwt_user:
         _recusa_no_upload(401, "Faça login para enviar um projeto.",
-                          "sem-login", quem=user_email or user_id)
+                          "sem-login",
+                          quem=(user_id if user_id and user_id != "anonymous"
+                                else user_email))
     if user_id and user_id != "anonymous" and jwt_user.get("id") != user_id and jwt_user.get("email", "").lower() != ADMIN_EMAIL:
         _recusa_no_upload(403, "user_id não corresponde ao token de autenticação",
                           "token-nao-bate",
                           detalhe="form=%s token=%s" % (user_id, jwt_user.get("id")),
-                          quem=jwt_user.get("email") or user_email)
+                          quem=jwt_user.get("id") or user_id)
     # Dono autoritativo vem do token (não confia só no parâmetro).
     if not user_id or user_id == "anonymous":
         user_id = jwt_user.get("id") or user_id
@@ -21062,7 +21099,7 @@ async def process_files(
         _recusa_no_upload(429, "Muitos projetos enviados em pouco tempo. Espere "
                           "alguns minutos e tente de novo.",
                           "muitos-envios", detalhe="teto=12 em 600s",
-                          quem=jwt_user.get("email") or user_email)
+                          quem=jwt_user.get("id") or user_id)
 
     # Teto de tamanho do REQUEST (anti-OOM). Desde 21/07 o upload é gravado em
     # disco em pedaços (_stream_upload_to_disk) — NÃO bufferiza mais o arquivo
@@ -21078,7 +21115,7 @@ async def process_files(
         _recusa_no_upload(413, "Arquivos muito grandes (máx. ~450 MB no total). Envie as pranchas do projeto — se for um projeto enorme, mande em 2 lotes.",
                           "request-grande",
                           detalhe="%d MB (teto 450)" % (int(_clen) // 1048576),
-                          quem=jwt_user.get("email") or user_email)
+                          quem=jwt_user.get("id") or user_id)
 
     if typology not in _VALID_TYPOLOGIES:
         typology = "office"
@@ -21116,7 +21153,7 @@ async def process_files(
     aviso_area_implausivel = _area_digitada if _area_err else None
     if not files:
         _recusa_no_upload(400, "Nenhum arquivo enviado", "sem-arquivo",
-                          quem=jwt_user.get("email") or user_email)
+                          quem=jwt_user.get("id") or user_id)
 
     # Validar arquivos (aceitar PDF, DWG e DXF)
     valid_extensions = ('.pdf', '.dwg', '.dxf')
@@ -21137,12 +21174,12 @@ async def process_files(
         _recusa_no_upload(400, "Nenhum arquivo válido encontrado. Aceito: PDF, DWG ou DXF.",
                           "formato-nao-aceito",
                           detalhe="tentou: %s (%d arquivo(s))" % (", ".join(_ext) or "?", len(files)),
-                          quem=jwt_user.get("email") or user_email)
+                          quem=jwt_user.get("id") or user_id)
 
     if len(valid_pairs) > 50:
         _recusa_no_upload(400, "Máximo de 50 arquivos por projeto", "muitos-arquivos",
                           detalhe="%d arquivos (teto 50)" % len(valid_pairs),
-                          quem=jwt_user.get("email") or user_email)
+                          quem=jwt_user.get("id") or user_id)
 
     # ── TRAVA DE ENVIO EM DOBRO ──────────────────────────────────────────
     # 🚨 26/08/2026, caso cliente-34. O site mandou o MESMO arquivo DUAS VEZES,
@@ -21240,7 +21277,7 @@ async def process_files(
                 "envio-incompleto",
                 detalhe="%s: %d de %d bytes" % (upload_file.filename, n_written,
                                                 upload_file.size),
-                quem=jwt_user.get("email") or user_email)
+                quem=jwt_user.get("id") or user_id)
         ext = upload_file.filename.lower().rsplit('.', 1)[-1]
         if ext == "dwg":
             if n_written < 100:
@@ -21252,7 +21289,7 @@ async def process_files(
                     f"provavelmente corrompido. Verifique se o arquivo abre no AutoCAD.",
                     "dwg-pequeno-demais",
                     detalhe="%s: %d bytes" % (upload_file.filename, n_written),
-                    quem=jwt_user.get("email") or user_email)
+                    quem=jwt_user.get("id") or user_id)
             if head[:2] != b"AC":
                 try: os.remove(file_path)
                 except OSError: pass
@@ -21263,7 +21300,7 @@ async def process_files(
                     f"verifique no AutoCAD ou exporte como PDF e suba o PDF.",
                     "dwg-sem-assinatura",
                     detalhe="%s: começa com %r" % (upload_file.filename, head[:4]),
-                    quem=jwt_user.get("email") or user_email)
+                    quem=jwt_user.get("id") or user_id)
             # AEC/MEP: avisar AGORA, não depois de 5 min de processamento.
             # Medido em 01/08/2026: 13 das 29 falhas de DWG são objetos AEC
             # (AutoCAD Architecture/MEP), que nenhum conversor livre abre. A
@@ -34984,12 +35021,18 @@ def admin_liberar_filhote(eval_job_id: str, request: Request):
                     _ok = (_email_leitura_combinada(pai, filho, eval_job_id, antes, depois)
                            if _e_merge
                            else _email_leitura_nova(pai, eval_job_id, antes, depois))
+                    # 🔒 LGPD (22/09): o log leva o dono truncado, não o e-mail
+                    # (a rota já recusa `pai` sem `user_id`).
                     _log_error("admin:filhote-email",
-                               f"{eval_job_id} para={pai.get('user_email','')} "
+                               f"{eval_job_id} para=user={str(pai.get('user_id') or '')[:8] or '?'} "
                                f"{'enviado' if _ok else 'FALHOU no SMTP'}", eval_job_id)
                 except Exception as _ee:
+                    # 🪤 O texto da exceção traz o destinatário quando o SMTP
+                    # recusa (`SMTPRecipientsRefused` carrega o endereço) — por
+                    # isso passa pela máscara também.
                     _log_error("admin:filhote-email",
-                               f"{eval_job_id} FALHOU: {type(_ee).__name__}: {_ee}", eval_job_id)
+                               f"{eval_job_id} FALHOU: {type(_ee).__name__}: "
+                               f"{_sem_email_no_log(_ee)}", eval_job_id)
             import threading as _th_fil
             _th_fil.Thread(target=_enviar_email_filhote, daemon=True).start()
             # 23/08 (auditoria): dizer "enviado" antes de o SMTP responder é

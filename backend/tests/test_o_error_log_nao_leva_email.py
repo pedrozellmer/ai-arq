@@ -1,5 +1,10 @@
 # -*- coding: utf-8 -*-
-"""O log do alerta de NPS não leva o e-mail do cliente (22/09/2026).
+"""Nenhum e-mail de cliente entra no `error_log` (22/09/2026).
+
+Nasceu do alerta de NPS e cresceu com a varredura da TABELA, que achou **32
+linhas com endereço em 7 stages** — duas famílias que a varredura do CÓDIGO
+tinha perdido, porque montam a mensagem com `%s` em vez de f-string. As 32
+foram mascaradas no banco no mesmo dia (viraram `user=<8 do user_id>`).
 
 🩸 Medido em 22/09: TODAS as 8 linhas `nps:*-alerta` do `error_log` (4 de
 promotor, 2 de neutro, 2 de detrator, de 02/09 a 22/09) tinham o endereço do
@@ -205,6 +210,69 @@ def test_comentario_de_nps_que_falhou_nao_leva_email_pro_log(bordas, monkeypatch
     assert ex.value.status_code == 502
     linha = _sem_email(logs, "avaliacao:comentario-falhou")
     assert "resposta=77" in linha["msg"] and "PATCH caiu" in linha["msg"], linha["msg"]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  A recusa de upload — a porta única por onde passam as 10 recusas
+# ─────────────────────────────────────────────────────────────────────────────
+#  `upload:recusado` guardava `quem=<endereço>` (2 linhas em 13/09, as duas da
+#  porta `sem-login`). Os chamadores passam user_id; o endereço que ainda
+#  chegar vira apelido estável dentro do `_recusa_no_upload`.
+
+def test_a_mascara_troca_o_endereco_e_mantem_o_resto(bordas):
+    """`_sem_email_no_log` é a peça que as duas portas usam."""
+    texto = ("SMTPRecipientsRefused: {'%s': (550, b'User unknown')}" % _EMAIL)
+    saida = main._sem_email_no_log(texto)
+    assert _RE_EMAIL.search(saida) is None, saida
+    assert "550" in saida and "SMTPRecipientsRefused" in saida, (
+        "a máscara comeu o diagnóstico junto com o endereço: %r" % saida)
+    assert main._sem_email_no_log(texto) == saida, "o apelido mudou entre chamadas"
+    assert main._sem_email_no_log("sem endereço nenhum") == "sem endereço nenhum"
+
+
+def _apelido(msg):
+    m = re.search(r"quem=(\S+)", msg)
+    assert m, msg
+    return m.group(1)
+
+
+def test_recusa_de_upload_NAO_leva_email_pro_log(bordas):
+    logs, _ = bordas
+    with pytest.raises(main.HTTPException):
+        main._recusa_no_upload(401, "Faça login para enviar um projeto.",
+                               "sem-login", quem=_EMAIL)
+    linha = _sem_email(logs, "upload:recusado")
+    assert _apelido(linha["msg"]).startswith("u:"), linha["msg"]
+
+
+def test_o_apelido_da_recusa_e_ESTAVEL_e_nao_depende_da_caixa(bordas):
+    """Tirar o e-mail não pode custar a única coisa que a linha ensinava: que
+    foi a MESMA pessoa nas duas tentativas de 13/09."""
+    logs, _ = bordas
+    for quem in (_EMAIL, _EMAIL.upper(), "  " + _EMAIL + "  "):
+        with pytest.raises(main.HTTPException):
+            main._recusa_no_upload(401, "x", "sem-login", quem=quem)
+    recusas = [x for x in logs if x["stage"] == "upload:recusado"]
+    assert len(recusas) == 3, logs
+    apelidos = {_apelido(x["msg"]) for x in recusas}
+    assert len(apelidos) == 1, ("a mesma pessoa gerou apelidos diferentes: %r" % apelidos)
+    outro = "outra-pessoa@example.com"
+    with pytest.raises(main.HTTPException):
+        main._recusa_no_upload(401, "x", "sem-login", quem=outro)
+    ultima = [x for x in logs if x["stage"] == "upload:recusado"][-1]["msg"]
+    assert _apelido(ultima) not in apelidos, (
+        "duas pessoas diferentes caíram no mesmo apelido: %r" % ultima)
+
+
+def test_recusa_com_user_id_guarda_o_ID_inteiro(bordas):
+    """Quem tem token entra pelo id — nada a mascarar, e o diagnóstico fica
+    melhor do que era com o e-mail."""
+    logs, _ = bordas
+    with pytest.raises(main.HTTPException):
+        main._recusa_no_upload(403, "x", "token-nao-bate", quem=_UID,
+                               detalhe="form=%s token=%s" % (_UID, _UID))
+    linha = _sem_email(logs, "upload:recusado")
+    assert _apelido(linha["msg"]) == _UID, linha["msg"]
 
 
 def test_CONTROLE_o_padrao_ACHA_o_email_no_formato_antigo():

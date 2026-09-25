@@ -451,3 +451,60 @@ def test_a_liberacao_acontece_mesmo_quando_o_email_e_segurado(bancada, juiza):
     # atualizado)" — e a releitura pode ser do MESMO motor.
     assert corpo.get("project_name", "").endswith(" — nova leitura"), corpo
     assert "motor atualizado" not in corpo.get("project_name", ""), corpo
+
+
+def test_o_log_do_EMAIL_do_filhote_nao_leva_endereco_de_cliente(bancada):
+    """🔒 LGPD (22/09/2026). `admin:filhote-email` gravava
+    `para=<endereço>` — **9 linhas** no error_log, de 23/08 a 05/09; a
+    varredura da tabela achou, a do código não (a mensagem é f-string, mas o
+    meu filtro procurava o nome da variável e aqui ela vem de `pai.get`).
+
+    O e-mail SAI pro cliente do mesmo jeito — o que muda é só o que fica
+    guardado no log técnico. A rota já recusa `pai` sem `user_id`, então o
+    identificador opaco está sempre à mão.
+    """
+    import re as _re
+
+    b = bancada["monta"]("ev597afa")
+    b.projects[PAI_ID]["user_email"] = "cliente-nn@example.com"
+    b.projects[PAI_ID]["user_id"] = "a1b2c3d4-0000-4000-8000-000000000001"
+    main.admin_liberar_filhote("ev597afa", _Req())
+
+    linhas = [m for s, m in bancada.get("logs", []) if s == "admin:filhote-email"]
+    assert len(linhas) == 1, (
+        "esperava 1 linha `admin:filhote-email` e vieram %d: %r"
+        % (len(linhas), bancada.get("logs", [])))
+    achou = _re.search(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", linhas[0])
+    assert achou is None, (
+        "o e-mail do cliente (%s) foi parar no error_log — regra dura nº6: %r"
+        % (achou.group(0) if achou else "", linhas[0]))
+    assert "para=user=a1b2c3d4" in linhas[0], linhas[0]
+    # 🧪 CONTROLE: o aviso ao cliente continua saindo, com o endereço de verdade
+    assert any(e["para"] == "cliente-nn@example.com" for e in bancada["emails"]), (
+        "o e-mail parou de sair pro cliente: %r" % bancada["emails"])
+
+
+def test_o_log_do_filhote_nao_leva_endereco_NEM_quando_o_SMTP_recusa(bancada, monkeypatch):
+    """🚨 O caminho de FALHA era o pior dos dois: `SMTPRecipientsRefused`
+    carrega o endereço DENTRO do texto da exceção, e a linha gravava `{_ee}`
+    cru. Achado ao revisar o próprio conserto, em 22/09.
+    """
+    import re as _re
+
+    b = bancada["monta"]("ev597afa")
+    b.projects[PAI_ID]["user_email"] = "cliente-nn@example.com"
+    b.projects[PAI_ID]["user_id"] = "a1b2c3d4-0000-4000-8000-000000000001"
+
+    def _smtp_recusa(*a, **k):
+        raise RuntimeError(
+            "SMTPRecipientsRefused: {'cliente-nn@example.com': (550, b'User unknown')}")
+    monkeypatch.setattr(main, "_email_leitura_nova", _smtp_recusa)
+
+    main.admin_liberar_filhote("ev597afa", _Req())
+    linhas = [m for s, m in bancada.get("logs", []) if s == "admin:filhote-email"]
+    assert len(linhas) == 1 and "FALHOU" in linhas[0], bancada.get("logs", [])
+    achou = _re.search(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", linhas[0])
+    assert achou is None, (
+        "o endereço vazou pelo texto da exceção do SMTP: %r" % linhas[0])
+    # 🧪 CONTROLE: o diagnóstico continua lá — só o endereço saiu
+    assert "550" in linhas[0] and "RuntimeError" in linhas[0], linhas[0]

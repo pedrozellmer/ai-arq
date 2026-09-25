@@ -269,9 +269,13 @@ def test_nenhuma_recusa_do_upload_e_muda(bancada, monkeypatch, motivo, status):
     assert linha["severity"] == "warning", (
         "recusa virou log comum (afoga o painel) ou subiu pra erro do motor: %r"
         % linha["severity"])
-    assert EMAIL in linha["message"], (
+    # 🔒 22/09/2026 (regra dura nº6): QUEM tentou é o user_id — ele liga a
+    # recusa à conta do funil (`profiles`) sem guardar endereço no log técnico.
+    assert UID in linha["message"], (
         "a linha não diz QUEM tentou — sem isso não dá pra ligar a recusa à "
-        "conta que sumiu do funil")
+        "conta que sumiu do funil: %r" % linha["message"])
+    assert EMAIL not in linha["message"], (
+        "o e-mail do cliente foi pro error_log: %r" % linha["message"])
 
 
 @pytest.mark.parametrize("motivo,nome_ruim", _PORTAS_POR_ARQUIVO)
