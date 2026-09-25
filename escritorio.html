@@ -57,57 +57,75 @@
   @media (min-width:1024px){ #side{transform:translateX(0);z-index:40} #scrim{display:none} #burger,#fechar{display:none} body{padding-left:248px} }
   /* cabeçalho */
   .cab{background:#fff;border-bottom:1px solid #E5E7EB;position:sticky;top:0;z-index:30}
-  .cab-in{max-width:72rem;margin:0 auto;padding:8px 16px;display:flex;align-items:center;gap:12px}
-  .trilha{font-size:11px;color:#6B7280;display:flex;gap:4px;flex-wrap:wrap}
+  .cab-in{max-width:90rem;margin:0 auto;padding:8px 16px;display:flex;align-items:center;gap:12px}
+  .trilha{font-size:12px;color:#6B7280;display:flex;gap:4px;flex-wrap:wrap}
   .trilha a{color:inherit;text-decoration:none} .trilha a:hover{color:#4F46E5}
-  .titulo{font-weight:600;color:#1F2937;margin:0;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .titulo{font-weight:600;color:#1F2937;margin:0;font-size:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .beta{font-size:12px;background:#EEF2FF;color:#4338CA;padding:4px 10px;border-radius:99px;font-weight:500;white-space:nowrap}
-  main{max-width:72rem;margin:0 auto;padding:24px 16px 48px;display:flex;flex-direction:column;gap:20px;box-sizing:border-box}
+  main{max-width:90rem;margin:0 auto;padding:28px 24px 56px;display:flex;flex-direction:column;gap:22px;box-sizing:border-box}
+  @media (max-width:640px){ main{padding:20px 16px 48px} }
   /* peças */
-  .card{background:#fff;border:1px solid #E2E8F0;border-radius:16px;box-shadow:0 1px 2px rgba(15,23,42,.04);padding:22px}
-  .h2{font-size:18px;font-weight:700;color:#111827;margin:0}
-  .sub{font-size:12px;color:#6B7280;margin:4px 0 0}
-  .lbl{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#64748B;margin:0 0 6px}
-  .in{border:1px solid #CBD5E1;border-radius:8px;padding:8px 10px;font-size:13px;color:#1E293B;background:#fff;width:100%;min-width:0;font-family:inherit;box-sizing:border-box}
+  .card{background:#fff;border:1px solid #E2E8F0;border-radius:18px;box-shadow:0 1px 2px rgba(15,23,42,.04);padding:26px}
+  .h2{font-size:20px;font-weight:700;color:#111827;margin:0}
+  .sub{font-size:13.5px;color:#6B7280;margin:4px 0 0}
+  .lbl{display:block;font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#64748B;margin:0 0 6px}
+  .in{border:1px solid #CBD5E1;border-radius:9px;padding:10px 12px;font-size:14px;color:#1E293B;background:#fff;width:100%;min-width:0;font-family:inherit;box-sizing:border-box}
   .in:focus-visible,button:focus-visible,a:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid #4F46E5;outline-offset:2px}
-  .btn{padding:8px 14px;border-radius:8px;border:1px solid #CBD5E1;background:#fff;color:#334155;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;text-decoration:none}
+  .btn{padding:9px 16px;border-radius:9px;border:1px solid #CBD5E1;background:#fff;color:#334155;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;text-decoration:none}
   .btn:hover{background:#F8FAFC}
   .btn:disabled{opacity:.55;cursor:wait}
   .btn-p{background:#4F46E5;border-color:#4F46E5;color:#fff;font-weight:600} .btn-p:hover{background:#4338CA}
   .btn-d{background:#1E293B;border-color:#1E293B;color:#fff;font-weight:600} .btn-d:hover{background:#0F172A}
   .btn-g{background:linear-gradient(135deg,#4f46e5,#06b6d4);border:0;color:#fff;font-weight:600;padding:9px 16px}
   .btn-r{border-color:#FECACA;background:#FEF2F2;color:#B91C1C;font-weight:600}
-  .btn-s{padding:5px 10px;font-size:12px}
-  .pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:2px 9px;border-radius:99px;border:1px solid;white-space:nowrap}
+  .btn-s{padding:6px 12px;font-size:13px}
+  .pill{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;padding:2px 9px;border-radius:99px;border:1px solid;white-space:nowrap}
   .pill i{width:6px;height:6px;border-radius:50%;background:currentColor;opacity:.8}
   .p-ok{background:#ECFDF5;color:#065F46;border-color:#A7F3D0} .p-warn{background:#FFFBEB;color:#92400E;border-color:#FDE68A}
   .p-late{background:#FEF2F2;color:#991B1B;border-color:#FECACA} .p-ind{background:#EEF2FF;color:#4338CA;border-color:#C7D2FE}
   .p-mut{background:#F8FAFC;color:#475569;border-color:#E2E8F0}
-  .chip{font-size:12px;padding:5px 11px;border-radius:99px;border:1px solid #E2E8F0;color:#475569;background:#fff;cursor:pointer;font-family:inherit;font-weight:500;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+  .chip{font-size:13px;padding:5px 11px;border-radius:99px;border:1px solid #E2E8F0;color:#475569;background:#fff;cursor:pointer;font-family:inherit;font-weight:500;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
   .chip[aria-pressed="true"]{border-color:#C7D2FE;color:#4338CA;background:#EEF2FF;font-weight:600}
   .chip .n{font-size:10.5px;opacity:.7}
-  .av{width:26px;height:26px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;flex:none;background:#EEF2FF;color:#4338CA}
+  .av{width:30px;height:30px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex:none;background:#EEF2FF;color:#4338CA}
   .avs{display:flex;margin-left:auto} .avs .av{margin-left:-6px;box-shadow:0 0 0 2px #fff} .avs .av:first-child{margin-left:0}
   .linha{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
   .grade{display:grid;gap:14px}
   @media (min-width:640px){ .g2{grid-template-columns:repeat(2,minmax(0,1fr))} }
   @media (min-width:900px){ .g3{grid-template-columns:repeat(3,minmax(0,1fr))} .g4{grid-template-columns:repeat(4,minmax(0,1fr))} }
-  .kpi{position:relative;overflow:hidden;background:#fff;border:1px solid #E2E8F0;border-radius:16px;padding:16px}
+  .kpi{position:relative;overflow:hidden;background:#fff;border:1px solid #E2E8F0;border-radius:18px;padding:20px;box-shadow:0 1px 2px rgba(15,23,42,.04);transition:transform .18s ease,box-shadow .18s ease}
+  .kpi:hover{transform:translateY(-3px);box-shadow:0 2px 4px rgba(15,23,42,.06),0 18px 38px -16px rgba(79,70,229,.30)}
+  .kpi.ok::before{background:linear-gradient(135deg,#10b981,#34d399)}
+  .kpi-top{display:flex;align-items:center;gap:9px;margin-bottom:10px}
+  .kpi-ico{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex:none;background:#EEF2FF;color:#4F46E5}
+  .kpi.ok .kpi-ico{background:#ECFDF5;color:#059669} .kpi.alerta .kpi-ico{background:#FFFBEB;color:#B45309}
   .kpi::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(135deg,#4f46e5,#22d3ee)}
   .kpi.alerta::before{background:linear-gradient(135deg,#f59e0b,#fbbf24)}
-  .kpi .rot{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748B;margin:0 0 6px}
-  .kpi .val{font-size:18px;font-weight:700;margin:0} .kpi .det{font-size:12px;color:#64748B;margin:4px 0 0}
+  .kpi .rot{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748B;margin:0}
+  .kpi .val{font-size:28px;font-weight:700;margin:0;line-height:1.1} .kpi .det{font-size:13px;color:#64748B;margin:6px 0 0}
   .voltar{align-self:flex-start;display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:#4338CA;background:#fff;border:1px solid #C7D2FE;border-radius:8px;padding:6px 12px;cursor:pointer;font-family:inherit}
   .etapas{display:flex;gap:4px;overflow-x:auto;padding-bottom:4px}
-  .etp{flex:1 0 auto;min-width:96px;text-align:center;font-size:11px;font-weight:600;padding:7px 8px 6px;border-radius:8px;background:#F1F5F9;color:#64748B;border:0;border-bottom:3px solid #E2E8F0;cursor:pointer;font-family:inherit}
+  .etp{flex:1 0 auto;min-width:112px;text-align:center;font-size:12.5px;font-weight:600;padding:10px 10px 8px;border-radius:8px;background:#F1F5F9;color:#64748B;border:0;border-bottom:3px solid #E2E8F0;cursor:pointer;font-family:inherit}
   .etp.feita{background:#ECFDF5;color:#065F46;border-bottom-color:#10B981}
   .etp.atual{background:#EEF2FF;color:#3730A3;border-bottom-color:#4F46E5}
   .etp[aria-pressed="true"]{box-shadow:inset 0 0 0 2px #4F46E5}
-  .etp small{display:block;font-size:10px;font-weight:500;opacity:.7}
-  .tool{display:flex;gap:12px;align-items:flex-start;text-align:left;padding:14px;border:1px solid #E2E8F0;border-radius:14px;background:#fff;cursor:pointer;font-family:inherit;text-decoration:none;color:inherit}
+  .etp small{display:block;font-size:11px;font-weight:500;opacity:.7}
+  .tool{display:flex;gap:14px;align-items:flex-start;text-align:left;padding:18px;border:1px solid #E2E8F0;border-radius:14px;background:#fff;cursor:pointer;font-family:inherit;text-decoration:none;color:inherit}
   .tool:hover{border-color:#A5B4FC}
-  .tool .ti{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex:none;background:#EEF2FF;color:#4F46E5}
-  .tool b{display:block;font-size:14px;color:#0F172A} .tool span{display:block;font-size:12px;color:#64748B;margin-top:2px}
+  .tool .ti{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex:none;background:#EEF2FF;color:#4F46E5}
+  .tool b{display:block;font-size:15.5px;color:#0F172A} .tool span{display:block;font-size:13px;color:#64748B;margin-top:3px}
+  .tool:hover{box-shadow:0 10px 24px -14px rgba(79,70,229,.35)}
+  .tool .so-voce{display:inline-flex;align-items:center;gap:4px;margin-left:6px;font-size:10.5px;font-weight:700;color:#475569;background:#F1F5F9;border-radius:99px;padding:1px 7px;vertical-align:2px}
+  .tool .so-voce svg{width:10px;height:10px}
+  .grupo-t{font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748B;margin:18px 0 10px}
+  .heroi{display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start}
+  .heroi h2{font-size:28px;line-height:1.2;margin:4px 0 0}
+  dl.dl{display:grid;grid-template-columns:max-content 1fr;gap:8px 16px;margin:18px 0 0;font-size:14px}
+  dl.dl dt{color:#64748B} dl.dl dd{margin:0;color:#0F172A;font-weight:500;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+  .lado{flex:0 1 300px;min-width:240px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:14px}
+  .lado .t{font-size:14.5px;font-weight:600;color:#0F172A;margin:0} .lado .d{font-size:13px;color:#64748B;margin:2px 0 0}
+  .rise{animation:rise .35s ease both} @keyframes rise{from{opacity:.001;transform:translateY(6px)}to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion:reduce){ .rise{animation:none} .kpi,.kpi:hover{transition:none;transform:none} }
   /* quadro */
   .board{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(236px,1fr);gap:12px;overflow-x:auto;padding-bottom:8px}
   .col{background:#F1F5F9;border-radius:14px;padding:10px;display:flex;flex-direction:column;gap:8px;min-height:120px}
@@ -236,6 +254,14 @@ const IC = {
   atas: '<path d="M6 3h9l5 5v13H6zM15 3v5h5M9 13h6M9 17h6"/>',
   eq: '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.6c2.7.2 5 2 5 4.9"/>',
   pastas: '<path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>',
+  plan: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 10v10M3 15h18"/>',
+  crono: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4M7 14h5M10 17.5h6"/>',
+  memo: '<path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8z"/><path d="M14 3v5h5M8.5 13h7M8.5 16.5h4.5"/>',
+  rev: '<path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 13.5l2 2 4-4.5"/>',
+  fin: '<path d="M3 6h18M3 12h18M3 18h12M17 15l3 3-3 3"/>',
+  cot: '<path d="M4 8h13l-3-3M20 16H7l3 3"/>',
+  cad: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/>',
+  cli: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
 };
 const svg = (k, s = 18) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${IC[k]}</svg>`;
 
@@ -431,40 +457,65 @@ function telaCapa() {
   const p = PROJ, et = p.etapas || [], iA = et.indexOf(p.etapa_atual);
   const abertas = TAR.filter(aberta), revisar = TAR.filter((t) => t.status === 'revdtz'), doCli = abertas.filter((t) => t.do_cliente);
   const foco = souAdmin() ? [...revisar, ...TAR.filter((t) => atrasada(t) && t.status !== 'revdtz')] : TAR.filter((t) => eMinha(t) && aberta(t));
-  const kpi = (alerta, rot, val, det) => `<div class="kpi ${alerta ? 'alerta' : ''}"><p class="rot">${rot}</p><p class="val tab">${val}</p><p class="det">${det}</p></div>`;
+  // o mesmo KPI da maquete (e do resto do site): barra de 3 px, ícone e cor de estado
+  const kpi = (estado, ic, rot, val, det) => `<div class="kpi ${estado}"><div class="kpi-top"><span class="kpi-ico">${svg(ic, 17)}</span><p class="rot">${rot}</p></div><p class="val tab">${val}</p><p class="det">${det}</p></div>`;
   const ativos = MEMBROS.filter((m) => m.status === 'ativo');
+  const convidados = MEMBROS.filter((m) => m.status === 'convidado').length;
+  const tool = (href, ic, t, d, soVoce) => `<a class="tool" href="${href}"><span class="ti">${svg(ic)}</span><span><b>${t}${soVoce ? `<span class="so-voce">${svg('cad', 10)}só você</span>` : ''}</b><span>${d}</span></span></a>`;
+  const J = p.job_id ? encodeURIComponent(p.job_id) : '';
+  const prox = p.proxima_entrega || p.proxima_entrega_data;
   return `
-  <section class="card">
-    <div class="linha" style="align-items:flex-start">
-      <div style="flex:1;min-width:240px">
-        <p class="lbl" style="margin:0">${esc(p.etapa_atual || 'Projeto')}</p>
-        <h2 class="h2" style="font-size:22px;margin-top:2px">${esc(p.nome)}</h2>
-        <p class="sub">${p.cliente_nome ? 'Cliente: <b>' + esc(p.cliente_nome) + '</b> · ' : ''}Equipe: ${ativos.map((m) => esc(curto(m))).join(', ')}</p>
+  <section class="card rise">
+    <div class="heroi">
+      <div style="flex:1 1 380px;min-width:260px">
+        <div class="linha" style="justify-content:space-between;align-items:flex-start">
+          <p class="lbl" style="margin:0">${esc(p.etapa_atual || 'Projeto')}${p.job_id ? ' · ligado ao projeto medido' : ''}</p>
+          ${souAdmin() ? `<button class="btn btn-s" onclick="editarProjeto()">Editar projeto</button>` : ''}
+        </div>
+        <h2 class="h2">${esc(p.nome)}</h2>
+        <dl class="dl">
+          ${p.cliente_nome ? `<dt>Cliente</dt><dd>${esc(p.cliente_nome)}</dd>` : ''}
+          <dt>Equipe</dt><dd>${ativos.map((m) => `${av(m)}<span style="margin-right:6px">${esc(curto(m))}</span>`).join('')}${convidados ? `<span class="pill p-warn"><i></i>${convidados} convite${convidados > 1 ? 's' : ''} aguardando</span>` : ''}</dd>
+          ${p.proxima_entrega_data ? `<dt>Próxima entrega</dt><dd class="tab">${dBR(p.proxima_entrega_data)}</dd>` : ''}
+        </dl>
       </div>
-      ${souAdmin() ? `<button class="btn btn-s" onclick="editarProjeto()">Editar projeto</button>` : ''}
+      <div class="lado">
+        <div><p class="lbl" style="margin:0 0 4px">Próxima entrega</p>${prox ? `<p class="t">${esc(p.proxima_entrega || 'Entrega')}</p><p class="d">${p.proxima_entrega_data ? dBR(p.proxima_entrega_data) : 'sem data'}</p>` : `<p class="d" style="margin:0">Ainda não marcada.${souAdmin() ? ' Use <b>Editar projeto</b>.' : ''}</p>`}</div>
+        <div><p class="lbl" style="margin:0 0 4px">Pasta do projeto</p><p class="d" style="margin:0">${svg('pastas', 14)} Google Drive · em breve</p></div>
+      </div>
     </div>
-    ${et.length ? `<div style="margin-top:16px"><p class="lbl">Etapas</p><div class="etapas" role="tablist">
+    ${et.length ? `<div style="margin-top:22px"><p class="lbl">Etapas</p><div class="etapas" role="tablist">
       ${et.map((e, i) => { const n = TAR.filter((t) => t.etapa === e).length; return `<button role="tab" class="etp ${i < iA ? 'feita' : i === iA ? 'atual' : ''}" aria-pressed="${ETAPA_SEL === e}" onclick="verEtapa(${i})">${esc(e)}<small>${n} tarefa${n === 1 ? '' : 's'}</small></button>`; }).join('')}</div>
       ${ETAPA_SEL ? painelEtapa() : '<p class="sub">Clique numa etapa pra ver o que tem nela.</p>'}</div>` : ''}
   </section>
-  <div class="grade g2 g4">
-    ${kpi(abertas.some(atrasada), 'Tarefas abertas', abertas.length, `${abertas.filter(atrasada).length} atrasada(s) · ${revisar.length} aguardando revisão`)}
-    ${kpi(doCli.some(atrasada), 'Com o cliente', doCli.length, doCli.length ? 'pendências do cliente' : 'nada com o cliente')}
-    ${kpi(false, 'Atas', ATAS.length, ATAS[0] ? 'última em ' + dBR(ATAS[0].data) : 'nenhuma ainda')}
-    ${kpi(false, 'Equipe', ativos.length, MEMBROS.filter((m) => m.status === 'convidado').length + ' convite(s) aguardando')}
+  <div class="grade g2 g4 rise">
+    ${kpi(abertas.some(atrasada) ? 'alerta' : '', 'tar', 'Tarefas abertas', abertas.length, `${abertas.filter(atrasada).length} atrasada(s) · ${revisar.length} aguardando revisão`)}
+    ${kpi(doCli.some(atrasada) ? 'alerta' : doCli.length ? '' : 'ok', 'cli', 'Com o cliente', doCli.length, doCli.length ? 'pendências do cliente' : 'nada com o cliente')}
+    ${kpi('', 'atas', 'Atas', ATAS.length, ATAS[0] ? 'última em ' + dBR(ATAS[0].data) : 'nenhuma ainda')}
+    ${kpi(convidados ? 'alerta' : 'ok', 'eq', 'Equipe', ativos.length, convidados + ' convite(s) aguardando')}
   </div>
-  <section class="card"><h2 class="h2">Tudo do projeto</h2>
-    <div class="grade g2 g4" style="margin-top:14px">
-      <a class="tool" href="#/p/${p.id}/tarefas"><span class="ti">${svg('tar')}</span><span><b>Tarefas</b><span>${abertas.length} abertas</span></span></a>
-      <a class="tool" href="#/p/${p.id}/arquivos"><span class="ti">${svg('arq')}</span><span><b>Arquivos</b><span>Pasta do Drive · em breve</span></span></a>
-      <a class="tool" href="#/p/${p.id}/atas"><span class="ti">${svg('atas')}</span><span><b>Atas</b><span>${ATAS.length} reuniões</span></span></a>
-      <a class="tool" href="#/p/${p.id}/equipe"><span class="ti">${svg('eq')}</span><span><b>Equipe</b><span>${ativos.length} pessoas</span></span></a>
+  <section class="card rise"><h2 class="h2">Tudo do projeto</h2>
+    <p class="sub">O escritório e as ferramentas que o AI.arq já tinha, no mesmo lugar.</p>
+    <p class="grupo-t">Escritório</p>
+    <div class="grade g2 g4">
+      ${tool(`#/p/${p.id}/tarefas`, 'tar', 'Tarefas', `${abertas.length} abertas`)}
+      ${tool(`#/p/${p.id}/arquivos`, 'arq', 'Arquivos', 'Pasta do Drive · em breve')}
+      ${tool(`#/p/${p.id}/atas`, 'atas', 'Atas', `${ATAS.length} reuniões`)}
+      ${tool(`#/p/${p.id}/equipe`, 'eq', 'Equipe', `${ativos.length} pessoas`)}
     </div>
-    ${p.job_id ? `<p class="sub" style="margin-top:12px">Ligado ao quantitativo: <a href="projeto.html?job=${encodeURIComponent(p.job_id)}">abrir quantitativo, cronograma e memorial</a>.</p>`
-      : `<p class="sub" style="margin-top:12px">Este projeto nasceu sem prancha. Pra trabalhar um projeto que você já mediu, use <b>Trazer projeto medido</b> na lista do Escritório.</p>`}
+    ${p.job_id ? `<p class="grupo-t">Quantitativo e obra</p>
+    <div class="grade g2 g4">
+      ${tool(`projeto.html?job_id=${J}#quantitativo`, 'plan', 'Quantitativo', souAdmin() ? 'Planilha do projeto medido' : 'Só leitura')}
+      ${tool(`cronograma.html?job=${J}`, 'crono', 'Cronograma', souAdmin() ? 'Montar ou abrir' : 'Só leitura')}
+      ${tool(`memorial.html?job_id=${J}`, 'memo', 'Memorial', souAdmin() ? 'Gerado do quantitativo' : 'Só leitura')}
+      ${souAdmin() ? tool(`revisao.html?job_id=${J}`, 'rev', 'Revisão', 'Conferir as linhas', true) : ''}
+      ${souAdmin() ? tool(`projeto.html?job_id=${J}#cotacoes`, 'cot', 'Comparativo', 'Cotações de fornecedor', true) : ''}
+      ${souAdmin() ? tool(`financeiro.html?job_id=${J}`, 'fin', 'Financeiro', 'Pagamentos da obra', true) : ''}
+    </div>`
+      : `<p class="sub" style="margin-top:14px">Este projeto nasceu sem prancha. Pra trabalhar um projeto que você já mediu, use <b>Trazer projeto medido</b> na lista do Escritório.</p>`}
   </section>
-  <section class="card"><div class="linha" style="justify-content:space-between"><h2 class="h2">${souAdmin() ? 'Precisa de você' : 'Suas tarefas'}</h2><a class="btn btn-s" href="#/p/${p.id}/tarefas">Abrir o quadro</a></div>
-    ${foco.length ? `<ul class="lista" style="margin-top:8px">${foco.slice(0, 8).map((t) => `<li style="cursor:pointer" onclick="ir('tarefas');setTimeout(()=>abrirCartao('${t.id}'),50)"><span style="width:8px;height:8px;border-radius:50%;background:${(ST.find((s) => s.k === t.status) || {}).cor}"></span><span style="flex:1;min-width:0;font-size:13.5px">${esc(t.titulo)}<span class="sub" style="display:block;margin:0">${stT(t.status)}</span></span>${pillPrazo(t)}${avs(t)}</li>`).join('')}</ul>` : '<p class="vazio" style="margin-top:8px">Nada parado com você.</p>'}
+  <section class="card rise"><div class="linha" style="justify-content:space-between"><h2 class="h2">${souAdmin() ? 'Precisa de você' : 'Suas tarefas'}</h2><a class="btn btn-s" href="#/p/${p.id}/tarefas">Abrir o quadro</a></div>
+    ${foco.length ? `<ul class="lista" style="margin-top:8px">${foco.slice(0, 8).map((t) => `<li style="cursor:pointer" onclick="ir('tarefas');setTimeout(()=>abrirCartao('${t.id}'),50)"><span style="width:9px;height:9px;border-radius:50%;background:${(ST.find((s) => s.k === t.status) || {}).cor}"></span><span style="flex:1;min-width:0;font-size:14.5px">${esc(t.titulo)}<span class="sub" style="display:block;margin:0">${stT(t.status)}</span></span>${pillPrazo(t)}${avs(t)}</li>`).join('')}</ul>` : '<p class="vazio" style="margin-top:8px">Nada parado com você.</p>'}
   </section>`;
 }
 function verEtapa(i) { const e = PROJ.etapas[i]; ETAPA_SEL = ETAPA_SEL === e ? null : e; render(); }
