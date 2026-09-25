@@ -4741,6 +4741,82 @@ def _notify_admin(subject: str, body_html: str) -> bool:
         '&middot; ai.arq.br</div></div>')
 
 
+# Último aviso de crédito NESTE processo (monotônico). 🪤 None, nunca 0.0: em
+# container o relógio monotônico começa perto de zero e "0 = nunca avisei"
+# faria o freio nascer fechado (feedback_sentinela_zero_em_relogio_monotonico).
+_SEM_CREDITO_ULTIMO = [None]
+
+
+def _alerta_sem_credito_ia(detalhe: str = "", tag: str = "", job_id=None) -> bool:
+    """🚨 Acabou o crédito da IA: UM aviso urgente ao Pedro por hora, não um por projeto.
+
+    25/09/2026 — sem isto, crédito acabado fazia TODO projeto falhar e o Pedro
+    recebia "Projeto com erro terminal" um por um, cada qual com a causa técnica
+    escondida no fim, sem nada dizendo que era uma causa só e que parava tudo.
+    Pedro: "é interno nosso, não faz sentido nenhum avisar isso pro cliente" — o
+    cliente lê o texto de falha interna de sempre; quem recebe ISTO é a casa.
+    Chamado pelo gancho do llm_retry (1ª chamada recusada) e pelo fim do job
+    (quando a chamada rodou fora deste processo). Nunca levanta.
+    """
+    try:
+        import time as _t
+        from datetime import timedelta as _tdc
+        _agora = _t.monotonic()
+        if _SEM_CREDITO_ULTIMO[0] is not None and _agora - _SEM_CREDITO_ULTIMO[0] < 600:
+            return False                     # mesmo incidente, neste processo
+        _SEM_CREDITO_ULTIMO[0] = _agora
+        _hora = datetime.utcnow().strftime("%Y-%m-%dT%H")
+        if _email_auto_ja_enviado(NOTIFY_EMAIL, "alerta_sem_credito_ia", ref=_hora):
+            return False                     # já avisei nesta hora (outro processo/deploy)
+        _log_error("ia:sem-credito",
+                   f"a IA recusou por falta de crédito (chamada: {tag or '?'}) — "
+                   f"aviso urgente ao Pedro", job_id, severity="critical")
+        _parados = []
+        try:
+            _desde = (datetime.utcnow() - _tdc(hours=3)).isoformat()
+            _st, _rows = _supa_rest_service(
+                "GET", f"error_log?stage=eq.ia:sem-credito&created_at=gte.{_desde}"
+                       f"&select=job_id&limit=200")
+            if _st and 200 <= _st < 300 and isinstance(_rows, list):
+                _parados = sorted({r.get("job_id") for r in _rows if r.get("job_id")})
+        except Exception:
+            pass
+        if job_id and job_id not in _parados:
+            _parados.append(job_id)
+        _hbr = (datetime.utcnow() - _tdc(hours=3)).strftime("%H:%M")
+        _lista = ("".join(f"<li><code>{p}</code></li>" for p in _parados)
+                  if _parados else "<li>nenhum terminou ainda — o primeiro está no meio "
+                                   "do processamento</li>")
+        _corpo = (
+            f"<b>A IA recusou uma chamada às {_hbr} (Brasília) por falta de crédito.</b> "
+            f"Enquanto não recarregar, <b>todo projeto novo vai falhar</b>.<br><br>"
+            f"<b>O que fazer:</b><ol style='margin:6px 0 12px 18px;padding:0'>"
+            f"<li>Recarregar o crédito da Anthropic (console → Plans &amp; Billing).</li>"
+            f"<li>Reprocessar os projetos parados — lista abaixo (e os que aparecerem "
+            f"até a recarga: <code>error_log</code> stage <code>ia:sem-credito</code>).</li>"
+            f"</ol>"
+            f"<b>Projetos parados até agora:</b><ul style='margin:6px 0 12px 18px;padding:0'>"
+            f"{_lista}</ul>"
+            f"O cliente leu só o aviso de falha interna de sempre — nada sobre crédito.<br><br>"
+            f"<span style='color:#64748b;font-size:13px'>Chamada: {tag or '?'} · "
+            f"detalhe técnico: {(detalhe or '')[:200]}</span>")
+        _ok = _notify_admin("🚨 URGENTE: acabou o crédito da IA — os projetos estão parando",
+                            _corpo)
+        if _ok:
+            _email_auto_registrar(NOTIFY_EMAIL, "alerta_sem_credito_ia", ref=_hora)
+        return bool(_ok)
+    except Exception as _e:
+        print(f"[ia:sem-credito] aviso falhou (nao-fatal): {_e}")
+        return False
+
+
+try:
+    import llm_retry as _llm_retry_gancho
+    _llm_retry_gancho.ao_faltar_credito = _alerta_sem_credito_ia
+except Exception as _e_gancho:
+    print(f"[ia:sem-credito] gancho não registrado: {_e_gancho}")
+
+
 def _saudacao() -> str:
     """bom dia / boa tarde / boa noite no horário de Brasília (UTC-3)."""
     h = (datetime.utcnow().hour - 3) % 24
@@ -17048,6 +17124,19 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     )
                 # permanent OU unknown: NUNCA culpar o provedor sem prova. Mensagem
                 # honesta — problema técnico do nosso lado, reprocessável, com suporte.
+                # 🔑 25/09/2026 — crédito da IA acabado cai AQUI (400 invalid_request).
+                # Marca o projeto como parado por crédito pra lista do aviso urgente
+                # (`_alerta_sem_credito_ia`, disparado pelo gancho do llm_retry) e pra
+                # quem for reprocessar depois de recarregar. O cliente NUNCA lê
+                # "crédito" — o texto de baixo é o mesmo de qualquer falha interna.
+                from llm_retry import e_falta_de_credito as _sem_credito
+                if _sem_credito(_errblob):
+                    _log_error("ia:sem-credito",
+                               "projeto parado porque a IA recusou por falta de crédito "
+                               "— reprocessar DEPOIS de recarregar", job_id,
+                               severity="critical")
+                    # a chamada pode ter rodado fora deste processo (sem gancho)
+                    _alerta_sem_credito_ia(_errblob[:300], "fim-do-job", job_id)
                 _low = _errblob.lower()
                 _detalhe = ("um caractere inválido no arquivo do CAD"
                             if ("surrogate" in _low or "invalid high surrogate" in _low)

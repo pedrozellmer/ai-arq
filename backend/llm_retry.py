@@ -539,6 +539,44 @@ def classify_error_text(text: str) -> str:
     return "unknown"
 
 
+# ── Crédito da IA acabou (25/09/2026) ────────────────────────────────────────
+# 🩸 Em junho a Anthropic respondeu "Your credit balance is too low" e o cliente
+# leu na TELA "provável sobrecarga temporária… Detalhe técnico: Error code: 400
+# … credit balance is too low" — em inglês, e errado (não era sobrecarga). Hoje o
+# mesmo erro vira "problema técnico do nosso lado, reprocesse" na tela e "troque
+# o arquivo, é PDF escaneado" no e-mail; e o Pedro recebe um alerta POR PROJETO
+# sem nada dizendo que a causa é uma só e para tudo. Pedro, 25/09: "crédito de IA
+# esgotado é interno nosso, não faz sentido nenhum avisar isso pro cliente".
+# 🔑 Reconhecer aqui (é por onde passa TODA chamada à IA) e avisar a casa pelo
+# gancho — o cliente recebe só "problema nosso, você recebe reprocessado".
+_SEM_CREDITO_TOKENS = (
+    "credit balance is too low", "credit_balance_too_low", "purchase credits",
+)
+
+
+def e_falta_de_credito(texto) -> bool:
+    """O erro diz que o crédito da conta de IA acabou? (não é sobrecarga nem arquivo)"""
+    msg = str(texto or "").lower()
+    return any(t in msg for t in _SEM_CREDITO_TOKENS)
+
+
+# Quem avisa a casa. O main registra na partida (llm_retry não importa o main).
+# Assinatura: gancho(detalhe: str, tag: str, job_id: str | None). Nunca levanta.
+ao_faltar_credito = None
+
+
+def _avisar_falta_de_credito(exc: Exception, tag: str, job_id: str | None) -> None:
+    if not e_falta_de_credito(f"{type(exc).__name__}: {exc}"):
+        return
+    gancho = ao_faltar_credito
+    if gancho is None:
+        return
+    try:
+        gancho(str(exc)[:300], tag, job_id or _JOB_ATUAL.get())
+    except Exception:
+        pass            # aviso é best-effort: nunca troca o erro que sobe
+
+
 def _extract_retry_after(exc: Exception) -> float | None:
     """Se a API mandou um Retry-After em segundos, respeitar."""
     try:
@@ -793,6 +831,7 @@ def call_with_retry(
                 _gravar_uso(tag=tag, resultado="falhou",
                             modelo=kwargs.get("model"), job_id=job_id,
                             cache_marcado=_cache_feito, erro=type(e).__name__)
+                _avisar_falta_de_credito(e, tag, job_id)
                 # Não é transitório, ou esgotou: propaga
                 raise
 
@@ -867,6 +906,7 @@ def call_with_retry_stream(
                 _gravar_uso(tag=tag, resultado="falhou",
                             modelo=kwargs.get("model"), job_id=job_id,
                             cache_marcado=_cache_feito, erro=type(e).__name__)
+                _avisar_falta_de_credito(e, tag, job_id)
                 raise
 
             sleep_for = _extract_retry_after(e) or delay
