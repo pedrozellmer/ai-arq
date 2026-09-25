@@ -2292,6 +2292,20 @@ _MTEXT_FORMAT_CODES_RE = re.compile(
 )
 
 
+def _texto_do_text(e) -> str:
+    """O texto de um TEXT/ATTRIB como se LÊ na folha, sem os códigos de controle
+    do AutoCAD: `%%U` (sublinhado) e `%%O` somem, `%%C` vira Ø, `%%D` vira °,
+    `%%P` vira ±.
+
+    🩸 25/09/2026 — os títulos de uma folha industrial vinham `%%UCORTE "A-A"`:
+    a regra de título (que exige COMEÇAR pelo tipo) não os reconhecia, e a IA
+    recebia o código cru. Medido no acervo local: 1 texto em 27 arquivos."""
+    try:
+        return (e.plain_text() or "").strip()
+    except Exception:
+        return (e.dxf.get("text", "") or "").strip()
+
+
 def _strip_mtext_codes(raw: str) -> str:
     """Remove códigos de formatação de MTEXT deixando só o texto legível.
     Fallback pra quando mtext.plain_text() não está disponível."""
@@ -2725,6 +2739,160 @@ def _dentro(p, cx):
     return cx[0] <= p[0] <= cx[2] and cx[1] <= p[1] <= cx[3]
 
 
+def _desenhos_no_modelo(msp, caixa=None) -> list:
+    """Desenhos lado a lado no MODELO, achados pelo título de cada um.
+
+    🩸 25/09/2026 — job `53f0483f` (elétrica industrial, 3 DWG): cada arquivo é
+    uma folha A1 INTEIRA desenhada no modelspace — moldura, carimbo, planta,
+    cortes e detalhes lado a lado — com UMA janela mostrando tudo. Sem janela
+    por desenho, `mapa_de_folhas` só achava o título do carimbo ("DISTRIBUIÇÃO
+    DE FORÇA…"), que não diz o que é, e o DETALHE típico (99,5 m de
+    "eletroduto", os leitos dos níveis 3 e 4) entrou na soma como percurso.
+
+    O desenho é o bloco de geometria logo ACIMA do seu título (é como se
+    desenha: título e escala embaixo). Título = a mesma regra do resto: começa
+    pelo que o desenho é e é a letra GRANDE da folha.
+
+    v1 conservadora, de propósito: só 'fora' tira da soma. 'vista' vai pro log
+    (continua na soma, como decidido em 24/09). 'planta' entra só como PROTEÇÃO
+    — caixa de detalhe/corte que CRUZA a caixa de uma planta não vale — e nunca
+    multiplica andar: a região vem de proximidade de geometria, e um ×N errado
+    custa caro. Na dúvida devolve [] (fica como era).
+    """
+    from engine_rules import parece_titulo_de_desenho, tipo_do_desenho
+    try:
+        def _na_caixa(x, y):
+            return caixa is None or _dentro((x, y), caixa)
+
+        textos = []
+        for e in msp.query("TEXT MTEXT"):
+            try:
+                p = e.dxf.insert
+                if not _na_caixa(p[0], p[1]):
+                    continue
+                h = float((e.dxf.get("height", 0) if e.dxftype() == "TEXT"
+                           else e.dxf.get("char_height", 0)) or 0)
+                t = _texto_do_text(e) if e.dxftype() == "TEXT" else e.plain_text()
+                t = " ".join((t or "").split())
+                if t and h > 0:
+                    textos.append((t, p[0], p[1], h))
+            except Exception:
+                continue
+        if not textos:
+            return []
+        hmax = max(t[3] for t in textos)
+        titulos = []
+        for t, x, y, h in textos:
+            if len(t) > 90 or h < 0.8 * hmax:
+                continue
+            tipo = tipo_do_desenho(t)
+            if tipo in ("fora", "vista") and parece_titulo_de_desenho(t):
+                titulos.append((t, x, y, h, tipo))
+            elif tipo == "planta":
+                titulos.append((t, x, y, h, tipo))      # só proteção
+        # só 'vista' não tira nada da soma, mas vai pro log o quanto pesa (é o
+        # dado que decide se corte sai da soma — ver engine_rules)
+        if not any(tt[4] in ("fora", "vista") for tt in titulos):
+            return []
+
+        # Geometria: segmentos (e o ponto de inserção dos blocos).
+        segs = []
+        for e in msp.query("LINE LWPOLYLINE ARC CIRCLE INSERT"):
+            try:
+                tp = e.dxftype()
+                if tp == "LINE":
+                    pts = [(e.dxf.start[0], e.dxf.start[1]), (e.dxf.end[0], e.dxf.end[1])]
+                elif tp == "LWPOLYLINE":
+                    pts = [(p[0], p[1]) for p in e.get_points("xy")]
+                elif tp in ("ARC", "CIRCLE"):
+                    c, r = e.dxf.center, float(e.dxf.radius)
+                    pts = [(c[0] - r, c[1]), (c[0] + r, c[1])]
+                else:
+                    p = e.dxf.insert
+                    pts = [(p[0], p[1]), (p[0], p[1])]
+                for a, b in zip(pts, pts[1:]):
+                    if _na_caixa(*a) and _na_caixa(*b):
+                        segs.append((a, b))
+            except Exception:
+                continue
+        if not segs:
+            return []
+        xs = [c for s in segs for c in (s[0][0], s[1][0])]
+        ys = [c for s in segs for c in (s[0][1], s[1][1])]
+        x0, y0, x1, y1 = min(xs), min(ys), max(xs), max(ys)
+        lado = max(x1 - x0, y1 - y0)
+        if lado <= 0:
+            return []
+        cel = lado / 150.0
+        # Moldura e linhas de carimbo atravessam a folha e colariam tudo.
+        longo = 0.4 * lado
+        ocup = set()
+        for (ax, ay), (bx, by) in segs:
+            L = math.hypot(bx - ax, by - ay)
+            if L > longo:
+                continue
+            n = max(1, int(L / cel) + 1)
+            for k in range(n + 1):
+                f = k / n
+                ocup.add((int((ax + f * (bx - ax) - x0) / cel),
+                          int((ay + f * (by - ay) - y0) / cel)))
+        # Blocos de desenho: células vizinhas (tolera 1 célula de vão).
+        comp_de, comps = {}, []
+        for c0 in ocup:
+            if c0 in comp_de:
+                continue
+            idx, pilha, cel_comp = len(comps), [c0], []
+            comp_de[c0] = idx
+            while pilha:
+                cx, cy = pilha.pop()
+                cel_comp.append((cx, cy))
+                for dx in (-2, -1, 0, 1, 2):
+                    for dy in (-2, -1, 0, 1, 2):
+                        v = (cx + dx, cy + dy)
+                        if v in ocup and v not in comp_de:
+                            comp_de[v] = idx
+                            pilha.append(v)
+            gx = [c[0] for c in cel_comp]
+            gy = [c[1] for c in cel_comp]
+            comps.append((x0 + min(gx) * cel, y0 + min(gy) * cel,
+                          x0 + (max(gx) + 1) * cel, y0 + (max(gy) + 1) * cel))
+        area_folha = (x1 - x0) * (y1 - y0) or 1.0
+        out = []
+        for t, x, y, h, tipo in titulos:
+            # O que está logo ACIMA do título (a coluna dele e as vizinhas).
+            ix, iy = int((x - x0) / cel), int((y + 0.5 * h - y0) / cel)
+            achado = None
+            for passo in range(0, 21):
+                for dx in (0, -1, 1, -2, 2):
+                    v = (ix + dx, iy + passo)
+                    if v in comp_de:
+                        achado = comp_de[v]
+                        break
+                if achado is not None:
+                    break
+            if achado is None:
+                continue
+            bx0, by0, bx1, by1 = comps[achado]
+            if (bx1 - bx0) * (by1 - by0) > 0.6 * area_folha:
+                continue                        # "o desenho" seria a folha toda
+            out.append({"folha": "modelo", "caixa": (bx0, by0, bx1, by1),
+                        "titulo": t[:160], "tipo": tipo, "andares": 1,
+                        "como": "modelo"})
+        # 🪤 Uma linha que emenda o detalhe na planta estica a caixa do detalhe
+        # por cima da planta — e o que da planta caísse ali sairia da soma.
+        # Caixa de detalhe/corte que CRUZA caixa de planta: não vale (fica 1).
+        plantas = [f["caixa"] for f in out if f["tipo"] == "planta"]
+
+        def _cruza(a, b):
+            return a[0] < b[2] and b[0] < a[2] and a[1] < b[3] and b[1] < a[3]
+        out = [f for f in out
+               if f["tipo"] == "planta" or not any(_cruza(f["caixa"], p) for p in plantas)]
+        return out if any(f["tipo"] in ("fora", "vista") for f in out) else []
+    except Exception as e:                       # nunca derruba a extração
+        logger.warning("_desenhos_no_modelo: %s", e)
+        return []
+
+
 def mapa_de_folhas(doc) -> dict:
     """Os desenhos do modelspace, pelas folhas: [{folha, titulo, tipo, andares, caixa}].
 
@@ -2765,9 +2933,10 @@ def mapa_de_folhas(doc) -> dict:
         for ins in msp.query("INSERT"):
             try:
                 for a in ins.attribs:
-                    if _RE_TAG_TITULO.search(a.dxf.tag or "") and (a.dxf.text or "").strip():
+                    _ta = _texto_do_text(a)
+                    if _RE_TAG_TITULO.search(a.dxf.tag or "") and _ta:
                         p = a.dxf.insert
-                        attrs.append((" ".join(a.dxf.text.split()), p[0], p[1]))
+                        attrs.append((" ".join(_ta.split()), p[0], p[1]))
             except Exception:
                 continue
         alturas = []                     # (x, y, altura) de TODO texto
@@ -2777,7 +2946,7 @@ def mapa_de_folhas(doc) -> dict:
                 alt = float((e.dxf.get("height", 0) if e.dxftype() == "TEXT"
                              else e.dxf.get("char_height", 0)) or 0)
                 alturas.append((p[0], p[1], alt))
-                t = e.dxf.text if e.dxftype() == "TEXT" else e.plain_text()
+                t = _texto_do_text(e) if e.dxftype() == "TEXT" else e.plain_text()
                 t = " ".join((t or "").split())
                 if t and len(t) <= 90 and parece_titulo_de_desenho(t) and tipo_do_desenho(t):
                     textos.append((t, p[0], p[1], alt))
@@ -2820,6 +2989,13 @@ def mapa_de_folhas(doc) -> dict:
                 j["andares"], j["como"] = nf, "nome da folha"
             elif j["andares"] != nf:            # título diz 1 (ou outro N), folha diz N
                 j["andares"], j["como"] = 1, "conflito folha×titulo"
+        # 25/09: nenhuma janela disse o que mostra (ex.: UMA janela com a folha
+        # A1 inteira desenhada no modelo) → procura os desenhos pelo título.
+        if uteis and not any(j.get("tipo") for j in uteis):
+            _mod = _desenhos_no_modelo(msp, uteis[0]["caixa"] if len(uteis) == 1 else None)
+            if _mod:
+                uteis = _mod
+                out["origem"] = "modelo"
         out["folhas"] = uteis
     except Exception as e:                   # nunca derruba a extração
         logger.warning("mapa_de_folhas: %s", e)
@@ -4002,7 +4178,7 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
 
     for text in msp.query("TEXT"):
         try:
-            content = text.dxf.text.strip()
+            content = _texto_do_text(text)
             if content:
                 pos = (text.dxf.insert.x, text.dxf.insert.y)
                 height = text.dxf.height if hasattr(text.dxf, "height") else 0
@@ -4202,6 +4378,8 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
                  "como": f.get("como", "")}
                 for f in _mapa.get("folhas", [])]
             _folhas["janelas_gerais"] = _mapa.get("gerais", 0)
+            # 25/09: "modelo" = desenhos achados pelo título dentro do modelspace
+            _folhas["origem"] = _mapa.get("origem", "")
             _folhas["sem_janela"] = _mapa.get("sem_janela", 0)
         except Exception as _efl:
             logger.warning("[leitura-por-folha] falhou (não-fatal): %s", _efl)

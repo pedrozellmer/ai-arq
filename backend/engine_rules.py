@@ -5400,8 +5400,14 @@ _RE_COMECO_DE_TITULO = _re.compile(
     r"cobertura|telhado|mezanino)")
 
 
+# 🩸 25/09/2026 — títulos de uma folha industrial vinham `%%UCORTE "A-A"`: o
+# código de SUBLINHADO do AutoCAD na frente, e "começa pelo tipo" dava falso.
+_RE_SUBLINHADO_AUTOCAD = _re.compile(r"%%[uUoO]")
+
+
 def parece_titulo_de_desenho(texto):
     """Um TEXTO solto pode ser o título do desenho? Só se começar pelo que ele é."""
+    texto = _RE_SUBLINHADO_AUTOCAD.sub("", texto or "")
     return bool(_RE_COMECO_DE_TITULO.match(_minusculo_sem_acento(texto)))
 
 

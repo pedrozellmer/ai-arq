@@ -1021,7 +1021,9 @@ def _leitura_por_folha_resumo(extraction) -> str:
     # vista (corte/elevação) fica na soma de propósito; contar é o que vai
     # dizer se vale tratar — ver `engine_rules._RE_DESENHO_VISTA`
     n_vista = sum(1 for x in ds if x.get("tipo") == "vista")
-    return (f"aplicada=sim desenhos={len(ds)} fora={n_fora} vistas={n_vista} neutros={n_neutro} "
+    # 25/09: desenhos achados pelo TÍTULO no modelspace (sem janela por desenho)
+    _orig = " origem=modelo" if f.get("origem") == "modelo" else ""
+    return (f"aplicada=sim{_orig} desenhos={len(ds)} fora={n_fora} vistas={n_vista} neutros={n_neutro} "
             f"multiplicadas=[{'; '.join(mult)}] "
             f"comprimento {a.get('comprimento')}→{d.get('comprimento')} m "
             f"area {a.get('area')}→{d.get('area')} m2 "
