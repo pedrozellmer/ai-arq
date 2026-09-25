@@ -3813,9 +3813,14 @@
       // Sem nome digitado → nome por data (nunca "Sem nome" no banco).
       const _pnRaw = (document.getElementById('project-name')?.value || '').trim();
       const projectName = _pnRaw || ('Projeto ' + window.fmtDataBR(new Date().toISOString()));
+      // 🔒 25/09/2026 — o nome do projeto vai no CORPO, junto dos arquivos. Na URL
+      // ele ficava gravado no log de acesso do servidor, e nome de projeto é,
+      // muitas vezes, nome de gente. Nada de dado pessoal no `params` abaixo:
+      // ele vira a URL.
+      formData.append('project_name', projectName);
       const typology = document.getElementById('project-typology')?.value || 'office';
       const projectType = document.getElementById('project-type')?.value || 'arquitetura';
-      const params = { typology, project_type: projectType, project_name: projectName };
+      const params = { typology, project_type: projectType };
       // Área informada pelo cliente (opcional): base pras áreas quando a planta não tem cota.
       // 🪤 MANDA O TEXTO CRU, sem parseFloat. Converter aqui é converter com a
       // régua do JavaScript, que é inglesa: parseFloat('1.200') = 1.2 e o
@@ -3827,14 +3832,9 @@
       // dá comprimento de parede. Backend valida a faixa 1,8–8,0 m de novo.
       const _pdRaw = parseFloat((document.getElementById('project-pe-direito')?.value || '').replace(',', '.'));
       if (!isNaN(_pdRaw) && _pdRaw >= 1.8 && _pdRaw <= 8) params.user_pe_direito = _pdRaw;
-      if (currentUser?.id) {
-        params.user_id = currentUser.id;
-        if (currentUser.email) params.user_email = currentUser.email;
-        const displayName = currentUser.user_metadata?.full_name
-          || currentUser.user_metadata?.name
-          || '';
-        if (displayName) params.user_name = displayName;
-      }
+      // 🔒 25/09/2026 — id, e-mail e nome do cliente NÃO saem mais daqui: o
+      // servidor tira do login (o Bearer do envio). Na URL eles ficavam
+      // gravados no log de acesso a cada projeto enviado.
       if (window.__creditsToConsumeCents > 0) {
         params.credits_to_consume_cents = window.__creditsToConsumeCents;
         window.__creditsToConsumeCents = 0;  // reset para próximo projeto
@@ -4878,11 +4878,13 @@
       // authFetch obrigatório: endpoint dispara chamada PAGA ao Claude e
       // exige ownership do projeto. Sem Bearer, qualquer um com o job_id
       // poderia gastar tokens no nome do dono (auditoria 2026-05-23).
-      const url = `${API_BASE}/api/agent/ask?job_id=${currentJobId}&question=${encodeURIComponent(q)}`;
+      // 🔒 25/09/2026 — a pergunta vai no CORPO. Na URL ela ficava gravada no
+      // log de acesso do servidor (é texto livre: o cliente cola nome, endereço).
+      const url = `${API_BASE}/api/agent/ask?job_id=${currentJobId}`;
       const res = await authFetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ history: agentConversation }),
+        body: JSON.stringify({ question: q, history: agentConversation }),
       });
       const data = await res.json();
       const thinking = document.getElementById('agent-thinking');

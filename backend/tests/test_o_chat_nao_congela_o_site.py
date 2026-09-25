@@ -175,12 +175,12 @@ def test_a_rota_do_chat_NAO_chama_o_agente_no_laco_de_eventos(
 
 def test_o_corpo_que_a_producao_MANDA_e_o_que_a_bancada_testa():
     """🪤 Ancora o fixture na tela real: se `dashboard.html` parar de mandar
-    `{history: ...}`, o parametrize acima vira ficcao e ninguem percebe."""
+    `{question, history}`, o parametrize acima vira ficcao e ninguem percebe."""
     _RAIZ = os.path.dirname(_BACKEND)
     dash = io.open(os.path.join(_RAIZ, "dashboard.html"), encoding="utf-8").read()
     i = dash.index("/api/agent/ask")
     trecho = dash[i:i + 900]
-    assert "JSON.stringify({ history: agentConversation })" in trecho, (
+    assert "JSON.stringify({ question: q, history: agentConversation })" in trecho, (
         "a tela mudou o corpo que manda pro chat - o parametrize desta bancada "
         "precisa acompanhar, senao volta a testar um formato que nao existe")
 
