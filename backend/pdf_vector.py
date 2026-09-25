@@ -312,10 +312,18 @@ def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
         # como estimado, igual ao carimbo.
         _t_et = time.time()
         try:
-            import fitz as _fitz_esc
+            # 🩸 1ª versão (b940850) lia com `fitz` (PyMuPDF), que NÃO está no
+            # requirements: na produção o import falhava, o except engolia e o
+            # conserto não fazia nada. A bancada do CI pegou (o teste pulava
+            # inteiro sem `fitz`). O motor lê PDF com pypdfium2 — o mesmo que
+            # `pdfvec_escala_por_vista.escalas_do_texto` já usa.
+            import pypdfium2 as _pdfium_esc
             from pdfvec_escala_por_vista import escala_do_rotulo
-            with _fitz_esc.open(pdf_path) as _doc_esc:
-                _texto_folha = _doc_esc[page_index].get_text()
+            _doc_esc = _pdfium_esc.PdfDocument(pdf_path)
+            try:
+                _texto_folha = _doc_esc[page_index].get_textpage().get_text_range()
+            finally:
+                _doc_esc.close()
             _den_txt, _fonte_txt = escala_do_rotulo(_texto_folha)
             if _den_txt and _fonte_txt == "esc":
                 den = float(_den_txt)

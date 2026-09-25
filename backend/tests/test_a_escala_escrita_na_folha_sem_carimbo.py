@@ -24,8 +24,10 @@ import pytest
 _AQUI = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(_AQUI))
 
-fitz = pytest.importorskip("fitz")
-
+# 🩸 A 1ª versão montava o PDF com `fitz` (PyMuPDF) e fazia `importorskip` no
+# TOPO: sem `fitz` (o CI e a produção não têm) o arquivo inteiro pulava e o
+# código de produção usava `fitz` também — o conserto era inerte lá. Agora o PDF
+# nasce com pikepdf (requirements), como nos outros guardas de PDF.
 import pdf_vector  # noqa: E402
 import pdfvec_carimbo  # noqa: E402
 import pdfvec_escala_por_vista  # noqa: E402
@@ -33,17 +35,19 @@ import pdfvec_escala_por_vista  # noqa: E402
 
 def _pdf(tmp_path, rotulo="ESCALA 1 : 75"):
     """Uma folha A3 deitada com uma planta de linhas, título e o rótulo embaixo."""
-    doc = fitz.open()
-    pg = doc.new_page(width=1191, height=842)
-    for (a, b) in [((200, 200), (700, 200)), ((700, 200), (700, 500)),
-                   ((700, 500), (200, 500)), ((200, 500), (200, 200)),
-                   ((450, 200), (450, 500))]:
-        pg.draw_line(a, b, width=2)
-    pg.insert_text((300, 540), "PLANTA DO APARTAMENTO", fontsize=12)
+    pikepdf = pytest.importorskip("pikepdf")
+    pdf = pikepdf.Pdf.new()
+    pg = pdf.add_blank_page(page_size=(1191, 842))
+    pg.Resources = pikepdf.Dictionary(Font=pikepdf.Dictionary(F1=pikepdf.Dictionary(
+        Type=pikepdf.Name.Font, Subtype=pikepdf.Name.Type1, BaseFont=pikepdf.Name.Helvetica)))
+    linhas = b"2 w 200 342 m 700 342 l S 700 342 m 700 642 l S 700 642 m 200 642 l S " \
+             b"200 642 m 200 342 l S 450 342 m 450 642 l S "
+    texto = b"BT /F1 12 Tf 300 302 Td (PLANTA DO APARTAMENTO) Tj ET "
     if rotulo:
-        pg.insert_text((320, 560), rotulo, fontsize=9)
+        texto += b"BT /F1 9 Tf 320 282 Td (" + rotulo.encode("latin-1") + b") Tj ET "
+    pg.Contents = pdf.make_stream(linhas + texto)
     p = str(tmp_path / "folha.pdf")
-    doc.save(p)
+    pdf.save(p)
     return p
 
 
@@ -51,6 +55,10 @@ def _pdf(tmp_path, rotulo="ESCALA 1 : 75"):
 def _sem_rede(monkeypatch):
     monkeypatch.setattr(socket.socket, "connect",
                         lambda *a, **k: (_ for _ in ()).throw(OSError("rede bloqueada no guarda")))
+    # 🔒 O CI e a produção NÃO têm `fitz` (PyMuPDF). Esta máquina tem — e foi
+    # por isso que a 1ª versão passou aqui e era inerte lá. Com `fitz` bloqueado,
+    # código que depender dele quebra ESTE guarda também aqui.
+    monkeypatch.setitem(sys.modules, "fitz", None)
 
 
 def _carimbo(monkeypatch, escala=None, indicadas=False):
