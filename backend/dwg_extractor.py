@@ -510,9 +510,19 @@ class DXFExtraction:
                          " cerâmica desenhados no MESMO layer têm padrões diferentes. Layer com UM"
                          " padrão só mede UM acabamento; layer com vários mistura acabamentos.)")
             _n_anot_ar = 0
+            _em_vista: dict[str, float] = defaultdict(float)
+            for _h in self.hatches:
+                if getattr(_h, "na_vista", False):
+                    _em_vista[_h.layer] += _h.area * getattr(_h, "peso", 1.0)
             for layer, area in sorted(areas_by_layer.items()):
                 _pats = _hatch_pat.get(layer, {})
                 _n = sum(_pats.values())
+                if _em_vista.get(layer, 0) >= 0.01 and not _anot(layer):
+                    lines.append(f"  {layer}: {area:.2f} m² — ⚠ {_em_vista[layer]:.2f} m² disto estão "
+                                 f"DENTRO de corte/elevação: superfície vista DE LADO — só vale "
+                                 f"como revestimento de PAREDE; NÃO é piso, laje nem forro "
+                                 f"(esses se medem na planta)")
+                    continue
                 # 🔑 Simetria com COMPRIMENTOS POR LAYER: hachura em layer de
                 # anotação é preenchimento de legenda/carimbo, não superfície de
                 # obra. O laço de HATCH não filtra layer — este rótulo é a única
@@ -544,7 +554,16 @@ class DXFExtraction:
             lines.append("ÁREAS DE CONTORNO FECHADO POR LAYER (polilinha fechada — ambiente/piso/forro):")
             lines.append("  (medido da geometria; pode incluir layer não-ambiente — use o nome do layer pra decidir; "
                          "NÃO some com ÁREAS HACHURADAS da MESMA região — é a mesma área medida de outro jeito)")
+            _poly_vista: dict[str, float] = defaultdict(float)
+            for _p in self.polygon_areas:
+                if getattr(_p, "na_vista", False):
+                    _poly_vista[_p.layer] += _p.area * getattr(_p, "peso", 1.0)
             for layer, area in sorted(poly_areas.items(), key=lambda x: -x[1]):
+                if _poly_vista.get(layer, 0) >= 0.01:
+                    lines.append(f"  {layer}: {area:.2f} m² — ⚠ {_poly_vista[layer]:.2f} m² disto "
+                                 f"estão DENTRO de corte/elevação (vista DE LADO): NÃO é piso, "
+                                 f"laje nem forro")
+                    continue
                 lines.append(f"  {layer}: {area:.2f} m²")
             lines.append("")
 
@@ -1109,6 +1128,36 @@ def _corrigir_duto_linha_dupla(walls, unit_factor: float = 1.0, layers_extra=Non
     except Exception as e:
         logger.warning("[duto-linha-dupla] falhou, mantendo medição original: %s", e)
         return walls, "", ""
+
+
+_RE_RELATO_EIXO = re.compile(r"^(.*): [\d.]+m de face -> [\d.]+m de eixo \(\d+ par\(es\)\)$")
+
+
+def _relato_do_eixo_na_soma(relato: str, walls) -> str:
+    """Reescreve o relato do eixo com o que FICOU na soma (depois da folha).
+
+    Sem número de antes: número que não está na soma vira quantidade na mão
+    da IA. Trecho que não casa o formato fica como veio."""
+    try:
+        novos = []
+        for trecho in (relato or "").split(" | "):
+            m = _RE_RELATO_EIXO.match(trecho.strip())
+            if not m:
+                novos.append(trecho)
+                continue
+            lay = m.group(1)
+            atual = sum(w.length * getattr(w, "peso", 1.0) for w in walls if w.layer == lay)
+            if atual < 0.05:
+                novos.append(f"{lay}: desenhado em 2 linhas, mas todo o traçado desta prancha "
+                             f"está em corte/detalhe/planta-chave — NADA deste layer entra "
+                             f"na soma desta prancha")
+            else:
+                novos.append(f"{lay}: {atual:.1f}m na soma, JÁ pelo EIXO (as 2 bordas contadas "
+                             f"uma vez; corte e detalhe já fora)")
+        return " | ".join(novos)
+    except Exception as e:                       # nunca derruba a extração
+        logger.warning("_relato_do_eixo_na_soma: %s", e)
+        return relato
 
 
 def _detect_unit_factor(doc) -> float:
@@ -3593,6 +3642,11 @@ def aplicar_leitura_por_folha(walls, hatches, polygon_areas, blocks, mapa) -> di
             pk = peso(((bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2), "m2") if len(bb) == 4 else 1
             if pk == 0 and ultimo["vista"] and not _secao_cortada(h):
                 pk = 1                               # corte: revestimento ao fundo fica
+            if pk and ultimo["vista"]:
+                # 🩸 25/09 (releitura do mesmo job): a área cheia que ficou no
+                # corte saiu BRANCA como "piso de equipamentos 11,46 m²". A IA
+                # precisa saber que ela foi vista DE LADO.
+                h.na_vista = True
             if pk == 0:
                 if ultimo["vista"]:
                     tirou["m2"] += h.area
@@ -4958,6 +5012,15 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             # 25/09: "modelo" = desenhos achados pelo título dentro do modelspace
             _folhas["origem"] = _mapa.get("origem", "")
             _folhas["sem_janela"] = _mapa.get("sem_janela", 0)
+            # 🩸 25/09 (releitura do job 53f0483f): o relato do eixo é feito
+            # ANTES da folha e dizia "431 m de face -> 230,5 m de eixo" numa
+            # prancha que era só corte. O layer na soma dava ZERO, mas a IA
+            # leu o relato e entregou 212,5 m de leito BRANCO. Depois da folha,
+            # o relato só fala do que ficou na soma (sem folha aplicada nada
+            # saiu — o número é o mesmo, muda só a redação).
+            if metadata.get("duto_linha_dupla"):
+                metadata["duto_linha_dupla"] = _relato_do_eixo_na_soma(
+                    metadata["duto_linha_dupla"], walls)
         except Exception as _efl:
             logger.warning("[leitura-por-folha] falhou (não-fatal): %s", _efl)
             _folhas = {"aplicada": False, "motivo": "erro: %s" % str(_efl)[:120]}
