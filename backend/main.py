@@ -5289,8 +5289,8 @@ def _build_email_de_falha(tipo: str, name: str, project_name: str,
                  + "<br><br>Desculpa pelo transtorno — se quiser falar com a gente, é só "
                    "responder este e-mail. 🙂")
         cta_txt, badge, pre = ("Abrir meu projeto", "⚠ Estamos resolvendo",
-                               "Não é o seu arquivo — já estamos resolvendo, e você recebe "
-                               "o projeto reprocessado.")
+                               "O problema não é o seu arquivo — já estamos resolvendo, e "
+                               "você recebe o projeto reprocessado.")
     else:
         passos = "".join(f'<li style="margin:0 0 8px">{p}</li>' for p in t.get("passos") or [])
         corpo = (f"{greet}<br><br>{o_que}<br>{img}<b>Como resolver:</b>"
@@ -26231,9 +26231,8 @@ _EMAIL_CATALOG = [
 ]
 
 # 25/09/2026 — CATÁLOGO DE FALHAS: um modelo por tipo (`falhas.py`), na Central,
-# no grupo "falha" (bloco próprio "Falhas — em revisão"). Enquanto
-# `falhas.LIGADO` for False NENHUM deles sai pro cliente: é pra o Pedro ler,
-# mandar teste pra si e aprovar antes de ligar.
+# no grupo "falha" (bloco próprio "Falhas"). Com `falhas.LIGADO` False nenhum
+# sai pro cliente. Ligado em 25/09 (Pedro: "vou confiar em você, pode fazer").
 try:
     import falhas as _falhas_cat
     for _tp_f, _t_f in _falhas_cat.TIPOS.items():
@@ -26247,6 +26246,14 @@ try:
                            if _t_f["quem"] == "nosso" else "Problema do CLIENTE")
                         + " · o que a casa faz: " + _t_f["aviso"]),
         })
+    # Ligado, os três e-mails de erro antigos não saem mais (todo ponto de falha
+    # passa o tipo) — a Central não pode dizer "auto" de e-mail aposentado.
+    if _falhas_cat.LIGADO:
+        for _c_old in _EMAIL_CATALOG:
+            if _c_old["key"] in ("erro_reprocessar", "erro_trocar", "erro_nosso"):
+                _c_old["gatilho"] = ("⏸ FORA DE USO desde 25/09: com o catálogo de falhas "
+                                     "ligado, sai o e-mail do TIPO (bloco Falhas). Era: "
+                                     + _c_old["gatilho"])
 except Exception as _e_cat_f:
     print(f"[email-catalogo] catálogo de falhas fora da Central: {_e_cat_f}")
 

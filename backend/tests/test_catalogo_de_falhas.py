@@ -4,7 +4,7 @@
 🩸 25/09/2026 — o e-mail de falha adivinhava o motivo farejando o texto da tela
 e contradizia a tela em 8 de 17 situações reais (7× "PDF escaneado" pra quem
 teve problema de servidor, de conversor ou mandou DWG). Voz do Pedro: problema
-NOSSO → "não é o seu arquivo, já estamos resolvendo, você recebe reprocessado";
+NOSSO → "o problema não é o seu arquivo, já estamos resolvendo, você recebe reprocessado";
 problema DO CLIENTE → o passo a passo. Nada interno aparece pro cliente.
 Enquanto `falhas.LIGADO` for False, os modelos só aparecem na Central (em revisão).
 """
@@ -58,7 +58,7 @@ def test_todo_tipo_tem_o_que_precisa(tipo):
 def test_problema_NOSSO_promete_e_nao_manda_o_cliente_mexer(tipo):
     s, txt = _texto(tipo)
     assert "problema do nosso lado" in s.lower()
-    assert "Não é o seu arquivo, e você não precisa fazer nada" in txt
+    assert "O problema não é o seu arquivo, e você não precisa fazer nada" in txt
     assert "você recebe o projeto reprocessado" in txt
     for proibido in ("precisamos de outro arquivo", "troque o arquivo", "reprocesse",
                      "reenvie", "pdf escaneado"):
@@ -115,12 +115,32 @@ def test_tipo_que_ninguem_previu_cai_no_desconhecido_honesto():
 
 
 @pytest.mark.parametrize("tipo", _TIPOS)
-def test_todo_tipo_esta_na_Central_em_revisao(tipo):
+def test_todo_tipo_esta_na_Central(tipo):
     ficha = next((c for c in main._EMAIL_CATALOG if c["key"] == f"falha:{tipo}"), None)
     assert ficha and ficha["grupo"] == "falha", tipo
-    assert "EM REVISÃO" in ficha["gatilho"]
+    # ligado, a Central não pode dizer "em revisão" de e-mail que já sai
+    assert ("EM REVISÃO" in ficha["gatilho"]) is (not falhas.LIGADO)
     subj, html = main._render_email_by_type(f"falha:{tipo}")
     assert subj and len(html) > 1000
+
+
+@pytest.mark.parametrize("key", ["erro_reprocessar", "erro_trocar", "erro_nosso"])
+def test_ligado_a_Central_marca_os_erros_antigos_como_fora_de_uso(key):
+    ficha = next(c for c in main._EMAIL_CATALOG if c["key"] == key)
+    assert ("FORA DE USO" in ficha["gatilho"]) is falhas.LIGADO, ficha
+
+
+def test_ligado_todo_ponto_de_falha_passa_o_tipo():
+    """Ligado, o e-mail antigo (que farejava a tela) só sai pra quem chama SEM
+    tipo. Todo `_email_falha_cliente(...)` do main.py tem que passar `tipo=` —
+    lido pela AST, não pelo texto."""
+    import ast
+    arvore = ast.parse(open(os.path.join(_BACK, "main.py"), encoding="utf-8").read())
+    chamadas = [n for n in ast.walk(arvore) if isinstance(n, ast.Call)
+                and getattr(n.func, "id", "") == "_email_falha_cliente"]
+    assert len(chamadas) >= 6, len(chamadas)
+    sem_tipo = [n.lineno for n in chamadas if not any(k.arg == "tipo" for k in n.keywords)]
+    assert not sem_tipo, "main.py: e-mail de falha sem tipo nas linhas %r" % sem_tipo
 
 
 def test_a_Central_mostra_o_bloco_das_falhas():

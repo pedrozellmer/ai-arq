@@ -28,8 +28,11 @@ LIGADO = False
 
 # Frase comum a TODO problema nosso — a promessa que a casa cumpre (o aviso
 # interno leva a causa técnica; alguém estuda e reprocessa).
-NOSSO_PROMESSA = ("<b>Não é o seu arquivo, e você não precisa fazer nada.</b> Já estamos "
-                  "resolvendo, e você recebe o projeto reprocessado aqui por e-mail.")
+# 25/09: "O problema não é…" e não "Não é o seu arquivo" — logo depois de "o
+# arquivo X é maior do que conseguimos processar", a frase curta soava contradição.
+NOSSO_PROMESSA = ("<b>O problema não é o seu arquivo, e você não precisa fazer nada.</b> "
+                  "Já estamos resolvendo, e você recebe o projeto reprocessado aqui por "
+                  "e-mail.")
 
 # Atalho opcional dos tipos em que o DXF contorna o nosso leitor de DWG.
 _ATALHO_DXF = ("<b>Se quiser adiantar:</b> salve o mesmo desenho em DXF (no AutoCAD ou "
@@ -49,9 +52,10 @@ TIPOS = {
     "servidor-instavel": {
         "quem": "nosso", "automatico": True, "arte": "falha-nossa.png",
         "rotulo": "Servidor instável (esgotou as tentativas automáticas)",
+        # 🪤 sem "tentamos de novo": a TELA mostra isto já na 1ª queda, antes de a
+        # varredura re-tentar — a frase afirmaria o que ainda não aconteceu
         "o_que_houve": "O processamento do <b>{projeto}</b> foi interrompido por uma "
-                       "instabilidade no nosso servidor. Tentamos de novo automaticamente, "
-                       "mas ainda não completou.",
+                       "instabilidade no nosso servidor.",
         "aviso": "Servidor caiu/reiniciou no meio e as re-tentativas automáticas não "
                  "resolveram. Ver o health do servidor e reprocessar.",
     },
@@ -108,7 +112,9 @@ TIPOS = {
     "leitor-extracao": {
         "quem": "nosso", "automatico": False, "arte": "falha-nossa.png",
         "rotulo": "Leitor: a leitura do DXF falhou",
-        "o_que_houve": "O nosso leitor não conseguiu terminar de ler o desenho "
+        # vale pros dois caminhos: a extração quebrou, OU leu o CAD e não saiu
+        # nenhum item — "não terminou de ler" seria falso no segundo
+        "o_que_houve": "O nosso leitor não conseguiu tirar as quantidades do desenho "
                        "<b>{arquivo}</b>.",
         "aviso": "A extração do DXF enviado pelo cliente falhou. Baixar e reproduzir local.",
     },
@@ -199,8 +205,11 @@ TIPOS = {
         "rotulo": "PDF lido sem nenhuma quantidade",
         "assunto": "{projeto} — lemos o desenho, mas faltou informação",
         "titulo": "Lemos o desenho, mas faltou informação",
-        "o_que_houve": "Lemos o <b>{arquivo}</b>, mas não saiu nenhuma quantidade: a prancha "
-                       "tem só o desenho, sem quadros de áreas, legendas ou especificações.",
+        # "costuma ser": é a causa provável, ninguém mediu (regra nº1; o texto
+        # antigo, `_mensagem_sem_itens`, já dizia assim)
+        "o_que_houve": "Lemos o <b>{arquivo}</b>, mas não saiu nenhuma quantidade — costuma "
+                       "ser prancha só com o desenho, sem quadros de áreas, legendas ou "
+                       "especificações.",
         "passos": ["Se tiver o arquivo do CAD, salve como <b>DXF</b> (Salvar como → DXF "
                    "2013) e envie no mesmo projeto — é dele que sai quantidade medida.",
                    "Se só tiver PDF, envie a prancha que traz os quadros de áreas e as "
@@ -225,14 +234,19 @@ TIPOS = {
     },
     "tipo-errado-estrutura": {
         "quem": "cliente", "automatico": False, "arte": "falha-tipo.png",
-        "rotulo": "Tipo errado: Estrutura numa planta de arquitetura",
-        "assunto": "{projeto} — o tipo do projeto ficou trocado",
-        "titulo": "O tipo do projeto ficou trocado",
-        "o_que_houve": "O <b>{projeto}</b> foi enviado como <b>Estrutura</b>, mas o desenho é "
-                       "de arquitetura (plantas, ambientes, portas). Com o tipo Estrutura a "
-                       "leitura procura só concreto, fôrma e aço — por isso não saiu nada.",
-        "passos": ["Envie o mesmo arquivo de novo escolhendo o tipo <b>Arquitetura</b>."],
-        "fecho": "É grátis e leva poucos minutos.",
+        "rotulo": "Estrutura sem nenhum item de estrutura (tipo provavelmente trocado)",
+        "assunto": "{projeto} — nenhum item de estrutura no desenho",
+        "titulo": "Nenhum item de estrutura no desenho",
+        # 🪤 25/09: a 1ª versão AFIRMAVA "o desenho é de arquitetura" (ninguém mediu)
+        # e mandava reenviar. O texto de 11/09 (`_mensagem_sem_itens`) já sabia as
+        # duas coisas: é condicional, e o arquivo já está com a gente.
+        "o_que_houve": "O <b>{projeto}</b> foi enviado como <b>Estrutura</b>, e não "
+                       "encontramos nenhum item de estrutura no desenho. Com o tipo "
+                       "Estrutura, a leitura procura só concreto, fôrma e aço.",
+        "passos": ["Se o desenho é de <b>arquitetura</b>, não precisa enviar de novo: abra o "
+                   "projeto, no quadro <b>Processamento</b> escolha <b>Ler como "
+                   "Arquitetura</b> e clique em <b>Reprocessar</b>."],
+        "fecho": "Leva poucos minutos.",
         "aviso": "Nada a fazer agora — o cliente recebeu o caminho.",
     },
     # ── o que ninguém previu: honesto, e o aviso pede pra classificar ──
