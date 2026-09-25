@@ -2746,6 +2746,38 @@ def _dentro(p, cx):
     return cx[0] <= p[0] <= cx[2] and cx[1] <= p[1] <= cx[3]
 
 
+_RE_SO_ESCALA = re.compile(r"^\s*(?:esc(?:ala)?\.?\s*:?\s*)?1\s*[:/]\s*\d{1,4}\s*$", re.IGNORECASE)
+
+
+def _titulo_no_papel(papel, textos) -> str:
+    """O título da vista escrito no PAPEL, logo abaixo da janela ('' se não há).
+
+    🩸 25/09/2026 — job `42f99f4f` (esgoto e pluvial exportados do REVIT): 16
+    janelas por folha e NENHUM título achado, porque o Revit escreve o título
+    de cada vista no espaço do papel (layer `G-ANNO-TTLB`): o nome junto do
+    canto de baixo-esquerdo da janela e a escala ("1 : 20") numa linha logo
+    abaixo. Entre as vistas havia três "3D - Térreo - …": o isométrico da
+    tubulação, somado como planta — 83% do tubo "medido" da folha 1.
+
+    Pega o texto MAIOR na faixa logo abaixo da janela (até 15% da altura dela),
+    começando perto da borda esquerda; a linha só de escala não vale.
+    """
+    if not papel or not textos:
+        return ""
+    x0, y0, x1, y1 = papel
+    w, h = (x1 - x0), (y1 - y0)
+    if w <= 0 or h <= 0:
+        return ""
+    cand = [t for t in textos
+            if y0 - 0.15 * h <= t[2] <= y0 + 0.02 * h
+            and x0 - 0.05 * w <= t[1] <= x0 + 0.6 * w
+            and not _RE_SO_ESCALA.match(t[0]) and len(t[0]) <= 90]
+    if not cand:
+        return ""
+    cand.sort(key=lambda t: (-t[3], abs(t[2] - y0) + abs(t[1] - x0)))
+    return cand[0][0]
+
+
 def _desenhos_no_modelo(msp, caixa=None) -> list:
     """Desenhos lado a lado no MODELO, achados pelo título de cada um.
 
@@ -2910,6 +2942,7 @@ def mapa_de_folhas(doc) -> dict:
     out = {"folhas": [], "gerais": 0, "sem_janela": 0}
     try:
         janelas = []
+        textos_papel = {}                # folha → [(texto, x, y, altura)] do PAPEL
         for lay in doc.layouts:
             if lay.name.lower() == "model":
                 continue
@@ -2919,7 +2952,21 @@ def mapa_de_folhas(doc) -> dict:
                     if vp.dxf.get("id", 2) != 1:
                         out["sem_janela"] += 1
                     continue
-                janelas.append({"folha": lay.name, "caixa": cx})
+                c, w, h = vp.dxf.center, float(vp.dxf.width), float(vp.dxf.height)
+                janelas.append({"folha": lay.name, "caixa": cx,
+                                "papel": (c[0] - w / 2, c[1] - h / 2, c[0] + w / 2, c[1] + h / 2)})
+            tp = []
+            for t in lay.query("TEXT MTEXT"):
+                try:
+                    s = _texto_do_text(t) if t.dxftype() == "TEXT" else t.plain_text()
+                    s = " ".join((s or "").split())
+                    alt = float((t.dxf.get("height", 0) if t.dxftype() == "TEXT"
+                                 else t.dxf.get("char_height", 0)) or 0)
+                    if s:
+                        tp.append((s, t.dxf.insert[0], t.dxf.insert[1], alt))
+                except Exception:
+                    continue
+            textos_papel[lay.name] = tp
         if not janelas:
             return out
         # Janela GERAL: a que mostra o desenho todo (contém o centro de 3+
@@ -2976,6 +3023,13 @@ def mapa_de_folhas(doc) -> dict:
                 hmax = max(hs) if hs else 0.0
                 cand = [t for t in textos if _dentro((t[1], t[2]), j["caixa"])]
                 tits = [t[0] for t in cand if hmax > 0 and t[3] >= 0.8 * hmax]
+            if not tits:
+                # 25/09: o Revit escreve o título da vista no PAPEL, logo
+                # abaixo da janela — não no modelo, onde se procurava até aqui
+                _tp = _titulo_no_papel(j.get("papel"), textos_papel.get(j["folha"], []))
+                if _tp:
+                    tits = [_tp]
+                    j["titulo_no_papel"] = True
             tipos = {tipo_do_desenho(t) for t in tits} - {""}
             j["titulo"] = " | ".join(dict.fromkeys(tits))[:160]
             j["tipo"] = tipos.pop() if len(tipos) == 1 else ""

@@ -5378,7 +5378,10 @@ def _minusculo_sem_acento(s):
 # de novo dentro.
 _RE_DESENHO_FORA_DA_SOMA = _re.compile(
     r"\b(?:esquema|isometric|diagrama|unifilar|multifilar|trifilar|detalhe|"
-    r"detalhamento|det\b|ampliacao|ampliad|situacao|localizacao)")
+    r"detalhamento|det\b|ampliacao|ampliad|situacao|localizacao|"
+    # 25/09: "3D - Térreo - Banho" (vista 3D do Revit) é o isométrico da
+    # tubulação — sem isto, o "térreo" do nome fazia dela uma PLANTA
+    r"3d\b|axonometric)")
 # 🚫 VISTA (corte, elevação, fachada) NÃO sai da soma — ainda. Medido no
 # acervo local em 24/09: nas elevações de um lavabo, tirar a vista levou a área
 # de 50,5 para 30,0 m². Elevação não é o mesmo objeto redesenhado: o
