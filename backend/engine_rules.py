@@ -3690,6 +3690,8 @@ FONTE_DA_ESCALA_SEM_PROVA = {
     "viewport": "da caixa de recorte do PDF",
     "cotas": "das cotas escritas na prancha (por votação)",
     "vista": "do rótulo escrito ao lado do próprio desenho",
+    # 25/09: "ESCALA 1:N" escrito na folha, lido do texto (pdf_vector)
+    "texto": "da escala escrita na própria folha",
 }
 
 
