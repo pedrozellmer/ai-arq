@@ -111,9 +111,13 @@ def _corpo_da_rota_do_chat():
 # guarda testando só o corpo vazio, dava pra devolver o agente ao laço de
 # eventos justamente no ramo que a produção mais usa (um `if history: ask(...)`)
 # e ficar verde. Os três corpos abaixo cobrem os três estados reais.
+# 🔒 25/09/2026 — a pergunta passou a ir NO CORPO (`question`), não na URL
+# (ver test_dado_pessoal_nao_vai_na_url.py). Os corpos reais levam as duas
+# chaves; o "sem corpo" segue lendo a pergunta da query, como a aba velha.
 _CORPO_SEM_BODY = b""
-_CORPO_1A_PERGUNTA = _json.dumps({"history": []}).encode("utf-8")
-_CORPO_CONVERSA = _json.dumps({"history": [
+_CORPO_1A_PERGUNTA = _json.dumps({"question": "quantos m2 de piso?",
+                                  "history": []}).encode("utf-8")
+_CORPO_CONVERSA = _json.dumps({"question": "e de rodape?", "history": [
     {"role": "user", "content": "quantos m2 de piso?"},
     {"role": "assistant", "content": "120 m2 no layer PISO"},
     {"role": "user", "content": "e de rodape?"},
@@ -146,7 +150,9 @@ def test_a_rota_do_chat_NAO_chama_o_agente_no_laco_de_eventos(
         time.sleep(0.30)                    # o agente "pensando"
         return {"answer": "resposta do agente", "tool_calls": [], "iterations": 1}
 
-    m = _rodar_a_rota(monkeypatch, _falso_ask, corpo=corpo)
+    # corpo com pergunta = produção: a query não leva a pergunta
+    m = _rodar_a_rota(monkeypatch, _falso_ask, corpo=corpo,
+                      pergunta="" if corpo else "  quantos m2 de piso?  ")
 
     assert visto.get("thread") is not None, "o agente nem foi chamado (%s)" % rotulo
     assert visto["thread"] != m["thread_do_laco"], (

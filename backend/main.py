@@ -1456,7 +1456,9 @@ def _supabase_update(table, match_field, match_value, data):
 def _get_user_from_request(request, tolerante: bool = False):
     """Valida header Authorization: Bearer <jwt> contra /auth/v1/user do Supabase.
 
-    Retorna dict com {"id", "email"} se válido, ou None se inválido/ausente.
+    Retorna dict com {"id", "email", "nome"} se válido, ou None se inválido/ausente.
+    `nome` é o do cadastro (`user_metadata.full_name`, senão `.name`) — a mesma
+    ordem que a tela usava; pode vir vazio.
 
     🚨 23/08/2026 (auditoria): qualquer exceção aqui — timeout, 5xx, DNS —
     virava `None`, e quem chamou levantava 401 "sessão expirada". O cliente com
@@ -1486,7 +1488,12 @@ def _get_user_from_request(request, tolerante: bool = False):
         email = (data.get("email") or "").lower()
         if not uid:
             return None
-        return {"id": uid, "email": email}
+        # 🪤 Qualquer exceção aqui cairia no `except` de baixo e viraria 503
+        # "não consegui confirmar seu login" — por causa de um NOME.
+        _meta = data.get("user_metadata")
+        _meta = _meta if isinstance(_meta, dict) else {}
+        nome = str(_meta.get("full_name") or _meta.get("name") or "").strip()
+        return {"id": uid, "email": email, "nome": nome}
     except urllib.error.HTTPError as _he:
         # 401/403 do Supabase = o token é ruim mesmo. 5xx = problema DELES.
         _supa_log(f"AUTH validate HTTP {_he.code}")
@@ -3728,6 +3735,12 @@ app.add_middleware(
 # total. Detalhes e medições em upload_teto.py.
 from upload_teto import TetoDeCorpo as _TetoDeCorpo  # noqa: E402
 app.add_middleware(_TetoDeCorpo)
+
+# 🔒 25/09/2026 — o log de acesso do uvicorn guardava e-mail, nome, projeto e
+# pergunta do chat que vinham na URL. A tela parou de mandar; isto cobre a aba
+# aberta antes do deploy e a próxima rota que escorregar. Ver log_de_acesso.py.
+import log_de_acesso as _log_de_acesso  # noqa: E402
+_log_de_acesso.instalar()
 
 
 @app.middleware("http")
@@ -20966,6 +20979,11 @@ async def process_files(
     files: list[UploadFile] = File(...),
     sheet_types: list[str] = Form(default=[]),
     sheet_ambientes: list[str] = Form(default=[]),
+    # 🔒 25/09/2026 — o nome do projeto sobe no CORPO, junto dos arquivos. Na
+    # URL ele ia pro log de acesso — e nome de projeto é, muitas vezes, nome de
+    # gente. O `project_name` da query (abaixo) fica pra aba aberta antes do
+    # deploy; `user_email`/`user_name` da query também, mas o token vence.
+    nome_do_projeto: Optional[str] = Form(default=None, alias="project_name"),
     typology: str = "office",
     project_type: str = "arquitetura",
     project_name: str = "",
@@ -20991,10 +21009,12 @@ async def process_files(
       pontos, piso, forro, det_forro, mobiliario, marcenaria.
     - `typology` (opcional, default `office`): usado pela calibração por
       densidade pra comparar o projeto com padrões da mesma categoria.
-    - `project_name` (opcional): apelido amigável dado pelo cliente.
+    - `project_name` (opcional, no FORM): apelido amigável dado pelo cliente.
+      Na query só é aceito por compatibilidade com a página velha.
     - `user_id` (opcional): se informado, vincula o projeto ao usuário e
       permite consumo/crédito. Validado contra JWT — não dá pra criar
-      projeto em nome de outro usuário.
+      projeto em nome de outro usuário. Sem ele, o dono é quem está logado.
+    - E-mail e nome do dono vêm do TOKEN, nunca da URL (ver `log_de_acesso.py`).
     - `credits_to_consume_cents` (opcional): se > 0, consome esse valor
       de créditos do user (usado quando checkout retornou is_free=true
       por saldo suficiente).
@@ -21017,6 +21037,18 @@ async def process_files(
     # Dono autoritativo vem do token (não confia só no parâmetro).
     if not user_id or user_id == "anonymous":
         user_id = jwt_user.get("id") or user_id
+
+    # 🔒 25/09/2026 — e-mail e nome do dono vêm do LOGIN, não da URL: lá eles
+    # ficavam gravados no log de acesso do Render (18 linhas, 8 pessoas em 30 h).
+    # 🪤 Só quando o projeto é de quem está logado. O admin que sobe em nome de
+    # outra conta (user_id ≠ token) segue com o que mandou — o e-mail dele não
+    # pode virar o do cliente.
+    if user_id == jwt_user.get("id"):
+        user_email = jwt_user.get("email") or user_email
+        user_name = jwt_user.get("nome") or user_name
+    # Chamada direta (bancada) entrega o `FieldInfo` do default: só texto conta.
+    if isinstance(nome_do_projeto, str) and nome_do_projeto.strip():
+        project_name = nome_do_projeto
 
     # Freio anti-abuso de CUSTO (achado auditoria 27/07): processar dispara IA
     # cara (Anthropic/Replicate) + RAM. No beta grátis/ilimitado, um usuário
@@ -28975,26 +29007,36 @@ async def agent_ask(request: Request, job_id: str, question: str = ""):
     investiga (lê planilha, busca itens, lê DXFs, checa calibração) e
     responde em linguagem natural com referências aos itens.
 
-    Body opcional (JSON): {"history": [{"role": "user|assistant", "content": "..."}]}
-    pra manter contexto de conversação contínua.
+    Body (JSON): {"question": "...", "history": [{"role": "user|assistant", "content": "..."}]}
+    — `history` mantém o contexto de conversação contínua.
+
+    🔒 25/09/2026 — a pergunta sobe no CORPO. Na query ela ia pro log de acesso
+    do Render (texto livre: o cliente cola legenda, nome, endereço). O
+    `question` da query fica só pra aba aberta antes do deploy.
     """
     if not job_id:
         raise HTTPException(400, "job_id obrigatório")
-    if not question or len(question.strip()) < 2:
-        raise HTTPException(400, "pergunta vazia")
+    # 🪤 Dono ANTES de ler o corpo, como sempre foi: corpo de quem não é dono
+    # não entra na memória.
     _require_project_owner(request, job_id)
 
-    # History opcional via JSON body
+    # Pergunta e history via JSON body
     history = None
     try:
         body_bytes = await request.body()
         if body_bytes:
             import json as _j
             body = _j.loads(body_bytes.decode("utf-8"))
-            if isinstance(body, dict) and isinstance(body.get("history"), list):
-                history = body["history"]
+            if isinstance(body, dict):
+                if isinstance(body.get("history"), list):
+                    history = body["history"]
+                _q = body.get("question")
+                if isinstance(_q, str) and _q.strip():
+                    question = _q
     except Exception:
         history = None
+    if not question or len(question.strip()) < 2:
+        raise HTTPException(400, "pergunta vazia")
 
     try:
         from agent import ask, tipos_de_arquivo_do_projeto
