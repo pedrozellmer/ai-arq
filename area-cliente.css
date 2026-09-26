@@ -18,10 +18,13 @@
 .faixa::after{content:"";position:absolute;width:140px;height:140px;border-radius:50%;right:170px;bottom:-100px;
   background:rgba(255,255,255,.07);pointer-events:none}
 .faixa > *{position:relative;z-index:1}
-.faixa h2{margin:0;font-size:22px;font-weight:700;color:#fff;line-height:1.2}
+.faixa h1,.faixa h2{margin:0;font-size:22px;font-weight:700;color:#fff;line-height:1.2}
 .faixa p{margin:4px 0 0;font-size:13.5px;color:rgba(255,255,255,.9);line-height:1.5}
 .faixa p b,.faixa p strong{color:#fff}
-.faixa h2,.faixa p{text-shadow:0 1px 2px rgba(15,23,42,.18)}
+.faixa h1,.faixa h2,.faixa p{text-shadow:0 1px 2px rgba(15,23,42,.18)}
+/* o botão principal da tela, dentro da faixa: branco com o texto na cor dela */
+.fx-botao{background:#fff;color:var(--c1);border:0;cursor:pointer;box-shadow:0 6px 16px -8px rgba(15,23,42,.45);transition:background .15s}
+.fx-botao:hover{background:#F8FAFC}
 .fx-ico{width:48px;height:48px;border-radius:14px;flex:none;display:flex;align-items:center;justify-content:center;
   background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.3);color:#fff}
 .fx-ico svg{width:24px;height:24px}
