@@ -11396,7 +11396,10 @@ def _derivacao_vai_repor(items, descricao: str, pe_direito: float) -> bool:
 
     if "pilar" in d and ("fôrma" in d or "forma" in d):
         # 🩸 26/09/2026 — job 32a27efc: em contenção `_derive_estrutura_pe_direito`
-        # desiste sempre. Apostar que ela repõe zeraria a fôrma por nada.
+        # desiste sempre — esta resposta espelha a desistência (é o contrato).
+        # 🪤 NÃO é ela que decide preservar: a linha de pilar feita com o
+        # pé-direito em contenção zera pela trava `_contencao_com_pd` da
+        # honestidade, que não depende desta aposta.
         if _contencao_no_job(items):
             return False
         return any(
@@ -11833,6 +11836,13 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
     _pd_ok = float(pe_direito or 0) > 0
     # 🚨 23/08 (auditoria): duas travas na preservação, porque texto não é prova.
     _mediu_linear = _tem_comprimento_medido(items)
+    # 🩸 26/09/2026 — job 32a27efc (muro de arrimo): em contenção o pé-direito
+    # informado não é altura de pilar (7,32 × 32 pilares de 1,00 a 6,77 m deu
+    # 13,35 m³ / 229,6 m² contra ≈ 7,0 / ≈ 120). 🔑 Linha de PILAR feita com ele
+    # é o número errado: não se preserva pela conta do pé-direito — zera, como
+    # qualquer número sem procedência. 📏 Hoje ≈ 0 linha: no DXF a linha da IA é
+    # 'dxf_geom' (não passa aqui) e o prompt do PDF não recebe o pé-direito.
+    _contencao_com_pd = _pd_ok and bool(_contencao_no_job(items))
 
     def _area_informada_alcancaria(_it, _u):
         """Se o cliente informar a área total no upload, ela CHEGA neste item?
@@ -12528,6 +12538,8 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
                                     getattr(it, "description", ""), u)
                                 and _derivacao_vai_repor(
                                     items, getattr(it, "description", ""), pe_direito))
+                       and not (_contencao_com_pd and "pilar" in str(
+                           getattr(it, "description", "") or "").lower())
                        and _RX_DERIV_PD.search(str(getattr(it, "observations", "") or "")))
                    )):
             # Preserva quando a procedência se sustenta sem depender do texto:
@@ -15456,6 +15468,11 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                             f"com a conta na observação; (b) sem essa altura na prancha, deixe "
                             f"o m³ e o m² com quantidade 0 e diga na observação que falta a "
                             f"altura de cada pilar no corte/elevação.\n"
+                            # 🪤 o exemplo de CONFIRMADO mais abaixo multiplica
+                            # pilares × "pé-direito das PREMISSAS": contradiz esta
+                            # regra se ninguém disser que ele não vale aqui.
+                            f"O exemplo de fôrma de pilar com o pé-direito das PREMISSAS, mais "
+                            f"abaixo, NÃO se aplica a este projeto.\n"
                         )
                     elif _pd_cli > 0 and is_structural:
                         # 🏗️ 27/08/2026 — O PÉ-DIREITO ERA JOGADO FORA NO
@@ -18679,14 +18696,20 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 # com CAD, ao comprimento medido que a honestidade exige pra
                 # preservar a conta da IA com o PD informado (job b5ce23ff: pilares
                 # dobrados na fôrma em m², viga medida no layer VIGA).
+                # 🩸 26/09/2026 — job 32a27efc (muro de arrimo, DXF): a conta já
+                # recusava a contenção, mas o comprimento medido do CAD ligava a
+                # dica sozinho — e em contenção o pé-direito não destrava nada
+                # (a conta recusa, o prompt manda não usar). Quem seguisse a
+                # dica reprocessaria pra receber o mesmo zero.
                 _pd_destrava = False
                 if _sem_pd:
                     try:
                         import copy as _copy_pd
                         _pd_destrava = bool(
-                            _tem_comprimento_medido(all_items)
-                            or _derive_estrutura_pe_direito(
-                                _copy_pd.deepcopy(all_items), 3.0) > 0)
+                            (_tem_comprimento_medido(all_items)
+                             or _derive_estrutura_pe_direito(
+                                 _copy_pd.deepcopy(all_items), 3.0) > 0)
+                            and not _contencao_no_job(all_items))
                     except Exception:
                         _pd_destrava = False    # na dúvida, não promete
                 _dica_pd = (

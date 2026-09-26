@@ -79,6 +79,8 @@ def _roda(itens, pe_direito=0):
         "_log_error": lambda *a, **k: logs.append(" ".join(str(x) for x in a)),
         "_tem_comprimento_medido": main._tem_comprimento_medido,
         "_derive_estrutura_pe_direito": main._derive_estrutura_pe_direito,
+        # 26/09 (job 32a27efc): a 3ª régua — em contenção o PD não destrava nada
+        "_contencao_no_job": main._contencao_no_job,
     }
     exec(compile(trecho, "main_estrutura_slice", "exec"), ns)
     return pd.warnings, " ".join(logs), ns

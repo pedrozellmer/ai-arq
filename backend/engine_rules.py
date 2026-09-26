@@ -3968,9 +3968,14 @@ def estrutura_de_contencao(textos) -> bool:
     """Algum dos textos fala de estrutura de CONTENÇÃO (muro de arrimo, cortina
     de concreto/estacas, parede diafragma)? Ignora acento e caixa.
 
-    📏 26/09/2026, acervo de cliente: 6 jobs têm item de Estrutura que casa
-    (5 de muro de arrimo/contenção e 1 prédio com "cortina de concreto" e a
-    nota "não inclui contenção"); só o 32a27efc informou pé-direito.
+    📏 26/09/2026, acervo de cliente: 6 jobs têm item de Estrutura que casa.
+    Só 1 é contenção pura (o 32a27efc, o único com pé-direito informado); 4 são
+    edificações que TÊM um muro de arrimo entre lajes, vigas e pilares
+    (0745bfc3, 2933cc30, 4a564963, dbd8d03e); 1 é prédio e casa pela nota
+    negada "NÃO inclui contenção" e por "cortina de concreto" (6c986633).
+    🪤 Quem pergunta pelo JOB desliga a conta dos pilares do PRÉDIO também,
+    se um desses informar pé-direito (linha zerada com o motivo, sem número
+    errado). Estreitar é decisão pendente, não feita aqui.
     """
     if isinstance(textos, str):
         textos = [textos]     # 🪤 str também é iterável: seria letra por letra
