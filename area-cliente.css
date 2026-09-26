@@ -39,6 +39,10 @@
   color:#fff;background:linear-gradient(135deg,var(--c1),var(--c2));box-shadow:0 8px 18px -8px var(--c1)}
 .ico-tile svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
 .ico-tile.p{width:40px;height:40px;border-radius:12px} .ico-tile.p svg{width:20px;height:20px}
+/* linha de projeto (Meus projetos): borda esquerda na cor da tipologia e leve subida ao apontar */
+.pj-linha{border-left:4px solid var(--c1,#CBD5E1) !important;border-radius:14px !important;transition:transform .15s ease,box-shadow .15s ease}
+.pj-linha.group:hover{transform:translateY(-2px);box-shadow:0 12px 26px -16px var(--c1,#4F46E5) !important}
+@media (prefers-reduced-motion:reduce){ .pj-linha,.pj-linha.group:hover{transition:none;transform:none} }
 /* grade que se ajusta: 4 no computador, 2 no tablet, 1 no celular (sem cortar texto em 375 px) */
 .grade-auto{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
 
