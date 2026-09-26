@@ -66,6 +66,8 @@ def varredura(monkeypatch):
     monkeypatch.setattr(main, "_email_auto_recente", lambda *a, **k: False)
     monkeypatch.setattr(main, "_alertas_de_cadastro_ao_pedro", lambda *a, **k: {"status": "teste"})
     monkeypatch.setattr(main, "_email_eh_interno", lambda e: False)
+    estado["avisos"] = []
+    monkeypatch.setattr(main, "_log_error", lambda stage, msg, *a, **k: estado["avisos"].append((stage, msg)))
 
     def rodar():
         r = main.emails_auto_tick(request=None, dry=1)
@@ -113,6 +115,22 @@ def test_sem_saber_quem_e_convidado_as_regras_de_cliente_novo_esperam(varredura)
     varredura["falha_membros"] = True
     tipos = varredura["rodar"]()
     assert "boas_vindas" not in tipos and "nudge_onboarding" not in tipos and "convidado_area_propria" not in tipos, tipos
+
+
+def test_a_esteira_parada_por_falha_de_leitura_fica_no_error_log(varredura):
+    # 🩸 26/09: o None acima era CALADO — o tick respondia 200 e a esteira de cliente novo parava sem rastro
+    varredura["users"] = [_user("u-cli", "cliente@exemplo.com", 2)]
+    varredura["falha_membros"] = True
+    varredura["rodar"]()
+    avisos = [m for s, m in varredura["avisos"] if s == "emails-auto:escritorio-leitura"]
+    assert avisos and all("HTTP 500" in m for m in avisos), varredura["avisos"]
+    assert any("convites" in m for m in avisos) and any("ativos" in m for m in avisos), avisos
+
+
+def test_controle_leitura_boa_nao_deixa_aviso(varredura):
+    varredura["users"] = [_user("u-cli", "cliente@exemplo.com", 2)]
+    varredura["rodar"]()
+    assert not [s for s, _ in varredura["avisos"] if s == "emails-auto:escritorio-leitura"], varredura["avisos"]
 
 
 def test_o_email_proprio_segue_o_padrao_da_casa():

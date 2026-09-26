@@ -23005,6 +23005,15 @@ def _send_email_convidado_area_propria(email: str, name: str, project_name: str,
     return _send_email_smtp(email, subject, html, log_kind="convidado_area_propria")
 
 
+def _avisar_leitura_do_escritorio_falhou(o_que: str, st) -> None:
+    """🩸 26/09: as duas leituras abaixo devolviam None CALADAS — e None segura as regras de
+    cliente-novo da varredura (boas-vindas, 1ª prancha) pra TODO mundo, com o tick respondendo
+    200. Uma coluna renomeada pararia a esteira sem ninguém saber. Agora fica no error_log."""
+    _log_error("emails-auto:escritorio-leitura",
+               f"não consegui ler {o_que} (HTTP {st}) — boas-vindas e 1ª prancha de cliente novo "
+               f"esperam o próximo tick até a leitura voltar")
+
+
 def _convidados_do_escritorio():
     """{user_id: {"aceito_em", "projeto", "quem"}} de quem está no Escritório SÓ como
     equipe (nunca como admin de projeto próprio). None = não consegui ler.
@@ -23017,10 +23026,12 @@ def _convidados_do_escritorio():
         params={"select": "user_id,papel,status,aceito_em,nome,projeto_id", "status": "eq.ativo"},
         ordem="id.asc", timeout=15)
     if st != 200:
+        _avisar_leitura_do_escritorio_falhou("escritorio_membros (ativos)", st)
         return None
     st2, projs = _supa_rest_tudo("escritorio_projetos", params={"select": "id,nome"},
                                  ordem="id.asc", timeout=15)
     if st2 != 200:
+        _avisar_leitura_do_escritorio_falhou("escritorio_projetos", st2)
         return None
     nome_proj = {p["id"]: p.get("nome") or "" for p in projs}
     admin_do = {l["projeto_id"]: (l.get("nome") or "") for l in linhas if l.get("papel") == "dono"}
@@ -23051,6 +23062,7 @@ def _convites_pendentes():
         params={"select": "email,convite_expira,visto_por", "status": "eq.convidado", "papel": "eq.freela"},
         ordem="id.asc", timeout=15)
     if st != 200:
+        _avisar_leitura_do_escritorio_falhou("escritorio_membros (convites)", st)
         return None
     from datetime import timezone as _tz_pend
     agora = datetime.now(_tz_pend.utc)
@@ -23566,11 +23578,13 @@ def emails_auto_tick(request: Request, dry: int = 0):
         convidados = _convidados_do_escritorio()
     except Exception as _ec:
         print(f"[emails-auto] convidados do escritório falhou: {_ec}")
+        _avisar_leitura_do_escritorio_falhou("os convidados do escritório", type(_ec).__name__)
         convidados = None
     try:
         pendentes = _convites_pendentes()
     except Exception as _ep:
         print(f"[emails-auto] convites pendentes falhou: {_ep}")
+        _avisar_leitura_do_escritorio_falhou("os convites pendentes", type(_ep).__name__)
         pendentes = None
 
     acoes: list[dict] = []
