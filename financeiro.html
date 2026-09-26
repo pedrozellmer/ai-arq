@@ -100,7 +100,9 @@
   table.fin { table-layout:fixed; width:100%; border-collapse:collapse; }
   table.fin th, table.fin td { padding:10px 12px; vertical-align:middle; }
   table.fin thead th { position:sticky; top:calc(var(--cr-header-h,60px) + var(--fin-bar-h,63px)); z-index:20; }
-  .tbl-wrap { overflow:visible; }
+  /* 26/09 (auditoria): position:relative prende o sr-only "Ações" do cabeçalho DENTRO da caixa. Sem isso ele
+     se posicionava pela <section> de fora, escapava do overflow-x e esticava a página a 641 px no celular. */
+  .tbl-wrap { overflow:visible; position:relative; }
   .forn-sub { display:none; }
   @media (max-width:1239px) {
     .c-forn, .th-forn, .td-forn { display:none; }

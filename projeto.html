@@ -33,6 +33,11 @@
   .q-card:hover { border-color:#22D3EE !important; }
   .q-card .q-ico { background:linear-gradient(135deg,#0891B2,#22D3EE) !important; color:#fff !important; box-shadow:0 8px 18px -8px #0891B2; }
   #arquivos-box { border-radius:16px; }
+  /* 26/09 (auditoria): no celular as caixas de Processamento (botão ao lado do texto, sem quebrar) esticavam a
+     página a 439 px. Item de grade sem min-width:0 não encolhe; e as caixas passam a quebrar linha. */
+  #detalhes-processamento .grid > * { min-width:0; }
+  #reprocess-box, #reportar-box { flex-wrap:wrap; }
+  #detalhes-processamento h3, #detalhes-processamento p { overflow-wrap:anywhere; }
   .arq-cab { background:linear-gradient(90deg,#FFFBEB,#fff 70%) !important; border-bottom-color:#FDE68A !important; }
   .kpi { position:relative; overflow:hidden; transition:transform .18s ease, box-shadow .18s ease; }
   .kpi:hover { transform:translateY(-3px); box-shadow:0 2px 4px rgba(15,23,42,.06), 0 18px 38px -16px rgba(79,70,229,.30); }
