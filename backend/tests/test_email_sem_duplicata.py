@@ -107,6 +107,10 @@ def _bancada_do_boas_vindas(monkeypatch, ja_recebeu, linha_do_tempo, enviados):
     monkeypatch.setattr(M, "_notify_admin", lambda *a, **k: True)
     monkeypatch.setattr(M, "_email_auto_ja_enviado", lambda *a, **k: True)
     monkeypatch.setattr(M, "_email_auto_registrar", lambda *a, **k: None)
+    # 26/09 (auditoria B-1): o 1º acesso agora ESPERA quando não consegue ler o Escritório (na dúvida, não envia).
+    # Esta bancada é do cliente comum, com a leitura funcionando: ninguém é convidado.
+    monkeypatch.setattr(M, "_convidados_do_escritorio", lambda: {})
+    monkeypatch.setattr(M, "_convites_pendentes", lambda: (set(), set()))
 
 
 def test_o_boas_vindas_confere_se_ja_saiu(monkeypatch):
