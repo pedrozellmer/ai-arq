@@ -189,8 +189,14 @@
   .arq-lista li.e-pasta .arq-ic{background:#FEF3C7;color:#D97706}
   .arq-n{flex:1;min-width:0;font-size:14.5px;overflow-wrap:anywhere} .arq-n a{color:#0F172A;text-decoration:none} .arq-n a:hover{color:#B45309;text-decoration:underline}
   .arq-lista li.e-pasta .arq-n a{font-weight:600}
-  .arq-q{font-size:12.5px;color:#94A3B8;white-space:nowrap}
-  @media (max-width:640px){ .arq-q{display:none} }
+  .arq-q{font-size:12.5px;color:#64748B;white-space:nowrap;width:230px;flex:none}
+  .arq-por{display:block;font-size:11.5px;color:#94A3B8;overflow:hidden;text-overflow:ellipsis}
+  .arq-t{font-size:12.5px;color:#64748B;width:72px;flex:none;text-align:right;font-variant-numeric:tabular-nums}
+  .arq-lista li.arq-sub,.arq-lista li.arq-abre{cursor:pointer}
+  .arq-lista li.arq-sub:focus-visible,.arq-lista li.arq-abre:focus-visible{outline:2px solid #D97706;outline-offset:2px}
+  .arq-cab-l{display:flex;gap:12px;padding:0 12px 6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#94A3B8}
+  .arq-cab-l span:nth-child(1){width:38px;flex:none} .arq-cab-l span:nth-child(2){flex:1} .arq-cab-l span:nth-child(3){width:230px;flex:none} .arq-cab-l span:nth-child(4){width:72px;flex:none;text-align:right}
+  @media (max-width:640px){ .arq-q,.arq-cab-l{display:none} }
   /* ata: data em destaque */
   .ata{border-left:4px solid #10B981}
   .ata-dia{width:54px;flex:none;text-align:center;border-radius:12px;background:#ECFDF5;color:#065F46;padding:6px 0}
@@ -938,17 +944,47 @@ async function carregarArquivos() {
   if (acoes) acoes.innerHTML = `<a class="btn btn-s" href="https://drive.google.com/drive/folders/${encodeURIComponent(pasta.atual || pasta.id)}" target="_blank" rel="noopener">Abrir no Drive</a>`
     + (souAdmin() ? '<button class="btn btn-s" onclick="sincronizarPasta()">Atualizar acesso da equipe</button><button class="btn btn-s" onclick="escolherPasta(\'root\')">Trocar pasta</button>' : '');
   const trilha = `<div class="arq-trilha"><a href="#" data-sub="" data-nome="" class="arq-sub">${svg('pastas', 14)}${esc(pasta.nome || 'Pasta do projeto')}</a>${ARQ_TRILHA.map((t) => `<span>›</span><a href="#" data-sub="${esc(t.id)}" data-nome="${esc(t.nome)}" class="arq-sub">${esc(t.nome)}</a>`).join('')}</div>`;
+  // 26/09 (Pedro): pastas antes, e em ordem NATURAL — o Google ordena "10 Outubro" antes de "2 Fevereiro"
+  arqs.sort((a, b) => (b.pasta - a.pasta) || String(a.nome).localeCompare(String(b.nome), 'pt-BR', { numeric: true, sensitivity: 'base' }));
   const nP = arqs.filter((f) => f.pasta).length, nA = arqs.length - nP;
-  corpo.innerHTML = trilha + (arqs.length ? `<p class="sub" style="margin:0 0 10px">${nP ? `${nP} pasta${nP > 1 ? 's' : ''}` : ''}${nP && nA ? ' · ' : ''}${nA ? `${nA} arquivo${nA > 1 ? 's' : ''}` : ''}</p><ul class="arq-lista">${arqs.map((f) => {
+  corpo.innerHTML = trilha + (arqs.length ? `<p class="sub" style="margin:0 0 10px">${nP ? `${nP} pasta${nP > 1 ? 's' : ''}` : ''}${nP && nA ? ' · ' : ''}${nA ? `${nA} arquivo${nA > 1 ? 's' : ''}` : ''}</p>
+    <div class="arq-cab-l" aria-hidden="true"><span></span><span>Nome</span><span>Última modificação</span><span>Tamanho</span></div><ul class="arq-lista">${arqs.map((f) => {
     const ic = ehIconeDoGoogle(f.icone) ? `<img src="${esc(f.icone)}" alt="" width="20" height="20">` : svg(f.pasta ? 'pastas' : 'arq', 20);
-    const quando = f.mudou_em ? dBR(f.mudou_em) + (f.por ? ' · ' + esc(f.por) : '') : '';
+    // o que o Google Drive guarda: quando mudou (data E hora, no fuso de Brasília) e quem mudou por último
+    const quando = f.mudou_em ? `${esc(quandoArq(f.mudou_em))}${f.por ? `<span class="arq-por">por ${esc(f.por)}</span>` : ''}` : '';
+    const linkOk = !f.pasta && ehLinkDoGoogle(f.link);
     const nome = f.pasta
       ? `<a href="#" class="arq-sub" data-sub="${esc(f.id)}" data-nome="${esc(f.nome)}">${esc(f.nome)}</a>`
-      : (ehLinkDoGoogle(f.link) ? `<a href="${esc(f.link)}" target="_blank" rel="noopener">${esc(f.nome)}</a>` : esc(f.nome));
-    return `<li class="${f.pasta ? 'e-pasta' : ''}"><span class="arq-ic">${ic}</span><span class="arq-n">${nome}</span><span class="arq-q">${quando}</span></li>`;
+      : (linkOk ? `<a href="${esc(f.link)}" target="_blank" rel="noopener">${esc(f.nome)}</a>` : esc(f.nome));
+    // a LINHA inteira abre (pasta: entra; arquivo: abre no Drive) — o nome continua sendo o link de verdade
+    const abre = f.pasta ? ` class="e-pasta arq-sub" data-sub="${esc(f.id)}" data-nome="${esc(f.nome)}" tabindex="0" role="link"`
+      : linkOk ? ` class="arq-abre" data-link="${esc(f.link)}" tabindex="0" role="link"` : '';
+    return `<li${abre}><span class="arq-ic">${ic}</span><span class="arq-n">${nome}</span><span class="arq-q">${quando}</span><span class="arq-t">${f.pasta ? '—' : tamanhoArq(f.tamanho)}</span></li>`;
   }).join('')}</ul>` : passo('pastas', 'Pasta vazia', 'Os arquivos que você puser nesta pasta do Drive aparecem aqui.'))
     + (souAdmin() ? '' : '<p class="sub" style="margin-top:12px">Pra abrir e editar os arquivos, use a conta Google em que você recebeu o compartilhamento da pasta.</p>');
 }
+// data e hora da última modificação no Drive, no fuso de Brasília ("13/04/2026 às 14:32")
+function quandoArq(iso) {
+  const d = new Date(iso); if (isNaN(d)) return '';
+  const p = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: FUSO }).formatToParts(d);
+  const v = (t) => (p.find((x) => x.type === t) || {}).value || '';
+  return `${v('day')}/${v('month')}/${v('year')} às ${v('hour')}:${v('minute')}`;
+}
+// tamanho que o Drive informa (em bytes); documento do próprio Google (Docs, Planilhas) não tem tamanho
+function tamanhoArq(b) {
+  const n = Number(b); if (!b || !isFinite(n)) return '—';
+  const u = [['GB', 1073741824], ['MB', 1048576], ['KB', 1024]].find(([, m]) => n >= m);   // base 1024, como o Drive mostra
+  return u ? `${(n / u[1]).toLocaleString('pt-BR', { maximumFractionDigits: n / u[1] < 10 ? 1 : 0 })} ${u[0]}` : `${n} B`;
+}
+// arquivo: a linha inteira abre no Drive (o link já passou pelo ehLinkDoGoogle ao desenhar)
+document.addEventListener('click', (ev) => {
+  const li = ev.target.closest && ev.target.closest('.arq-abre'); if (!li || ev.target.closest('a')) return;
+  const url = li.dataset.link || ''; if (ehLinkDoGoogle(url)) window.open(url, '_blank', 'noopener');
+});
+document.addEventListener('keydown', (ev) => {
+  if (ev.key !== 'Enter') return;
+  const li = ev.target.closest && ev.target.closest('li.arq-abre, li.arq-sub'); if (li && ev.target === li) li.click();
+});
 // um ouvinte só pras subpastas (o nome da pasta nunca vai dentro de onclick)
 document.addEventListener('click', (ev) => {
   const a = ev.target.closest && ev.target.closest('.arq-sub'); if (!a) return;
