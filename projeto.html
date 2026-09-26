@@ -10,6 +10,7 @@
   <title>Projeto — AI.arq</title>
   <meta name="robots" content="noindex,follow">
   <link rel="stylesheet" href="/tailwind.min.css">
+  <link rel="stylesheet" href="/area-cliente.css">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
   body { font-family: 'Inter', -apple-system, sans-serif; }
@@ -135,6 +136,12 @@
 <main id="main" class="max-w-6xl mx-auto px-4 py-6">
   <!-- ══ VISTA: visao ══ -->
   <div class="vista" data-vista="visao">
+  <!-- 25/09: faixa do padrão da área do cliente (area-cliente.css) -->
+  <section class="faixa" style="--c1:#4F46E5;--c2:#06B6D4">
+    <span class="fx-ico"><svg fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg></span>
+    <div class="fx-texto"><h2>Visão geral</h2>
+      <p>O andamento do projeto, os números da planilha e o que ainda precisa de você.</p></div>
+  </section>
 <div id="aviso-coerencia" class="hidden"></div>
 <div id="proc-block" class="hidden rounded-2xl border-2 border-indigo-200 bg-white p-6 shadow-lg hero-accent">
     <div class="flex items-center gap-3 mb-1">
@@ -467,6 +474,12 @@
 
   <!-- ══ VISTA: quantitativo ══ -->
   <div class="vista" data-vista="quantitativo" hidden>
+  <!-- 25/09: faixa do padrão da área do cliente (area-cliente.css) -->
+  <section class="faixa" style="--c1:#0891B2;--c2:#22D3EE">
+    <span class="fx-ico"><svg fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 10v10M3 15h18"/></svg></span>
+    <div class="fx-texto"><h2>Quantitativo</h2>
+      <p>A planilha lida das suas pranchas: baixe, revise e acompanhe o que foi medido e o que falta.</p></div>
+  </section>
     <!-- 🚨 Regra dura nº7: o aviso de "entregável desatualizado" tem que
          estar ONDE O CLIENTE BAIXA. Antes vivia só na Visão geral, e quem
          entrava direto aqui baixava arquivo velho sem nunca ver o alerta.
@@ -581,6 +594,12 @@
 
   <!-- ══ VISTA: cotacoes ══ -->
   <div class="vista" data-vista="cotacoes" hidden>
+  <!-- 25/09: faixa do padrão da área do cliente (area-cliente.css) -->
+  <section class="faixa" style="--c1:#0D9488;--c2:#2DD4BF">
+    <span class="fx-ico"><svg fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M4 8h13l-3-3M20 16H7l3 3"/></svg></span>
+    <div class="fx-texto"><h2>Comparativo</h2>
+      <p>Suba a planilha revisada e as cotações de fornecedor deste projeto.</p></div>
+  </section>
 <section id="cotacoes-section" class="rounded-xl border bg-white overflow-hidden">
     <div class="px-5 py-4 border-b bg-gray-50">
       <h2 class="font-semibold text-gray-800">📤 Enviar planilhas deste projeto</h2>
@@ -681,6 +700,12 @@
 
   <!-- ══ VISTA: processamento ══ -->
   <div class="vista" data-vista="processamento" hidden>
+  <!-- 25/09: faixa do padrão da área do cliente (area-cliente.css) -->
+  <section class="faixa" style="--c1:#475569;--c2:#94A3B8">
+    <span class="fx-ico"><svg fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+    <div class="fx-texto"><h2>Processamento</h2>
+      <p>Como a leitura das pranchas correu, e o botão pra processar de novo.</p></div>
+  </section>
 <section id="detalhes-processamento">
     <h2 class="text-sm font-bold text-gray-700 mb-3">Detalhes do processamento</h2>
     <div class="grid gap-3 sm:grid-cols-2">
