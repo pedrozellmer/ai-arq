@@ -297,30 +297,32 @@
 
         <!-- Resumo do que a IA já fez (números REAIS, medidos do seu histórico) -->
         <div id="home-metrics" class="rounded-2xl border border-gray-200 bg-white p-5 mb-6">
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-5">
+          <!-- 26/09 (auditoria): ícones desenhados no lugar dos emojis, e grade que vira 1 coluna no celular
+               (em 2 colunas de 375 px os textos saíam cortados: "itens de quan…", "Reside…") -->
+          <div class="grade-auto" style="gap:20px 16px">
             <div class="flex items-center gap-3">
-              <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-xl" aria-hidden="true">📊</span>
+              <span class="ico-tile" style="--c1:#4F46E5;--c2:#818CF8" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 20V11M10 20V5M16 20v-6M21 20H3"/></svg></span>
               <div class="min-w-0">
                 <p id="stat-projects" class="text-2xl font-bold text-gray-900 leading-none">0</p>
                 <p id="stat-projects-sub" class="text-xs text-gray-500 mt-1 truncate">projetos processados</p>
               </div>
             </div>
             <div class="flex items-center gap-3">
-              <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-purple-50 text-xl" aria-hidden="true">📋</span>
+              <span class="ico-tile" style="--c1:#0891B2;--c2:#22D3EE" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 10v10M3 15h18"/></svg></span>
               <div class="min-w-0">
                 <p id="stat-items" class="text-2xl font-bold text-gray-900 leading-none">0</p>
                 <p class="text-xs text-gray-500 mt-1 truncate">itens de quantitativo</p>
               </div>
             </div>
             <div class="flex items-center gap-3">
-              <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-xl" aria-hidden="true">⏱️</span>
+              <span class="ico-tile" style="--c1:#059669;--c2:#34D399" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 1.5M9.5 2.5h5"/></svg></span>
               <div class="min-w-0">
                 <p id="stat-avg-time" class="text-2xl font-bold text-gray-900 leading-none">--</p>
                 <p class="text-xs text-gray-500 mt-1 truncate">tempo médio / projeto</p>
               </div>
             </div>
             <div class="flex items-center gap-3">
-              <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-xl" aria-hidden="true">🏠</span>
+              <span class="ico-tile" style="--c1:#D97706;--c2:#F59E0B" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg></span>
               <div class="min-w-0">
                 <p id="stat-top-typology" class="text-lg font-bold text-gray-900 leading-tight capitalize truncate">--</p>
                 <p class="text-xs text-gray-500 mt-1 truncate">tipologia mais usada</p>
@@ -336,23 +338,31 @@
         </div>
 
         <!-- Atalhos (tiles) -->
-        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+        <!-- 26/09 (auditoria): 4 atalhos (eram 3 numa grade de 4, com buraco), ícones desenhados e 1 coluna no celular -->
+        <div class="grade-auto mb-6">
           <button data-track="novo-projeto-atalho" onclick="switchTab('novo-projeto')" class="flex items-center gap-3 rounded-2xl border-2 border-indigo-200 bg-indigo-50/60 hover:bg-indigo-100 hover:border-indigo-300 p-4 text-left transition">
-            <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white text-lg" aria-hidden="true">➕</span>
+            <span class="ico-tile" style="--c1:#4F46E5;--c2:#06B6D4" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span>
             <div class="min-w-0">
               <p class="font-semibold text-gray-900 truncate">Novo projeto</p>
               <p class="text-xs text-gray-500 truncate">Subir DXF/DWG/PDF</p>
             </div>
           </button>
           <button onclick="switchTab('meus-projetos')" class="flex items-center gap-3 rounded-2xl border border-gray-200 bg-white hover:border-indigo-300 hover:shadow-sm p-4 text-left transition">
-            <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-lg" aria-hidden="true">📁</span>
+            <span class="ico-tile" style="--c1:#7C3AED;--c2:#A78BFA" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>
             <div class="min-w-0">
               <p class="font-semibold text-gray-900 truncate">Meus projetos</p>
               <p class="text-xs text-gray-500 truncate">Histórico e revisar</p>
             </div>
           </button>
+          <button data-track="revisao-atalho" onclick="switchTab('revisao')" class="flex items-center gap-3 rounded-2xl border border-gray-200 bg-white hover:border-indigo-300 hover:shadow-sm p-4 text-left transition">
+            <span class="ico-tile" style="--c1:#E11D48;--c2:#FB7185" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1M9 12l2 2 4-4"/></svg></span>
+            <div class="min-w-0">
+              <p class="font-semibold text-gray-900 truncate">Revisão</p>
+              <p class="text-xs text-gray-500 truncate">Itens esperando você</p>
+            </div>
+          </button>
           <button onclick="switchTab('meu-cadastro')" class="flex items-center gap-3 rounded-2xl border border-gray-200 bg-white hover:border-indigo-300 hover:shadow-sm p-4 text-left transition">
-            <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-lg" aria-hidden="true">👤</span>
+            <span class="ico-tile" style="--c1:#2563EB;--c2:#60A5FA" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/></svg></span>
             <div class="min-w-0">
               <p class="font-semibold text-gray-900 truncate">Meu cadastro</p>
               <p class="text-xs text-gray-500 truncate">Dados e conta</p>
@@ -1931,7 +1941,8 @@
       } else {
         recentEl.innerHTML = recent.map(p => {
           const when = p.created_at ? window.fmtBR(p.created_at, {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
-          const _ti = ({office:['🏢','bg-indigo-50'],residential:['🏠','bg-emerald-50'],retail:['🏪','bg-amber-50'],hospital:['🏥','bg-rose-50'],educational:['🎓','bg-sky-50']})[p.typology] || ['📄','bg-gray-100'];
+          // 26/09 (auditoria): ícone desenhado na cor da tipologia (era emoji)
+          const _ti = ({office:['#4F46E5','#818CF8'],residential:['#059669','#34D399'],retail:['#D97706','#F59E0B'],hospital:['#E11D48','#FB7185'],educational:['#0891B2','#22D3EE']})[p.typology] || ['#64748B','#94A3B8'];
           // Selo de status — daltônico-safe (ícone + texto, nunca só cor)
           const _st = p.status || '';
           let _badge = '';
@@ -1942,10 +1953,10 @@
           }
           return `
             <a href="projeto.html?job_id=${p.job_id}" class="flex items-center gap-3 px-5 py-3 hover:bg-gray-50 no-underline">
-              <div class="w-10 h-10 rounded-xl ${_ti[1]} flex items-center justify-center text-lg shrink-0" aria-hidden="true">${_ti[0]}</div>
+              <span class="ico-tile p" style="--c1:${_ti[0]};--c2:${_ti[1]}" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 21V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v16M15 9h4a1 1 0 0 1 1 1v11M3 21h18M8 8h3M8 12h3M8 16h3"/></svg></span>
               <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2 min-w-0">
-                  <p class="font-medium text-gray-800 truncate">${escapeH(p.project_name || 'Sem nome')}</p>
+                  <p class="font-medium text-gray-800 truncate">${escapeH(tituloProjeto(p.project_name || 'Sem nome'))}</p>
                   ${_badge}
                 </div>
                 <p class="text-xs text-gray-500 truncate">${(p.client_name || '').trim() ? '<span class="text-gray-700 font-medium">👤 ' + escapeH(p.client_name) + '</span> · ' : ''}${escapeH(p.typology || '')} · ${p.items_count || 0} itens · ${when}</p>

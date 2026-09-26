@@ -676,12 +676,19 @@
       } catch (e) {}
     }
   };
-  // toda escrita da página (qualquer caminho) apaga o cache — antes de sair e quando volta
+  // toda escrita da página (qualquer caminho) apaga o cache — antes de sair e quando volta.
+  // 🩸 26/09 (auditoria): o /api/track (registro de visita/clique) é POST e dispara em quase toda
+  // abertura de página — apagava o cache logo ao abrir e ele quase nunca servia. Envio que só REGISTRA
+  // (telemetria, boas-vindas, nota de satisfação) e a renovação do login do Supabase não mudam nenhum
+  // dado das rotas guardadas: passam sem apagar.
+  var _SO_REGISTRO = /\/api\/(track|notify\/|nps)(\b|\/|$)|\/auth\/v1\//;
   try {
     var _fetchOrig = window.fetch.bind(window);
     window.fetch = function (input, init) {
       var m = (init && init.method) || (input && typeof input === 'object' && input.method) || 'GET';
       if (String(m).toUpperCase() === 'GET' || String(m).toUpperCase() === 'HEAD') return _fetchOrig(input, init);
+      var _u = typeof input === 'string' ? input : (input && input.url) || '';
+      if (_SO_REGISTRO.test(String(_u))) return _fetchOrig(input, init);
       window.aiarqCache.limpar();
       return _fetchOrig(input, init).then(function (r) { window.aiarqCache.limpar(); return r; },
                                            function (e) { window.aiarqCache.limpar(); throw e; });
@@ -689,6 +696,7 @@
   } catch (e) {}
 
   var _avisouSessao = false;
+  var _emVoo = {};          // leituras da lista em andamento: chave → {g: geração, p: promessa do texto}
   window.authFetch = async function (url, options) {
     options = options || {};
     const { data: { session } } = await _sbClient.auth.getSession();
@@ -701,6 +709,19 @@
       if (_guardado !== null) {
         return new Response(_guardado, { status: 200, headers: { 'Content-Type': 'application/json', 'X-Aiarq-Cache': '1' } });
       }
+    }
+    // 26/09 (auditoria): a MESMA leitura pedida duas vezes ao mesmo tempo (o painel e o menu pediam
+    // /api/meus-entregaveis juntos) vai UMA vez ao servidor — a segunda espera a resposta da primeira.
+    // Se uma escrita acontecer no meio, quem esperava não usa a resposta e busca a sua.
+    var _chaveVoo = _cacheavel ? (_uid || '') + '|' + String(url) : null, _resolveVoo = null, _txtVoo = null, _meuVoo = null;
+    if (_chaveVoo && _emVoo[_chaveVoo] && _emVoo[_chaveVoo].g === _g0) {
+      var _deOutro = await _emVoo[_chaveVoo].p;
+      if (_deOutro !== null && window.aiarqCache.geracao() === _g0) {
+        return new Response(_deOutro, { status: 200, headers: { 'Content-Type': 'application/json', 'X-Aiarq-Cache': 'voo' } });
+      }
+    } else if (_chaveVoo) {
+      _meuVoo = { g: _g0, p: new Promise(function (r) { _resolveVoo = r; }) };
+      _emVoo[_chaveVoo] = _meuVoo;
     }
     const headers = Object.assign({}, options.headers || {});
     if (session && session.access_token) {
@@ -731,10 +752,11 @@
           notify.warn('Sua sessão expirou ou não deu pra confirmar seu login. Recarregue a página e entre de novo.');
         } catch (e) {}
       }
-      if (_cacheavel && resp.ok && window.aiarqCache.geracao() === _g0) {
+      if (_cacheavel && resp.ok) {
         try {
           var _txt = await resp.clone().text();
-          window.aiarqCache.guardar(url, _uid, _txt);
+          if (_resolveVoo) _txtVoo = _txt;
+          if (window.aiarqCache.geracao() === _g0) window.aiarqCache.guardar(url, _uid, _txt);
         } catch (e) {}
       }
       return resp;
@@ -745,6 +767,8 @@
       throw err;
     } finally {
       if (timer) clearTimeout(timer);
+      // quem esperava esta leitura recebe o texto (ou null: deu erro, cada um tenta por si)
+      if (_resolveVoo) { _resolveVoo(_txtVoo); if (_emVoo[_chaveVoo] === _meuVoo) delete _emVoo[_chaveVoo]; }
     }
   };
 

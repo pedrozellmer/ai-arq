@@ -34,6 +34,14 @@
   background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.28);border-radius:99px;padding:4px 11px}
 @media (max-width:640px){ .faixa{padding:18px} .faixa h2{font-size:19px} .fx-ico{width:42px;height:42px} }
 
+/* ícone desenhado num quadradinho na cor da coisa (o mesmo dos atalhos do Escritório) — no lugar dos emojis */
+.ico-tile{--c1:#4F46E5;--c2:#818CF8;width:44px;height:44px;border-radius:13px;flex:none;display:flex;align-items:center;justify-content:center;
+  color:#fff;background:linear-gradient(135deg,var(--c1),var(--c2));box-shadow:0 8px 18px -8px var(--c1)}
+.ico-tile svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.ico-tile.p{width:40px;height:40px;border-radius:12px} .ico-tile.p svg{width:20px;height:20px}
+/* grade que se ajusta: 4 no computador, 2 no tablet, 1 no celular (sem cortar texto em 375 px) */
+.grade-auto{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr))}
+
 /* 26/09 (Pedro: "ao mudar de página o site fica carregando de novo"): o "Carregando…" (#gate) cobria a
    tela INTEIRA, menu junto, em branco — cada troca parecia recarregar o site. Agora, no computador, ele
    cobre só o conteúdo: o menu (fixo, 248 px) fica parado, e o fundo é o da página, sem clarão. */

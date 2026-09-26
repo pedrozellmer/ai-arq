@@ -72,7 +72,8 @@ def test_leitura_que_atravessou_uma_escrita_nao_e_guardada():
     i = UTILS.index("window.authFetch = async function (url, options) {")
     af = UTILS[i:UTILS.index("\n  };\n", i)]
     assert "var _g0 = window.aiarqCache.geracao();" in af
-    assert "resp.ok && window.aiarqCache.geracao() === _g0" in af
+    # 26/09: o texto é lido pra quem espera a mesma leitura, mas só é GUARDADO se não houve escrita no meio
+    assert "if (window.aiarqCache.geracao() === _g0) window.aiarqCache.guardar(url, _uid, _txt);" in af
     pj = _ler("projeto.html")
     j = pj.index("const lerComCache = async (url, headers, teto) => {")
     lc = pj[j:pj.index("\n  };\n", j)]
@@ -94,6 +95,38 @@ def test_o_menu_so_adianta_leituras_da_lista():
     for base, resto in urls:
         assert ok.search(API + base + "abc123" + (resto or "")), base + (resto or "")
     assert "marcar" not in corpo
+
+def _regex_so_registro():
+    m = re.search(r"var _SO_REGISTRO = /(.*?)/;", UTILS)
+    assert m, "a lista de envios que só registram sumiu"
+    return re.compile(m.group(1).replace("\\/", "/"))
+
+
+def test_telemetria_nao_apaga_o_cache_mas_escrita_de_verdade_apaga():
+    # 🩸 26/09 (auditoria): o /api/track dispara em quase toda página e apagava o cache ao abrir
+    so = _regex_so_registro()
+    for u in ("https://api.ai.arq.br/api/track", "https://api.ai.arq.br/api/notify/welcome",
+              "https://api.ai.arq.br/api/nps", "https://x.supabase.co/auth/v1/token?grant_type=refresh_token"):
+        assert so.search(u), u
+    for u in ("https://api.ai.arq.br/api/items/abc/review/it1", "https://api.ai.arq.br/api/items/abc/finalize",
+              "https://api.ai.arq.br/api/project/abc/reprocess", "https://api.ai.arq.br/api/cronograma/abc",
+              "https://x.supabase.co/rest/v1/escritorio_tarefas", "https://api.ai.arq.br/api/tracker-novo"):
+        assert not so.search(u), u
+    i = UTILS.index("var _fetchOrig = window.fetch.bind(window);")
+    corpo = UTILS[i:UTILS.index("} catch (e) {}", i)]
+    assert corpo.index("_SO_REGISTRO.test(") < corpo.index("window.aiarqCache.limpar();")
+
+
+def test_a_mesma_leitura_ao_mesmo_tempo_vai_uma_vez_so():
+    i = UTILS.index("window.authFetch = async function (url, options) {")
+    af = UTILS[i:UTILS.index("\n  };\n", i)]
+    assert "_emVoo[_chaveVoo].g === _g0" in af, "só espera leitura da mesma geração"
+    assert "_deOutro !== null && window.aiarqCache.geracao() === _g0" in af, "escrita no meio: busca a sua"
+    assert "if (_emVoo[_chaveVoo] === _meuVoo) delete _emVoo[_chaveVoo];" in af, "não apaga o registro de outra leitura"
+    # quem esperava SEMPRE é liberado (no finally, deu certo ou não)
+    fin = af[af.index("} finally {"):]
+    assert "_resolveVoo(_txtVoo);" in fin
+
 
 # controle positivo (26/09): pôr "|items\/[^/?#]+\/review-state\?marcar=1" na lista reprovou
 # test_a_lista_recusa_efeito_colateral_e_escrita; tirar o "_cacheGeracao++;" reprovou o da travessia.
