@@ -16,11 +16,27 @@
     body { font-family: 'Inter', -apple-system, sans-serif; }
     /* Cabeçalho de disciplina: card branco com faixa de degradê 3px no topo
        (padrão novo do cronograma.html). Texto escuro, botões com contraste. */
-    /* 25/09: no tom da Revisão (a mesma faixa rosa do topo — area-cliente.css) */
-    .section-header { position: relative; background: linear-gradient(90deg,#FFF1F2,#fff 70%); border-bottom: 1px solid #FFE4E6; padding-bottom: 14px !important; }
-    .section-header::before { content:""; position:absolute; top:0; left:0; right:0; height:3px; background:linear-gradient(135deg,#E11D48,#FB7185); }
-    .sec-prog { position:absolute; left:16px; right:16px; bottom:6px; height:4px; border-radius:99px; background:#FFE4E6; overflow:hidden; }
+    /* 25/09 (Pedro: "no jeito do Escritório"): cada disciplina é um cartão com a SUA cor (--sc no style
+       da <section>, pela ordem da disciplina), cabeçalho no tom dela e a barra do que já foi revisado. */
+    .rv-sec { --sc:#E11D48; border-top:4px solid var(--sc) !important; border-radius:18px !important; }
+    .section-header { position: relative; background: linear-gradient(90deg,color-mix(in srgb,var(--sc) 9%,#fff),#fff 70%); border-bottom: 1px solid color-mix(in srgb,var(--sc) 14%,#fff); padding-top: 12px !important; padding-bottom: 16px !important; }
+    .section-header h2 { display:flex; align-items:center; gap:8px; font-size:15px !important; }
+    .section-header h2 i { width:10px; height:10px; border-radius:50%; background:var(--sc); box-shadow:0 0 0 3px color-mix(in srgb,var(--sc) 22%,transparent); flex:none; }
+    .sec-prog { position:absolute; left:16px; right:16px; bottom:6px; height:5px; border-radius:99px; background:color-mix(in srgb,var(--sc) 12%,#F1F5F9); overflow:hidden; }
     .sec-prog i { display:block; height:100%; border-radius:99px; background:linear-gradient(90deg,#10B981,#34D399); transition:width .3s ease; }
+    .rv-lista { display:flex; flex-direction:column; gap:8px; padding:12px; background:color-mix(in srgb,var(--sc) 3%,#F8FAFC); }
+    .rv-lista .item-row { background:#fff; border:1px solid #E2E8F0; border-radius:14px; box-shadow:0 1px 2px rgba(15,23,42,.04); }
+    .rv-lista .item-row:hover { box-shadow:0 10px 22px -14px rgba(15,23,42,.35); }
+    .rv-acoes button { border-radius:999px !important; background:#fff; }
+    .rv-num { display:inline-flex; align-items:center; justify-content:center; min-width:24px; height:24px; border-radius:8px; background:color-mix(in srgb,var(--sc) 12%,#fff); color:var(--sc); font-weight:700; font-size:11px; }
+    /* resumo no topo (dentro da faixa) */
+    .fx-prog { height:6px; border-radius:99px; background:rgba(255,255,255,.28); overflow:hidden; margin-top:12px; max-width:420px; }
+    .fx-prog i { display:block; height:100%; border-radius:99px; background:#fff; transition:width .3s ease; }
+    details.rv-ajuda > summary { cursor:pointer; list-style:none; display:flex; align-items:center; gap:8px; font-weight:600; color:#334155; font-size:13px; }
+    details.rv-ajuda > summary::-webkit-details-marker { display:none; }
+    details.rv-ajuda > summary::after { content:"▸"; margin-left:auto; color:#94A3B8; transition:transform .15s; }
+    details.rv-ajuda[open] > summary::after { transform:rotate(90deg); }
+    details.rv-ajuda[open] > summary { margin-bottom:12px; }
     .item-row { transition: all 0.15s; }
     /* Estados de revisão usam cor + espessura/estilo de borda + badge
        textual (renderizado no JS). Pedro é daltônico — verde vs âmbar
@@ -139,7 +155,9 @@
   <section class="faixa" style="--c1:#E11D48;--c2:#FB7185">
     <span class="fx-ico"><svg fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4V3h6v1M9 12l2 2 4-4"/></svg></span>
     <div class="fx-texto"><h2>Revisão dos quantitativos</h2>
-      <p>Confira linha por linha o que a IA leu nas pranchas: aprove, corrija ou rejeite antes de entregar.</p></div>
+      <p>Confira linha por linha o que a IA leu nas pranchas: aprove, corrija ou rejeite antes de entregar.</p>
+      <div class="fx-chips"><span id="fx-revisados">— revisados</span><span id="fx-estimados">— a confirmar</span></div>
+      <div class="fx-prog" aria-hidden="true"><i id="fx-prog" style="width:0%"></i></div></div>
   </section>
 
   <!-- Progresso da revisão — mini-KPIs (cor + ícone + texto; visíveis também no celular) -->
@@ -183,7 +201,8 @@
   </div>
 
   <!-- Legenda rápida -->
-  <div class="bg-white rounded-2xl border shadow-sm p-4 text-xs text-gray-600 rv-rise rv-rise-1">
+  <details class="rv-ajuda bg-white rounded-2xl border shadow-sm p-4 text-xs text-gray-600 rv-rise rv-rise-1">
+    <summary>❔ Como usar e atalhos de teclado</summary>
     <div class="grid md:grid-cols-2 gap-4">
       <div>
         <p class="mb-2 font-medium text-gray-800">Como usar</p>
@@ -207,7 +226,7 @@
       </div>
     </div>
     <p class="mt-3 text-gray-500 text-xs">Você pode exportar a qualquer momento — itens não revisados ficam como a IA gerou.</p>
-  </div>
+  </details>
 
   <!-- Resumo medido vs a confirmar + filtro "só as estimativas" (cor + ícone + texto) -->
   <div class="flex flex-wrap items-center justify-between gap-3 mb-3 rounded-2xl border shadow-sm bg-white px-4 py-3 rv-rise rv-rise-2">
@@ -646,6 +665,9 @@ async function submitConviteArea() {
   }
 }
 
+// uma cor por disciplina, na ordem (as mesmas do Escritório)
+const RV_COR = ['#4F46E5', '#D97706', '#059669', '#7C3AED', '#0891B2', '#EA580C', '#2563EB', '#E11D48', '#0D9488', '#16A34A'];
+
 function render() {
   // Resumo (sobre TODOS os itens, não muda com o filtro)
   const _medidoAll = items.filter(it => it.confidence === 'confirmado').length;
@@ -696,10 +718,12 @@ function render() {
       return sa.localeCompare(sb);
     });
     const pendingInSec = secItems.filter(it => !reviewState[it.id] || reviewState[it.id] === 'pending').length;
+    // 25/09: a cor da disciplina segue a ORDEM dela na tela (vizinhas nunca iguais), como as etapas do Escritório
+    const cor = RV_COR[sortedSecs.indexOf(sec) % RV_COR.length];
     return `
-    <section class="bg-white rounded-2xl border shadow-sm overflow-hidden">
+    <section class="rv-sec bg-white rounded-2xl border shadow-sm overflow-hidden" style="--sc:${cor}">
       <div class="section-header px-4 py-2.5 flex items-center justify-between gap-x-2 gap-y-1 flex-wrap">
-        <h2 class="text-gray-800 font-semibold text-sm">${escapeHtml(sec)}</h2>
+        <h2 class="text-gray-800 font-semibold text-sm"><i aria-hidden="true"></i>${escapeHtml(sec)}</h2>
         <div class="flex items-center gap-1 text-xs">
           <span class="text-gray-500 mr-2">${pendingInSec}/${secItems.length} pendentes</span>
           <button onclick="bulkReview('${escapeHtml(sec).replace(/'/g,'&#39;')}','approve')"
@@ -715,7 +739,7 @@ function render() {
         </div>
         <div class="sec-prog" title="${secItems.length - pendingInSec} de ${secItems.length} revisados"><i style="width:${secItems.length ? Math.round(((secItems.length - pendingInSec) / secItems.length) * 100) : 0}%"></i></div>
       </div>
-      <div class="divide-y" data-section="${escapeHtml(sec)}">
+      <div class="rv-lista" data-section="${escapeHtml(sec)}">
         ${secItems.map((it, i) => renderItem(it, i)).join('')}
       </div>
     </section>
@@ -781,7 +805,7 @@ function renderItem(it, localIndex) {
   return `
     <div class="item-row ${state} ${isOrange ? 'conf-estimado' : 'conf-medido'} px-4 py-3" data-id="${it.id}" data-ref="${escapeHtml(it.ref_sheet || '')}" tabindex="-1">
       <div class="flex items-start gap-3">
-        <div class="flex-shrink-0 w-6 text-xs text-gray-500 pt-1">${localIndex + 1}</div>
+        <div class="flex-shrink-0 w-6 text-xs text-gray-500"><span class="rv-num">${localIndex + 1}</span></div>
         <div class="flex-1 min-w-0">
           <p class="text-sm text-gray-800 ${isOrange ? '' : 'font-medium'}">${escapeHtml(it.description)}</p>
           <p class="text-xs text-gray-500 mt-1">
@@ -797,7 +821,7 @@ function renderItem(it, localIndex) {
         <div class="flex-shrink-0 w-6" aria-hidden="true"></div>
         <div class="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-2">
         ${qtyBlock}
-        <div class="flex flex-wrap items-center gap-1.5">
+        <div class="rv-acoes flex flex-wrap items-center gap-1.5">
           <button onclick="review('${it.id}','approve')" title="A quantidade está certa (tecla A)"
             class="${btnBase} border-green-300 text-green-700 hover:bg-green-50">✓ Confirmar</button>
           <button onclick="openEdit('${it.id}')" title="Corrigir quantidade, unidade ou descrição (tecla E)"
@@ -1381,6 +1405,12 @@ render = function() {
 // HELPERS
 // ═══════════════════════════════════════════════
 function updateCounters() {
+  // 25/09: o resumo da faixa do topo, contado do estado de revisão que a tela já tem (roda a cada ação)
+  const _rev = items.filter(it => reviewState[it.id] && reviewState[it.id] !== 'pending').length;
+  const _est = items.filter(it => it.confidence !== 'confirmado').length;
+  const _fr = document.getElementById('fx-revisados'); if (_fr) _fr.textContent = `${_rev} de ${items.length} revisados`;
+  const _fe = document.getElementById('fx-estimados'); if (_fe) _fe.textContent = `${_est} a confirmar`;
+  const _fp = document.getElementById('fx-prog'); if (_fp) _fp.style.width = (items.length ? Math.round(_rev / items.length * 100) : 0) + '%';
   const counts = { approved: 0, rejected: 0, edited: 0, pending: 0 };
   items.forEach(it => {
     const s = reviewState[it.id] || 'pending';
