@@ -9735,6 +9735,39 @@ def _diag_excecao(exc, limite: int = 260) -> str:
     return _t[:_cabeca] + " …CORTADO… " + _t[-(limite - _cabeca):]
 
 
+def _etiquetas_entre_pranchas(extraction, structured_text: str, acumulado: dict,
+                              prancha: str, job_id: str = "") -> str:
+    """Etiqueta que a planta de OUTRA prancha do mesmo job já contou sai do ×N.
+
+    🩸 25/09/2026, job 53f0483f: o laço lê um DXF por vez; a prancha só de
+    cortes contava de novo o "TH-90°" que a planta já tinha contado (18 + 12 +
+    14). Prancha com planta ALIMENTA `acumulado`; prancha só de corte é
+    MARCADA por ele e o texto da IA é refeito (é `to_structured_prompt()` puro,
+    igual ao do subprocesso). Devolve o texto (o mesmo, se nada mudou). Nunca
+    levanta: falhou, segue como veio.
+    """
+    try:
+        from dwg_extractor import (etiquetas_contadas, marcar_etiquetas_ja_contadas,
+                                   prancha_so_de_vista)
+        if prancha_so_de_vista(extraction):
+            marc = marcar_etiquetas_ja_contadas(extraction, acumulado)
+            if marc:
+                try:
+                    _log_error("motor:etiqueta-entre-pranchas",
+                               f"{prancha}: {len(marc)} etiqueta(s) já contada(s) na planta de "
+                               f"outra prancha, fora do xN: " + ", ".join(marc[:12]), job_id)
+                except Exception:
+                    pass
+                return extraction.to_structured_prompt()
+            return structured_text
+        for k, (txt, n) in etiquetas_contadas(extraction).items():
+            acumulado.setdefault(k, (txt, n, prancha))
+        return structured_text
+    except Exception as e:
+        print(f"[etiqueta-entre-pranchas] falhou (segue como veio): {e}")
+        return structured_text
+
+
 def _extract_dxf_isolated(dxf_path, unit_consensus, timeout_s=900, job_id: str = ""):
     """Extrai UMA prancha DXF num SUBPROCESSO matável com teto de memória (fix
     confiabilidade 2026-07-22). Uma prancha densa que estouraria a RAM mata só o
@@ -14548,6 +14581,9 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                 # causa da RAM), e a chave do selo só roda no FIM do job, depois
                 # das 32 travas. Sem este cofre ela não teria contra o que provar.
                 _indice_geom = {"comprimento": [], "area": [], "contagem": []}
+                # 25/09: o que as pranchas com planta já contaram (ver
+                # `_etiquetas_entre_pranchas`)
+                _etiquetas_da_planta: dict = {}
                 for idx, dxf_path in enumerate(dxf_paths):
                     # 🛡️ Freio de MEMÓRIA: se o container está chegando perto do limite
                     # de RAM, aborta ANTES do OOM matar o servidor inteiro. Um projeto
@@ -14760,6 +14796,8 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                         _apaga_dir_de_conversao(dxf_path)   # senão vaza até o fim do job
                         _descartadas.add(dxf_path)          # não é 'sumiu': fomos nós
                         continue
+                    structured_text = _etiquetas_entre_pranchas(
+                        extraction, structured_text, _etiquetas_da_planta, _dxf_nome, job_id)
                     # Cap de segurança (auditoria 06/07): projeto gigante pode gerar
                     # prompt enorme e estourar RAM/contexto do modelo. 300k chars é
                     # folgado pra uma prancha real.

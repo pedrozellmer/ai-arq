@@ -701,6 +701,13 @@ class DXFExtraction:
                 lines.append("  TEXTOS QUE ESTÃO SÓ EM CORTE/ELEVAÇÃO/DETALHE (a MESMA peça da planta")
                 lines.append("   vista de novo — servem de ESPECIFICAÇÃO; NÃO conte nem some com a")
                 lines.append("   planta; por isso vêm sem ×N):")
+                _ja = {}
+                for _t in self.texts:
+                    if getattr(_t, "ja_contada_em", ""):
+                        _ja.setdefault(_t.ja_contada_em, set()).add(" ".join(_t.text.split()))
+                for _pr, _ts in sorted(_ja.items()):
+                    lines.append(f"  ⚠ JÁ CONTADAS NA PLANTA da prancha {_pr[:60]} — NÃO conte de novo "
+                                 f"aqui: " + "; ".join(sorted(_ts)[:20]))
                 for layer, _ts in sorted(_txt_vista.items()):
                     _uniq = sorted({x.strip() for x in _ts if len(x.strip()) > 1})
                     if not _uniq:
@@ -3563,6 +3570,66 @@ def _descartar_plantas_repetidas(walls, hatches, polygon_areas, blocks, regs) ->
         logger.warning("_descartar_plantas_repetidas: %s", e)
     out["m"], out["m2"] = round(float(out["m"]), 2), round(float(out["m2"]), 2)
     return out
+
+
+def _chave_de_texto(x) -> str:
+    return " ".join(str(x or "").split()).lower()
+
+
+def prancha_so_de_vista(extraction) -> bool:
+    """A prancha tem corte/elevação e NENHUMA planta — a "prancha de cortes" do
+    conjunto, cuja planta está em outro arquivo."""
+    try:
+        fl = getattr(extraction, "folhas", None) or {}
+        if not fl.get("aplicada"):
+            return False
+        ds = fl.get("desenhos_lista") or []
+        return (any(d.get("tipo") == "vista" for d in ds)
+                and not any(d.get("tipo") == "planta" for d in ds))
+    except Exception:
+        return False
+
+
+def etiquetas_contadas(extraction) -> dict:
+    """{chave: (texto, n)} dos textos que ENTRAM na contagem ×N desta prancha
+    (fora de corte/detalhe) e que contam objeto."""
+    from engine_rules import texto_conta_objeto
+    out = {}
+    for t in getattr(extraction, "texts", None) or []:
+        if getattr(t, "fora_da_contagem", False):
+            continue
+        k = _chave_de_texto(t.text)
+        if not k or not texto_conta_objeto(t.text):
+            continue
+        out[k] = (" ".join(str(t.text).split()), out.get(k, ("", 0))[1] + 1)
+    return out
+
+
+def marcar_etiquetas_ja_contadas(extraction, contadas: dict) -> list:
+    """Na prancha SÓ de corte, o texto que a planta de outra prancha do MESMO
+    job já contou sai do ×N (`fora_da_contagem`, `ja_contada_em`).
+
+    🩸 25/09/2026, job 53f0483f: "TH-90°" ×18 na planta (folha 2/4) e de novo
+    ×12 e ×14 nos cortes (3/4 e 4/4). O aviso "não some com a planta de outra
+    prancha" foi IGNORADO pela IA em duas releituras. O motor lê um arquivo por
+    vez; `contadas` é o que as pranchas com planta já contaram neste job
+    ({chave: (texto, n, prancha)}). 🪤 Depende da ORDEM: corte processado antes
+    da planta não é pego. Devolve as chaves marcadas. Nunca levanta.
+    """
+    try:
+        if not contadas or not prancha_so_de_vista(extraction):
+            return []
+        marcadas = set()
+        for t in getattr(extraction, "texts", None) or []:
+            k = _chave_de_texto(t.text)
+            if k in contadas and not getattr(t, "fora_da_contagem", False):
+                t.fora_da_contagem = True
+                t.ja_contada_em = str(contadas[k][2] if len(contadas[k]) > 2 else "")
+                marcadas.add(k)
+        return sorted(marcadas)
+    except Exception as e:                       # nunca derruba a extração
+        logger.warning("marcar_etiquetas_ja_contadas: %s", e)
+        return []
 
 
 def _marcar_textos_repetidos_da_planta(texts, mapa) -> int:
