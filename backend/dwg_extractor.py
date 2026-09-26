@@ -276,11 +276,18 @@ class DXFExtraction:
                              + ("…" if len(_vis) > 8 else ""))
             if _fl.get("repetidas"):
                 _gr = _fl["repetidas"].get("grupos") or []
+                def _versoes(g):
+                    vs = g[3] if len(g) > 3 else []
+                    return (" (versões: %s)" % " / ".join("%g" % v for v in vs)
+                            if len(set(vs)) > 1 else "")
                 lines.append("  • plantas TEMÁTICAS do mesmo pavimento (layout, luminotécnica, pontos, "
-                             "forro, original…): a base repetida em todas JÁ foi contada UMA vez"
-                             + (" — ex.: " + "; ".join("%s %s m em %d plantas" % (g[0], g[1], g[2])
+                             "forro, original…): a base redesenhada nelas JÁ foi contada UMA vez — "
+                             "quando as plantas diferem (original × layout), ficou a MAIOR versão"
+                             + (" — ex.: " + "; ".join("%s %s m em %d plantas%s" % (g[0], g[1], g[2], _versoes(g))
                                                        for g in _gr[:4]) if _gr else "")
-                             + ". Não some as plantas entre si.")
+                             + ". Não some as plantas entre si. Esse comprimento é o que está "
+                             "DESENHADO numa versão do pavimento: não o chame de parede NOVA/A "
+                             "CONSTRUIR — parede nova só com o que o desenho marca como construir.")
             lines.append("  Não some de novo o que está fora nem multiplique de novo a planta-tipo. "
                          "Use o esquema e os detalhes só para ler diâmetro, material e especificação.")
             lines.append("")
@@ -3481,12 +3488,20 @@ def _descartar_plantas_repetidas(walls, hatches, polygon_areas, blocks, regs) ->
     Medido no acervo local: o mesmo acontece nas plantas-chave "PONTOS / FORRO /
     PISO / PLANTA BAIXA" de folhas de elevação (18–22% do comprimento).
 
-    🔑 Regra: um layer (ou bloco) com o MESMO comprimento (±0,5%, ≥ 1 m; área
-    ≥ 1 m²; contagem igual) em 2+ plantas do mesmo pavimento é a base repetida:
-    fica a da primeira planta, as outras saem. O que muda de uma planta pra
-    outra (o que só a luminotécnica tem, a parede nova do layout) FICA — não é
-    igual, não é repetição. Pavimento/unidade diferente no título nunca junta.
-    Muta as listas; devolve o que tirou. Nunca levanta.
+    🔑 Regra: um layer (ou bloco) presente (≥ 1 m; área ≥ 1 m²; contagem ≥ 1)
+    em 2+ plantas do mesmo pavimento — e em pelo menos METADE delas — é a base
+    redesenhada: fica UMA versão, a MAIOR (empate ±0,5%: a da primeira planta),
+    as outras saem. Em menos da metade, só o valor IGUAL (±0,5%) é repetição;
+    o diferente (o circuito que só a luminotécnica e a de pontos têm, cada uma
+    o seu) é complemento e FICA inteiro. Pavimento/unidade diferente no título
+    nunca junta. Muta as listas; devolve o que tirou. Nunca levanta.
+
+    🩸 26/09/2026 — a 1ª regra (25/09) só juntava valor IGUAL, pra "não perder a
+    parede nova do layout". Na releitura do mesmo job a camada PAREDE tinha
+    633 / 420 / 257 / 254 / 254 m nas cinco plantas (original × layouts): só as
+    duas iguais saíram e a planilha trouxe "construção de paredes novas
+    1.589 ml" (× pé-direito = 4.768 m²). A camada inteira muda de uma versão
+    pra outra, não só a parede nova — somar versões conta a base várias vezes.
     """
     out = {"m": 0.0, "m2": 0.0, "blocos": 0, "grupos": []}
     try:
@@ -3501,19 +3516,30 @@ def _descartar_plantas_repetidas(walls, hatches, polygon_areas, blocks, regs) ->
             ks = [k for k, f in enumerate(plantas) if _dentro(p, f["caixa"])]
             return ks[0] if len(ks) == 1 else None
 
-        def iguais(vals, tol, minimo):
-            """Grupos de índices com valor igual (±tol) e títulos do mesmo pavimento."""
-            ordem = sorted((v, k) for k, v in vals.items() if v >= minimo)
+        def versoes(vals, minimo):
+            """Grupos [fica, sai, sai…] das plantas do mesmo pavimento que têm o
+            layer: 2+ plantas e pelo menos METADE das plantas daquele pavimento.
+            Fica a versão maior (empate ±0,5%: a de menor índice)."""
+            ks = [k for k, v in vals.items() if v >= minimo]
             grupos, usados = [], set()
-            for i, (v, k) in enumerate(ordem):
-                if k in usados:
+            for k0 in sorted(ks, key=lambda k: (-vals[k], k)):
+                if k0 in usados:
                     continue
-                g = [k] + [k2 for v2, k2 in ordem[i + 1:]
-                           if k2 not in usados and abs(v2 - v) <= tol * max(v, 1e-9)
-                           and _mesmo_pavimento(plantas[k].get("titulo"), plantas[k2].get("titulo"))]
-                if len(g) >= 2:
-                    usados.update(g)
-                    grupos.append(sorted(g))
+                pav = [k for k in range(len(plantas)) if k == k0 or _mesmo_pavimento(
+                    plantas[k0].get("titulo"), plantas[k].get("titulo"))]
+                g = [k for k in ks if k in pav and k not in usados]
+                if len(g) < 2:
+                    continue
+                if 2 * len(g) < len(pav):
+                    # em poucas plantas: só o IGUAL (±0,5%) é repetição — o
+                    # diferente é complemento (o circuito que só 2 de 5 têm)
+                    g = [k for k in g if abs(vals[k] - vals[k0]) <= 0.005 * vals[k0]]
+                    if len(g) < 2:
+                        continue
+                topo = max(vals[k] for k in g)
+                fica = min(k for k in g if vals[k] >= topo * (1 - 0.005))
+                usados.update(g)
+                grupos.append([fica] + sorted(k for k in g if k != fica))
             return grupos
 
         def _meio(w):
@@ -3530,9 +3556,10 @@ def _descartar_plantas_repetidas(walls, hatches, polygon_areas, blocks, regs) ->
                 por[w.layer][k] += w.length
         tirar_w = set()
         for lay, vals in por.items():
-            for g in iguais(vals, 0.005, 1.0):
+            for g in versoes(vals, 1.0):
                 tirar_w.update((lay, k) for k in g[1:])
-                out["grupos"].append((lay, round(vals[g[0]], 2), len(g)))
+                out["grupos"].append((lay, round(vals[g[0]], 2), len(g),
+                                      [round(vals[k], 1) for k in g]))
         if tirar_w:
             novas = []
             for w in walls:
@@ -3552,7 +3579,7 @@ def _descartar_plantas_repetidas(walls, hatches, polygon_areas, blocks, regs) ->
                     por_a[h.layer][k] += h.area
             tirar_a = set()
             for lay, vals in por_a.items():
-                for g in iguais(vals, 0.005, 1.0):
+                for g in versoes(vals, 1.0):
                     tirar_a.update((lay, k) for k in g[1:])
             if tirar_a:
                 novas = []
@@ -3577,7 +3604,7 @@ def _descartar_plantas_repetidas(walls, hatches, polygon_areas, blocks, regs) ->
                 if k is not None:
                     cont[k] = cont.get(k, 0) + 1
             tirar_b = set()
-            for g in iguais({k: float(v) for k, v in cont.items()}, 0.0, 1.0):
+            for g in versoes({k: float(v) for k, v in cont.items()}, 1.0):
                 tirar_b.update(g[1:])
             if tirar_b:
                 fica = [p for p in pos if dona(p) not in tirar_b]
