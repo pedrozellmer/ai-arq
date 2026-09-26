@@ -10,6 +10,7 @@
 <title>Financeiro da obra — AI.arq</title>
 <meta name="robots" content="noindex,follow">
 <link rel="stylesheet" href="/tailwind.min.css">
+<link rel="stylesheet" href="/area-cliente.css">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   /* [hidden] perde pra .inline-flex/.flex do build (mesma camada, o utilitário vence):
@@ -113,7 +114,7 @@
     #cr-actionbar > .flex-1 { display:none; }
     #cr-actionbar > .exp:first-of-type { margin-left:auto; }
     table.fin th:first-child, table.fin td:first-child { position:sticky; left:0; background:#fff; z-index:1; }
-    table.fin thead th:first-child { background:#1E293B; }
+    table.fin thead th:first-child { background:#F0FDF4; }
     table.fin tr.cat td:first-child { background:#F8FAFC; }
   }
   .pop { position:absolute; z-index:60; background:#fff; border:1px solid #E2E8F0; border-radius:12px; box-shadow:0 10px 30px -10px rgba(15,23,42,.35); }
@@ -204,6 +205,12 @@
   </div>
 
   <div id="conteudo" hidden class="space-y-6">
+  <!-- 25/09: a faixa do padrão da área do cliente (area-cliente.css), na cor do Financeiro -->
+  <section class="faixa rise" style="--c1:#16A34A;--c2:#4ADE80">
+    <span class="fx-ico"><svg fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h12M17 15l3 3-3 3"/></svg></span>
+    <div class="fx-texto"><h2>Financeiro da obra</h2>
+      <p>Lançamentos por categoria, vencimentos amarrados ao cronograma e o desembolso no tempo.</p></div>
+  </section>
   <!-- Regra nº5, no mesmo molde do banner "gerado automaticamente" -->
   <div id="banner-regra" class="rise rounded-xl bg-gradient-to-r from-indigo-50 to-cyan-50 border-2 border-indigo-200 p-4 flex items-start gap-3">
     <span class="shrink-0 mt-0.5 text-indigo-600"><svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.2 8-8 9-4.8-1-8-4.5-8-9V6l8-3z"/><path d="M9 12l2 2 4-4"/></svg></span>
@@ -301,7 +308,7 @@
       Clique numa célula pra editar. Clique no status pra avançar de Cotado a Pago. O vencimento nasce <strong>amarrado à fase do cronograma</strong> — mexeu a fase no Gantt, o pagamento anda junto — e pode virar data fixa a qualquer hora.
     </p>
     <div class="tbl-wrap">
-      <table class="fin text-sm" aria-label="Lançamentos financeiros">
+      <table class="fin tab-clara text-sm" style="--c1:#16A34A" aria-label="Lançamentos financeiros">
         <colgroup>
           <col>
           <col class="c-forn" style="width:168px">

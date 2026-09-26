@@ -1,0 +1,38 @@
+/* ÁREA DO CLIENTE — o padrão visual comum (25/09/2026).
+   Pedro, depois do Escritório: "segue isso em todo o site, em toda a área de cliente".
+   O mesmo desenho do escritorio.html: faixa colorida no topo de cada tela, na cor da
+   ferramenta (a mesma do atalho na página do projeto), e tabela de cabeçalho claro.
+   🪤 CSS próprio, não utilitário: o /tailwind.min.css é um build ESTÁTICO — classe que
+   não está lá não pinta e não avisa.
+
+   Uso: <section class="faixa" style="--c1:#16A34A;--c2:#4ADE80"> … </section>
+   Cores (iguais às do Escritório): quantitativo #0891B2/#22D3EE · cronograma #EA580C/#FB923C
+   · memorial #2563EB/#60A5FA · revisão #E11D48/#FB7185 · comparativo #0D9488/#2DD4BF
+   · financeiro #16A34A/#4ADE80 · painel #4F46E5/#06B6D4 */
+
+.faixa{--c1:#4F46E5;--c2:#06B6D4;position:relative;overflow:hidden;display:flex;flex-wrap:wrap;align-items:center;gap:16px;
+  padding:22px 24px;border-radius:18px;color:#fff;background:linear-gradient(135deg,var(--c1),var(--c2));
+  box-shadow:0 14px 30px -20px var(--c1)}
+.faixa::before{content:"";position:absolute;width:220px;height:220px;border-radius:50%;right:-50px;top:-110px;
+  background:rgba(255,255,255,.12);pointer-events:none}
+.faixa::after{content:"";position:absolute;width:140px;height:140px;border-radius:50%;right:170px;bottom:-100px;
+  background:rgba(255,255,255,.07);pointer-events:none}
+.faixa > *{position:relative;z-index:1}
+.faixa h2{margin:0;font-size:22px;font-weight:700;color:#fff;line-height:1.2}
+.faixa p{margin:4px 0 0;font-size:13.5px;color:rgba(255,255,255,.9);line-height:1.5}
+.faixa p b,.faixa p strong{color:#fff}
+.faixa h2,.faixa p{text-shadow:0 1px 2px rgba(15,23,42,.18)}
+.fx-ico{width:48px;height:48px;border-radius:14px;flex:none;display:flex;align-items:center;justify-content:center;
+  background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.3);color:#fff}
+.fx-ico svg{width:24px;height:24px}
+.fx-texto{flex:1 1 260px;min-width:0}
+.fx-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.fx-chips span{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;
+  background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.28);border-radius:99px;padding:4px 11px}
+@media (max-width:640px){ .faixa{padding:18px} .faixa h2{font-size:19px} .fx-ico{width:42px;height:42px} }
+
+/* tabela da casa: cabeçalho CLARO no tom da ferramenta (era a faixa preta bg-slate-800).
+   O seletor com a tabela vence o utilitário do Tailwind sem !important. */
+table.tab-clara thead th{background:color-mix(in srgb,var(--c1,#4F46E5) 9%,#fff);color:#334155;
+  border-bottom:2px solid color-mix(in srgb,var(--c1,#4F46E5) 28%,#fff)}
+table.tab-clara thead th span{color:#64748B}

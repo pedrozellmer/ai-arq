@@ -43,7 +43,11 @@ def _js(html=HTML):
 
 
 def _style(html=HTML):
-    return "\n".join(re.findall(r"<style>(.*?)</style>", html, re.S))
+    s = "\n".join(re.findall(r"<style>(.*?)</style>", html, re.S))
+    # 25/09: o padrão comum da área do cliente mora em /area-cliente.css — conta só se a página o carrega
+    if '<link rel="stylesheet" href="/area-cliente.css">' in html:
+        s += "\n" + io.open(os.path.join(_RAIZ, "area-cliente.css"), encoding="utf-8").read()
+    return s
 
 
 # ── o shell ────────────────────────────────────────────────────────────────
