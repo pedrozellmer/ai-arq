@@ -6954,7 +6954,7 @@ def _auto_retry_erros_transitorios():
         q = (f"{SUPABASE_URL}/rest/v1/projects?status=eq.error&archived=not.is.true"
              f"&is_eval=not.is.true"  # avaliações (teste) ficam fora do auto-retry/alerta
              f"&created_at=gte.{_cut}"
-             f"&select=job_id,user_email,project_name,error_message,typology,project_type,auto_resume_count,created_at"
+             f"&select=job_id,user_id,user_email,project_name,error_message,typology,project_type,auto_resume_count,created_at"
              f"&limit=20")
         req = _u.Request(q, method="GET")
         req.add_header("apikey", SUPABASE_KEY)
@@ -7080,11 +7080,17 @@ def _auto_retry_erros_transitorios():
                 # pra ficar rastreável via MCP mesmo sem email. NÃO registra o
                 # dedup (assim re-tenta o alerta na próxima varredura, quando o
                 # SMTP voltar). A causa real vai junto pra não perder o diagnóstico.
+                # 🔒 LGPD (26/09): o cliente vai como `user=<8 do user_id>` (por
+                # isso o `select` acima traz o user_id), nunca o endereço — e o
+                # texto inteiro passa pela máscara, porque rótulo e causa técnica
+                # também podem carregar um (erro de SMTP traz o destinatário).
                 _log_error(
                     "alert:admin",
-                    f"aviso de projeto parado NÃO entregue (SMTP fora) — job {job_id}; "
-                    f"cliente {row.get('user_email') or '—'}; rótulo: {msg[:200]}"
-                    + (f"; causa real: {_causa_real[:400]}" if _causa_real else ""),
+                    _sem_email_no_log(
+                        f"aviso de projeto parado NÃO entregue (SMTP fora) — job {job_id}; "
+                        f"cliente user={str(row.get('user_id') or '')[:8] or '?'}; "
+                        f"rótulo: {msg[:200]}"
+                        + (f"; causa real: {_causa_real[:400]}" if _causa_real else "")),
                     job_id, severity="critical")
 
 

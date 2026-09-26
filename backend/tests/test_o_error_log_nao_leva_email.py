@@ -281,3 +281,85 @@ def test_CONTROLE_o_padrao_ACHA_o_email_no_formato_antigo():
     antiga = ("resposta='9 de 10' score_guardado=9 %s avisei_admin=True" % _EMAIL)
     m = _RE_EMAIL.search(antiga)
     assert m and m.group(0) == _EMAIL
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  O aviso de projeto parado que NÃO saiu (SMTP fora) — `alert:admin`
+# ─────────────────────────────────────────────────────────────────────────────
+#  26/09/2026. Era a exceção que ficou de 22/09: quando o SMTP cai, a varredura
+#  grava no log o aviso que não chegou — com `cliente <endereço>` cru. O
+#  endereço ali não é o que se diagnostica (o destinatário é o Pedro).
+#  🪤 O `row` vem de uma consulta ao banco que NÃO trazia o `user_id`: trocar o
+#  e-mail pelo id sem mudar o `select` deixaria a linha com `user=?`. Por isso o
+#  dublê abaixo devolve SÓ as colunas que o `select` pede, como o PostgREST.
+_PROJETO_PARADO = {"job_id": _JOB, "user_id": _UID, "user_email": _EMAIL,
+                   "project_name": "Projeto Teste",
+                   "error_message": "Nenhum item de ESTRUTURA foi identificado neste arquivo.",
+                   "typology": "office", "project_type": "estrutura",
+                   "auto_resume_count": 0, "created_at": "2026-09-26T12:00:00Z"}
+
+
+def _varredura_com_smtp_fora(bordas, monkeypatch, causa_real=""):
+    import json as _json
+    import urllib.parse as _up
+    import urllib.request as _ur
+
+    import falhas
+    logs, _ = bordas
+
+    class _Resposta:
+        def __init__(self, corpo):
+            self._c = corpo
+
+        def read(self, *a):
+            return self._c
+
+    def _banco(req, *a, **k):
+        url = getattr(req, "full_url", str(req))
+        pedidas = _up.parse_qs(_up.urlsplit(url).query).get("select", [""])[0].split(",")
+        linha = {c: _PROJETO_PARADO[c] for c in pedidas if c in _PROJETO_PARADO}
+        return _Resposta(_json.dumps([linha]).encode("utf-8"))
+
+    monkeypatch.setattr(falhas, "LIGADO", False)
+    monkeypatch.setattr(main, "SUPABASE_URL", "https://exemplo.supabase.co")
+    monkeypatch.setattr(_ur, "urlopen", _banco)
+    monkeypatch.setattr(main, "_filhote_do_projeto", lambda *a, **k: "")
+    monkeypatch.setattr(main, "_tipo_registrado", lambda *a, **k: ("", ""))
+    monkeypatch.setattr(main, "_email_auto_ja_enviado", lambda *a, **k: False)
+    monkeypatch.setattr(main, "_email_auto_registrar", lambda *a, **k: None)
+    monkeypatch.setattr(main, "_email_falha_cliente", lambda *a, **k: True)
+    monkeypatch.setattr(main, "_error_log_causa_real", lambda *a, **k: causa_real)
+    monkeypatch.setattr(main, "_linha_do_email_ao_cliente", lambda *a, **k: "")
+    monkeypatch.setattr(main, "_notify_admin", lambda *a, **k: False)   # SMTP fora
+    main._auto_retry_erros_transitorios()
+    return logs
+
+
+def test_aviso_de_projeto_parado_que_nao_saiu_NAO_leva_email_pro_log(bordas, monkeypatch):
+    logs = _varredura_com_smtp_fora(bordas, monkeypatch)
+    linha = _sem_email(logs, "alert:admin")
+    assert "user=%s" % _UID[:8] in linha["msg"], (
+        "a linha perdeu QUEM é o cliente — o `select` da varredura traz o "
+        "user_id? %r" % linha["msg"])
+    assert _JOB in linha["msg"], linha["msg"]
+
+
+def test_a_causa_tecnica_com_endereco_tambem_passa_pela_mascara(bordas, monkeypatch):
+    """A causa real vem do próprio error_log e o rótulo vem do motor — um erro
+    de SMTP traz o destinatário dentro do texto."""
+    logs = _varredura_com_smtp_fora(
+        bordas, monkeypatch,
+        causa_real="SMTPRecipientsRefused: {'%s': (550, b'User unknown')}" % _EMAIL)
+    linha = _sem_email(logs, "alert:admin")
+    assert "550" in linha["msg"], ("a máscara comeu o diagnóstico: %r" % linha["msg"])
+
+
+def test_CONTROLE_com_SMTP_de_pe_nao_ha_linha_de_alerta(bordas, monkeypatch):
+    """A linha só existe quando o aviso NÃO sai — prova que os testes acima
+    exercitam o caminho certo, e não outro que por acaso grava `alert:admin`."""
+    logs = _varredura_com_smtp_fora(bordas, monkeypatch)
+    assert [x for x in logs if x["stage"] == "alert:admin"]
+    logs.clear()
+    monkeypatch.setattr(main, "_notify_admin", lambda *a, **k: True)
+    main._auto_retry_erros_transitorios()
+    assert not [x for x in logs if x["stage"] == "alert:admin"], logs
