@@ -876,7 +876,7 @@
         .then(function (m) { return !!(m && !m.error && (m.count || 0) > 0); });
     });
     sera.then(function (ok) {
-      if (!ok) return;
+      if (!ok || ESC) return;          // chegou depois de o menu virar o do Escritório: nada a pôr
       if (document.getElementById('aiarq-grp-escritorio')) return;
       var side = document.getElementById('aiarq-side');
       var primeiro = side && side.querySelector('.side-grp');
@@ -903,26 +903,83 @@
 
   // 🏢 Parte 2 (24/09): projeto medido aberto por alguém da EQUIPE do Escritório. O menu fala do que ela
   // pode: Visão geral, Quantitativo, Cronograma, Memorial — e o caminho de volta pro Escritório.
+  var SO_LEITURA = false;
+  // a equipe não vê Revisão, Financeiro, Comparativo nem Processamento (são do dono)
+  function tirarItensDoDono() {
+    ['revisao', 'financeiro', 'comparativo'].forEach(function (k) {
+      var e = document.querySelector('#aiarq-side .side-it[data-chave="' + k + '"]');
+      if (e && e.parentNode) e.parentNode.removeChild(e);
+    });
+    var proc = document.querySelector('#aiarq-side .side-it[data-track="menu-processamento"]');
+    if (proc && proc.parentNode) proc.parentNode.removeChild(proc);
+  }
+
+  // 🏢 25/09 (Pedro: "faz o que achar mais lógico"): o menu do Escritório aparece SEMPRE que o projeto
+  // medido está ligado a um projeto do Escritório — não só quando a pessoa veio de lá nesta aba.
+  // Troca os grupos do menu já montado pelos do Escritório. Quem chama sabe que o projeto é da pessoa
+  // (dono: /api/meus-entregaveis; equipe: /acesso). Só UUID vira link; nome entra como texto.
+  function aplicarEscritorio(c) {
+    if (ESC || !c || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(c.id || '')) return;
+    var side = document.getElementById('aiarq-side');
+    if (!side) return;
+    ESC = { job: JOB, id: c.id, nome: String(c.nome || 'Projeto').slice(0, 160), sub: String(c.sub || '').slice(0, 120) };
+    try { sessionStorage.setItem('aiarq_esc_ctx', JSON.stringify(ESC)); } catch (_) {}
+    GRUPOS = gruposEscritorio();
+    // os selos de estado (12 medidos, velho, ok…) que o atualizarSelo já pintou passam pros itens novos
+    var selos = {};
+    [].slice.call(side.querySelectorAll('.side-est[data-est]')).forEach(function (e) {
+      selos[e.getAttribute('data-est')] = { t: e.textContent, c: e.className };
+    });
+    var admin = side.querySelector('#btn-admin');
+    var grpAdmin = admin && admin.closest('.side-grp');
+    [].slice.call(side.querySelectorAll('.side-grp')).forEach(function (g) {
+      if (g !== grpAdmin && g.parentNode) g.parentNode.removeChild(g);
+    });
+    var volta = side.querySelector('#aiarq-volta-escritorio');
+    if (volta && volta.parentNode) volta.parentNode.removeChild(volta);
+    var ancora = grpAdmin || side.querySelector('.aiarq-rodape');
+    if (ancora) ancora.insertAdjacentHTML('beforebegin', montarItens());
+    [].slice.call(side.querySelectorAll('.side-est[data-est]')).forEach(function (e) {
+      var s = selos[e.getAttribute('data-est')];
+      if (s) { e.textContent = s.t; e.className = s.c; }
+    });
+    var sair = side.querySelector('.aiarq-sair-proj');
+    if (sair) {
+      sair.setAttribute('href', 'escritorio.html#/');
+      if (sair.lastChild) sair.lastChild.textContent = 'Projetos do Escritório';
+    }
+    var tag = side.querySelector('.aiarq-fixado .tag');
+    if (tag) tag.textContent = 'Escritório · projeto aberto';
+    var nm = side.querySelector('#aiarq-proj-nome');
+    if (nm) nm.textContent = ESC.nome;
+    var sb = side.querySelector('#aiarq-proj-sub');
+    if (sb) sb.textContent = SO_LEITURA ? 'equipe · só leitura' : ESC.sub;
+    if (SO_LEITURA) tirarItensDoDono();
+    marcarAtivo();
+  }
+
+  // dono do projeto medido: ele está ligado a um projeto do Escritório? (o banco responde pela RLS)
+  function descobrirEscritorio() {
+    if (ESC || !FIXADO || !window.sbClient || typeof window.sbClient.from !== 'function') return;
+    window.sbClient.from('escritorio_projetos').select('id,nome,etapa_atual').eq('job_id', JOB).maybeSingle()
+      .then(function (r) {
+        if (!r || r.error || !r.data) return;
+        aplicarEscritorio({ id: r.data.id, nome: r.data.nome, sub: r.data.etapa_atual || '' });
+      }, function () {});
+  }
+
   function montarEquipe() {
     if (!FIXADO || typeof window.aiarqAcesso !== 'function') return;
     window.aiarqAcesso(JOB).then(function (a) {
       if (!a || !a.so_leitura) return;
+      SO_LEITURA = true;
       var nx = document.getElementById('aiarq-proj-nome');
       if (nx && !ESC) nx.textContent = (window.tituloProjeto || String)(a.nome || 'Projeto');
       var sub = document.getElementById('aiarq-proj-sub');
       if (sub) sub.textContent = ESC ? 'equipe · só leitura' : 'equipe · só leitura · ' + (a.itens || 0) + ' itens';
-      ['revisao', 'financeiro', 'comparativo'].forEach(function (k) {
-        var e = document.querySelector('#aiarq-side .side-it[data-chave="' + k + '"]');
-        if (e && e.parentNode) e.parentNode.removeChild(e);
-      });
-      var proc = document.querySelector('#aiarq-side .side-it[data-track="menu-processamento"]');
-      if (proc && proc.parentNode) proc.parentNode.removeChild(proc);
-      var fix = document.querySelector('#aiarq-side .aiarq-fixado');
-      if (fix && !ESC && a.escritorio_id && !document.getElementById('aiarq-volta-escritorio')) {
-        fix.insertAdjacentHTML('afterend', '<a class="side-it" id="aiarq-volta-escritorio" href="escritorio.html#/p/'
-          + encodeURIComponent(a.escritorio_id) + '/capa" data-track="menu-volta-escritorio">'
-          + svg('quadro') + 'Voltar ao Escritório</a>');
-      }
+      tirarItensDoDono();
+      // a equipe entra no Escritório pelo projeto dela: o menu vira o do Escritório
+      if (a.escritorio_id) aplicarEscritorio({ id: a.escritorio_id, nome: (window.tituloProjeto || String)(a.nome || 'Projeto') });
     }, function () {});
   }
 
@@ -963,6 +1020,7 @@
         // só aqui se sabe que o projeto aberto é DESTA conta (a lista vem de /api/meus-entregaveis):
         // a conta de administração abre projeto de cliente e não pode ligar ele ao Escritório dela
         montarEscritorio();
+        descobrirEscritorio();
         var nm = document.getElementById('aiarq-proj-nome');
         // Vitrine: primeira letra maiúscula. O dado no banco não muda.
         if (nm && !ESC) nm.textContent = (window.tituloProjeto || String)(p.nome);

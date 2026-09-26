@@ -59,4 +59,38 @@ def test_grupos_do_escritorio_apontam_pras_telas_dele_e_pras_do_medido():
         assert "e + '" + tela + "'" in f
     assert "gruposProjeto()[0].itens.filter(function (it) { return !!it.chave; })" in f
     assert "var GRUPOS = FIXADO ? (ESC ? gruposEscritorio() : gruposProjeto()) : GRUPOS_CONTA;" in js
+
+# 25/09, 2ª parte (Pedro: "faz o que achar mais lógico"): o menu vira o do Escritório SEMPRE que o projeto
+# medido está ligado a um — não só quando a pessoa veio de lá nesta aba.
+def _funcao_js(js, cabeca):
+    i = js.index(cabeca)
+    return js[i:js.index("\n  }\n", i)]
+
+
+def test_aplicar_escritorio_so_aceita_uuid_e_poe_o_nome_como_texto():
+    f = _funcao_js(_ler("menu-lateral.js"), "function aplicarEscritorio(c) {")
+    assert re.search(r"/\^\[0-9a-f\]\{8\}-.*?\$/i\.test\(c\.id", f), "o id vai pra um href: só UUID"
+    assert "nm.textContent = ESC.nome" in f and "innerHTML" not in f
+    assert "if (SO_LEITURA) tirarItensDoDono();" in f, "a equipe não pode ganhar de volta Revisão/Financeiro"
+
+
+def test_descobrir_so_roda_depois_de_saber_que_o_projeto_e_da_pessoa():
+    js = _ler("menu-lateral.js")
+    i = js.index("function atualizarSelo() {")
+    sel = js[i:js.index("\n  }\n", i)]
+    # a consulta mora DEPOIS da confirmação de que o job está em /api/meus-entregaveis desta conta
+    assert sel.index("if (!p) {") < sel.index("descobrirEscritorio();")
+    d = _funcao_js(js, "function descobrirEscritorio() {")
+    assert ".from('escritorio_projetos')" in d and ".eq('job_id', JOB)" in d
+
+
+def test_equipe_vira_o_menu_do_escritorio_pelo_acesso():
+    f = _funcao_js(_ler("menu-lateral.js"), "function montarEquipe() {")
+    assert "if (a.escritorio_id) aplicarEscritorio(" in f
+
+
+def test_o_grupo_antigo_nao_aparece_depois_da_troca():
+    f = _funcao_js(_ler("menu-lateral.js"), "function montarEscritorio(uid) {")
+    assert "if (!ok || ESC) return;" in f
+
 # controle positivo (25/09): tirar "c.job === JOB && " do menu-lateral.js reprovou o 2º teste.

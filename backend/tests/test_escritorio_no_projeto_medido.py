@@ -38,7 +38,7 @@ def test_o_grupo_so_nasce_pra_projeto_da_conta_e_no_piloto():
     assert "if (r && !r.error && r.data === true) return true;" in corpo
     # dentro do projeto medido, só o PILOTO (é o dono ligando o projeto dele); membro de equipe é só na conta
     assert "if (FIXADO || !uid || typeof window.sbClient.from !== 'function') return false;" in corpo
-    assert "if (!ok) return;" in corpo
+    assert "if (!ok || ESC) return;" in corpo, "fora do piloto nada nasce (e nada, se o menu já virou o do Escritório)"
     assert "hidden" not in corpo, "nesta folha o hidden perde pra classe de display (cartão do painel, 24/09)"
     assert "var base = 'escritorio.html#/job/' + encodeURIComponent(JOB) + '/';" in corpo
     sel = js[js.index("function atualizarSelo()"):]

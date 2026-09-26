@@ -227,9 +227,14 @@ def test_o_menu_da_equipe_mostra_so_o_que_ela_pode():
     assert sel.index("if (nx) nx.textContent = 'Projeto não encontrado';") < sel.index("montarEquipe();")
     eq = js[js.index("function montarEquipe() {"):]
     eq = eq[:eq.index("\n  }\n")]
-    assert "['revisao', 'financeiro', 'comparativo'].forEach(" in eq
     assert "if (!a || !a.so_leitura) return;" in eq
-    assert 'href="escritorio.html#/p/' in eq and "Voltar ao Escritório" in eq
+    # 25/09: tirar os itens do dono virou função (a troca pro menu do Escritório refaz os grupos e
+    # precisa tirar de novo); o caminho de volta deixou de ser um link solto: o menu INTEIRO vira o do
+    # Escritório (aplicarEscritorio), com "Página do projeto" etc.
+    assert "tirarItensDoDono();" in eq
+    tira = js[js.index("function tirarItensDoDono() {"):]
+    assert "['revisao', 'financeiro', 'comparativo'].forEach(" in tira[:tira.index("\n  }\n")]
+    assert "if (a.escritorio_id) aplicarEscritorio(" in eq
 
 
 def test_a_admin_libera_o_download_por_pessoa():
