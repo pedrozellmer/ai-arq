@@ -923,6 +923,10 @@ def _num_br(v):
 #: Área e volume: numa linha dessas, um comprimento é no máximo a BASE da conta.
 _UNIDADES_DE_AREA_OU_VOLUME = {"m²", "m2", "m2.", "m².", "m³", "m3"}
 
+#: O começo do aviso que a recuperação escreve. A chave do selo procura por ele
+#: (`selo_com_prova_da_geometria`): número recuperado não sobe a medido.
+MARCA_QUANTIDADE_RECUPERADA = "⚠ QUANTIDADE RECUPERADA"
+
 
 def corrigir_comprimento_medido(desc, unit, quantity, obs, texto_de_pdf=False):
     """Devolve dict de correções ({} = não mexer) pro item cuja observação traz
@@ -974,6 +978,18 @@ def corrigir_comprimento_medido(desc, unit, quantity, obs, texto_de_pdf=False):
     if q <= 0:
         if do_pdf:
             return {}             # número da IA não volta como "o motor mediu"
+        # 🩸 26/09/2026 — job 32a27efc (muro de arrimo, CAD): "Concreto armado
+        # — Rampa — volume" saiu da IA em 0 m³, e a própria observação dizia que
+        # os 90,85 m do layer 'Rampa' eram o CONTORNO e que o volume não sai
+        # deles. Esta regra copiou os 90,85, trocou m³ por m — e a chave do selo
+        # ainda promoveu a "✓ MEDIDO", porque o número batia com o layer de onde
+        # veio. 🔑 Comprimento não preenche linha de VOLUME: é no máximo a base
+        # da conta. A linha fica zerada, como a IA deixou.
+        # 📏 Na história: 1 linha de volume em 25 recuperações — esta. O ramo 2
+        # (m³ com o MESMO número do comprimento) nunca pegou volume e fica como
+        # estava (o controle de 22/09 o descreve).
+        if grandeza_da_unidade(unit) == "volume":
+            return {}
         return {"quantity": round(medida, 2),
                 "unit": unit if u in LENGTH_UNITS_OK else "m",
                 "confidence": "estimado",
@@ -981,7 +997,7 @@ def corrigir_comprimento_medido(desc, unit, quantity, obs, texto_de_pdf=False):
                 # texto fixo, colado em item de alvenaria, de peitoril e de
                 # revestimento de pilar. Falar de tubulação numa linha de
                 # alvenaria faz o cliente desconfiar do aviso inteiro.
-                "motivo": (f"⚠ QUANTIDADE RECUPERADA: o motor mediu {n} m neste "
+                "motivo": (f"{MARCA_QUANTIDADE_RECUPERADA}: o motor mediu {n} m neste "
                            f"layer e a linha tinha saído zerada. Marcado como "
                            f"ESTIMADO — a soma do layer pode incluir traço que "
                            f"não é deste item. Confira antes de orçar.")}
@@ -4826,6 +4842,13 @@ def selo_com_prova_da_geometria(items, indice):
             continue
         if q <= 0:
             continue                      # linha em branco não é medição
+        # 🩸 26/09 (job 32a27efc): a recuperação COPIA o número do layer numa
+        # linha que a IA deixou zerada — e diz por que ela fica estimada ("a
+        # soma do layer pode incluir traço que não é deste item"). Conferir a
+        # cópia contra o próprio layer é prova circular: sempre bate. Sem isto a
+        # observação saía dizendo ESTIMADO e ✓ MEDIDO na mesma linha.
+        if MARCA_QUANTIDADE_RECUPERADA in str(_campo_do_item(it, "observations", "") or ""):
+            continue
         motivo = prova_da_geometria(
             q, _campo_do_item(it, "unit", ""),
             _campo_do_item(it, "observations", ""), indice)
