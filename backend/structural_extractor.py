@@ -187,6 +187,37 @@ _TOTAL_ROW_RE = re.compile(r"^\s*(?:peso\s+)?tota[l]\b", re.IGNORECASE)
 _CA_RE = re.compile(r"\bCA[-\s]?\.?\s?(25|50|60)\b", re.IGNORECASE)
 _KG_PER_M_RE = re.compile(r"kg\s*/\s*m", re.IGNORECASE)
 
+# 🩸 26/09/2026 — O RESUMO DO AÇO DO EBERICK NÃO ERA LIDO, E UM RÓTULO DELE
+# INVENTOU 300 kg.
+#
+# Caso job 32a27efc (muro de arrimo, 7 DXF, cada prancha é a folha A1 desenhada
+# no MODELO). O resumo vem em TEXTs soltos, uma linha por bitola, sem cabeçalho
+# de coluna, e o total espaçado letra a letra:
+#     "PESO CA-50 Ø 10"   "<comprimento> m"   "<peso>kg"
+#     "P E S O   T O T A L  =  <total>kg"
+# O parser devolvia None nas 6 pranchas que TÊM o resumo. Na 7ª, o rótulo de
+# LINHA virou CABEÇALHO de quadro (tem a palavra *peso*): a linha dele juntou o
+# desenho da folha na mesma altura, uma cota "300" virou o TOTAL e um "22" virou
+# peso. O prompt recebeu "PESO TOTAL declarado na prancha: 300.00 kg" — número
+# que não existe na prancha — e a IA copiou.
+# 📏 Alcance medido: 1 job, 7 linhas de aço erradas em 2 pranchas; a assinatura
+# do formato ("PESO CA-xx Ø", "P E S O") não aparece na observação de nenhum
+# outro job do acervo (piso: só texto do banco, os arquivos antigos já foram
+# apagados). Nos 10 DXF de controle sem quadro de aço: None antes e depois.
+_RESUMO_BITOLA_RE = re.compile(
+    r"^\s*peso\s+CA[-\s]?\.?\s?(25|50|60)\s*(?:ø|Ø|φ|Φ|%%[cC])\s*(\d{1,2}(?:[.,]\d{1,2})?)\s*$",
+    re.IGNORECASE)
+_CELULA_KG_RE = re.compile(r"^\s*\d[\d.,]*\s*kgf?\.?\s*$", re.IGNORECASE)
+_CELULA_M_RE = re.compile(r"^\s*\d[\d.,]*\s*m\s*$", re.IGNORECASE)
+# 3 ou mais letras SOLTAS separadas por espaço ("P E S O", "T O T A L").
+# 🪤 Dígito nunca entra: "V 1", "P 12", "N3 Ø10" ficam como estão.
+_ESPACADO_RE = re.compile(r"(?<!\S)(?:[^\W\d_] ){2,}[^\W\d_](?!\S)")
+
+
+def _desespaca(txt: str) -> str:
+    """'P E S O   T O T A L = 1.234,56kg' → 'PESO   TOTAL = 1.234,56kg'."""
+    return _ESPACADO_RE.sub(lambda m: m.group(0).replace(" ", ""), txt)
+
 
 def _match_bitola(value: float | None) -> float | None:
     """Casa um valor numérico com uma bitola comercial (±0,11 mm)."""
@@ -238,7 +269,8 @@ def parse_steel_table(texts) -> dict | None:
     """
     cells = []
     for t in texts or []:
-        txt = (getattr(t, "text", "") or "").strip()
+        # 🔑 desespaçado aqui, só pro parser: a lista de textos do prompt não muda
+        txt = _desespaca((getattr(t, "text", "") or "").strip())
         if not txt:
             continue
         pos = getattr(t, "position", (0, 0)) or (0, 0)
@@ -285,8 +317,14 @@ def parse_steel_table(texts) -> dict | None:
             #     descartada marca o quadro inteiro como não-confiável.
             #
             # 🩸 Seis linhas perfeitas dela viraram laranja por causa disto.
+            #
+            # 🩸 26/09/2026 — "PESO CA-50 Ø 10" também NÃO é cabeçalho: é o
+            # rótulo de LINHA do resumo do Eberick (job 32a27efc). Como
+            # cabeçalho, abria um quadro-fantasma do tamanho da folha e a cota
+            # "300" do desenho saía como PESO TOTAL. Ele é lido no modo RESUMO.
             if (_PESO_HDR_RE.search(c[0]) and not _KG_PER_M_RE.search(c[0])
-                    and not _TOTAL_ROW_RE.match(c[0])):
+                    and not _TOTAL_ROW_RE.match(c[0])
+                    and not _RESUMO_BITOLA_RE.match(c[0])):
                 header_idxs.append(i)
                 break
 
@@ -452,6 +490,63 @@ def parse_steel_table(texts) -> dict | None:
             for c in row_cells:
                 consumed_cells.add(id(c))
 
+    # ---- modo RESUMO (rótulo por bitola + valores À DIREITA, mesma linha) --
+    #
+    # 🩸 26/09/2026 — job 32a27efc. "PESO CA-50 Ø 10" | "… m" | "…kg" em
+    # TEXTs separados: sem cabeçalho de coluna o modo TABELA não entra, e o
+    # modo LINHA só lê bitola e kg no MESMO texto.
+    # 🔑 O par é o rótulo + o "…kg" mais PERTO À DIREITA na MESMA linha de base
+    # (|Δy| ≤ 0,6 altura, 0 < Δx ≤ 60 alturas). Nunca a linha inteira da folha:
+    # foi ela que pôs a cota do desenho no lugar do total. O "… m" entre os dois
+    # é o comprimento, e a conferência NBR 7480 é a mesma do modo TABELA.
+    # 🪤 Linha sem comprimento não tem conferência própria (ver `_resumo_sem_nbr`).
+    _resumo_sem_nbr = False
+    for c in cells:
+        if id(c) in consumed_cells:
+            continue
+        mr = _RESUMO_BITOLA_RE.match(c[0])
+        if not mr:
+            continue
+        bitola = _match_bitola(_num(mr.group(2)))
+        if bitola is None:
+            continue
+        _h = c[3] if c[3] > 0 else 1.0
+        viz = []
+        for d in cells:
+            if d is c or id(d) in consumed_cells:
+                continue
+            if abs(d[2] - c[2]) > 0.6 * _h:
+                continue  # outra linha de base
+            if d[1] <= c[1]:
+                continue  # à esquerda do rótulo
+            if d[1] - c[1] > 60 * _h:
+                continue  # longe demais: já é desenho
+            viz.append(d)
+        ckg = min((d for d in viz if _CELULA_KG_RE.match(d[0])),
+                  key=lambda d: d[1] - c[1], default=None)
+        if ckg is None:
+            continue
+        kg = _num(ckg[0])
+        if kg is None or not (0 < kg <= 200000):
+            continue
+        cm = min((d for d in viz if _CELULA_M_RE.match(d[0]) and d[1] < ckg[1]),
+                 key=lambda d: d[1] - c[1], default=None)
+        comp = _num(cm[0]) if cm else None
+        if comp is None or comp <= 0:
+            _resumo_sem_nbr = True
+        else:
+            esperado = comp * massa_linear_kg_m(bitola)
+            if esperado > 0 and not (0.70 <= kg / esperado <= 1.70):
+                avisos.append(
+                    f"Ø {bitola} mm: peso lido ({kg:.2f} kg) não bate com "
+                    f"comprimento × massa linear ({esperado:.2f} kg) — linha descartada")
+                continue
+        entries.append({"bitola_mm": bitola, "kg": kg, "comp_m": comp,
+                        "aco": f"CA-{mr.group(1)}", "quadro": None})
+        for d in (c, ckg, cm):
+            if d is not None:
+                consumed_cells.add(id(d))
+
     # ---- modo LINHA (texto único com 'kg' explícito) ----------------------
     for c in cells:
         if id(c) in consumed_cells:
@@ -600,6 +695,13 @@ def parse_steel_table(texts) -> dict | None:
             avisos.append(
                 f"soma das bitolas ({soma:.2f} kg) difere do TOTAL declarado na prancha "
                 f"({total_kg:.2f} kg) — leitura possivelmente incompleta; tratar como ESTIMADO")
+
+    # 🔑 26/09/2026 — linha do resumo SEM comprimento não passou pela NBR 7480;
+    # só vira [MEDIDO] se a prancha declarar um total que bata com a soma.
+    if _resumo_sem_nbr and total_kg is None:
+        confiavel = False
+        avisos.append("resumo de aço sem comprimento pra conferir pela NBR 7480 e sem "
+                      "peso total declarado — tratando como ESTIMADO")
 
     # 🚨 29/08/2026 — O BURACO QUE DEIXAVA AÇO EM DOBRO SAIR COMO "MEDIDO".
     #
