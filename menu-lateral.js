@@ -301,11 +301,46 @@
   // escritorio.html (sessionStorage 'aiarq_esc_ctx', só desta aba) e só vale pro MESMO job da URL — o
   // projeto fixado continua morando na URL. Abrir o painel da conta apaga a marca: o painel volta limpo.
   // O id vai pra um href: só UUID passa. O nome entra por textContent, nunca como HTML.
+  // 26/09 (Pedro: "o menu fica invertendo"): sem a marca da aba, o menu nascia no desenho antigo e, quando o
+  // banco respondia, virava o do Escritório — a cada página, em cima e embaixo trocavam de lugar. Agora o
+  // navegador LEMBRA que o projeto medido é do Escritório (localStorage 'aiarq_esc_mapa', por pessoa): da 2ª
+  // vez em diante o menu já nasce certo. Quem confirma continua sendo o banco (descobrirEscritorio): se o
+  // projeto saiu do Escritório, a lembrança é apagada e a próxima página nasce no menu normal.
+  var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  function uidLocal() {
+    try {
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (k && /^sb-.*-auth-token$/.test(k)) {
+          var v = JSON.parse(localStorage.getItem(k) || 'null');
+          return (v && v.user && v.user.id) || '';
+        }
+      }
+    } catch (_) {}
+    return '';
+  }
+  function lerMapa() { try { return JSON.parse(localStorage.getItem('aiarq_esc_mapa') || '{}') || {}; } catch (_) { return {}; } }
+  function gravarMapa(job, c) {
+    try {
+      var m = lerMapa(), uid = uidLocal();
+      if (c) m[job] = { id: c.id, nome: c.nome, sub: c.sub || '', uid: uid, t: Date.now() };
+      else delete m[job];
+      var ks = Object.keys(m).sort(function (a, b) { return (m[b].t || 0) - (m[a].t || 0); });
+      ks.slice(60).forEach(function (k) { delete m[k]; });          // guarda os 60 mais recentes
+      localStorage.setItem('aiarq_esc_mapa', JSON.stringify(m));
+    } catch (_) {}
+  }
+  var ESC_DO_MAPA = false;
   var ESC = (function () {
     try {
       if (!FIXADO) { sessionStorage.removeItem('aiarq_esc_ctx'); return null; }
       var c = JSON.parse(sessionStorage.getItem('aiarq_esc_ctx') || 'null');
-      return c && c.job === JOB && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(c.id || '') ? c : null;
+      if (!(c && c.job === JOB)) {
+        var m = lerMapa()[JOB];
+        c = m && m.uid && m.uid === uidLocal() ? { job: JOB, id: m.id, nome: m.nome, sub: m.sub } : null;
+        ESC_DO_MAPA = !!c;
+      }
+      return c && UUID_RE.test(c.id || '') ? c : null;
     } catch (_) { return null; }
   })();
 
@@ -314,7 +349,7 @@
   function gruposEscritorio() {
     var e = 'escritorio.html#/p/' + ESC.id + '/';
     return [
-      { titulo: '', itens: [
+      { titulo: 'Escritório', itens: [
         { href: e + 'capa',     rotulo: 'Página do projeto', ic: 'painel',   track: 'menu-esc-capa' },
         { href: e + 'tarefas',  rotulo: 'Tarefas',           ic: 'quadro',   track: 'menu-esc-tarefas' },
         { href: e + 'arquivos', rotulo: 'Arquivos',          ic: 'pasta',    track: 'menu-esc-arquivos' },
@@ -943,7 +978,8 @@
         return '<a class="side-it" href="' + base + tela + '" data-track="menu-escritorio-' + tela + '">'
              + svg(ic) + rotulo + '</a>';
       };
-      primeiro.insertAdjacentHTML('afterend',
+      // 26/09 (Pedro: "o Escritório sobressai e fica em cima"): o grupo entra ANTES do menu do projeto
+      primeiro.insertAdjacentHTML('beforebegin',
         '<div class="side-grp" id="aiarq-grp-escritorio"><p class="side-grp-t">Escritório</p>'
         + item('equipe', 'equipe', 'Equipe') + item('tarefas', 'quadro', 'Tarefas') + item('atas', 'memorial', 'Atas')
         + '</div>');
@@ -973,6 +1009,7 @@
     if (!side) return;
     ESC = { job: JOB, id: c.id, nome: String(c.nome || 'Projeto').slice(0, 160), sub: String(c.sub || '').slice(0, 120) };
     try { sessionStorage.setItem('aiarq_esc_ctx', JSON.stringify(ESC)); } catch (_) {}
+    gravarMapa(JOB, ESC);          // da próxima vez o menu já nasce assim (sem inverter)
     GRUPOS = gruposEscritorio();
     // os selos de estado (12 medidos, velho, ok…) que o atualizarSelo já pintou passam pros itens novos
     var selos = {};
@@ -1009,18 +1046,24 @@
 
   // dono do projeto medido: ele está ligado a um projeto do Escritório? (o banco responde pela RLS)
   function descobrirEscritorio() {
-    if (ESC || !FIXADO || !window.sbClient || typeof window.sbClient.from !== 'function') return;
+    // o menu que nasceu da lembrança do navegador também é conferido (o banco é quem sabe)
+    if ((ESC && !ESC_DO_MAPA) || !FIXADO || !window.sbClient || typeof window.sbClient.from !== 'function') return;
     window.sbClient.from('escritorio_projetos').select('id,nome,etapa_atual').eq('job_id', JOB).maybeSingle()
       .then(function (r) {
-        if (!r || r.error || !r.data) return;
-        aplicarEscritorio({ id: r.data.id, nome: r.data.nome, sub: r.data.etapa_atual || '' });
+        if (!r || r.error) return;                       // falha de leitura não é "não tem": não mexe
+        if (!r.data) { if (ESC_DO_MAPA) gravarMapa(JOB, null); return; }   // saiu do Escritório
+        var c = { id: r.data.id, nome: r.data.nome, sub: r.data.etapa_atual || '' };
+        if (!ESC) return aplicarEscritorio(c);
+        gravarMapa(JOB, c);                              // já está no menu certo: só atualiza nome/etapa
+        var nm = document.getElementById('aiarq-proj-nome');
+        if (nm) nm.textContent = String(c.nome || 'Projeto').slice(0, 160);
       }, function () {});
   }
 
   function montarEquipe() {
     if (!FIXADO || typeof window.aiarqAcesso !== 'function') return;
     window.aiarqAcesso(JOB).then(function (a) {
-      if (!a || !a.so_leitura) return;
+      if (!a || !a.so_leitura) { if (a && ESC_DO_MAPA && !a.escritorio_id) gravarMapa(JOB, null); return; }
       SO_LEITURA = true;
       var nx = document.getElementById('aiarq-proj-nome');
       if (nx && !ESC) nx.textContent = (window.tituloProjeto || String)(a.nome || 'Projeto');

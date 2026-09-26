@@ -37,8 +37,11 @@ def test_escritorio_grava_a_marca_com_o_job_e_o_id_do_projeto():
 def test_menu_so_vira_escritorio_pro_mesmo_job_e_com_id_uuid():
     b = _bloco_esc(_ler("menu-lateral.js"))
     assert "c.job === JOB" in b, "sem isto, a marca de um projeto mudaria o menu de OUTRO"
-    m = re.search(r"/\^\[0-9a-f\]\{8\}-.*?\$/i\.test\(c\.id", b)
-    assert m, "o id vai pra um href: só UUID pode passar"
+    js = _ler("menu-lateral.js")
+    assert re.search(r"var UUID_RE = /\^\[0-9a-f\]\{8\}-.*?\$/i;", js)
+    assert "UUID_RE.test(c.id || '')" in b, "o id vai pra um href: só UUID pode passar"
+    # 26/09: a lembrança que dura (aiarq_esc_mapa) é da PESSOA e do JOB da URL
+    assert "var m = lerMapa()[JOB];" in b and "m.uid && m.uid === uidLocal()" in b
     assert "if (!FIXADO) { sessionStorage.removeItem('aiarq_esc_ctx')" in b, "o painel da conta volta limpo"
 
 
@@ -105,5 +108,24 @@ def test_o_menu_da_propria_tela_do_escritorio_tambem_mostra_quantitativo_e_obra(
     # o que é do dono fica atrás do souAdmin(), como no menu-lateral.js
     for href in ("revisao.html?job_id=${J}", "financeiro.html?job_id=${J}", "projeto.html?job_id=${J}#cotacoes"):
         assert "souAdmin() ? fora(`" + href in f, href
+
+
+def test_a_lembranca_e_conferida_pelo_banco_e_apagada_quando_o_projeto_sai():
+    # 26/09 — Pedro: "o menu fica invertendo". O menu nasce da lembrança; o banco confirma.
+    d = _funcao_js(_ler("menu-lateral.js"), "function descobrirEscritorio() {")
+    assert "(ESC && !ESC_DO_MAPA)" in d, "o menu que nasceu da lembrança também tem que ser conferido"
+    assert "if (!r || r.error) return;" in d, "falha de leitura não é 'não tem Escritório'"
+    assert "if (!r.data) { if (ESC_DO_MAPA) gravarMapa(JOB, null); return; }" in d
+
+
+def test_o_grupo_escritorio_fica_em_cima():
+    js = _ler("menu-lateral.js")
+    f = _funcao_js(js, "function montarEscritorio(uid) {")
+    assert "primeiro.insertAdjacentHTML('beforebegin'," in f
+    g = _funcao_js(js, "function gruposEscritorio() {")
+    assert g.index("titulo: 'Escritório'") < g.index("titulo: 'Quantitativo e obra'")
+    h = _ler("escritorio.html")
+    r = h[h.index("function renderMoldura() {"):]
+    assert r.index('<div class="s-grp-t">Escritório</div>') < r.index("${obra}")
 
 # controle positivo (25/09): tirar "c.job === JOB && " do menu-lateral.js reprovou o 2º teste.

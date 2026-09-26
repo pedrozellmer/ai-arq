@@ -227,7 +227,8 @@ def test_o_menu_da_equipe_mostra_so_o_que_ela_pode():
     assert sel.index("if (nx) nx.textContent = 'Projeto não encontrado';") < sel.index("montarEquipe();")
     eq = js[js.index("function montarEquipe() {"):]
     eq = eq[:eq.index("\n  }\n")]
-    assert "if (!a || !a.so_leitura) return;" in eq
+    # 26/09: quem não é equipe (ou saiu) não ganha nada — e, se o menu nasceu da lembrança, ela é apagada
+    assert "if (!a || !a.so_leitura) { if (a && ESC_DO_MAPA && !a.escritorio_id) gravarMapa(JOB, null); return; }" in eq
     # 25/09: tirar os itens do dono virou função (a troca pro menu do Escritório refaz os grupos e
     # precisa tirar de novo); o caminho de volta deixou de ser um link solto: o menu INTEIRO vira o do
     # Escritório (aplicarEscritorio), com "Página do projeto" etc.
