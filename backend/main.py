@@ -585,6 +585,8 @@ _STAGES_DIAGNOSTICO = frozenset({
     "motor:verbas-preliminares",
     # 24/09: esquema/detalhe fora da medição, planta-tipo × andares
     "motor:leitura-por-folha",
+    # 26/09: o mesmo arquivo 2× no envio, lido uma vez
+    "motor:arquivo-repetido",
     "motor:pe-direito", "motor:escala-aviso", "motor:concordancia-rotulo",
     "motor:parede-medida",
     # 15/09: os trechos de perfil e escala H/V que a prancha escreve. Só
@@ -10376,6 +10378,40 @@ def _recusa_por_paginas(job_id, file_paths) -> bool:
     return True
 
 
+def _sem_arquivos_repetidos(job_id, file_paths) -> list:
+    """A lista sem o MESMO arquivo (sha256) repetido — fica a 1ª ocorrência.
+
+    🩸 26/09/2026 — job `facb8346`: a cliente mandou "…TIP_R06.pdf" e
+    "…TIP_R06 (1).pdf" (o nome que o navegador dá ao baixar de novo), byte a
+    byte iguais. O motor leu os dois como pranchas diferentes: numa leitura de
+    arquitetura, as quantidades daquela planta sairiam em DOBRO. No Storage
+    inteiro havia mais 2 envios assim ("… - Copia.pdf"). O /add-file já barra o
+    gêmeo pelo sha256; o envio inicial e o reprocesso, não.
+    Arquivo que não abre fica (quem decide é o motor). Nunca levanta.
+    """
+    try:
+        vistos, fica, fora = {}, [], []
+        for fp in file_paths:
+            try:
+                h = _sha256_do_arquivo(fp)
+            except Exception:
+                fica.append(fp)
+                continue
+            if h in vistos:
+                fora.append((os.path.basename(str(fp)), os.path.basename(str(vistos[h]))))
+                continue
+            vistos[h] = fp
+            fica.append(fp)
+        if fora:
+            _log_error("motor:arquivo-repetido",
+                       "lidos=%d de %d | %s" % (len(fica), len(file_paths),
+                                                "; ".join("%s = %s" % par for par in fora[:8])),
+                       job_id, severity="info")
+        return fica
+    except Exception:
+        return list(file_paths)
+
+
 def _process_job_throttled(*args, **kwargs):
     """Wrapper que limita quantos process_job rodam ao mesmo tempo.
 
@@ -10404,6 +10440,16 @@ def _process_job_throttled(*args, **kwargs):
     # máquina (18/09). Recusar depois da fila faria o cliente esperar uma hora
     # para descobrir que não ia rodar.
     _fps = args[1] if len(args) > 1 else kwargs.get("file_paths")
+    # 26/09: o MESMO arquivo duas vezes no envio é lido uma vez (e conta
+    # página uma vez) — ver `_sem_arquivos_repetidos`
+    if _dono and isinstance(_fps, list) and len(_fps) > 1:
+        _unicos = _sem_arquivos_repetidos(_dono, _fps)
+        if len(_unicos) != len(_fps):
+            if len(args) > 1:
+                args = (args[0], _unicos) + tuple(args[2:])
+            else:
+                kwargs["file_paths"] = _unicos
+            _fps = _unicos
     if _dono and isinstance(_fps, list) and _recusa_por_paginas(_dono, _fps):
         return
     from llm_retry import escopo_job
