@@ -340,6 +340,9 @@ def extraction_has_quality_caveat(metadata) -> bool:
         # medição e NÃO é. Sem entrar aqui, o aviso morria no log e o item
         # saía branco na planilha. Ver _corrigir_duto_linha_dupla.
         or metadata.get("duto_medicao_suspeita")
+        # 🩸 26/09 (job 32a27efc): a folha de papel inteira desenhada no
+        # modelo, cada vista numa escala — nenhum fator único mede a prancha.
+        or metadata.get("escala_por_vista")
     )
 
 
@@ -2639,7 +2642,11 @@ _UNIDADES_QUE_DEPENDEM_DE_ESCALA = {
     "m", "ml", "m²", "m2", "m³", "m3", "km", "cm", "mm",
 }
 
-_RESSALVAS_SO_DE_ESCALA = ("unidade_suspeita", "alerta_unidade")
+# 🩸 26/09 (job 32a27efc): `escala_por_vista` — folha de papel no modelo com
+# vistas em escalas diferentes. É de ESCALA: a contagem de pilares e o kg do
+# quadro de aço da mesma prancha não dependem dela. 🪤 Chave própria, e não
+# `alerta_unidade`: a 5ª régua (rótulo de área que bate) apaga aquela.
+_RESSALVAS_SO_DE_ESCALA = ("unidade_suspeita", "alerta_unidade", "escala_por_vista")
 
 
 def caveat_atinge_unidade(metadata, unidade: str) -> bool:

@@ -13143,6 +13143,13 @@ def _resumo_escala_arquivo(caminho: str, md: dict) -> dict:
     nome = _nome_prancha_bonito(caminho)
     uni = (md.get("unidade_nome_provada") or "").strip()
     try:
+        if md.get("escala_por_vista"):
+            # 🩸 26/09/2026 — job 32a27efc: a folha de papel inteira no modelo,
+            # cada vista numa escala. Vem ANTES de tudo: nem cota validada nem
+            # rótulo que bate numa vista provam as outras — e o cliente leria
+            # "✅ escala conferida" numa prancha que não foi medida.
+            return {"nome": nome, "status": "folha",
+                    "escalas": str(md.get("escala_por_vista"))[:160]}
         if md.get("unidade_validada_por_cotas"):
             return {"nome": nome, "status": "cotas",
                     "n": int(md["unidade_validada_por_cotas"]), "unidade": uni}
@@ -13199,7 +13206,26 @@ def _linhas_escala_projeto(arqs: list, n_medidos: int = -1,
     # mais grave era o único mudo. Vai PRIMEIRO, porque "a escala está suspeita"
     # é pior que "não consegui provar a escala".
     alerta = [a for a in arqs if a.get("status") == "alerta"]
+    # 🩸 26/09 (job 32a27efc): folha de papel no modelo. Vai antes da suspeita:
+    # aqui a gente SABE por que a escala não fecha. 🔑 O que falta é fato (o
+    # desenho em escala real); o que resolve é hipótese — não promete medir.
+    folha = [a for a in arqs if a.get("status") == "folha"]
     out = []
+    if folha:
+        _n = "; ".join("%s — %s" % (a["nome"], a.get("escalas") or "?")
+                       for a in folha[:4])
+        if len(folha) > 4:
+            _n += "; e mais %d" % (len(folha) - 4)
+        out.append(
+            "⚠ ESCALA DE PAPEL em %s (escalas lidas nas cotas). Nestas pranchas a "
+            "folha inteira foi desenhada no modelo em milímetros de papel, com "
+            "cada vista na sua escala — não existe um fator único que meça a "
+            "prancha. Por isso comprimento, área e volume destas pranchas NÃO foram "
+            "medidos: os números delas em metro, m² e m³ são estimativa e podem "
+            "estar fora de escala. Contagens de peças (un) e pesos lidos do quadro "
+            "de aço (kg) não dependem da escala. O que falta é o desenho em escala "
+            "real: se você tiver o DWG com o desenho em 1:1 no modelo (as folhas "
+            "montadas no layout), envie." % _n)
     if alerta:
         _n = ", ".join(
             "%s (o arquivo declara: %s)" % (a["nome"], a.get("declarada") or "?")
@@ -15089,7 +15115,10 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                             f"corrigida={_md_u.get('unidade_corrigida_por_cotas', '-')} "
                             f"alerta={(_md_u.get('alerta_unidade') or '-')[:120]} "
                             f"ressalva={_dxf_sem_procedencia} "
-                            f"cab={_md_u.get('diag_unidade') or '-'}",
+                            f"cab={_md_u.get('diag_unidade') or '-'} "
+                            # 📏 26/09 (job 32a27efc): DIMLFAC efetivo por cota —
+                            # mede no acervo quantas pranchas são folha de papel.
+                            f"lfac={_md_u.get('lfac_por_cota') or '-'}",
                             job_id)
                         try:
                             _escala_arqs.append(_resumo_escala_arquivo(dxf_path, _md_u))

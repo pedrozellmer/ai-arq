@@ -4235,6 +4235,151 @@ def medir_por_folha(walls, hatches, polygon_areas, blocks, mapa) -> dict:
     return med
 
 
+# ══════════════════════════════════════════════════════════════════════
+#  FOLHA DE PAPEL DESENHADA NO MODELO — cada vista numa escala
+# ══════════════════════════════════════════════════════════════════════
+# 🩸 26/09/2026 — job 32a27efc (7 DXF de estrutura de muro de arrimo). Cada
+# prancha é a FOLHA A1 inteira desenhada no MODELO, em milímetros de PAPEL
+# ($INSUNITS=4, extensão 841×594, nenhuma janela de layout), e cada vista numa
+# escala: fôrma em 1:125, seções em 1:25, cortes em 1:100. Quem conta a escala
+# de cada vista é a cota: o DIMLFAC dela é a escala em cm por mm de papel
+# (12,5 → 1:125; 2,5 → 1:25). O motor usa UM fator por arquivo: na 0001 ficou
+# o milímetro do cabeçalho (tudo 125× menor, e SEM ressalva); nas outras seis a
+# plausibilidade escolheu decímetro — certo numa vista, errado nas outras.
+# 🔑 Não existe fator único que meça esta folha. Então não se tenta medir: a
+# prancha é marcada (`escala_por_vista`) e isso vira ressalva de ESCALA —
+# m/m²/m³ dela não saem medidos; contagem e kg de quadro de aço continuam.
+# 📏 Alcance medido: 7 de 7 pranchas do caso; 0 dos DXF locais de controle
+# (acervo antigo + casos de 25–26/09 + gabarito).
+_FOLHAS_ISO_MM = ((1189.0, 841.0), (841.0, 594.0), (594.0, 420.0),
+                  (420.0, 297.0), (297.0, 210.0))      # A0 … A4
+_FOLHA_TOL = 0.03
+_FOLHA_MIN_COTAS = 3
+_FOLHA_FRACAO_FORA_DE_1 = 0.80
+
+
+def _e_folha_iso(w, h) -> str:
+    """Nome da folha ISO (A0–A4, ±3%, qualquer orientação) ou ''."""
+    maior, menor = max(w, h), min(w, h)
+    for i, (a, b) in enumerate(_FOLHAS_ISO_MM):
+        if abs(maior / a - 1) <= _FOLHA_TOL and abs(menor / b - 1) <= _FOLHA_TOL:
+            return "A%d" % i
+    return ""
+
+
+def _extensao_do_cabecalho(doc):
+    """(largura, altura) de $EXTMIN/$EXTMAX, ou None se vazio ou inválido.
+
+    🪤 O ezdxf e vários conversores gravam o "nunca calculado" como ±1e20.
+    """
+    try:
+        emin, emax = doc.header.get("$EXTMIN"), doc.header.get("$EXTMAX")
+        v = [float(emin[0]), float(emin[1]), float(emax[0]), float(emax[1])]
+    except Exception:
+        return None
+    if any(x != x or abs(x) >= 1e19 for x in v):
+        return None
+    w, h = v[2] - v[0], v[3] - v[1]
+    return (w, h) if w > 0 and h > 0 else None
+
+
+def histograma_dimlfac(doc) -> dict:
+    """{DIMLFAC efetivo: nº de cotas} do modelo. Nunca levanta.
+
+    Mesma régua de `_unidade_por_dimlfac` (override → estilo → 1), com o mesmo
+    teto de varredura das cotas.
+    """
+    c: Counter = Counter()
+    try:
+        for i, dim in enumerate(doc.modelspace().query("DIMENSION")):
+            if i >= _DIM_MAX_SCAN:
+                break
+            try:
+                med = dim.get_measurement()
+            except Exception:
+                continue
+            if not isinstance(med, (int, float)) or abs(med) <= 1e-9:
+                continue
+            c[round(_dim_effective_dimlfac(doc, dim), 4)] += 1
+    except Exception:
+        pass
+    return dict(c)
+
+
+def lfac_para_log(hist) -> str:
+    """'{12.5:54,2.5:48}' — o histograma numa linha, do mais comum pro menos."""
+    itens = sorted((hist or {}).items(), key=lambda kv: -kv[1])
+    return "{" + ",".join("%g:%d" % (k, n) for k, n in itens[:8]) + "}"
+
+
+def folha_de_papel_no_modelo(doc):
+    """A prancha é a FOLHA DE PAPEL desenhada no modelo, com vistas em escala?
+
+    Devolve None, ou {"folha", "cotas", "fora_de_1", "escalas", "texto"} —
+    `escalas` = [(denominador, nº de cotas)], `texto` = "1:125 (54 cotas), …".
+    Pura: só lê o doc. Nunca levanta.
+
+    Critério (TODOS):
+      · $INSUNITS 0 ou 4 — o milímetro do papel;
+      · nenhuma janela de viewport — quem monta a folha no layout não desenha
+        a folha no modelo;
+      · extensão de folha ISO A0–A4 (±3%) — do cabeçalho; das entidades
+        quando o cabeçalho está vazio ou inválido (1e20);
+      · ≥3 cotas lineares e ≥80% delas com razão efetiva ≠ 1: a cota exibe
+        OUTRO número que a medida do desenho, ou seja, a vista está em escala.
+    Razão efetiva = número exibido / medida: na cota automática é o DIMLFAC,
+    na digitada é o número escrito — `_dim_displayed_number` dá as duas.
+
+    🪤 O denominador (DIMLFAC × 10) supõe a cota em CENTÍMETRO, como na
+    estrutura e na arquitetura brasileiras. Serve pra DIZER a escala ao
+    cliente; a decisão de marcar não depende dele.
+    """
+    try:
+        if int(doc.header.get("$INSUNITS", 0) or 0) not in (0, 4):
+            return None
+        for lay in doc.layouts:
+            for vp in lay.query("VIEWPORT"):
+                if _janela_da_viewport(vp) is not None:
+                    return None
+        msp = doc.modelspace()
+        n = fora = 0
+        for i, dim in enumerate(msp.query("DIMENSION")):
+            if i >= _DIM_MAX_SCAN:
+                break
+            try:
+                if dim.dimtype not in (0, 1):
+                    continue            # só cota linear/alinhada é régua
+                med = float(dim.get_measurement())
+            except Exception:
+                continue
+            if med <= 1e-9:
+                continue
+            mostrado = _dim_displayed_number(doc, dim, med)
+            if mostrado is None or mostrado[0] <= 0:
+                continue
+            n += 1
+            if abs(mostrado[0] / med - 1.0) > _DIM_RATIO_TOL:
+                fora += 1
+        if n < _FOLHA_MIN_COTAS or fora < _FOLHA_FRACAO_FORA_DE_1 * n:
+            return None
+        ext = _extensao_do_cabecalho(doc) or _compute_block_bbox(msp)
+        folha = _e_folha_iso(*ext) if ext else ""
+        if not folha:
+            return None
+        hist = histograma_dimlfac(doc)
+        escalas = [(round(lf * 10, 1), c) for lf, c in
+                   sorted(hist.items(), key=lambda kv: -kv[1])
+                   if c >= _FOLHA_MIN_COTAS and abs(lf - 1.0) > _DIM_RATIO_TOL]
+        texto = ", ".join("1:%s (%d cotas)" % (("%g" % d).replace(".", ","), c)
+                          for d, c in escalas)
+        return {"folha": folha, "cotas": n, "fora_de_1": fora, "escalas": escalas,
+                "texto": texto or ("%d de %d cotas exibem outro número que a "
+                                   "medida do desenho" % (fora, n))}
+    except Exception as exc:
+        logger.warning("[folha-no-modelo] falhou (ignorado): %s", exc)
+        return None
+
+
 def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> DXFExtraction:
     """Main extraction function — reads a .dxf file and returns structured data.
 
@@ -4409,6 +4554,16 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         # metadata em vez de rebaixar tudo pra estimado
         dim_check["heuristica_superada"] = " | ".join(unit_warnings)
         unit_warnings = []
+    # 🩸 26/09/2026 — job 32a27efc: a FOLHA inteira desenhada no modelo, cada
+    # vista numa escala (ver `folha_de_papel_no_modelo`). Roda DEPOIS da
+    # cascata e fora dela: não escolhe fator — não existe um que sirva — só
+    # marca a prancha. 🪤 Não entra em `unit_warnings`/`alerta_unidade`: a 5ª
+    # régua apaga essa chave quando dois rótulos de área batem, e bater numa
+    # vista não prova as outras.
+    _folha_papel = folha_de_papel_no_modelo(doc)
+    # 📏 O histograma vai pro log `motor:unidade` de TODA prancha com cota —
+    # sem ele não dá pra medir no acervo quantas são folha de papel.
+    _lfac_hist = histograma_dimlfac(doc)
     # ── CONSENSO DE UNIDADE DO PROJETO ──────────────────────────────────────
     # Se ESTA prancha NÃO tem cota que prove a escala e a detecção local dela é
     # FRACA (chutou pela extensão / caiu em pés por $MEASUREMENT, sem $INSUNITS
@@ -4541,6 +4696,12 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
                 f"{_unit_consenso[0]})")
     except Exception:
         pass
+    # 🔑 Ressalva de ESCALA com chave própria (engine_rules
+    # `_RESSALVAS_SO_DE_ESCALA`): m/m²/m³ desta prancha não saem medidos.
+    if _folha_papel:
+        metadata["escala_por_vista"] = _folha_papel["texto"]
+    if _lfac_hist:
+        metadata["lfac_por_cota"] = lfac_para_log(_lfac_hist)
 
     # ---- Layers -----------------------------------------------------------
     layer_names = [layer.dxf.name for layer in doc.layers]
