@@ -763,6 +763,24 @@
     });
   });
 
+  // Origem que vai pra CONTA no cadastro — o first-touch de aiarq-utils.js
+  // (`aiarq_src`). Dado de conta: não depende de cookie.
+  // 🆕 26/09/2026: `src_landing` = a PÁGINA do site onde a pessoa chegou da
+  // primeira vez (home, post X, FAQ…). O navegador já guardava isso em
+  // `aiarq_src.landing` e o cadastro jogava fora; "por qual página entrou quem
+  // se cadastrou" só existia na telemetria, que vê quem aceita cookie (18 dos
+  // 32 cadastros da semana de 21/09). É `location.pathname` — caminho, nunca a
+  // query — e o corte em 80 é repetido aqui porque o localStorage é do visitante.
+  function _origemParaConta(s) {
+    if (!s || !s.label) return null;
+    return {
+      src: s.label,
+      src_ref: s.ref || '',
+      src_campaign: s.utm_campaign || '',
+      src_landing: String(s.landing || '').slice(0, 80)
+    };
+  }
+
   // ══════════════════════════════════════════════
   //  FORM SUBMIT
   // ══════════════════════════════════════════════
@@ -890,16 +908,12 @@
           localStorage.setItem('aiarq_profile_complete', 'true');
       // Atribuição de origem: grava de onde este cliente chegou (first-touch)
       // na conta dele — dado de conta, confiável (não depende de cookie).
-      // Aparece no admin agrupado, pra saber o que traz cliente.
+      // 🪤 26/09/2026: o painel admin NÃO mostra isto (a lista de cadastros lê
+      // só o "Como nos conheceu?"); lê-se no banco, em
+      // auth.users.raw_user_meta_data (src, src_ref, src_campaign, src_landing).
       try {
-        var _srcAttr = window.aiArqSource && window.aiArqSource();
-        if (_srcAttr && _srcAttr.label) {
-          await sbClient.auth.updateUser({ data: {
-            src: _srcAttr.label,
-            src_ref: _srcAttr.ref || '',
-            src_campaign: _srcAttr.utm_campaign || ''
-          } });
-        }
+        var _origem = _origemParaConta(window.aiArqSource && window.aiArqSource());
+        if (_origem) await sbClient.auth.updateUser({ data: _origem });
       } catch (e) { /* atribuição nunca bloqueia o cadastro */ }
 
       // Boas-vindas AQUI, no cadastro (02/08/2026 — Pedro: "abriu cadastro já
