@@ -265,7 +265,19 @@ def test_o_login_devolve_o_nome_do_cadastro(monkeypatch, meta, esperado):
     monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **k: _RespAuth(payload))
     req = types.SimpleNamespace(headers={"Authorization": "Bearer token-de-teste"})
     u = main._get_user_from_request(req)
-    assert u == {"id": UID, "email": EMAIL, "nome": esperado}, u
+    # 26/09: o login também diz se o e-mail foi confirmado (o convite sem código aceita só por e-mail confirmado)
+    assert u == {"id": UID, "email": EMAIL, "nome": esperado, "email_confirmado": False}, u
+
+
+@pytest.mark.parametrize("campo", ["email_confirmed_at", "confirmed_at"])
+def test_o_login_diz_quando_o_email_foi_confirmado(monkeypatch, campo):
+    import urllib.request
+    payload = {"id": UID, "email": EMAIL, "user_metadata": {}, campo: "2026-09-01T12:00:00Z"}
+    monkeypatch.setattr(main, "SUPABASE_URL", "https://supa.exemplo.test")
+    monkeypatch.setattr(main, "SUPABASE_KEY", "chave-de-teste")
+    monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **k: _RespAuth(payload))
+    req = types.SimpleNamespace(headers={"Authorization": "Bearer token-de-teste"})
+    assert main._get_user_from_request(req)["email_confirmado"] is True
 
 
 # ══════════════════════════════════════════════════════════════════════════

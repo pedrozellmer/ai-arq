@@ -1526,7 +1526,10 @@ def _get_user_from_request(request, tolerante: bool = False):
         _meta = data.get("user_metadata")
         _meta = _meta if isinstance(_meta, dict) else {}
         nome = str(_meta.get("full_name") or _meta.get("name") or "").strip()
-        return {"id": uid, "email": email, "nome": nome}
+        # 26/09: o convite do Escritório aceito PELO E-MAIL (sem o código do link) só vale com o e-mail
+        # CONFIRMADO — senão bastaria criar conta com o e-mail de outra pessoa pra pegar o convite dela
+        return {"id": uid, "email": email, "nome": nome,
+                "email_confirmado": bool(data.get("email_confirmed_at") or data.get("confirmed_at"))}
     except urllib.error.HTTPError as _he:
         # 401/403 do Supabase = o token é ruim mesmo. 5xx = problema DELES.
         _supa_log(f"AUTH validate HTTP {_he.code}")

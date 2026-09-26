@@ -403,16 +403,69 @@ def convite_visto(request: Request, corpo: dict):
     return {"ok": True, "visto": not dispensar}
 
 
+_UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I)
+
+
+def _email_da_conta(eu) -> str:
+    """O e-mail da conta logada SÓ se ele estiver confirmado (Google, ou o link de confirmação do
+    cadastro por senha). Vazio = não serve de prova pra aceitar convite pelo e-mail."""
+    if not eu or eu.get("email_confirmado") is not True:
+        return ""
+    email = str(eu.get("email") or "").strip().lower()
+    return email if _EMAIL.match(email) else ""
+
+
+@router.post("/convite/pendentes")
+def convites_pendentes_da_conta(request: Request):
+    """🩸 26/09 (uma convidada, no celular): o código do convite se perdeu na volta do login pelo Google e a
+    página dizia "Não achei o convite" — com o convite pendente pro e-mail dela no banco. Pra quem está
+    LOGADO, os convites em aberto pro e-mail EXATO e CONFIRMADO da conta: o convite foi mandado pra esse
+    e-mail, e a conta prova que é dona dele. Não devolve código nem e-mail de ninguém."""
+    eu = _exige_login(request)
+    email = _email_da_conta(eu)
+    if not email:
+        return {"convites": []}
+    status, linhas = _SERVICO("GET", "escritorio_membros",
+                              params={"email": f"eq.{email}", "status": "eq.convidado",
+                                      "select": "id,projeto_id,convite_expira", "order": "convidado_em.desc",
+                                      "limit": "10"})
+    if status == 0 or status >= 300 or linhas is None:
+        raise HTTPException(502, "O banco não respondeu agora. Tente de novo em instantes.")
+    saida = []
+    for m in linhas:
+        if expirado(m.get("convite_expira")):
+            continue
+        p = _um(_SERVICO("GET", "escritorio_projetos", params={"id": f"eq.{m['projeto_id']}", "select": "nome"})) or {}
+        admin = _um(_SERVICO("GET", "escritorio_membros",
+                             params={"projeto_id": f"eq.{m['projeto_id']}", "papel": "eq.dono", "select": "nome"})) or {}
+        saida.append({"convite_id": m["id"], "projeto": p.get("nome") or "", "convidado_por": admin.get("nome") or ""})
+    return {"convites": saida}
+
+
 @router.post("/convite/aceitar")
 def aceitar_convite(request: Request, corpo: dict):
-    """Logado (Google OU senha) + token válido → vira membro ativo. Só aqui alguém é ativado."""
+    """Logado (Google OU senha) + token válido → vira membro ativo. Só aqui alguém é ativado.
+    26/09: OU `convite_id` (da lista de /convite/pendentes) — aí a prova é o e-mail: só a conta com o
+    MESMO e-mail do convite, confirmado, aceita."""
     eu = _exige_login(request)
     token = str(corpo.get("token") or "")
-    if len(token) < 20:
+    convite_id = str(corpo.get("convite_id") or "")
+    if len(token) >= 20:
+        m = _um(_SERVICO("GET", "escritorio_membros",
+                         params={"convite_hash": f"eq.{hash_do_token(token)}",
+                                 "select": "id,projeto_id,email,nome,status,convite_expira"}))
+    elif _UUID.match(convite_id):
+        email = _email_da_conta(eu)
+        if not email:
+            raise HTTPException(404, "Convite não encontrado.")
+        m = _um(_SERVICO("GET", "escritorio_membros",
+                         params={"id": f"eq.{convite_id}", "email": f"eq.{email}",
+                                 "select": "id,projeto_id,email,nome,status,convite_expira"}))
+        # 🔒 de outra pessoa (outro e-mail) = o mesmo 404 de "não existe": não revela convite alheio
+        if m and str(m.get("email") or "").strip().lower() != email:
+            m = None
+    else:
         raise HTTPException(404, "Convite não encontrado.")
-    m = _um(_SERVICO("GET", "escritorio_membros",
-                     params={"convite_hash": f"eq.{hash_do_token(token)}",
-                             "select": "id,projeto_id,email,nome,status,convite_expira"}))
     _recusa_se_nao_vale(m)
     if expirado(m["convite_expira"]):
         raise HTTPException(410, "Este convite venceu. Peça um novo a quem te convidou.")
