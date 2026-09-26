@@ -97,6 +97,11 @@
   @media (min-width:900px){ .g3{grid-template-columns:repeat(3,minmax(0,1fr))} .g4{grid-template-columns:repeat(4,minmax(0,1fr))} }
   .kpi{position:relative;overflow:hidden;background:#fff;border:1px solid #E2E8F0;border-radius:18px;padding:20px;box-shadow:0 1px 2px rgba(15,23,42,.04);transition:transform .18s ease,box-shadow .18s ease}
   .kpi:hover{transform:translateY(-3px);box-shadow:0 2px 4px rgba(15,23,42,.06),0 18px 38px -16px rgba(79,70,229,.30)}
+  .kpi-btn{display:block;width:100%;text-align:left;font-family:inherit;cursor:pointer}
+  .kpi-btn:focus-visible{outline:2px solid #4F46E5;outline-offset:2px}
+  /* faixa de avanço de etapa (debaixo da linha do tempo) */
+  .avanco{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin:14px 0 4px;padding:12px 14px;border-radius:12px;background:#EEF2FF;border:1px solid #C7D2FE;font-size:13.5px;color:#1E293B}
+  .avanco.pronto{background:#ECFDF5;border-color:#A7F3D0}
   .kpi.ok::before{background:linear-gradient(135deg,#10b981,#34d399)}
   .kpi-top{display:flex;align-items:center;gap:9px;margin-bottom:10px}
   .kpi-ico{width:34px;height:34px;border-radius:10px;display:flex;align-items:center;justify-content:center;flex:none;background:#EEF2FF;color:#4F46E5}
@@ -610,7 +615,8 @@ function telaCapa() {
   const abertas = TAR.filter(aberta), revisar = TAR.filter((t) => t.status === 'revdtz'), doCli = abertas.filter((t) => t.do_cliente);
   const foco = souAdmin() ? [...revisar, ...TAR.filter((t) => atrasada(t) && t.status !== 'revdtz')] : TAR.filter((t) => eMinha(t) && aberta(t));
   // o mesmo KPI da maquete (e do resto do site): barra de 3 px, ícone e cor de estado
-  const kpi = (estado, ic, rot, val, det) => `<div class="kpi ${estado}"><div class="kpi-top"><span class="kpi-ico">${svg(ic, 17)}</span><p class="rot">${rot}</p></div><p class="val tab">${val}</p><p class="det">${det}</p></div>`;
+  // 26/09 (Pedro): cada KPI é um atalho pra tela dele (acao = JS fixo daqui, nunca texto de gente)
+  const kpi = (estado, ic, rot, val, det, acao) => `<button type="button" class="kpi kpi-btn ${estado}" onclick="${acao}"><div class="kpi-top"><span class="kpi-ico">${svg(ic, 17)}</span><p class="rot">${rot}</p></div><p class="val tab">${val}</p><p class="det">${det}</p></button>`;
   const ativos = MEMBROS.filter((m) => m.status === 'ativo');
   const convidados = MEMBROS.filter((m) => m.status === 'convidado').length;
   const tool = (href, ic, t, d, soVoce) => `<a class="tool" href="${href}" style="--c1:${COR[ic][0]};--c2:${COR[ic][1]};--bg:${COR[ic][2]}"><span class="ti">${svg(ic, 22)}</span><span><b>${t}${soVoce ? `<span class="so-voce">${svg('cad', 10)}só você</span>` : ''}</b><span>${d}</span></span></a>`;
@@ -646,13 +652,14 @@ function telaCapa() {
     </div>
     ${et.length ? `<div style="margin-top:22px"><p class="lbl">Etapas</p><div class="etapas" role="tablist">
       ${et.map((e, i) => { const n = TAR.filter((t) => t.etapa === e).length; return `<button role="tab" class="etp ${i < iA ? 'feita' : i === iA ? 'atual' : ''}" aria-pressed="${ETAPA_SEL === e}" onclick="verEtapa(${i})"><span class="num">${i < iA ? '✓' : i + 1}</span><b>${esc(e)}</b><small>${n} tarefa${n === 1 ? '' : 's'}</small></button>`; }).join('')}</div>
-      ${ETAPA_SEL ? painelEtapa() : '<p class="sub">Clique numa etapa pra ver o que tem nela.</p>'}</div>` : ''}
+      ${avancoEtapa(et, iA)}
+      ${ETAPA_SEL ? painelEtapa() : `<p class="sub">Clique numa etapa pra ver as tarefas dela${souAdmin() ? ' ou pra voltar a ela' : ''}.</p>`}</div>` : ''}
   </section>
   <div class="grade g2 g4 rise">
-    ${kpi(abertas.some(atrasada) ? 'alerta' : '', 'tar', 'Tarefas abertas', abertas.length, `${abertas.filter(atrasada).length} atrasada(s) · ${revisar.length} aguardando revisão`)}
-    ${kpi(doCli.some(atrasada) ? 'alerta' : doCli.length ? '' : 'ok', 'cli', 'Com o cliente', doCli.length, doCli.length ? 'pendências do cliente' : 'nada com o cliente')}
-    ${kpi('', 'atas', 'Atas', ATAS.length, ATAS[0] ? 'última em ' + dBR(ATAS[0].data) : 'nenhuma ainda')}
-    ${kpi(convidados ? 'alerta' : 'ok', 'eq', 'Equipe', ativos.length, convidados + ' convite(s) aguardando')}
+    ${kpi(abertas.some(atrasada) ? 'alerta' : '', 'tar', 'Tarefas abertas', abertas.length, `${abertas.filter(atrasada).length} atrasada(s) · ${revisar.length} aguardando revisão`, "FILTRO='todas';FILTRO_E='';ir('tarefas')")}
+    ${kpi(doCli.some(atrasada) ? 'alerta' : doCli.length ? '' : 'ok', 'cli', 'Com o cliente', doCli.length, doCli.length ? 'pendências do cliente' : 'nada com o cliente', "FILTRO='cliente';FILTRO_E='';ir('tarefas')")}
+    ${kpi('', 'atas', 'Atas', ATAS.length, ATAS[0] ? 'última em ' + dBR(ATAS[0].data) : 'nenhuma ainda', "ir('atas')")}
+    ${kpi(convidados ? 'alerta' : 'ok', 'eq', 'Equipe', ativos.length, convidados + ' convite(s) aguardando', "ir('equipe')")}
   </div>
   <section class="card rise"><h2 class="h2">Tudo do projeto</h2>
     <p class="sub">O escritório e as ferramentas que o AI.arq já tinha, no mesmo lugar.</p>
@@ -697,6 +704,31 @@ function resumoAndamento(et, iA, abertas) {
   </div>`;
 }
 function verEtapa(i) { const e = PROJ.etapas[i]; ETAPA_SEL = ETAPA_SEL === e ? null : e; render(); }
+// 26/09 (Pedro: "como eu avanço de Briefing pra Levantamento?"): o avanço é da ADMIN, na mão — etapa de
+// projeto fecha quando o cliente aprova, não quando a lista de tarefas zera. As tarefas só AVISAM:
+// "ainda tem 2 abertas no Briefing" ou "tudo pronto nesta etapa". O banco confere quem pode mudar.
+function avancoEtapa(et, iA) {
+  if (!et.length) return '';
+  const atual = iA >= 0 ? et[iA] : null, prox = et[iA + 1];
+  const abertasAqui = atual ? TAR.filter((t) => t.etapa === atual && aberta(t)).length : 0;
+  const totalAqui = atual ? TAR.filter((t) => t.etapa === atual).length : 0;
+  const estado = !atual ? 'Nenhuma etapa marcada como atual.'
+    : abertasAqui ? `${abertasAqui} tarefa${abertasAqui > 1 ? 's' : ''} aberta${abertasAqui > 1 ? 's' : ''} nesta etapa.`
+    : totalAqui ? '✓ Tudo pronto nesta etapa.' : 'Nenhuma tarefa nesta etapa.';
+  if (!souAdmin()) return `<div class="avanco"><span>Etapa atual: <b>${esc(atual || '—')}</b> · ${estado}</span><span class="sub" style="margin:0">Quem avança a etapa é a admin do projeto.</span></div>`;
+  const botao = !atual ? `<button class="btn btn-p btn-s" onclick="marcarAtual(0)">Começar por ${esc(et[0])} →</button>`
+    : prox ? `<button class="btn btn-p btn-s" onclick="avancarEtapa()">Concluir ${esc(atual)} e passar pra ${esc(prox)} →</button>`
+    : '<span class="pill p-ok"><i></i>última etapa</span>';
+  return `<div class="avanco ${atual && !abertasAqui && totalAqui ? 'pronto' : ''}"><span>Etapa atual: <b>${esc(atual || '—')}</b> · ${estado}</span>${botao}</div>`;
+}
+async function avancarEtapa() {
+  const et = PROJ.etapas || [], iA = et.indexOf(PROJ.etapa_atual);
+  if (iA < 0 || iA >= et.length - 1) return;
+  const n = TAR.filter((t) => t.etapa === et[iA] && aberta(t)).length;
+  if (n && !confirm(`Ainda há ${n} tarefa${n > 1 ? 's' : ''} aberta${n > 1 ? 's' : ''} em ${et[iA]}. Passar pra ${et[iA + 1]} mesmo assim? (as tarefas continuam no quadro)`)) return;
+  ETAPA_SEL = null;
+  await marcarAtual(iA + 1);
+}
 function painelEtapa() {
   const e = ETAPA_SEL, i = PROJ.etapas.indexOf(e), iA = PROJ.etapas.indexOf(PROJ.etapa_atual);
   const ts = TAR.filter((t) => t.etapa === e);
