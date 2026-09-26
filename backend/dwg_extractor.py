@@ -3633,6 +3633,19 @@ def siglas_da_legenda(texts) -> dict:
     virou curva, cruzeta e até condulete). Mesma linha = diferença de altura
     até meia letra; à direita = até 25 letras de distância, a MAIS PERTO;
     nome = 2+ palavras com letras, que não é outra sigla. Nunca levanta.
+
+    🩸 26/09/2026, job befab5aa (interiores): na PLANTA luminotécnica, um "C01"
+    — número de circuito, 39 vezes na planta — tinha à direita, na mesma linha,
+    o rótulo "PERFIL DE LED DE EMBUTIR - 2,00m" de UMA luminária. Virou
+    "C01 = PERFIL DE LED…" nesta seção, a IA obedeceu ("use ESTE nome") e a
+    planilha trouxe 39 × 2 m = 78 ml de perfil (os rótulos somam ~20 m).
+    🔑 Legenda é TABELA: o par sigla → nome da mesma linha só vale se a sigla
+    estiver numa coluna de pelo menos 3 siglas distintas (uma embaixo da
+    outra). Par solto no meio da planta é anotação, não definição. O "=" ("L =
+    LEITO") diz sozinho que é definição e continua valendo sozinho. Medido no
+    acervo (37 DXF): some o C01, um "IP55", um "PM02 = W.C. SUÍTE 04" e o
+    "SGL" do carimbo do Revit; TH/CH/CZ/JA/CVE/CVI e o R6 do forro ficam; perde
+    o MB-01 de uma legenda de 2 linhas (fica sem nome — a IA lê o texto).
     """
     try:
         itens = []
@@ -3664,6 +3677,7 @@ def siglas_da_legenda(texts) -> dict:
             m = _RE_SIGLA_IGUAL.match(txt)
             if m and _nome(m.group(2)):
                 out.setdefault(m.group(1), _nome(m.group(2)))
+        pares = []
         for txt, x, y, h in itens:
             if not _e_sigla(txt):
                 continue
@@ -3680,7 +3694,16 @@ def siglas_da_legenda(texts) -> dict:
                 if melhor is None or x2 - x < melhor[0]:
                     melhor = (x2 - x, n2)
             if melhor:
-                out.setdefault(txt, melhor[1])
+                pares.append((txt, melhor[1], x, y, h))
+        siglas = [(t, x, y) for t, x, y, h in itens if _e_sigla(t)]
+        for txt, nome, x, y, h in pares:
+            # a coluna da tabela: 3+ siglas DISTINTAS no prumo desta (±3 letras
+            # — 🪤 na tabela do Felipe a "JA", curta, sai 1,9 letra fora) a até
+            # 20 linhas. Conta sigla com ou sem nome na linha: no forro do
+            # acervo só o R6 tem o nome na mesma linha, as outras não.
+            coluna = {t for t, x2, y2 in siglas if abs(x2 - x) <= 3 * h and abs(y2 - y) <= 20 * h}
+            if len(coluna) >= 3:
+                out.setdefault(txt, nome)
         return dict(list(out.items())[:40])
     except Exception as e:
         logger.warning("siglas_da_legenda: %s", e)
