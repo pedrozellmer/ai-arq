@@ -653,6 +653,15 @@ class DXFExtraction:
         # "Bebedouro" 7× na prancha chegava como 1 palavra e voltava com qtd 0.
         # Medido em 08/08: 468 das 1.080 linhas zeradas nasciam desse molde.
         # Ver `contar_textos_repetidos` em engine_rules.py.
+        # 25/09: SIGLA → NOME pela legenda da própria prancha (ver
+        # `siglas_da_legenda`) — antes a IA adivinhava e trocava TH/CH/CZ
+        _sig = siglas_da_legenda(self.texts)
+        if _sig:
+            lines.append("SIGLAS DA LEGENDA DESTA PRANCHA (o projetista escreveu o nome de cada")
+            lines.append("  sigla — use ESTE nome na descrição do item; não traduza a sigla por conta):")
+            for _k, _v in _sig.items():
+                lines.append(f"  {_k} = {_v}")
+            lines.append("")
         texts_by_layer = self.get_texts_by_layer()
         # 25/09: texto só de corte/detalhe sai do ×N (ver
         # `_marcar_textos_repetidos_da_planta`) e vem listado à parte, no fim
@@ -3570,6 +3579,71 @@ def _descartar_plantas_repetidas(walls, hatches, polygon_areas, blocks, regs) ->
         logger.warning("_descartar_plantas_repetidas: %s", e)
     out["m"], out["m2"] = round(float(out["m"]), 2), round(float(out["m2"]), 2)
     return out
+
+
+_RE_SIGLA = re.compile(r"^[A-Z]{1,5}(?:-?\d{1,4})?[º°]?$")
+_RE_SIGLA_IGUAL = re.compile(r"^([A-Z]{1,5}(?:-?\d{1,4}[º°]?)?)\s*=\s*([^=]{4,60})$")
+
+
+def siglas_da_legenda(texts) -> dict:
+    """{SIGLA: NOME} lido da legenda: a sigla e, NA MESMA LINHA logo à direita,
+    o nome por extenso ("CH-90º   CURVA HORIZONTAL 90°"); ou "L = LEITO".
+
+    🩸 25/09/2026, job 53f0483f (subestação): a tabela de acessórios dizia
+    TH-90º = TÊ HORIZONTAL, CH-90º = CURVA HORIZONTAL, CZ-90º = CRUZETA — e a
+    IA, lendo os textos soltos, trocou os três em quatro releituras ("TH"
+    virou curva, cruzeta e até condulete). Mesma linha = diferença de altura
+    até meia letra; à direita = até 25 letras de distância, a MAIS PERTO;
+    nome = 2+ palavras com letras, que não é outra sigla. Nunca levanta.
+    """
+    try:
+        itens = []
+        for t in texts or []:
+            txt = " ".join(str(getattr(t, "text", "") or "").split())
+            p = getattr(t, "position", None)
+            h = float(getattr(t, "height", 0) or 0)
+            if not txt or not p or len(p) < 2 or h <= 0:
+                continue
+            itens.append((txt, float(p[0]), float(p[1]), h))
+        def _nome(x):
+            """Nome por extenso: começa por LETRA e é quase todo letra. 🪤 Medido
+            no acervo: "PD=255cm", "A=4,20m²" e "H=70cm…" são MEDIDA, não nome."""
+            x = x.strip().lstrip("-–—•* ").strip().rstrip(".")
+            if not x or not x[0].isalpha():
+                return ""
+            if sum(c.isalpha() for c in x) < 0.6 * len(x.replace(" ", "")):
+                return ""
+            return x
+
+        def _e_sigla(x):
+            """Na tabela, sigla tem número/hífen ou é curta. 🪤 "RALO", "BACIA",
+            "DUPLA" ao lado de um texto são rótulo, não sigla."""
+            return (bool(_RE_SIGLA.match(x)) and len(x) >= 2
+                    and (any(c.isdigit() for c in x) or "-" in x or len(x) <= 3))
+
+        out = {}
+        for txt, x, y, h in itens:
+            m = _RE_SIGLA_IGUAL.match(txt)
+            if m and _nome(m.group(2)):
+                out.setdefault(m.group(1), _nome(m.group(2)))
+        for txt, x, y, h in itens:
+            if not _e_sigla(txt):
+                continue
+            melhor = None
+            for t2, x2, y2, h2 in itens:
+                if abs(y2 - y) > 0.5 * h or not (0 < x2 - x <= 25 * h):
+                    continue
+                n2 = _nome(t2)
+                if _RE_SIGLA.match(t2) or not n2 or len(n2.split()) < 2 or len(n2) > 60:
+                    continue
+                if melhor is None or x2 - x < melhor[0]:
+                    melhor = (x2 - x, n2)
+            if melhor:
+                out.setdefault(txt, melhor[1])
+        return dict(list(out.items())[:40])
+    except Exception as e:
+        logger.warning("siglas_da_legenda: %s", e)
+        return {}
 
 
 def _chave_de_texto(x) -> str:
