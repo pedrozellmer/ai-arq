@@ -811,9 +811,10 @@ _INSUNITS_TO_METERS[14] = 0.1
 #
 # 🔒 Só age em layer de DUTO. Eletroduto, prumada e canaleta são linha ÚNICA —
 # parear ali cortaria pela metade uma medição correta, que é o erro oposto e
-# igualmente grave (regra nº1). Parede também é desenhada com duas linhas, mas
-# mexer nela mudaria todo projeto de arquitetura que hoje funciona: fora de
-# escopo, deliberadamente.
+# igualmente grave (regra nº1). Parede também é desenhada com duas linhas; até
+# 26/09 ficou de fora de propósito ("mudaria todo projeto de arquitetura que
+# hoje funciona"). Medido naquele dia: não funcionava — a parede saía 1,5–2×.
+# Agora ela usa esta máquina em `_corrigir_parede_linha_dupla`.
 # 25/09: leito de cabos, eletrocalha e bandeja são desenhados do mesmo jeito
 # (as duas bordas). "eletroduto" continua de fora: é linha ÚNICA.
 _RE_DUTO_DUPLO = re.compile(
@@ -951,12 +952,19 @@ def _legenda_de_linha_dupla(msp) -> dict:
         return {}
 
 
-def _corrigir_duto_linha_dupla(walls, unit_factor: float = 1.0, layers_extra=None):
+def _corrigir_duto_linha_dupla(walls, unit_factor: float = 1.0, layers_extra=None,
+                               escolhe=None, sep_max_m=None, min_seg_m=None,
+                               min_fracao_par=None):
     """Troca a soma das duas faces pelo comprimento do EIXO, em layer de duto.
 
     `layers_extra`: layers que a LEGENDA da prancha diz serem leito/duto
     desenhado em duas linhas (ver `_legenda_de_linha_dupla`) — o nome do layer
     não precisa dizer.
+    `escolhe` (layer → bool), `sep_max_m` e `min_seg_m` trocam QUEM entra, a
+    seção máxima e o menor lado que ainda entra no pareamento/tampa — é como a
+    PAREDE usa esta mesma máquina (ver `_corrigir_parede_linha_dupla`).
+    `min_fracao_par`: o layer só é corrigido se pelo menos essa fração do
+    comprimento dele estiver em par (a convenção DO LAYER é linha dupla).
 
     Devolve (walls_corrigidos, relato_eixo, ressalva_hachura).
     Sem par encontrado, devolve a lista original — na dúvida, não mexe.
@@ -991,12 +999,14 @@ def _corrigir_duto_linha_dupla(walls, unit_factor: float = 1.0, layers_extra=Non
         por_layer = _dd(list)
         for i, w in enumerate(walls):
             lay = str(getattr(w, "layer", "") or "")
-            if lay in extra or _RE_DUTO_DUPLO.search(lay):
+            if (escolhe(lay) if escolhe else (lay in extra or _RE_DUTO_DUPLO.search(lay))):
                 por_layer[w.layer].append(i)
         if not por_layer:
             return walls, "", ""
 
-        sep_min, sep_max = _DUTO_SEP_MIN / uf, _DUTO_SEP_MAX / uf    # em bruto
+        sep_min = _DUTO_SEP_MIN / uf                                  # em bruto
+        sep_max = (sep_max_m if sep_max_m else _DUTO_SEP_MAX) / uf
+        min_seg = min_seg_m if min_seg_m else _DUTO_MIN_SEG           # em metro
         fator = {}                     # índice -> fração do comprimento que fica
         relato, ressalva = [], []
         pareados_no_layer = set()
@@ -1012,14 +1022,14 @@ def _corrigir_duto_linha_dupla(walls, unit_factor: float = 1.0, layers_extra=Non
             sub = []                    # (índice do pai, a, b) — cru
             for i in idxs:
                 w = walls[i]
-                if getattr(w, "curvo", False) or getattr(w, "length", 0) < _DUTO_MIN_SEG:
+                if getattr(w, "curvo", False) or getattr(w, "length", 0) < min_seg:
                     continue
                 pts = getattr(w, "pontos", ()) or ()
                 if len(pts) >= 2:
                     for p, q in zip(pts, pts[1:]):
                         if len(p) > 2 and p[2]:
                             continue            # lado em arco: fora (ressalva)
-                        if (p[0], p[1]) != (q[0], q[1]) and math.hypot(q[0] - p[0], q[1] - p[1]) * uf >= _DUTO_MIN_SEG:
+                        if (p[0], p[1]) != (q[0], q[1]) and math.hypot(q[0] - p[0], q[1] - p[1]) * uf >= min_seg:
                             sub.append((i, (p[0], p[1]), (q[0], q[1])))
                 elif tuple(w.start) != tuple(w.end):
                     sub.append((i, tuple(w.start), tuple(w.end)))
@@ -1096,6 +1106,11 @@ def _corrigir_duto_linha_dupla(walls, unit_factor: float = 1.0, layers_extra=Non
                             k += 1
             if not pares:
                 continue
+            if min_fracao_par:
+                _em_par = sum(min(p, math.hypot(seg_b[k][0] - seg_a[k][0], seg_b[k][1] - seg_a[k][1]))
+                              for k, p in pareado.items()) * uf
+                if bruto <= 0 or _em_par / bruto < min_fracao_par:
+                    continue                    # layer de linha ÚNICA: par é coincidência
             # TAMPA: lado curto sem par (até a largura de uma seção) com as
             # DUAS pontas em cima de bordas pareadas — é o fecho do retângulo
             # ou a divisa entre dois trechos, não metro de leito.
@@ -1195,6 +1210,44 @@ def _corrigir_duto_linha_dupla(walls, unit_factor: float = 1.0, layers_extra=Non
     except Exception as e:
         logger.warning("[duto-linha-dupla] falhou, mantendo medição original: %s", e)
         return walls, "", ""
+
+
+#: Parede: a seção vai de 5 cm (drywall fino) a 40 cm (alvenaria externa com
+#: revestimento). Acima disso não se pareia — são paredes diferentes.
+_PAREDE_SEP_MAX = 0.40
+#: 🪤 O lado mínimo do duto (25 cm) deixava a PONTA da parede (7–25 cm) e o
+#: batente do vão sempre somados: nunca viravam tampa. Na parede, 3 cm.
+_PAREDE_MIN_SEG = 0.03
+#: A convenção do LAYER decide: com menos da metade do comprimento em par, o
+#: layer é de linha ÚNICA e o par que aparece é coincidência (duas paredes
+#: vizinhas). Medido no acervo (26/09): os layers de linha dupla têm 52–96% em
+#: par; o drywall de um gabarito de cliente — que aprovou a pintura pela soma
+#: das linhas — tinha 34%, e ficaria 17% menor.
+_PAREDE_MIN_FRACAO_PAR = 0.50
+
+
+def _corrigir_parede_linha_dupla(walls, unit_factor: float = 1.0):
+    """Parede desenhada pelas DUAS FACES mede pelo EIXO. Devolve (walls, relato).
+
+    🩸 26/09/2026 — job befab5aa (interiores): a planilha trouxe "pintura
+    1.977 m²" = "659 m × 3 m de pé-direito, por face". Os 659 m eram a SOMA
+    DAS LINHAS do layer PAREDE — e 79% delas vinham em pares de face (5–30 cm):
+    pelo eixo, a mesma versão do apartamento tem ~383 m. A soma das faces ×
+    pé-direito é ≈ as DUAS faces, não uma; e toda linha "parede (ml) ✓" de DWG
+    com parede em duas faces saía 1,5–2× maior. No acervo local, os layers de
+    parede tinham 55–73% do comprimento em pares (3 de 4 arquivos).
+
+    Mesma máquina do leito/duto (pares por TRECHO, tampa nas pontas, polilinha
+    pelos lados), só em layer de parede (`engine_rules.layer_e_parede`) e com
+    seção até 40 cm. Parede de linha ÚNICA não tem par e fica como está. A
+    ressalva de hachura do duto NÃO vale aqui: ela rebaixa o desenho inteiro e
+    parede com padrão gráfico no layer é caso de outra régua.
+    """
+    from engine_rules import layer_e_parede
+    novos, relato, _ressalva = _corrigir_duto_linha_dupla(
+        walls, unit_factor, escolhe=layer_e_parede, sep_max_m=_PAREDE_SEP_MAX,
+        min_seg_m=_PAREDE_MIN_SEG, min_fracao_par=_PAREDE_MIN_FRACAO_PAR)
+    return novos, relato
 
 
 _RE_RELATO_EIXO = re.compile(r"^(.*): [\d.]+m de face -> [\d.]+m de eixo \(\d+ par\(es\)\)$")
@@ -4782,6 +4835,7 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         except Exception:
             continue
 
+    from engine_rules import layer_e_parede as _layer_e_parede
     for lwpoly in msp.query("LWPOLYLINE"):
         try:
             length = _lwpolyline_length(lwpoly) * unit_factor
@@ -4790,7 +4844,11 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
                 start = pts[0] if pts else (0, 0)
                 end = pts[-1] if pts else (0, 0)
                 _pontos = ()
-                if lwpoly.dxf.layer in _layers_linha_dupla or _RE_DUTO_DUPLO.search(str(lwpoly.dxf.layer)):
+                # os lados da polilinha, pra o pareamento das faces (duto, leito
+                # e — 26/09 — parede: sem eles a parede em polilinha entrava
+                # como UMA reta do 1º ao último vértice e não pareava)
+                if (lwpoly.dxf.layer in _layers_linha_dupla or _RE_DUTO_DUPLO.search(str(lwpoly.dxf.layer))
+                        or _layer_e_parede(lwpoly.dxf.layer)):
                     _xyb = [(p[0], p[1], p[2]) for p in lwpoly.get_points(format="xyb")]
                     if lwpoly.closed and _xyb:
                         _xyb.append(_xyb[0])
@@ -5379,6 +5437,10 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         walls, unit_factor, layers_extra=_layers_linha_dupla)
     if _rel_duto:
         metadata["duto_linha_dupla"] = _rel_duto
+    # 26/09: parede em duas faces também mede pelo EIXO (ver a função)
+    walls, _rel_parede = _corrigir_parede_linha_dupla(walls, unit_factor)
+    if _rel_parede:
+        metadata["parede_linha_dupla"] = _rel_parede
     if _legenda_dupla:
         # a IA precisa saber o que o layer É — antes era palpite ("o layer de
         # maior extensão") — e que o comprimento dele JÁ é o eixo
@@ -5506,9 +5568,10 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             # leu o relato e entregou 212,5 m de leito BRANCO. Depois da folha,
             # o relato só fala do que ficou na soma (sem folha aplicada nada
             # saiu — o número é o mesmo, muda só a redação).
-            if metadata.get("duto_linha_dupla"):
-                metadata["duto_linha_dupla"] = _relato_do_eixo_na_soma(
-                    metadata["duto_linha_dupla"], walls)
+            for _chave_eixo in ("duto_linha_dupla", "parede_linha_dupla"):
+                if metadata.get(_chave_eixo):
+                    metadata[_chave_eixo] = _relato_do_eixo_na_soma(
+                        metadata[_chave_eixo], walls)
         except Exception as _efl:
             logger.warning("[leitura-por-folha] falhou (não-fatal): %s", _efl)
             _folhas = {"aplicada": False, "motivo": "erro: %s" % str(_efl)[:120]}

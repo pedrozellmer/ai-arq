@@ -5338,6 +5338,26 @@ _RE_CABECA_FRACA_PAREDE = _re.compile(r"^(?:fechamento|veda[çc][ãa]o|muros?|mu
 _RE_PALAVRA_PAREDE = _re.compile(r"\b(?:paredes?|alvenarias?|divis[óo]rias?|drywall)\b")
 
 
+#: Nome de LAYER de parede (não de serviço): a palavra é um pedaço inteiro do
+#: nome ("ARQ-ALV", "A-WALL", "00_PAREDE", "parede drywall"). 🪤 Ficam de fora
+#: os layers que moram junto da parede e não são o traço dela: hachura/padrão,
+#: acabamento, revestimento, piso, forro, cota, texto e o eixo do quadriculado —
+#: e a INSTALAÇÃO que corre na parede ("ELETRODUTO PAREDE"): eletroduto é linha
+#: ÚNICA, e parear dois paralelos cortaria a medição dele pela metade.
+_RE_LAYER_PAREDE = _re.compile(
+    r"(?:^|[^a-z])(?:paredes?|alvenarias?|alven|alv|walls?|drywall|divisorias?|vedacao)(?:[^a-z]|$)")
+_RE_LAYER_NAO_PAREDE = _re.compile(
+    r"(?:^|[^a-z])(?:patt|pattern|hach\w*|hatch\w*|fnsh|finish|acab\w*|revest\w*|piso|forro|"
+    r"cotas?|dim|textos?|txt|eixos?|eletrod\w*|tubo\w*|tubula\w*|hidr\w*|esgoto|agua|gas|"
+    r"eletric\w*|lumin\w*|tomadas?|dutos?|cabos?|leitos?|calhas?)(?:[^a-z]|$)")
+
+
+def layer_e_parede(nome) -> bool:
+    """O LAYER é o traço da parede? (ver `_RE_LAYER_PAREDE`)"""
+    n = _minusculo_sem_acento(str(nome or ""))
+    return bool(_RE_LAYER_PAREDE.search(n)) and not _RE_LAYER_NAO_PAREDE.search(n)
+
+
 def e_parede_pelo_nome(descricao):
     """A linha É parede? Decide a CABEÇA do nome do serviço (antes do travessão).
 
