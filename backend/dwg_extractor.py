@@ -653,6 +653,17 @@ class DXFExtraction:
         # "Bebedouro" 7× na prancha chegava como 1 palavra e voltava com qtd 0.
         # Medido em 08/08: 468 das 1.080 linhas zeradas nasciam desse molde.
         # Ver `contar_textos_repetidos` em engine_rules.py.
+        _cl = (self.folhas or {}).get("legenda_contagem") or []
+        if _cl:
+            lines.append("CONTAGEM PELO SÍMBOLO DA LEGENDA (a tabela SÍMBOLO | DESCRIÇÃO da prancha")
+            lines.append("  deixou a quantidade em branco; o motor contou na PLANTA o MESMO desenho")
+            lines.append("  do símbolo, no mesmo tamanho. É contagem do desenho: use ESTE número na")
+            lines.append("  linha dessa descrição. Linha da legenda que não está aqui NÃO foi contada")
+            lines.append("  — o símbolo na planta é diferente do da tabela; não invente):")
+            for _r in _cl:
+                _pp = "; ".join("%s: %d" % (k, v) for k, v in _r["por_planta"].items())
+                lines.append(f"  {_r['descricao']} = {_r['n']}  ({_pp})")
+            lines.append("")
         # 25/09: SIGLA → NOME pela legenda da própria prancha (ver
         # `siglas_da_legenda`) — antes a IA adivinhava e trocava TH/CH/CZ
         _sig = siglas_da_legenda(self.texts)
@@ -3636,6 +3647,9 @@ def siglas_da_legenda(texts) -> dict:
                 n2 = _nome(t2)
                 if _RE_SIGLA.match(t2) or not n2 or len(n2.split()) < 2 or len(n2) > 60:
                     continue
+                # 🪤 cabeçalho de tabela ("QTD   DESCRIÇÃO - LUMINÁRIA") não é sigla
+                if _RE_CAB_DESCRICAO.match(n2) or txt.upper() in ("QTD", "QTDE", "ITEM", "COD", "UN"):
+                    continue
                 if melhor is None or x2 - x < melhor[0]:
                     melhor = (x2 - x, n2)
             if melhor:
@@ -3644,6 +3658,160 @@ def siglas_da_legenda(texts) -> dict:
     except Exception as e:
         logger.warning("siglas_da_legenda: %s", e)
         return {}
+
+
+def _peca_do_simbolo(e):
+    """(tipo, tamanho, centro) de uma peça — tamanho que não muda com rotação."""
+    t = e.dxftype()
+    try:
+        if t == "CIRCLE":
+            return ("C", float(e.dxf.radius), (float(e.dxf.center[0]), float(e.dxf.center[1])))
+        if t == "ARC":
+            span = (e.dxf.end_angle - e.dxf.start_angle) % 360 or 360
+            return ("A%d" % round(span / 15), float(e.dxf.radius),
+                    (float(e.dxf.center[0]), float(e.dxf.center[1])))
+        if t == "LINE":
+            a, b = e.dxf.start, e.dxf.end
+            return ("L", math.hypot(b[0] - a[0], b[1] - a[1]), ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2))
+        if t == "LWPOLYLINE":
+            pts = [(p[0], p[1]) for p in e.get_points("xy")]
+            if len(pts) < 2:
+                return None
+            if e.closed:
+                pts.append(pts[0])
+            L = sum(math.dist(p, q) for p, q in zip(pts, pts[1:]))
+            return ("P", L, (sum(p[0] for p in pts) / len(pts), sum(p[1] for p in pts) / len(pts)))
+    except Exception:
+        return None
+    return None
+
+
+_RE_CAB_SIMBOLO = re.compile(r"^s[ií]mbolo", re.IGNORECASE)
+_RE_CAB_DESCRICAO = re.compile(r"^descri", re.IGNORECASE)
+
+
+def contagem_pela_legenda(doc, mapa) -> list:
+    """CONT.SE da tabela da legenda: cada SÍMBOLO desenhado na tabela, contado
+    na PLANTA onde aparece o MESMO desenho, na mesma escala.
+
+    🩸 25/09/2026, job 73c6f0ed (orçamentista, projeto elétrico/luminotécnico):
+    a LEGENDA LUMINOTÉCNICO era uma tabela SÍMBOLO | QTD ("00") | DESCRIÇÃO —
+    o projetista deixa a quantidade pra quem orça contar. O símbolo é desenho
+    SOLTO (círculos, arcos, linhas), não bloco, e o motor — que conta bloco —
+    entregou as luminárias com ZERO; o cliente contou à mão. Pedro: "é um
+    CONT.SE no Excel".
+    Regras (medidas contra o que o cliente digitou):
+    - só vale desenho IGUAL: mesmas peças, mesmo tamanho (±3%), mesmas
+      distâncias — aceita rotação. No caso, jardim 11 e AR111 6 = cliente.
+      🪤 Aceitar escala livre achava demais (jardim 32): em outra escala
+      sempre aparece um desenho parecido por acaso. Símbolo que o projetista
+      redesenhou diferente na planta fica SEM contagem — nunca chuta;
+    - símbolo de 2+ peças (um traço solto é genérico demais);
+    - só dentro das janelas de PLANTA com título; sem elas, não conta (as
+      cópias temáticas da planta triplicavam: jardim 33 no modelo, 11 na
+      planta). A caixa da própria legenda não conta.
+    Devolve [{"descricao", "n", "por_planta": {titulo: n}}] só com n > 0.
+    Nunca levanta.
+    """
+    try:
+        msp = doc.modelspace()
+        textos = []
+        for e in msp.query("TEXT MTEXT"):
+            try:
+                t = _texto_do_text(e) if e.dxftype() == "TEXT" else e.plain_text()
+                t = " ".join((t or "").split())
+                h = float((e.dxf.get("height", 0) if e.dxftype() == "TEXT"
+                           else e.dxf.get("char_height", 0)) or 0)
+                if t and h > 0:
+                    textos.append((t, float(e.dxf.insert[0]), float(e.dxf.insert[1]), h))
+            except Exception:
+                continue
+        cabecalhos = [x for x in textos if _RE_CAB_SIMBOLO.match(x[0])]
+        if not cabecalhos:
+            return []
+        plantas = [f for f in (mapa or {}).get("folhas", []) if f.get("tipo") == "planta"]
+        if not plantas:
+            return []              # atalho: sem planta nada conta (evita explodir blocos)
+        pecas = []
+        for e in msp:
+            tp = e.dxftype()
+            if tp in ("LINE", "LWPOLYLINE", "CIRCLE", "ARC"):
+                pecas.append(_peca_do_simbolo(e))
+            elif tp == "INSERT":
+                try:
+                    b = doc.blocks.get(e.dxf.name)
+                    if b is None or len(b) > 60:
+                        continue
+                    for v in e.virtual_entities():
+                        if v.dxftype() in ("LINE", "LWPOLYLINE", "CIRCLE", "ARC"):
+                            pecas.append(_peca_do_simbolo(v))
+                except Exception:
+                    continue
+        pecas = [p for p in pecas if p and p[1] > 0]
+        G = 0.25 * max(x[3] for x in cabecalhos) / 0.1       # grade na ordem do símbolo
+        grade = {}
+        for p in pecas:
+            grade.setdefault((p[0], int(p[2][0] // G), int(p[2][1] // G)), []).append(p)
+
+        def perto(tipo, c, r):
+            out = []
+            for gx in range(int((c[0] - r) // G), int((c[0] + r) // G) + 1):
+                for gy in range(int((c[1] - r) // G), int((c[1] + r) // G) + 1):
+                    out.extend(grade.get((tipo, gx, gy), ()))
+            return out
+
+        resultado = []
+        for cab, cx, cy, ch in cabecalhos:
+            desc = [d for d in textos if _RE_CAB_DESCRICAO.match(d[0])
+                    and abs(d[2] - cy) <= ch and 0 < d[1] - cx < 40 * ch]
+            if not desc:
+                continue
+            dx_ = min(desc, key=lambda d: d[1] - cx)[1]
+            linhas = sorted([q for q in textos if abs(q[1] - dx_) <= 2 * ch
+                             and cy - 80 * ch < q[2] < cy - 0.2 * ch and len(q[0]) > 3
+                             and any(c.isalpha() for c in q[0])], key=lambda q: -q[2])
+            if not linhas:
+                continue
+            leg = (cx - 3 * ch, min(q[2] for q in linhas) - 3 * ch, dx_ + 80 * ch, cy + 3 * ch)
+            for i, (nome, lx, ly, lh) in enumerate(linhas):
+                topo = (ly + linhas[i - 1][2]) / 2 if i else ly + 2 * lh
+                base = (ly + linhas[i + 1][2]) / 2 if i + 1 < len(linhas) else ly - 2 * lh
+                am = [p for p in pecas if cx - 1.5 * ch <= p[2][0] <= dx_ - 2 * ch
+                      and base < p[2][1] < topo and p[1] < 3 * (topo - base)]
+                if len(am) < 2:
+                    continue
+                am.sort(key=lambda p: (p[0] == "L", p[0] == "P", -p[1]))
+                anc = am[0]
+                rel = [(p[0], p[1], math.dist(p[2], anc[2])) for p in am[1:]]
+                vistos = set()
+                por_planta = {}
+                for cand in [q for q in pecas if q[0] == anc[0]]:
+                    if abs(cand[1] - anc[1]) > 0.03 * anc[1]:
+                        continue
+                    c = cand[2]
+                    if leg[0] <= c[0] <= leg[2] and leg[1] <= c[1] <= leg[3]:
+                        continue
+                    k = (round(c[0], 3), round(c[1], 3))
+                    if k in vistos:
+                        continue
+                    if not all(any(abs(q[1] - tam) <= 0.03 * tam
+                                   and abs(math.dist(q[2], c) - d) <= 0.05 * max(d, anc[1])
+                                   for q in perto(tp, c, d + anc[1]) if q is not cand)
+                               for tp, tam, d in rel):
+                        continue
+                    vistos.add(k)
+                    donas = [f for f in plantas if _dentro(c, f["caixa"])]
+                    if len(donas) != 1:
+                        continue
+                    t_ = (donas[0].get("titulo") or donas[0].get("folha") or "planta")[:60]
+                    por_planta[t_] = por_planta.get(t_, 0) + 1
+                n = sum(por_planta.values())
+                if n > 0:
+                    resultado.append({"descricao": nome[:80], "n": n, "por_planta": por_planta})
+        return resultado[:60]
+    except Exception as e:                       # nunca derruba a extração
+        logger.warning("contagem_pela_legenda: %s", e)
+        return []
 
 
 def _chave_de_texto(x) -> str:
@@ -5266,6 +5434,10 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             _medida = medir_por_folha(walls, hatches, polygon_areas, blocks, _mapa)
             _folhas = aplicar_leitura_por_folha(walls, hatches, polygon_areas, blocks, _mapa)
             _n_txt = _marcar_textos_repetidos_da_planta(texts, _mapa)
+            # 25/09: CONT.SE da tabela da legenda (ver `contagem_pela_legenda`)
+            _cont_leg = contagem_pela_legenda(doc, _mapa)
+            if _cont_leg:
+                _folhas["legenda_contagem"] = _cont_leg
             if _n_txt:
                 _folhas["textos_fora_da_contagem"] = _n_txt
             _folhas["medida"] = _medida
