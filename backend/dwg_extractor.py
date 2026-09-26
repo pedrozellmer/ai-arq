@@ -4420,6 +4420,46 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
     _desc = {"anonimo": 0, "utilitario": 0, "anotacao": 0, "ilegivel": 0}
     _amostra_anonimo = []
 
+    # 🩸 25/09/2026, job 73c6f0ed (projeto elétrico exportado do Revit): a
+    # tomada, o ponto de ar e as luminárias eram INSERIDOS a até 2 km da casa
+    # — a definição do bloco trazia o desenho deslocado da base, e ele caía no
+    # lugar certo só depois de escalar e girar. O motor situava cada bloco pelo
+    # ponto de inserção: todos ficaram "fora de qualquer desenho" e a leitura
+    # por folha não conseguiu separar planta de corte nem as plantas temáticas.
+    # Quando o desenho está LONGE da base (mais de 5× o tamanho dele), a
+    # posição passa a ser o centro do desenho levado pela inserção. Bloco
+    # normal (desenho em volta da base) não muda.
+    from ezdxf import bbox as _ezbbox
+    _centro_cache: dict = {}
+    _bbox_cache = _ezbbox.Cache()
+
+    def _centro_do_desenho(ins):
+        """(x, y) de onde o bloco APARECE, ou None quando o insert já serve."""
+        n = ins.dxf.name
+        if n not in _centro_cache:
+            c = None
+            try:
+                b = doc.blocks.get(n)
+                eb = _ezbbox.extents(b, cache=_bbox_cache) if b is not None else None
+                if eb is not None and eb.has_data:
+                    cx = (eb.extmin.x + eb.extmax.x) / 2
+                    cy = (eb.extmin.y + eb.extmax.y) / 2
+                    diag = math.hypot(eb.extmax.x - eb.extmin.x, eb.extmax.y - eb.extmin.y)
+                    bp = b.block.dxf.base_point
+                    if diag > 0 and math.hypot(cx - bp[0], cy - bp[1]) > 5 * diag:
+                        c = (cx, cy)
+            except Exception:
+                c = None
+            _centro_cache[n] = c
+        c = _centro_cache[n]
+        if c is None:
+            return None
+        try:
+            w = ins.matrix44().transform((c[0], c[1], 0))
+            return (w[0], w[1])
+        except Exception:
+            return None
+
     for insert in msp.query("INSERT"):
         try:
             bname = insert.dxf.name
@@ -4454,6 +4494,10 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
                 "widths": [], "heights": [],
             }
         block_counter[bname]["count"] += 1
+        _onde = _centro_do_desenho(insert)
+        if _onde is not None:
+            x, y = _onde
+            metadata["blocos_pelo_desenho"] = metadata.get("blocos_pelo_desenho", 0) + 1
         block_counter[bname]["positions"].append((round(x, 2), round(y, 2)))
 
         # Se parece ser esquadria (porta/janela), armazena dimensão em metros
