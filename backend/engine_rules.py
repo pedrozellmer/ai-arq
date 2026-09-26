@@ -360,6 +360,14 @@ DIVERGENCIA_MINIMA = 10.0
 # entra: contar bloco não depende de escala — decisão deliberada de 17/08.
 UNIDADES_DE_ESCALA = ("m", "m²", "m2", "m³", "m3", "ml", "cm", "mm", "km", "m.l")
 
+#: O começo do aviso que a trava de escala divergente (main.py) escreve na
+#: linha que ela rebaixou. A chave do selo procura por ele
+#: (`selo_com_prova_da_geometria`): número de prancha divergente não volta a
+#: medido. 🔑 Um texto só, usado pelos dois lados — mesmo feitio de
+#: `MARCA_QUANTIDADE_RECUPERADA`.
+MARCA_ESCALA_DIVERGENTE = ("⚠ ESTIMADO — as pranchas deste projeto foram lidas "
+                           "em escalas diferentes")
+
 
 def escala_divergente(escalas):
     """As pranchas do mesmo job discordam da unidade entre si?
@@ -4855,6 +4863,14 @@ def selo_com_prova_da_geometria(items, indice):
         # cópia contra o próprio layer é prova circular: sempre bate. Sem isto a
         # observação saía dizendo ESTIMADO e ✓ MEDIDO na mesma linha.
         if MARCA_QUANTIDADE_RECUPERADA in str(_campo_do_item(it, "observations", "") or ""):
+            continue
+        # 🩸 26/09 (job 32a27efc, 7 pranchas em 0,001 e 0,1): a trava de escala
+        # divergente rebaixa a linha da prancha que discorda — e a chave roda
+        # DEPOIS dela. O número bate com o layer porque foi medido na escala
+        # suspeita: bater não prova nada, e a chave desfazia o rebaixamento.
+        # 📏 No acervo, 0 das 28 promoções traz este aviso: o furo foi provado
+        # executando, antes de morder cliente.
+        if MARCA_ESCALA_DIVERGENTE in str(_campo_do_item(it, "observations", "") or ""):
             continue
         motivo = prova_da_geometria(
             q, _campo_do_item(it, "unit", ""),

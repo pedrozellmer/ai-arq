@@ -15347,12 +15347,25 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                     # 🔑 O QUE ESTE ARQUIVO MEDIU vai pro cofre do job. Só número
                     # e rótulo — nada de entidade viva, que é o que pesa na RAM.
                     try:
-                        for _lyr, _c in (extraction.get_walls_by_layer() or {}).items():
-                            _indice_geom["comprimento"].append((str(_lyr), round(float(_c), 2)))
-                        for _lyr, _a in (extraction.get_areas_by_layer() or {}).items():
-                            _indice_geom["area"].append((str(_lyr), round(float(_a), 2)))
-                        for _lyr, _a in (extraction.get_polygon_areas_by_layer() or {}).items():
-                            _indice_geom["area"].append((str(_lyr), round(float(_a), 2)))
+                        # 🩸 26/09/2026 — job 32a27efc: prancha lida em 0,1 por
+                        # PLAUSIBILIDADE (sem prova); a trava de procedência
+                        # rebaixou a linha dela, e a chave do selo, que roda no
+                        # fim, promoveu de volta a "✓ MEDIDO" porque o número
+                        # batia com o layer — medido na mesma escala sem prova.
+                        # 📏 No acervo: 13 das 28 promoções da chave (3 jobs)
+                        # vieram de prancha com ressalva de escala, todas por
+                        # plausibilidade — entre elas o tubo de gás de 1.088 m
+                        # (0a999117) e seis eletrodutos de ~0,6 m (73c6f0ed).
+                        # 🔑 A chave não sobe o que a procedência rebaixaria: a
+                        # MESMA régua decide. Contagem continua entrando —
+                        # contar bloco não depende de escala.
+                        if not _caveat_atinge_unidade(extraction.metadata, "m"):
+                            for _lyr, _c in (extraction.get_walls_by_layer() or {}).items():
+                                _indice_geom["comprimento"].append((str(_lyr), round(float(_c), 2)))
+                            for _lyr, _a in (extraction.get_areas_by_layer() or {}).items():
+                                _indice_geom["area"].append((str(_lyr), round(float(_a), 2)))
+                            for _lyr, _a in (extraction.get_polygon_areas_by_layer() or {}).items():
+                                _indice_geom["area"].append((str(_lyr), round(float(_a), 2)))
                         for _blk, _n in (extraction.get_block_summary() or {}).items():
                             _indice_geom["contagem"].append((str(_blk), int(_n)))
                     except Exception as _eig:
@@ -18220,7 +18233,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # resumo de escala nem enxergava o fator.
         try:
             from engine_rules import (escala_divergente as _esc_div,
-                                      item_e_de_escala as _e_escala)
+                                      item_e_de_escala as _e_escala,
+                                      MARCA_ESCALA_DIVERGENTE as _MARCA_ESC_DIV)
             from models import Confidence as _CfE
             _div, _suspeitas, _resumo_div = _esc_div(_escala_por_prancha)
             if _div:
@@ -18244,10 +18258,15 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     except Exception:
                         continue
                     _o = str(getattr(_it, "observations", "") or "")
-                    if "escalas diferentes" not in _o:
+                    # 🔑 26/09 (job 32a27efc): o começo do aviso é a MARCA que a
+                    # chave do selo procura — sem ela a chave, que roda depois,
+                    # promovia a linha de volta. 🪤 A checagem de "já avisei" é
+                    # pela marca, não por "escalas diferentes": se a IA escreve
+                    # isso (folha com vistas 1:25 e 1:125, como esta), a linha
+                    # era rebaixada SEM a marca. 📏 Hoje 0 linhas assim no acervo.
+                    if _MARCA_ESC_DIV not in _o:
                         _it.observations = _observacao_que_cabe(
-                            "⚠ ESTIMADO — as pranchas deste projeto foram lidas em "
-                            "escalas diferentes e esta é uma das divergentes; o número "
+                            _MARCA_ESC_DIV + " e esta é uma das divergentes; o número "
                             "pode estar 1000× fora. Confira contra a prancha. " + _o)
                 _log_error("motor:escala-divergente",
                            "pranchas=%d fatores_distintos=%s suspeitas=%d "

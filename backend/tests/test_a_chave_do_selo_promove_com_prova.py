@@ -250,6 +250,14 @@ def test_a_chave_roda_DEPOIS_das_travas_de_rebaixamento():
             assert min(linhas) < chave, (
                 "%s roda DEPOIS da chave — o rebaixamento desfaria a "
                 "promoção" % trava)
+    # 🩸 26/09 (job 32a27efc): a trava de escala divergente rebaixa e deixa a
+    # marca que a chave respeita (`MARCA_ESCALA_DIVERGENTE`). A marca só existe
+    # se ela roda ANTES — e aqui ela não pode sumir calada (sem `if linhas`).
+    div = _linhas_de(fn, "_esc_div")
+    assert div, "sumiu a trava de escala divergente do process_job"
+    assert min(div) < chave, (
+        "a trava de escala divergente roda DEPOIS da chave (linha %d vs %d): "
+        "quando a chave roda, a marca ainda não existe" % (min(div), chave))
 
 
 def test_o_retorno_da_chave_NAO_vai_pro_lixo():
