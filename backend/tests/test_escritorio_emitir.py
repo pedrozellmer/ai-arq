@@ -97,9 +97,12 @@ class Google:
             "PASTA_QUALQUER_01": {"id": "PASTA_QUALQUER_01", "name": "Fotos", "mimeType": ed.PASTA, "parents": [RAIZ]},
             "COPIA_EMITIDA_01": {"id": "COPIA_EMITIDA_01", "name": "Planta_R00.dwg", "mimeType": "image/vnd.dwg", "parents": [EMIT]},
             "DOC_DO_GOOGLE_01": {"id": "DOC_DO_GOOGLE_01", "name": "Memorial", "mimeType": "application/vnd.google-apps.document", "parents": [RAIZ]},
+            "ATALHO_000000001": {"id": "ATALHO_000000001", "name": "Planta (atalho)", "mimeType": "application/vnd.google-apps.shortcut", "parents": [RAIZ]},
+            "COPIA_NA_SUB_001": {"id": "COPIA_NA_SUB_001", "name": "Planta_R01.dwg", "mimeType": "image/vnd.dwg", "parents": ["SUB_DE_EMITIDOS"]},
         }
-        self.pais = {SUB: RAIZ, EMIT: RAIZ, FORA: "raiz-do-drive"}
+        self.pais = {SUB: RAIZ, EMIT: RAIZ, FORA: "raiz-do-drive", "SUB_DE_EMITIDOS": EMIT}
         self.emitidos_existe, self.copia_falha, self.trava_falha = emitidos_existe, copia_falha, trava_falha
+        self.copia_sem_resposta, self.copia_feita_mesmo_assim, self.recusa = False, False, None
         ed._HTTP = self
 
     def __call__(self, method, url, token=None, form=None, corpo=None, timeout=20):
@@ -109,19 +112,27 @@ class Google:
         u = urllib.parse.urlparse(url)
         q = dict(urllib.parse.parse_qsl(u.query))
         caminho = u.path.split("/drive/v3/", 1)[1]
-        if caminho == "files" and method == "GET":        # procura a pasta Emitidos
-            assert f"'{RAIZ}' in parents" in q["q"] and "name='Emitidos'" in q["q"]
+        if caminho == "files" and method == "GET" and "name='Emitidos'" in q["q"]:   # procura a pasta Emitidos
+            assert f"'{RAIZ}' in parents" in q["q"]
             return 200, {"files": [{"id": EMIT}] if self.emitidos_existe else []}
+        if caminho == "files" and method == "GET":        # procura a cópia pelo nome (a cópia ficou sem resposta)
+            assert f"'{EMIT}' in parents" in q["q"]
+            achou = [{"id": "COPIA_ACHADA_001", "name": "Planta baixa_R00.dwg", "webViewLink": "https://drive.google.com/file/d/COPIA_ACHADA_001/view"}]
+            return 200, {"files": achou if self.copia_feita_mesmo_assim and "name='Planta baixa_R00.dwg'" in q["q"] else []}
         if caminho == "files" and method == "POST":       # cria a pasta Emitidos
             self.emitidos_existe = True
             return 200, {"id": EMIT}
         if caminho.endswith("/copy"):
+            if self.copia_sem_resposta:
+                return 0, None
+            if self.recusa:
+                return 403, {"error": {"errors": [{"reason": self.recusa}]}}
             if self.copia_falha:
                 return 500, None
             return 200, {"id": "COPIA_NOVA_0001", "name": corpo["name"], "webViewLink": "https://drive.google.com/file/d/COPIA_NOVA_0001/view"}
         fid = caminho.split("/", 1)[1]
-        if method == "PATCH":
-            return (500, None) if self.trava_falha else (200, {"id": fid})
+        if method == "PATCH":   # o Drive devolve o que gravou (fields=contentRestrictions)
+            return (500, None) if self.trava_falha else (200, {"contentRestrictions": (corpo or {}).get("contentRestrictions")})
         if q.get("fields") == "parents":
             return 200, ({"parents": [self.pais[fid]]} if fid in self.pais else {})
         if fid in self.arquivos:
@@ -160,6 +171,8 @@ def test_primeira_emissao_e_R00_copia_em_Emitidos_e_trava():
     assert len(copia) == 1 and copia[0]["corpo"] == {"name": "Planta baixa_R00.dwg", "parents": [EMIT]}
     trava = g.feitas("PATCH", "/files/COPIA_NOVA_0001")
     assert trava and trava[0]["corpo"]["contentRestrictions"][0]["readOnly"] is True
+    # 🔒 26/09 (auditoria SEG-1): sem ownerRestricted qualquer editora da pasta (a equipe) tirava a trava
+    assert trava[0]["corpo"]["contentRestrictions"][0]["ownerRestricted"] is True
     assert not [c for c in g.chamadas if c["m"] != "GET" and f"/files/{ARQ}" in c["url"] and "/copy" not in c["url"]], \
         "o ORIGINAL não é tocado"
     e = b.emissoes[0]
@@ -201,6 +214,8 @@ def test_so_a_admin_emite():
     ("ARQUIVO_FORA_0001", 403),        # fora da pasta do projeto
     ("PASTA_QUALQUER_01", 400),        # pasta
     ("COPIA_EMITIDA_01", 400),         # já é uma cópia emitida
+    ("COPIA_NA_SUB_001", 400),         # 26/09 (LOG-C3): cópia movida pra subpasta de Emitidos também é cópia
+    ("ATALHO_000000001", 400),         # 26/09 (DRV-2): atalho copiaria só o atalho
     ("NAO_EXISTE_00001", 404),
     ("x'/../", 400), ("", 400)])       # id estranho nem chega ao Google
 def test_o_que_nao_se_emite(arquivo, codigo):
@@ -226,6 +241,34 @@ def test_copia_que_falha_desfaz_a_reserva():
         _emitir()
     assert e.value.status_code == 502 and b.emissoes == [], "nada emitido pela metade"
     assert [x["m"] for x in b.escritas if x["path"] == "escritorio_emissoes"] == ["POST", "DELETE"]
+
+
+def test_copia_sem_resposta_que_saiu_mesmo_assim_e_adotada_e_travada():
+    # 🩸 26/09 (LOG-C2/DRV-3): tempo esgotado não é "nada foi emitido" — procura pelo nome antes de desfazer
+    b, g = Banco(), Google(emitidos_existe=True)
+    g.copia_sem_resposta, g.copia_feita_mesmo_assim = True, True
+    r = _emitir()
+    assert r["ok"] and b.emissoes[0]["copia_id"] == "COPIA_ACHADA_001" and r["travada"] is True
+    assert g.feitas("PATCH", "/files/COPIA_ACHADA_001")
+
+
+def test_copia_sem_resposta_que_nao_saiu_desfaz_a_reserva():
+    b, g = Banco(), Google(emitidos_existe=True)
+    g.copia_sem_resposta = True                            # controle: não achou pelo nome → nada emitido
+    with pytest.raises(HTTPException) as e:
+        _emitir()
+    assert e.value.status_code == 502 and b.emissoes == []
+
+
+@pytest.mark.parametrize("motivo,trecho", [("storageQuotaExceeded", "cheio"), ("cannotCopyFile", "não deixa copiar")])
+def test_recusa_definitiva_do_google_nao_manda_tentar_de_novo(motivo, trecho):
+    # 26/09 (LOG-C7): Drive cheio / cópia proibida nunca vai dar certo tentando de novo
+    b, g = Banco(), Google(emitidos_existe=True)
+    g.recusa = motivo
+    with pytest.raises(HTTPException) as e:
+        _emitir()
+    assert e.value.status_code == 409 and trecho in e.value.detail and "tente de novo" not in e.value.detail
+    assert b.emissoes == []
 
 
 def test_trava_que_falha_nao_derruba_a_emissao():

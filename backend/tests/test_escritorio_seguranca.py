@@ -214,7 +214,9 @@ def test_revisao2_link_morto_nao_apaga_o_convite_pendente_bom():
     i_visto = ini.index("if (destaAba && !desistiu) VISTO = api('convite/visto', { token }, sessao);")
     assert i_visto < ini.index("if (!temFicha)")
     assert "const destaAba = !!token && token === daAba;" in fonte
-    assert "if (!VISTO && !desistiu) VISTO = api('convite/visto', { token }, sessao);" in ini[ini.index("mostrar('st-confirmar')"):]
+    # 🔒 26/09 (auditoria CONV-1): nem na confirmação o pendente de OUTRA aba liga a conta ao convite (visto) — só
+    # o aberto nesta aba. O "é meu" explícito do servidor (428) cobre quem entra com outro e-mail.
+    assert "if (!VISTO && !desistiu && destaAba) VISTO = api('convite/visto', { token }, sessao);" in ini[ini.index("mostrar('st-confirmar')"):]
     assert ini.index("if (desistiu) return;") < ini.index("if (!temFicha)")
     for f in ("async function agoraNao()", "async function sairEUsarOutraConta()"):
         corpo = fonte[fonte.index(f):]

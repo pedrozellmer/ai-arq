@@ -150,11 +150,27 @@ def _segredo_do_cliente() -> str:
     return s
 
 
-def _drive(method, caminho, token, params=None, corpo=None):
+def _drive(method, caminho, token, params=None, corpo=None, timeout=None):
     url = "https://www.googleapis.com/drive/v3/" + caminho
     if params:
         url += "?" + urllib.parse.urlencode(params)
+    if timeout:
+        return _HTTP(method, url, token=token, corpo=corpo, timeout=timeout)
     return _HTTP(method, url, token=token, corpo=corpo)
+
+
+def _q_texto(s: str) -> str:
+    """Texto dentro de aspas simples na busca do Drive (parâmetro q): escapa \\ e '."""
+    return str(s or "").replace("\\", "\\\\").replace("'", "\\'")
+
+
+def _motivo_do_google(r) -> str:
+    """O `reason` do erro do Google (storageQuotaExceeded, cannotCopyFile…), ou ''."""
+    try:
+        e = (r or {}).get("error") or {}
+        return str(((e.get("errors") or [{}])[0]).get("reason") or e.get("status") or "")
+    except Exception:
+        return ""
 
 
 # ── conexões guardadas ─────────────────────────────────────────────────────
@@ -334,6 +350,20 @@ def _dentro_da_pasta(tok: str, alvo: str, raiz: str, limite: int = 12) -> bool:
     return False
 
 
+def _ancestrais_ate(tok: str, alvo: str, raiz: str, limite: int = 12):
+    """[alvo, pai, avô, …, raiz] subindo pelos pais até a pasta do projeto; None se não chegar nela."""
+    caminho, atual = [], alvo
+    while atual and len(caminho) <= limite:
+        caminho.append(atual)
+        if atual == raiz:
+            return caminho
+        st, f = _drive("GET", f"files/{atual}", tok, params={"fields": "parents", "supportsAllDrives": "true"})
+        if st != 200 or not f or not f.get("parents"):
+            return None
+        atual = f["parents"][0]
+    return None
+
+
 @router.get("/projetos/{projeto_id}/arquivos")
 def projeto_arquivos(projeto_id: str, request: Request, pasta: str = ""):
     """A lista da pasta do projeto (ou de uma subpasta DELA), pra admin e pra equipe, com a chave da dona."""
@@ -371,6 +401,8 @@ def projeto_arquivos(projeto_id: str, request: Request, pasta: str = ""):
 
 EMITIDOS = "Emitidos"
 _GOOGLE_NATIVO = "application/vnd.google-apps."     # Docs, Planilhas… não têm extensão no nome
+_ATALHO = "application/vnd.google-apps.shortcut"
+_ESPERA_DA_COPIA = 90       # s: a cópia é feita no Google (não passa pelo servidor), mas arquivo grande demora
 _REV_NO_FIM = re.compile(r"[ _-]+R\d{2}$", re.I)
 _ID_DRIVE = re.compile(r"[A-Za-z0-9_-]{10,200}")
 
@@ -429,11 +461,16 @@ def projeto_emitir(projeto_id: str, request: Request, corpo: dict):
         raise HTTPException(502, "O Google não respondeu agora. Tente de novo em instantes.")
     if f.get("mimeType") == PASTA:
         raise HTTPException(400, "Pasta não se emite: escolha um arquivo.")
+    # 26/09 (auditoria DRV-2): copiar um ATALHO copia só o atalho — a "R00" apontaria pro arquivo vivo
+    if f.get("mimeType") == _ATALHO:
+        raise HTTPException(400, "Isso é um atalho do Drive. Emita o arquivo original.")
     pai = (f.get("parents") or [""])[0]
-    if not pai or not _dentro_da_pasta(tok, pai, p["pasta_id"]):
+    caminho = _ancestrais_ate(tok, pai, p["pasta_id"]) if pai else None
+    if caminho is None:
         raise HTTPException(403, "Esse arquivo não é da pasta deste projeto.")
     emitidos = _pasta_emitidos(tok, p["pasta_id"])
-    if pai == emitidos:
+    # 26/09 (auditoria LOG-C3): cópia movida pra uma SUBPASTA de Emitidos também é cópia (antes só o pai direto)
+    if emitidos in caminho:
         raise HTTPException(400, "Esse já é uma cópia emitida. Emita o arquivo de trabalho.")
     st_r, ja = esc._SERVICO("GET", "escritorio_emissoes", params={
         "projeto_id": f"eq.{projeto_id}", "arquivo_id": f"eq.{arquivo}", "select": "revisao",
@@ -457,66 +494,149 @@ def projeto_emitir(projeto_id: str, request: Request, corpo: dict):
     emissao_id = linha[0]["id"]
     st_c, copia = _drive("POST", f"files/{arquivo}/copy", tok,
                          params={"supportsAllDrives": "true", "fields": "id,name,webViewLink"},
-                         corpo={"name": nome, "parents": [emitidos]})
+                         corpo={"name": nome, "parents": [emitidos]}, timeout=_ESPERA_DA_COPIA)
+    if st_c == 0:
+        # 🩸 26/09 (auditoria LOG-C2/DRV-3): sem resposta (tempo esgotado) NÃO é "nada foi emitido" — o Google
+        # pode ter feito a cópia. Procura pelo nome em Emitidos antes de desfazer a reserva.
+        st_b, achou = _drive("GET", "files", tok, params={
+            "q": f"'{emitidos}' in parents and name='{_q_texto(nome)}' and trashed=false",
+            "fields": "files(id,name,webViewLink)", "orderBy": "createdTime desc", "pageSize": "1",
+            "supportsAllDrives": "true", "includeItemsFromAllDrives": "true"})
+        if st_b == 200 and achou and achou.get("files"):
+            st_c, copia = 200, achou["files"][0]
     if st_c != 200 or not copia or not copia.get("id"):
         st_d, _ = esc._SERVICO("DELETE", "escritorio_emissoes", params={"id": f"eq.{emissao_id}"})
         if st_d >= 300 or st_d == 0:
             esc._registrar("escritorio:emitir", f"a cópia falhou e a reserva {emissao_id} ficou no banco (HTTP {st_d})")
+        # 26/09 (auditoria LOG-C7): recusa DEFINITIVA do Google não é "tente de novo"
+        motivo = _motivo_do_google(copia)
+        if motivo in ("storageQuotaExceeded", "quotaExceeded"):
+            raise HTTPException(409, "O Google Drive da admin está cheio: libere espaço lá e emita de novo. Nada foi emitido.")
+        if motivo in ("cannotCopyFile", "fileNotDownloadable", "insufficientFilePermissions", "forbidden"):
+            raise HTTPException(409, "O Google não deixa copiar este arquivo (o dono dele bloqueou cópia, ou a conta "
+                                     "conectada não pode copiar). Nada foi emitido.")
         raise HTTPException(502, "O Google não fez a cópia agora. Nada foi emitido; tente de novo.")
     st_u, _ = esc._SERVICO("PATCH", "escritorio_emissoes", params={"id": f"eq.{emissao_id}"},
                            body={"copia_id": copia["id"], "copia_nome": str(copia.get("name") or nome)[:320]})
     if st_u >= 300 or st_u == 0:
         esc._registrar("escritorio:emitir", f"emissão {emissao_id} ficou sem o id da cópia (HTTP {st_u})")
-    # trava a cópia contra edição; falhou = segue (a cópia existe e está registrada)
-    st_t, _ = _drive("PATCH", f"files/{copia['id']}", tok, params={"supportsAllDrives": "true", "fields": "id"},
-                     corpo={"contentRestrictions": [{"readOnly": True, "reason": f"Emitido como R{rev:02d} pelo AI.arq"}]})
+    # 🔒 26/09 (auditoria SEG-1): trava que SÓ a dona destrava (ownerRestricted). Sem isso qualquer pessoa da
+    # equipe (editora da pasta) tirava a trava e mudava o que foi ao cliente. Confere na resposta se pegou.
+    st_t, trava = _drive("PATCH", f"files/{copia['id']}", tok,
+                         params={"supportsAllDrives": "true", "fields": "contentRestrictions"},
+                         corpo={"contentRestrictions": [{"readOnly": True, "ownerRestricted": True,
+                                                         "reason": f"Emitido como R{rev:02d} pelo AI.arq"}]})
+    travada = st_t == 200 and any(c.get("readOnly") and c.get("ownerRestricted")
+                                  for c in ((trava or {}).get("contentRestrictions") or []))
+    if not travada:
+        esc._registrar("escritorio:emitir", f"emissão {emissao_id}: a trava da cópia não pegou (HTTP {st_t})")
     return {"ok": True, "emissao_id": emissao_id, "revisao": rev, "nome": str(copia.get("name") or nome),
-            "link": copia.get("webViewLink") or "", "travada": st_t == 200}
+            "link": copia.get("webViewLink") or "", "travada": travada}
 
 
 # ── compartilhamento com a equipe ──────────────────────────────────────────
 
+_PAPEIS_DE_EDICAO = {"writer", "fileOrganizer", "organizer", "owner"}
+
+
+def _permissoes_da_pasta(tok: str, pasta_id: str):
+    """{e-mail: {"id", "role"}} de quem JÁ tem acesso de usuário à pasta, por qualquer caminho. None = não li."""
+    out, pagina = {}, None
+    for _ in range(10):
+        params = {"fields": "nextPageToken,permissions(id,emailAddress,role,type,deleted)",
+                  "supportsAllDrives": "true", "pageSize": "100"}
+        if pagina:
+            params["pageToken"] = pagina
+        st, r = _drive("GET", f"files/{pasta_id}/permissions", tok, params=params)
+        if st != 200 or r is None:
+            return None
+        for x in r.get("permissions", []):
+            if x.get("type") == "user" and x.get("emailAddress") and not x.get("deleted"):
+                out[str(x["emailAddress"]).strip().lower()] = {"id": x.get("id"), "role": x.get("role")}
+        pagina = r.get("nextPageToken")
+        if not pagina:
+            return out
+    return None     # pasta com mais de 1.000 permissões: melhor não decidir pela metade
+
+
 def sincronizar(projeto_id: str) -> dict:
     """Equipe ativa = quem tem acesso de edição à pasta. Cria o que falta, tira de quem saiu (e da pasta
-    antiga, se a admin trocou). Só mexe nas permissões que NÓS criamos. Nunca derruba quem chamou:
-    falha vira item em `falhas`."""
+    antiga, se a admin trocou). Nunca derruba quem chamou: falha vira item em `falhas`.
+
+    26/09 (auditoria do Escritório, 5 lentes):
+      • o e-mail que ganha acesso é o da CONTA, confirmado, gravado pelo servidor no aceite
+        (`escritorio_membros.email_conta`) — não o `profiles.email`, que a própria pessoa edita pela API;
+      • sem conexão/pasta devolve `sem_conexao`/`sem_pasta` (a tela avisa; antes voltava tudo zero, calado);
+      • 404 no DELETE só vale como "já saiu" se a conta enxerga a pasta (senão é "não consigo ver", e o
+        registro fica pra tentar de novo);
+      • quem JÁ tinha acesso de edição dado pela admin à mão (`ja_existia`) não é tocado: nem ao entrar, nem
+        ao sair;
+      • quem segue ativo noutro projeto com a MESMA pasta não perde o acesso quando sai deste."""
     p = _dono_do_projeto(projeto_id)
-    if not p.get("pasta_id") or not _conexao(p["dono"]):
-        return {"compartilhados": 0, "tirados": 0, "falhas": []}
+    base = {"compartilhados": 0, "tirados": 0, "falhas": []}
+    if not p.get("pasta_id"):
+        return {**base, "sem_pasta": True}
+    if not _conexao(p["dono"]):
+        return {**base, "sem_conexao": True}
     tok = _acesso(p["dono"])
     st_m, membros = esc._SERVICO("GET", "escritorio_membros", params={
-        "projeto_id": f"eq.{projeto_id}", "status": "eq.ativo", "papel": "eq.freela", "select": "id,user_id"})
+        "projeto_id": f"eq.{projeto_id}", "status": "eq.ativo", "papel": "eq.freela", "select": "id,email_conta"})
     st_r, feitos = esc._SERVICO("GET", "escritorio_drive_permissoes", params={
-        "projeto_id": f"eq.{projeto_id}", "select": "id,membro_id,pasta_id,permission_id,email"})
+        "projeto_id": f"eq.{projeto_id}", "select": "id,membro_id,pasta_id,permission_id,email,ja_existia"})
     if st_m >= 300 or st_r >= 300 or membros is None or feitos is None:
-        return {"compartilhados": 0, "tirados": 0, "falhas": ["banco"]}
-    ids = [m["user_id"] for m in membros if m.get("user_id")]
-    emails = {}
-    if ids:
-        st_e, perfis = esc._SERVICO("GET", "profiles", params={
-            "user_id": "in.(" + ",".join(ids) + ")", "select": "user_id,email"})
-        if st_e < 300 and perfis:
-            emails = {str(x["user_id"]): (x.get("email") or "").strip().lower() for x in perfis}
-    ativos = {m["id"]: emails.get(str(m.get("user_id")), "") for m in membros}
+        return {**base, "falhas": ["banco"]}
+    ativos = {m["id"]: str(m.get("email_conta") or "").strip().lower() for m in membros}
     feito_por_membro = {f.get("membro_id"): f for f in feitos if f.get("pasta_id") == p["pasta_id"]}
     compartilhados, tirados, falhas = 0, 0, []
+    enxerga = {}
+
+    def _enxerga(pasta):
+        if pasta not in enxerga:
+            st_v, _ = _drive("GET", f"files/{pasta}", tok, params={"fields": "id", "supportsAllDrives": "true"})
+            enxerga[pasta] = st_v == 200
+        return enxerga[pasta]
+
     # tira: quem saiu, e o que ficou na pasta antiga
     for f in feitos:
         if f.get("pasta_id") == p["pasta_id"] and f.get("membro_id") in ativos:
             continue
+        apagar_registro = bool(f.get("ja_existia"))          # a admin deu à mão: fica como estava no Drive
+        if not apagar_registro:
+            st_o, outros = esc._SERVICO("GET", "escritorio_drive_permissoes", params={
+                "pasta_id": f"eq.{f['pasta_id']}", "email": f"eq.{f.get('email') or ''}",
+                "projeto_id": f"neq.{projeto_id}", "select": "id"})
+            if st_o >= 300 or outros is None:
+                falhas.append(f.get("email") or "?")
+                continue
+            apagar_registro = bool(outros)                    # outro projeto com a mesma pasta ainda usa
+        if apagar_registro:
+            esc._SERVICO("DELETE", "escritorio_drive_permissoes", params={"id": f"eq.{f['id']}"})
+            continue
         st_d, _ = _drive("DELETE", f"files/{f['pasta_id']}/permissions/{f['permission_id']}", tok,
                          params={"supportsAllDrives": "true"})
-        if st_d in (200, 204, 404):
+        if st_d in (200, 204) or (st_d == 404 and _enxerga(f["pasta_id"])):
             esc._SERVICO("DELETE", "escritorio_drive_permissoes", params={"id": f"eq.{f['id']}"})
             tirados += 1
         else:
             falhas.append(f.get("email") or "?")
     # dá: quem está ativo e ainda não tem
+    ja_tem = None
     for membro_id, email in ativos.items():
         if membro_id in feito_por_membro:
             continue
         if not email:
-            falhas.append("(sem e-mail)")
+            falhas.append("(sem e-mail confirmado)")
+            continue
+        if ja_tem is None:
+            ja_tem = _permissoes_da_pasta(tok, p["pasta_id"])
+            if ja_tem is None:
+                falhas.append(email)
+                continue
+        antes = ja_tem.get(email)
+        if antes and antes.get("role") in _PAPEIS_DE_EDICAO:
+            esc._SERVICO("POST", "escritorio_drive_permissoes", body={
+                "projeto_id": projeto_id, "membro_id": membro_id, "email": email, "pasta_id": p["pasta_id"],
+                "permission_id": antes.get("id") or "", "ja_existia": True})
             continue
         st_c, perm = _drive("POST", f"files/{p['pasta_id']}/permissions", tok,
                             params={"sendNotificationEmail": "true", "supportsAllDrives": "true"},
@@ -529,6 +649,39 @@ def sincronizar(projeto_id: str) -> dict:
         else:
             falhas.append(email)
     return {"compartilhados": compartilhados, "tirados": tirados, "falhas": falhas}
+
+
+def faxina(limite: int = 20) -> dict:
+    """Tick horário: permissão que NÓS demos a quem já não está ativo no projeto → sincroniza de novo aquele
+    projeto (a retirada na hora falhou, ou a conexão estava caída). Nunca levanta; pendência fica registrada."""
+    st, feitos = esc._SERVICO("GET", "escritorio_drive_permissoes", params={"select": "projeto_id,membro_id"})
+    if st >= 300 or feitos is None:
+        esc._registrar("escritorio:drive-faxina", f"não li as permissões (HTTP {st})")
+        return {"erro": st}
+    ids = sorted({str(f["membro_id"]) for f in feitos if f.get("membro_id")})
+    ativos = set()
+    if ids:
+        st_m, membros = esc._SERVICO("GET", "escritorio_membros", params={
+            "id": "in.(" + ",".join(ids) + ")", "select": "id,status"})
+        if st_m >= 300 or membros is None:
+            esc._registrar("escritorio:drive-faxina", f"não li os membros (HTTP {st_m})")
+            return {"erro": st_m}
+        ativos = {str(m["id"]) for m in membros if m.get("status") == "ativo"}
+    projetos = sorted({f["projeto_id"] for f in feitos if str(f.get("membro_id") or "") not in ativos})
+    feito = {"projetos": len(projetos), "tirados": 0, "pendentes": 0}
+    for pid in projetos[:limite]:
+        try:
+            r = sincronizar(pid)
+        except Exception as e:
+            feito["pendentes"] += 1
+            esc._registrar("escritorio:drive-faxina", f"projeto {pid}: {type(e).__name__}: {str(e)[:160]}")
+            continue
+        feito["tirados"] += r.get("tirados", 0)
+        if r.get("falhas") or r.get("sem_conexao"):
+            feito["pendentes"] += 1
+            esc._registrar("escritorio:drive-faxina",
+                           f"projeto {pid}: acesso ao Drive não tirado ({'sem conexão' if r.get('sem_conexao') else str(len(r['falhas'])) + ' falha(s)'})")
+    return feito
 
 
 @router.post("/projetos/{projeto_id}/drive/sincronizar")

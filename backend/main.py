@@ -2109,6 +2109,20 @@ def _req_de_leitura(request):
     return None if _so_leitura(request) else request
 
 
+def _cronograma_sem_dinheiro(cron):
+    """🔒 26/09 (auditoria SRV-3): a equipe do Escritório vê o cronograma FÍSICO, nunca o dinheiro da obra —
+    previsto × realizado é do financeiro, que é só do dono. Tira o bloco `financeiro` e os valores das fases
+    (a planilha e o PDF montam a parte financeira a partir deles)."""
+    if not isinstance(cron, dict):
+        return cron
+    out = {k: v for k, v in cron.items() if k != "financeiro"}
+    for chave in ("fases", "fases_custom"):
+        if isinstance(out.get(chave), list):
+            out[chave] = [{k: v for k, v in f.items() if k not in ("valor_previsto", "valor_realizado")}
+                          if isinstance(f, dict) else f for f in out[chave]]
+    return out
+
+
 _DISCIPLINE_TO_SECTION = {
     "Estrutura":                   "0. Estrutura",
     "Serviços Preliminares":       "1. Serviços Preliminares",
@@ -22334,15 +22348,19 @@ def notify_welcome(request: Request):
     if _ja_recebeu_kind(email, "boas_vindas"):
         return {"status": "ok", "sent": False, "reason": "ja_recebeu"}
     # 🏢 quem veio por convite do Escritório não leva o boas-vindas de cliente
-    # (leva o "sua área também", pela varredura). Falha de leitura = segue o normal.
+    # (leva o "sua área também", pela varredura).
+    # 🩸 26/09 (auditoria B-1): falha de leitura "seguia o normal" — mandava o boas-vindas de CLIENTE
+    # justamente quando não dava pra saber se era convidado. Agora espera, como a varredura: o tick
+    # horário manda o boas-vindas quando a leitura voltar (regra da casa: na dúvida, não envia).
     try:
         _conv = _convidados_do_escritorio()
         _pend = _convites_pendentes()
-        if (_conv and str(user["id"]) in _conv) or (
-                _pend and (email.strip().lower() in _pend[0] or str(user["id"]) in _pend[1])):
-            return {"status": "ok", "sent": False, "reason": "convidado_do_escritorio"}
     except Exception:
-        pass
+        _conv = _pend = None
+    if _conv is None or _pend is None:
+        return {"status": "ok", "sent": False, "reason": "escritorio_nao_leu"}
+    if str(user["id"]) in _conv or email.strip().lower() in _pend[0] or str(user["id"]) in _pend[1]:
+        return {"status": "ok", "sent": False, "reason": "convidado_do_escritorio"}
     import html as _hw
     sent = _send_welcome_email(email, name)
     # Alerta interno pro Pedro: novo cliente (em thread)
@@ -23011,7 +23029,7 @@ def _avisar_leitura_do_escritorio_falhou(o_que: str, st) -> None:
     200. Uma coluna renomeada pararia a esteira sem ninguém saber. Agora fica no error_log."""
     _log_error("emails-auto:escritorio-leitura",
                f"não consegui ler {o_que} (HTTP {st}) — boas-vindas e 1ª prancha de cliente novo "
-               f"esperam o próximo tick até a leitura voltar")
+               f"esperam (na varredura e no 1º acesso ao painel) até a leitura voltar")
 
 
 def _convidados_do_escritorio():
@@ -23467,6 +23485,15 @@ def emails_auto_tick(request: Request, dry: int = 0):
     """Varredura horária (pg_cron): decide e envia os lembretes automáticos.
     dry=1 → só lista o que ENVIARIA, sem mandar nada (ensaio)."""
     _require_tick_secret(request)
+    # 🧹 26/09 (auditoria do Escritório, achado de 5 lentes): quem saiu de um projeto e continuou editora da
+    # pasta do Drive (a retirada na hora falhou, ou a conexão da admin estava caída) — tenta de novo a cada
+    # hora. Fica ANTES da chave dos e-mails: tirar acesso não pode depender de e-mail ligado.
+    if not dry:
+        try:
+            import escritorio_drive as _ed_faxina
+            _ed_faxina.faxina()
+        except Exception as _ef:
+            _log_error("escritorio:drive-faxina", f"{type(_ef).__name__}: {str(_ef)[:200]}")
     if os.environ.get("EMAILS_AUTO", "1") == "0":
         return {"status": "off"}
     from datetime import datetime as _dt, timezone as _tz
@@ -30554,6 +30581,8 @@ def get_cronograma(job_id: str, request: Request):     # `def`: zero await no co
         raise HTTPException(502, "não consegui ler o cronograma agora — recarregue em instantes")
     if not saved:
         return {"status": "empty", "job_id": job_id, "saved": None}
+    if _so_leitura(request):
+        saved = _cronograma_sem_dinheiro(saved)
     return {"status": "ok", "job_id": job_id, "saved": saved}
 
 
@@ -30633,7 +30662,7 @@ def get_cronograma_full(job_id: str, request: Request):
         raise HTTPException(404, "Cronograma ainda não gerado para este projeto")
     try:
         cron, _branding = _build_cronograma_for_export(job_id, request=_req_de_leitura(request))
-        return cron
+        return _cronograma_sem_dinheiro(cron) if _so_leitura(request) else cron
     except HTTPException:
         raise
     except Exception as e:
@@ -30769,6 +30798,8 @@ async def export_cronograma_pdf(job_id: str, request: Request,
     from fastapi.responses import FileResponse
     cron, branding = await run_in_threadpool(
         _build_cronograma_for_export, job_id, request=_req_de_leitura(request))
+    if _so_leitura(request):
+        cron = _cronograma_sem_dinheiro(cron)
     tmpl = (template or "").strip().lower()
     if tmpl not in _CRONO_TEMPLATES:
         tmpl = "escuro"
@@ -30818,6 +30849,8 @@ async def export_cronograma_xlsx(job_id: str, request: Request):
     from fastapi.responses import FileResponse
     cron, branding = await run_in_threadpool(
         _build_cronograma_for_export, job_id, request=_req_de_leitura(request))
+    if _so_leitura(request):
+        cron = _cronograma_sem_dinheiro(cron)
     tem_fin = bool((cron.get("financeiro") or {}).get("total_informado"))
     sufixo = "fisico_financeiro" if tem_fin else "fisico"
     fname = f"cronograma_{sufixo}_{_slug_filename(branding['project_name'])}.xlsx"
@@ -30845,6 +30878,8 @@ async def export_cronograma_pptx(job_id: str, request: Request,
     from fastapi.responses import FileResponse
     cron, branding = await run_in_threadpool(
         _build_cronograma_for_export, job_id, request=_req_de_leitura(request))
+    if _so_leitura(request):
+        cron = _cronograma_sem_dinheiro(cron)
     tmpl = (template or "").strip().lower()
     if tmpl not in _CRONO_TEMPLATES:
         tmpl = "escuro"
@@ -33587,6 +33622,12 @@ async def get_sheet_pdf(job_id: str, request: Request, ref: str = ""):
     # imagem e derrubar o site. A trava é estrutural, não confiança.
     if ext not in (".pdf", ".png", ".jpg", ".jpeg"):
         raise HTTPException(404, "Prancha não encontrada")
+    # 🔒 26/09 (auditoria SRV-1): o PDF é o ARQUIVO ORIGINAL do cliente — abrir no navegador é ter o
+    # arquivo. Da equipe, só quem a admin liberou ("pode baixar"); a imagem que NÓS renderizamos do CAD
+    # continua sendo "ver". O projeto.html já tratava abrir PDF como baixar (.sem-baixar).
+    if ext == ".pdf" and _so_leitura(request) and not getattr(request.state, "pode_baixar", False):
+        raise HTTPException(403, "Este PDF é o arquivo original do projeto: abrir depende da liberação de "
+                                 "download de quem é dono do projeto.")
 
     # O nome do que está sendo ENTREGUE vai no cabeçalho. Sem isso o
     # `downloadProtected` (aiarq-utils.js) não acha `filename=`, cai no nome que

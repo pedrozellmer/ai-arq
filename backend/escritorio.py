@@ -476,6 +476,12 @@ def aceitar_convite(request: Request, corpo: dict):
         # a admin conferindo o próprio link (ou quem já está no projeto): não é erro e NÃO gasta o
         # convite — a tela dizia "Este convite já foi usado" com ele valendo (4ª revisão, 24/09)
         return {"ok": True, "ja_membro": True, "projeto_id": m["projeto_id"]}
+    # 🔒 26/09 (auditoria CONV-1): pelo CÓDIGO, conta com e-mail diferente do convite só entra dizendo que é
+    # ela (computador compartilhado: o código guardado no navegador pode ser de OUTRA pessoa). A tela mostra
+    # pra quem o convite foi e pede o clique; quem usa outro e-mail de verdade confirma e segue.
+    conta = str(eu.get("email") or "").strip().lower()
+    if len(token) >= 20 and conta != str(m.get("email") or "").strip().lower() and corpo.get("outra_conta") is not True:
+        raise HTTPException(428, {"codigo": "outra_conta", "convite_para": mascarar(m.get("email") or "")})
     # quem SAIU do projeto e volta por um convite novo com OUTRO e-mail: a linha antiga ainda segura
     # o user_id e o índice único (projeto, user) barrava o aceite pra sempre (502) (4ª revisão, 24/09)
     antiga = _um(_SERVICO("GET", "escritorio_membros",
@@ -488,7 +494,9 @@ def aceitar_convite(request: Request, corpo: dict):
             raise HTTPException(502, "Não consegui confirmar o convite agora. Tente de novo em instantes.")
     # o hash FICA depois do aceite (status 'ativo' já impede reuso): assim o 2º clique no link
     # sabe dizer "já foi usado" em vez de "trocado ou cancelado" (revisão adversarial 24/09)
-    ativar = {"user_id": eu["id"], "status": "ativo",
+    # 🔒 26/09 (auditoria RLS-2): o e-mail que ganha a pasta do Drive é o da CONTA, confirmado, gravado AQUI
+    # (coluna que só o servidor escreve) — o profiles.email a própria pessoa edita pela API.
+    ativar = {"user_id": eu["id"], "status": "ativo", "email_conta": _email_da_conta(eu) or None,
               "aceito_em": datetime.now(timezone.utc).isoformat()}
     if not m.get("nome"):   # o admin não deu nome: vale o do cadastro (a pessoa não edita a própria linha)
         try:
@@ -509,7 +517,7 @@ def aceitar_convite(request: Request, corpo: dict):
             _DEPOIS_DO_ACEITE(m["projeto_id"])
         except Exception:
             pass
-    outro_email = (eu.get("email") or "").lower() != (m["email"] or "").lower()
+    outro_email = conta != (m["email"] or "").lower()
     return {"ok": True, "projeto_id": m["projeto_id"],
             # conta com e-mail diferente do convite: vale (o token prova que o convite chegou
             # a ela), mas a tela avisa — a pasta do Drive vai ser compartilhada com ESTA conta.

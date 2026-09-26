@@ -80,7 +80,15 @@ class Banco:
             return 200, self.membros
         if path == "escritorio_drive_permissoes":
             if method == "GET":
-                return 200, self.feitos
+                # filtra como o PostgREST: a pergunta "outro projeto usa a mesma pasta pra esse e-mail?"
+                linhas = self.feitos
+                if str(params.get("projeto_id", "")).startswith("eq."):
+                    linhas = [f for f in linhas if f.get("projeto_id", PROJ) == params["projeto_id"][3:]]
+                if "email" in params:
+                    linhas = [f for f in linhas if f.get("email") == params["email"].split(".", 1)[1]
+                              and f.get("pasta_id") == params["pasta_id"].split(".", 1)[1]
+                              and f.get("projeto_id", PROJ) != params["projeto_id"].split(".", 1)[1]]
+                return 200, linhas
             if method == "DELETE":
                 i = params["id"].split(".", 1)[1]
                 self.feitos = [f for f in self.feitos if str(f["id"]) != i]
@@ -216,7 +224,7 @@ def test_escolher_algo_que_nao_e_pasta_e_recusado():
 
 def test_pasta_escolhida_e_gravada_e_ja_compartilhada():
     b = Banco(pasta=None)
-    b.membros = [{"id": "m1", "user_id": "u1"}]
+    b.membros = [{"id": "m1", "user_id": "u1", "email_conta": "u1@exemplo.com"}]
     g = Google(respostas={"/files/PASTA_NOVA_123?": (200, {"id": "PASTA_NOVA_123", "name": "Casa 2026", "mimeType": ed.PASTA})})
     r = ed.projeto_pasta(PROJ, REQ, {"pasta": "https://drive.google.com/drive/folders/PASTA_NOVA_123"})
     assert b.projeto["pasta_id"] == "PASTA_NOVA_123" and r["compartilhados"] == 1
@@ -266,7 +274,8 @@ def test_sem_pasta_e_sem_conexao_dizem_o_que_falta():
 # ── compartilhamento ──
 def test_sincronizar_da_a_quem_entrou_tira_de_quem_saiu_e_da_pasta_antiga():
     b = Banco()
-    b.membros = [{"id": "m-novo", "user_id": "u-novo"}, {"id": "m-fica", "user_id": "u-fica"}]
+    b.membros = [{"id": "m-novo", "user_id": "u-novo", "email_conta": "u-novo@exemplo.com"},
+                 {"id": "m-fica", "user_id": "u-fica", "email_conta": "u-fica@exemplo.com"}]
     b.feitos = [
         {"id": 1, "membro_id": "m-fica", "pasta_id": "PASTA_PROJ", "permission_id": "p-fica", "email": "u-fica@exemplo.com"},
         {"id": 2, "membro_id": "m-saiu", "pasta_id": "PASTA_PROJ", "permission_id": "p-saiu", "email": "saiu@exemplo.com"},
@@ -282,10 +291,93 @@ def test_sincronizar_da_a_quem_entrou_tira_de_quem_saiu_e_da_pasta_antiga():
 
 def test_compartilhamento_que_falha_nao_derruba_e_fica_listado():
     b = Banco()
-    b.membros = [{"id": "m1", "user_id": "u1"}]
+    b.membros = [{"id": "m1", "user_id": "u1", "email_conta": "u1@exemplo.com"}]
     Google(respostas={"/permissions": (400, {"error": {"message": "not a Google account"}})})
     r = ed.sincronizar(PROJ)
     assert r["compartilhados"] == 0 and r["falhas"] == ["u1@exemplo.com"] and b.feitos == []
+
+
+# ── 26/09 (auditoria completa do Escritório) ──
+def test_o_email_que_ganha_a_pasta_e_o_da_conta_nunca_o_do_perfil():
+    # o profiles.email a própria pessoa edita pela API: o Banco falso devolve um e-mail "trocado" lá
+    b = Banco()
+    b.membros = [{"id": "m1", "user_id": "u1", "email_conta": "conta.confirmada@exemplo.com"}]
+    g = Google()
+    ed.sincronizar(PROJ)
+    criadas = [c["corpo"]["emailAddress"] for c in g.chamadas if c["m"] == "POST" and "/permissions" in c["url"]]
+    assert criadas == ["conta.confirmada@exemplo.com"]
+    assert not [c for c in b.escritas if c["path"] == "profiles"]
+
+
+def test_sem_email_confirmado_nao_compartilha():
+    b = Banco()
+    b.membros = [{"id": "m1", "user_id": "u1", "email_conta": None}]
+    g = Google()
+    r = ed.sincronizar(PROJ)
+    assert r["falhas"] == ["(sem e-mail confirmado)"] and not [c for c in g.chamadas if c["m"] == "POST" and "/permissions" in c["url"]]
+
+
+def test_sem_conexao_avisa_em_vez_de_zero_calado():
+    Banco(conectada=False)
+    assert ed.sincronizar(PROJ)["sem_conexao"] is True
+    Banco(pasta=None)
+    assert ed.sincronizar(PROJ)["sem_pasta"] is True
+
+
+def test_acesso_dado_a_mao_pela_admin_nao_e_tocado_nem_na_entrada_nem_na_saida():
+    b = Banco()
+    b.membros = [{"id": "m1", "user_id": "u1", "email_conta": "ja.editava@exemplo.com"}]
+    g = Google(respostas={"/files/PASTA_PROJ/permissions?fields": (200, {"permissions": [
+        {"id": "perm-manual", "emailAddress": "Ja.Editava@exemplo.com", "role": "writer", "type": "user"}]})})
+    r = ed.sincronizar(PROJ)
+    assert r["compartilhados"] == 0 and not [c for c in g.chamadas if c["m"] == "POST" and "/permissions" in c["url"]]
+    assert b.feitos[0]["ja_existia"] is True and b.feitos[0]["permission_id"] == "perm-manual"
+    b.membros = []                                        # a pessoa sai do projeto
+    g.chamadas.clear()
+    r = ed.sincronizar(PROJ)
+    assert not [c for c in g.chamadas if c["m"] == "DELETE"], "o que a admin deu à mão fica"
+    assert b.feitos == [], "só o registro sai"
+
+
+def test_quem_segue_noutro_projeto_com_a_mesma_pasta_nao_perde_o_acesso():
+    b = Banco()
+    b.membros = []
+    b.feitos = [{"id": 1, "membro_id": "m-saiu", "pasta_id": "PASTA_PROJ", "permission_id": "p-x", "email": "x@exemplo.com"},
+                {"id": 2, "projeto_id": "outro-projeto", "membro_id": "m-outro", "pasta_id": "PASTA_PROJ",
+                 "permission_id": "p-x", "email": "x@exemplo.com"}]
+    g = Google()
+    ed.sincronizar(PROJ)
+    assert not [c for c in g.chamadas if c["m"] == "DELETE"]
+    assert [f["id"] for f in b.feitos] == [2]
+
+
+def test_404_so_vale_como_ja_saiu_se_a_conta_enxerga_a_pasta():
+    b = Banco()
+    b.membros = []
+    b.feitos = [{"id": 1, "membro_id": "m-saiu", "pasta_id": "PASTA_PROJ", "permission_id": "p-x", "email": "x@exemplo.com"}]
+    Google(respostas={"/permissions/p-x": (404, {}), "/files/PASTA_PROJ?fields=id": (404, {})})
+    r = ed.sincronizar(PROJ)
+    assert r["tirados"] == 0 and r["falhas"] == ["x@exemplo.com"] and len(b.feitos) == 1, "o registro fica pra tentar de novo"
+    b.feitos = [{"id": 1, "membro_id": "m-saiu", "pasta_id": "PASTA_PROJ", "permission_id": "p-x", "email": "x@exemplo.com"}]
+    Google(respostas={"/permissions/p-x": (404, {})})     # controle: a conta enxerga a pasta → já tinha saído
+    r = ed.sincronizar(PROJ)
+    assert r["tirados"] == 1 and b.feitos == []
+
+
+def test_faxina_tenta_de_novo_so_os_projetos_com_quem_ja_saiu():
+    b = Banco()
+    b.feitos = [{"id": 1, "projeto_id": PROJ, "membro_id": "m-saiu", "pasta_id": "PASTA_PROJ", "permission_id": "p-x", "email": "x@exemplo.com"}]
+    b.membros = [{"id": "m-saiu", "status": "removido"}]
+    chamou = []
+    real = ed.sincronizar
+    ed.sincronizar = lambda pid: chamou.append(pid) or {"compartilhados": 0, "tirados": 1, "falhas": []}
+    try:
+        assert ed.faxina() == {"projetos": 1, "tirados": 1, "pendentes": 0} and chamou == [PROJ]
+        b.membros = [{"id": "m-saiu", "status": "ativo"}]         # controle: todo mundo ativo → nada a fazer
+        chamou.clear()
+        assert ed.faxina()["projetos"] == 0 and chamou == []
+    finally:
+        ed.sincronizar = real
 
 
 def test_o_aceite_do_convite_chama_o_drive():

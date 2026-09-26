@@ -211,6 +211,8 @@
   @media (max-width:640px){ .arq-q,.arq-cab-l{display:none} }
   /* 26/09 — emitir (cópia R00, R01… em "Emitidos") e a tela de Emissões */
   .arq-e{width:92px;flex:none;text-align:right} .arq-cab-l span:nth-child(5){width:92px;flex:none}
+  /* 26/09 (auditoria UX-2): no celular a coluna do Emitir espremia o nome em ~25 px — some o tamanho, o botão encolhe */
+  @media (max-width:640px){ .arq-lista li:has(.arq-e) .arq-t{display:none} .arq-e{width:auto} .arq-e .btn{padding:6px 9px;font-size:12.5px} }
   .rev-tag{display:inline-block;margin-left:8px;font-size:11px;font-weight:700;padding:1px 7px;border-radius:6px;background:#E0F2FE;color:#0369A1;font-variant-numeric:tabular-nums;vertical-align:1px;white-space:nowrap}
   .p-neu{background:#F8FAFC;color:#475569;border-color:#E2E8F0}
   .emi-g{border:1px solid #E2E8F0;border-radius:14px;padding:14px 16px;margin-top:12px}
@@ -374,7 +376,10 @@ function falhou(e, oque) {
 }
 function menu(abre) { $('side').classList.toggle('aberto', abre); $('scrim').classList.toggle('aberto', abre); }
 function abrirModal(t, html, largo) { $('modal-t').textContent = t; $('modal-b').innerHTML = html; const mc = document.querySelector('#modal .modal-c'); if (mc) mc.classList.toggle('largo', !!largo); $('modal').hidden = false; const f = $('modal-b').querySelector('input,textarea,select'); if (f) f.focus(); }
-function fecharModal() { $('modal').hidden = true; }
+// 26/09 (auditoria UX-4): fechar o modal no MEIO da emissão (Esc, toque fora) e clicar Emitir de novo fazia
+// uma revisão a mais — enquanto emite, o modal não fecha
+let EMITINDO = false;
+function fecharModal() { if (EMITINDO) return; $('modal').hidden = true; }
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('modal').hidden) fecharModal(); });
 const hoje = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; };
 const dISO = (s) => { const [y, m, d] = String(s).slice(0, 10).split('-').map(Number); return new Date(y, m - 1, d); };
@@ -486,7 +491,7 @@ async function carregarProjeto(id) {
   EMI = TEM_EMI ? em.data : []; EMI_EV = TEM_EMI ? ev.data : [];
   if (PAPEL === 'dono') {   // contatos da equipe: só o admin (LGPD — a equipe não precisa do telefone do colega)
     const c = await sb.rpc('escritorio_contatos', { p_projeto: id });
-    if (!c.error) c.data.forEach((x) => { const m = MEMBROS.find((y) => y.id === x.membro_id); if (m) { m.email = x.email; m.telefone = x.telefone; } });
+    if (!c.error) c.data.forEach((x) => { const m = MEMBROS.find((y) => y.id === x.membro_id); if (m) { m.email = x.email; m.telefone = x.telefone; m.email_conta = x.email_conta || null; } });
   }
   if (PAPEL === 'dono') {   // a anotação sobre cada pessoa: tabela própria, só o admin lê
     const n = await sb.from('escritorio_membro_notas').select('membro_id,observacao').eq('projeto_id', id);
@@ -1209,6 +1214,7 @@ async function sincronizarPasta(calado) {
   const r = await apiEsc(`projetos/${PROJ.id}/drive/sincronizar`, 'POST');
   if (calado) return;
   if (!r.ok) return toast(r.dados.detail || 'Não consegui atualizar o acesso.', true);
+  if (r.dados.sem_conexao) return toast('O seu Google Drive está desconectado: conecte de novo pra atualizar o acesso da equipe.', true);
   const f = (r.dados.falhas || []).length;
   toast(`Acesso atualizado: ${r.dados.compartilhados || 0} entrou, ${r.dados.tirados || 0} saiu` + (f ? ` · ${f} não deu` : ''));
 }
@@ -1235,22 +1241,37 @@ function emitirArquivo(id, nome) {
   if (!ID_DRIVE.test(id)) return;
   const ja = EMI.filter((e) => e.arquivo_id === id);
   const prox = ja.length ? Math.max(...ja.map((e) => Number(e.revisao) || 0)) + 1 : 0;
-  abrirModal('Emitir ' + revTxt(prox), `
-    <p style="margin:0 0 10px;font-size:14px;line-height:1.5">Uma <b>cópia</b> de <b>${esc(nome)}</b> vai pra pasta <b>Emitidos</b> deste projeto, com <b>${revTxt(prox)}</b> no nome. O original continua sendo o arquivo de trabalho, sem mudar nada.</p>
-    ${ja.length ? `<p class="sub" style="margin:0 0 10px">Última emitida: ${revTxt(prox - 1)}, em ${esc(quandoArq(ja[0].emitido_em))}.</p>` : ''}
+  // 26/09 (auditoria UX-5): sem as emissões lidas (TEM_EMI falso) o número seria chute — quem numera é o servidor
+  const rotulo = TEM_EMI ? revTxt(prox) : 'nova revisão';
+  abrirModal('Emitir ' + rotulo, `
+    <p style="margin:0 0 10px;font-size:14px;line-height:1.5">Uma <b>cópia</b> de <b>${esc(nome)}</b> vai pra pasta <b>Emitidos</b> deste projeto, com ${TEM_EMI ? `<b>${revTxt(prox)}</b>` : 'a revisão'} no nome. O original continua sendo o arquivo de trabalho, sem mudar nada.</p>
+    ${TEM_EMI && ja.length ? `<p class="sub" style="margin:0 0 10px">Última emitida: ${revTxt(prox - 1)}, em ${esc(quandoArq(ja[0].emitido_em))}.</p>` : ''}
     <label class="lbl" for="em-nota">O que muda nesta revisão (opcional)</label>
     <textarea id="em-nota" class="in" rows="3" maxlength="1000" placeholder="Ex.: cozinha ajustada como pedido na reunião"></textarea>
-    <p class="sub" style="margin:8px 0 0">A cópia fica travada contra edição no Drive, pra ser sempre o que foi emitido.</p>
-    <div class="rodape"><button class="btn" onclick="fecharModal()">Cancelar</button><button class="btn btn-d" id="em-ok">Emitir ${revTxt(prox)}</button></div>`);
+    <p class="sub" style="margin:8px 0 0">A cópia fica travada no Drive: só a dona do Drive destrava. Assim ela é sempre o que foi emitido.</p>
+    <div class="rodape"><button class="btn" onclick="fecharModal()">Cancelar</button><button class="btn btn-d" id="em-ok">Emitir ${rotulo}</button></div>`);
   $('em-ok').onclick = () => confirmarEmissao(id);
 }
 async function confirmarEmissao(id) {
   const b = $('em-ok'); if (!b || b.disabled) return;
   b.disabled = true; b.textContent = 'Emitindo…';
-  const r = await apiEsc(`projetos/${PROJ.id}/emitir`, 'POST', { arquivo_id: id, nota: ($('em-nota') || {}).value || '' });
+  EMITINDO = true;
+  let r;
+  try { r = await apiEsc(`projetos/${PROJ.id}/emitir`, 'POST', { arquivo_id: id, nota: ($('em-nota') || {}).value || '' }); }
+  finally { EMITINDO = false; }
+  if (!r.ok && r.status === 0) {
+    // 🩸 26/09 (auditoria LOG-C1): sem resposta não dá pra saber se a cópia saiu — "Tentar de novo" emitia a
+    // MESMA revisão duas vezes. Relê e mostra a lista; a pessoa confere antes de emitir de novo.
+    fecharModal();
+    try { await recarregar(); } catch (_) {}
+    return toast('A conexão caiu no meio: não sei se a emissão saiu. Atualizei a lista — confira em Emissões antes de emitir de novo.', true);
+  }
   if (!r.ok) { b.disabled = false; b.textContent = 'Tentar de novo'; return toast(r.dados.detail || 'Não deu pra emitir agora.', true); }
   fecharModal();
-  toast(`Emitido: ${r.dados.nome}` + (r.dados.travada ? '' : ' · a cópia não ficou travada no Drive'));
+  if (r.dados.travada) toast(`Emitido: ${r.dados.nome}`);
+  else abrirModal('Emitido, mas sem trava', `<p style="margin:0;font-size:14px;line-height:1.5"><b>${esc(r.dados.nome)}</b> foi pra pasta Emitidos, mas <b>o Drive não aceitou a trava</b>: quem é da equipe consegue editar a cópia.</p>
+    <p class="sub" style="margin:0">Se quiser garantir, bloqueie o arquivo no próprio Drive.</p>
+    <div class="rodape"><button class="btn btn-d" onclick="fecharModal()">Entendi</button></div>`);
   await recarregar();
 }
 function telaEmissoes() {
@@ -1271,7 +1292,7 @@ function telaEmissoes() {
         <div class="emi-n">${lk ? `<a href="${esc(lk)}" target="_blank" rel="noopener">${esc(e.copia_nome || e.arquivo_nome)}</a>` : esc(e.copia_nome || e.arquivo_nome)}
           <small>emitida em ${esc(quandoArq(e.emitido_em))}${quem(e)}</small>
           ${e.nota ? `<p class="emi-nota">${esc(e.nota)}</p>` : ''}
-          ${evs.length ? `<ul class="emi-hist">${evs.map((x) => `<li><b>${EV[x.tipo] ? EV[x.tipo][0] : esc(x.tipo)}</b> · ${esc(dBR(x.em))}${x.nota ? ' — ' + esc(x.nota) : ''}</li>`).join('')}</ul>` : ''}
+          ${evs.length ? `<ul class="emi-hist">${evs.map((x) => `<li><b>${EV[x.tipo] ? EV[x.tipo][0] : esc(x.tipo)}</b> · ${esc(dBR(x.em))}${x.nota ? ' — ' + esc(x.nota) : ''}${souAdmin() ? ` <button type="button" class="chk-x" title="Apagar este registro" aria-label="Apagar este registro" onclick="apagarRetorno('${x.id}')">×</button>` : ''}</li>`).join('')}</ul>` : ''}
         </div>
         <div class="emi-st">${pillEmissao(e)}${souAdmin() ? `<button type="button" class="btn btn-s" onclick="registrarRetorno('${e.id}')">Registrar retorno</button>` : ''}</div></li>`;
     }).join('')}</ul></div>`).join('')}</section>`;
@@ -1282,7 +1303,7 @@ function registrarRetorno(id) {
   const u = ultimoEv(e), sug = !u ? 'enviado' : u.tipo === 'enviado' ? 'aprovado' : 'enviado';
   abrirModal(`${revTxt(e.revisao)} · ${e.copia_nome || e.arquivo_nome}`, `
     <div class="ret-op" role="radiogroup" aria-label="O que aconteceu">${Object.keys(EV).map((k) => `<label><input type="radio" name="ret-tipo" value="${k}" ${k === sug ? 'checked' : ''}>${EV[k][0]}</label>`).join('')}</div>
-    <label class="lbl" for="ret-em">Quando</label><input id="ret-em" class="in" type="date" value="${hojeISO()}">
+    <label class="lbl" for="ret-em">Quando</label><input id="ret-em" class="in" type="date" value="${hojeISO()}" max="${hojeISO()}">
     <label class="lbl" for="ret-nota" style="margin-top:10px">Nota (opcional)</label>
     <textarea id="ret-nota" class="in" rows="3" maxlength="1000" placeholder="Ex.: aprovou por e-mail, pediu pra aumentar a janela da sala"></textarea>
     <div class="rodape"><button class="btn" onclick="fecharModal()">Cancelar</button><button class="btn btn-d" id="ret-ok">Registrar</button></div>`);
@@ -1293,12 +1314,27 @@ async function salvarRetorno(id) {
   const tipo = (document.querySelector('input[name="ret-tipo"]:checked') || {}).value, em = $('ret-em').value;
   if (!EV[tipo]) return toast('Escolha o que aconteceu.', true);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(em)) return toast('Escolha a data.', true);
+  // 26/09 (auditoria LOG-C4): data no futuro virava o "último" pra sempre e prendia a situação da emissão
+  if (em > hojeISO()) return toast('A data não pode ser depois de hoje.', true);
   b.disabled = true;
   const nota = $('ret-nota').value.trim();
   const { error } = await sb.from('escritorio_emissao_eventos').insert({ projeto_id: PROJ.id, emissao_id: id, tipo, em, nota: nota || null });
   if (error) { b.disabled = false; return falhou(error, 'Registrar o retorno'); }
   fecharModal(); toast('Registrado');
   await recarregar();
+}
+// 26/09 (auditoria LOG-C4): registro errado (data, tipo) não tinha como sair — a admin apaga e registra de novo
+function apagarRetorno(id) {
+  const x = EMI_EV.find((v) => v.id === id); if (!x || !souAdmin()) return;
+  abrirModal('Apagar este registro?', `<p style="margin:0;font-size:14px"><b>${EV[x.tipo] ? EV[x.tipo][0] : esc(x.tipo)}</b> · ${esc(dBR(x.em))}${x.nota ? ' — ' + esc(x.nota) : ''}</p>
+    <div class="rodape"><button class="btn" onclick="fecharModal()">Voltar</button><button class="btn btn-r" id="ret-apagar">Apagar</button></div>`);
+  $('ret-apagar').onclick = async () => {
+    $('ret-apagar').disabled = true;
+    const { error } = await sb.from('escritorio_emissao_eventos').delete().eq('id', id).eq('projeto_id', PROJ.id);
+    if (error) { $('ret-apagar').disabled = false; return falhou(error, 'Apagar o registro'); }
+    fecharModal(); toast('Registro apagado');
+    await recarregar();
+  };
 }
 
 // ══════════════ ATAS ══════════════
@@ -1366,6 +1402,7 @@ function telaEquipe() {
     <section class="card"><div class="linha" style="justify-content:space-between"><h2 class="h2">${vis.length} pessoa${vis.length > 1 ? 's' : ''}</h2></div>
       <ul class="lista" style="margin-top:8px">${vis.map((m) => `<li style="flex-wrap:wrap">${av(m)}<div style="flex:1;min-width:180px"><b style="font-size:14px">${esc(nomeDe(m))}${m.user_id === EU.id ? ' <span style="font-weight:400;color:#64748B">(você)</span>' : ''}</b>
         <span class="sub" style="display:block;margin:0">${esc(m.funcao || (m.papel === 'dono' ? 'Admin do projeto' : ''))}${m.email ? ' · ' + esc(m.email) : ''}${m.telefone ? ' · ' + esc(m.telefone) : ''}</span>
+        ${m.email_conta && m.email && m.email_conta !== String(m.email).toLowerCase() ? `<span class="sub" style="display:block;margin:0;color:#92400E">Entrou com a conta ${esc(m.email_conta)} (a pasta do Drive vai pra esta)</span>` : ''}
         ${NOTAS[m.id] ? `<span class="sub" style="display:block;margin:0">${esc(NOTAS[m.id])}</span>` : ''}</div>
         ${m.papel === 'dono' ? '<span class="pill p-ind">admin · vê tudo</span>' : m.status === 'ativo' ? '<span class="pill p-ok"><i></i>no projeto</span>' : pillConvite(m)}
         ${souAdmin() && PROJ.job_id && m.papel !== 'dono' ? `<label class="chip" title="Planilha, cronograma e memorial do projeto medido ligado"><input type="checkbox" ${m.pode_baixar ? 'checked' : ''} onchange="mudarBaixar('${m.id}', this.checked, this)"> pode baixar arquivos</label>` : ''}
@@ -1447,8 +1484,23 @@ async function salvarPessoa(id) {
 }
 function tirar(id) {
   const m = MEMBROS.find((x) => x.id === id), conv = m.status === 'convidado';
-  abrirModal(conv ? 'Cancelar convite' : 'Tirar ' + curto(m) + ' do projeto', `<p style="margin:0;font-size:14px">${conv ? 'O link do convite de <b>' + esc(nomeDe(m)) + '</b> deixa de funcionar.' : '<b>' + esc(nomeDe(m)) + '</b> perde o acesso a este projeto na hora. As tarefas continuam no quadro, pra você passar a outra pessoa.'}</p>
+  abrirModal(conv ? 'Cancelar convite' : 'Tirar ' + curto(m) + ' do projeto', `<p style="margin:0;font-size:14px">${conv ? 'O link do convite de <b>' + esc(nomeDe(m)) + '</b> deixa de funcionar.' : '<b>' + esc(nomeDe(m)) + '</b> perde o acesso a este projeto na hora' + (PROJ.pasta_id ? ', e o AI.arq tira o acesso dela à pasta do Drive (você vê aqui se deu certo)' : '') + '. As tarefas continuam no quadro, pra você passar a outra pessoa.'}</p>
     <div class="rodape"><button class="btn" onclick="fecharModal()">Voltar</button><button class="btn btn-r" onclick="confirmarTirar('${id}')">${conv ? 'Cancelar convite' : 'Tirar do projeto'}</button></div>`);
+}
+// 🩸 26/09 (auditoria do Escritório, 5 lentes): tirar alguém chamava a retirada da pasta do Drive "calada" — sem
+// conexão, token cortado ou erro do Google, a pessoa seguia EDITORA da pasta e a tela dizia "saiu". Agora espera
+// o resultado e diz o que aconteceu; o que ficar pendente o servidor tenta de novo a cada hora.
+async function tirarDaPasta(nome) {
+  const r = await apiEsc(`projetos/${PROJ.id}/drive/sincronizar`, 'POST');
+  const d = r.dados || {};
+  let problema = '';
+  if (!r.ok) problema = d.detail || 'o Google não respondeu';
+  else if (d.sem_conexao) problema = 'o seu Google Drive está desconectado do AI.arq';
+  else if ((d.falhas || []).length) problema = 'o Google recusou agora';
+  if (!problema) return toast(nome + ' saiu do projeto e da pasta do Drive');
+  abrirModal('Falta tirar o acesso à pasta', `<p style="margin:0;font-size:14px;line-height:1.5"><b>${esc(nome)}</b> saiu do projeto, mas <b>não consegui tirar o acesso dela à pasta do Drive</b>: ${esc(problema)}.</p>
+    <p class="sub" style="margin:0">Vou tentar de novo a cada hora. Se quiser garantir agora, abra a pasta no Drive, clique em <b>Compartilhar</b> e tire o acesso dela.</p>
+    <div class="rodape">${PROJ.pasta_id ? `<a class="btn" href="https://drive.google.com/drive/folders/${encodeURIComponent(PROJ.pasta_id)}" target="_blank" rel="noopener">Abrir a pasta no Drive</a>` : ''}<button class="btn btn-d" onclick="fecharModal()">Entendi</button></div>`);
 }
 async function confirmarTirar(id) {
   const m = MEMBROS.find((x) => x.id === id);
@@ -1462,8 +1514,8 @@ async function confirmarTirar(id) {
   fecharModal();
   try { await recarregar(); } catch (e) { return falhou(e, 'Feito, mas não consegui atualizar a lista'); }
   if (!count) return toast(m.status === 'convidado' ? 'Essa pessoa já tinha entrado no projeto. Atualizei a lista.' : 'Nada mudou: atualizei a lista.', true);
+  if (m.status !== 'convidado' && PROJ.pasta_id) return tirarDaPasta(curto(m));   // espera e diz se o Drive saiu
   toast(m.status === 'convidado' ? 'Convite cancelado' : curto(m) + ' saiu do projeto');
-  if (m.status !== 'convidado' && PROJ.pasta_id) sincronizarPasta(true);   // tira o acesso à pasta do Drive
 }
 
 // ══════════════ início ══════════════

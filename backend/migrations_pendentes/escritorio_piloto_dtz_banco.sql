@@ -889,3 +889,73 @@ begin
 end $$;
 create trigger escritorio_etiquetas_guarda before update on public.escritorio_etiquetas
   for each row execute function public.escritorio_etiqueta_guarda();
+
+-- ── 25. (26/09, auditoria completa do Escritório) o e-mail CONFIRMADO da conta ganha a pasta do Drive ──
+-- Antes o compartilhamento usava profiles.email — que a própria pessoa edita pela API (política sem WITH CHECK
+-- + UPDATE na coluna). Agora o servidor grava, no aceite, o e-mail confirmado da conta numa coluna que só ele
+-- escreve (o gatilho barra qualquer outro), e a sincronização do Drive usa ela.
+alter table public.escritorio_membros add column if not exists email_conta text
+  check (email_conta is null or (char_length(email_conta) between 3 and 254 and email_conta = lower(email_conta)));
+comment on column public.escritorio_membros.email_conta is
+  'E-mail confirmado da conta que aceitou o convite (quem recebe a pasta do Drive). Só o servidor escreve.';
+-- (não entra no GRANT de SELECT por coluna de authenticated — seção 16: a tela não lê; a admin vê pelo RPC)
+
+create or replace function public.escritorio_membro_guarda()
+returns trigger language plpgsql set search_path to '' as $$
+begin
+  if public.escritorio_eh_servidor() then
+    return case when tg_op = 'DELETE' then old else new end;
+  end if;
+  if tg_op = 'DELETE' then
+    if old.papel = 'dono'
+       and exists (select 1 from public.escritorio_projetos p where p.id = old.projeto_id)
+       and public.escritorio_conta_existe(old.user_id) then
+      raise exception 'o dono não sai do próprio projeto' using errcode = '42501';
+    end if;
+    return old;
+  end if;
+  if old.papel = 'dono' then
+    raise exception 'a linha do dono não se edita' using errcode = '42501';
+  end if;
+  if new.projeto_id <> old.projeto_id or new.papel <> old.papel
+     or new.user_id is distinct from old.user_id
+     or new.convite_hash is distinct from old.convite_hash
+     or new.visto_por is distinct from old.visto_por
+     or new.email_conta is distinct from old.email_conta
+     or (new.status = 'ativo' and old.status <> 'ativo')
+     or (old.status = 'removido' and new.status <> 'removido') then
+    raise exception 'só o aceite do convite (servidor) ativa ou liga uma pessoa' using errcode = '42501';
+  end if;
+  if new.email is distinct from old.email
+     or new.convite_expira is distinct from old.convite_expira
+     or new.convidado_em is distinct from old.convidado_em
+     or new.aceito_em is distinct from old.aceito_em then
+    raise exception 'e-mail e datas do convite só mudam por um convite novo' using errcode = '42501';
+  end if;
+  if new.status = 'removido' and old.status <> 'removido' then new.removido_em := coalesce(new.removido_em, now()); end if;
+  return new;
+end $$;
+
+-- quem já está ativo hoje: o e-mail confirmado da conta dele (auth.users), uma vez
+update public.escritorio_membros m
+   set email_conta = lower(u.email)
+  from auth.users u
+ where u.id = m.user_id and m.status = 'ativo' and m.papel = 'freela'
+   and m.email_conta is null and u.email_confirmed_at is not null and u.email is not null;
+
+-- acesso à pasta que a admin JÁ tinha dado à mão: o AI.arq registra, mas nunca tira (nem ao sair do projeto)
+alter table public.escritorio_drive_permissoes add column if not exists ja_existia boolean not null default false;
+
+-- a admin vê com qual conta cada pessoa entrou (pode ser outro e-mail que o do convite). Mudar o retorno pede
+-- DROP + CREATE: as permissões voltam iguais às de antes (authenticated e service_role; anon e public não).
+drop function if exists public.escritorio_contatos(uuid);
+create function public.escritorio_contatos(p_projeto uuid)
+returns table(membro_id uuid, email text, telefone text, email_conta text)
+language sql stable security definer set search_path to '' as $$
+  select m.id, m.email, m.telefone, m.email_conta
+    from public.escritorio_membros m
+   where m.projeto_id = p_projeto
+     and public.escritorio_papel(p_projeto) = 'dono'
+$$;
+revoke all on function public.escritorio_contatos(uuid) from public, anon;
+grant execute on function public.escritorio_contatos(uuid) to authenticated, service_role;

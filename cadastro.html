@@ -323,8 +323,20 @@
   // 🏢 23/09/2026 — quem chega de um convite do escritório faz ESTA MESMA ficha
   // (decisão do Pedro: o cadastro não enxuga; os termos valem pra todo mundo) e,
   // no fim, volta pro convite em vez de ir pro painel.
-  const _convite = window.aiarqConvite && window.aiarqConvite.pendente();
-  const destinoDepois = () => (_convite ? 'convite.html' : 'dashboard.html');
+  // 🔒 26/09 (auditoria CONV-1): o convite guardado no NAVEGADOR pode ser de outra pessoa (computador
+  // compartilhado). Aqui ele só vale se foi aberto NESTA aba — ou, decidido em checkAuth quando a conta é
+  // conhecida, se esta conta nasceu DEPOIS dele (a confirmação do e-mail abre aba nova; quase sempre é a mesma
+  // pessoa). Fora disso quem traz de volta pro convite é o painel, 1× por sessão, e a confirmação mostra pra quem
+  // o convite foi.
+  const _pendente = window.aiarqConvite && window.aiarqConvite.pendente();
+  let _abaConvite = null;
+  try { _abaConvite = sessionStorage.getItem('aiarq_convite_aba'); } catch (_) {}
+  let _convite = _pendente && _abaConvite && _pendente.t === _abaConvite ? _pendente : null;
+  // 🩸 26/09 (auditoria LOG-A1): quem veio do convite SEM código (achado pelo e-mail da conta) e não tinha ficha
+  // volta pro convite no fim — sem isto caía no painel e o convite sumia.
+  let _voltaSemCodigo = false;
+  try { _voltaSemCodigo = sessionStorage.getItem('aiarq_convite_sem_codigo') === '1'; } catch (_) {}
+  const destinoDepois = () => ((_convite || _voltaSemCodigo) ? 'convite.html' : 'dashboard.html');
   // Rastreio anônimo do funil (chegou na página de cadastro).
   if (window.trackEvent) trackEvent('view_cadastro');
 
@@ -506,6 +518,8 @@
 
     currentUser = session.user;
     const meta = currentUser.user_metadata || {};
+    // o convite guardado vale também se esta conta nasceu DEPOIS da 1ª visita a ele neste navegador (ver o topo)
+    if (!_convite && _pendente && _pendente.em && Date.parse(currentUser.created_at || '') >= _pendente.em) _convite = _pendente;
 
     // 🔑 04/09/2026 — O RASCUNHO ENTRA AQUI, e não mais no fim do script.
     // Desde que a chave passou a ter dono, restaurar antes de saber QUEM está

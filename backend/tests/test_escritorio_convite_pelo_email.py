@@ -164,8 +164,22 @@ def test_o_token_continua_valendo_e_tem_precedencia():
                              "status": "convidado", "convite_expira": FUTURO}])),
                     ("PATCH", "escritorio_membros", {}, (200, [{"id": "m1"}]))])
     _montar(banco, CONVIDADA)
-    r = esc.aceitar_convite(REQ, {"token": t, "convite_id": CID})
+    r = esc.aceitar_convite(REQ, {"token": t, "convite_id": CID, "outra_conta": True})
     assert r["ok"] is True and r["email_da_conta_diferente"] is True   # o caminho do código segue igual
+    patch = [c for c in banco.chamadas if c["m"] == "PATCH"][-1]
+    assert patch["body"]["email_conta"] == CONVIDADA["email"], "o aceite grava o e-mail CONFIRMADO da conta"
+
+
+def test_aceite_de_conta_sem_email_confirmado_nao_grava_email_conta():
+    t = "T" * 43
+    banco = _Banco([("GET", "escritorio_membros", {"convite_hash": f"eq.{esc.hash_do_token(t)}"},
+                     (200, [{"id": "m1", "projeto_id": PROJ, "email": "convidada@exemplo.com", "nome": "X",
+                             "status": "convidado", "convite_expira": FUTURO}])),
+                    ("PATCH", "escritorio_membros", {}, (200, [{"id": "m1"}]))])
+    _montar(banco, NAO_CONFIRMADA)
+    esc.aceitar_convite(REQ, {"token": t})
+    patch = [c for c in banco.chamadas if c["m"] == "PATCH"][-1]
+    assert patch["body"]["email_conta"] is None, "e-mail não confirmado não ganha a pasta do Drive"
 
 
 def test_a_rota_nova_esta_no_app():
@@ -184,7 +198,7 @@ def test_a_pagina_do_convite_procura_pelo_email_quando_nao_tem_codigo():
     h = open(os.path.join(os.path.dirname(os.path.dirname(_AQUI)), "convite.html"), encoding="utf-8").read()
     assert "if (!token) return semCodigo();" in h
     assert "api('convite/pendentes', {}, SESSAO)" in h
-    assert "CONVITE_ID ? { convite_id: CONVITE_ID } : { token }" in h
+    assert "CONVITE_ID ? { convite_id: CONVITE_ID } : { token, outra_conta: OUTRA_CONTA || undefined }" in h
     s = h[h.index("async function semCodigo() {"):h.index("async function iniciar() {")]
     assert "sb.from('profiles')" in s and "location.href = 'cadastro.html'" in s, "sem ficha não entra no projeto"
 

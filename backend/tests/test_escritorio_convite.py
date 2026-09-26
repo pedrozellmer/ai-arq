@@ -239,7 +239,14 @@ def test_aceitar_ativa_com_a_conta_logada_e_guarda_o_hash():
 def test_aceitar_com_outra_conta_vale_mas_avisa():
     banco = _Banco([_convite(), ("PATCH", "escritorio_membros", {}, (200, [{"id": "m1"}]))])
     _montar(banco, usuario={"id": "uid-x", "email": "outra.conta@exemplo.com"})
-    assert esc.aceitar_convite(REQ, {"token": "T" * 43})["email_da_conta_diferente"] is True
+    # 🔒 26/09 (auditoria CONV-1): computador compartilhado — o código guardado pode ser de OUTRA pessoa. Conta com
+    # e-mail diferente do convite só entra dizendo que é ela; antes disso é 428 e NADA é escrito.
+    with pytest.raises(HTTPException) as e:
+        esc.aceitar_convite(REQ, {"token": "T" * 43})
+    assert e.value.status_code == 428 and e.value.detail["codigo"] == "outra_conta"
+    assert "outra.conta" not in str(e.value.detail) and "***@" in e.value.detail["convite_para"], "o convite vai mascarado"
+    assert [c for c in banco.chamadas if c["m"] == "PATCH"] == []
+    assert esc.aceitar_convite(REQ, {"token": "T" * 43, "outra_conta": True})["email_da_conta_diferente"] is True
 
 
 def test_convite_vencido_e_410_e_nao_escreve():
