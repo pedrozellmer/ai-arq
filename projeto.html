@@ -1113,12 +1113,21 @@ function renderExpansaoDisciplinas(items) {
   });
 })();
 
-async function carregarStatsEntregas() {
+// 🐢 26/09 (Pedro: "trocar de página está devagar"): os logs do servidor mostravam /api/items DUAS vezes
+// por abertura desta página — o init já traz os itens, e esta função buscava de novo. Cada chamada custa
+// 0,5–1 s (servidor longe) e a do cronograma, abaixo, preenchia selos que não existem mais na tela (o
+// cartão saiu em 05/08). As duas iam em FILA antes do aviso de coerência. Agora: reusa os itens do init
+// e só pergunta do cronograma se houver onde mostrar.
+async function carregarStatsEntregas(itensJaLidos) {
   // ── Quantitativo: items detectados + revisados ──
   try {
-    const r = await authFetch(`${API_BASE}/api/items/${jobId}`);
-    if (r.ok) {
-      const d = await r.json();
+    let d = null;
+    if (Array.isArray(itensJaLidos)) d = { items: itensJaLidos };
+    else {
+      const r = await authFetch(`${API_BASE}/api/items/${jobId}`);
+      if (r.ok) d = await r.json();
+    }
+    if (d) {
       const items = d.items || [];
       const elItems = document.getElementById('entrega-q-items');
       if (elItems) elItems.textContent = items.length.toString();
@@ -1137,8 +1146,8 @@ async function carregarStatsEntregas() {
     }
   } catch (e) { console.warn('items stats:', e); }
 
-  // ── Cronograma: tem ou não? PPC + duração ──
-  try {
+  // ── Cronograma: tem ou não? PPC + duração ── (só se a tela ainda tiver onde mostrar)
+  if (['entrega-cron-badge', 'entrega-cron-dur', 'entrega-cron-ppc'].some((id) => document.getElementById(id))) try {
     const r = await authFetch(`${API_BASE}/api/cronograma/${jobId}`);
     if (r.ok) {
       const d = await r.json();
@@ -1444,7 +1453,7 @@ async function carregarStatsEntregas() {
   // Entregas (Revisar/XLSX/Cronograma/PDF/PPT) só ligam com projeto pronto.
   if (!emProcesso && !emErro) habilitarEntregas();
   // Stats dos cards de entregas não fazem sentido no meio do processamento.
-  if (!emProcesso) carregarStatsEntregas();
+  if (!emProcesso) carregarStatsEntregas(items);
 
   // Cada render protegido — se um quebrar, os outros continuam
   safeRun(() => renderHeader(proj), 'renderHeader');

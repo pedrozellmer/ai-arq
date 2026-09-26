@@ -34,6 +34,12 @@
   background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.28);border-radius:99px;padding:4px 11px}
 @media (max-width:640px){ .faixa{padding:18px} .faixa h2{font-size:19px} .fx-ico{width:42px;height:42px} }
 
+/* 26/09 (Pedro: "ao mudar de página o site fica carregando de novo"): o "Carregando…" (#gate) cobria a
+   tela INTEIRA, menu junto, em branco — cada troca parecia recarregar o site. Agora, no computador, ele
+   cobre só o conteúdo: o menu (fixo, 248 px) fica parado, e o fundo é o da página, sem clarão. */
+#gate{background:#F9FAFB !important}
+@media (min-width:1024px){ #gate{left:248px !important} }
+
 /* tabela da casa: cabeçalho CLARO no tom da ferramenta (era a faixa preta bg-slate-800).
    O seletor com a tabela vence o utilitário do Tailwind sem !important. */
 table.tab-clara thead th{background:color-mix(in srgb,var(--c1,#4F46E5) 9%,#fff);color:#334155;

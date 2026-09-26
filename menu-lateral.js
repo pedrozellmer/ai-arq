@@ -511,6 +511,30 @@
     (document.head || document.documentElement).appendChild(st);
   }
 
+  // 🐢 26/09 (Pedro: "trocar de página está devagar"): o HTML de cada página leva ~0,5 s pra chegar
+  // (medido). Ao APONTAR pra um item do menu, a página já começa a vir (prefetch) — no clique ela está
+  // no cache do navegador. Só a página, nunca dados: o que ela mostra continua sendo buscado fresco.
+  function adiantarAoApontar(side) {
+    var feitos = {};
+    function adianta(ev) {
+      var a = ev.target && ev.target.closest && ev.target.closest('a[href]');
+      if (!a) return;
+      var u;
+      try { u = new URL(a.getAttribute('href'), location.href); } catch (_) { return; }
+      if (u.origin !== location.origin || !/\.html$/.test(u.pathname) || u.pathname === location.pathname) return;
+      var chave = u.pathname + u.search;
+      if (feitos[chave]) return;
+      feitos[chave] = 1;
+      var l = document.createElement('link');
+      l.rel = 'prefetch';
+      l.href = chave;
+      (document.head || document.documentElement).appendChild(l);
+    }
+    side.addEventListener('pointerover', adianta);
+    side.addEventListener('focusin', adianta);
+    side.addEventListener('touchstart', adianta, { passive: true });
+  }
+
   function montar() {
     injetarCSS();
 
@@ -562,6 +586,7 @@
 
     document.body.appendChild(scrim);
     document.body.appendChild(side);
+    adiantarAoApontar(side);
     if (ESC) {                         // nome e resumo do projeto do Escritório (texto, nunca HTML)
       var escNome = side.querySelector('#aiarq-proj-nome'), escSub = side.querySelector('#aiarq-proj-sub');
       if (escNome) escNome.textContent = String(ESC.nome || 'Projeto').slice(0, 160);
