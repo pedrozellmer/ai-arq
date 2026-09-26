@@ -439,15 +439,29 @@ function renderMoldura() {
   }
   const revisar = TAR.filter((t) => t.status === 'revdtz').length, minhasAt = TAR.filter((t) => eMinha(t) && atrasada(t)).length;
   const it = (v, ic, txt, est) => `<a class="s-it ${VIEW === v ? 'on' : ''}" ${VIEW === v ? 'aria-current="page"' : ''} href="#/p/${PROJ.id}/${v}">${svg(ic)}${txt}${est || ''}</a>`;
-  $('side-c').innerHTML = `<a class="s-it" href="#/" style="font-size:12px;color:#64748B">← Todos os projetos</a>
-    <div class="s-fix"><span class="tag">Projeto aberto</span><b>${esc(PROJ.nome)}</b><span>${esc(PROJ.etapa_atual || '')} · ${MEMBROS.filter((m) => m.status === 'ativo').length} pessoas</span></div>
+  const nAtivos = MEMBROS.filter((m) => m.status === 'ativo').length;
+  // 26/09 (Pedro: "o ideal é que fique sempre visível"): projeto ligado ao medido mostra, aqui também, o grupo
+  // "Quantitativo e obra" — o MESMO menu que o menu-lateral.js monta nas páginas do medido. A equipe só vê
+  // o que pode (Quantitativo, Cronograma, Memorial; só leitura).
+  const J = PROJ.job_id ? encodeURIComponent(PROJ.job_id) : '';
+  const fora = (href, ic, txt) => `<a class="s-it" href="${href}">${svg(ic)}${txt}</a>`;
+  const obra = PROJ.job_id ? `<div class="s-grp"><div class="s-grp-t">Quantitativo e obra</div>
+      ${fora(`projeto.html?job_id=${J}#quantitativo`, 'plan', 'Quantitativo')}
+      ${souAdmin() ? fora(`revisao.html?job_id=${J}`, 'rev', 'Revisão') : ''}
+      ${fora(`cronograma.html?job_id=${J}`, 'crono', 'Cronograma')}
+      ${souAdmin() ? fora(`financeiro.html?job_id=${J}`, 'fin', 'Financeiro') : ''}
+      ${fora(`memorial.html?job_id=${J}`, 'memo', 'Memorial')}
+      ${souAdmin() ? fora(`projeto.html?job_id=${J}#cotacoes`, 'cot', 'Comparativo') : ''}
+    </div>` : '';
+  $('side-c').innerHTML = `<a class="s-it" href="#/" style="font-size:12px;color:#64748B">← Projetos do Escritório</a>
+    <div class="s-fix"><span class="tag">Escritório · projeto aberto</span><b>${esc(PROJ.nome)}</b><span>${esc(PROJ.etapa_atual || '')} · ${nAtivos} pessoa${nAtivos === 1 ? '' : 's'}</span></div>
     <div class="s-grp">
       ${it('capa', 'capa', 'Página do projeto')}
       ${it('tarefas', 'tar', 'Tarefas', souAdmin() ? (revisar ? `<span class="s-est pend">${revisar} pra revisar</span>` : '') : (minhasAt ? `<span class="s-est pend">${minhasAt} atrasada</span>` : ''))}
       ${it('arquivos', 'arq', 'Arquivos', PROJ && PROJ.pasta_id ? '' : '<span class="s-est">Drive</span>')}
       ${it('atas', 'atas', 'Atas', `<span class="s-est">${ATAS.length}</span>`)}
-      ${it('equipe', 'eq', 'Equipe', `<span class="s-est">${MEMBROS.filter((m) => m.status === 'ativo').length}</span>`)}
-    </div>`;
+      ${it('equipe', 'eq', 'Equipe', `<span class="s-est">${nAtivos}</span>`)}
+    </div>${obra}`;
   const nomes = { capa: 'Página do projeto', tarefas: 'Tarefas', arquivos: 'Arquivos', atas: 'Atas', equipe: 'Equipe' };
   $('trilha').innerHTML = `<a href="dashboard.html">Início</a><span>›</span><a href="#/">Escritório</a><span>›</span><a href="#/p/${PROJ.id}/capa">${esc(PROJ.nome)}</a>`;
   $('titulo').textContent = nomes[VIEW] || PROJ.nome;

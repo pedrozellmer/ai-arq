@@ -93,4 +93,17 @@ def test_o_grupo_antigo_nao_aparece_depois_da_troca():
     f = _funcao_js(_ler("menu-lateral.js"), "function montarEscritorio(uid) {")
     assert "if (!ok || ESC) return;" in f
 
+
+def test_o_menu_da_propria_tela_do_escritorio_tambem_mostra_quantitativo_e_obra():
+    # 26/09 — Pedro: "passo pra Equipe e o Quantitativo, Memorial… tudo some"
+    h = _ler("escritorio.html")
+    i = h.index("function renderMoldura() {")
+    f = h[i:h.index("\n}\n", i)]
+    assert "const obra = PROJ.job_id ?" in f and "${obra}" in f
+    for href in ("projeto.html?job_id=${J}#quantitativo", "cronograma.html?job_id=${J}", "memorial.html?job_id=${J}"):
+        assert href in f
+    # o que é do dono fica atrás do souAdmin(), como no menu-lateral.js
+    for href in ("revisao.html?job_id=${J}", "financeiro.html?job_id=${J}", "projeto.html?job_id=${J}#cotacoes"):
+        assert "souAdmin() ? fora(`" + href in f, href
+
 # controle positivo (25/09): tirar "c.job === JOB && " do menu-lateral.js reprovou o 2º teste.
