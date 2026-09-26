@@ -1327,12 +1327,22 @@ async function carregarStatsEntregas(itensJaLidos) {
 
   // ── CARREGA DADOS EM PARALELO, cada um com fallback ──
   // Se qualquer um travar/falhar, os outros ainda rodam.
+  // 🐢 26/09: as leituras desta abertura usam o cache curto da aba (aiarq-utils.js → aiarqCache): o que outra
+  // tela do projeto acabou de buscar (≤ 30 s, sem escrita no meio) chega na hora, sem ir ao servidor.
+  const lerComCache = async (url, headers, teto) => {
+    const C = window.aiarqCache, uid = session.user.id, cabe = !!(C && C.cabe(url));
+    const guardado = cabe ? C.ler(url, uid) : null;
+    if (guardado !== null) return JSON.parse(guardado);
+    const g0 = cabe ? C.geracao() : 0;
+    const r = await fetchWithTimeout(url, { headers }, teto);
+    const texto = await r.text();
+    if (cabe && r.ok && C.geracao() === g0) C.guardar(url, uid, texto);
+    return JSON.parse(texto);
+  };
   const getProjects = async () => {
     try {
-      const r = await fetchWithTimeout(`${API_BASE}/api/projects/by-user/${session.user.id}`, {
-        headers: { Authorization: `Bearer ${session.access_token}` }
-      }, 15000);
-      return await r.json();
+      return await lerComCache(`${API_BASE}/api/projects/by-user/${session.user.id}`,
+        { Authorization: `Bearer ${session.access_token}` }, 15000);
     } catch (e) {
       console.error('[projects] erro:', e);
       return { projects: [] };
@@ -1342,8 +1352,7 @@ async function carregarStatsEntregas(itensJaLidos) {
     try {
       const { data: { session } } = await sb.auth.getSession();
       const headers = session ? { 'Authorization': `Bearer ${session.access_token}` } : {};
-      const r = await fetchWithTimeout(`${API_BASE}/api/items/${jobId}`, { headers }, 15000);
-      return await r.json();
+      return await lerComCache(`${API_BASE}/api/items/${jobId}`, headers, 15000);
     } catch (e) {
       console.error('[items] erro:', e);
       return { items: [] };
@@ -1353,8 +1362,7 @@ async function carregarStatsEntregas(itensJaLidos) {
     try {
       const { data: { session } } = await sb.auth.getSession();
       const headers = session ? { 'Authorization': `Bearer ${session.access_token}` } : {};
-      const r = await fetchWithTimeout(`${API_BASE}/api/items/${jobId}/review-state`, { headers }, 10000);
-      return await r.json();
+      return await lerComCache(`${API_BASE}/api/items/${jobId}/review-state`, headers, 10000);
     } catch (e) {
       console.error('[review-state] erro:', e);
       return { state: {} };

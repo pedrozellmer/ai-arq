@@ -640,10 +640,68 @@
   // 23/08/2026 (board): sem timeout, servidor pendurado virava "Carregando…"
   // eterno; 401 virava "Erro ao salvar: …" técnico. Agora: 45 s de teto (a não
   // ser que quem chamou passe o próprio signal) e aviso único de sessão expirada.
+  // ─── cache curto dos dados (26/09) ───────────────────────────
+  // 🐢 Pedro: "trocar de página está devagar". Medido: cada chamada à API leva 0,5–0,85 s (servidor
+  // longe) e as telas do projeto pedem os MESMOS dados (os itens da planilha) uma atrás da outra.
+  // Leitura das rotas abaixo fica guardada NA ABA por 30 s — no clique seguinte a página já acha pronto.
+  // 🔒 Regras: só GET, só as rotas da lista (nenhuma com efeito colateral: o ?marcar=1 da revisão não
+  // entra), chave com o id da pessoa, e QUALQUER pedido que não seja leitura — por authFetch, fetch ou
+  // o Supabase — apaga tudo antes e depois: depois de uma mudança, nada velho aparece.
+  var _CACHE_PFX = 'aiarq_c:', _CACHE_MS = 30000, _CACHE_MAX = 1500000;
+  var _CACHE_OK = /\/api\/(items\/[^/?#]+|items\/[^/?#]+\/review-state|cronograma\/[^/?#]+(\/full)?|memorial\/[^/?#]+\/estrutura|projects\/[^/?#]+\/quotes|projeto\/[^/?#]+\/coerencia|meus-entregaveis|projects\/by-user\/[^/?#]+)$/;
+  function _cacheChave(url, uid) { return _CACHE_PFX + (uid || '') + '|' + String(url); }
+  // leitura que ATRAVESSOU uma escrita (começou antes, terminou depois) não é guardada: traria o de antes
+  var _cacheGeracao = 0;
+  window.aiarqCache = {
+    geracao: function () { return _cacheGeracao; },
+    cabe: function (url, metodo) {
+      return (!metodo || String(metodo).toUpperCase() === 'GET') && _CACHE_OK.test(String(url).split('#')[0]);
+    },
+    ler: function (url, uid) {
+      try {
+        var v = JSON.parse(sessionStorage.getItem(_cacheChave(url, uid)) || 'null');
+        return v && (Date.now() - v.t) < _CACHE_MS ? v.b : null;
+      } catch (e) { return null; }
+    },
+    guardar: function (url, uid, texto) {
+      try { if (texto && texto.length <= _CACHE_MAX) sessionStorage.setItem(_cacheChave(url, uid), JSON.stringify({ t: Date.now(), b: texto })); } catch (e) {}
+    },
+    limpar: function () {
+      _cacheGeracao++;
+      try {
+        for (var i = sessionStorage.length - 1; i >= 0; i--) {
+          var k = sessionStorage.key(i);
+          if (k && k.indexOf(_CACHE_PFX) === 0) sessionStorage.removeItem(k);
+        }
+      } catch (e) {}
+    }
+  };
+  // toda escrita da página (qualquer caminho) apaga o cache — antes de sair e quando volta
+  try {
+    var _fetchOrig = window.fetch.bind(window);
+    window.fetch = function (input, init) {
+      var m = (init && init.method) || (input && typeof input === 'object' && input.method) || 'GET';
+      if (String(m).toUpperCase() === 'GET' || String(m).toUpperCase() === 'HEAD') return _fetchOrig(input, init);
+      window.aiarqCache.limpar();
+      return _fetchOrig(input, init).then(function (r) { window.aiarqCache.limpar(); return r; },
+                                           function (e) { window.aiarqCache.limpar(); throw e; });
+    };
+  } catch (e) {}
+
   var _avisouSessao = false;
   window.authFetch = async function (url, options) {
     options = options || {};
     const { data: { session } } = await _sbClient.auth.getSession();
+    // cache curto (ver acima): leitura de rota da lista, feita há menos de 30 s nesta aba
+    var _uid = session && session.user && session.user.id;
+    var _cacheavel = !options.signal && window.aiarqCache.cabe(url, options.method);
+    var _g0 = window.aiarqCache.geracao();
+    if (_cacheavel) {
+      var _guardado = window.aiarqCache.ler(url, _uid);
+      if (_guardado !== null) {
+        return new Response(_guardado, { status: 200, headers: { 'Content-Type': 'application/json', 'X-Aiarq-Cache': '1' } });
+      }
+    }
     const headers = Object.assign({}, options.headers || {});
     if (session && session.access_token) {
       headers['Authorization'] = 'Bearer ' + session.access_token;
@@ -671,6 +729,12 @@
         setTimeout(function () { _avisouSessao = false; }, 60000);
         try {
           notify.warn('Sua sessão expirou ou não deu pra confirmar seu login. Recarregue a página e entre de novo.');
+        } catch (e) {}
+      }
+      if (_cacheavel && resp.ok && window.aiarqCache.geracao() === _g0) {
+        try {
+          var _txt = await resp.clone().text();
+          window.aiarqCache.guardar(url, _uid, _txt);
         } catch (e) {}
       }
       return resp;

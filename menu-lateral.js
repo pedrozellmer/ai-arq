@@ -514,25 +514,49 @@
   // 🐢 26/09 (Pedro: "trocar de página está devagar"): o HTML de cada página leva ~0,5 s pra chegar
   // (medido). Ao APONTAR pra um item do menu, a página já começa a vir (prefetch) — no clique ela está
   // no cache do navegador. Só a página, nunca dados: o que ela mostra continua sendo buscado fresco.
+  // 26/09, 2ª parte (Pedro: "bora"): além da página, os DADOS dela — pelo authFetch, que guarda 30 s na
+  // aba (aiarq-utils.js → aiarqCache). Só leituras sem efeito colateral e só do projeto fixado; os
+  // mesmos itens servem Projeto, Revisão e Financeiro (uma busca só). Espera 150 ms parado em cima.
+  // Cada rota escrita por extenso (o guarda test_botao_bate_com_a_rota confere que ela existe no servidor).
+  // Repetir não custa: dentro de 30 s o authFetch devolve o guardado, sem ir ao servidor.
+  function adiantarDados(pagina) {
+    if (!FIXADO || !window.API_BASE || !window.authFetch || !window.aiarqCache) return;
+    var b = window.API_BASE, j = encodeURIComponent(JOB), p = [];
+    if (pagina === 'projeto.html' || pagina === 'revisao.html' || pagina === 'financeiro.html') p.push(window.authFetch(b + '/api/items/' + j));
+    if (pagina === 'projeto.html') p.push(window.authFetch(b + '/api/items/' + j + '/review-state'));
+    if (pagina === 'financeiro.html' || pagina === 'cronograma.html') p.push(window.authFetch(b + '/api/cronograma/' + j));
+    if (pagina === 'memorial.html') p.push(window.authFetch(b + '/api/memorial/' + j + '/estrutura'));
+    p.forEach(function (x) { x.catch(function () {}); });       // guarda no cache; ninguém espera a resposta
+  }
   function adiantarAoApontar(side) {
-    var feitos = {};
-    function adianta(ev) {
-      var a = ev.target && ev.target.closest && ev.target.closest('a[href]');
-      if (!a) return;
+    var feitos = {}, espera = null;
+    function adianta(a) {
       var u;
       try { u = new URL(a.getAttribute('href'), location.href); } catch (_) { return; }
       if (u.origin !== location.origin || !/\.html$/.test(u.pathname) || u.pathname === location.pathname) return;
       var chave = u.pathname + u.search;
-      if (feitos[chave]) return;
-      feitos[chave] = 1;
-      var l = document.createElement('link');
-      l.rel = 'prefetch';
-      l.href = chave;
-      (document.head || document.documentElement).appendChild(l);
+      if (!feitos[chave]) {
+        feitos[chave] = 1;
+        var l = document.createElement('link');
+        l.rel = 'prefetch';
+        l.href = chave;
+        (document.head || document.documentElement).appendChild(l);
+      }
+      adiantarDados(u.pathname.split('/').pop());
     }
-    side.addEventListener('pointerover', adianta);
-    side.addEventListener('focusin', adianta);
-    side.addEventListener('touchstart', adianta, { passive: true });
+    function aoApontar(ev) {
+      var a = ev.target && ev.target.closest && ev.target.closest('a[href]');
+      if (!a) return;
+      clearTimeout(espera);
+      espera = setTimeout(function () { adianta(a); }, 150);
+    }
+    side.addEventListener('pointerover', aoApontar);
+    side.addEventListener('pointerout', function () { clearTimeout(espera); });
+    side.addEventListener('focusin', aoApontar);
+    side.addEventListener('touchstart', function (ev) {
+      var a = ev.target && ev.target.closest && ev.target.closest('a[href]');
+      if (a) adianta(a);
+    }, { passive: true });
   }
 
   function montar() {
