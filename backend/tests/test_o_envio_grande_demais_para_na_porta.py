@@ -62,14 +62,19 @@ JOB = "job12345"   # 🔒 regra dura nº6: rótulo, nunca pessoa
 # 🪤 Um `b"%PDF-1.4 blá"` faria `pdf_page_count` devolver 1 em TODO arquivo, e o
 # guarda passaria a medir o fallback de erro em vez da contagem real. Estes PDFs
 # abrem no pypdfium2 — o mesmo motor que a produção usa.
-def _pdf_com_paginas(n: int) -> bytes:
+def _pdf_com_paginas(n: int, marca: str = "") -> bytes:
+    """🪤 26/09/2026: a `marca` (o nome do arquivo) entra num comentário do
+    cabeçalho, ANTES das posições do xref. Sem ela, dois PDFs com o mesmo nº de
+    páginas saíam byte a byte iguais — e desde que a porta única lê o MESMO
+    arquivo uma vez só (`_sem_arquivos_repetidos`), o "envio de 6 arquivos"
+    virava 1 e a régua deixava de ser testada. Arquivo diferente, bytes diferentes."""
     n = max(1, int(n))
     objetos = [b"<< /Type /Catalog /Pages 2 0 R >>",
                ("<< /Type /Pages /Kids [%s] /Count %d >>"
                 % (" ".join("%d 0 R" % (3 + i) for i in range(n)), n)).encode()]
     objetos += [b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] >>"] * n
 
-    saida = bytearray(b"%PDF-1.4\n")
+    saida = bytearray(b"%PDF-1.4\n" + (("% " + marca + "\n").encode("utf-8") if marca else b""))
     offsets = []
     for i, corpo in enumerate(objetos, start=1):
         offsets.append(len(saida))
@@ -85,13 +90,13 @@ def _pdf_com_paginas(n: int) -> bytes:
 
 def _escreve(tmp_path, nome, paginas):
     p = tmp_path / nome
-    p.write_bytes(_pdf_com_paginas(paginas))
+    p.write_bytes(_pdf_com_paginas(paginas, marca=nome))
     return str(p)
 
 
 def _cad(tmp_path, nome):
     p = tmp_path / nome
-    p.write_bytes(b"AC1032" + b"z" * 400)
+    p.write_bytes(b"AC1032" + b"z" * 400 + nome.encode("utf-8"))   # 🪤 bytes próprios (ver acima)
     return str(p)
 
 
@@ -485,7 +490,9 @@ def test_pdf_que_nao_abre_conta_como_uma_pagina_e_nao_barra(bancada, tmp_path):
     ruins = []
     for i in range(40):
         p = tmp_path / ("quebrado-%02d.pdf" % i)
-        p.write_bytes(b"%PDF-1.4 isto nao abre")
+        # 🪤 26/09: bytes próprios — 40 cópias idênticas viravam 1 arquivo na
+        # porta (`_sem_arquivos_repetidos`) e este guarda passava sem testar nada
+        p.write_bytes(b"%%PDF-1.4 isto nao abre %02d" % i)
         ruins.append(str(p))
     _dispara(ruins)
     assert bancada.rodou_motor == [JOB], (
@@ -493,6 +500,7 @@ def test_pdf_que_nao_abre_conta_como_uma_pagina_e_nao_barra(bancada, tmp_path):
     linhas = _logs_de(bancada, "motor:paginas-do-envio")
     assert linhas and "=1/1" in linhas[0]["message"], (
         "o PDF que não abre não aparece no rastro — vira silêncio")
+    assert "a_ler=40 " in linhas[0]["message"], "a conta tem de ver os 40, não 1: " + linhas[0]["message"][:80]
 
 
 def test_cad_nao_entra_na_conta_de_paginas(bancada, tmp_path):
