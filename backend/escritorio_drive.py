@@ -365,6 +365,115 @@ def projeto_arquivos(projeto_id: str, request: Request, pasta: str = ""):
                          for f in r.get("files", [])]}
 
 
+# ── emitir: cópia com R00, R01… na pasta "Emitidos" ────────────────────────
+# 23/09 (Pedro): "renomear com R00/R01 ao emitir" e "é uma CÓPIA" — o original segue sendo o arquivo de
+# TRABALHO; o que foi pro cliente vira uma cópia com a revisão no nome, dentro de "Emitidos".
+
+EMITIDOS = "Emitidos"
+_GOOGLE_NATIVO = "application/vnd.google-apps."     # Docs, Planilhas… não têm extensão no nome
+_REV_NO_FIM = re.compile(r"[ _-]+R\d{2}$", re.I)
+_ID_DRIVE = re.compile(r"[A-Za-z0-9_-]{10,200}")
+
+
+def nome_da_emissao(nome: str, revisao: int, nativo: bool = False) -> str:
+    """'Planta baixa.dwg' + 3 → 'Planta baixa_R03.dwg'. Uma revisão que já estivesse no fim do nome sai
+    ('Planta_R02.dwg' → 'Planta_R03.dwg', nunca 'Planta_R02_R03.dwg')."""
+    base, ext = str(nome or "").strip(), ""
+    m = None if nativo else re.match(r"^(.+?)(\.[A-Za-z0-9]{1,8})$", base)
+    if m:
+        base, ext = m.group(1), m.group(2)
+    base = _REV_NO_FIM.sub("", base).strip() or "arquivo"
+    return f"{base[:290]}_R{revisao:02d}{ext}"
+
+
+def _pasta_emitidos(tok: str, raiz: str) -> str:
+    """A pasta "Emitidos" direto dentro da pasta do projeto — criada na 1ª emissão."""
+    st, r = _drive("GET", "files", tok, params={
+        "q": f"'{raiz}' in parents and name='{EMITIDOS}' and mimeType='{PASTA}' and trashed=false",
+        "fields": "files(id)", "orderBy": "createdTime", "pageSize": "5",
+        "supportsAllDrives": "true", "includeItemsFromAllDrives": "true"})
+    if st != 200 or r is None:
+        raise HTTPException(502, "O Google não respondeu agora. Tente de novo em instantes.")
+    if r.get("files"):
+        return r["files"][0]["id"]
+    st_c, nova = _drive("POST", "files", tok, params={"supportsAllDrives": "true", "fields": "id"},
+                        corpo={"name": EMITIDOS, "mimeType": PASTA, "parents": [raiz]})
+    if st_c != 200 or not nova or not nova.get("id"):
+        raise HTTPException(502, "Não consegui criar a pasta Emitidos no Drive. Tente de novo em instantes.")
+    return nova["id"]
+
+
+@router.post("/projetos/{projeto_id}/emitir")
+def projeto_emitir(projeto_id: str, request: Request, corpo: dict):
+    """A admin emite um arquivo da pasta do projeto. A revisão é POR ARQUIVO (R00 na 1ª vez, depois R01…),
+    contada no banco; a cópia vai pra "Emitidos" e fica travada contra edição no Drive (a dona destrava lá
+    se precisar). Nada muda no original."""
+    eu = esc._exige_login(request)
+    if esc._papel(request, projeto_id) != "dono":
+        raise HTTPException(403, "Só a admin do projeto emite.")
+    arquivo = str((corpo or {}).get("arquivo_id") or "").strip()
+    if not _ID_DRIVE.fullmatch(arquivo):
+        raise HTTPException(400, "Arquivo inválido.")
+    nota = str((corpo or {}).get("nota") or "").strip()[:1000] or None
+    p = _dono_do_projeto(projeto_id)
+    if not p.get("pasta_id"):
+        raise HTTPException(409, "Ligue a pasta do Drive a este projeto antes de emitir.")
+    if not _conexao(p["dono"]):
+        raise HTTPException(409, "O Google Drive não está conectado.")
+    tok = _acesso(p["dono"])
+    st, f = _drive("GET", f"files/{arquivo}", tok,
+                   params={"fields": "id,name,mimeType,parents,trashed", "supportsAllDrives": "true"})
+    if st == 404 or (st == 200 and (not f or f.get("trashed"))):
+        raise HTTPException(404, "Esse arquivo não está mais no Drive.")
+    if st != 200:
+        raise HTTPException(502, "O Google não respondeu agora. Tente de novo em instantes.")
+    if f.get("mimeType") == PASTA:
+        raise HTTPException(400, "Pasta não se emite: escolha um arquivo.")
+    pai = (f.get("parents") or [""])[0]
+    if not pai or not _dentro_da_pasta(tok, pai, p["pasta_id"]):
+        raise HTTPException(403, "Esse arquivo não é da pasta deste projeto.")
+    emitidos = _pasta_emitidos(tok, p["pasta_id"])
+    if pai == emitidos:
+        raise HTTPException(400, "Esse já é uma cópia emitida. Emita o arquivo de trabalho.")
+    st_r, ja = esc._SERVICO("GET", "escritorio_emissoes", params={
+        "projeto_id": f"eq.{projeto_id}", "arquivo_id": f"eq.{arquivo}", "select": "revisao",
+        "order": "revisao.desc", "limit": "1"})
+    if st_r >= 300 or st_r == 0 or ja is None:
+        raise HTTPException(502, "O banco não respondeu agora. Tente de novo em instantes.")
+    rev = int(ja[0]["revisao"]) + 1 if ja else 0
+    if rev > 99:
+        raise HTTPException(409, "Este arquivo já chegou à R99.")
+    original = str(f.get("name") or "arquivo")
+    nome = nome_da_emissao(original, rev, str(f.get("mimeType") or "").startswith(_GOOGLE_NATIVO))
+    # 🔒 a revisão é RESERVADA no banco ANTES da cópia: dois cliques juntos não viram duas R03 (a chave única
+    # projeto+arquivo+revisão barra o 2º) nem deixam cópia órfã no Drive.
+    st_i, linha = esc._SERVICO("POST", "escritorio_emissoes", body={
+        "projeto_id": projeto_id, "arquivo_id": arquivo, "arquivo_nome": original[:300], "revisao": rev,
+        "copia_nome": nome, "nota": nota, "emitido_por": eu["id"]}, prefer="return=representation")
+    if st_i == 409:
+        raise HTTPException(409, f"A R{rev:02d} deste arquivo acabou de ser emitida. Atualize a página.")
+    if st_i >= 300 or st_i == 0 or not linha:
+        raise HTTPException(502, "Não consegui registrar a emissão agora. Tente de novo em instantes.")
+    emissao_id = linha[0]["id"]
+    st_c, copia = _drive("POST", f"files/{arquivo}/copy", tok,
+                         params={"supportsAllDrives": "true", "fields": "id,name,webViewLink"},
+                         corpo={"name": nome, "parents": [emitidos]})
+    if st_c != 200 or not copia or not copia.get("id"):
+        st_d, _ = esc._SERVICO("DELETE", "escritorio_emissoes", params={"id": f"eq.{emissao_id}"})
+        if st_d >= 300 or st_d == 0:
+            esc._registrar("escritorio:emitir", f"a cópia falhou e a reserva {emissao_id} ficou no banco (HTTP {st_d})")
+        raise HTTPException(502, "O Google não fez a cópia agora. Nada foi emitido; tente de novo.")
+    st_u, _ = esc._SERVICO("PATCH", "escritorio_emissoes", params={"id": f"eq.{emissao_id}"},
+                           body={"copia_id": copia["id"], "copia_nome": str(copia.get("name") or nome)[:320]})
+    if st_u >= 300 or st_u == 0:
+        esc._registrar("escritorio:emitir", f"emissão {emissao_id} ficou sem o id da cópia (HTTP {st_u})")
+    # trava a cópia contra edição; falhou = segue (a cópia existe e está registrada)
+    st_t, _ = _drive("PATCH", f"files/{copia['id']}", tok, params={"supportsAllDrives": "true", "fields": "id"},
+                     corpo={"contentRestrictions": [{"readOnly": True, "reason": f"Emitido como R{rev:02d} pelo AI.arq"}]})
+    return {"ok": True, "emissao_id": emissao_id, "revisao": rev, "nome": str(copia.get("name") or nome),
+            "link": copia.get("webViewLink") or "", "travada": st_t == 200}
+
+
 # ── compartilhamento com a equipe ──────────────────────────────────────────
 
 def sincronizar(projeto_id: str) -> dict:

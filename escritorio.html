@@ -209,6 +209,22 @@
   .arq-cab-l{display:flex;gap:12px;padding:0 12px 6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#94A3B8}
   .arq-cab-l span:nth-child(1){width:38px;flex:none} .arq-cab-l span:nth-child(2){flex:1} .arq-cab-l span:nth-child(3){width:230px;flex:none} .arq-cab-l span:nth-child(4){width:72px;flex:none;text-align:right}
   @media (max-width:640px){ .arq-q,.arq-cab-l{display:none} }
+  /* 26/09 — emitir (cópia R00, R01… em "Emitidos") e a tela de Emissões */
+  .arq-e{width:92px;flex:none;text-align:right} .arq-cab-l span:nth-child(5){width:92px;flex:none}
+  .rev-tag{display:inline-block;margin-left:8px;font-size:11px;font-weight:700;padding:1px 7px;border-radius:6px;background:#E0F2FE;color:#0369A1;font-variant-numeric:tabular-nums;vertical-align:1px;white-space:nowrap}
+  .p-neu{background:#F8FAFC;color:#475569;border-color:#E2E8F0}
+  .emi-g{border:1px solid #E2E8F0;border-radius:14px;padding:14px 16px;margin-top:12px}
+  .emi-g h3{margin:0 0 10px;font-size:15px;display:flex;align-items:center;gap:8px;min-width:0;overflow-wrap:anywhere}
+  .emi-l{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+  .emi-l > li{display:flex;gap:10px 12px;align-items:flex-start;flex-wrap:wrap;padding:10px 12px;border-radius:12px;background:#F8FAFC}
+  .emi-n{flex:1 1 260px;min-width:0;font-size:14px;overflow-wrap:anywhere} .emi-n a{color:#0F172A;font-weight:600} .emi-n a:hover{color:#0369A1}
+  .emi-n small{display:block;color:#64748B;font-size:12px;margin-top:2px}
+  .emi-nota{font-size:13px;color:#334155;margin:4px 0 0}
+  .emi-hist{list-style:none;margin:8px 0 0;padding:0 0 0 10px;border-left:2px solid #E2E8F0;font-size:12.5px;color:#475569}
+  .emi-hist li{padding:2px 0}
+  .emi-st{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex:none}
+  @media (max-width:640px){ .emi-st{flex-direction:row;align-items:center;width:100%} .emi-g{padding:12px} }
+  .ret-op{display:flex;flex-direction:column;gap:6px;margin:0 0 12px} .ret-op label{display:flex;gap:8px;align-items:center;font-size:14px;cursor:pointer}
   /* ata: data em destaque */
   .ata{border-left:4px solid #10B981}
   .ata-dia{width:54px;flex:none;text-align:center;border-radius:12px;background:#ECFDF5;color:#065F46;padding:6px 0}
@@ -343,6 +359,8 @@ let NO_PILOTO = false;
 let EU = null, PROJETOS = [], PROJ = null, MEMBROS = [], PAPEL = null, TAR = [], PESSOAS_T = [], ATAS = [], NOTAS = {};
 // 26/09: checklist e etiquetas do cartão (tabelas da seção 24). TEM_CHK = as tabelas existem e leram bem.
 let CHK = [], ETQ = [], TETQ = [], TEM_CHK = false;
+// 26/09: emissões ao cliente (R00, R01…) e o que o cliente respondeu. TEM_EMI = leu bem.
+let EMI = [], EMI_EV = [], TEM_EMI = false;
 let VIEW = 'lista', FILTRO = 'todas', FILTRO_E = '', ETAPA_SEL = null;
 
 // ── utilidades ──
@@ -402,11 +420,12 @@ const IC = {
   cot: '<path d="M4 8h13l-3-3M20 16H7l3 3"/>',
   cad: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/>',
   cli: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  emi: '<path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4z"/>',
 };
 // a cor de cada ferramenta (forte, clara, fundo) — a mesma no cartão da página do projeto e na faixa da tela dela
 const COR = { tar: ['#4F46E5', '#818CF8', '#EEF2FF'], arq: ['#D97706', '#F59E0B', '#FFFBEB'], atas: ['#059669', '#34D399', '#ECFDF5'], eq: ['#7C3AED', '#A78BFA', '#F5F3FF'],
   plan: ['#0891B2', '#22D3EE', '#ECFEFF'], crono: ['#EA580C', '#FB923C', '#FFF7ED'], memo: ['#2563EB', '#60A5FA', '#EFF6FF'], rev: ['#E11D48', '#FB7185', '#FFF1F2'],
-  cot: ['#0D9488', '#2DD4BF', '#F0FDFA'], fin: ['#16A34A', '#4ADE80', '#F0FDF4'] };
+  cot: ['#0D9488', '#2DD4BF', '#F0FDFA'], fin: ['#16A34A', '#4ADE80', '#F0FDF4'], emi: ['#0284C7', '#38BDF8', '#F0F9FF'] };
 // faixa colorida no topo de cada tela (ícone, título, uma linha e os botões da tela)
 const faixa = (ic, titulo, sub, acoes = '') => `<section class="faixa rise" style="--c1:${COR[ic][0]};--c2:${COR[ic][1]}">
   <span class="fx-ico">${svg(ic, 24)}</span><div style="flex:1 1 260px;min-width:0"><h2>${titulo}</h2>${sub ? `<p>${sub}</p>` : ''}</div>${acoes ? `<div class="linha fx-acoes">${acoes}</div>` : ''}</section>`;
@@ -458,6 +477,13 @@ async function carregarProjeto(id) {
   ]);
   TEM_CHK = !ck.error && !et.error && !te.error;
   CHK = TEM_CHK ? ck.data : []; ETQ = TEM_CHK ? et.data : []; TETQ = TEM_CHK ? te.data : [];
+  // emissões: também acessório — falhou, a tela de Emissões diz que não leu (e o resto segue)
+  const [em, ev] = await Promise.all([
+    sb.from('escritorio_emissoes').select('id,arquivo_id,arquivo_nome,revisao,copia_id,copia_nome,nota,emitido_por,emitido_em').eq('projeto_id', id).order('emitido_em', { ascending: false }),
+    sb.from('escritorio_emissao_eventos').select('id,emissao_id,tipo,em,nota,criado_em').eq('projeto_id', id).order('em').order('criado_em'),
+  ]);
+  TEM_EMI = !em.error && !ev.error;
+  EMI = TEM_EMI ? em.data : []; EMI_EV = TEM_EMI ? ev.data : [];
   if (PAPEL === 'dono') {   // contatos da equipe: só o admin (LGPD — a equipe não precisa do telefone do colega)
     const c = await sb.rpc('escritorio_contatos', { p_projeto: id });
     if (!c.error) c.data.forEach((x) => { const m = MEMBROS.find((y) => y.id === x.membro_id); if (m) { m.email = x.email; m.telefone = x.telefone; } });
@@ -485,6 +511,7 @@ function renderMoldura() {
   const revisar = TAR.filter((t) => t.status === 'revdtz').length, minhasAt = TAR.filter((t) => eMinha(t) && atrasada(t)).length;
   const it = (v, ic, txt, est) => `<a class="s-it ${VIEW === v ? 'on' : ''}" ${VIEW === v ? 'aria-current="page"' : ''} href="#/p/${PROJ.id}/${v}">${svg(ic)}${txt}${est || ''}</a>`;
   const nAtivos = MEMBROS.filter((m) => m.status === 'ativo').length;
+  const comCliente = EMI.filter((e) => (ultimoEv(e) || {}).tipo === 'enviado').length;
   // 26/09 (Pedro: "o ideal é que fique sempre visível"): projeto ligado ao medido mostra, aqui também, o grupo
   // "Quantitativo e obra" — o MESMO menu que o menu-lateral.js monta nas páginas do medido. A equipe só vê
   // o que pode (Quantitativo, Cronograma, Memorial; só leitura).
@@ -504,10 +531,11 @@ function renderMoldura() {
       ${it('capa', 'capa', 'Página do projeto')}
       ${it('tarefas', 'tar', 'Tarefas', souAdmin() ? (revisar ? `<span class="s-est pend">${revisar} pra revisar</span>` : '') : (minhasAt ? `<span class="s-est pend">${minhasAt} atrasada</span>` : ''))}
       ${it('arquivos', 'arq', 'Arquivos', PROJ && PROJ.pasta_id ? '' : '<span class="s-est">Drive</span>')}
+      ${it('emissoes', 'emi', 'Emissões', comCliente ? `<span class="s-est pend">${comCliente} com o cliente</span>` : EMI.length ? `<span class="s-est">${EMI.length}</span>` : '')}
       ${it('atas', 'atas', 'Atas', `<span class="s-est">${ATAS.length}</span>`)}
       ${it('equipe', 'eq', 'Equipe', `<span class="s-est">${nAtivos}</span>`)}
     </div>${obra}`;
-  const nomes = { capa: 'Página do projeto', tarefas: 'Tarefas', arquivos: 'Arquivos', atas: 'Atas', equipe: 'Equipe' };
+  const nomes = { capa: 'Página do projeto', tarefas: 'Tarefas', arquivos: 'Arquivos', emissoes: 'Emissões', atas: 'Atas', equipe: 'Equipe' };
   $('trilha').innerHTML = `<a href="dashboard.html">Início</a><span>›</span><a href="#/">Escritório</a><span>›</span><a href="#/p/${PROJ.id}/capa">${esc(PROJ.nome)}</a>`;
   $('titulo').textContent = nomes[VIEW] || PROJ.nome;
 }
@@ -521,7 +549,7 @@ async function navegar() {
     else {
       if (!PROJETOS.length || !PROJETOS.find((p) => p.id === r.id)) await carregarProjetos();
       if (!PROJ || PROJ.id !== r.id || !MEMBROS.length) { if (!(await carregarProjeto(r.id))) { location.hash = '#/'; return; } }
-      VIEW = ['capa', 'tarefas', 'arquivos', 'atas', 'equipe'].includes(r.view) ? r.view : 'capa';
+      VIEW = ['capa', 'tarefas', 'arquivos', 'emissoes', 'atas', 'equipe'].includes(r.view) ? r.view : 'capa';
     }
   } catch (e) {
     $('main').innerHTML = `<div class="card"><p class="h2">Não consegui carregar agora</p><p class="sub">Foi um soluço de conexão com o banco. Recarregue a página em instantes.</p></div>`;
@@ -551,7 +579,7 @@ function marcarContexto() {
 function render() {
   renderMoldura();
   marcarContexto();
-  const T = { lista: telaLista, capa: telaCapa, tarefas: telaTarefas, arquivos: telaArquivos, atas: telaAtas, equipe: telaEquipe };
+  const T = { lista: telaLista, capa: telaCapa, tarefas: telaTarefas, arquivos: telaArquivos, emissoes: telaEmissoes, atas: telaAtas, equipe: telaEquipe };
   const volta = VIEW !== 'lista' && VIEW !== 'capa' ? `<button class="voltar" onclick="ir('capa')">← Página do projeto</button>` : '';
   $('main').innerHTML = volta + T[VIEW]();
 }
@@ -689,6 +717,7 @@ function telaCapa() {
       <div class="lado">
         <div><p class="lbl" style="margin:0 0 4px">Próxima entrega</p>${prox ? `<p class="t">${esc(p.proxima_entrega || 'Entrega')}</p><p class="d">${p.proxima_entrega_data ? dBR(p.proxima_entrega_data) : 'sem data'}</p>` : `<p class="d" style="margin:0">Ainda não marcada.${souAdmin() ? ' Use <b>Editar projeto</b>.' : ''}</p>`}</div>
         <div><p class="lbl" style="margin:0 0 4px">Pasta do projeto</p><p class="d" style="margin:0">${svg('pastas', 14)} ${p.pasta_caminho ? 'Drive · ' + esc(p.pasta_caminho) : 'Google Drive · ainda não ligada'}</p></div>
+        ${EMI[0] ? `<div><p class="lbl" style="margin:0 0 4px">Última emissão</p><p class="t" style="overflow-wrap:anywhere">${esc(EMI[0].copia_nome || EMI[0].arquivo_nome)}</p><p class="d" style="margin:0;display:flex;gap:6px;align-items:center;flex-wrap:wrap">${esc(dBR(EMI[0].emitido_em))} ${pillEmissao(EMI[0])}</p></div>` : ''}
       </div>
     </div>
     ${et.length ? `<div style="margin-top:22px"><p class="lbl">Etapas</p><div class="etapas" role="tablist">
@@ -708,6 +737,7 @@ function telaCapa() {
     <div class="grade g2 g4">
       ${tool(`#/p/${p.id}/tarefas`, 'tar', 'Tarefas', `${abertas.length} abertas`)}
       ${tool(`#/p/${p.id}/arquivos`, 'arq', 'Arquivos', p.pasta_caminho ? 'Drive · ' + esc(p.pasta_caminho) : 'Ligar a pasta do Drive')}
+      ${tool(`#/p/${p.id}/emissoes`, 'emi', 'Emissões', EMI.length ? `${EMI.length} ${EMI.length === 1 ? 'emitida' : 'emitidas'}` : 'R00, R01… ao cliente')}
       ${tool(`#/p/${p.id}/atas`, 'atas', 'Atas', `${ATAS.length} ${ATAS.length === 1 ? 'reunião' : 'reuniões'}`)}
       ${tool(`#/p/${p.id}/equipe`, 'eq', 'Equipe', `${ativos.length} ${ativos.length === 1 ? 'pessoa' : 'pessoas'}`)}
     </div>
@@ -1092,8 +1122,10 @@ async function carregarArquivos() {
   // 26/09 (Pedro): pastas antes, e em ordem NATURAL — o Google ordena "10 Outubro" antes de "2 Fevereiro"
   arqs.sort((a, b) => (b.pasta - a.pasta) || String(a.nome).localeCompare(String(b.nome), 'pt-BR', { numeric: true, sensitivity: 'base' }));
   const nP = arqs.filter((f) => f.pasta).length, nA = arqs.length - nP;
+  // 26/09: a admin emite daqui (cópia com R00, R01… em "Emitidos"); dentro de Emitidos não — lá já são as cópias
+  const podeEmitir = souAdmin() && !(ARQ_TRILHA.length === 1 && ARQ_TRILHA[0].nome === 'Emitidos');
   corpo.innerHTML = trilha + (arqs.length ? `<p class="sub" style="margin:0 0 10px">${nP ? `${nP} pasta${nP > 1 ? 's' : ''}` : ''}${nP && nA ? ' · ' : ''}${nA ? `${nA} arquivo${nA > 1 ? 's' : ''}` : ''}</p>
-    <div class="arq-cab-l" aria-hidden="true"><span></span><span>Nome</span><span>Última modificação</span><span>Tamanho</span></div><ul class="arq-lista">${arqs.map((f) => {
+    <div class="arq-cab-l" aria-hidden="true"><span></span><span>Nome</span><span>Última modificação</span><span>Tamanho</span>${podeEmitir ? '<span></span>' : ''}</div><ul class="arq-lista">${arqs.map((f) => {
     const ic = ehIconeDoGoogle(f.icone) ? `<img src="${esc(f.icone)}" alt="" width="20" height="20">` : svg(f.pasta ? 'pastas' : 'arq', 20);
     // o que o Google Drive guarda: quando mudou (data E hora, no fuso de Brasília) e quem mudou por último
     const quando = f.mudou_em ? `${esc(quandoArq(f.mudou_em))}${f.por ? `<span class="arq-por">por ${esc(f.por)}</span>` : ''}` : '';
@@ -1104,7 +1136,10 @@ async function carregarArquivos() {
     // a LINHA inteira abre (pasta: entra; arquivo: abre no Drive) — o nome continua sendo o link de verdade
     const abre = f.pasta ? ` class="e-pasta arq-sub" data-sub="${esc(f.id)}" data-nome="${esc(f.nome)}" tabindex="0" role="link"`
       : linkOk ? ` class="arq-abre" data-link="${esc(f.link)}" tabindex="0" role="link"` : '';
-    return `<li${abre}><span class="arq-ic">${ic}</span><span class="arq-n">${nome}</span><span class="arq-q">${quando}</span><span class="arq-t">${f.pasta ? '—' : tamanhoArq(f.tamanho)}</span></li>`;
+    const ult = f.pasta ? null : EMI.find((e) => e.arquivo_id === f.id);   // EMI vem da mais nova pra mais velha
+    const tag = ult ? `<span class="rev-tag" title="Última revisão emitida deste arquivo">${revTxt(ult.revisao)}</span>` : '';
+    const emitir = podeEmitir ? `<span class="arq-e">${f.pasta ? '' : `<button type="button" class="btn btn-s arq-emitir" data-id="${esc(f.id)}" data-nome="${esc(f.nome)}">Emitir</button>`}</span>` : '';
+    return `<li${abre}><span class="arq-ic">${ic}</span><span class="arq-n">${nome}${tag}</span><span class="arq-q">${quando}</span><span class="arq-t">${f.pasta ? '—' : tamanhoArq(f.tamanho)}</span>${emitir}</li>`;
   }).join('')}</ul>` : passo('pastas', 'Pasta vazia', 'Os arquivos que você puser nesta pasta do Drive aparecem aqui.'))
     + (souAdmin() ? '' : '<p class="sub" style="margin-top:12px">Pra abrir e editar os arquivos, use a conta Google em que você recebeu o compartilhamento da pasta.</p>');
 }
@@ -1123,7 +1158,7 @@ function tamanhoArq(b) {
 }
 // arquivo: a linha inteira abre no Drive (o link já passou pelo ehLinkDoGoogle ao desenhar)
 document.addEventListener('click', (ev) => {
-  const li = ev.target.closest && ev.target.closest('.arq-abre'); if (!li || ev.target.closest('a')) return;
+  const li = ev.target.closest && ev.target.closest('.arq-abre'); if (!li || ev.target.closest('a,button')) return;
   const url = li.dataset.link || ''; if (ehLinkDoGoogle(url)) window.open(url, '_blank', 'noopener');
 });
 document.addEventListener('keydown', (ev) => {
@@ -1176,6 +1211,94 @@ async function sincronizarPasta(calado) {
   if (!r.ok) return toast(r.dados.detail || 'Não consegui atualizar o acesso.', true);
   const f = (r.dados.falhas || []).length;
   toast(`Acesso atualizado: ${r.dados.compartilhados || 0} entrou, ${r.dados.tirados || 0} saiu` + (f ? ` · ${f} não deu` : ''));
+}
+
+// ══════════════ EMISSÕES (R00, R01…) ══════════════
+// 23/09 (Pedro): "renomear com R00/R01 ao emitir", e é uma CÓPIA — o original segue sendo o de trabalho.
+// Quem copia e numera é o SERVIDOR (a revisão sai do banco); aqui a tela só mostra e registra o retorno do cliente.
+const revTxt = (n) => 'R' + String(Number(n) || 0).padStart(2, '0');
+const ID_DRIVE = /^[A-Za-z0-9_-]{10,200}$/;
+const linkCopia = (e) => (ID_DRIVE.test(e.copia_id || '') ? `https://drive.google.com/file/d/${e.copia_id}/view` : '');
+const evDa = (e) => EMI_EV.filter((x) => x.emissao_id === e.id);
+const ultimoEv = (e) => { const l = evDa(e); return l.length ? l[l.length - 1] : null; };
+const EV = { enviado: ['Enviada ao cliente', 'p-warn', 'Com o cliente'], aprovado: ['Cliente aprovou', 'p-ok', 'Aprovada'], revisao: ['Cliente pediu revisão', 'p-late', 'Revisão pedida'] };
+function pillEmissao(e) {
+  const u = ultimoEv(e);
+  return u && EV[u.tipo] ? `<span class="pill ${EV[u.tipo][1]}"><i></i>${EV[u.tipo][2]}</span>` : '<span class="pill p-neu"><i></i>Emitida</span>';
+}
+document.addEventListener('click', (ev) => {
+  const b = ev.target.closest && ev.target.closest('.arq-emitir'); if (!b) return;
+  ev.preventDefault(); ev.stopPropagation();
+  emitirArquivo(b.dataset.id || '', b.dataset.nome || '');
+});
+function emitirArquivo(id, nome) {
+  if (!ID_DRIVE.test(id)) return;
+  const ja = EMI.filter((e) => e.arquivo_id === id);
+  const prox = ja.length ? Math.max(...ja.map((e) => Number(e.revisao) || 0)) + 1 : 0;
+  abrirModal('Emitir ' + revTxt(prox), `
+    <p style="margin:0 0 10px;font-size:14px;line-height:1.5">Uma <b>cópia</b> de <b>${esc(nome)}</b> vai pra pasta <b>Emitidos</b> deste projeto, com <b>${revTxt(prox)}</b> no nome. O original continua sendo o arquivo de trabalho, sem mudar nada.</p>
+    ${ja.length ? `<p class="sub" style="margin:0 0 10px">Última emitida: ${revTxt(prox - 1)}, em ${esc(quandoArq(ja[0].emitido_em))}.</p>` : ''}
+    <label class="lbl" for="em-nota">O que muda nesta revisão (opcional)</label>
+    <textarea id="em-nota" class="in" rows="3" maxlength="1000" placeholder="Ex.: cozinha ajustada como pedido na reunião"></textarea>
+    <p class="sub" style="margin:8px 0 0">A cópia fica travada contra edição no Drive, pra ser sempre o que foi emitido.</p>
+    <div class="rodape"><button class="btn" onclick="fecharModal()">Cancelar</button><button class="btn btn-d" id="em-ok">Emitir ${revTxt(prox)}</button></div>`);
+  $('em-ok').onclick = () => confirmarEmissao(id);
+}
+async function confirmarEmissao(id) {
+  const b = $('em-ok'); if (!b || b.disabled) return;
+  b.disabled = true; b.textContent = 'Emitindo…';
+  const r = await apiEsc(`projetos/${PROJ.id}/emitir`, 'POST', { arquivo_id: id, nota: ($('em-nota') || {}).value || '' });
+  if (!r.ok) { b.disabled = false; b.textContent = 'Tentar de novo'; return toast(r.dados.detail || 'Não deu pra emitir agora.', true); }
+  fecharModal();
+  toast(`Emitido: ${r.dados.nome}` + (r.dados.travada ? '' : ' · a cópia não ficou travada no Drive'));
+  await recarregar();
+}
+function telaEmissoes() {
+  const ir2 = souAdmin() ? `<button class="btn btn-s" onclick="ir('arquivos')">Emitir um arquivo</button>` : '';
+  const topo = faixa('emi', 'Emissões ao cliente', 'Cada arquivo emitido vira uma cópia com a revisão no nome (R00, R01…) na pasta Emitidos. Aqui fica o que foi enviado e o que o cliente respondeu.', ir2);
+  if (!TEM_EMI) return topo + '<section class="card rise"><p class="vazio">Não consegui ler as emissões agora. Recarregue a página em instantes.</p></section>';
+  if (!EMI.length) return topo + `<section class="card rise"><div class="passo"><span class="passo-ic">${svg('emi', 28)}</span><b>Nenhuma emissão ainda</b><p>${souAdmin()
+    ? 'Em <b>Arquivos</b>, use <b>Emitir</b> num arquivo: uma cópia com R00 vai pra pasta Emitidos e aparece aqui, pra você registrar quando enviou e o que o cliente respondeu.'
+    : 'Quando a admin emitir um arquivo pro cliente, ele aparece aqui, com a revisão e a resposta do cliente.'}</p></div></section>`;
+  // um grupo por arquivo de trabalho, na ordem da emissão mais recente
+  const grupos = [], por = {};
+  for (const e of EMI) { if (!por[e.arquivo_id]) { por[e.arquivo_id] = []; grupos.push(por[e.arquivo_id]); } por[e.arquivo_id].push(e); }
+  const quem = (e) => { const m = MEMBROS.find((x) => x.user_id === e.emitido_por); return m ? ' por ' + esc(curto(m)) : ''; };
+  return topo + `<section class="card rise">${grupos.map((g) => `<div class="emi-g"><h3>${svg('arq', 16)}${esc(g[0].arquivo_nome)}<span class="sub" style="margin:0;font-weight:500">${g.length} revis${g.length === 1 ? 'ão' : 'ões'}</span></h3>
+    <ul class="emi-l">${g.map((e) => {
+      const lk = linkCopia(e), evs = evDa(e);
+      return `<li><span class="rev-tag" style="margin:2px 0 0">${revTxt(e.revisao)}</span>
+        <div class="emi-n">${lk ? `<a href="${esc(lk)}" target="_blank" rel="noopener">${esc(e.copia_nome || e.arquivo_nome)}</a>` : esc(e.copia_nome || e.arquivo_nome)}
+          <small>emitida em ${esc(quandoArq(e.emitido_em))}${quem(e)}</small>
+          ${e.nota ? `<p class="emi-nota">${esc(e.nota)}</p>` : ''}
+          ${evs.length ? `<ul class="emi-hist">${evs.map((x) => `<li><b>${EV[x.tipo] ? EV[x.tipo][0] : esc(x.tipo)}</b> · ${esc(dBR(x.em))}${x.nota ? ' — ' + esc(x.nota) : ''}</li>`).join('')}</ul>` : ''}
+        </div>
+        <div class="emi-st">${pillEmissao(e)}${souAdmin() ? `<button type="button" class="btn btn-s" onclick="registrarRetorno('${e.id}')">Registrar retorno</button>` : ''}</div></li>`;
+    }).join('')}</ul></div>`).join('')}</section>`;
+}
+// a admin registra o que aconteceu com a emissão: enviou, o cliente aprovou, ou pediu revisão (com data e nota)
+function registrarRetorno(id) {
+  const e = EMI.find((x) => x.id === id); if (!e || !souAdmin()) return;
+  const u = ultimoEv(e), sug = !u ? 'enviado' : u.tipo === 'enviado' ? 'aprovado' : 'enviado';
+  abrirModal(`${revTxt(e.revisao)} · ${e.copia_nome || e.arquivo_nome}`, `
+    <div class="ret-op" role="radiogroup" aria-label="O que aconteceu">${Object.keys(EV).map((k) => `<label><input type="radio" name="ret-tipo" value="${k}" ${k === sug ? 'checked' : ''}>${EV[k][0]}</label>`).join('')}</div>
+    <label class="lbl" for="ret-em">Quando</label><input id="ret-em" class="in" type="date" value="${hojeISO()}">
+    <label class="lbl" for="ret-nota" style="margin-top:10px">Nota (opcional)</label>
+    <textarea id="ret-nota" class="in" rows="3" maxlength="1000" placeholder="Ex.: aprovou por e-mail, pediu pra aumentar a janela da sala"></textarea>
+    <div class="rodape"><button class="btn" onclick="fecharModal()">Cancelar</button><button class="btn btn-d" id="ret-ok">Registrar</button></div>`);
+  $('ret-ok').onclick = () => salvarRetorno(id);
+}
+async function salvarRetorno(id) {
+  const b = $('ret-ok'); if (!b || b.disabled) return;
+  const tipo = (document.querySelector('input[name="ret-tipo"]:checked') || {}).value, em = $('ret-em').value;
+  if (!EV[tipo]) return toast('Escolha o que aconteceu.', true);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(em)) return toast('Escolha a data.', true);
+  b.disabled = true;
+  const nota = $('ret-nota').value.trim();
+  const { error } = await sb.from('escritorio_emissao_eventos').insert({ projeto_id: PROJ.id, emissao_id: id, tipo, em, nota: nota || null });
+  if (error) { b.disabled = false; return falhou(error, 'Registrar o retorno'); }
+  fecharModal(); toast('Registrado');
+  await recarregar();
 }
 
 // ══════════════ ATAS ══════════════

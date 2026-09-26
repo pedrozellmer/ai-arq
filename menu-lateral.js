@@ -210,6 +210,7 @@
     sair: '<path d="M15 17l5-5-5-5M20 12H9M12 20H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h6"/>',
     equipe: '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.6c2.7.2 5 2 5 4.9"/>',
     quadro: '<rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="11" rx="1.5"/><rect x="17" y="4" width="4" height="7" rx="1.5"/>',
+    enviar: '<path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4z"/>',
     engrenagem: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>'
   };
 
@@ -353,6 +354,7 @@
         { href: e + 'capa',     rotulo: 'Página do projeto', ic: 'painel',   track: 'menu-esc-capa' },
         { href: e + 'tarefas',  rotulo: 'Tarefas',           ic: 'quadro',   track: 'menu-esc-tarefas' },
         { href: e + 'arquivos', rotulo: 'Arquivos',          ic: 'pasta',    track: 'menu-esc-arquivos' },
+        { href: e + 'emissoes', rotulo: 'Emissões',          ic: 'enviar',   track: 'menu-esc-emissoes' },
         { href: e + 'atas',     rotulo: 'Atas',              ic: 'memorial', track: 'menu-esc-atas' },
         { href: e + 'equipe',   rotulo: 'Equipe',            ic: 'equipe',   track: 'menu-esc-equipe' }
       ]},
