@@ -16,8 +16,11 @@
     body { font-family: 'Inter', -apple-system, sans-serif; }
     /* Cabeçalho de disciplina: card branco com faixa de degradê 3px no topo
        (padrão novo do cronograma.html). Texto escuro, botões com contraste. */
-    .section-header { position: relative; background: #fff; border-bottom: 1px solid #e5e7eb; }
-    .section-header::before { content:""; position:absolute; top:0; left:0; right:0; height:3px; background:linear-gradient(135deg,#4f46e5,#22d3ee); }
+    /* 25/09: no tom da Revisão (a mesma faixa rosa do topo — area-cliente.css) */
+    .section-header { position: relative; background: linear-gradient(90deg,#FFF1F2,#fff 70%); border-bottom: 1px solid #FFE4E6; padding-bottom: 14px !important; }
+    .section-header::before { content:""; position:absolute; top:0; left:0; right:0; height:3px; background:linear-gradient(135deg,#E11D48,#FB7185); }
+    .sec-prog { position:absolute; left:16px; right:16px; bottom:6px; height:4px; border-radius:99px; background:#FFE4E6; overflow:hidden; }
+    .sec-prog i { display:block; height:100%; border-radius:99px; background:linear-gradient(90deg,#10B981,#34D399); transition:width .3s ease; }
     .item-row { transition: all 0.15s; }
     /* Estados de revisão usam cor + espessura/estilo de borda + badge
        textual (renderizado no JS). Pedro é daltônico — verde vs âmbar
@@ -710,6 +713,7 @@ function render() {
             ✕ Excluir seção
           </button>
         </div>
+        <div class="sec-prog" title="${secItems.length - pendingInSec} de ${secItems.length} revisados"><i style="width:${secItems.length ? Math.round(((secItems.length - pendingInSec) / secItems.length) * 100) : 0}%"></i></div>
       </div>
       <div class="divide-y" data-section="${escapeHtml(sec)}">
         ${secItems.map((it, i) => renderItem(it, i)).join('')}
