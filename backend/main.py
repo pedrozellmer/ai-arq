@@ -10843,6 +10843,15 @@ def _derive_estrutura_pe_direito(items, pe_direito: float) -> int:
 
     🚨 Regra dura nº1: tudo que sai daqui é derivado de PD INFORMADO — vira
     'estimado' com procedência explícita, nunca 'confirmado'.
+
+    🩸 26/09/2026 — job 32a27efc (muro de arrimo, 7 DXF): a conta juntava os
+    pilares contados em TODAS as pranchas (32 + 26 + 16 + 33 + 2 = "109
+    pilares", num muro de P1 a P44 — cada prancha conta os pilares que MOSTRA,
+    e as faixas se sobrepõem) e escrevia o MESMO total em toda linha-alvo
+    zerada de qualquer prancha: 46,99 m³ e 791 m² de fôrma, duas vezes (0002 e
+    0003). 🔑 Agora é por PRANCHA: a linha-alvo usa só os pilares contados na
+    própria prancha dela; prancha sem pilar contado não recebe conta (fica
+    zerada — a pergunta honesta).
     """
     from models import Confidence   # 🪤 faltava: o selo "estimado" era pulado calado pelo except
     _derive_estrutura_pe_direito.ultimo_motivo = ""
@@ -10851,7 +10860,11 @@ def _derive_estrutura_pe_direito(items, pe_direito: float) -> int:
         return 0
     h = float(pe_direito)
 
-    # 1) Coleta seções contadas: [(area_secao_m2, perimetro_m, N), ...]
+    def _folha(it):
+        return str(getattr(it, "ref_sheet", "") or "").strip()
+
+    # 1) Coleta seções contadas, POR PRANCHA: {prancha: [(area_m2, perimetro_m, N)]}
+    por_folha = {}
     secoes = []
     for it in items:
         try:
@@ -10869,19 +10882,23 @@ def _derive_estrutura_pe_direito(items, pe_direito: float) -> int:
             if not (5 <= a_cm <= 300 and 5 <= b_cm <= 300):
                 continue          # seção implausível não entra
             n = float(it.quantity)
-            secoes.append((a_cm * b_cm / 10000.0, 2 * (a_cm + b_cm) / 100.0, n))
+            sec = (a_cm * b_cm / 10000.0, 2 * (a_cm + b_cm) / 100.0, n)
+            secoes.append(sec)
+            por_folha.setdefault(_folha(it), []).append(sec)
         except Exception:
             continue
     if not secoes:
         _derive_estrutura_pe_direito.ultimo_motivo = "nenhum pilar em un com seção 'AxB cm'"
         return 0
 
-    vol_m3 = round(sum(a * h * n for a, _, n in secoes), 2)
-    forma_m2 = round(sum(p * h * n for _, p, n in secoes), 2)
-    n_pilares = int(sum(n for _, _, n in secoes))
-    _proc = (f"Derivado das seções contadas: {len(secoes)} seção(ões) × "
-             f"pé-direito {h:g} m (informado por você) × contagem "
-             f"({n_pilares} pilares)")
+    def _conta(secs):
+        """(volume m³, fôrma m², nº de pilares, procedência) de UMA prancha."""
+        vol = round(sum(a * h * n for a, _, n in secs), 2)
+        frm = round(sum(p * h * n for _, p, n in secs), 2)
+        npl = int(sum(n for _, _, n in secs))
+        return vol, frm, npl, (f"Derivado das seções contadas: {len(secs)} seção(ões) × "
+                               f"pé-direito {h:g} m (informado por você) × contagem "
+                               f"({npl} pilares)")
 
     tocados = 0
     for it in items:
@@ -10890,6 +10907,10 @@ def _derive_estrutura_pe_direito(items, pe_direito: float) -> int:
             u = str(getattr(it, "unit", "") or "").strip().lower()
             if "pilar" not in d:
                 continue
+            _secs = por_folha.get(_folha(it))
+            if not _secs:
+                continue                # prancha sem pilar contado: não recebe conta
+            vol_m3, forma_m2, _npl, _proc = _conta(_secs)
             alvo = None
             if "concreto" in d and u in ("m³", "m3"):
                 alvo, valor, un_rot = "conc", vol_m3, "m³"
@@ -10936,10 +10957,15 @@ def _derive_estrutura_pe_direito(items, pe_direito: float) -> int:
     # pra decidir se preserva uma linha (24/08: a aposta errada zerou 540 m²).
     # Por isso aqui só entra o MOTIVO. A decisão vem depois do número.
     if not tocados:
+        # o número que TERIA saído é o da prancha com mais pilares contados —
+        # somar as pranchas seria o mesmo erro de 26/09, agora no log
+        _maior = max(por_folha.values(), key=lambda s: sum(n for _, _, n in s))
+        _v, _f, _np, _ = _conta(_maior)
         _derive_estrutura_pe_direito.ultimo_motivo = (
-            "sem item-alvo (pilar+concreto em m³ ou pilar+fôrma em m²) — "
-            "%d seção(ões), %d pilares, teria dado %g m³ e %g m²"
-            % (len(secoes), n_pilares, vol_m3, forma_m2))
+            "sem item-alvo (pilar+concreto em m³ ou pilar+fôrma em m²) na mesma "
+            "prancha dos pilares contados — %d seção(ões), %d pilares, teria dado "
+            "%g m³ e %g m² (prancha com mais pilares; %d prancha(s) com pilar contado)"
+            % (len(_maior), _np, _v, _f, len(por_folha)))
     return tocados
 
 
