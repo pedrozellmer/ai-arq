@@ -76,6 +76,8 @@ def test_area_que_ficou_no_corte_vai_marcada(tmp_path, monkeypatch):
     txt = dx.extract_dxf(_folha(tmp_path)).to_structured_prompt()
     linha = next(l for l in txt.splitlines() if l.strip().startswith("CONCRETO:"))
     assert "vista DE LADO" in linha and "NÃO é piso" in linha, linha
+    # 🩸 3ª releitura: "só vale como revestimento" virou revestimento de concreto
+    assert "IGNORE" in linha and "só vale como revestimento" not in linha, linha
 
 
 def test_CONTROLE_area_da_planta_nao_leva_a_marca(tmp_path, monkeypatch):

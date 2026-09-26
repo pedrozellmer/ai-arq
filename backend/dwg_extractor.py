@@ -525,10 +525,16 @@ class DXFExtraction:
                 _pats = _hatch_pat.get(layer, {})
                 _n = sum(_pats.values())
                 if _em_vista.get(layer, 0) >= 0.01 and not _anot(layer):
+                    # 🩸 25/09 (3ª releitura do job 53f0483f): a 1ª redação dizia
+                    # "só vale como revestimento de parede" e a IA OBEDECEU —
+                    # o concreto cortado de uma subestação virou "revestimento
+                    # de parede 11,46 m²" branco.
                     lines.append(f"  {layer}: {area:.2f} m² — ⚠ {_em_vista[layer]:.2f} m² disto estão "
-                                 f"DENTRO de corte/elevação: superfície vista DE LADO — só vale "
-                                 f"como revestimento de PAREDE; NÃO é piso, laje nem forro "
-                                 f"(esses se medem na planta)")
+                                 f"DENTRO de corte/elevação: superfície vista DE LADO — NÃO é "
+                                 f"piso, laje nem forro (esses se medem na planta). Só vira "
+                                 f"quantidade se o projeto ESPECIFICA revestimento de parede "
+                                 f"neste layer (azulejo, pastilha, painel); se não especifica "
+                                 f"— instalações, estrutura, concreto cortado — IGNORE esta área")
                     continue
                 # 🔑 Simetria com COMPRIMENTOS POR LAYER: hachura em layer de
                 # anotação é preenchimento de legenda/carimbo, não superfície de
@@ -569,7 +575,8 @@ class DXFExtraction:
                 if _poly_vista.get(layer, 0) >= 0.01:
                     lines.append(f"  {layer}: {area:.2f} m² — ⚠ {_poly_vista[layer]:.2f} m² disto "
                                  f"estão DENTRO de corte/elevação (vista DE LADO): NÃO é piso, "
-                                 f"laje nem forro")
+                                 f"laje nem forro; se o projeto não especifica revestimento de "
+                                 f"parede neste layer, IGNORE esta área")
                     continue
                 lines.append(f"  {layer}: {area:.2f} m²")
             lines.append("")
