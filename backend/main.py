@@ -10854,6 +10854,25 @@ def _anotar_area_parede_pe_direito(items, pe_direito: float) -> int:
 _RX_SECAO_PILAR = _re.compile(r"(\d{1,3})\s*[x×]\s*(\d{1,3})\s*cm", _re.I)
 
 
+def _contencao_no_job(items) -> str:
+    """A descrição do 1º item de ESTRUTURA do job que fala de contenção / muro
+    de arrimo ('' se nenhum).
+
+    🩸 26/09/2026 — job 32a27efc: 3 das 7 pranchas não citam o muro nos itens
+    (a 0001 tinha "Pilares 30×19 cm (32 un)" e fôrma de 229,55 m² com os 7,32 m).
+    🔑 Por isso a pergunta é do JOB, não da prancha. Só Estrutura: "muro de
+    arrimo" como referência de arquitetura não diz nada sobre o pilar.
+    """
+    from engine_rules import estrutura_de_contencao
+    for it in (items or []):
+        if str(getattr(it, "discipline", "") or "").strip().lower() != "estrutura":
+            continue
+        d = str(getattr(it, "description", "") or "")
+        if estrutura_de_contencao([d]):
+            return d
+    return ""
+
+
 def _derive_estrutura_pe_direito(items, pe_direito: float) -> int:
     """Deriva volume e fôrma de PILARES a partir de seção × pé-direito × contagem.
 
@@ -10887,6 +10906,20 @@ def _derive_estrutura_pe_direito(items, pe_direito: float) -> int:
         _derive_estrutura_pe_direito.ultimo_motivo = "sem pé-direito informado"
         return 0
     h = float(pe_direito)
+    # 🩸 26/09/2026 — job 32a27efc (muro de arrimo): o 7,32 informado é a
+    # altura do muro no ponto mais fundo; os 32 pilares têm de 1,00 a 6,77 m.
+    # Seção × 7,32 × 32 deu 13,35 m³ / 229,6 m² contra ≈ 7,0 m³ / ≈ 120 m².
+    # 🔑 Contenção: nenhuma conta com o pé-direito — nem preencher, nem a
+    # "Conferência" (seria o número errado ao lado do certo). A linha fica
+    # zerada, a pergunta honesta. 📏 1 job de cliente (este) tinha contenção
+    # com pé-direito informado; o galpão pré-moldado b073d13b segue derivando.
+    _muro = _contencao_no_job(items)
+    if _muro:
+        _derive_estrutura_pe_direito.ultimo_motivo = (
+            "estrutura de contenção/muro de arrimo: cada pilar tem a altura do "
+            "muro naquele ponto; o pé-direito informado não é altura de pilar "
+            "(item: %r)" % _muro[:80])
+        return 0
 
     def _folha(it):
         return str(getattr(it, "ref_sheet", "") or "").strip()
@@ -11362,6 +11395,10 @@ def _derivacao_vai_repor(items, descricao: str, pe_direito: float) -> bool:
         return total_m > 0
 
     if "pilar" in d and ("fôrma" in d or "forma" in d):
+        # 🩸 26/09/2026 — job 32a27efc: em contenção `_derive_estrutura_pe_direito`
+        # desiste sempre. Apostar que ela repõe zeraria a fôrma por nada.
+        if _contencao_no_job(items):
+            return False
         return any(
             str(getattr(i, "unit", "") or "").strip().lower() == "un"
             and _q(i) > 0
@@ -15397,7 +15434,30 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                         _pd_cli = float(user_pe_direito or 0)
                     except (TypeError, ValueError):
                         _pd_cli = 0.0
-                    if _pd_cli > 0 and is_structural:
+                    # 🩸 26/09/2026 — job 32a27efc (muro de arrimo, 7 DXF): com
+                    # "Use este valor como ALTURA" a IA pôs 7,32 m — a altura do
+                    # muro no ponto mais fundo — nos 32 pilares (1,00 a 6,77 m
+                    # desenhados): 13,35 m³ e 229,55 m² de fôrma. 🔑 Contenção:
+                    # o pé-direito não é altura de pilar. 📏 O carimbo "RAMPA -
+                    # MURO DE ARRIMO" chega no texto extraído das 7 pranchas.
+                    from engine_rules import estrutura_de_contencao as _e_contencao
+                    _pd_contencao = bool(_pd_cli > 0 and is_structural
+                                         and _e_contencao([structured_text]))
+                    if _pd_contencao:
+                        _pd_directive = (
+                            f"\n=== PÉ-DIREITO INFORMADO PELO CLIENTE NO UPLOAD: {_pd_cli:.2f} m "
+                            f"— ESTRUTURA DE CONTENÇÃO (muro de arrimo) ===\n"
+                            f"Este projeto é de CONTENÇÃO: cada pilar e cada trecho de muro têm "
+                            f"a altura do muro NAQUELE ponto. O pé-direito informado NÃO vale "
+                            f"como altura de pilar de muro/contenção — NÃO multiplique a seção "
+                            f"por {_pd_cli:.2f} m.\n"
+                            f"REGRAS: (a) volume e fôrma de pilar/muro só com a altura de CADA "
+                            f"pilar lida no corte/elevação desta prancha, somada pilar a pilar, "
+                            f"com a conta na observação; (b) sem essa altura na prancha, deixe "
+                            f"o m³ e o m² com quantidade 0 e diga na observação que falta a "
+                            f"altura de cada pilar no corte/elevação.\n"
+                        )
+                    elif _pd_cli > 0 and is_structural:
                         # 🏗️ 27/08/2026 — O PÉ-DIREITO ERA JOGADO FORA NO
                         # ESTRUTURAL. O `and not is_structural` original
                         # descartava o DADO inteiro, e não só a diretiva de

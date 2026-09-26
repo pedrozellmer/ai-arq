@@ -6,6 +6,11 @@ pilares contados em TODAS as pranchas (32 + 26 + 16 + 33 + 2 = "109 pilares",
 num muro de P1 a P44 — cada prancha conta os pilares que MOSTRA, e as faixas se
 sobrepõem) e escrevia o MESMO total em toda linha-alvo zerada, de qualquer
 prancha: 46,99 m³ e 791 m² de fôrma, duas vezes (pranchas 0002 e 0003).
+
+🪤 As descrições aqui são NEUTRAS de propósito: estes testes são do POR
+PRANCHA. Com "muro de arrimo" na descrição a conta nem roda — contenção
+não usa o pé-direito como altura de pilar (ver
+test_o_pe_direito_nao_e_altura_de_pilar_de_muro.py).
 """
 import os
 import sys
@@ -30,15 +35,15 @@ class _It:
 
 
 def _pilar(n, folha, sec="19×30"):
-    return _It("Pilar de concreto armado — seção %s cm — muro de arrimo" % sec, "un", n, folha)
+    return _It("Pilar de concreto armado — seção %s cm" % sec, "un", n, folha)
 
 
 def _conc(folha, q=0):
-    return _It("Concreto armado — pilares do muro de arrimo", "m³", q, folha)
+    return _It("Concreto armado — pilares", "m³", q, folha)
 
 
 def _forma(folha, q=0):
-    return _It("Fôrma de madeira — pilares do muro", "m²", q, folha)
+    return _It("Fôrma de madeira — pilares", "m²", q, folha)
 
 
 # 19×30 cm × 7,32 m: 0,057 m² × 7,32 = 0,41724 m³ por pilar; perímetro 0,98 m

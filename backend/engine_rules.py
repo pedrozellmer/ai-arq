@@ -3951,6 +3951,32 @@ def linhas_de_aco_do_resumo(items) -> int:
     return n
 
 
+# 🩸 26/09/2026 — job 32a27efc (muro de arrimo, 7 DXF de estrutura). O cliente
+# informou pé-direito 7,32 m — a altura TOTAL do muro no ponto mais fundo — e a
+# conta seção × pé-direito × contagem pôs 7,32 m em cada um dos 32 pilares
+# 19×30, que no desenho têm de 1,00 a 6,77 m (média 3,84). Deu 13,35 m³ e
+# 229,6 m² de fôrma, contra ≈ 7,0 m³ e ≈ 120 m² desenhados.
+# 🔑 Em contenção cada pilar tem a altura do muro NAQUELE ponto: o pé-direito
+# informado não é altura de pilar.
+# 🪤 Sem "muro" sozinho: "muro de divisa" e "gradil sobre muros" são
+# arquitetura. "Cortina" só de concreto/estaca: "cortina de vidro" é esquadria.
+_RX_CONTENCAO = _re.compile(
+    r"arrimo|conten[cç][aã]o|cortina\s+(?:de\s+)?(?:concreto|estacas?)|parede\s+diafragma")
+
+
+def estrutura_de_contencao(textos) -> bool:
+    """Algum dos textos fala de estrutura de CONTENÇÃO (muro de arrimo, cortina
+    de concreto/estacas, parede diafragma)? Ignora acento e caixa.
+
+    📏 26/09/2026, acervo de cliente: 6 jobs têm item de Estrutura que casa
+    (5 de muro de arrimo/contenção e 1 prédio com "cortina de concreto" e a
+    nota "não inclui contenção"); só o 32a27efc informou pé-direito.
+    """
+    if isinstance(textos, str):
+        textos = [textos]     # 🪤 str também é iterável: seria letra por letra
+    return any(_RX_CONTENCAO.search(_sem_acento(t).lower()) for t in (textos or []))
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 🩸 18/09/2026 — O E-MAIL SE CONTRADIZIA EM DUAS LINHAS
 #
