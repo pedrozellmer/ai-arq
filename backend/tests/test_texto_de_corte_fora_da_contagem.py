@@ -15,7 +15,6 @@ import os
 import sys
 
 import ezdxf
-import pytest
 
 _AQUI = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(_AQUI))
