@@ -37,6 +37,9 @@
   /* 🏢 Escritório, Parte 2 (24/09): a EQUIPE vê só leitura; baixar só com a liberação da admin */
   .so-leitura #btn-ia, .so-leitura #btn-salvar,
   .sem-baixar #btn-docx, .sem-baixar #btn-pdf { display: none !important; }
+  /* 26/09 (auditoria EDIT-1): o aviso "atualize com os números de agora" é recado pro dono */
+  .so-leitura #aviso-coerencia { display: none !important; }
+  .so-leitura .blk[contenteditable], .so-leitura td[contenteditable] { cursor: default; }
 </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -126,7 +129,14 @@ const urlParams = new URLSearchParams(window.location.search);
 // ao menu do projeto, achado em 04/08 quando o cronograma deu o mesmo sintoma.
 const jobId = urlParams.get('job_id') || urlParams.get('job');
 // 🏢 equipe do Escritório: só leitura (Parte 2, 24/09)
-try { window.aiarqMarcarSoLeitura && window.aiarqMarcarSoLeitura(jobId); } catch (_) {}
+// 🩸 26/09 (auditoria EDIT-1): só leitura escondia o Salvar mas deixava editar — o autosave levava 403 e o salvar()
+// que falhava CANCELAVA o download de quem a admin liberou. Agora a equipe não edita e o salvar() não tenta.
+const ehSoLeitura = () => document.documentElement.classList.contains('so-leitura');
+function travarEdicaoDaEquipe() {
+  if (!ehSoLeitura()) return;
+  document.querySelectorAll('#doc-container [contenteditable]').forEach((el) => el.setAttribute('contenteditable', 'false'));
+}
+try { window.aiarqMarcarSoLeitura && window.aiarqMarcarSoLeitura(jobId).then(travarEdicaoDaEquipe, () => {}); } catch (_) {}
 if (!jobId) { window.location.href = 'dashboard.html'; }
 
 let estrutura = null;   // objeto vivo — o DOM edita, o save serializa daqui
@@ -282,6 +292,7 @@ function render(jaSalvo) {
     html += `</div></section>`;
   });
   c.innerHTML = html;
+  travarEdicaoDaEquipe();
 }
 
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -292,7 +303,7 @@ let autosaveTimer = null;
 
 container.addEventListener('input', (e) => {
   const el = e.target.closest('[data-s]');
-  if (!el) return;
+  if (!el || ehSoLeitura()) return;
   const si = +el.dataset.s, bi = +el.dataset.b;
   const bloco = estrutura.secoes?.[si]?.blocos?.[bi];
   if (!bloco) return;
@@ -361,6 +372,7 @@ function _horaAgora() {
 }
 
 async function salvar() {
+  if (ehSoLeitura()) return true;          // a equipe não grava: baixar segue (é o que a admin liberou)
   if (!dirty || salvando || !estrutura) return true;
   salvando = true;
   const st = document.getElementById('save-status');

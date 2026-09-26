@@ -42,7 +42,7 @@ def test_o_grupo_so_nasce_pra_projeto_da_conta_e_no_piloto():
     assert "hidden" not in corpo, "nesta folha o hidden perde pra classe de display (cartão do painel, 24/09)"
     assert "var base = 'escritorio.html#/job/' + encodeURIComponent(JOB) + '/';" in corpo
     sel = js[js.index("function atualizarSelo()"):]
-    i_nao_e = sel.index("if (nx) nx.textContent = 'Projeto não encontrado';")
+    i_nao_e = sel.index("if (nx && !ESC) nx.textContent = 'Projeto não encontrado';")
     i_monta = sel.index("montarEscritorio();")
     assert i_nao_e < i_monta, "o grupo tem que nascer DEPOIS de saber que o projeto aberto é da conta"
 

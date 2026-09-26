@@ -1065,10 +1065,24 @@
   function montarEquipe() {
     if (!FIXADO || typeof window.aiarqAcesso !== 'function') return;
     window.aiarqAcesso(JOB).then(function (a) {
+      if (a && a.negado) {
+        // 🩸 26/09 (auditoria MAPA-1): quem saiu da equipe continuava com o menu do Escritório (e as portas do dono)
+        // em toda visita, pela lembrança do navegador. Negado pelo servidor → apaga a lembrança e tira as portas.
+        if (ESC_DO_MAPA || ESC) {
+          gravarMapa(JOB, null);
+          try { sessionStorage.removeItem('aiarq_esc_ctx'); } catch (_) {}
+          tirarItensDoDono();
+          var nn = document.getElementById('aiarq-proj-nome');
+          if (nn) nn.textContent = 'Projeto não encontrado';
+        }
+        return;
+      }
       if (!a || !a.so_leitura) { if (a && ESC_DO_MAPA && !a.escritorio_id) gravarMapa(JOB, null); return; }
       SO_LEITURA = true;
       var nx = document.getElementById('aiarq-proj-nome');
-      if (nx && !ESC) nx.textContent = (window.tituloProjeto || String)(a.nome || 'Projeto');
+      // 26/09 (auditoria MENU-1): com o menu do Escritório o nome é o do projeto de lá (o atualizarSelo já não escreve
+      // "Projeto não encontrado" por cima quando ESC existe)
+      if (nx) nx.textContent = ESC ? String(ESC.nome || 'Projeto').slice(0, 160) : (window.tituloProjeto || String)(a.nome || 'Projeto');
       var sub = document.getElementById('aiarq-proj-sub');
       if (sub) sub.textContent = ESC ? 'equipe · só leitura' : 'equipe · só leitura · ' + (a.itens || 0) + ' itens';
       tirarItensDoDono();
@@ -1107,7 +1121,9 @@
           // O projeto da URL não é deste usuário (ou não existe). Não invente
           // nome: diga o que se sabe e deixe a saída à mão.
           var nx = document.getElementById('aiarq-proj-nome');
-          if (nx) nx.textContent = 'Projeto não encontrado';
+          // 26/09 (auditoria MENU-1): pra EQUIPE (vinda do Escritório) o projeto nunca está nesta lista, que é só do
+          // dono — com o menu do Escritório, quem decide o nome é o montarEquipe (pelo /acesso)
+          if (nx && !ESC) nx.textContent = 'Projeto não encontrado';
           montarEquipe();
           return;
         }

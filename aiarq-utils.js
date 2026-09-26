@@ -941,8 +941,10 @@
   window.aiarqAcesso = function (jobId) {
     if (!jobId || !window.authFetch || !window.API_BASE) return Promise.resolve(null);
     if (!cache[jobId]) {
+      // 26/09 (auditoria MAPA-1): 403 é "você não está neste projeto" (ex.: saiu da equipe) — diferente de falha de
+      // rede (null). O menu usa isso pra apagar a lembrança do Escritório de quem já não é do projeto.
       cache[jobId] = window.authFetch(window.API_BASE + '/api/projeto/' + encodeURIComponent(jobId) + '/acesso')
-        .then(function (r) { return r && r.ok ? r.json() : null; })
+        .then(function (r) { if (r && (r.status === 403 || r.status === 404)) return { negado: true }; return r && r.ok ? r.json() : null; })
         .catch(function () { return null; });
     }
     return cache[jobId];

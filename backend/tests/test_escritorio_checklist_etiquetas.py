@@ -62,7 +62,8 @@ def test_item_nao_muda_de_tarefa_nem_de_autor():
 
 def test_tela_nao_depende_das_tabelas_novas():
     c = _funcao("async function carregarProjeto(id) {")
-    assert "TEM_CHK = !ck.error && !et.error && !te.error;" in c
+    # 26/09 (auditoria TELA-13): lido em variável local e trocado junto com o resto no fim do carregarProjeto
+    assert "const temChk = !ck.error && !et.error && !te.error;" in c and "TEM_CHK = temChk;" in c
     # a leitura das tabelas novas NÃO entra no laço que derruba a tela ("for (const r of [m, t, tp, a, papel]) if (r.error) throw")
     assert "for (const r of [m, t, tp, a, papel]) if (r.error) throw r.error;" in c
     a = _funcao("async function abrirCartao(id) {")

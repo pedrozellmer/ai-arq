@@ -69,6 +69,9 @@
   /* 🏢 Escritório, Parte 2 (24/09): a EQUIPE vê só leitura; baixar só com a liberação da admin */
   .so-leitura #btn-add-fase, .so-leitura #btn-edit, .so-leitura #btn-gerar, .so-leitura #btn-save,
   .sem-baixar #btn-export-pdf, .sem-baixar #btn-export-pptx, .sem-baixar #btn-export-xlsx { display: none !important; }
+  /* 26/09 (auditoria EDIT-1): o editor de fases ficava aberto pra equipe (mexia no % e perdia calado, sem Salvar);
+     e o aviso "regerar" é recado pro dono */
+  .so-leitura #editor, .so-leitura #inputs-card, .so-leitura #aviso-coerencia { display: none !important; }
 </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -484,6 +487,15 @@ async function init() {
     //    disciplinas) e dispara /generate sozinho. Usuário entra e já vê o
     //    cronograma — só ajusta duração + Regerar se quiser mudar.
     //    Banner explícito deixa claro que é geração automática.
+    // 🩸 26/09 (auditoria EDIT-1): a EQUIPE não gera cronograma — o /sugestao e o /generate são do dono, e a tela
+    // mostrava "Erro: HTTP 403". Quem é da equipe vê o aviso de que a admin ainda não gerou.
+    let _acesso = null;
+    try { _acesso = window.aiarqAcesso ? await window.aiarqAcesso(jobId) : null; } catch (_) {}
+    if (_acesso && _acesso.so_leitura) {
+      document.getElementById('inputs-card').classList.add('hidden');
+      info.textContent = 'A admin do projeto ainda não gerou o cronograma. Quando ela gerar, ele aparece aqui.';
+      return;
+    }
     await carregarSugestao();
     autoGerarPrimeiraVisita();
   } catch (e) {

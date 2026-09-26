@@ -460,9 +460,11 @@ async function carregarProjetos() {
   PROJETOS = r.data || [];
   NO_PILOTO = !pil.error && pil.data === true;
 }
+// 🩸 26/09 (auditoria TELA-13): o PROJ trocava ANTES das leituras — uma falha no meio deixava o projeto novo com
+// as tarefas, a equipe e o PAPEL do anterior. Agora tudo é lido em variáveis locais e trocado junto, no fim.
 async function carregarProjeto(id) {
-  PROJ = PROJETOS.find((p) => p.id === id) || null;
-  if (!PROJ) return false;
+  const proj = PROJETOS.find((p) => p.id === id) || null;
+  if (!proj) return false;
   const [m, t, tp, a, papel] = await Promise.all([
     // 🔒 colunas POR NOME: e-mail e telefone da equipe não vêm daqui (só o admin, pelo RPC abaixo)
     sb.from('escritorio_membros').select(COLS_MEMBRO).eq('projeto_id', id).order('convidado_em'),
@@ -472,31 +474,33 @@ async function carregarProjeto(id) {
     sb.rpc('escritorio_papel', { p_projeto: id }),
   ]);
   for (const r of [m, t, tp, a, papel]) if (r.error) throw r.error;
-  MEMBROS = m.data; TAR = t.data; PESSOAS_T = tp.data; ATAS = a.data; PAPEL = papel.data;
-  NOTAS = {};
   // checklist e etiquetas: ACESSÓRIO — falhou (ou as tabelas ainda não existem), o cartão segue como antes
   const [ck, et, te] = await Promise.all([
     sb.from('escritorio_checklist').select('id,tarefa_id,texto,feito,posicao').eq('projeto_id', id).order('posicao'),
     sb.from('escritorio_etiquetas').select('id,nome,cor').eq('projeto_id', id).order('nome'),
     sb.from('escritorio_tarefa_etiquetas').select('tarefa_id,etiqueta_id').eq('projeto_id', id),
   ]);
-  TEM_CHK = !ck.error && !et.error && !te.error;
-  CHK = TEM_CHK ? ck.data : []; ETQ = TEM_CHK ? et.data : []; TETQ = TEM_CHK ? te.data : [];
+  const temChk = !ck.error && !et.error && !te.error;
   // emissões: também acessório — falhou, a tela de Emissões diz que não leu (e o resto segue)
   const [em, ev] = await Promise.all([
     sb.from('escritorio_emissoes').select('id,arquivo_id,arquivo_nome,revisao,copia_id,copia_nome,nota,emitido_por,emitido_em').eq('projeto_id', id).order('emitido_em', { ascending: false }),
     sb.from('escritorio_emissao_eventos').select('id,emissao_id,tipo,em,nota,criado_em').eq('projeto_id', id).order('em').order('criado_em'),
   ]);
-  TEM_EMI = !em.error && !ev.error;
-  EMI = TEM_EMI ? em.data : []; EMI_EV = TEM_EMI ? ev.data : [];
-  if (PAPEL === 'dono') {   // contatos da equipe: só o admin (LGPD — a equipe não precisa do telefone do colega)
+  const temEmi = !em.error && !ev.error;
+  const membros = m.data, notas = {};
+  if (papel.data === 'dono') {   // contatos da equipe: só o admin (LGPD — a equipe não precisa do telefone do colega)
     const c = await sb.rpc('escritorio_contatos', { p_projeto: id });
-    if (!c.error) c.data.forEach((x) => { const m = MEMBROS.find((y) => y.id === x.membro_id); if (m) { m.email = x.email; m.telefone = x.telefone; m.email_conta = x.email_conta || null; } });
-  }
-  if (PAPEL === 'dono') {   // a anotação sobre cada pessoa: tabela própria, só o admin lê
+    if (!c.error) c.data.forEach((x) => { const y = membros.find((z) => z.id === x.membro_id); if (y) { y.email = x.email; y.telefone = x.telefone; y.email_conta = x.email_conta || null; } });
+    // a anotação sobre cada pessoa: tabela própria, só o admin lê
     const n = await sb.from('escritorio_membro_notas').select('membro_id,observacao').eq('projeto_id', id);
-    if (!n.error) n.data.forEach((x) => { NOTAS[x.membro_id] = x.observacao; });
+    if (!n.error) n.data.forEach((x) => { notas[x.membro_id] = x.observacao; });
   }
+  // 🩸 26/09 (auditoria TELA-1/TELA-2): a subpasta aberta, o filtro de etapa e a etapa selecionada eram globais e
+  // passavam pro próximo projeto (Arquivos travava em "não é deste projeto"; o quadro filtrava por etapa que nem existe)
+  if (!PROJ || PROJ.id !== id) { ARQ_PASTA = ''; ARQ_TRILHA = []; FILTRO = 'todas'; FILTRO_E = ''; ETAPA_SEL = null; }
+  PROJ = proj; MEMBROS = membros; TAR = t.data; PESSOAS_T = tp.data; ATAS = a.data; PAPEL = papel.data; NOTAS = notas;
+  TEM_CHK = temChk; CHK = temChk ? ck.data : []; ETQ = temChk ? et.data : []; TETQ = temChk ? te.data : [];
+  TEM_EMI = temEmi; EMI = temEmi ? em.data : []; EMI_EV = temEmi ? ev.data : [];
   return true;
 }
 
@@ -686,7 +690,7 @@ async function criarProjeto() {
 // ══════════════ CAPA ══════════════
 function telaCapa() {
   const p = PROJ, et = p.etapas || [], iA = et.indexOf(p.etapa_atual);
-  const abertas = TAR.filter(aberta), revisar = TAR.filter((t) => t.status === 'revdtz'), doCli = abertas.filter((t) => t.do_cliente);
+  const abertas = TAR.filter(aberta), revisar = TAR.filter((t) => t.status === 'revdtz'), doCli = abertas.filter(comCliente);
   const foco = souAdmin() ? [...revisar, ...TAR.filter((t) => atrasada(t) && t.status !== 'revdtz')] : TAR.filter((t) => eMinha(t) && aberta(t));
   // o mesmo KPI da maquete (e do resto do site): barra de 3 px, ícone e cor de estado
   // 26/09 (Pedro): cada KPI é um atalho pra tela dele (acao = JS fixo daqui, nunca texto de gente)
@@ -838,8 +842,13 @@ async function salvarProjeto() {
 }
 
 // ══════════════ TAREFAS (quadro estilo Trello) ══════════════
-const FILT = { todas: () => true, minhas: eMinha, cliente: (t) => t.do_cliente };
-const visivel = (t) => FILT[FILTRO](t) && (!FILTRO_E || t.etapa === FILTRO_E);
+// 26/09 (auditoria TELA-3): "com o cliente" é o cartão marcado do cliente OU parado na coluna Aguardando cliente —
+// o KPI da capa, o filtro e a contagem usam a MESMA regra (antes o KPI dizia "nada com o cliente" com a coluna cheia)
+const comCliente = (t) => !!t.do_cliente || t.status === 'cliente';
+const FILT = { todas: () => true, minhas: eMinha, cliente: comCliente };
+// 26/09 (auditoria TELA-2): etapa do filtro que não existe NESTE projeto não filtra (e não vai pro cartão novo)
+const etapaDoFiltro = () => ((PROJ && PROJ.etapas) || []).includes(FILTRO_E) ? FILTRO_E : '';
+const visivel = (t) => FILT[FILTRO](t) && (!etapaDoFiltro() || t.etapa === FILTRO_E);
 const podeLevar = (t, st) => souAdmin() || st === t.status || (['afazer', 'dev', 'revdtz', 'revsol'].includes(t.status) && ST_EQUIPE.includes(st));
 function telaTarefas() {
   const ch = (k, t) => `<button class="chip" aria-pressed="${FILTRO === k}" onclick="FILTRO='${k}';render()">${t}<span class="n">${TAR.filter(FILT[k]).filter(aberta).length}</span></button>`;
@@ -972,7 +981,7 @@ function novaTarefa() { const b = document.querySelector('.col[data-st="afazer"]
 async function criarCartao(st, txt) {
   txt = String(txt || '').trim(); if (!txt) return render();
   const max = Math.max(0, ...TAR.filter((x) => x.status === st).map((x) => x.posicao));
-  const { data, error } = await sb.from('escritorio_tarefas').insert({ projeto_id: PROJ.id, titulo: txt, status: st, posicao: max + 1, etapa: FILTRO_E || PROJ.etapa_atual || null, do_cliente: st === 'cliente', criado_por: EU.id }).select().single();
+  const { data, error } = await sb.from('escritorio_tarefas').insert({ projeto_id: PROJ.id, titulo: txt, status: st, posicao: max + 1, etapa: etapaDoFiltro() || PROJ.etapa_atual || null, do_cliente: st === 'cliente', criado_por: EU.id }).select().single();
   if (error) return falhou(error, 'Não criei o cartão');
   TAR.push(data);
   const eu = meuMembro();
@@ -1027,6 +1036,7 @@ async function carregarComentarios(id) {
   const { data, error } = await sb.from('escritorio_comentarios').select('*').eq('tarefa_id', id).order('criado_em');
   const ul = $('ct-coms'); if (!ul) return;
   if (error) { ul.innerHTML = '<li class="vazio">Não consegui carregar os comentários.</li>'; return; }
+  if (CART && CART.id === id) CART.nComentarios = data.length;   // o "Excluir" diz quantos vão junto
   ul.innerHTML = data.length ? data.map((c) => { const m = MEMBROS.find((x) => x.user_id === c.autor); return `<li style="align-items:flex-start">${av(m)}<div style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;padding:8px 10px"><p class="sub" style="margin:0"><b style="color:#334155">${esc(curto(m))}</b> · ${new Date(c.criado_em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: FUSO })}</p><p style="margin:2px 0 0;font-size:13.5px;white-space:pre-wrap">${esc(c.texto).replace(/@([A-Za-zÀ-ÿ]+)/g, '<span class="men">@$1</span>')}</p></div></li>`; }).join('') : '<li class="vazio">Nenhum comentário ainda.</li>';
 }
 function togP(id, b) { const i = CART.pessoas.indexOf(id); if (i >= 0) CART.pessoas.splice(i, 1); else CART.pessoas.push(id); b.setAttribute('aria-pressed', String(i < 0)); }
@@ -1064,7 +1074,16 @@ async function subirDescer(id, d) {
   if (r.some((x) => x.error)) return falhou(r.find((x) => x.error).error, 'Não mudei a ordem');
   t.posicao = a; o.posicao = b; render(); abrirCartao(id);
 }
-async function apagarCartao(id) {
+// 🩸 26/09 (auditoria TELA-4): um clique apagava o cartão com comentários, checklist, etiquetas e pessoas (cascata),
+// sem volta. Agora pede confirmação dizendo o que vai junto — no mesmo padrão de "Tirar do projeto".
+function apagarCartao(id) {
+  const t = TAR.find((x) => x.id === id); if (!t) return;
+  const nChk = CHK.filter((c) => c.tarefa_id === id).length, nCom = Number(CART && CART.id === id ? CART.nComentarios || 0 : 0);
+  const junto = [nCom ? `${nCom} comentário${nCom > 1 ? 's' : ''}` : 'os comentários', nChk ? `${nChk} ite${nChk > 1 ? 'ns' : 'm'} do checklist` : '', 'as etiquetas e as pessoas marcadas'].filter(Boolean).join(', ');
+  abrirModal('Excluir o cartão?', `<p style="margin:0;font-size:14px;line-height:1.5"><b>${esc(t.titulo)}</b> some do quadro junto com ${esc(junto)}. Não dá pra desfazer.</p>
+    <div class="rodape"><button class="btn" onclick="abrirCartao('${id}')">Voltar</button><button class="btn btn-r" onclick="confirmarApagarCartao('${id}')">Excluir</button></div>`);
+}
+async function confirmarApagarCartao(id) {
   const { error, count } = await sb.from('escritorio_tarefas').delete({ count: 'exact' }).eq('id', id);
   if (error) return falhou(error, 'Não excluí');
   if (!count) return toast('Só quem criou o cartão ou a admin pode excluir.', true);
@@ -1092,19 +1111,34 @@ function telaArquivos() {
   return `${faixa('arq', 'Arquivos do projeto', 'A pasta deste projeto no Google Drive. Cada pessoa da equipe tem acesso só a ela.', '<span id="arq-acoes" class="linha"></span>')}
     <section class="card rise"><div id="arq-corpo"><p class="sub" style="margin:0">Abrindo a pasta do Drive…</p></div></section>`;
 }
+// 26/09 (auditoria TELA-7): cada pedido ganha um número; resposta de um pedido velho (outra pasta, outro projeto)
+// que chega depois não pinta a tela
+let ARQ_PEDIDO = 0;
 async function carregarArquivos() {
   const corpo = $('arq-corpo'); if (!corpo || VIEW !== 'arquivos') return;
+  const pedido = ++ARQ_PEDIDO, projAqui = PROJ.id;
   const q = ARQ_PASTA ? '?pasta=' + encodeURIComponent(ARQ_PASTA) : '';
   const [st, l] = await Promise.all([souAdmin() ? apiEsc('drive/status') : Promise.resolve(null), apiEsc(`projetos/${PROJ.id}/arquivos${q}`)]);
-  if (!$('arq-corpo') || VIEW !== 'arquivos') return;
+  if (!$('arq-corpo') || VIEW !== 'arquivos' || pedido !== ARQ_PEDIDO || !PROJ || PROJ.id !== projAqui) return;
   const drv = st && st.ok ? st.dados : null, acoes = $('arq-acoes');
-  if (!l.ok) { corpo.innerHTML = `<p class="vazio">${esc(l.dados.detail || 'Não consegui abrir a pasta agora.')}</p>`; return; }
-  const d = l.dados;
-  if (souAdmin() && drv && !drv.configurado) { corpo.innerHTML = '<p class="vazio">O Google Drive ainda está sendo configurado no servidor.</p>'; return; }
   // estado sem lista (conectar, escolher pasta, conexão caiu): um bloco centrado, com o próximo passo
   const passo = (ic, titulo, texto, botao) => `<div class="passo"><span class="passo-ic">${svg(ic, 28)}</span><b>${titulo}</b><p>${texto}</p>${botao || ''}</div>`;
+  if (!l.ok) {
+    // 26/09 (auditoria TELA-1): subpasta que não é (mais) deste projeto → volta pra raiz em vez de travar
+    if (l.status === 403 && ARQ_PASTA) { ARQ_PASTA = ''; ARQ_TRILHA = []; return carregarArquivos(); }
+    // 26/09 (auditoria DRV-2): acesso cortado no Google → caminho de volta, não um beco
+    if (l.status === 409) {
+      corpo.innerHTML = souAdmin()
+        ? passo('arq', 'O acesso ao Drive foi cortado', esc(l.dados.detail || 'Conecte de novo pra equipe voltar a ver a pasta.'), '<button class="btn btn-g" onclick="conectarDrive()">Conectar de novo</button>')
+        : passo('arq', 'O acesso ao Drive foi cortado', 'A admin precisa conectar o Drive de novo.');
+      return;
+    }
+    corpo.innerHTML = `<p class="vazio">${esc(l.dados.detail || 'Não consegui abrir a pasta agora.')}</p>`; return;
+  }
+  const d = l.dados;
+  if (souAdmin() && drv && !drv.configurado) { corpo.innerHTML = '<p class="vazio">O Google Drive ainda está sendo configurado no servidor.</p>'; return; }
   if (souAdmin() && drv && !drv.conectado) {
-    corpo.innerHTML = passo('arq', 'Conecte o seu Google Drive', 'Você escolhe a pasta deste projeto, e cada pessoa da equipe recebe acesso só a ela. O Google mostra um aviso de "app não verificado" (estamos em piloto): é só clicar em <b>Avançado</b> e seguir. Você pode cortar o acesso quando quiser, aqui ou na sua conta Google.',
+    corpo.innerHTML = passo('arq', 'Conecte o seu Google Drive', 'Você escolhe a pasta deste projeto, e cada pessoa da equipe recebe acesso só a ela. O Google mostra um aviso de "app não verificado" (estamos em piloto): é só clicar em <b>Avançado</b> e seguir. Você pode desconectar quando quiser, aqui ou na sua conta Google.',
       '<button class="btn btn-g" onclick="conectarDrive()">Conectar Google Drive</button>');
     return;
   }
@@ -1122,7 +1156,7 @@ async function carregarArquivos() {
   }
   const pasta = d.pasta || {}, arqs = d.arquivos || [];
   if (acoes) acoes.innerHTML = `<a class="btn btn-s" href="https://drive.google.com/drive/folders/${encodeURIComponent(pasta.atual || pasta.id)}" target="_blank" rel="noopener">Abrir no Drive</a>`
-    + (souAdmin() ? '<button class="btn btn-s" onclick="sincronizarPasta()">Atualizar acesso da equipe</button><button class="btn btn-s" onclick="escolherPasta(\'root\')">Trocar pasta</button>' : '');
+    + (souAdmin() ? '<button class="btn btn-s" onclick="sincronizarPasta()">Atualizar acesso da equipe</button><button class="btn btn-s" onclick="escolherPasta(\'root\')">Trocar pasta</button><button class="btn btn-s" onclick="desconectarDrive()">Desconectar o Drive</button>' : '');
   const trilha = `<div class="arq-trilha"><a href="#" data-sub="" data-nome="" class="arq-sub">${svg('pastas', 14)}${esc(pasta.nome || 'Pasta do projeto')}</a>${ARQ_TRILHA.map((t) => `<span>›</span><a href="#" data-sub="${esc(t.id)}" data-nome="${esc(t.nome)}" class="arq-sub">${esc(t.nome)}</a>`).join('')}</div>`;
   // 26/09 (Pedro): pastas antes, e em ordem NATURAL — o Google ordena "10 Outubro" antes de "2 Fevereiro"
   arqs.sort((a, b) => (b.pasta - a.pasta) || String(a.nome).localeCompare(String(b.nome), 'pt-BR', { numeric: true, sensitivity: 'base' }));
@@ -1179,6 +1213,18 @@ document.addEventListener('click', (ev) => {
   else { const k = ARQ_TRILHA.findIndex((t) => t.id === id); ARQ_TRILHA = k >= 0 ? ARQ_TRILHA.slice(0, k + 1) : [...ARQ_TRILHA, { id, nome }]; ARQ_PASTA = id; }
   carregarArquivos();
 });
+// 26/09 (auditoria DRV-2/LGPD-2): a tela prometia "cortar o acesso aqui" e não tinha o botão
+function desconectarDrive() {
+  abrirModal('Desconectar o Google Drive?', `<p style="margin:0;font-size:14px;line-height:1.5">O AI.arq deixa de ler as suas pastas e a equipe deixa de ver a pasta <b>por aqui</b>.</p>
+    <p class="sub" style="margin:0">Quem já recebeu acesso à pasta no Drive continua com ele: pra tirar, tire a pessoa do projeto <b>antes</b> de desconectar, ou tire o acesso no próprio Drive.</p>
+    <div class="rodape"><button class="btn" onclick="fecharModal()">Voltar</button><button class="btn btn-r" id="dd-ok">Desconectar</button></div>`);
+  $('dd-ok').onclick = async () => {
+    $('dd-ok').disabled = true;
+    const r = await apiEsc('drive/desconectar', 'POST');
+    if (!r.ok) { $('dd-ok').disabled = false; return toast(r.dados.detail || 'Não consegui desconectar agora.', true); }
+    fecharModal(); toast('Google Drive desconectado'); carregarArquivos();
+  };
+}
 async function conectarDrive() {
   const r = await apiEsc('drive/iniciar', 'POST', { projeto_id: PROJ ? PROJ.id : '' });
   if (!r.ok) return toast(r.dados.detail || 'Não deu pra conectar agora.', true);

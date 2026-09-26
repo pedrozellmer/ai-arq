@@ -437,6 +437,12 @@ let commentingItem = null;
   const { data: { session } } = await sb.auth.getSession();
   if (!session) { window.location.href = 'login.html'; return; }
   currentUser = session.user;
+  // 🩸 26/09 (auditoria PORTA-1): a EQUIPE do Escritório não revisa (é do dono) — aqui ela via aprovar, editar,
+  // excluir e "Concluir revisão", e cada ação levava 403. Volta pro quantitativo, que ela vê só leitura.
+  try {
+    const _a = window.aiarqAcesso && jobId ? await window.aiarqAcesso(jobId) : null;
+    if (_a && _a.so_leitura) { window.location.replace(`projeto.html?job_id=${encodeURIComponent(jobId)}#quantitativo`); return; }
+  } catch (_) {}
 
   await loadItems();
   document.getElementById('gate').classList.add('hidden');
@@ -1521,12 +1527,19 @@ document.getElementById('btn-finish')?.addEventListener('click', async () => {
   btn.disabled = true;
   btn.textContent = 'Concluindo...';
   try {
-    // Marca revisão como concluída (endpoint POST — best-effort)
-    await authFetch(`${API_BASE}/api/items/${jobId}/review-finalize`, {
+    // Marca revisão como concluída.
+    // 🩸 26/09 (auditoria PORTA-1): era "best-effort" — a resposta nem era lida, e a tela dizia "Revisão
+    // concluída!" e gravava o evento do funil mesmo com o servidor recusando (403). Agora só com a resposta ok.
+    const _fin = await authFetch(`${API_BASE}/api/items/${jobId}/review-finalize`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ user_id: window.currentUserId || '' }),
-    }).catch(() => {});
+    }).catch(() => null);
+    if (!_fin || !_fin.ok) {
+      throw new Error(_fin && _fin.status === 403
+        ? 'só quem é dono do projeto conclui a revisão.'
+        : 'não consegui registrar a conclusão agora. Tente de novo em instantes.');
+    }
     if (window.trackEvent) trackEvent('revisao_concluida', {
       job_id: jobId, n_itens: items.length,
       confirmados: counts.approved, excluidos: counts.rejected, editados: counts.edited,

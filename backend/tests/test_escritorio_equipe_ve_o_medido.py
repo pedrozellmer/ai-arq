@@ -224,7 +224,8 @@ def test_cada_tela_esconde_as_acoes_do_dono_e_os_downloads_sem_liberacao(pagina,
 def test_o_menu_da_equipe_mostra_so_o_que_ela_pode():
     js = _ler("menu-lateral.js")
     sel = js[js.index("function atualizarSelo()"):]
-    assert sel.index("if (nx) nx.textContent = 'Projeto não encontrado';") < sel.index("montarEquipe();")
+    # 26/09 (auditoria MENU-1): com o menu do Escritório (ESC) quem dá o nome é o montarEquipe, não este aviso
+    assert sel.index("if (nx && !ESC) nx.textContent = 'Projeto não encontrado';") < sel.index("montarEquipe();")
     eq = js[js.index("function montarEquipe() {"):]
     eq = eq[:eq.index("\n  }\n")]
     # 26/09: quem não é equipe (ou saiu) não ganha nada — e, se o menu nasceu da lembrança, ela é apagada

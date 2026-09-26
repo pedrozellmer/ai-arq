@@ -183,6 +183,15 @@ def _conexao(user_id: str):
     return linhas[0] if linhas else None
 
 
+def _esquecer_conexao(user_id: str) -> None:
+    """🩸 26/09 (auditoria DRV-2): a conexão MORTA (revogada no Google, cifra girada) ficava no banco — /drive/status
+    dizia "conectado" e a tela não tinha como reconectar. Apagando, a tela cai no "Conecte o seu Google Drive"."""
+    _CACHE_ACESSO.pop(user_id, None)
+    st, _ = esc._SERVICO("DELETE", "escritorio_drive_conexoes", params={"user_id": f"eq.{user_id}"})
+    if st >= 300 or st == 0:
+        esc._registrar("escritorio:drive", f"conexão morta não foi apagada (HTTP {st})")
+
+
 def _acesso(user_id: str) -> str:
     """Chave de acesso de curta duração da conta ligada (renova com o refresh token cifrado)."""
     em_cache = _CACHE_ACESSO.get(user_id)
@@ -191,11 +200,17 @@ def _acesso(user_id: str) -> str:
     c = _conexao(user_id)
     if not c:
         raise HTTPException(409, "O Google Drive não está conectado.")
+    try:
+        refresh = decifrar(c["token_cifrado"])
+    except HTTPException:
+        _esquecer_conexao(user_id)          # cifra girada: a chave guardada não abre mais
+        raise
     st, r = _HTTP("POST", "https://oauth2.googleapis.com/token", form={
         "client_id": CLIENT_ID, "client_secret": _segredo_do_cliente(),
-        "refresh_token": decifrar(c["token_cifrado"]), "grant_type": "refresh_token"})
+        "refresh_token": refresh, "grant_type": "refresh_token"})
     if st != 200 or not r or not r.get("access_token"):
         if r and r.get("error") == "invalid_grant":   # a pessoa revogou no Google, ou o token venceu
+            _esquecer_conexao(user_id)
             raise HTTPException(409, "O acesso ao Drive foi cortado no Google. Conecte de novo.")
         raise HTTPException(502, "O Google não respondeu agora. Tente de novo em instantes.")
     _CACHE_ACESSO[user_id] = (r["access_token"], time.time() + int(r.get("expires_in") or 3000))

@@ -85,7 +85,14 @@
   .so-leitura [onclick^="saveProjectAndClient"], .so-leitura [onclick^="enviarRespostasProc"],
   .so-leitura [onclick^="submitInformed"], .so-leitura [onclick^="switchUploadTab"],
   .so-leitura [onclick^="sendFeedback"], .so-leitura [onclick^="openClientEdit"],
-  .sem-baixar [onclick^="downloadProtected"], .sem-baixar [onclick^="openPdfProtected"] { display: none !important; }
+  .sem-baixar [onclick^="downloadProtected"], .sem-baixar [onclick^="openPdfProtected"],
+  /* 26/09 (auditoria PORTA-1): portas do dono que ainda apareciam pra equipe — Revisar, anexar pranchas das
+     disciplinas, os botões dos avisos de coerência (financeiro, refazer planilha/comparativo) — e o XLSX principal,
+     que é ligado por addEventListener e não casava com a regra do onclick */
+  .so-leitura #btn-review, .so-leitura #expansao-disciplinas, .so-leitura #pd-prompt, .so-leitura [data-coer],
+  .so-leitura #aviso-coerencia, .so-leitura .aviso-coerencia,
+  .sem-baixar #btn-download { display: none !important; }
+  .so-leitura .card-clickable-review { cursor: default !important; }
 </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -1288,6 +1295,8 @@ async function carregarStatsEntregas(itensJaLidos) {
         card.addEventListener('click', (e) => {
           // Se clicou num botão/link específico, deixa o comportamento default
           if (e.target.closest('a, button')) return;
+          // 26/09 (auditoria PORTA-1): a equipe não revisa — o cartão inteiro levava ela à revisão (e a 403 em tudo)
+          if (btnId === 'btn-review' && document.documentElement.classList.contains('so-leitura')) return;
           if (btn.target === '_blank') {
             window.open(btn.href, '_blank', 'noopener');
           } else {
