@@ -259,6 +259,13 @@ class DXFExtraction:
                                  (d.get("titulo") or d.get("folha"))[:50] for d in _fora[:8])
                              + ("…" if len(_fora) > 8 else ""))
             _vis = [d for d in _ds if d.get("tipo") == "vista"]
+            if _vis and not _planta1 and not _mult:
+                # 25/09: a prancha de CORTES do conjunto — a planta está em
+                # outro arquivo e o motor lê um arquivo por vez
+                lines.append("  • ⚠ esta prancha tem CORTE/ELEVAÇÃO e NENHUMA planta: as peças e "
+                             "etiquetas daqui costumam ser as MESMAS da planta de OUTRA prancha "
+                             "— NÃO some contagem daqui com a da planta; use só o que a planta "
+                             "não mostra")
             if _vis and _fl.get("vista") is not None:
                 # 25/09: sem isto a IA vê o leito do corte sumir e "completa"
                 lines.append(f"  • {len(_vis)} corte(s)/elevação(ões) — o objeto visto DE LADO: o "
@@ -640,7 +647,16 @@ class DXFExtraction:
         # Medido em 08/08: 468 das 1.080 linhas zeradas nasciam desse molde.
         # Ver `contar_textos_repetidos` em engine_rules.py.
         texts_by_layer = self.get_texts_by_layer()
-        if texts_by_layer:
+        # 25/09: texto só de corte/detalhe sai do ×N (ver
+        # `_marcar_textos_repetidos_da_planta`) e vem listado à parte, no fim
+        _txt_vista: dict[str, list] = defaultdict(list)
+        if any(getattr(_t, "fora_da_contagem", False) for _t in self.texts):
+            texts_by_layer = defaultdict(list)
+            for _t in self.texts:
+                (_txt_vista if getattr(_t, "fora_da_contagem", False)
+                 else texts_by_layer)[_t.layer].append(_t.text)
+            texts_by_layer = dict(texts_by_layer)
+        if texts_by_layer or _txt_vista:
             try:
                 from engine_rules import (contar_textos_repetidos as _contar,
                                           texto_conta_objeto as _conta_obj)
@@ -674,6 +690,16 @@ class DXFExtraction:
                 if len(contagem) > 50:
                     # honestidade: a IA precisa saber que a lista foi cortada
                     lines.append(f"    (+{len(contagem) - 50} texto(s) desta camada não listado(s))")
+            if _txt_vista:
+                lines.append("  TEXTOS QUE ESTÃO SÓ EM CORTE/ELEVAÇÃO/DETALHE (a MESMA peça da planta")
+                lines.append("   vista de novo — servem de ESPECIFICAÇÃO; NÃO conte nem some com a")
+                lines.append("   planta; por isso vêm sem ×N):")
+                for layer, _ts in sorted(_txt_vista.items()):
+                    _uniq = sorted({x.strip() for x in _ts if len(x.strip()) > 1})
+                    if not _uniq:
+                        continue
+                    lines.append(f"  [{layer}]: " + "; ".join(_uniq[:30])
+                                 + (f" (+{len(_uniq) - 30})" if len(_uniq) > 30 else ""))
             lines.append("")
 
         # Dimensions
@@ -3532,6 +3558,51 @@ def _descartar_plantas_repetidas(walls, hatches, polygon_areas, blocks, regs) ->
     return out
 
 
+def _marcar_textos_repetidos_da_planta(texts, mapa) -> int:
+    """Marca o texto de detalhe/vista que repete a planta (`fora_da_contagem`).
+
+    🩸 25/09/2026 (releitura do job 53f0483f): a etiqueta de cada acessório de
+    leito ("TH-90°", "CH-90°") aparece na planta e DE NOVO nos cortes; a IA
+    somou as pranchas. O comprimento e o bloco da vista já saíam; o texto não.
+    Continua na lista (traz especificação), mas fora do ×N.
+    - DETALHE ('fora'): sai sempre — é o recorte típico redesenhado.
+    - CORTE/ELEVAÇÃO: sai só se o MESMO texto é contado fora da vista neste
+      arquivo. 🪤 Medido no acervo: nos cortes de interiores "nicho ×29",
+      "prateleira ×5" e a "papeleira ×2" da elevação só existem ali — é a
+      mesma regra do bloco (o único registro fica).
+    Com planta junto, fica como era. Devolve quantos marcou. Nunca levanta.
+    """
+    try:
+        regs = [f for f in (mapa or {}).get("folhas", [])
+                if f.get("tipo") in ("fora", "vista", "planta")]
+        if not any(f["tipo"] in ("fora", "vista") for f in regs):
+            return 0
+
+        def _chave(x):
+            return " ".join(str(x or "").split()).lower()
+        onde = []
+        fora_da_vista = set()
+        for t in texts:
+            p = getattr(t, "position", None)
+            tipos = set()
+            if p and len(p) >= 2 and tuple(p[:2]) != (0, 0):
+                tipos = {f["tipo"] for f in regs if _dentro(p, f["caixa"])}
+            onde.append(tipos)
+            if not (tipos and tipos <= {"fora", "vista"}):
+                fora_da_vista.add(_chave(t.text))
+        n = 0
+        for t, tipos in zip(texts, onde):
+            if not tipos or not tipos <= {"fora", "vista"}:
+                continue
+            if "fora" in tipos or _chave(t.text) in fora_da_vista:
+                t.fora_da_contagem = True
+                n += 1
+        return n
+    except Exception as e:                       # nunca derruba a extração
+        logger.warning("_marcar_textos_repetidos_da_planta: %s", e)
+        return 0
+
+
 def aplicar_leitura_por_folha(walls, hatches, polygon_areas, blocks, mapa) -> dict:
     """Tira da medição o que está em desenho 'fora' e dá peso N à planta de N andares.
 
@@ -5002,6 +5073,9 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             _mapa = mapa_de_folhas(doc)
             _medida = medir_por_folha(walls, hatches, polygon_areas, blocks, _mapa)
             _folhas = aplicar_leitura_por_folha(walls, hatches, polygon_areas, blocks, _mapa)
+            _n_txt = _marcar_textos_repetidos_da_planta(texts, _mapa)
+            if _n_txt:
+                _folhas["textos_fora_da_contagem"] = _n_txt
             _folhas["medida"] = _medida
             _folhas["desenhos_lista"] = [
                 {"folha": f["folha"][:40], "titulo": f.get("titulo", "")[:90],
