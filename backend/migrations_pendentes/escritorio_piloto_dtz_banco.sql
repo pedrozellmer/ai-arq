@@ -786,3 +786,106 @@ comment on table public.escritorio_drive_permissoes is
 create unique index escritorio_drive_permissoes_um on public.escritorio_drive_permissoes (projeto_id, membro_id, pasta_id) where membro_id is not null;
 alter table public.escritorio_drive_permissoes enable row level security;
 revoke all on public.escritorio_drive_permissoes from anon, authenticated;
+
+-- ── 24. (26/09) CHECKLIST e ETIQUETAS do cartão (Pedro: "o Trello é a referência") ──
+-- Mesmo molde de escritorio_tarefa_pessoas/comentarios: a tarefa e o projeto andam JUNTOS na chave
+-- estrangeira (tarefa_id, projeto_id) — não dá pra pendurar item de um projeto em tarefa de outro — e
+-- quem vê/mexe é quem tem papel no projeto (escritorio_papel). Etiqueta é do PROJETO: criar, renomear e
+-- apagar é da admin (dono); marcar/desmarcar numa tarefa é de qualquer um da equipe, como pessoas.
+-- Aplicada como `escritorio_checklist_etiquetas`.
+create table public.escritorio_checklist (
+  id          uuid primary key default gen_random_uuid(),
+  tarefa_id   uuid not null,
+  projeto_id  uuid not null,
+  texto       text not null check (char_length(btrim(texto)) between 1 and 300),
+  feito       boolean not null default false,
+  posicao     double precision not null default 0,
+  criado_por  uuid default auth.uid() references auth.users(id) on delete set null,
+  criado_em   timestamptz not null default now(),
+  foreign key (tarefa_id, projeto_id) references public.escritorio_tarefas(id, projeto_id) on delete cascade
+);
+create index escritorio_checklist_tarefa on public.escritorio_checklist (tarefa_id, posicao);
+
+create table public.escritorio_etiquetas (
+  id          uuid primary key default gen_random_uuid(),
+  projeto_id  uuid not null references public.escritorio_projetos(id) on delete cascade,
+  nome        text not null check (char_length(btrim(nome)) between 1 and 40),
+  cor         text not null check (cor ~ '^#[0-9A-Fa-f]{6}$'),
+  criado_em   timestamptz not null default now(),
+  unique (id, projeto_id),
+  unique (projeto_id, nome)
+);
+
+create table public.escritorio_tarefa_etiquetas (
+  tarefa_id   uuid not null,
+  etiqueta_id uuid not null,
+  projeto_id  uuid not null,
+  primary key (tarefa_id, etiqueta_id),
+  foreign key (tarefa_id, projeto_id)   references public.escritorio_tarefas(id, projeto_id)   on delete cascade,
+  foreign key (etiqueta_id, projeto_id) references public.escritorio_etiquetas(id, projeto_id) on delete cascade
+);
+create index escritorio_tarefa_etiquetas_etq on public.escritorio_tarefa_etiquetas (etiqueta_id);
+
+alter table public.escritorio_checklist        enable row level security;
+alter table public.escritorio_etiquetas        enable row level security;
+alter table public.escritorio_tarefa_etiquetas enable row level security;
+revoke all on public.escritorio_checklist, public.escritorio_etiquetas, public.escritorio_tarefa_etiquetas from anon;
+grant select, insert, update, delete on public.escritorio_checklist, public.escritorio_etiquetas, public.escritorio_tarefa_etiquetas to authenticated;
+-- Ensaio em transação desfeita (26/09), projeto de teste: dono vê/cria/marca; trocar a tarefa do item e
+-- apontar item pra outro projeto = 42501; estranho vê 0 e é barrado; anon barrado.
+
+create policy escritorio_checklist_ver    on public.escritorio_checklist for select to authenticated
+  using (public.escritorio_papel(projeto_id) is not null);
+create policy escritorio_checklist_criar  on public.escritorio_checklist for insert to authenticated
+  with check (public.escritorio_papel(projeto_id) is not null);
+create policy escritorio_checklist_editar on public.escritorio_checklist for update to authenticated
+  using (public.escritorio_papel(projeto_id) is not null) with check (public.escritorio_papel(projeto_id) is not null);
+create policy escritorio_checklist_apagar on public.escritorio_checklist for delete to authenticated
+  using (public.escritorio_papel(projeto_id) is not null);
+
+create policy escritorio_etiquetas_ver    on public.escritorio_etiquetas for select to authenticated
+  using (public.escritorio_papel(projeto_id) is not null);
+create policy escritorio_etiquetas_criar  on public.escritorio_etiquetas for insert to authenticated
+  with check (public.escritorio_papel(projeto_id) = 'dono');
+create policy escritorio_etiquetas_editar on public.escritorio_etiquetas for update to authenticated
+  using (public.escritorio_papel(projeto_id) = 'dono') with check (public.escritorio_papel(projeto_id) = 'dono');
+create policy escritorio_etiquetas_apagar on public.escritorio_etiquetas for delete to authenticated
+  using (public.escritorio_papel(projeto_id) = 'dono');
+
+create policy escritorio_tarefa_etiquetas_ver      on public.escritorio_tarefa_etiquetas for select to authenticated
+  using (public.escritorio_papel(projeto_id) is not null);
+create policy escritorio_tarefa_etiquetas_marcar   on public.escritorio_tarefa_etiquetas for insert to authenticated
+  with check (public.escritorio_papel(projeto_id) is not null);
+create policy escritorio_tarefa_etiquetas_desmarcar on public.escritorio_tarefa_etiquetas for delete to authenticated
+  using (public.escritorio_papel(projeto_id) is not null);
+
+-- item do checklist: tarefa, projeto, autor e data de criação não mudam depois de criados
+create or replace function public.escritorio_checklist_guarda()
+returns trigger language plpgsql set search_path to '' as $$
+begin
+  if public.escritorio_eh_servidor() then return new; end if;
+  if tg_op = 'INSERT' then
+    new.criado_em := now(); new.criado_por := (select auth.uid());
+    return new;
+  end if;
+  if new.tarefa_id <> old.tarefa_id or new.projeto_id <> old.projeto_id
+     or new.criado_por is distinct from old.criado_por or new.criado_em is distinct from old.criado_em then
+    raise exception 'tarefa, autor e data do item não mudam' using errcode = '42501';
+  end if;
+  return new;
+end $$;
+create trigger escritorio_checklist_guarda before insert or update on public.escritorio_checklist
+  for each row execute function public.escritorio_checklist_guarda();
+
+-- etiqueta: não muda de projeto
+create or replace function public.escritorio_etiqueta_guarda()
+returns trigger language plpgsql set search_path to '' as $$
+begin
+  if public.escritorio_eh_servidor() then return new; end if;
+  if tg_op = 'UPDATE' and new.projeto_id <> old.projeto_id then
+    raise exception 'a etiqueta não muda de projeto' using errcode = '42501';
+  end if;
+  return new;
+end $$;
+create trigger escritorio_etiquetas_guarda before update on public.escritorio_etiquetas
+  for each row execute function public.escritorio_etiqueta_guarda();
