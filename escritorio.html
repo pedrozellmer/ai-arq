@@ -487,7 +487,7 @@ const faixaDeFora = (padrao) => (MARCA && MARCA.cor ? `linear-gradient(135deg,${
 // A parte feita vem das tarefas da etapa (Aprovado ou Concluído) — ou, numa etapa de obra, do % executado do cronograma
 // de obra (a MESMA conta da tela do cronograma, feita no servidor). Cada etapa tem um peso (padrão 1, a admin muda).
 // Nada estimado: etapa atual sem tarefa conta zero até ser concluída.
-const ehEtapaDeObra = (e) => /(^|[^A-Za-zÀ-ÿ])obra([^A-Za-zÀ-ÿ]|$)/i.test(String(e || ''));
+const ehEtapaDeObra = (e) => /(^|[^A-Za-zÀ-ÿ])obras?([^A-Za-zÀ-ÿ]|$)/i.test(String(e || ''));
 function pesoDa(pesos, e) { const v = Number((pesos || {})[e]); return Number.isFinite(v) && v >= 0 ? Math.min(v, 20) : 1; }
 function calcAndamento(et, iA, pesos, feitas, total, obraPct) {
   if (!et.length || iA < 0) return null;

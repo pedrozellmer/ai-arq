@@ -263,8 +263,6 @@ def test_andamento_conta_so_as_etapas_antes_da_atual_mais_a_parte_feita_dela():
                   "return { pct: Math.round(pAntes + pAtual), pAntes, pAtual, obra, obraPct,"):
         assert linha in c, linha
     assert "calcAndamento(et, iA, pesos, feitas, total, OBRA.projeto === p.id ? OBRA.pct : null)" in _fn("andamentoAtual")
-    # "obra" como PALAVRA: "Acompanhamento de obra" sim; "Manobra" não
-    assert "const ehEtapaDeObra = (e) => /(^|[^A-Za-zÀ-ÿ])obra([^A-Za-zÀ-ÿ]|$)/i.test(String(e || ''));" in H
     p = _fn("pesoDa")
     assert "Number.isFinite(v) && v >= 0 ? Math.min(v, 20) : 1" in p          # sem peso = 1; negativo não vale
 
@@ -315,3 +313,62 @@ def test_a_cor_do_escritorio_so_nas_telas_de_quem_e_de_fora():
     r = _fn("renderMoldura")
     assert "selo.textContent = mk && !souEquipe() ? 'via AI.arq' : 'Piloto';" in r
     assert "const mk = PROJ && VIEW !== 'lista' ? MARCA : null" in r
+
+
+# ── a tela RODANDO (dukpy): as contas da página publicada, não o texto delas ──
+# 🔑 O bloco dos ajudantes (da marca ao andamento) roda inteiro no motor JS; o que se cobra é o NÚMERO que a tela
+# mostra. Um guarda de texto não vê `Math.round(pAntes)` no lugar de `Math.round(pAntes + pAtual)` escrito de outro jeito.
+def _tela(expr):
+    import json
+    import dukpy
+    ini, fim = H.index("const LOGO_OK"), H.index("function pillPrazo")
+    bloco = H[ini:fim]
+    assert "function calcAndamento(" in bloco and "function marcaLimpa(" in bloco and len(bloco) < 20000
+    modelo = H[H.index("const MODELO_DTZ = ["):]
+    modelo = modelo[:modelo.index(";") + 1]
+    return json.loads(dukpy.evaljs([modelo, bloco, "JSON.stringify(" + expr + ")"]))
+
+
+def _pct(iA, pesos="{}", feitas=0, total=0, obra="null"):
+    return _tela("calcAndamento(MODELO_DTZ, %d, %s, %d, %d, %s)" % (iA, pesos, feitas, total, obra))
+
+
+def test_na_tela_briefing_concluido_sem_tarefa_e_1_de_9():
+    # o 11% que o Pedro viu: Briefing concluído, Levantamento sem tarefa feita
+    assert _tela("MODELO_DTZ.length") == 9 and _pct(1)["pct"] == 11
+
+
+def test_na_tela_a_parte_feita_da_etapa_atual_entra():
+    assert _pct(1, feitas=2, total=4)["pct"] == 17            # 1/9 + ½ · 1/9 = 16,7
+    assert _pct(0, feitas=4, total=4)["pct"] == 11            # etapa toda feita e não concluída = a etapa inteira
+    assert _pct(1, feitas=5, total=4)["pct"] == 22            # nunca passa da etapa
+    assert _tela("calcAndamento(MODELO_DTZ, -1, {}, 0, 0, null)") is None      # etapa atual não marcada
+
+
+def test_na_tela_o_peso_muda_a_conta():
+    # Executivo (5ª) pesando 3: W = 8 + 3 = 11 → 4/11 antes + 3 · ½ / 11 = 36,4 + 13,6
+    a = _pct(4, pesos='{"Executivo": 3}', feitas=1, total=2)
+    assert a["pct"] == 50 and round(a["pAntes"], 1) == 36.4 and round(a["pAtual"], 1) == 13.6
+    assert _tela("[pesoDa({a: -2}, 'a'), pesoDa({a: 'x'}, 'a'), pesoDa({a: 99}, 'a'), pesoDa({a: 0}, 'a'), pesoDa({}, 'a')]") \
+        == [1, 1, 20, 0, 1]
+
+
+def test_na_tela_a_obra_vem_do_cronograma_e_sem_ele_das_tarefas():
+    assert _pct(7, obra="15.2")["pct"] == 79                  # 7/9 + 0,152/9 = 77,8 + 1,7
+    assert _pct(7, obra="15.2")["obra"] is True
+    assert _pct(7, feitas=1, total=4)["pct"] == 81            # sem cronograma: pelas tarefas (77,8 + 2,8)
+    assert _pct(7, obra="150")["pct"] == 89                   # % absurdo não passa da etapa
+    assert _pct(6, feitas=0, total=0, obra="50")["obra"] is False   # obra só na etapa de obra
+    assert _tela("['Obra', 'Obras', 'Acompanhamento de obra', 'Manobra', 'Obrador', ''].map(ehEtapaDeObra)") \
+        == [True, True, True, False, False, False]
+
+
+def test_na_tela_cor_legivel_e_logo_so_do_bucket():
+    for cor in ("#FFFF00", "#A5F3FC", "#FFFFFF"):
+        saiu = _tela("corLegivel('%s')" % cor)
+        assert 1.05 / (_luz(saiu) + 0.05) >= 4.5, (cor, saiu)
+    assert _tela("corLegivel('#1e3a8a')") == "#1e3a8a"                          # escura já legível: fica
+    assert _tela("[corLegivel('red;x'), corLegivel(''), corLegivel(null)]") == [None, None, None]
+    assert _tela("marcaLimpa({nome: 'X', logo_url: 'https://evil.test/storage/v1/object/public/logos/a.png'}).logo") == ""
+    assert _tela("marcaLimpa({nome: 'X', logo_url: '%s'}).logo" % LOGO) == LOGO
+    assert _tela("[marcaLimpa({nome: '  '}), marcaLimpa(null)]") == [None, None]
