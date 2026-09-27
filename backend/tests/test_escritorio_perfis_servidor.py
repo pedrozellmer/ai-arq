@@ -14,6 +14,8 @@ O banco já separa o que cada perfil vê. Aqui, o que o servidor faz com a chave
 🧪 O banco falso daqui FILTRA como o PostgREST (eq, neq, in, is, not.is, gte): o dos testes antigos devolvia
 tudo, e um filtro esquecido (papel=eq.freela) passaria verde.
 """
+import io
+import json
 import os
 import sys
 import types
@@ -50,9 +52,10 @@ class BancoFiel:
         self.t = {k: [] for k in (
             "escritorio_projetos", "escritorio_membros", "escritorio_drive_permissoes", "escritorio_drive_conexoes",
             "escritorio_emissoes", "escritorio_emissao_destinos", "escritorio_emissao_eventos", "escritorio_piloto",
-            "escritorio_convites_enviados", "profiles")}
+            "escritorio_convites_enviados", "profiles", "escritorio_fotos")}
         self.falhar = set()          # (método, tabela) que devolvem 500
         self.rls_recusa = False      # a gravação COMO USUÁRIO bate na RLS
+        self.papel = None            # quem está logado (pra leitura COMO USUÁRIO seguir a RLS)
         self._n = 0
 
     @staticmethod
@@ -105,8 +108,13 @@ class BancoFiel:
             return 204, None
         raise AssertionError(method)
 
-    def como_usuario(self, method, path, body):
-        """A resposta do cliente gravada COM O LOGIN DELE (aqui: o que o banco faria)."""
+    def como_usuario(self, method, path, body, params=None):
+        """O que o banco faria COM O LOGIN da pessoa (a RLS da seção 26, no que estes testes usam)."""
+        if (method, path) == ("GET", "escritorio_fotos"):
+            if self.papel not in ("dono", "freela", "fornecedor", "cliente"):
+                return 200, []
+            linhas = [x for x in self.t[path] if self.casa(x, params)]
+            return 200, [dict(x) for x in linhas if self.papel != "cliente" or x.get("pro_cliente") is True]
         assert (method, path) == ("POST", "escritorio_emissao_eventos"), (method, path)
         if self.rls_recusa:
             return 403, {"code": "42501", "message": "new row violates row-level security policy"}
@@ -129,6 +137,10 @@ class GoogleFiel:
             return 200, {"access_token": "acesso", "expires_in": 3600}
         if method == "DELETE":
             return 204, {}
+        if method == "PATCH" and "/files/" in url:
+            return 200, {}                                           # ex.: foto pra lixeira
+        if method == "POST" and "/files?" in url:
+            return 200, {"id": "PASTA_%s" % str((corpo or {}).get("name", "NOVA")).upper()}   # cria a subpasta
         if "/permissions" in url:
             if method == "POST":
                 return (500, None) if self.falha_permissao else (200, {"id": "perm-%d" % len(self.chamadas)})
@@ -157,23 +169,24 @@ def _pecas(monkeypatch):
     nomes = ("_SERVICO", "_COMO_USUARIO", "_USUARIO", "_REGISTRAR", "_ENVIAR", "_MOLDURA",
              "_DEPOIS_DO_ACEITE", "_PASTA_DO_FORNECEDOR")
     antes = {n: getattr(esc, n) for n in nomes}
-    antes_http = ed._HTTP
+    antes_http, antes_bruto = ed._HTTP, ed._BRUTO
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "segredo-de-teste-do-servidor")
     monkeypatch.setenv("GOOGLE_DRIVE_CLIENT_SECRET", "segredo-do-cliente")
     ed._CACHE_ACESSO.clear()
     yield
     for n, v in antes.items():
         setattr(esc, n, v)
-    ed._HTTP = antes_http
+    ed._HTTP, ed._BRUTO = antes_http, antes_bruto
     ed._CACHE_ACESSO.clear()
 
 
 def montar(usuario, papel):
     b, enviados, depois = BancoFiel(), [], []
+    b.papel = papel
     esc._SERVICO = b
     esc._USUARIO = lambda r: usuario
-    esc._COMO_USUARIO = lambda req, m, path, body=None, **k: (
-        (200, papel) if path == "rpc/escritorio_papel" else b.como_usuario(m, path, body))
+    esc._COMO_USUARIO = lambda req, m, path, body=None, params=None, **k: (
+        (200, papel) if path == "rpc/escritorio_papel" else b.como_usuario(m, path, body, params))
     esc._REGISTRAR = None
     esc._MOLDURA = lambda titulo, corpo, **k: "<h1>%s</h1>%s" % (titulo, corpo)
     esc._ENVIAR = lambda para, assunto, html, texto="", **k: enviados.append(
@@ -484,3 +497,149 @@ def test_cliente_e_fornecedor_contam_como_convidados_e_so_a_equipe_leva_o_sua_ar
     conv = main._convidados_do_escritorio()
     assert set(conv) == {"u-cli", "u-eq"}
     assert conv["u-cli"]["papeis"] == {"cliente"} and conv["u-eq"]["papeis"] == {"freela"}
+
+
+# ── fotos (26/09: "pasta Fotos no Drive"; sobem equipe e fornecedor; o cliente vê as "pro cliente") ──
+JPG = bytes([0xFF, 0xD8, 0xFF, 0xE0]) + b"foto-de-teste"
+PNG = bytes([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) + b"png-de-teste"
+F1 = "f0000000-0000-4000-8000-000000000001"
+F2 = "f0000000-0000-4000-8000-000000000002"
+
+
+class BrutoFiel:
+    """Upload e download de imagem (o que não é JSON)."""
+    def __init__(self):
+        self.chamadas, self.falha_upload = [], False
+        ed._BRUTO = self
+
+    def __call__(self, method, url, token=None, corpo=None, tipo=None, timeout=60):
+        self.chamadas.append({"m": method, "url": url, "corpo": corpo, "tipo": tipo})
+        if "/upload/drive/v3/files" in url:
+            if self.falha_upload:
+                return 500, b"", ""
+            n = len([c for c in self.chamadas if "/upload/" in c["url"]])
+            return 200, json.dumps({"id": "FOTO_DRIVE_%02d" % n, "name": "x"}).encode("utf-8"), "application/json"
+        if "googleusercontent" in url:
+            return 200, b"miniatura-" + url.rsplit("=", 1)[1].encode("ascii"), "image/jpeg"
+        if "alt=media" in url:
+            return 200, JPG, "image/jpeg"
+        return 404, b"", ""
+
+    def uploads(self):
+        return [c for c in self.chamadas if "/upload/" in c["url"]]
+
+
+def _arq(dados, nome="foto.jpg"):
+    return types.SimpleNamespace(file=io.BytesIO(dados), filename=nome)
+
+
+def test_fornecedor_sobe_fotos_na_pasta_fotos_e_elas_nao_vao_sozinhas_pro_cliente():
+    b, _, _ = montar(FORN, "fornecedor")
+    membro(b, M_FORN, "fornecedor", FORN)
+    g, br = _pastas(), BrutoFiel()
+    r = ed.projeto_fotos_subir(PROJ, REQ, fotos=[_arq(JPG), _arq(PNG, "b.png")], legenda="Vão da cozinha",
+                               etapa="Obra", pro_cliente="1")
+    assert len(r["fotos"]) == 2 and r["falhas"] == 0
+    assert all(f["pro_cliente"] is False and f["enviada_por"] == FORN["id"] and f["etapa"] == "Obra"
+               for f in b.t["escritorio_fotos"])
+    criou = [c for m, u, c in g.chamadas if m == "POST" and "/files?" in u]
+    assert [c["name"] for c in criou] == ["Fotos"] and criou[0]["parents"] == ["PASTA_PROJ"]
+    up = br.uploads()
+    assert len(up) == 2 and all(b"PASTA_FOTOS" in c["corpo"] for c in up)
+    assert b"da cozinha 01.jpg" in up[0]["corpo"] and b"da cozinha 02.png" in up[1]["corpo"]
+    assert up[0]["tipo"].startswith("multipart/related; boundary=") and JPG in up[0]["corpo"]
+
+
+def test_controle_a_equipe_marca_pro_cliente_na_subida():
+    b, _, _ = montar(EQUIPE, "freela")
+    membro(b, M_EQ, "freela", EQUIPE)
+    _pastas()
+    BrutoFiel()
+    ed.projeto_fotos_subir(PROJ, REQ, fotos=[_arq(JPG)], legenda="Fachada", pro_cliente="1")
+    assert b.t["escritorio_fotos"][0]["pro_cliente"] is True
+
+
+def test_cliente_nao_sobe_foto():
+    montar(CLI, "cliente")
+    br = BrutoFiel()
+    with pytest.raises(HTTPException) as e:
+        ed.projeto_fotos_subir(PROJ, REQ, fotos=[_arq(JPG)])
+    assert e.value.status_code == 403 and not br.chamadas
+
+
+def test_o_que_nao_e_imagem_e_recusado_pelos_bytes_mesmo_com_nome_de_jpg():
+    b, _, _ = montar(EQUIPE, "freela")
+    _pastas()
+    br = BrutoFiel()
+    with pytest.raises(HTTPException) as e:
+        ed.projeto_fotos_subir(PROJ, REQ, fotos=[_arq(b"%PDF-1.7 planta", "planta.jpg")])
+    assert e.value.status_code == 415 and not br.chamadas and not b.t["escritorio_fotos"]
+
+
+def test_foto_acima_do_teto_e_recusada_antes_de_subir(monkeypatch):
+    montar(EQUIPE, "freela")
+    _pastas()
+    br = BrutoFiel()
+    monkeypatch.setattr(ed, "_FOTO_TETO", 10)
+    with pytest.raises(HTTPException) as e:
+        ed.projeto_fotos_subir(PROJ, REQ, fotos=[_arq(JPG)])
+    assert e.value.status_code == 413 and not br.chamadas
+
+
+def test_sem_o_registro_a_foto_nao_fica_orfa_no_drive():
+    b, _, _ = montar(EQUIPE, "freela")
+    g = _pastas()
+    BrutoFiel()
+    b.falhar.add(("POST", "escritorio_fotos"))
+    with pytest.raises(HTTPException) as e:
+        ed.projeto_fotos_subir(PROJ, REQ, fotos=[_arq(JPG)])
+    assert e.value.status_code == 502
+    assert any(m == "DELETE" and "/files/FOTO_DRIVE_01" in u for m, u, _ in g.chamadas)
+
+
+def _fotos(b, g):
+    b.t["escritorio_fotos"] += [
+        {"id": F1, "projeto_id": PROJ, "drive_file_id": "FOTO_DRIVE_01", "pro_cliente": True, "enviada_por": DONA["id"]},
+        {"id": F2, "projeto_id": PROJ, "drive_file_id": "FOTO_DRIVE_02", "pro_cliente": False, "enviada_por": FORN["id"]}]
+    for fid in ("FOTO_DRIVE_01", "FOTO_DRIVE_02"):
+        g.pastas[fid] = {"thumbnailLink": "https://lh3.googleusercontent.com/" + fid + "=s220"}
+
+
+def test_o_cliente_so_ve_a_imagem_das_fotos_pro_cliente_e_no_tamanho_pedido():
+    b, _, _ = montar(CLI, "cliente")
+    g = _pastas()
+    _fotos(b, g)
+    BrutoFiel()
+    r = ed.projeto_foto_imagem(PROJ, F1, REQ, tam="grande")
+    assert r.body == b"miniatura-s1600" and r.media_type == "image/jpeg"
+    assert "private" in r.headers["cache-control"]
+    with pytest.raises(HTTPException) as e:
+        ed.projeto_foto_imagem(PROJ, F2, REQ)
+    assert e.value.status_code == 404
+
+
+def test_miniatura_que_nao_e_do_google_nao_e_seguida():
+    b, _, _ = montar(EQUIPE, "freela")
+    g = _pastas()
+    _fotos(b, g)
+    g.pastas["FOTO_DRIVE_01"] = {"thumbnailLink": "https://outro.exemplo.com/x=s220"}
+    br = BrutoFiel()
+    r = ed.projeto_foto_imagem(PROJ, F1, REQ)
+    assert r.body == JPG and not [c for c in br.chamadas if "exemplo.com" in c["url"]]
+
+
+def test_apagar_foto_so_quem_subiu_ou_a_admin_e_vai_pra_lixeira():
+    b, _, _ = montar(FORN, "fornecedor")
+    g = _pastas()
+    _fotos(b, g)
+    with pytest.raises(HTTPException) as e:
+        ed.projeto_foto_apagar(PROJ, F1, REQ)                    # a da admin
+    assert e.value.status_code == 403
+    assert ed.projeto_foto_apagar(PROJ, F2, REQ)["ok"]            # a dele
+    lixo = [(u, c) for m, u, c in g.chamadas if m == "PATCH"]
+    assert len(lixo) == 1 and "/files/FOTO_DRIVE_02" in lixo[0][0] and lixo[0][1] == {"trashed": True}
+    assert [f["id"] for f in b.t["escritorio_fotos"]] == [F1]
+    b2, _, _ = montar(DONA, "dono")
+    g2 = _pastas()
+    _fotos(b2, g2)
+    assert ed.projeto_foto_apagar(PROJ, F2, REQ)["ok"]            # a admin apaga a de qualquer um

@@ -66,11 +66,11 @@
       <div id="st-convite" hidden>
         <h1 class="text-2xl font-bold text-gray-900 text-center mt-6 mb-2">Você foi convidado</h1>
         <p class="text-base text-gray-700 text-center mb-6">
-          <b id="c-por">Alguém</b> te chamou para trabalhar no projeto<br>
+          <b id="c-por">Alguém</b> te chamou para <span id="c-verbo">trabalhar no</span> projeto<br>
           <b id="c-projeto" class="text-indigo-700">—</b>
         </p>
         <div class="rounded-xl bg-indigo-50 border border-indigo-100 px-4 py-3 mb-6 text-sm text-indigo-900">
-          Lá você vê as <b>tarefas</b>, as <b>atas de reunião</b> e os <b>arquivos</b> do projeto, num lugar só.
+          <span id="c-ve">Lá você vê as <b>tarefas</b>, as <b>atas de reunião</b> e os <b>arquivos</b> do projeto, num lugar só.</span>
           <span class="block text-xs text-indigo-800 mt-1">Convite enviado para <b id="c-email">—</b>.</span>
         </div>
         <div class="space-y-3">
@@ -364,7 +364,16 @@
     if (v.status !== 200) return erro('Não deu pra abrir o convite agora', v.dados.detail || 'Tente de novo em instantes.', true);
     if (v.dados.expirado) return recusado({ status: 410, dados: {} });
     const projeto = v.dados.projeto || 'um projeto', por = v.dados.convidado_por || 'Alguém';
-    window.aiarqConvite.guardar(token, { projeto, por });   // o cadastro mostra "a convite de…"
+    // 26/09 (perfis): o cliente (dono da obra) e o fornecedor não vêm "trabalhar" em atas e tarefas — o texto e o
+    // cadastro (curto, pra eles) seguem o perfil do convite, que o SERVIDOR diz
+    const perfil = ['cliente', 'fornecedor'].includes(v.dados.perfil) ? v.dados.perfil : 'equipe';
+    window.aiarqConvite.guardar(token, { projeto, por, perfil });   // o cadastro mostra "a convite de…"
+    if (perfil !== 'equipe') {
+      $('c-verbo').textContent = 'acompanhar o';
+      $('c-ve').innerHTML = perfil === 'cliente'
+        ? 'Lá você vê o que o escritório <b>mandar pra você</b>, <b>aprova ou pede revisão</b> e acompanha as <b>fotos da obra</b>, num lugar só.'
+        : 'Lá você vê <b>as tarefas que são suas</b>, <b>os arquivos que o escritório separou</b> pra você e as <b>fotos da obra</b>.';
+    }
     $('c-projeto').textContent = projeto; $('p-projeto').textContent = projeto;
     $('c-por').textContent = por;
     $('c-email').textContent = v.dados.email || 'o seu e-mail';

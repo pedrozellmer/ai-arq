@@ -253,8 +253,10 @@ def test_o_menu_da_equipe_mostra_so_o_que_ela_pode():
 
 def test_a_admin_libera_o_download_por_pessoa():
     h = _ler("escritorio.html")
-    assert "const COLS_MEMBRO = 'id,projeto_id,user_id,nome,papel,funcao,status,convidado_em,aceito_em,removido_em,pode_baixar';" in h
-    assert "${souAdmin() && PROJ.job_id && m.papel !== 'dono' ? `<label class=\"chip\"" in h
+    # 26/09 (perfis): a coluna do nome da pasta do fornecedor entrou; "pode baixar" é só da EQUIPE (cliente e
+    # fornecedor nunca veem o medido — o servidor exige papel freela)
+    assert "const COLS_MEMBRO = 'id,projeto_id,user_id,nome,papel,funcao,status,convidado_em,aceito_em,removido_em,pode_baixar,drive_pasta_nome';" in h
+    assert "${souAdmin() && PROJ.job_id && m.papel === 'freela' ? `<label class=\"chip\"" in h
     mb = h[h.index("async function mudarBaixar(id, v, el) {"):]
     mb = mb[:mb.index("\n}\n")]
     assert ".update({ pode_baixar: v }).eq('id', id).eq('projeto_id', PROJ.id)" in mb

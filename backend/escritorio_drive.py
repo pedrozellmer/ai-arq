@@ -32,8 +32,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import RedirectResponse, Response
 
 import escritorio as esc
 
@@ -562,8 +562,13 @@ def nome_da_emissao(nome: str, revisao: int, nativo: bool = False) -> str:
 
 def _pasta_emitidos(tok: str, raiz: str) -> str:
     """A pasta "Emitidos" direto dentro da pasta do projeto — criada na 1ª emissão."""
+    return _subpasta_da_dona(tok, raiz, EMITIDOS)
+
+
+def _subpasta_da_dona(tok: str, raiz: str, nome: str) -> str:
+    """Uma subpasta fixa ("Emitidos", "Fotos") direto dentro da pasta do projeto — criada na 1ª vez."""
     st, r = _drive("GET", "files", tok, params={
-        "q": f"'{raiz}' in parents and name='{EMITIDOS}' and mimeType='{PASTA}' and trashed=false",
+        "q": f"'{raiz}' in parents and name='{_q_texto(nome)}' and mimeType='{PASTA}' and trashed=false",
         "fields": "files(id,ownedByMe,driveId)", "orderBy": "createdTime", "pageSize": "10",
         "supportsAllDrives": "true", "includeItemsFromAllDrives": "true"})
     if st != 200 or r is None:
@@ -575,9 +580,9 @@ def _pasta_emitidos(tok: str, raiz: str) -> str:
         if f.get("ownedByMe") or f.get("driveId"):
             return f["id"]
     st_c, nova = _drive("POST", "files", tok, params={"supportsAllDrives": "true", "fields": "id"},
-                        corpo={"name": EMITIDOS, "mimeType": PASTA, "parents": [raiz]})
+                        corpo={"name": nome, "mimeType": PASTA, "parents": [raiz]})
     if st_c != 200 or not nova or not nova.get("id"):
-        raise HTTPException(502, "Não consegui criar a pasta Emitidos no Drive. Tente de novo em instantes.")
+        raise HTTPException(502, f"Não consegui criar a pasta {nome} no Drive. Tente de novo em instantes.")
     return nova["id"]
 
 
@@ -1108,3 +1113,189 @@ def sincronizar_em_segundo_plano(projeto_id: str):
 
 
 esc._DEPOIS_DO_ACEITE = sincronizar_em_segundo_plano
+
+
+# ── fotos do projeto (perfis, 26/09 — decisão do Pedro: "pasta Fotos no Drive"; sobem equipe e fornecedor) ──
+# O arquivo mora na pasta "Fotos" dentro da pasta do projeto, no Drive da dona; o banco guarda só legenda, etapa, data
+# e "pro cliente" (escritorio_fotos). Sobe e aparece pelo SERVIDOR: o cliente não tem acesso à pasta no Drive, e a
+# imagem chega na tela pelo login (nenhum link aberto do Google).
+
+FOTOS = "Fotos"
+_FOTO_TETO = 12 * 1024 * 1024        # por foto (a do celular tem 3–6 MB)
+_FOTOS_POR_VEZ = 10
+_FOTOS_TOTAL = 40 * 1024 * 1024      # por envio: 1 processo no Render, não dá pra segurar mais que isso na memória
+_TAMANHOS = {"miniatura": 480, "grande": 1600}
+_MINIATURA_DO_GOOGLE = re.compile("^https://[a-z0-9.-]+[.]googleusercontent[.]com/")
+_ENVIO_RN = bytes([13, 10])
+
+
+def _bruto(method, url, token=None, corpo=None, tipo=None, timeout=60):
+    """(status, bytes, content-type) — pra subir e baixar imagem. Trocável nos testes (`_BRUTO`)."""
+    cab = {}
+    if token:
+        cab["Authorization"] = f"Bearer {token}"
+    if tipo:
+        cab["Content-Type"] = tipo
+    req = urllib.request.Request(url, data=corpo, method=method, headers=cab)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return r.status, r.read(_FOTO_TETO + 1), r.headers.get("Content-Type") or ""
+    except urllib.error.HTTPError as e:
+        return e.code, b"", ""
+    except Exception:
+        return 0, b"", ""
+
+
+_BRUTO = _bruto
+
+
+def tipo_da_foto(dados: bytes):
+    """(mime, extensão) pelos PRIMEIROS BYTES — nunca pelo nome do arquivo nem pelo que o navegador disse."""
+    if dados[:3] == bytes([0xFF, 0xD8, 0xFF]):
+        return "image/jpeg", "jpg"
+    if dados[:8] == bytes([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]):
+        return "image/png", "png"
+    if dados[:4] == b"RIFF" and dados[8:12] == b"WEBP":
+        return "image/webp", "webp"
+    if dados[4:8] == b"ftyp" and dados[8:12] in (b"heic", b"heix", b"heim", b"heis", b"mif1", b"msf1"):
+        return "image/heic", "heic"
+    return None, None
+
+
+def _subir_pro_drive(tok: str, pasta: str, nome: str, mime: str, dados: bytes):
+    """Upload multipart do Drive (metadados + bytes num envio só). (status, {"id","name"} | {})."""
+    fronteira = "aiarq" + base64.urlsafe_b64encode(os.urandom(12)).decode("ascii").rstrip("=")
+    f, rn = fronteira.encode("ascii"), _ENVIO_RN
+    meta = json.dumps({"name": nome, "parents": [pasta]}).encode("utf-8")
+    corpo = b"".join([b"--", f, rn, b"Content-Type: application/json; charset=UTF-8", rn, rn, meta, rn,
+                      b"--", f, rn, b"Content-Type: ", mime.encode("ascii"), rn, rn, dados, rn,
+                      b"--", f, b"--", rn])
+    st, bruto, _ = _BRUTO("POST", "https://www.googleapis.com/upload/drive/v3/files"
+                                  "?uploadType=multipart&supportsAllDrives=true&fields=id,name",
+                          tok, corpo, "multipart/related; boundary=" + fronteira, timeout=120)
+    try:
+        return st, (json.loads(bruto.decode("utf-8")) if st == 200 and bruto else {})
+    except (ValueError, UnicodeDecodeError):
+        return st, {}
+
+
+@router.post("/projetos/{projeto_id}/fotos")
+def projeto_fotos_subir(projeto_id: str, request: Request, fotos: list[UploadFile] = File(...),
+                        legenda: str = Form(""), etapa: str = Form(""), pro_cliente: str = Form("")):
+    """Equipe e fornecedor sobem fotos da obra. Vão pra pasta Fotos do Drive da dona; "pro cliente" é decisão da
+    EQUIPE (o fornecedor manda, a equipe decide o que o cliente vê — o banco também barra ele de mudar depois)."""
+    eu = esc._exige_login(request)
+    papel = esc._papel(request, projeto_id)
+    if papel not in ("dono", "freela", "fornecedor"):
+        raise HTTPException(403, "Só a equipe e os fornecedores do projeto sobem fotos.")
+    if not fotos:
+        raise HTTPException(400, "Escolha pelo menos uma foto.")
+    if len(fotos) > _FOTOS_POR_VEZ:
+        raise HTTPException(400, f"Mande até {_FOTOS_POR_VEZ} fotos por vez.")
+    leg = esc._texto_sem_controle(legenda, 200)
+    et = esc._texto_sem_controle(etapa, 80)
+    pro = papel in ("dono", "freela") and str(pro_cliente or "").strip().lower() in ("1", "true", "sim", "on")
+    lidas, total = [], 0
+    for n, arq in enumerate(fotos, 1):
+        dados = arq.file.read(_FOTO_TETO + 1)
+        if len(dados) > _FOTO_TETO:
+            raise HTTPException(413, f"A foto {n} passou de {_FOTO_TETO // 1048576} MB.")
+        mime, ext = tipo_da_foto(dados)
+        if not mime:
+            raise HTTPException(415, f"A foto {n} não é uma imagem que o AI.arq aceita (JPG, PNG, WEBP ou HEIC).")
+        total += len(dados)
+        if total > _FOTOS_TOTAL:
+            raise HTTPException(413, f"Esse envio passou de {_FOTOS_TOTAL // 1048576} MB. Mande em partes menores.")
+        lidas.append((dados, mime, ext))
+    p = _dono_do_projeto(projeto_id)
+    if not p.get("pasta_id"):
+        raise HTTPException(409, "A admin ainda não ligou a pasta do Drive a este projeto.")
+    if not _conexao(p["dono"]):
+        raise HTTPException(409, "O Google Drive do projeto está desconectado. Avise a admin.")
+    tok = _acesso(p["dono"])
+    pasta = _subpasta_da_dona(tok, p["pasta_id"], FOTOS)
+    dia = _hoje_no_brasil()
+    base = " ".join(re.sub("[^0-9A-Za-zÀ-ÿ _-]+", " ", leg or "foto").split())[:60] or "foto"
+    feitas, falhas = [], 0
+    for i, (dados, mime, ext) in enumerate(lidas, 1):
+        nome = f"{dia} {base} {i:02d}.{ext}" if len(lidas) > 1 else f"{dia} {base}.{ext}"
+        st, meta = _subir_pro_drive(tok, pasta, nome, mime, dados)
+        if st != 200 or not meta.get("id"):
+            falhas += 1
+            continue
+        st_i, linha = esc._SERVICO("POST", "escritorio_fotos", body={
+            "projeto_id": projeto_id, "drive_file_id": meta["id"], "legenda": leg, "etapa": et,
+            "pro_cliente": pro, "enviada_por": eu["id"]}, prefer="return=representation")
+        if st_i >= 300 or st_i == 0 or not linha:
+            # sem o registro a foto não aparece em lugar nenhum: não deixa órfã no Drive
+            _drive("DELETE", f"files/{meta['id']}", tok, params={"supportsAllDrives": "true"})
+            falhas += 1
+            continue
+        feitas.append(linha[0])
+    if not feitas:
+        raise HTTPException(502, "As fotos não subiram agora. Tente de novo em instantes.")
+    return {"ok": True, "fotos": feitas, "falhas": falhas}
+
+
+@router.get("/projetos/{projeto_id}/fotos/{foto_id}/imagem")
+def projeto_foto_imagem(projeto_id: str, foto_id: str, request: Request, tam: str = "miniatura"):
+    """A imagem, pelo login. QUEM pode ver é o banco que responde: a linha só volta pra quem pode (o cliente, só
+    as "pro cliente"). Miniatura do próprio Google no tamanho pedido; sem miniatura ainda, o original (no teto)."""
+    esc._exige_login(request)
+    if not esc._UUID.match(str(foto_id or "")):
+        raise HTTPException(404, "Foto não encontrada.")
+    st, linhas = esc._COMO_USUARIO(request, "GET", "escritorio_fotos", params={
+        "id": f"eq.{foto_id}", "projeto_id": f"eq.{projeto_id}", "select": "drive_file_id"})
+    if st == 0 or st >= 500:
+        raise HTTPException(502, "O banco não respondeu agora. Tente de novo em instantes.")
+    if st >= 300 or not isinstance(linhas, list) or not linhas:
+        raise HTTPException(404, "Foto não encontrada.")
+    fid = str(linhas[0].get("drive_file_id") or "")
+    if not _ID_DRIVE.fullmatch(fid):
+        raise HTTPException(404, "Foto não encontrada.")
+    p = _dono_do_projeto(projeto_id)
+    if not _conexao(p["dono"]):
+        raise HTTPException(409, "O Google Drive do projeto está desconectado.")
+    tok = _acesso(p["dono"])
+    st_f, f = _drive("GET", f"files/{fid}", tok, params={"fields": "thumbnailLink", "supportsAllDrives": "true"})
+    if st_f == 404:
+        raise HTTPException(404, "A foto não está mais no Drive.")
+    if st_f != 200 or f is None:
+        raise HTTPException(502, "O Google não respondeu agora. Tente de novo em instantes.")
+    link, st_b, dados, tipo = str(f.get("thumbnailLink") or ""), 0, b"", ""
+    if _MINIATURA_DO_GOOGLE.match(link):
+        lado = _TAMANHOS.get(tam, _TAMANHOS["miniatura"])
+        st_b, dados, tipo = _BRUTO("GET", re.sub("=s[0-9]+$", f"=s{lado}", link), tok)
+    if st_b != 200 or not dados:
+        st_b, dados, tipo = _BRUTO("GET", f"https://www.googleapis.com/drive/v3/files/{fid}?alt=media&supportsAllDrives=true", tok)
+        if st_b != 200 or not dados or len(dados) > _FOTO_TETO:
+            raise HTTPException(502, "A foto ainda está sendo preparada no Drive. Tente de novo em instantes.")
+    mime = tipo.split(";")[0].strip() if tipo.startswith("image/") else (tipo_da_foto(dados)[0] or "application/octet-stream")
+    return Response(content=dados, media_type=mime,
+                    headers={"Cache-Control": "private, max-age=86400", "X-Content-Type-Options": "nosniff"})
+
+
+@router.delete("/projetos/{projeto_id}/fotos/{foto_id}")
+def projeto_foto_apagar(projeto_id: str, foto_id: str, request: Request):
+    """A admin apaga qualquer foto; equipe e fornecedor, as que subiram. Vai pra LIXEIRA do Drive (volta em 30 dias)."""
+    eu = esc._exige_login(request)
+    papel = esc._papel(request, projeto_id)
+    if not esc._UUID.match(str(foto_id or "")):
+        raise HTTPException(404, "Foto não encontrada.")
+    f = esc._um(esc._SERVICO("GET", "escritorio_fotos", params={
+        "id": f"eq.{foto_id}", "projeto_id": f"eq.{projeto_id}", "select": "id,drive_file_id,enviada_por"}))
+    if not f or not papel:
+        raise HTTPException(404, "Foto não encontrada.")
+    if not (papel == "dono" or (papel in ("freela", "fornecedor") and str(f.get("enviada_por")) == eu["id"])):
+        raise HTTPException(403, "Só quem subiu a foto (ou a admin) apaga.")
+    p = _dono_do_projeto(projeto_id)
+    if not _conexao(p["dono"]):
+        raise HTTPException(409, "O Google Drive do projeto está desconectado: a foto não foi apagada.")
+    st_d, _ = _drive("PATCH", f"files/{f['drive_file_id']}", _acesso(p["dono"]),
+                     params={"supportsAllDrives": "true"}, corpo={"trashed": True})
+    if st_d not in (200, 404):
+        raise HTTPException(502, "O Google não respondeu agora. A foto não foi apagada.")
+    st, _ = esc._SERVICO("DELETE", "escritorio_fotos", params={"id": f"eq.{foto_id}", "projeto_id": f"eq.{projeto_id}"})
+    if st >= 300 or st == 0:
+        raise HTTPException(502, "A foto foi pra lixeira do Drive, mas não saiu da lista agora. Tente de novo.")
+    return {"ok": True}

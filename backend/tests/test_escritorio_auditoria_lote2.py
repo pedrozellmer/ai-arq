@@ -52,7 +52,9 @@ def test_carregar_projeto_troca_tudo_junto_no_fim():
     i_leituras = cp.index("await Promise.all([")
     i_troca = cp.index("PROJ = proj; MEMBROS = membros;")
     assert i_leituras < i_troca and "PROJ = PROJETOS.find" not in cp, "o PROJ não pode trocar antes das leituras"
-    assert cp.index("if (!PROJ || PROJ.id !== id) { ARQ_PASTA = ''; ARQ_TRILHA = []; FILTRO = 'todas'; FILTRO_E = ''; ETAPA_SEL = null; }") < i_troca
+    # 26/09 (perfis): o bloco ganhou o filtro das fotos e a limpeza das imagens — a limpeza continua ANTES da troca
+    i_se = cp.index("if (!PROJ || PROJ.id !== id) {")
+    assert i_se < cp.index("ARQ_PASTA = ''; ARQ_TRILHA = []; FILTRO = 'todas'; FILTRO_E = ''; ETAPA_SEL = null;") < i_troca
 
 
 def test_etapa_do_filtro_que_nao_existe_no_projeto_nao_filtra_nem_vai_pro_cartao():

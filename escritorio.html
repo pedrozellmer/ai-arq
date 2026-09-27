@@ -313,6 +313,23 @@
   .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(10px);background:#1E293B;color:#fff;font-size:13px;font-weight:500;padding:10px 16px;border-radius:10px;opacity:0;transition:all .25s;z-index:80;pointer-events:none;max-width:calc(100% - 32px)}
   .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
   .toast.erro{background:#991B1B}
+  /* 26/09 (perfis): fotos do projeto — a imagem chega pelo servidor (blob), o quadro espera com um degradê */
+  .fotos-g{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(160px,1fr))}
+  .ft{display:flex;flex-direction:column;background:#fff;border:1px solid #E2E8F0;border-radius:14px;overflow:hidden;padding:0;cursor:pointer;font-family:inherit;text-align:left;transition:box-shadow .15s}
+  .ft:hover{box-shadow:0 10px 22px -12px rgba(15,23,42,.35)}
+  .ft-img{display:block;aspect-ratio:4/3;background:linear-gradient(135deg,#E2E8F0,#F1F5F9)}
+  .ft-img.falhou{background:repeating-linear-gradient(45deg,#F1F5F9 0 8px,#E2E8F0 8px 16px)}
+  .ft-img img{width:100%;height:100%;object-fit:cover;display:block}
+  .ft-img img:not([src]){visibility:hidden}
+  .ft-leg{display:flex;flex-direction:column;gap:2px;padding:8px 10px;min-width:0}
+  .ft-leg b{font-size:13px;color:#0F172A;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ft-leg small{font-size:11.5px;color:#64748B}
+  .ft-grande{background:#0F172A;border-radius:12px;overflow:hidden;min-height:200px;display:flex;align-items:center;justify-content:center}
+  .ft-grande img{max-width:100%;max-height:70vh;display:block}
+  .ft-grande img:not([src]){visibility:hidden}
+  .perfil-op{border:1px solid #E2E8F0;border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:#475569;line-height:1.4;cursor:pointer}
+  .perfil-op:has(input:checked){border:2px solid #4F46E5;background:#EEF2FF;padding:9px 11px}
+  .perfil-op b{font-size:14px;color:#0F172A}
   .gira{border:2px solid #c7d2fe;border-top-color:#4f46e5;border-radius:9999px;width:2rem;height:2rem;animation:spin 1s linear infinite;margin:40px auto}
   @keyframes spin{to{transform:rotate(360deg)}}
   @media (prefers-reduced-motion: reduce){ *{animation-duration:.01ms!important;transition-duration:.01ms!important} }
@@ -360,7 +377,7 @@ const ST = [
 const ST_EQUIPE = ['afazer', 'dev', 'revdtz'];   // o mesmo que o gatilho escritorio_tarefa_guarda
 const stT = (k) => (ST.find((s) => s.k === k) || {}).t || k;
 
-const COLS_MEMBRO = 'id,projeto_id,user_id,nome,papel,funcao,status,convidado_em,aceito_em,removido_em,pode_baixar';
+const COLS_MEMBRO = 'id,projeto_id,user_id,nome,papel,funcao,status,convidado_em,aceito_em,removido_em,pode_baixar,drive_pasta_nome';
 // ── estado ──
 let NO_PILOTO = false;
 let EU = null, PROJETOS = [], PROJ = null, MEMBROS = [], PAPEL = null, TAR = [], PESSOAS_T = [], ATAS = [], NOTAS = {};
@@ -368,6 +385,8 @@ let EU = null, PROJETOS = [], PROJ = null, MEMBROS = [], PAPEL = null, TAR = [],
 let CHK = [], ETQ = [], TETQ = [], TEM_CHK = false;
 // 26/09: emissões ao cliente (R00, R01…) e o que o cliente respondeu. TEM_EMI = leu bem.
 let EMI = [], EMI_EV = [], TEM_EMI = false;
+// 26/09 (perfis): pra quem cada emissão foi (DEST) e as fotos do projeto (FOTOS). Acessórios: falhou, o resto segue.
+let DEST = [], FOTOS = [], TEM_FOTOS = false;
 let VIEW = 'lista', FILTRO = 'todas', FILTRO_E = '', ETAPA_SEL = null;
 
 // ── utilidades ──
@@ -380,6 +399,12 @@ function falhou(e, oque) {
   console.error(oque, e);
 }
 function menu(abre) { $('side').classList.toggle('aberto', abre); $('scrim').classList.toggle('aberto', abre); }
+// 26/09 (perfis): o cliente e o fornecedor não passam pelo painel — o Sair mora aqui também. Como o do menu-lateral.js
+// (auditoria LGPD-9): o nome dos projetos não fica no navegador depois de sair.
+function sairDaConta() {
+  try { localStorage.removeItem('aiarq_esc_mapa'); sessionStorage.removeItem('aiarq_esc_ctx'); sessionStorage.removeItem('aiarq_escritorio_levou'); } catch (_) {}
+  sb.auth.signOut().finally(() => { location.href = 'login.html'; });
+}
 function abrirModal(t, html, largo) { $('modal-t').textContent = t; $('modal-b').innerHTML = html; const mc = document.querySelector('#modal .modal-c'); if (mc) mc.classList.toggle('largo', !!largo); $('modal').hidden = false; const f = $('modal-b').querySelector('input,textarea,select'); if (f) f.focus(); }
 // 26/09 (auditoria UX-4): fechar o modal no MEIO da emissão (Esc, toque fora) e clicar Emitir de novo fazia
 // uma revisão a mais — enquanto emite, o modal não fecha
@@ -397,6 +422,13 @@ const dBR = (s) => (!s ? '' : String(s).length > 10
 const hojeISO = () => new Intl.DateTimeFormat('en-CA', { timeZone: FUSO, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 const dias = (s) => Math.round((dISO(s) - hoje()) / 864e5);
 const souAdmin = () => PAPEL === 'dono';
+// 26/09 (perfis — maquete aprovada pelo Pedro): a EQUIPE é a admin e quem ela chamou como equipe ('freela' no banco);
+// fornecedor e cliente veem só o que é deles. Quem decide é o banco (seção 26); a tela só não mostra o que não vale.
+const souEquipe = () => PAPEL === 'dono' || PAPEL === 'freela';
+const souFornecedor = () => PAPEL === 'fornecedor';
+const souCliente = () => PAPEL === 'cliente';
+const PERFIL_TXT = { dono: 'admin', freela: 'equipe', fornecedor: 'fornecedor', cliente: 'cliente' };
+const deFora = (m) => !!m && (m.papel === 'cliente' || m.papel === 'fornecedor');
 const meuMembro = () => MEMBROS.find((m) => m.user_id === EU.id);
 const nomeDe = (m) => (m && (m.nome || (m.email || '').split('@')[0])) || '—';
 const curto = (m) => nomeDe(m).split(' ')[0];
@@ -434,11 +466,14 @@ const IC = {
   cad: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/>',
   cli: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
   emi: '<path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4z"/>',
+  foto: '<path d="M3 8a2 2 0 012-2h2l1.5-2h7L17 6h2a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><circle cx="12" cy="13" r="3.5"/>',
+  forn: '<path d="M14.7 6.3a4 4 0 00-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 005.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z"/>',
 };
 // a cor de cada ferramenta (forte, clara, fundo) — a mesma no cartão da página do projeto e na faixa da tela dela
 const COR = { tar: ['#4F46E5', '#818CF8', '#EEF2FF'], arq: ['#D97706', '#F59E0B', '#FFFBEB'], atas: ['#059669', '#34D399', '#ECFDF5'], eq: ['#7C3AED', '#A78BFA', '#F5F3FF'],
   plan: ['#0891B2', '#22D3EE', '#ECFEFF'], crono: ['#EA580C', '#FB923C', '#FFF7ED'], memo: ['#2563EB', '#60A5FA', '#EFF6FF'], rev: ['#E11D48', '#FB7185', '#FFF1F2'],
-  cot: ['#0D9488', '#2DD4BF', '#F0FDFA'], fin: ['#16A34A', '#4ADE80', '#F0FDF4'], emi: ['#0284C7', '#38BDF8', '#F0F9FF'] };
+  cot: ['#0D9488', '#2DD4BF', '#F0FDFA'], fin: ['#16A34A', '#4ADE80', '#F0FDF4'], emi: ['#0284C7', '#38BDF8', '#F0F9FF'],
+  foto: ['#BE185D', '#F472B6', '#FDF2F8'], cli: ['#0369A1', '#38BDF8', '#F0F9FF'], forn: ['#C2410C', '#FB923C', '#FFF7ED'] };
 // faixa colorida no topo de cada tela (ícone, título, uma linha e os botões da tela)
 const faixa = (ic, titulo, sub, acoes = '') => `<section class="faixa rise" style="--c1:${COR[ic][0]};--c2:${COR[ic][1]}">
   <span class="fx-ico">${svg(ic, 24)}</span><div style="flex:1 1 260px;min-width:0"><h2>${titulo}</h2>${sub ? `<p>${sub}</p>` : ''}</div>${acoes ? `<div class="linha fx-acoes">${acoes}</div>` : ''}</section>`;
@@ -459,13 +494,20 @@ window.addEventListener('hashchange', () => navegar());
 
 // ── dados ──
 async function carregarProjetos() {
-  const [r, pil] = await Promise.all([
+  const [r, pil, fora] = await Promise.all([
     sb.from('escritorio_projetos').select('*').order('criado_em', { ascending: false }),
     // 🔒 A1: criar projeto é só pra quem está no piloto — o BANCO decide (tabela escritorio_piloto)
     sb.rpc('escritorio_no_piloto'),
+    // 26/09 (perfis): cliente e fornecedor não leem a linha do projeto (tem a pasta e o projeto medido) — o banco
+    // devolve só o resumo dos projetos em que a pessoa entrou como cliente/fornecedor
+    sb.rpc('escritorio_resumo_externo'),
   ]);
   if (r.error) throw r.error;
-  PROJETOS = r.data || [];
+  const doResumo = (!fora.error && fora.data) || [];
+  PROJETOS = [...(r.data || []), ...doResumo.filter((x) => !(r.data || []).some((p) => p.id === x.projeto_id)).map((x) => ({
+    id: x.projeto_id, nome: x.nome, etapas: x.etapas || [], etapa_atual: x.etapa_atual, inicio: x.inicio, entrega: x.entrega,
+    proxima_entrega: x.proxima_entrega, proxima_entrega_data: x.proxima_entrega_data, escritorio: x.escritorio || '',
+    externo: true, papel_externo: x.papel }))];
   NO_PILOTO = !pil.error && pil.data === true;
 }
 // 🩸 26/09 (auditoria TELA-13): o PROJ trocava ANTES das leituras — uma falha no meio deixava o projeto novo com
@@ -490,9 +532,12 @@ async function carregarProjeto(id) {
   ]);
   const temChk = !ck.error && !et.error && !te.error;
   // emissões: também acessório — falhou, a tela de Emissões diz que não leu (e o resto segue)
-  const [em, ev] = await Promise.all([
+  const [em, ev, de, fo] = await Promise.all([
     sb.from('escritorio_emissoes').select('id,arquivo_id,arquivo_nome,revisao,copia_id,copia_nome,nota,emitido_por,emitido_em').eq('projeto_id', id).order('emitido_em', { ascending: false }),
-    sb.from('escritorio_emissao_eventos').select('id,emissao_id,tipo,em,nota,criado_em').eq('projeto_id', id).order('em').order('criado_em'),
+    sb.from('escritorio_emissao_eventos').select('id,emissao_id,tipo,em,nota,criado_em,pelo_cliente,registrado_por').eq('projeto_id', id).order('em').order('criado_em'),
+    // 26/09 (perfis): pra quem cada emissão foi, e as fotos (o banco já filtra: o cliente só vê as "pro cliente")
+    sb.from('escritorio_emissao_destinos').select('emissao_id,membro_id,enviado_em,permission_id').eq('projeto_id', id),
+    sb.from('escritorio_fotos').select('id,legenda,etapa,pro_cliente,enviada_por,enviada_em').eq('projeto_id', id).order('enviada_em', { ascending: false }),
   ]);
   const temEmi = !em.error && !ev.error;
   const membros = m.data, notas = {};
@@ -505,10 +550,15 @@ async function carregarProjeto(id) {
   }
   // 🩸 26/09 (auditoria TELA-1/TELA-2): a subpasta aberta, o filtro de etapa e a etapa selecionada eram globais e
   // passavam pro próximo projeto (Arquivos travava em "não é deste projeto"; o quadro filtrava por etapa que nem existe)
-  if (!PROJ || PROJ.id !== id) { ARQ_PASTA = ''; ARQ_TRILHA = []; FILTRO = 'todas'; FILTRO_E = ''; ETAPA_SEL = null; }
+  if (!PROJ || PROJ.id !== id) {
+    ARQ_PASTA = ''; ARQ_TRILHA = []; FILTRO = 'todas'; FILTRO_E = ''; ETAPA_SEL = null; FILTRO_F = '';
+    // as imagens do projeto anterior (blob:) saem da memória
+    Object.keys(FOTO_URL).forEach((k) => { try { URL.revokeObjectURL(FOTO_URL[k]); } catch (_) {} }); FOTO_URL = {};
+  }
   PROJ = proj; MEMBROS = membros; TAR = t.data; PESSOAS_T = tp.data; ATAS = a.data; PAPEL = papel.data; NOTAS = notas;
   TEM_CHK = temChk; CHK = temChk ? ck.data : []; ETQ = temChk ? et.data : []; TETQ = temChk ? te.data : [];
   TEM_EMI = temEmi; EMI = temEmi ? em.data : []; EMI_EV = temEmi ? ev.data : [];
+  DEST = de.error ? [] : de.data; TEM_FOTOS = !fo.error; FOTOS = fo.error ? [] : fo.data;
   return true;
 }
 
@@ -527,6 +577,25 @@ function renderMoldura() {
   }
   const revisar = TAR.filter((t) => t.status === 'revdtz').length, minhasAt = TAR.filter((t) => eMinha(t) && atrasada(t)).length;
   const it = (v, ic, txt, est) => `<a class="s-it ${VIEW === v ? 'on' : ''}" ${VIEW === v ? 'aria-current="page"' : ''} href="#/p/${PROJ.id}/${v}">${svg(ic)}${txt}${est || ''}</a>`;
+  // 26/09 (perfis): cliente e fornecedor têm o menu DELES (maquete aprovada) — nada de atas, equipe nem quantitativo
+  if (!souEquipe()) {
+    const eu = meuMembro() || {}, cli = souCliente();
+    const pra = EMI.filter(esperaResposta).length, abertasFora = TAR.filter(aberta).length;
+    $('side-c').innerHTML = `<a class="s-it" href="#/" style="font-size:12px;color:#64748B">← ${PROJETOS.length > 1 ? 'Seus projetos' : 'Escritório'}</a>
+      <div class="s-fix"><span class="tag">${cli ? 'Seu projeto' : 'Fornecedor no projeto'}</span><b>${esc(PROJ.nome)}</b><span>${esc(cli ? (PROJ.escritorio ? 'com ' + PROJ.escritorio : '') : (eu.drive_pasta_nome || eu.funcao || ''))}</span></div>
+      <div class="s-grp">
+        ${it('capa', 'capa', cli ? 'Visão do projeto' : 'Visão geral')}
+        ${it('tarefas', cli ? 'cli' : 'tar', cli ? 'Suas pendências' : 'Suas tarefas', abertasFora ? `<span class="s-est">${abertasFora}</span>` : '')}
+        ${cli ? '' : it('arquivos', 'arq', eu.drive_pasta_nome ? 'Pasta ' + esc(eu.drive_pasta_nome) : 'Arquivos')}
+        ${it('emissoes', 'emi', cli ? 'Emissões' : 'Emissões pra você', pra ? `<span class="s-est pend">${pra} pra você</span>` : '')}
+        ${it('fotos', 'foto', cli ? 'Fotos da obra' : 'Fotos', FOTOS.length ? `<span class="s-est">${FOTOS.length}</span>` : '')}
+      </div>
+      <div class="s-grp"><button type="button" class="s-it" onclick="sairDaConta()">Sair</button></div>`;
+    const nomesF = { capa: cli ? 'Visão do projeto' : 'Visão geral', tarefas: cli ? 'Suas pendências' : 'Suas tarefas', arquivos: 'Arquivos', emissoes: 'Emissões', fotos: 'Fotos' };
+    $('trilha').innerHTML = `<a href="#/">Escritório</a><span>›</span><a href="#/p/${PROJ.id}/capa">${esc(PROJ.nome)}</a>`;
+    $('titulo').textContent = nomesF[VIEW] || PROJ.nome;
+    return;
+  }
   const nAtivos = MEMBROS.filter((m) => m.status === 'ativo').length;
   const comCliente = EMI.filter((e) => (ultimoEv(e) || {}).tipo === 'enviado').length;
   // 26/09 (Pedro: "o ideal é que fique sempre visível"): projeto ligado ao medido mostra, aqui também, o grupo
@@ -549,10 +618,11 @@ function renderMoldura() {
       ${it('tarefas', 'tar', 'Tarefas', souAdmin() ? (revisar ? `<span class="s-est pend">${revisar} pra revisar</span>` : '') : (minhasAt ? `<span class="s-est pend">${minhasAt} atrasada</span>` : ''))}
       ${it('arquivos', 'arq', 'Arquivos', PROJ && PROJ.pasta_id ? '' : '<span class="s-est">Drive</span>')}
       ${it('emissoes', 'emi', 'Emissões', comCliente ? `<span class="s-est pend">${comCliente} com o cliente</span>` : EMI.length ? `<span class="s-est">${EMI.length}</span>` : '')}
+      ${it('fotos', 'foto', 'Fotos', FOTOS.length ? `<span class="s-est">${FOTOS.length}</span>` : '')}
       ${it('atas', 'atas', 'Atas', `<span class="s-est">${ATAS.length}</span>`)}
       ${it('equipe', 'eq', 'Equipe', `<span class="s-est">${nAtivos}</span>`)}
     </div>${obra}`;
-  const nomes = { capa: 'Página do projeto', tarefas: 'Tarefas', arquivos: 'Arquivos', emissoes: 'Emissões', atas: 'Atas', equipe: 'Equipe' };
+  const nomes = { capa: 'Página do projeto', tarefas: 'Tarefas', arquivos: 'Arquivos', emissoes: 'Emissões', atas: 'Atas', equipe: 'Equipe', fotos: 'Fotos' };
   $('trilha').innerHTML = `<a href="dashboard.html">Início</a><span>›</span><a href="#/">Escritório</a><span>›</span><a href="#/p/${PROJ.id}/capa">${esc(PROJ.nome)}</a>`;
   $('titulo').textContent = nomes[VIEW] || PROJ.nome;
 }
@@ -562,11 +632,17 @@ async function navegar() {
   menu(false);
   try {
     if (r.job) { await abrirPeloJob(r.job, r.view); return; }
-    if (!r.id) { VIEW = 'lista'; PROJ = null; await carregarProjetos(); }
-    else {
+    if (!r.id) {
+      VIEW = 'lista'; PROJ = null; await carregarProjetos();
+      // 26/09 (perfis — "o cliente cai direto no projeto"): quem só tem UM projeto, e é de fora, não passa pela lista
+      if (PROJETOS.length === 1 && PROJETOS[0].externo && !NO_PILOTO) { location.replace(`#/p/${PROJETOS[0].id}/capa`); return; }
+    } else {
       if (!PROJETOS.length || !PROJETOS.find((p) => p.id === r.id)) await carregarProjetos();
       if (!PROJ || PROJ.id !== r.id || !MEMBROS.length) { if (!(await carregarProjeto(r.id))) { location.hash = '#/'; return; } }
-      VIEW = ['capa', 'tarefas', 'arquivos', 'emissoes', 'atas', 'equipe'].includes(r.view) ? r.view : 'capa';
+      // 26/09 (perfis): cada um abre só as telas dele (o banco não mostraria nada nas outras, mas a tela nem oferece)
+      const telas = souEquipe() ? ['capa', 'tarefas', 'arquivos', 'emissoes', 'atas', 'equipe', 'fotos']
+        : souFornecedor() ? ['capa', 'tarefas', 'arquivos', 'emissoes', 'fotos'] : ['capa', 'tarefas', 'emissoes', 'fotos'];
+      VIEW = telas.includes(r.view) ? r.view : 'capa';
     }
   } catch (e) {
     $('main').innerHTML = `<div class="card"><p class="h2">Não consegui carregar agora</p><p class="sub">Foi um soluço de conexão com o banco. Recarregue a página em instantes.</p></div>`;
@@ -596,8 +672,11 @@ function marcarContexto() {
 function render() {
   renderMoldura();
   marcarContexto();
-  const T = { lista: telaLista, capa: telaCapa, tarefas: telaTarefas, arquivos: telaArquivos, emissoes: telaEmissoes, atas: telaAtas, equipe: telaEquipe };
-  const volta = VIEW !== 'lista' && VIEW !== 'capa' ? `<button class="voltar" onclick="ir('capa')">← Página do projeto</button>` : '';
+  const T = { lista: telaLista, capa: telaCapa, tarefas: telaTarefas, arquivos: telaArquivos, emissoes: telaEmissoes, atas: telaAtas, equipe: telaEquipe, fotos: telaFotos };
+  // 26/09 (perfis): as telas próprias do cliente e do fornecedor (maquete aprovada)
+  if (PROJ && souCliente()) Object.assign(T, { capa: telaVisaoCliente, tarefas: telaPendencias, emissoes: telaEmissoesDeFora });
+  if (PROJ && souFornecedor()) Object.assign(T, { capa: telaVisaoFornecedor, emissoes: telaEmissoesDeFora });
+  const volta = VIEW !== 'lista' && VIEW !== 'capa' ? `<button class="voltar" onclick="ir('capa')">← ${souEquipe() ? 'Página do projeto' : souCliente() ? 'Visão do projeto' : 'Visão geral'}</button>` : '';
   $('main').innerHTML = volta + T[VIEW]();
 }
 async function recarregar() { await carregarProjeto(PROJ.id); render(); }
@@ -620,7 +699,7 @@ function telaLista() {
           <div class="linha" style="justify-content:space-between;align-items:flex-start"><b>${esc(p.nome)}</b>${p.job_id ? '<span class="pill p-ind">medido</span>' : ''}</div>
           ${p.cliente_nome ? `<span class="sub" style="margin:0">Cliente: ${esc(p.cliente_nome)}</span>` : ''}
           ${et.length ? `<div><div class="linha" style="justify-content:space-between;margin-bottom:6px"><span class="sub" style="margin:0;font-weight:600;color:#334155">${esc(p.etapa_atual || 'Sem etapa')}</span><span class="sub tab" style="margin:0">${i >= 0 ? `etapa ${i + 1} de ${et.length}` : ''}</span></div><div class="barra"><i style="width:${pct}%"></i></div></div>` : ''}
-          <span class="sub" style="margin:0">${p.dono === EU.id ? 'Você é admin' : 'Você faz parte da equipe'}</span></div></a>`; }).join('')}</div>`
+          <span class="sub" style="margin:0">${p.externo ? (p.papel_externo === 'cliente' ? 'Seu projeto' : 'Você é fornecedor') + (p.escritorio ? ' · com ' + esc(p.escritorio) : '') : p.dono === EU.id ? 'Você é admin' : 'Você faz parte da equipe'}</span></div></a>`; }).join('')}</div>`
       : `<div class="card"><p class="h2" style="font-size:16px">Comece pelo primeiro projeto</p><p class="sub">Um projeto aqui nasce sem prancha: tarefas, atas, equipe e a pasta do Drive. Já mediu o projeto no AI.arq? Use <b>Trazer projeto medido</b>: a equipe trabalha nele e vê o quantitativo.</p></div>`}`;
 }
 // 🏢 Trazer um projeto MEDIDO pro Escritório (24/09 — Pedro: "como levar um projeto feito pro escritório?").
@@ -711,7 +790,7 @@ function telaCapa() {
   // o mesmo KPI da maquete (e do resto do site): barra de 3 px, ícone e cor de estado
   // 26/09 (Pedro): cada KPI é um atalho pra tela dele (acao = JS fixo daqui, nunca texto de gente)
   const kpi = (estado, ic, rot, val, det, acao) => `<button type="button" class="kpi kpi-btn ${estado}" onclick="${acao}"><div class="kpi-top"><span class="kpi-ico">${svg(ic, 17)}</span><p class="rot">${rot}</p></div><p class="val tab">${val}</p><p class="det">${det}</p></button>`;
-  const ativos = MEMBROS.filter((m) => m.status === 'ativo');
+  const ativos = MEMBROS.filter((m) => m.status === 'ativo' && !deFora(m));   // "na equipe" não conta cliente nem fornecedor
   const convidados = MEMBROS.filter(conviteVivo).length;
   const vencidos = MEMBROS.filter((m) => m.status === 'convidado' && !conviteVivo(m)).length;
   const tool = (href, ic, t, d, soVoce) => `<a class="tool" href="${href}" style="--c1:${COR[ic][0]};--c2:${COR[ic][1]};--bg:${COR[ic][2]}"><span class="ti">${svg(ic, 22)}</span><span><b>${t}${soVoce ? `<span class="so-voce">${svg('cad', 10)}só você</span>` : ''}</b><span>${d}</span></span></a>`;
@@ -764,6 +843,7 @@ function telaCapa() {
       ${tool(`#/p/${p.id}/tarefas`, 'tar', 'Tarefas', `${abertas.length} abertas`)}
       ${tool(`#/p/${p.id}/arquivos`, 'arq', 'Arquivos', p.pasta_caminho ? 'Drive · ' + esc(p.pasta_caminho) : 'Ligar a pasta do Drive')}
       ${tool(`#/p/${p.id}/emissoes`, 'emi', 'Emissões', EMI.length ? `${EMI.length} ${EMI.length === 1 ? 'emitida' : 'emitidas'}` : 'R00, R01… ao cliente')}
+      ${tool(`#/p/${p.id}/fotos`, 'foto', 'Fotos', FOTOS.length ? `${FOTOS.length} foto${FOTOS.length === 1 ? '' : 's'} da obra` : 'Da obra, pelo celular')}
       ${tool(`#/p/${p.id}/atas`, 'atas', 'Atas', `${ATAS.length} ${ATAS.length === 1 ? 'reunião' : 'reuniões'}`)}
       ${tool(`#/p/${p.id}/equipe`, 'eq', 'Equipe', `${ativos.length} ${ativos.length === 1 ? 'pessoa' : 'pessoas'}`)}
     </div>
@@ -872,16 +952,18 @@ const podeLevar = (t, st) => souAdmin() || st === t.status || (['afazer', 'dev',
 function telaTarefas() {
   const ch = (k, t) => `<button class="chip" aria-pressed="${FILTRO === k}" onclick="FILTRO='${k}';render()">${t}<span class="n">${TAR.filter(FILT[k]).filter(aberta).length}</span></button>`;
   const ab = TAR.filter(aberta), atr = ab.filter(atrasada).length;
-  return `${faixa('tar', 'Tarefas', `${ab.length} aberta${ab.length === 1 ? '' : 's'}${atr ? ` · <b>${atr} atrasada${atr === 1 ? '' : 's'}</b>` : ''}. Arraste os cartões entre as colunas; clique num cartão pra marcar pessoas e comentar.`,
-      '<button class="btn btn-p" onclick="novaTarefa()">+ Nova tarefa</button>')}
-    <div class="linha">${ch('todas', 'Todas')}${ch('minhas', 'Minhas')}${ch('cliente', 'Do cliente')}
+  // 26/09 (perfis): o fornecedor só MOVE as tarefas dele (o banco barra criar e editar) — sem botão de criar
+  const cria = souEquipe();
+  return `${faixa('tar', cria ? 'Tarefas' : 'Suas tarefas', `${ab.length} aberta${ab.length === 1 ? '' : 's'}${atr ? ` · <b>${atr} atrasada${atr === 1 ? '' : 's'}</b>` : ''}. ${cria ? 'Arraste os cartões entre as colunas; clique num cartão pra marcar pessoas e comentar.' : 'As tarefas que o escritório passou pra você. Arraste até <b>Aguardando revisão</b> quando terminar; clique pra ver o checklist e comentar.'}`,
+      cria ? '<button class="btn btn-p" onclick="novaTarefa()">+ Nova tarefa</button>' : '')}
+    <div class="linha">${cria ? ch('todas', 'Todas') + ch('minhas', 'Minhas') + ch('cliente', 'Do cliente') : ''}
       <select class="in" style="width:auto;padding:5px 8px;font-size:12px" aria-label="Filtrar por etapa" onchange="FILTRO_E=this.value;render()"><option value="">Todas as etapas</option>${(PROJ.etapas || []).map((e) => `<option ${e === FILTRO_E ? 'selected' : ''}>${esc(e)}</option>`).join('')}</select>
       <span class="sub" style="margin:0 0 0 auto">${souAdmin() ? 'A equipe leva até <b>Aguardando revisão</b>; dali pra frente é você.' : 'Você leva até <b>Aguardando revisão</b>; dali pra frente é a admin do projeto.'}</span></div>
     <div class="board">${ST.map((s) => { const ts = TAR.filter((t) => t.status === s.k && visivel(t)).sort((a, b) => a.posicao - b.posicao); return `
       <div class="col" style="--sc:${s.cor}" data-st="${s.k}" ondragover="sobre(event)" ondrop="soltar(event)" aria-label="${s.t}">
         <div class="col-h"><i style="background:${s.cor}"></i>${s.t}<span class="n">${ts.length}</span></div>
         <div class="cards">${ts.map(cartao).join('')}</div>
-        <div><button class="add" onclick="addCartao('${s.k}',this)">+ Adicionar cartão</button></div>
+        ${cria ? `<div><button class="add" onclick="addCartao('${s.k}',this)">+ Adicionar cartão</button></div>` : ''}
       </div>`; }).join('')}</div>`;
 }
 // a etapa vira a etiqueta colorida do cartão (como no Trello): a cor segue a ORDEM da etapa no projeto,
@@ -908,10 +990,11 @@ function cartao(t) {
 // bloco do checklist dentro do cartão aberto
 function blocoChecklist(tid) {
   const l = chkDa(tid), f = l.filter((c) => c.feito).length, pct = l.length ? Math.round((f / l.length) * 100) : 0;
+  const mexe = souEquipe();   // 26/09 (perfis): o fornecedor só marca "feito" (o gatilho do banco barra o resto)
   return `<p class="lbl sec">${svg('tar', 16)}Checklist${l.length ? ` <span class="sub" style="margin:0 0 0 auto;font-weight:600">${f}/${l.length}</span>` : ''}</p>
     ${l.length ? `<div class="barra" style="--c1:#10B981;--c2:#34D399;margin-bottom:8px"><i style="width:${pct}%"></i></div>` : ''}
-    <ul class="chk-lista">${l.map((c) => `<li class="${c.feito ? 'feito' : ''}"><label><input type="checkbox" ${c.feito ? 'checked' : ''} onchange="togChk('${c.id}',this.checked,'${tid}')"><span>${esc(c.texto)}</span></label><button type="button" class="chk-x" title="Tirar item" aria-label="Tirar item" onclick="apagarChk('${c.id}','${tid}')">×</button></li>`).join('')}</ul>
-    <div class="linha" style="gap:6px;margin-top:6px;flex-wrap:nowrap"><input id="chk-novo" class="in" maxlength="300" placeholder="Adicionar um item…" onkeydown="if(event.key==='Enter'){event.preventDefault();addChk('${tid}')}"><button type="button" class="btn btn-s" onclick="addChk('${tid}')">Adicionar</button></div>`;
+    <ul class="chk-lista">${l.map((c) => `<li class="${c.feito ? 'feito' : ''}"><label><input type="checkbox" ${c.feito ? 'checked' : ''} onchange="togChk('${c.id}',this.checked,'${tid}')"><span>${esc(c.texto)}</span></label>${mexe ? `<button type="button" class="chk-x" title="Tirar item" aria-label="Tirar item" onclick="apagarChk('${c.id}','${tid}')">×</button>` : ''}</li>`).join('')}</ul>
+    ${mexe ? `<div class="linha" style="gap:6px;margin-top:6px;flex-wrap:nowrap"><input id="chk-novo" class="in" maxlength="300" placeholder="Adicionar um item…" onkeydown="if(event.key==='Enter'){event.preventDefault();addChk('${tid}')}"><button type="button" class="btn btn-s" onclick="addChk('${tid}')">Adicionar</button></div>` : ''}`;
 }
 function redesenharChk(tid) { const b = $('ct-chk'); if (b) b.innerHTML = blocoChecklist(tid); render(); }
 async function addChk(tid) {
@@ -1039,7 +1122,38 @@ async function criarCartao(st, txt) {
 
 // ── o cartão aberto ──
 let CART = null;
+// 26/09 (perfis): o cartão do FORNECEDOR — lê título, descrição e prazo; marca o checklist, comenta e muda a coluna
+// (até Aguardando revisão). É exatamente o que o banco deixa (gatilho escritorio_tarefa_guarda).
+function abrirCartaoFornecedor(id) {
+  const t = TAR.find((x) => x.id === id); if (!t) return;
+  CART = { id, pessoas: pessoasDa(t).map((m) => m.id) };
+  const opc = ST.filter((s) => podeLevar(t, s.k)).map((s) => `<option value="${s.k}" ${s.k === t.status ? 'selected' : ''}>${s.t}</option>`).join('');
+  const eu = meuMembro();
+  abrirModal('Tarefa', `<div class="cart"><div class="cart-main">
+      <div class="cart-tit">${svg('tar', 20)}<b style="font-size:18px;color:#0F172A">${esc(t.titulo)}</b></div>
+      <div class="cart-meta">${t.etapa ? `<div><p class="lbl">Etapa</p>${etiqueta(t.etapa)}</div>` : ''}${t.prazo ? `<div><p class="lbl">Prazo</p>${pillPrazo(t)}</div>` : ''}</div>
+      ${t.descricao ? `<div><p class="lbl sec">${svg('memo', 16)}Descrição</p><p style="margin:0;font-size:14px;white-space:pre-wrap;color:#334155">${esc(t.descricao)}</p></div>` : ''}
+      ${TEM_CHK && chkDa(id).length ? `<div id="ct-chk">${blocoChecklist(id)}</div>` : ''}
+      <div><p class="lbl sec">${svg('atas', 16)}Comentários</p>
+        <div class="coment">${eu ? av(eu) : ''}<div style="flex:1;min-width:0"><textarea id="ct-com" rows="2" class="in" maxlength="5000" placeholder="Escreva pro escritório…"></textarea>
+          <div class="linha" style="margin-top:6px"><span style="flex:1"></span><button class="btn btn-p btn-s" onclick="comentar('${id}')">Comentar</button></div></div></div>
+        <ul class="lista" id="ct-coms" style="margin-top:10px"><li class="vazio">Carregando…</li></ul></div>
+    </div>
+    <aside class="cart-lado"><div><label class="lbl" for="ct-st">Coluna</label><select id="ct-st" class="in">${opc}</select></div>
+      <p class="sub" style="margin:0">Terminou? Leve pra <b>Aguardando revisão</b>: o escritório confere.</p></aside></div>
+    <div class="rodape"><button class="btn" onclick="fecharModal()">Fechar</button><button class="btn btn-d" onclick="salvarColuna('${id}')">Salvar</button></div>`, true);
+  carregarComentarios(id);
+}
+async function salvarColuna(id) {
+  const t = TAR.find((x) => x.id === id), st = $('ct-st').value;
+  if (!t || st === t.status) return fecharModal();
+  const pos = Math.max(0, ...TAR.filter((x) => x.status === st).map((x) => x.posicao)) + 1;
+  const { error } = await sb.from('escritorio_tarefas').update({ status: st, posicao: pos }).eq('id', id);
+  if (error) return falhou(error, 'Não movi');
+  fecharModal(); await recarregar(); toast('Movido para ' + stT(st));
+}
 async function abrirCartao(id) {
+  if (souFornecedor()) return abrirCartaoFornecedor(id);
   const t = TAR.find((x) => x.id === id); if (!t) return;
   CART = { id, pessoas: pessoasDa(t).map((m) => m.id) };
   const gente = MEMBROS.filter((m) => m.status === 'ativo');
@@ -1199,7 +1313,7 @@ const ehLinkDoGoogle = (u) => /^https:\/\/(docs|drive)\.google\.com\//.test(Stri
 const ehIconeDoGoogle = (u) => /^https:\/\/[a-z0-9.-]+\.googleusercontent\.com\//.test(String(u || ''));
 function telaArquivos() {
   setTimeout(carregarArquivos, 0);
-  return `${faixa('arq', 'Arquivos do projeto', 'A pasta deste projeto no Google Drive. Cada pessoa da equipe tem acesso só a ela.', '<span id="arq-acoes" class="linha"></span>')}
+  return `${faixa('arq', souFornecedor() ? 'Sua pasta do projeto' : 'Arquivos do projeto', souFornecedor() ? 'A pasta que o escritório separou pra você no Google Drive (só pra ler).' : 'A pasta deste projeto no Google Drive. Cada pessoa da equipe tem acesso só a ela.', '<span id="arq-acoes" class="linha"></span>')}
     <section class="card rise"><div id="arq-corpo"><p class="sub" style="margin:0">Abrindo a pasta do Drive…</p></div></section>`;
 }
 // 26/09 (auditoria TELA-7): cada pedido ganha um número; resposta de um pedido velho (outra pasta, outro projeto)
@@ -1231,6 +1345,10 @@ async function carregarArquivos() {
   if (souAdmin() && drv && !drv.conectado) {
     corpo.innerHTML = passo('arq', 'Conecte o seu Google Drive', 'Você escolhe a pasta deste projeto, e cada pessoa da equipe recebe acesso só a ela. O Google mostra um aviso de "app não verificado" (estamos em piloto): é só clicar em <b>Avançado</b> e seguir. Você pode desconectar quando quiser, aqui ou na sua conta Google.',
       '<button class="btn btn-g" onclick="conectarDrive()">Conectar Google Drive</button>');
+    return;
+  }
+  if (d.sem_pasta && d.fornecedor) {
+    corpo.innerHTML = passo('pastas', 'Ainda não há uma pasta pra você', 'Quando o escritório separar uma pasta do projeto pra você, os arquivos dela aparecem aqui. As emissões mandadas pra você ficam em <b>Emissões pra você</b>.');
     return;
   }
   if (d.sem_pasta) {
@@ -1391,6 +1509,87 @@ function pillEmissao(e) {
   const u = ultimoEv(e);
   return u && EV[u.tipo] ? `<span class="pill ${EV[u.tipo][1]}"><i></i>${EV[u.tipo][2]}</span>` : '<span class="pill p-neu"><i></i>Emitida</span>';
 }
+// ── 26/09 (perfis): mandar a emissão pro cliente / fornecedor e a resposta do cliente pelo sistema ──
+// o servidor dá LEITURA só no arquivo emitido (nunca na pasta Emitidos) e registra pra quem foi
+const destinosDa = (e) => DEST.filter((d) => d.emissao_id === e.id);
+const deForaAtivos = () => MEMBROS.filter((m) => m.status === 'ativo' && deFora(m));
+// esperando o cliente: o último registro é "enviado" (a resposta dele, pelo sistema ou registrada, vem depois)
+const esperaResposta = (e) => { const u = ultimoEv(e); return !!u && u.tipo === 'enviado'; };
+function blocoMandarPra(jaTem, clienteMarcado) {
+  const gente = deForaAtivos().filter((m) => !jaTem.includes(m.id));
+  if (!gente.length) return deForaAtivos().length ? '' : '<p class="sub" style="margin:8px 0 0">Pra mandar pelo sistema, convide o cliente (ou o fornecedor) na <b>Equipe</b>, com o perfil dele.</p>';
+  return `<div style="margin-top:10px"><p class="lbl">Mandar pra</p><div style="display:flex;flex-direction:column;gap:6px">${gente.map((m) => `<label class="linha" style="gap:8px;flex-wrap:nowrap;font-size:14px;cursor:pointer;border:1px solid #E2E8F0;border-radius:10px;padding:8px 10px">
+      <input type="checkbox" name="em-para" value="${m.id}" ${clienteMarcado && m.papel === 'cliente' ? 'checked' : ''}><span style="flex:1;min-width:0">${esc(nomeDe(m))}</span><span class="pill ${m.papel === 'cliente' ? 'p-ok' : 'p-warn'}">${PERFIL_TXT[m.papel]}</span></label>`).join('')}</div>
+    <p class="sub" style="margin:6px 0 0">Cada pessoa recebe só este arquivo, só pra ler — o Google avisa por e-mail. O cliente aprova ou pede revisão pelo AI.arq.</p></div>`;
+}
+const paraMarcados = () => [...document.querySelectorAll('input[name="em-para"]:checked')].map((i) => i.value);
+function mandarDepois(id) {
+  const e = EMI.find((x) => x.id === id); if (!e || !souAdmin()) return;
+  const ja = destinosDa(e).filter((d) => d.permission_id).map((d) => d.membro_id);
+  abrirModal(`Mandar ${revTxt(e.revisao)} · ${e.copia_nome || e.arquivo_nome}`, `${blocoMandarPra(ja, false) || '<p class="sub" style="margin:0">Todo mundo de fora deste projeto já recebeu esta emissão.</p>'}
+    <div class="rodape"><button class="btn" onclick="fecharModal()">Cancelar</button><button class="btn btn-d" id="md-ok">Mandar</button></div>`);
+  $('md-ok').onclick = async () => {
+    const para = paraMarcados(); if (!para.length) return toast('Marque pra quem mandar.', true);
+    $('md-ok').disabled = true;
+    const r = await apiEsc(`projetos/${PROJ.id}/emissoes/${e.id}/mandar`, 'POST', { para });
+    if (!r.ok) { $('md-ok').disabled = false; return toast(r.dados.detail || 'Não consegui mandar agora.', true); }
+    fecharModal();
+    const f = (r.dados.falhas || []).length;
+    toast(`Mandado pra ${r.dados.mandados || 0} pessoa(s)` + (f ? ` · ${f} não deu (a pessoa entrou sem e-mail confirmado?)` : ''), !!f);
+    await recarregar();
+  };
+}
+// o pedido de revisão do cliente vira cartão no quadro (a admin ou a equipe decidem quem faz)
+async function virarTarefa(evId) {
+  const x = EMI_EV.find((v) => v.id === evId), e = x && EMI.find((y) => y.id === x.emissao_id); if (!x || !e || !souEquipe()) return;
+  const titulo = ('Revisão pedida pelo cliente: ' + (e.copia_nome || e.arquivo_nome)).slice(0, 300);
+  const pos = Math.max(0, ...TAR.filter((t) => t.status === 'afazer').map((t) => t.posicao)) + 1;
+  const { error } = await sb.from('escritorio_tarefas').insert({ projeto_id: PROJ.id, titulo, descricao: x.nota || null, status: 'afazer', posicao: pos, etapa: PROJ.etapa_atual || null, criado_por: EU.id });
+  if (error) return falhou(error, 'Não criei a tarefa');
+  toast('Virou tarefa em A fazer'); await recarregar();
+}
+// o CLIENTE responde: aprovar (confirma) ou pedir revisão (diz o que muda). Grava com o login dele, no servidor.
+function responderEmissao(id, tipo) {
+  const e = EMI.find((x) => x.id === id); if (!e || !souCliente()) return;
+  const nome = `${e.copia_nome || e.arquivo_nome}`;
+  const corpo = tipo === 'aprovado'
+    ? `<p style="margin:0;font-size:14px;line-height:1.5">Você aprova <b>${esc(nome)}</b>. O escritório recebe um aviso, e a aprovação fica registrada com a data de hoje.</p>
+       <label class="lbl" for="rs-nota" style="margin-top:6px">Algum comentário? (opcional)</label><textarea id="rs-nota" class="in" rows="2" maxlength="1000"></textarea>`
+    : `<label class="lbl" for="rs-nota">O que precisa mudar?</label><textarea id="rs-nota" class="in" rows="4" maxlength="1000" placeholder="Ex.: a porta da despensa ficou atrás da geladeira"></textarea>
+       <p class="sub" style="margin:0">O escritório recebe um aviso. O pedido fica registrado com a data e o seu nome, junto com esta versão.</p>`;
+  abrirModal(tipo === 'aprovado' ? 'Aprovar ' + revTxt(e.revisao) + '?' : 'Pedir revisão · ' + revTxt(e.revisao), `${corpo}
+    <div class="rodape"><button class="btn" onclick="fecharModal()">Cancelar</button><button class="btn ${tipo === 'aprovado' ? 'btn-d' : 'btn-r'}" id="rs-ok">${tipo === 'aprovado' ? 'Aprovar' : 'Enviar pedido de revisão'}</button></div>`);
+  $('rs-ok').onclick = async () => {
+    const nota = $('rs-nota').value.trim();
+    if (tipo === 'revisao' && !nota) return toast('Conte o que precisa mudar.', true);
+    $('rs-ok').disabled = true;
+    const r = await apiEsc(`emissoes/${e.id}/responder`, 'POST', { tipo, nota: nota || null });
+    if (!r.ok) { $('rs-ok').disabled = false; return toast(r.dados.detail || 'Não consegui registrar agora. Tente de novo.', true); }
+    fecharModal(); toast(tipo === 'aprovado' ? 'Aprovado — o escritório foi avisado' : 'Pedido de revisão enviado ao escritório');
+    await recarregar();
+  };
+}
+// emissões vistas de FORA: o cliente (com aprovar / pedir revisão) e o fornecedor (só as mandadas pra ele)
+function telaEmissoesDeFora() {
+  const cli = souCliente();
+  const topo = faixa('emi', cli ? 'Emissões enviadas pra você' : 'Emissões pra você', cli ? 'Cada versão fica guardada. O que você aprova ou pede fica registrado com a data.' : 'Os arquivos emitidos que o escritório mandou pra você (só pra ler).');
+  if (!TEM_EMI) return topo + '<section class="card rise"><p class="vazio">Não consegui ler as emissões agora. Recarregue a página em instantes.</p></section>';
+  if (!EMI.length) return topo + `<section class="card rise"><div class="passo"><span class="passo-ic">${svg('emi', 28)}</span><b>Nada por aqui ainda</b><p>Quando o escritório mandar um arquivo pra você, ele aparece aqui${cli ? ', pra você aprovar ou pedir revisão' : ''}.</p></div></section>`;
+  const grupos = [], por = {};
+  for (const e of EMI) { if (!por[e.arquivo_id]) { por[e.arquivo_id] = []; grupos.push(por[e.arquivo_id]); } por[e.arquivo_id].push(e); }
+  return topo + `<section class="card rise">${grupos.map((g) => `<div class="emi-g"><h3>${svg('arq', 16)}${esc(g[0].arquivo_nome)}</h3>
+    <ul class="emi-l">${g.map((e) => {
+      const lk = linkCopia(e), evs = evDa(e), espera = cli && esperaResposta(e);
+      return `<li${espera ? ' style="background:#FFFBEB;border:1px solid #FDE68A"' : ''}><span class="rev-tag" style="margin:2px 0 0">${revTxt(e.revisao)}</span>
+        <div class="emi-n">${lk ? `<a href="${esc(lk)}" target="_blank" rel="noopener">${esc(e.copia_nome || e.arquivo_nome)}</a>` : esc(e.copia_nome || e.arquivo_nome)}
+          <small>emitida em ${esc(quandoArq(e.emitido_em))}</small>
+          ${e.nota ? `<p class="emi-nota">“${esc(e.nota)}”</p>` : ''}
+          ${cli && evs.length ? `<ul class="emi-hist">${evs.filter((x) => x.tipo !== 'enviado').map((x) => `<li><b>${x.pelo_cliente ? (x.tipo === 'aprovado' ? 'Você aprovou' : 'Você pediu revisão') : (x.tipo === 'aprovado' ? 'O escritório registrou a sua aprovação' : 'O escritório registrou um pedido de revisão')}</b> · ${esc(dBR(x.em))}${x.nota ? ' — ' + esc(x.nota) : ''}</li>`).join('')}</ul>` : ''}
+        </div>
+        <div class="emi-st">${cli ? (espera ? `<span class="pill p-warn"><i></i>Aguardando você</span><div class="linha" style="gap:6px"><button type="button" class="btn btn-s btn-r" onclick="responderEmissao('${e.id}','revisao')">Pedir revisão</button><button type="button" class="btn btn-s btn-d" onclick="responderEmissao('${e.id}','aprovado')">Aprovar</button></div>` : pillEmissao(e)) : ''}${lk ? `<a class="btn btn-s" href="${esc(lk)}" target="_blank" rel="noopener">Abrir</a>` : ''}</div></li>`;
+    }).join('')}</ul></div>`).join('')}
+    <p class="sub" style="margin-top:12px">Pra abrir o arquivo, use a conta Google do e-mail em que você recebeu o aviso do Google Drive.</p></section>`;
+}
 document.addEventListener('click', (ev) => {
   const b = ev.target.closest && ev.target.closest('.arq-emitir'); if (!b) return;
   ev.preventDefault(); ev.stopPropagation();
@@ -1407,6 +1606,7 @@ function emitirArquivo(id, nome) {
     ${TEM_EMI && ja.length ? `<p class="sub" style="margin:0 0 10px">Última emitida: ${revTxt(prox - 1)}, em ${esc(quandoArq(ja[0].emitido_em))}.</p>` : ''}
     <label class="lbl" for="em-nota">O que muda nesta revisão (opcional)</label>
     <textarea id="em-nota" class="in" rows="3" maxlength="1000" placeholder="Ex.: cozinha ajustada como pedido na reunião"></textarea>
+    ${blocoMandarPra([], true)}
     <p class="sub" style="margin:8px 0 0">A cópia fica travada no Drive: só a dona do Drive destrava. Assim ela é sempre o que foi emitido.</p>
     <div class="rodape"><button class="btn" onclick="fecharModal()">Cancelar</button><button class="btn btn-d" id="em-ok">Emitir ${rotulo}</button></div>`);
   $('em-ok').onclick = () => confirmarEmissao(id);
@@ -1416,7 +1616,7 @@ async function confirmarEmissao(id) {
   b.disabled = true; b.textContent = 'Emitindo…';
   EMITINDO = true;
   let r;
-  try { r = await apiEsc(`projetos/${PROJ.id}/emitir`, 'POST', { arquivo_id: id, nota: ($('em-nota') || {}).value || '' }); }
+  try { r = await apiEsc(`projetos/${PROJ.id}/emitir`, 'POST', { arquivo_id: id, nota: ($('em-nota') || {}).value || '', para: paraMarcados() }); }
   finally { EMITINDO = false; }
   if (!r.ok && r.status === 0) {
     // 🩸 26/09 (auditoria LOG-C1): sem resposta não dá pra saber se a cópia saiu — "Tentar de novo" emitia a
@@ -1427,7 +1627,8 @@ async function confirmarEmissao(id) {
   }
   if (!r.ok) { b.disabled = false; b.textContent = 'Tentar de novo'; return toast(r.dados.detail || 'Não deu pra emitir agora.', true); }
   fecharModal();
-  if (r.dados.travada) toast(`Emitido: ${r.dados.nome}`);
+  const nM = r.dados.mandados || 0, nF = (r.dados.falhas || []).length;
+  if (r.dados.travada) toast(`Emitido: ${r.dados.nome}` + (nM ? ` · mandado pra ${nM} pessoa${nM > 1 ? 's' : ''}` : '') + (nF ? ` · ${nF} não deu: mande de novo em Emissões` : ''), !!nF);
   else abrirModal('Emitido, mas sem trava', `<p style="margin:0;font-size:14px;line-height:1.5"><b>${esc(r.dados.nome)}</b> foi pra pasta Emitidos, mas <b>o Drive não aceitou a trava</b>: quem é da equipe consegue editar a cópia.</p>
     <p class="sub" style="margin:0">Se quiser garantir, bloqueie o arquivo no próprio Drive.</p>
     <div class="rodape"><button class="btn btn-d" onclick="fecharModal()">Entendi</button></div>`);
@@ -1451,9 +1652,10 @@ function telaEmissoes() {
         <div class="emi-n">${lk ? `<a href="${esc(lk)}" target="_blank" rel="noopener">${esc(e.copia_nome || e.arquivo_nome)}</a>` : esc(e.copia_nome || e.arquivo_nome)}
           <small>emitida em ${esc(quandoArq(e.emitido_em))}${quem(e)}</small>
           ${e.nota ? `<p class="emi-nota">${esc(e.nota)}</p>` : ''}
-          ${evs.length ? `<ul class="emi-hist">${evs.map((x) => `<li><b>${EV[x.tipo] ? EV[x.tipo][0] : esc(x.tipo)}</b> · ${esc(dBR(x.em))}${x.nota ? ' — ' + esc(x.nota) : ''}${souAdmin() ? ` <button type="button" class="chk-x" title="Apagar este registro" aria-label="Apagar este registro" onclick="apagarRetorno('${x.id}')">×</button>` : ''}</li>`).join('')}</ul>` : ''}
+          ${destinosDa(e).length ? `<small>Mandada pra ${destinosDa(e).map((d) => { const m = MEMBROS.find((x) => x.id === d.membro_id); return esc(m ? nomeDe(m) : 'quem saiu do projeto') + (d.permission_id ? '' : ' (sem acesso: saiu do projeto)'); }).join(', ')}</small>` : ''}
+          ${evs.length ? `<ul class="emi-hist">${evs.map((x) => `<li><b>${EV[x.tipo] ? EV[x.tipo][0] : esc(x.tipo)}</b> · ${esc(dBR(x.em))}${x.pelo_cliente ? ' · <span class="pill p-ind" style="font-size:10.5px;padding:0 7px">pelo sistema</span>' : ''}${x.nota ? ' — ' + esc(x.nota) : ''}${x.pelo_cliente && x.tipo === 'revisao' && souEquipe() ? ` · <button type="button" class="lnk" onclick="virarTarefa('${x.id}')">virar tarefa</button>` : ''}${souAdmin() && !x.pelo_cliente ? ` <button type="button" class="chk-x" title="Apagar este registro" aria-label="Apagar este registro" onclick="apagarRetorno('${x.id}')">×</button>` : ''}</li>`).join('')}</ul>` : ''}
         </div>
-        <div class="emi-st">${pillEmissao(e)}${souAdmin() ? `<button type="button" class="btn btn-s" onclick="registrarRetorno('${e.id}')">Registrar retorno</button>` : ''}</div></li>`;
+        <div class="emi-st">${pillEmissao(e)}${souAdmin() ? `<button type="button" class="btn btn-s" onclick="registrarRetorno('${e.id}')">Registrar retorno</button>${deForaAtivos().length ? `<button type="button" class="btn btn-s" onclick="mandarDepois('${e.id}')">Mandar pra…</button>` : ''}` : ''}</div></li>`;
     }).join('')}</ul></div>`).join('')}</section>`;
 }
 // a admin registra o que aconteceu com a emissão: enviou, o cliente aprovou, ou pediu revisão (com data e nota)
@@ -1485,6 +1687,7 @@ async function salvarRetorno(id) {
 // 26/09 (auditoria LOG-C4): registro errado (data, tipo) não tinha como sair — a admin apaga e registra de novo
 function apagarRetorno(id) {
   const x = EMI_EV.find((v) => v.id === id); if (!x || !souAdmin()) return;
+  if (x.pelo_cliente) return toast('A resposta do cliente fica registrada: não se apaga.', true);   // o banco também barra
   abrirModal('Apagar este registro?', `<p style="margin:0;font-size:14px"><b>${EV[x.tipo] ? EV[x.tipo][0] : esc(x.tipo)}</b> · ${esc(dBR(x.em))}${x.nota ? ' — ' + esc(x.nota) : ''}</p>
     <div class="rodape"><button class="btn" onclick="fecharModal()">Voltar</button><button class="btn btn-r" id="ret-apagar">Apagar</button></div>`);
   $('ret-apagar').onclick = async () => {
@@ -1494,6 +1697,175 @@ function apagarRetorno(id) {
     fecharModal(); toast('Registro apagado');
     await recarregar();
   };
+}
+
+// ══════════════ PERFIS DE FORA (26/09 — maquete aprovada pelo Pedro) ══════════════
+const porPrazo = (a, b) => String(a.prazo || '9999').localeCompare(String(b.prazo || '9999'));
+// a visão do CLIENTE: em que etapa está, o que espera a aprovação dele, o que depende dele e as fotos
+function telaVisaoCliente() {
+  const p = PROJ, et = p.etapas || [], iA = et.indexOf(p.etapa_atual);
+  const esperando = EMI.filter(esperaResposta), pend = TAR.filter(aberta).sort(porPrazo);
+  setTimeout(carregarMiniaturas, 0);
+  return `<section class="card rise"><div class="banda" style="background:linear-gradient(135deg,#0369A1,#38BDF8)">
+      <p class="lbl" style="margin:0">${esc(p.etapa_atual || 'Seu projeto')}</p><h2>${esc(p.nome)}</h2>
+      <div class="chips">${p.escritorio ? `<span>com ${esc(p.escritorio)}</span>` : ''}${p.proxima_entrega || p.proxima_entrega_data ? `<span>Próxima entrega: ${esc(p.proxima_entrega || 'entrega')}${p.proxima_entrega_data ? ' · ' + dBR(p.proxima_entrega_data) : ''}</span>` : ''}</div></div>
+    ${et.length ? `<p class="lbl">Em que etapa está</p><div class="etapas">${et.map((e, i) => `<div class="etp ${i < iA ? 'feita' : i === iA ? 'atual' : ''}" style="cursor:default"><span class="num">${i < iA ? '✓' : i + 1}</span><b>${esc(e)}</b></div>`).join('')}</div>` : ''}
+  </section>
+  ${esperando.map((e) => `<section class="card rise" style="border:2px solid #F59E0B"><div class="linha" style="gap:16px">
+      <span class="kpi-ico" style="width:48px;height:48px;background:#FFFBEB;color:#B45309">${svg('emi', 24)}</span>
+      <div style="flex:1 1 240px;min-width:0"><p class="lbl" style="margin:0;color:#B45309">Aguardando a sua aprovação</p>
+        <b style="font-size:16px;overflow-wrap:anywhere">${esc(e.copia_nome || e.arquivo_nome)}</b><span class="rev-tag">${revTxt(e.revisao)}</span>
+        <p class="sub" style="margin:2px 0 0">Enviada em ${esc(dBR((ultimoEv(e) || {}).em || e.emitido_em))}${e.nota ? ' · “' + esc(e.nota) + '”' : ''}</p></div>
+      <div class="linha" style="gap:8px">${linkCopia(e) ? `<a class="btn btn-s" href="${esc(linkCopia(e))}" target="_blank" rel="noopener">Abrir</a>` : ''}<button type="button" class="btn btn-s btn-r" onclick="responderEmissao('${e.id}','revisao')">Pedir revisão</button><button type="button" class="btn btn-s btn-d" onclick="responderEmissao('${e.id}','aprovado')">Aprovar</button></div></div></section>`).join('')}
+  <div class="grade g2 rise">
+    <section class="card"><h2 class="h2" style="font-size:16px">O que depende de você</h2>
+      ${pend.length ? `<ul class="lista" style="margin-top:8px">${pend.slice(0, 6).map((t) => `<li style="cursor:pointer" onclick="ir('tarefas')"><span style="width:9px;height:9px;border-radius:50%;background:#F59E0B"></span><span style="flex:1;min-width:0;font-size:14px">${esc(t.titulo)}</span>${pillPrazo(t) || '<span class="sub" style="margin:0">sem data</span>'}</li>`).join('')}</ul>` : '<p class="vazio" style="margin-top:8px">Nada pendente com você agora.</p>'}
+      <p class="sub" style="margin-top:8px">Só aparecem aqui as tarefas que o escritório marcou como suas.</p></section>
+    <section class="card"><div class="linha" style="justify-content:space-between"><h2 class="h2" style="font-size:16px">Fotos da obra</h2>${FOTOS.length ? `<a class="btn btn-s" href="#/p/${p.id}/fotos">Ver todas (${FOTOS.length})</a>` : ''}</div>
+      ${FOTOS.length ? `<div class="fotos-g" style="margin-top:10px">${FOTOS.slice(0, 4).map(fotoTile).join('')}</div>` : '<p class="vazio" style="margin-top:8px">Quando o escritório separar fotos da obra pra você, elas aparecem aqui.</p>'}</section>
+  </div>`;
+}
+// as pendências do cliente: só leitura (quem mexe no quadro é o escritório)
+function telaPendencias() {
+  const ab = TAR.filter(aberta).sort(porPrazo), feitas = TAR.filter((t) => !aberta(t));
+  const li = (t) => `<li style="align-items:flex-start"><span style="width:9px;height:9px;border-radius:50%;margin-top:6px;background:${aberta(t) ? '#F59E0B' : '#10B981'}"></span><span style="flex:1;min-width:0"><b style="font-size:14.5px">${esc(t.titulo)}</b>${t.descricao ? `<span class="sub" style="display:block;margin:2px 0 0;white-space:pre-wrap">${esc(t.descricao)}</span>` : ''}</span>${pillPrazo(t)}</li>`;
+  return `${faixa('cli', 'Suas pendências', 'O que o escritório marcou como seu neste projeto. Fez? Avise o escritório: é ele quem atualiza o andamento.')}
+    <section class="card rise">${ab.length ? `<ul class="lista">${ab.map(li).join('')}</ul>` : '<p class="vazio">Nada pendente com você agora.</p>'}</section>
+    ${feitas.length ? `<section class="card rise"><h2 class="h2" style="font-size:16px">Já resolvidas</h2><ul class="lista" style="margin-top:8px">${feitas.map(li).join('')}</ul></section>` : ''}`;
+}
+// a visão do FORNECEDOR: as tarefas dele, a pasta que o escritório separou e as emissões mandadas pra ele
+function telaVisaoFornecedor() {
+  const p = PROJ, eu = meuMembro() || {}, ab = TAR.filter(aberta).sort(porPrazo);
+  return `${faixa('forn', esc(p.nome) + (eu.funcao ? ' · ' + esc(eu.funcao) : ''), 'O que o escritório passou pra você neste projeto.', `<a class="btn btn-p" href="#/p/${p.id}/fotos">Subir fotos da obra</a>`)}
+    <div class="grade g2 rise">
+      <section class="card"><div class="linha" style="justify-content:space-between"><h2 class="h2" style="font-size:16px">Suas tarefas</h2><a class="btn btn-s" href="#/p/${p.id}/tarefas">Abrir o quadro</a></div>
+        ${ab.length ? `<ul class="lista" style="margin-top:8px">${ab.map((t) => `<li style="cursor:pointer" onclick="ir('tarefas');setTimeout(()=>abrirCartao('${t.id}'),50)"><span style="width:9px;height:9px;border-radius:50%;background:${(ST.find((s) => s.k === t.status) || {}).cor}"></span><span style="flex:1;min-width:0;font-size:14.5px">${esc(t.titulo)}<span class="sub" style="display:block;margin:0">${stT(t.status)}${chkDa(t.id).length ? ` · checklist ${chkDa(t.id).filter((c) => c.feito).length} de ${chkDa(t.id).length}` : ''}</span></span>${pillPrazo(t)}</li>`).join('')}</ul>` : '<p class="vazio" style="margin-top:8px">Nenhuma tarefa aberta com você.</p>'}</section>
+      <div style="display:flex;flex-direction:column;gap:22px">
+        <section class="card"><h2 class="h2" style="font-size:16px">Sua pasta</h2>
+          <p class="sub">${eu.drive_pasta_nome ? `A pasta <b>${esc(eu.drive_pasta_nome)}</b> do Drive do projeto, só pra ler.` : 'O escritório ainda não separou uma pasta pra você.'}</p>
+          ${eu.drive_pasta_nome ? `<a class="btn btn-s" style="margin-top:10px" href="#/p/${p.id}/arquivos">Abrir a pasta</a>` : ''}</section>
+        <section class="card"><h2 class="h2" style="font-size:16px">Emissões pra você</h2>
+          ${EMI.length ? `<ul class="lista" style="margin-top:8px">${EMI.slice(0, 5).map((e) => `<li><span class="rev-tag" style="margin:0">${revTxt(e.revisao)}</span><span style="flex:1;min-width:0;font-size:14px;overflow-wrap:anywhere">${linkCopia(e) ? `<a href="${esc(linkCopia(e))}" target="_blank" rel="noopener">${esc(e.copia_nome || e.arquivo_nome)}</a>` : esc(e.copia_nome || e.arquivo_nome)}</span><span class="sub" style="margin:0">${esc(dBR(e.emitido_em))}</span></li>`).join('')}</ul>` : '<p class="vazio" style="margin-top:8px">Nada mandado pra você ainda.</p>'}</section>
+      </div></div>`;
+}
+
+// ══════════════ FOTOS (26/09 — "pasta Fotos no Drive"; sobem equipe e fornecedor) ══════════════
+// A imagem vem do SERVIDOR com o login (o banco decide quem vê: o cliente só as "pro cliente") e vira um blob:
+// nenhum link aberto do Google na tela. Cache por aba; some ao trocar de projeto.
+let FILTRO_F = '', FOTO_URL = {};
+function fotoTile(f) {
+  const m = MEMBROS.find((x) => x.user_id === f.enviada_por);
+  const hora = f.enviada_em ? new Date(f.enviada_em).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: FUSO }) : '';
+  return `<button type="button" class="ft" onclick="verFoto('${f.id}')"><span class="ft-img"><img data-foto="${f.id}" alt="${esc(f.legenda || 'Foto da obra')}"></span>
+    <span class="ft-leg"><b>${esc(f.legenda || 'Sem legenda')}</b><small>${m ? esc(curto(m)) + ' · ' : ''}${hora}${souEquipe() && f.pro_cliente ? ' · pro cliente' : ''}</small></span></button>`;
+}
+async function urlDaFoto(id, tam) {
+  const k = id + ':' + tam; if (FOTO_URL[k]) return FOTO_URL[k];
+  const { data: { session } } = await sb.auth.getSession();
+  const r = await fetch(`${window.API_BASE}/api/escritorio/projetos/${PROJ.id}/fotos/${id}/imagem?tam=${tam}`, { headers: { Authorization: 'Bearer ' + (session ? session.access_token : '') } });
+  if (!r.ok) throw new Error('foto ' + r.status);
+  const u = URL.createObjectURL(await r.blob()); FOTO_URL[k] = u; return u;
+}
+async function carregarMiniaturas() {
+  const imgs = [...document.querySelectorAll('img[data-foto]:not([src])')];
+  let i = 0;
+  const trabalha = async () => {
+    while (i < imgs.length) {
+      const img = imgs[i++];
+      try { img.src = await urlDaFoto(img.dataset.foto, 'miniatura'); }
+      catch (_) { const c = img.closest('.ft-img'); if (c) c.classList.add('falhou'); }
+    }
+  };
+  await Promise.all([trabalha(), trabalha(), trabalha(), trabalha()]);   // 4 de cada vez: 1 processo no servidor
+}
+document.addEventListener('click', (ev) => { const b = ev.target.closest && ev.target.closest('[data-ff]'); if (!b) return; FILTRO_F = b.dataset.ff || ''; render(); });
+function telaFotos() {
+  const podeSubir = !souCliente();
+  const etapas = [...new Set(FOTOS.map((f) => f.etapa).filter(Boolean))];
+  const lista = FOTOS.filter((f) => !FILTRO_F || (FILTRO_F === '__cliente' ? f.pro_cliente : f.etapa === FILTRO_F));
+  const grupos = [];
+  for (const f of lista) {
+    const dia = f.enviada_em ? new Date(f.enviada_em).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: FUSO }) : 'Sem data';
+    if (!grupos.length || grupos[grupos.length - 1].dia !== dia) grupos.push({ dia, fotos: [] });
+    grupos[grupos.length - 1].fotos.push(f);
+  }
+  setTimeout(carregarMiniaturas, 0);
+  // o nome da etapa vai em data-* (é texto de gente), nunca dentro de onclick
+  const chip = (k, t, n) => `<button type="button" class="chip" aria-pressed="${FILTRO_F === k}" data-ff="${esc(k)}">${esc(t)}<span class="n">${n}</span></button>`;
+  return `${faixa('foto', souCliente() ? 'Fotos da obra' : 'Fotos do projeto', souCliente() ? 'As fotos da obra que o escritório separou pra você.' : 'Ficam na pasta Fotos do Drive do projeto. A equipe e os fornecedores sobem pelo celular, na obra.', podeSubir ? '<button class="btn btn-g" onclick="subirFotos()">Subir fotos</button>' : '')}
+    ${!TEM_FOTOS ? '<section class="card"><p class="vazio">Não consegui ler as fotos agora. Recarregue a página em instantes.</p></section>' : ''}
+    ${FOTOS.length ? `<div class="linha">${chip('', 'Todas', FOTOS.length)}${etapas.map((e) => chip(e, e, FOTOS.filter((f) => f.etapa === e).length)).join('')}${souEquipe() ? chip('__cliente', 'Visíveis pro cliente', FOTOS.filter((f) => f.pro_cliente).length) : ''}</div>` : ''}
+    ${grupos.length ? grupos.map((g) => `<section class="rise"><p class="lbl" style="margin:0 0 8px">${esc(g.dia)} · ${g.fotos.length} foto${g.fotos.length === 1 ? '' : 's'}</p><div class="fotos-g">${g.fotos.map(fotoTile).join('')}</div></section>`).join('')
+      : `<section class="card rise"><div class="passo"><span class="passo-ic">${svg('foto', 28)}</span><b>Nenhuma foto ${FILTRO_F ? 'neste filtro' : 'ainda'}</b><p>${podeSubir ? 'Use <b>Subir fotos</b>: no celular, dá pra tirar a foto na hora.' : 'Quando o escritório separar fotos da obra pra você, elas aparecem aqui.'}</p></div></section>`}`;
+}
+function verFoto(id) {
+  const f = FOTOS.find((x) => x.id === id); if (!f) return;
+  const minha = f.enviada_por === EU.id;
+  const edita = souEquipe() || (souFornecedor() && minha);        // o mesmo que a regra do banco
+  const apaga = souAdmin() || ((PAPEL === 'freela' || souFornecedor()) && minha);   // o mesmo que o servidor
+  abrirModal(f.legenda || 'Foto da obra', `<div class="ft-grande"><img id="fg-img" alt="${esc(f.legenda || 'Foto da obra')}"></div>
+    ${edita ? `<div class="grade g2"><div><label class="lbl" for="fg-l">Legenda</label><input id="fg-l" class="in" maxlength="200" value="${esc(f.legenda || '')}"></div>
+      <div><label class="lbl" for="fg-e">Etapa</label><select id="fg-e" class="in"><option value="">—</option>${(PROJ.etapas || []).map((e) => `<option ${e === f.etapa ? 'selected' : ''}>${esc(e)}</option>`).join('')}</select></div></div>
+      ${souEquipe() ? `<label class="linha" style="gap:8px;font-size:14px;flex-wrap:nowrap"><input type="checkbox" id="fg-c" ${f.pro_cliente ? 'checked' : ''}> Mostrar pro cliente</label>` : ''}`
+      : (f.etapa ? `<p class="sub" style="margin:0">Etapa: ${esc(f.etapa)}</p>` : '')}
+    <div class="rodape">${apaga ? '<button class="btn btn-r" id="fg-apagar">Apagar</button><span style="flex:1"></span>' : ''}<button class="btn" onclick="fecharModal()">Fechar</button>${edita ? '<button class="btn btn-d" id="fg-ok">Salvar</button>' : ''}</div>`, true);
+  urlDaFoto(id, 'grande').then((u) => { const i = $('fg-img'); if (i) i.src = u; }).catch(() => { const i = $('fg-img'); if (i) i.alt = 'Não consegui abrir a foto agora.'; });
+  if (edita) $('fg-ok').onclick = async () => {
+    const mud = { legenda: $('fg-l').value.trim() || null, etapa: $('fg-e').value || null };
+    if (souEquipe()) mud.pro_cliente = $('fg-c').checked;
+    $('fg-ok').disabled = true;
+    const { error } = await sb.from('escritorio_fotos').update(mud).eq('id', id).eq('projeto_id', PROJ.id);
+    if (error) { $('fg-ok').disabled = false; return falhou(error, 'Não salvei a foto'); }
+    Object.assign(f, mud); fecharModal(); render(); toast('Foto salva');
+  };
+  if (apaga) $('fg-apagar').onclick = async () => {
+    if (!window.confirm('Apagar esta foto? Ela vai pra lixeira do Google Drive (dá pra recuperar lá por 30 dias).')) return;
+    $('fg-apagar').disabled = true;
+    const r = await apiEsc(`projetos/${PROJ.id}/fotos/${id}`, 'DELETE');
+    if (!r.ok) { $('fg-apagar').disabled = false; return toast(typeof r.dados.detail === 'string' ? r.dados.detail : 'Não consegui apagar agora.', true); }
+    FOTOS = FOTOS.filter((x) => x.id !== id); fecharModal(); render(); toast('Foto apagada');
+  };
+}
+function subirFotos() {
+  if (souCliente()) return;
+  abrirModal('Subir fotos', `<div><label class="lbl" for="sf-arq">Fotos</label><input id="sf-arq" type="file" class="in" accept="image/*" multiple>
+      <span class="sub" style="display:block">No celular, dá pra tirar a foto na hora. Até 10 por vez, 12 MB cada.</span></div>
+    <div class="grade g2"><div><label class="lbl" for="sf-e">Etapa</label><select id="sf-e" class="in"><option value="">—</option>${(PROJ.etapas || []).map((e) => `<option ${e === PROJ.etapa_atual ? 'selected' : ''}>${esc(e)}</option>`).join('')}</select></div>
+      <div><label class="lbl" for="sf-l">Legenda (vale pra todas)</label><input id="sf-l" class="in" maxlength="200" placeholder="ex.: Elétrica da cozinha"></div></div>
+    ${souEquipe() ? '<label class="linha" style="gap:8px;font-size:14px;flex-wrap:nowrap"><input type="checkbox" id="sf-c"> Mostrar pro cliente</label>' : '<p class="sub" style="margin:0">O escritório decide quais fotos o cliente vê.</p>'}
+    <p class="sub" style="margin:0">Vão pra pasta Fotos do projeto no Drive. A data e o seu nome ficam junto.</p>
+    <div class="rodape"><button class="btn" onclick="fecharModal()">Cancelar</button><button class="btn btn-d" id="sf-ok">Enviar</button></div>`);
+  $('sf-arq').onchange = () => { const n = $('sf-arq').files.length; $('sf-ok').textContent = n ? `Enviar ${n} foto${n > 1 ? 's' : ''}` : 'Enviar'; };
+  $('sf-ok').onclick = enviarFotos;
+}
+async function enviarFotos() {
+  const b = $('sf-ok'); if (!b || b.disabled) return;
+  const arqs = [...($('sf-arq').files || [])];
+  if (!arqs.length) return toast('Escolha as fotos.', true);
+  if (arqs.length > 10) return toast('Mande até 10 fotos por vez.', true);
+  const grande = arqs.find((a) => a.size > 12 * 1048576); if (grande) return toast(`${grande.name} passou de 12 MB.`, true);
+  const fd = new FormData();
+  arqs.forEach((a) => fd.append('fotos', a, a.name));
+  fd.append('legenda', $('sf-l').value.trim()); fd.append('etapa', $('sf-e').value);
+  if ($('sf-c') && $('sf-c').checked) fd.append('pro_cliente', '1');
+  b.disabled = true; b.textContent = 'Enviando…';
+  EMITINDO = true;   // o mesmo cadeado do Emitir: enquanto sobe, o modal não fecha
+  let r = null, d = {};
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    r = await fetch(`${window.API_BASE}/api/escritorio/projetos/${PROJ.id}/fotos`, { method: 'POST', headers: { Authorization: 'Bearer ' + (session ? session.access_token : '') }, body: fd });
+    try { d = await r.json(); } catch (_) {}
+  } catch (_) { r = null; }
+  finally { EMITINDO = false; }
+  if (!r) {
+    // sem resposta não dá pra saber se subiram — relê em vez de mandar de novo (e duplicar)
+    fecharModal(); try { await recarregar(); } catch (_) {}
+    return toast('A conexão caiu no meio: confira se as fotos entraram antes de mandar de novo.', true);
+  }
+  if (!r.ok) { b.disabled = false; b.textContent = 'Tentar de novo'; return toast(typeof d.detail === 'string' ? d.detail : 'As fotos não subiram agora. Tente de novo.', true); }
+  fecharModal(); await recarregar();
+  const n = (d.fotos || []).length;
+  toast(`${n} foto${n === 1 ? '' : 's'} enviada${n === 1 ? '' : 's'}` + (d.falhas ? ` · ${d.falhas} não subiu: mande de novo` : ''), !!d.falhas);
 }
 
 // ══════════════ ATAS ══════════════
@@ -1591,15 +1963,17 @@ function telaEquipe() {
   const saiu = souAdmin() ? MEMBROS.filter((m) => m.status === 'removido') : [];
   return `${faixa('eq', 'Equipe', `${at} no projeto${cv ? ` · ${cv} convite${cv > 1 ? 's' : ''} aguardando` : ''}. Cada pessoa vê só este projeto.`,
       souAdmin() ? '<button class="btn btn-p" onclick="convidar()">+ Convidar pessoa</button>' : '')}
-    <div class="aviso"><b>Quem você convida entra no projeto, não no escritório.</b><br>
-      <span style="font-size:12.5px;color:#475569">Vê e edita: as tarefas, as atas e a pasta do Drive deste projeto (acesso de edição pela conta Google da pessoa). Vê o nome e a função dos colegas, mas não o e-mail nem o telefone. Não vê: os outros projetos, o financeiro e o resto do seu Drive.${PROJ.job_id ? ' <b>Projeto medido ligado:</b> a equipe vê o quantitativo, o cronograma e o memorial, só leitura; <b>baixar arquivos</b> só quem você liberar abaixo.' : ''}</span></div>
+    <div class="aviso"><b>Quem você convida entra no projeto, não no escritório — com um perfil.</b><br>
+      <span style="font-size:12.5px;color:#475569"><b>Equipe</b>: vê e edita as tarefas, as atas e a pasta do Drive deste projeto (acesso de edição pela conta Google da pessoa); vê o nome e a função dos colegas, mas não o e-mail nem o telefone.${PROJ.job_id ? ' Com o projeto medido ligado, vê o quantitativo, o cronograma e o memorial, só leitura; <b>baixar arquivos</b> só quem você liberar abaixo.' : ''}
+      <b>Fornecedor</b>: só as tarefas marcadas pra ele, a subpasta que você escolher (só leitura), as emissões mandadas pra ele e as fotos. <b>Cliente</b>: a etapa do projeto, as emissões mandadas pra ele (aprova ou pede revisão), as tarefas do cliente e as fotos que você marcar. Ninguém vê os outros projetos, o financeiro nem o resto do seu Drive.</span></div>
     <section class="card"><div class="linha" style="justify-content:space-between"><h2 class="h2">${vis.length} pessoa${vis.length > 1 ? 's' : ''}</h2></div>
       <ul class="lista" style="margin-top:8px">${vis.map((m) => `<li style="flex-wrap:wrap">${av(m)}<div style="flex:1;min-width:180px"><b style="font-size:14px">${esc(nomeDe(m))}${m.user_id === EU.id ? ' <span style="font-weight:400;color:#64748B">(você)</span>' : ''}</b>
         <span class="sub" style="display:block;margin:0">${esc(m.funcao || (m.papel === 'dono' ? 'Admin do projeto' : ''))}${m.email ? ' · ' + esc(m.email) : ''}${m.telefone ? ' · ' + esc(m.telefone) : ''}</span>
+        ${deFora(m) ? `<span class="sub" style="display:block;margin:0"><span class="pill ${m.papel === 'cliente' ? 'p-ok' : 'p-warn'}" style="font-size:11px">${PERFIL_TXT[m.papel]}</span>${m.drive_pasta_nome ? ' vê a pasta <b>' + esc(m.drive_pasta_nome) + '</b>' : ''}</span>` : ''}
         ${m.email_conta && m.email && m.email_conta !== String(m.email).toLowerCase() ? `<span class="sub" style="display:block;margin:0;color:#92400E">Entrou com a conta ${esc(m.email_conta)} (a pasta do Drive vai pra esta)</span>` : ''}
         ${NOTAS[m.id] ? `<span class="sub" style="display:block;margin:0">${esc(NOTAS[m.id])}</span>` : ''}</div>
         ${m.papel === 'dono' ? '<span class="pill p-ind">admin · vê tudo</span>' : m.status === 'ativo' ? '<span class="pill p-ok"><i></i>no projeto</span>' : pillConvite(m)}
-        ${souAdmin() && PROJ.job_id && m.papel !== 'dono' ? `<label class="chip" title="Planilha, cronograma e memorial do projeto medido ligado"><input type="checkbox" ${m.pode_baixar ? 'checked' : ''} onchange="mudarBaixar('${m.id}', this.checked, this)"> pode baixar arquivos</label>` : ''}
+        ${souAdmin() && PROJ.job_id && m.papel === 'freela' ? `<label class="chip" title="Planilha, cronograma e memorial do projeto medido ligado"><input type="checkbox" ${m.pode_baixar ? 'checked' : ''} onchange="mudarBaixar('${m.id}', this.checked, this)"> pode baixar arquivos</label>` : ''}
         ${souAdmin() && m.papel !== 'dono' ? `<button class="btn btn-s" onclick="editarPessoa('${m.id}')">Editar</button>${m.status === 'convidado' ? `<button class="btn btn-s" onclick="reenviar('${m.id}')">Reenviar convite</button>` : ''}<button class="btn btn-s" onclick="tirar('${m.id}')">${m.status === 'convidado' ? 'Cancelar convite' : 'Tirar do projeto'}</button>` : ''}
       </li>`).join('')}</ul></section>
     ${saiu.length ? `<section class="card"><h2 class="h2">Saíram do projeto</h2>
@@ -1635,19 +2009,58 @@ function pillConvite(m) {
   if (vence < new Date()) return `<span class="pill p-late"><i></i>convite venceu ${dBR(vence.toISOString())}</span>`;
   return `<span class="pill p-warn"><i></i>aguardando · vence ${dBR(vence.toISOString())}</span>`;
 }
+let CV_PRE = {};
 function convidar(pre) {
-  pre = pre || {};
+  pre = pre || {}; CV_PRE = pre;
   abrirModal('Convidar pessoa para ' + PROJ.nome, `
     <div class="grade g2"><div><label class="lbl" for="cv-e">E-mail</label><input id="cv-e" type="email" class="in" maxlength="254" value="${esc(pre.email || '')}" placeholder="nome@exemplo.com"></div>
       <div><label class="lbl" for="cv-n">Nome</label><input id="cv-n" class="in" maxlength="120" value="${esc(pre.nome || '')}" placeholder="como você chama a pessoa"></div>
       <div><label class="lbl" for="cv-f">Função</label><input id="cv-f" class="in" maxlength="60" list="cv-fs" value="${esc(pre.funcao || '')}"><datalist id="cv-fs"><option>Arquiteto(a)</option><option>Estagiário(a)</option><option>Projetista</option><option>Renderista</option></datalist></div>
       <div><label class="lbl" for="cv-t">Telefone / WhatsApp</label><input id="cv-t" class="in" maxlength="40" inputmode="tel" value="${esc(pre.telefone || '')}"></div></div>
-    <div class="aviso" style="font-size:12.5px">A pessoa recebe um e-mail com o botão <b>Aceitar convite</b>, entra com Google ou cria uma senha, preenche o cadastro do AI.arq e aceita os termos. Depois disso ela já está no projeto.</div>
+    <div><p class="lbl">Perfil neste projeto</p><div class="grade g3" role="radiogroup" aria-label="Perfil neste projeto">${PERFIS_CONVITE.map(([k, t, d]) => `<label class="perfil-op"><span class="linha" style="gap:6px;flex-wrap:nowrap"><input type="radio" name="cv-perfil" value="${k}" ${k === (pre.perfil || 'equipe') ? 'checked' : ''}><b>${t}</b></span><span>${d}</span></label>`).join('')}</div></div>
+    <div id="cv-pasta-box" ${pre.perfil === 'fornecedor' ? '' : 'hidden'}><label class="lbl" for="cv-pasta">Pasta do Drive que ele vê (opcional)</label><select id="cv-pasta" class="in"><option value="">Nenhuma por enquanto</option></select>
+      <span class="sub" style="display:block" id="cv-pasta-sub">Uma subpasta da pasta do projeto. Ele só lê.</span></div>
+    <div class="aviso" style="font-size:12.5px" id="cv-aviso">${AVISO_PERFIL[pre.perfil || 'equipe']}</div>
     <div class="rodape"><button class="btn" onclick="fecharModal()">Cancelar</button><button class="btn btn-d" id="cv-ok" onclick="enviarConvite()">Enviar convite</button></div>`);
+  document.querySelectorAll('input[name="cv-perfil"]').forEach((r) => { r.onchange = perfilDoConvite; });
+  if (pre.perfil === 'fornecedor') carregarPastasDoFornecedor();
+}
+// 26/09 (perfis): o que cada perfil vê — o MESMO texto da maquete aprovada e das regras do banco (seção 26)
+const PERFIS_CONVITE = [
+  ['equipe', 'Equipe', 'Arquitetos e estagiários. Pasta do projeto, tarefas, atas.'],
+  ['fornecedor', 'Fornecedor', 'Marcenaria, obra, instalações. Só as tarefas dele e a pasta que você escolher.'],
+  ['cliente', 'Cliente', 'O dono da obra. Acompanha, vê as emissões e aprova.'],
+];
+const AVISO_PERFIL = {
+  equipe: 'A pessoa recebe um e-mail com o botão <b>Aceitar convite</b>, entra com Google ou cria uma senha, preenche o cadastro do AI.arq e aceita os termos. Depois disso ela já está no projeto.',
+  fornecedor: 'Ele vai ver: <b>as tarefas marcadas pra ele</b>, <b>a pasta que você escolher</b> (só leitura), <b>as emissões que você mandar pra ele</b> e <b>as fotos</b> (e pode subir foto). Não vê atas, equipe, quantitativo nem financeiro.',
+  cliente: 'Ele vai ver: <b>a etapa do projeto</b>, <b>as emissões que você mandar pra ele</b> (e aprova ou pede revisão), <b>as tarefas do cliente</b> e <b>as fotos que você marcar pro cliente</b>. O cadastro dele é curto: nome e telefone.',
+};
+const perfilMarcado = () => (document.querySelector('input[name="cv-perfil"]:checked') || {}).value || 'equipe';
+function perfilDoConvite() {
+  const p = perfilMarcado();
+  $('cv-pasta-box').hidden = p !== 'fornecedor'; $('cv-aviso').innerHTML = AVISO_PERFIL[p];
+  if (p === 'fornecedor') carregarPastasDoFornecedor();
+}
+// as subpastas de 1º nível da pasta do projeto (Emitidos e Fotos são do sistema: ficam de fora)
+async function carregarPastasDoFornecedor() {
+  const sel = $('cv-pasta'); if (!sel || sel.dataset.lido) return;
+  if (!PROJ.pasta_id) { $('cv-pasta-sub').textContent = 'Ligue a pasta do Drive ao projeto (em Arquivos) pra escolher uma subpasta pro fornecedor.'; sel.disabled = true; return; }
+  sel.dataset.lido = '1';
+  const r = await apiEsc(`projetos/${PROJ.id}/arquivos`);
+  const ps = r.ok ? (r.dados.arquivos || []).filter((f) => f.pasta && f.nome !== 'Emitidos' && f.nome !== 'Fotos') : [];
+  if (!$('cv-pasta')) return;
+  ps.forEach((p) => { const o = document.createElement('option'); o.value = p.id; o.textContent = p.nome; sel.appendChild(o); });
+  if (!ps.length) $('cv-pasta-sub').textContent = r.ok ? 'A pasta do projeto não tem subpastas. Crie uma no Drive (ex.: Marcenaria) e abra o convite de novo.' : 'Não consegui ler as pastas agora. Dá pra convidar sem e escolher depois.';
 }
 async function enviarConvite() {
   const corpo = { email: $('cv-e').value.trim(), nome: $('cv-n').value.trim() || null, funcao: $('cv-f').value.trim() || null, telefone: $('cv-t').value.trim() || null };
   if (!corpo.email) return toast('Informe o e-mail.', true);
+  corpo.perfil = perfilMarcado();
+  if (corpo.perfil === 'fornecedor' && $('cv-pasta') && $('cv-pasta').value) corpo.pasta = $('cv-pasta').value;
+  // reenvio sem mudar o perfil nem escolher pasta: não manda o perfil — o servidor mantém o que era (inclusive a
+  // pasta do fornecedor, que "perfil informado sem pasta" limparia)
+  if (CV_PRE.perfil && corpo.perfil === CV_PRE.perfil && !corpo.pasta) delete corpo.perfil;
   $('cv-ok').disabled = true;
   const { data: { session } } = await sb.auth.getSession();
   let r, d = {};
@@ -1671,7 +2084,7 @@ async function enviarConvite() {
     <div class="rodape"><button class="btn" onclick="copiarLink()">Copiar link</button><button class="btn btn-d" onclick="fecharModal()">Pronto</button></div>`);
 }
 function copiarLink() { const i = $('cv-link'); try { navigator.clipboard.writeText(i.value).then(() => toast('Link copiado'), () => { i.select(); toast('Selecionei o link: copie com Ctrl+C'); }); } catch (_) { i.select(); } }
-function reenviar(id) { const m = MEMBROS.find((x) => x.id === id); convidar({ email: m.email, nome: m.nome, funcao: m.funcao, telefone: m.telefone }); }
+function reenviar(id) { const m = MEMBROS.find((x) => x.id === id); convidar({ email: m.email, nome: m.nome, funcao: m.funcao, telefone: m.telefone, perfil: { freela: 'equipe', fornecedor: 'fornecedor', cliente: 'cliente' }[m.papel] || 'equipe' }); }
 function editarPessoa(id) {
   const m = MEMBROS.find((x) => x.id === id);
   abrirModal('Dados de ' + curto(m), `
@@ -1696,7 +2109,9 @@ async function salvarPessoa(id) {
 }
 function tirar(id) {
   const m = MEMBROS.find((x) => x.id === id), conv = m.status === 'convidado';
-  abrirModal(conv ? 'Cancelar convite' : 'Tirar ' + curto(m) + ' do projeto', `<p style="margin:0;font-size:14px">${conv ? 'O link do convite de <b>' + esc(nomeDe(m)) + '</b> deixa de funcionar.' : '<b>' + esc(nomeDe(m)) + '</b> perde o acesso a este projeto na hora' + (PROJ.pasta_id ? ', e o AI.arq tira o acesso dela à pasta do Drive (você vê aqui se deu certo)' : '') + '. As tarefas continuam no quadro, pra você passar a outra pessoa.'}</p>
+  const oQueSai = deFora(m) ? ', e o AI.arq tira o acesso dela aos arquivos que recebeu' + (m.papel === 'fornecedor' ? ' e à pasta dela' : '') + ' (você vê aqui se deu certo)'
+    : PROJ.pasta_id ? ', e o AI.arq tira o acesso dela à pasta do Drive (você vê aqui se deu certo)' : '';
+  abrirModal(conv ? 'Cancelar convite' : 'Tirar ' + curto(m) + ' do projeto', `<p style="margin:0;font-size:14px">${conv ? 'O link do convite de <b>' + esc(nomeDe(m)) + '</b> deixa de funcionar.' : '<b>' + esc(nomeDe(m)) + '</b> perde o acesso a este projeto na hora' + oQueSai + '. As tarefas continuam no quadro, pra você passar a outra pessoa.'}</p>
     <div class="rodape"><button class="btn" onclick="fecharModal()">Voltar</button><button class="btn btn-r" onclick="confirmarTirar('${id}')">${conv ? 'Cancelar convite' : 'Tirar do projeto'}</button></div>`);
 }
 // 🩸 26/09 (auditoria do Escritório, 5 lentes): tirar alguém chamava a retirada da pasta do Drive "calada" — sem

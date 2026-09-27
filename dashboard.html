@@ -2342,6 +2342,18 @@
         const temProjeto = !m.error && (m.count || 0) > 0;
         const porta = document.getElementById('escritorio-entrada');
         if (porta && (noPiloto || temProjeto)) { porta.hidden = false; porta.style.display = ''; }
+        // 26/09 (perfis — "o cliente cai direto no projeto"): quem está no AI.arq SÓ como cliente ou fornecedor de
+        // um escritório (sem projeto próprio, sem ser equipe) vai pro Escritório. Uma vez por aba: voltar pro painel
+        // continua possível (e quem quiser medir um projeto próprio sobe normalmente daqui).
+        if (temProjeto && !noPiloto && !sessionStorage.getItem('aiarq_escritorio_levou')) {
+          const [fora, meus, equipe] = await Promise.all([
+            sbClient.rpc('escritorio_resumo_externo'),
+            sbClient.from('projects').select('job_id', { count: 'exact', head: true }).eq('user_id', currentUser.id),
+            sbClient.from('escritorio_membros').select('id', { count: 'exact', head: true }).eq('user_id', currentUser.id).eq('status', 'ativo').in('papel', ['dono', 'freela']),
+          ]);
+          const soDeFora = !fora.error && (fora.data || []).length > 0 && !meus.error && (meus.count || 0) === 0 && !equipe.error && (equipe.count || 0) === 0;
+          if (soDeFora) { sessionStorage.setItem('aiarq_escritorio_levou', '1'); location.replace('escritorio.html'); }
+        }
       } catch (_) {}
     })();
 

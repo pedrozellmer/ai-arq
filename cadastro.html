@@ -598,6 +598,17 @@
         referralSourceSelect.dispatchEvent(new Event('change'));
         if (!referralDetailInput.value) referralDetailInput.value = 'Convite do escritório' + (_convite.por ? ' — ' + _convite.por : '');
       }
+      // 26/09 (perfis — maquete aprovada pelo Pedro): o cliente (dono da obra) e o fornecedor têm cadastro CURTO,
+      // nome e telefone. A área e a origem ficam com o que é verdade (vieram por convite do Escritório); o resto some.
+      if (_convite.perfil === 'cliente' || _convite.perfil === 'fornecedor') {
+        const rotulo = _convite.perfil === 'cliente' ? 'Cliente de obra (Escritório)' : 'Fornecedor (Escritório)';
+        const area = document.getElementById('area');
+        if (area) { area.add(new Option(rotulo, rotulo)); area.value = rotulo; }
+        ['cpf_cnpj', 'empresa', 'area', 'cargo', 'referral_source'].forEach((id) => {
+          const el = document.getElementById(id), caixa = el && el.closest('div');
+          if (caixa) { caixa.hidden = true; caixa.style.display = 'none'; }
+        });
+      }
     }
     mostrarFormulario(erroDaChecagem
       ? 'Não consegui confirmar se você já tem cadastro. Se já preencheu antes, '
