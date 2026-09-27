@@ -1100,6 +1100,7 @@ def render_sitemap():
         (f"{SITE_URL}/blog/", "0.9", "weekly"),
         (f"{SITE_URL}/faq.html", "0.7", "monthly"),
         (f"{SITE_URL}/sobre.html", "0.5", "monthly"),
+        (f"{SITE_URL}/dados.html", "0.5", "monthly"),
         (f"{SITE_URL}/termos.html", "0.3", "yearly"),
         (f"{SITE_URL}/privacidade.html", "0.3", "yearly"),
         # 🪤 Esta lista é a fonte da verdade do sitemap: ele é REESCRITO do zero

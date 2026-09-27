@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="icon" type="image/x-icon" href="favicon-v2.ico">
+<link rel="apple-touch-icon" href="apple-touch-icon-v2.png">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dados do AI.arq — o que a gente mede, com data e amostra</title>
+<meta name="description" content="Os números que o site do AI.arq cita, num lugar só: quanto da planilha volta preenchido e quanto volta medido, em CAD e em PDF, com a data, a amostra e o método.">
+<link rel="canonical" href="https://ai.arq.br/dados.html">
+<meta name="robots" content="index, follow">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://ai.arq.br/dados.html">
+<meta property="og:title" content="Dados do AI.arq — com data e amostra">
+<meta property="og:description" content="Quanto da planilha volta preenchido e quanto volta medido, em CAD e em PDF, com o método.">
+<meta property="og:image" content="https://ai.arq.br/og-image.png">
+<meta property="og:locale" content="pt_BR">
+<meta property="og:site_name" content="AI.arq">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Dados do AI.arq — com data e amostra">
+<meta name="twitter:description" content="Quanto da planilha volta preenchido e quanto volta medido, em CAD e em PDF, com o método.">
+<meta name="twitter:image" content="https://ai.arq.br/og-image.png">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"WebPage","name":"Dados do AI.arq","url":"https://ai.arq.br/dados.html","inLanguage":"pt-BR","isPartOf":{"@id":"https://ai.arq.br/#website"},"publisher":{"@id":"https://ai.arq.br/#org"},"dateModified":"2026-09-27"}
+</script>
+<link rel="stylesheet" href="/tailwind.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js" integrity="sha384-qafw21c/iciq0VXsi9FzkfoQv5I/V0iqE4lSNcKXPnW9/UTJLnv5CcN4FHxVLnKg" crossorigin="anonymous"></script>
+<script src="aiarq-utils.js"></script>
+<style>
+  body { font-family: 'Inter', sans-serif; }
+  .gradient-main { background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); }
+  .gradient-text { background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+</style>
+</head>
+<body class="bg-gray-50 text-gray-900 antialiased min-h-screen flex flex-col">
+<a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:bg-white focus:px-4 focus:py-2 focus:rounded focus:shadow z-50">Pular pro conte&uacute;do</a>
+
+<!-- NAVBAR -->
+<nav class="sticky top-0 z-50 border-b bg-white/80 backdrop-blur-md">
+  <div class="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
+    <a href="/" class="flex items-center gap-2 no-underline">
+      <div class="flex h-9 w-9 items-center justify-center rounded-lg gradient-main text-white font-bold text-sm">AI</div>
+      <span class="text-xl font-bold text-gray-900">AI<span class="gradient-text">.arq</span></span>
+    </a>
+    <div id="nav-auth" class="flex items-center gap-3">
+      <a href="login.html" id="nav-login" class="text-sm text-gray-600 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 transition">Entrar</a>
+      <a href="login.html" id="nav-cta" class="text-sm gradient-main text-white px-4 py-2 rounded-lg font-medium transition shadow-sm no-underline">Comece Gr&aacute;tis</a>
+      <div id="nav-user" class="hidden flex items-center gap-3">
+        <img id="nav-avatar" src="" alt="" class="w-8 h-8 rounded-full" loading="lazy">
+        <span id="nav-name" class="text-sm font-medium text-gray-700"></span>
+        <a href="dashboard.html" class="text-sm gradient-main text-white px-4 py-2 rounded-lg font-medium transition shadow-sm no-underline">Minha &Aacute;rea</a>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<main id="main" class="flex-1">
+  <div class="max-w-3xl mx-auto px-4 py-12">
+
+    <div class="mb-10">
+      <h1 class="text-3xl font-bold text-gray-900 md:text-4xl">Os números do AI.arq, com data e amostra</h1>
+      <p class="mt-3 text-lg text-gray-600 leading-relaxed">
+        Todo número que o site cita sobre o que o AI.arq mede vem daqui. Esta página diz quando foi
+        medido, sobre quais projetos e como.
+      </p>
+      <p class="mt-2 text-sm text-gray-500">Medição de 18 de setembro de 2026</p>
+    </div>
+
+    <div class="space-y-8">
+
+      <section>
+        <h2 class="text-xl font-bold text-gray-900 mb-3">Quanto do projeto volta preenchido e quanto volta medido</h2>
+        <div class="rounded-xl bg-white border p-6 shadow-sm text-gray-600 leading-relaxed space-y-4">
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm border-collapse">
+              <thead>
+                <tr class="bg-gray-100 text-gray-700">
+                  <th class="text-left px-3 py-2 font-semibold">Formato enviado</th>
+                  <th class="text-right px-3 py-2 font-semibold">Projetos</th>
+                  <th class="text-right px-3 py-2 font-semibold">Linhas</th>
+                  <th class="text-right px-3 py-2 font-semibold">Com quantidade</th>
+                  <th class="text-right px-3 py-2 font-semibold">Medidas</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="border-t">
+                  <td class="px-3 py-2">DWG ou DXF</td>
+                  <td class="text-right px-3 py-2">101</td>
+                  <td class="text-right px-3 py-2">5.682</td>
+                  <td class="text-right px-3 py-2">68,4%</td>
+                  <td class="text-right px-3 py-2">25,0%</td>
+                </tr>
+                <tr class="border-t">
+                  <td class="px-3 py-2">Só PDF</td>
+                  <td class="text-right px-3 py-2">53</td>
+                  <td class="text-right px-3 py-2">5.222</td>
+                  <td class="text-right px-3 py-2">52,3%</td>
+                  <td class="text-right px-3 py-2">3 linhas</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            <strong>Com quantidade</strong> é a linha da planilha que volta com número. <strong>Medida</strong> é a
+            linha carimbada como medida: a quantidade saiu da geometria do desenho. É a parte que você pode usar
+            sem conferir o número &mdash; o resto sai como estimativa, em laranja, pra revisar.
+          </p>
+          <p>
+            Em PDF, as 3 linhas medidas s&atilde;o de maio de 2026, anteriores &agrave; regra atual. Desde ent&atilde;o,
+            nada que vem de PDF sai carimbado como medido.
+          </p>
+        </div>
+      </section>
+
+      <section>
+        <h2 class="text-xl font-bold text-gray-900 mb-3">Como a gente mediu</h2>
+        <div class="rounded-xl bg-white border p-6 shadow-sm text-gray-600 leading-relaxed">
+          <ul class="space-y-3">
+            <li><strong>Amostra:</strong> todos os projetos de clientes conclu&iacute;dos at&eacute; 18/09/2026 &mdash;
+              154 projetos, 10.904 linhas de planilha. Os projetos da pr&oacute;pria equipe ficam de fora.</li>
+            <li><strong>Separa&ccedil;&atilde;o por formato:</strong> o projeto conta como &ldquo;DWG ou DXF&rdquo; quando
+              veio com pelo menos um arquivo de CAD, e como &ldquo;s&oacute; PDF&rdquo; quando todos os arquivos eram PDF.
+              As duas popula&ccedil;&otilde;es s&atilde;o contadas separadas: juntar as duas mediria quantos clientes
+              mandam PDF, e n&atilde;o o que o motor mede.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section>
+        <h2 class="text-xl font-bold text-gray-900 mb-3">Por que o PDF n&atilde;o sai medido</h2>
+        <div class="rounded-xl bg-white border p-6 shadow-sm text-gray-600 leading-relaxed">
+          <p>
+            PDF vetorial tamb&eacute;m &eacute; lido &mdash; o motor mede a geometria quando d&aacute; e a IA l&ecirc;
+            textos e legendas &mdash;, mas tudo que vem de PDF sai como estimativa: &eacute; regra nossa n&atilde;o selar
+            n&uacute;mero de PDF como medido, porque a escala dele vem de uma declara&ccedil;&atilde;o (o carimbo).
+            Planta escaneada n&atilde;o mede. Por isso a gente pede DXF sempre que der.
+          </p>
+        </div>
+      </section>
+
+      <section>
+        <h2 class="text-xl font-bold text-gray-900 mb-3">O que estes n&uacute;meros n&atilde;o dizem</h2>
+        <div class="rounded-xl bg-white border p-6 shadow-sm text-gray-600 leading-relaxed">
+          <ul class="space-y-3">
+            <li><strong>N&atilde;o s&atilde;o taxa de acerto.</strong> &ldquo;Com quantidade&rdquo; quer dizer que a linha
+              voltou com n&uacute;mero, n&atilde;o que o n&uacute;mero foi conferido.</li>
+            <li><strong>Mudam com a amostra.</strong> A base cresce toda semana; a pr&oacute;xima remedi&ccedil;&atilde;o
+              est&aacute; prevista pra outubro de 2026, e quando ela sair os n&uacute;meros mudam aqui e em todas as
+              p&aacute;ginas que os citam.</li>
+            <li><strong>N&atilde;o dispensam o profissional.</strong> Toda planilha deve ser revisada por arquiteto ou
+              engenheiro habilitado.</li>
+          </ul>
+        </div>
+      </section>
+
+      <div class="flex flex-col sm:flex-row gap-3 pt-2">
+        <a href="exemplo.html" data-track="dados-exemplo" class="inline-flex justify-center items-center rounded-xl border border-gray-300 bg-white px-6 py-3 text-sm font-semibold text-gray-800 hover:border-indigo-300 hover:bg-indigo-50 transition no-underline">Ver um quantitativo de exemplo</a>
+        <a href="login.html?novo=1" data-track="dados-criar-conta" class="inline-flex justify-center items-center rounded-xl gradient-main px-6 py-3 text-sm font-semibold text-white shadow-sm transition no-underline">Criar conta gr&aacute;tis</a>
+      </div>
+
+    </div>
+  </div>
+</main>
+
+<footer class="border-t bg-gray-50 py-12">
+  <div class="mx-auto max-w-6xl px-4">
+    <div class="flex flex-col items-center gap-5 text-center">
+      <div class="flex items-center gap-2">
+        <div class="flex h-8 w-8 items-center justify-center rounded-lg text-white font-bold text-xs" style="background:linear-gradient(135deg,#4F46E5 0%,#22D3EE 100%)">AI</div>
+        <span class="font-bold text-gray-900">AI<span style="background:linear-gradient(135deg,#4F46E5,#22D3EE);-webkit-background-clip:text;background-clip:text;color:transparent">.arq</span></span>
+      </div>
+      <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-gray-500">
+        <a href="precos.html" class="hover:text-gray-900 transition">Pre&ccedil;os</a>
+        <a href="faq.html" class="hover:text-gray-900 transition">FAQ</a>
+        <a href="termos.html" class="hover:text-gray-900 transition">Termos de Uso</a>
+        <a href="privacidade.html" class="hover:text-gray-900 transition">Privacidade</a>
+        <a href="sobre.html" class="hover:text-gray-900 transition">Sobre</a>
+        <a href="licencas.html" class="hover:text-gray-900 transition">Licen&ccedil;as</a>
+        <button type="button" onclick="window.aiarqCookieConsent?window.aiarqCookieConsent.open():window.location.href='privacidade.html'" class="hover:text-gray-900 transition">Gerenciar cookies</button>
+        <a href="javascript:void(0)" onclick="window.aiArqContactOpen?aiArqContactOpen():window.location.href='mailto:contato@ai.arq.br'" class="hover:text-gray-900 transition">Contato</a>
+      </div>
+    </div>
+    <div class="mt-6 pt-6 border-t border-gray-100 text-center text-xs text-gray-400">
+      &copy; 2026 ai.arq.br &middot; Todos os direitos reservados<br>
+        Serviço prestado por <strong>Pedro Zellmer</strong> &middot; Rio de Janeiro/RJ &middot; <a href="mailto:contato@ai.arq.br" class="hover:text-gray-600">contato@ai.arq.br</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+  const sbClient = window.sbClient;
+  (async () => {
+    if (!sbClient) return;
+    const { data: { session } } = await sbClient.auth.getSession();
+    if (session) {
+      const user = session.user;
+      const meta = user.user_metadata || {};
+      document.getElementById('nav-login').classList.add('hidden');
+      document.getElementById('nav-cta').classList.add('hidden');
+      const navUser = document.getElementById('nav-user');
+      navUser.classList.remove('hidden');
+      navUser.classList.add('flex');
+      document.getElementById('nav-name').textContent = meta.full_name || meta.name || user.email.split('@')[0];
+      const avatar = meta.avatar_url || meta.picture || '';
+      if (avatar) document.getElementById('nav-avatar').src = avatar;
+      else document.getElementById('nav-avatar').classList.add('hidden');
+    }
+  })();
+</script>
+
+<script src="contact-modal.js" defer></script>
+<script src="cookie-consent.js" defer></script>
+<script src="whatsapp-button.js" defer></script>
+</body>
+</html>
