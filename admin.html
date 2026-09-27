@@ -2035,14 +2035,15 @@ function renderOndeErra(d){
   if (!tot) return `<p class="text-gray-400 text-sm">Nenhuma correção de cliente ainda. Cada uma delas é a única verdade de campo que a gente tem.</p>`;
   const pad = (d.padroes || []).map(p => `
     <div class="flex items-center justify-between text-sm py-1.5 border-b last:border-0">
-      <span class="text-gray-700">${p.padrao}</span>
-      <span class="font-semibold text-gray-900">${p.n}</span>
+      <span class="text-gray-700">${_escHtml(p.padrao)}</span>
+      <span class="font-semibold text-gray-900">${_escHtml(p.n)}</span>
     </div>`).join('');
+  // 🔒 27/09 (auditoria SI): a descrição do item vem da revisão que o CLIENTE digita — tudo escapado
   const ex = (d.exemplos || []).map(x => `
     <div class="flex items-center justify-between text-xs py-1.5 border-b last:border-0 gap-3">
-      <span class="text-gray-700 truncate">${x.item}</span>
-      <span class="shrink-0 text-gray-500">motor <b class="text-red-700">${x.motor_disse ?? '–'}</b>
-        → cliente <b class="text-emerald-700">${x.cliente_disse ?? '–'}</b></span>
+      <span class="text-gray-700 truncate">${_escHtml(x.item)}</span>
+      <span class="shrink-0 text-gray-500">motor <b class="text-red-700">${_escHtml(x.motor_disse ?? '–')}</b>
+        → cliente <b class="text-emerald-700">${_escHtml(x.cliente_disse ?? '–')}</b></span>
     </div>`).join('');
   return `
   <div class="grid sm:grid-cols-3 gap-3 mb-4">
@@ -2261,10 +2262,10 @@ function renderFilhotes(L){
     <div class="rounded-xl border bg-white p-4 mb-3">
       <div class="flex items-start justify-between gap-3 flex-wrap">
         <div class="min-w-0">
-          <p class="font-semibold text-gray-900 truncate">${f.projeto}</p>
-          <p class="text-xs text-gray-500">${f.cliente} &middot;
-            <span class="font-mono">${f.job_id}</span> &larr; <span class="font-mono">${f.parent_job_id}</span>
-            &middot; ${pronto ? 'concluído' : f.status}</p>
+          <p class="font-semibold text-gray-900 truncate">${_escHtml(f.projeto)}</p>
+          <p class="text-xs text-gray-500">${_escHtml(f.cliente)} &middot;
+            <span class="font-mono">${_escHtml(f.job_id)}</span> &larr; <span class="font-mono">${_escHtml(f.parent_job_id)}</span>
+            &middot; ${pronto ? 'concluído' : _escHtml(f.status)}</p>
           ${String(f.job_id).startsWith('mg')
             ? `<p class="mt-1 inline-block text-[11px] px-2 py-0.5 rounded-full bg-violet-50 border border-violet-300 text-violet-800 font-semibold">&#129516; COMBINADA &mdash; a melhor prancha de cada leitura</p>`
             : (temMergeMelhor(f)
@@ -2448,7 +2449,8 @@ async function mergeEstudar(jobId){
 // pegou. É a quarta vez hoje que um comentário meu planta o defeito que ele
 // explica.
 function mergeHtml(d, jobId){
-  const nome = (p) => String(p||'').replace(/_libredwg\.dxf$/,'').replace(/\.(dxf|dwg)$/i,'');
+  // 🔒 27/09 (auditoria SI): nome de prancha, motivo da juíza, itens e códigos vêm do arquivo do cliente — escapados
+  const nome = (p) => _escHtml(String(p||'').replace(/_libredwg\.dxf$/,'').replace(/\.(dxf|dwg)$/i,''));
   const ganho = d.merge.medidos - Math.max(d.original.medidos, d.releitura.medidos);
 
   const cabecalho = `
@@ -2489,8 +2491,8 @@ function mergeHtml(d, jobId){
               ${so ? 'só existe numa leitura'
                    : `original ${p.pai.medidos}/${p.pai.itens} &middot; releitura ${p.filho.medidos}/${p.filho.itens}`}
             </div>
-            ${j.motivo ? `<div class="text-xs text-gray-700 mt-1.5">${j.motivo}</div>` : ''}
-            ${(j.perdas||[]).length ? `<div class="text-xs text-red-700 mt-1">deixaria de fora: ${j.perdas.join(' · ')}</div>` : ''}
+            ${j.motivo ? `<div class="text-xs text-gray-700 mt-1.5">${_escHtml(j.motivo)}</div>` : ''}
+            ${(j.perdas||[]).length ? `<div class="text-xs text-red-700 mt-1">deixaria de fora: ${j.perdas.map(_escHtml).join(' · ')}</div>` : ''}
           </div>
           <span class="shrink-0 text-xs px-2 py-1 rounded-full ${p.lado === 'pai' ? 'bg-slate-100 text-slate-700' : 'bg-indigo-50 text-indigo-700'} border">
             ${p.lado === 'pai' ? 'original' : 'releitura'}
@@ -2513,11 +2515,11 @@ function mergeHtml(d, jobId){
       <div class="space-y-1">
         ${d.sobreposicoes.slice(0,12).map(s => `
           <div class="text-xs bg-white rounded p-2 border border-amber-200">
-            <span class="font-mono font-semibold">${s.codigo}</span>
-            <span class="text-gray-500">(${s.unidade})</span> &mdash;
-            somando daria <b>${s.soma_se_somar}</b>, maior prancha sozinha <b>${s.maior_sozinho}</b>
+            <span class="font-mono font-semibold">${_escHtml(s.codigo)}</span>
+            <span class="text-gray-500">(${_escHtml(s.unidade)})</span> &mdash;
+            somando daria <b>${_escHtml(s.soma_se_somar)}</b>, maior prancha sozinha <b>${_escHtml(s.maior_sozinho)}</b>
             <div class="text-gray-500 mt-0.5">${s.linhas.map(l =>
-                `${l.quantidade} em ${nome(l.prancha)}` + (l.linhas > 1 ? ` <span class="text-gray-400">(${l.linhas} tipos)</span>` : '')
+                `${_escHtml(l.quantidade)} em ${nome(l.prancha)}` + (l.linhas > 1 ? ` <span class="text-gray-400">(${_escHtml(l.linhas)} tipos)</span>` : '')
               ).join(' &middot; ')}</div>
           </div>`).join('')}
       </div>
@@ -2526,7 +2528,7 @@ function mergeHtml(d, jobId){
   const bloqueado = (d.bloqueios || []).length;
   const acao = bloqueado
     ? `<div class="rounded-xl border border-red-200 bg-red-50 p-4 mt-4 text-sm text-red-800">
-         <b>Não dá pra criar:</b><ul class="list-disc ml-5 mt-1">${d.bloqueios.map(b => `<li>${b}</li>`).join('')}</ul>
+         <b>Não dá pra criar:</b><ul class="list-disc ml-5 mt-1">${d.bloqueios.map(b => `<li>${_escHtml(b)}</li>`).join('')}</ul>
        </div>`
     : `<div class="mt-5 rounded-xl border-2 border-violet-300 bg-violet-50 p-4">
          <p class="text-sm font-semibold text-violet-800 mb-1">Passo 2 de 2 — até aqui só li, não criei nada</p>
