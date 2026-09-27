@@ -22101,20 +22101,19 @@ async def process_files(
             "titulo": ("Um dos seus arquivos é do AutoCAD Architecture/MEP"
                        if len(avisos_aec) == 1 else
                        "Alguns arquivos são do AutoCAD Architecture/MEP"),
+            # 🩸 27/09/2026 — este texto dizia que "nenhum conversor abre direto"
+            # e, com um arquivo só, que "provavelmente não vai conseguir medir
+            # nada". Medido em 90 dias: dos envios desse tipo que terminaram, 9
+            # de 10 saíram com linhas medidas; 3 dos 4 erros eram defeito NOSSO
+            # de conversor (consertados em 23 e 27/09). Um cliente novo foi
+            # embora no aviso irmão da tela, sem processar. O passo a passo de
+            # exportar continua na mensagem de FALHA (quando não abre mesmo).
             "texto": (
-                "Esse tipo de DWG guarda paredes e móveis como \"objetos inteligentes\", "
-                "que nenhum conversor abre direto — nem o \"Salvar como DXF\" comum. "
-                "Não é defeito do seu arquivo.\n\n"
-                "Como resolver, em 3 passos:\n"
-                "1. No AutoCAD, com o arquivo aberto, digite EXPORTTOAUTOCAD e Enter\n"
-                "2. Escolha a versão 2013 e confirme — ele cria um arquivo novo "
-                "(o seu original não é alterado)\n"
-                "3. Abra esse arquivo novo, salve como DXF e anexe aqui\n\n"
-                + ("Seu projeto vai seguir processando com os outros arquivos, "
-                   "mas o que estiver só nesse DWG não vai ser medido."
-                   if _tem_alternativa else
-                   "Como esse é o único arquivo do envio, o processamento "
-                   "provavelmente não vai conseguir medir nada.")),
+                "Esse tipo de DWG guarda paredes e móveis como \"objetos inteligentes\". "
+                "A gente lê esse tipo de arquivo direto na maioria dos casos, e o seu "
+                "projeto segue processando normalmente.\n\n"
+                "Se este arquivo não abrir, avisamos no resultado e mostramos como "
+                "exportar (EXPORTTOAUTOCAD, no próprio AutoCAD)."),
         }
         try:
             _log_error("dwg:aec-detectado-no-upload",

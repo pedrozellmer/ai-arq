@@ -123,6 +123,31 @@ def test_CONTROLE_o_texto_dos_avisos_NAO_mudou():
     assert "quantidade em branco" in pdf, (
         "o texto do aviso do PDF foi alterado no commit do instrumento — o "
         "número que vier depois vai medir outro aviso")
+    # 🩸 27/09/2026 — o texto do DWG MUDOU de propósito, com o número na mão:
+    # um cliente novo escolheu 9 DWG, leu "pode não medir. Rode EXPORTTOAUTOCAD"
+    # e foi embora; e dos envios desse tipo que terminaram em 90 dias, 9 de 10
+    # mediram. O funil deste aviso se lê ANTES e DEPOIS de 27/09. Agora o guarda
+    # prende o contrário: o aviso da escolha do arquivo NÃO manda voltar ao CAD.
     dwg = sem_comentarios_js(corpo_js("checkDwgAecAndWarn", "dashboard.html"))
-    assert "EXPORTTOAUTOCAD" in dwg, (
-        "o texto do aviso do DWG foi alterado no commit do instrumento")
+    assert "EXPORTTOAUTOCAD" not in dwg and "Pode enviar assim" in dwg, (
+        "o aviso do DWG voltou a mandar exportar antes de tentar — foi esse "
+        "pedido que espantou o cliente de 27/09")
+    assert "toast.warn(msg, { duration: 0 })" not in dwg, (
+        "o aviso do DWG voltou a ser alerta fixo na tela")
+
+
+def test_o_aviso_do_servidor_nao_diz_que_nao_vai_medir():
+    """A caixa que aparece DEPOIS do envio dizia "nenhum conversor abre direto"
+    e, com arquivo único, "provavelmente não vai conseguir medir nada" — falso
+    em 9 de 10 envios que terminaram (90 dias, 27/09). O passo a passo de
+    exportar mora na mensagem de FALHA."""
+    import os as _os
+    src = open(_os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
+                             "main.py"), encoding="utf-8").read()
+    i = src.index('"titulo": ("Um dos seus arquivos é do AutoCAD Architecture/MEP"')
+    # 🪤 o comentário acima do texto CITA a frase antiga — fora os comentários
+    bloco = "\n".join(l for l in src[i:i + 2400].splitlines()
+                      if not l.strip().startswith("#"))
+    assert "provavelmente não vai conseguir medir" not in bloco
+    assert "nenhum conversor abre" not in bloco
+    assert "segue processando normalmente" in bloco

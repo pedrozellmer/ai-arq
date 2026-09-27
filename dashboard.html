@@ -3203,15 +3203,21 @@
       _aecToastTimer = setTimeout(() => {
         const n = _aecHits.length;
         const quais = n === 1 ? `"${_aecHits[0]}"` : `${n} arquivos`;
-        const msg = `⚠ ${quais} ${n === 1 ? 'é' : 'são'} do AutoCAD MEP/Architecture — `
-          + `pode não medir. Rode EXPORTTOAUTOCAD no CAD e mande o DXF. `
-          + `Veja o passo a passo no guia de exportação abaixo.`;
-        // 🚨 14/09: irmão do `aviso_pdf_sem_texto`. Este manda a pessoa VOLTAR
-        // ao CAD e rodar um comando antes de continuar — é o pedido mais caro
-        // que a tela faz, e também não era registrado.
+        // 🩸 27/09/2026 — um cliente novo escolheu 9 DWG, leu "pode não medir.
+        // Rode … no CAD e mande o DXF" e foi embora sem processar. Medido em 90
+        // dias: dos envios desse tipo que terminaram, 9 de 10 saíram com linhas
+        // medidas, e 3 dos 4 erros eram defeito NOSSO de conversor (consertados
+        // em 23 e 27/09). Pedir pra voltar ao CAD antes de tentar custava o
+        // cliente por um risco raro. Agora avisa sem mandar exportar; o passo a
+        // passo vem só quando a leitura falha de verdade (mensagem de falha).
+        const msg = `${quais} ${n === 1 ? 'é' : 'são'} do AutoCAD Architecture/MEP. `
+          + `Pode enviar assim: a gente lê esse tipo de arquivo direto na maioria dos casos. `
+          + `Se algum não abrir, avisamos no resultado e mostramos como exportar.`;
+        // 🚨 14/09: irmão do `aviso_pdf_sem_texto` — a exibição vira evento.
+        // 27/09: informativo (ℹ, some sozinho), não alerta fixo na tela.
         try { trackEvent('aviso_dwg_aec', { n: n }); } catch (_) {}
-        if (window.toast) window.toast.warn(msg, { duration: 0 });
-        else setTimeout(() => window.toast?.warn(msg, { duration: 0 }) || console.warn(msg), 500);
+        if (window.toast) window.toast.info(msg);
+        else setTimeout(() => window.toast?.info(msg) || console.info(msg), 500);
       }, 400);
     } catch (e) {
       // Falha de leitura → não opina, fluxo segue normal.
@@ -3919,7 +3925,8 @@
       // 🎯 15/09: o 3º argumento é o TIPO do aviso — é por ele que a exibição
       // vira evento. O guarda confere que cada chave da resposta chega aqui
       // com o tipo de mesmo nome.
-      if (data.aviso_aec) mostrarAvisoAec(data.aviso_aec, null, 'aec');
+      // 27/09: informativo (azul), não alerta âmbar — o arquivo quase sempre abre.
+      if (data.aviso_aec) mostrarAvisoAec(data.aviso_aec, 'indigo', 'aec');
       // Arquivos com cara de estrutural em modo arquitetura (01/08): quase
       // ninguém achava o modo Estrutura no dropdown — o aviso ensina.
       if (data.aviso_estrutural) mostrarAvisoAec(data.aviso_estrutural, 'indigo', 'estrutural');
