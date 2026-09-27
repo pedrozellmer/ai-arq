@@ -2061,9 +2061,11 @@ def _equipe_do_projeto_medido(job_id: str, user_id: str):
     if not eps:
         return None
     ep = eps[0].get("id")
+    # 🔒 26/09 (perfis): só a EQUIPE (papel 'freela') vê o medido. Cliente e fornecedor também são membros ativos,
+    # e sem este filtro o dono da obra abriria o quantitativo, o memorial e as pranchas do escritório.
     st, ms = _supa_rest_service("GET", "/escritorio_membros",
                                 params={"projeto_id": f"eq.{ep}", "user_id": f"eq.{user_id}",
-                                        "status": "eq.ativo", "select": "id,pode_baixar"})
+                                        "status": "eq.ativo", "papel": "eq.freela", "select": "id,pode_baixar"})
     if st != 200 or ms is None:
         raise HTTPException(503, "Não consegui conferir o acesso agora. Tente de novo em instantes.")
     if not ms:
@@ -23222,12 +23224,16 @@ def _convidados_do_escritorio():
     out = {}
     for l in linhas:
         uid = str(l.get("user_id") or "")
-        if not uid or l.get("papel") != "freela" or uid in admins:
+        # 26/09 (perfis): cliente e fornecedor também vieram por convite — a esteira de cliente novo ("suba sua
+        # 1ª prancha") não é pra eles. `papeis` diz em que papel a pessoa está (o "sua área" é só da equipe).
+        if not uid or l.get("papel") not in ("freela", "fornecedor", "cliente") or uid in admins:
             continue
         atual = out.get(uid)
+        papeis = (atual or {}).get("papeis", set()) | {l.get("papel")}
         if atual is None or str(l.get("aceito_em") or "") < str(atual["aceito_em"] or ""):
-            out[uid] = {"aceito_em": l.get("aceito_em"), "projeto": nome_proj.get(l["projeto_id"], ""),
-                        "quem": admin_do.get(l["projeto_id"], "")}
+            atual = {"aceito_em": l.get("aceito_em"), "projeto": nome_proj.get(l["projeto_id"], ""),
+                     "quem": admin_do.get(l["projeto_id"], "")}
+        out[uid] = {**atual, "papeis": papeis}
     return out
 
 
@@ -23242,7 +23248,7 @@ def _convites_pendentes():
     conta chega na confirmação do convite) pega quem entrou com OUTRO e-mail (2ª revisão, 24/09)."""
     st, linhas = _supa_rest_tudo(
         "escritorio_membros",
-        params={"select": "email,convite_expira,visto_por", "status": "eq.convidado", "papel": "eq.freela"},
+        params={"select": "email,convite_expira,visto_por", "status": "eq.convidado", "papel": "neq.dono"},
         ordem="id.asc", timeout=15)
     if st != 200:
         _avisar_leitura_do_escritorio_falhou("escritorio_membros (convites)", st)
@@ -23846,7 +23852,8 @@ def emails_auto_tick(request: Request, dry: int = 0):
         #    depois do aceite, UM e-mail dizendo que a conta serve pros projetos dela
         #    também. Janela de 30 dias pelo aceite (não pela idade da conta: quem já
         #    tinha conta antiga e foi convidado conta igual).
-        elif conv and tem_perfil and email not in proj_by_email and conv.get("aceito_em"):
+        elif (conv and "freela" in (conv.get("papeis") or ()) and tem_perfil and email not in proj_by_email
+              and conv.get("aceito_em")):
             _ac = _parse(conv["aceito_em"])
             if _ac and 3 * 24 <= (now - _ac).total_seconds() / H <= 30 * 24:
                 acoes.append({"kind": "convidado_area_propria", "email": email, "nome": nome,
@@ -25769,6 +25776,10 @@ _EMAIL_CATALOG = [
     {"key": "escritorio_convite", "nome": "Convite do Escritório", "grupo": "auto",
      "gatilho": "auto: a admin de um projeto do Escritório convida alguém por e-mail "
                 "(teto de 40 por dia por conta)"},
+    # 26/09/2026 — perfis do Escritório: o cliente aprova ou pede revisão pelo sistema (sai de escritorio.py)
+    {"key": "escritorio_resposta_cliente", "nome": "Escritório: resposta do cliente", "grupo": "auto",
+     "gatilho": "auto: o cliente aprova ou pede revisão de uma emissão — vai pra admin do projeto "
+                "(1 aviso a cada 10 min por emissão)"},
     {"key": "convidado_area_propria", "nome": "Convidado: sua área também", "grupo": "auto",
      "gatilho": "auto (tick horário): entrou por convite do Escritório, 3 dias depois do "
                 "aceite, sem projeto próprio (1x na vida) — no lugar do boas-vindas e da 1ª prancha"},

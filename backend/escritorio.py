@@ -48,6 +48,12 @@ _ENVIAR = None       # _send_email_smtp(to, subject, html, text="", log_kind=...
 _MOLDURA = None      # _email_wrap(title, body_html, cta_text, cta_url, ..., reason=..., preheader=...)
 _REGISTRAR = None    # _log_error(stage, msg, severity=...)
 _DEPOIS_DO_ACEITE = None  # escritorio_drive: compartilha a pasta do projeto com quem acabou de entrar
+_PASTA_DO_FORNECEDOR = None  # escritorio_drive.pasta_do_fornecedor(projeto_id, entrada) -> {"id", "nome"}
+
+# 26/09 (perfis — maquete aprovada pelo Pedro): quem a admin convida entra com um PERFIL. No banco a equipe
+# continua com o papel antigo, 'freela'; os de fora são 'fornecedor' e 'cliente' (regras: seção 26 da migração).
+PERFIS = {"equipe": "freela", "fornecedor": "fornecedor", "cliente": "cliente"}
+PERFIL_DO_PAPEL = {papel: perfil for perfil, papel in PERFIS.items()}
 
 
 def configurar(servico, como_usuario, usuario, enviar, moldura, registrar=None):
@@ -123,16 +129,27 @@ def assunto_do_convite(quem_convida: str, projeto: str) -> str:
     return a if len(a) <= TETO_ASSUNTO else a[:TETO_ASSUNTO - 1].rstrip() + "…"
 
 
+def _o_que_o_convite_abre(q: str, p: str, perfil: str) -> str:
+    """A 1ª frase do convite muda com o perfil: dono de obra não vai 'trabalhar' em atas e tarefas."""
+    if perfil == "cliente":
+        return (f'<b>{q}</b> te convidou para acompanhar o projeto <b>{p}</b> no AI.arq: o que o escritório '
+                'mandar pra você, a sua aprovação (ou o pedido de revisão) e as fotos da obra, num lugar só.')
+    if perfil == "fornecedor":
+        return (f'<b>{q}</b> te chamou para acompanhar a sua parte do projeto <b>{p}</b> no AI.arq: as tarefas '
+                'que são suas, os arquivos que o escritório separou pra você e as fotos da obra.')
+    return (f'<b>{q}</b> te convidou para trabalhar no projeto '
+            f'<b>{p}</b> no AI.arq: tarefas, atas de reunião e os arquivos do projeto num lugar só.')
+
+
 def email_do_convite(quem_convida: str, email_de_quem_convida: str, projeto: str, link: str,
-                     moldura=None):
+                     moldura=None, perfil: str = "equipe"):
     """(assunto, html, texto). Sem Reply-To trocado: a porta única de e-mail não
     tem esse parâmetro e não vale mexer nela por isso — o e-mail de quem convida
     vai escrito no corpo."""
     q, p = _escapar(quem_convida), _escapar(projeto)
     assunto = assunto_do_convite(quem_convida, projeto)
     corpo = (
-        f'<p style="margin:0 0 12px;"><b>{q}</b> te convidou para trabalhar no projeto '
-        f'<b>{p}</b> no AI.arq: tarefas, atas de reunião e os arquivos do projeto num lugar só.</p>'
+        f'<p style="margin:0 0 12px;">{_o_que_o_convite_abre(q, p, perfil)}</p>'
         '<p style="margin:0 0 12px;">Pra entrar, clique no botão. Dá pra usar a conta Google '
         'ou criar uma senha com este mesmo e-mail. Antes de entrar, você preenche um cadastro rápido '
         'e aceita os Termos de Uso e a Política de Privacidade do AI.arq.</p>'
@@ -255,6 +272,13 @@ def convidar(projeto_id: str, request: Request, corpo: dict):
     if email == (eu.get("email") or "").lower():
         raise HTTPException(400, "Esse é o seu próprio e-mail.")
     campos = {k: texto_curto(corpo.get(k), k) for k in ("nome", "funcao", "telefone")}
+    # 26/09 (perfis): sem `perfil` no pedido, um convite NOVO é da equipe (a tela de hoje não manda) e um
+    # REENVIO mantém o perfil que o convite já tinha — senão "reenviar" transformava o cliente em equipe.
+    perfil_pedido = corpo.get("perfil")
+    if perfil_pedido is not None:
+        perfil_pedido = str(perfil_pedido).strip().lower()
+        if perfil_pedido not in PERFIS:
+            raise HTTPException(400, "Perfil inválido: escolha equipe, fornecedor ou cliente.")
 
     projeto = _um(_SERVICO("GET", "escritorio_projetos",
                            params={"id": f"eq.{projeto_id}", "select": "id,nome,dono"}))
@@ -262,8 +286,21 @@ def convidar(projeto_id: str, request: Request, corpo: dict):
         raise HTTPException(404, "Projeto não encontrado.")
     atual = _um(_SERVICO("GET", "escritorio_membros",
                          params={"projeto_id": f"eq.{projeto_id}", "email": f"eq.{email}",
-                                 "select": "id,status,convite_expira"}))
+                                 "select": "id,status,convite_expira,papel"}))
     if atual and atual["status"] == "ativo":
+        raise HTTPException(409, "Essa pessoa já está no projeto.")
+    if perfil_pedido is None and atual:
+        papel, pasta_linha = atual["papel"], {}
+    else:
+        papel = PERFIS[perfil_pedido or "equipe"]
+        pasta = None
+        if papel == "fornecedor" and corpo.get("pasta"):
+            if not _PASTA_DO_FORNECEDOR:
+                raise HTTPException(503, "O Drive está indisponível agora. Convide sem a pasta e escolha depois.")
+            pasta = _PASTA_DO_FORNECEDOR(projeto_id, corpo.get("pasta"))
+        pasta_linha = {"drive_pasta_id": pasta["id"] if pasta else None,
+                       "drive_pasta_nome": pasta["nome"] if pasta else None}
+    if papel not in PERFIL_DO_PAPEL:          # a linha do dono nunca é reconvidada
         raise HTTPException(409, "Essa pessoa já está no projeto.")
 
     agora = datetime.now(timezone.utc)
@@ -290,7 +327,10 @@ def convidar(projeto_id: str, request: Request, corpo: dict):
     linha = {"convite_hash": hash_do_token(token),
              "convite_expira": (agora + timedelta(days=VALIDADE_DIAS)).isoformat(),
              "convidado_em": agora.isoformat(),
+             "papel": papel, **pasta_linha,
              **{k: v for k, v in campos.items() if v is not None}}
+    if papel != "freela":
+        linha["pode_baixar"] = False      # "pode baixar" é do quantitativo da EQUIPE; os de fora nunca
     if atual:  # convidado de novo (token novo) ou removido voltando
         linha.update({"status": "convidado", "user_id": None, "aceito_em": None, "removido_em": None})
         if atual["status"] != "convidado":
@@ -305,14 +345,15 @@ def convidar(projeto_id: str, request: Request, corpo: dict):
         if status < 300 and dados == []:
             raise HTTPException(409, "Essa pessoa acabou de entrar no projeto (ou o convite mudou agora). Atualize a lista.")
     else:
-        linha.update({"projeto_id": projeto_id, "email": email, "papel": "freela", "status": "convidado"})
+        linha.update({"projeto_id": projeto_id, "email": email, "status": "convidado"})
         status, dados = _SERVICO("POST", "escritorio_membros", body=linha, prefer="return=representation")
     if status >= 300 or not dados:
         raise HTTPException(502, "Não consegui registrar o convite agora. Tente de novo em instantes.")
 
     quem = admin.get("nome") or eu.get("email") or "Alguém"
     link = link_do_convite(token)
-    assunto, html, texto = email_do_convite(quem, admin.get("email") or eu.get("email"), projeto["nome"], link)
+    assunto, html, texto = email_do_convite(quem, admin.get("email") or eu.get("email"), projeto["nome"], link,
+                                            perfil=PERFIL_DO_PAPEL[papel])
     # 🔒 O teto segura o NOSSO E-MAIL, nunca o convite: passou do teto, o convite nasce igual e
     # o link volta pra admin mandar pela conversa que já usa (a tela mostra "mande o link abaixo").
     enviado, motivo = False, None
@@ -341,7 +382,7 @@ def convidar(projeto_id: str, request: Request, corpo: dict):
             if not enviado and not motivo:
                 motivo = "email_falhou"
     return {"ok": True, "membro_id": dados[0]["id"], "email_enviado": enviado, "motivo_sem_email": motivo,
-            "link": link, "expira_em": linha["convite_expira"]}
+            "link": link, "expira_em": linha["convite_expira"], "perfil": PERFIL_DO_PAPEL[papel]}
 
 
 def _recusa_se_nao_vale(m):
@@ -364,13 +405,14 @@ def ver_convite(corpo: dict):
         raise HTTPException(404, "Convite não encontrado.")
     m = _um(_SERVICO("GET", "escritorio_membros",
                      params={"convite_hash": f"eq.{hash_do_token(token)}",
-                             "select": "email,status,convite_expira,projeto_id"}))
+                             "select": "email,status,convite_expira,projeto_id,papel"}))
     _recusa_se_nao_vale(m)
     p = _um(_SERVICO("GET", "escritorio_projetos", params={"id": f"eq.{m['projeto_id']}", "select": "nome"})) or {}
     admin = _um(_SERVICO("GET", "escritorio_membros",
                          params={"projeto_id": f"eq.{m['projeto_id']}", "papel": "eq.dono", "select": "nome"})) or {}
     return {"projeto": p.get("nome") or "", "convidado_por": admin.get("nome") or "",
-            "email": mascarar(m["email"]), "expirado": expirado(m["convite_expira"])}
+            "email": mascarar(m["email"]), "expirado": expirado(m["convite_expira"]),
+            "perfil": PERFIL_DO_PAPEL.get(m.get("papel"), "equipe")}
 
 
 @router.post("/convite/visto")
@@ -437,7 +479,7 @@ def convites_pendentes_da_conta(request: Request):
         return {"convites": []}
     status, linhas = _SERVICO("GET", "escritorio_membros",
                               params={"email": f"eq.{email}", "status": "eq.convidado",
-                                      "select": "id,projeto_id,convite_expira", "order": "convidado_em.desc",
+                                      "select": "id,projeto_id,convite_expira,papel", "order": "convidado_em.desc",
                                       "limit": "10"})
     if status == 0 or status >= 300 or linhas is None:
         raise HTTPException(502, "O banco não respondeu agora. Tente de novo em instantes.")
@@ -448,7 +490,8 @@ def convites_pendentes_da_conta(request: Request):
         p = _um(_SERVICO("GET", "escritorio_projetos", params={"id": f"eq.{m['projeto_id']}", "select": "nome"})) or {}
         admin = _um(_SERVICO("GET", "escritorio_membros",
                              params={"projeto_id": f"eq.{m['projeto_id']}", "papel": "eq.dono", "select": "nome"})) or {}
-        saida.append({"convite_id": m["id"], "projeto": p.get("nome") or "", "convidado_por": admin.get("nome") or ""})
+        saida.append({"convite_id": m["id"], "projeto": p.get("nome") or "", "convidado_por": admin.get("nome") or "",
+                      "perfil": PERFIL_DO_PAPEL.get(m.get("papel"), "equipe")})
     return {"convites": saida}
 
 
@@ -463,14 +506,14 @@ def aceitar_convite(request: Request, corpo: dict):
     if len(token) >= 20:
         m = _um(_SERVICO("GET", "escritorio_membros",
                          params={"convite_hash": f"eq.{hash_do_token(token)}",
-                                 "select": "id,projeto_id,email,nome,status,convite_expira"}))
+                                 "select": "id,projeto_id,email,nome,status,convite_expira,papel"}))
     elif _UUID.match(convite_id):
         email = _email_da_conta(eu)
         if not email:
             raise HTTPException(404, "Convite não encontrado.")
         m = _um(_SERVICO("GET", "escritorio_membros",
                          params={"id": f"eq.{convite_id}", "email": f"eq.{email}",
-                                 "select": "id,projeto_id,email,nome,status,convite_expira"}))
+                                 "select": "id,projeto_id,email,nome,status,convite_expira,papel"}))
         # 🔒 de outra pessoa (outro e-mail) = o mesmo 404 de "não existe": não revela convite alheio
         if m and str(m.get("email") or "").strip().lower() != email:
             m = None
@@ -522,13 +565,114 @@ def aceitar_convite(request: Request, corpo: dict):
                              prefer="return=representation")
     if status >= 300 or not dados:
         raise HTTPException(502, "Não consegui confirmar o convite agora. Tente de novo em instantes.")
-    if _DEPOIS_DO_ACEITE:          # a pasta do Drive do projeto (em segundo plano: nunca atrasa o aceite)
+    # a pasta do Drive (em segundo plano: nunca atrasa o aceite). Equipe ganha a pasta do projeto, fornecedor
+    # a subpasta dele; o cliente não ganha pasta nenhuma — recebe cada arquivo pelas Emissões.
+    if _DEPOIS_DO_ACEITE and m.get("papel") in ("freela", "fornecedor"):
         try:
             _DEPOIS_DO_ACEITE(m["projeto_id"])
         except Exception:
             pass
     outro_email = conta != (m["email"] or "").lower()
-    return {"ok": True, "projeto_id": m["projeto_id"],
+    return {"ok": True, "projeto_id": m["projeto_id"], "perfil": PERFIL_DO_PAPEL.get(m.get("papel"), "equipe"),
             # conta com e-mail diferente do convite: vale (o token prova que o convite chegou
             # a ela), mas a tela avisa — a pasta do Drive vai ser compartilhada com ESTA conta.
             "email_da_conta_diferente": outro_email}
+
+
+# ── a resposta do CLIENTE a uma emissão (perfis, 26/09) ────────────────────
+
+_PAUSA_DO_AVISO = 600   # s: cliques repetidos do cliente não viram uma enxurrada de e-mails pra admin
+_DUAS_LINHAS = chr(10) * 2
+
+
+def _texto_sem_controle(bruto, teto: int):
+    """Tira caractere de controle (fica a quebra de linha) e corta no teto. Vazio → None."""
+    t = "".join(c for c in str(bruto or "") if c == chr(10) or (ord(c) >= 32 and ord(c) != 127)).strip()
+    return t[:teto] or None
+
+
+def _hoje_no_brasil() -> str:
+    return (datetime.now(timezone.utc) - timedelta(hours=3)).date().isoformat()
+
+
+def assunto_da_resposta(tipo: str, arquivo: str) -> str:
+    """'Cliente aprovou: Planta baixa_R02.pdf' / 'Cliente pediu revisão: …', no teto da casa."""
+    comeco = "Cliente aprovou" if tipo == "aprovado" else "Cliente pediu revisão"
+    a = " ".join(f"{comeco}: {arquivo}".split())
+    return a if len(a) <= TETO_ASSUNTO else a[:TETO_ASSUNTO - 1].rstrip() + "…"
+
+
+def email_da_resposta(cliente: str, arquivo: str, projeto: str, tipo: str, nota, link: str, moldura=None):
+    """(assunto, html, texto) do aviso à admin. Tudo que veio de fora (nome, arquivo, nota) vai escapado."""
+    c, a, p = _escapar(cliente), _escapar(arquivo), _escapar(projeto)
+    verbo = "aprovou" if tipo == "aprovado" else "pediu revisão de"
+    corpo = f'<p style="margin:0 0 12px;"><b>{c}</b> {verbo} <b>{a}</b>, no projeto <b>{p}</b>.</p>'
+    if nota:
+        corpo += ('<p style="margin:0 0 12px;padding:10px 12px;background:#f8fafc;border-radius:8px;">'
+                  f'“{_escapar(nota)}”</p>')
+    corpo += ('<p style="margin:0;color:#64748b;font-size:13px;">A resposta ficou registrada na emissão, '
+              'com a data, e ninguém edita depois.</p>')
+    html = (moldura or _MOLDURA)(f"Resposta do cliente: {p}", corpo, cta_text="Abrir as emissões", cta_url=link,
+                                 reason=f"Você recebeu este e-mail porque é a admin do projeto {p} no AI.arq.",
+                                 preheader=f"{c} {verbo} {a}.")
+    texto = (f"{cliente} {verbo} {arquivo}, no projeto {projeto}."
+             + (f"{_DUAS_LINHAS}“{nota}”" if nota else "") + f"{_DUAS_LINHAS}{link}")
+    return assunto_da_resposta(tipo, arquivo), html, texto
+
+
+def _avisar_admin(e: dict, tipo: str, nota, eu: dict, evento_id) -> bool:
+    desde = (datetime.now(timezone.utc) - timedelta(seconds=_PAUSA_DO_AVISO)).isoformat()
+    st, recentes = _SERVICO("GET", "escritorio_emissao_eventos", params={
+        "emissao_id": f"eq.{e['id']}", "pelo_cliente": "is.true", "criado_em": f"gte.{desde}",
+        "select": "id"})
+    if st < 300 and st != 0 and recentes is not None:
+        recentes = [r for r in recentes if str(r.get("id")) != str(evento_id)]
+    if st >= 300 or st == 0 or recentes is None or recentes:
+        return False        # já avisou há pouco (ou não sei): a resposta está registrada do mesmo jeito
+    admin = _um(_SERVICO("GET", "escritorio_membros", params={
+        "projeto_id": f"eq.{e['projeto_id']}", "papel": "eq.dono", "select": "email"})) or {}
+    para = str(admin.get("email") or "").strip().lower()
+    if not _EMAIL.match(para):
+        return False
+    quem = _um(_SERVICO("GET", "escritorio_membros", params={
+        "projeto_id": f"eq.{e['projeto_id']}", "user_id": f"eq.{eu['id']}", "select": "nome"})) or {}
+    p = _um(_SERVICO("GET", "escritorio_projetos", params={"id": f"eq.{e['projeto_id']}", "select": "nome"})) or {}
+    arquivo = e.get("copia_nome") or e.get("arquivo_nome") or "o arquivo"
+    link = f"{SITE}/escritorio.html#/p/{e['projeto_id']}/emissoes"
+    assunto, html, texto = email_da_resposta(quem.get("nome") or "O cliente", arquivo, p.get("nome") or "",
+                                             tipo, nota, link)
+    return bool(_ENVIAR(para, assunto, html, texto, log_kind="escritorio_resposta_cliente"))
+
+
+@router.post("/emissoes/{emissao_id}/responder")
+def responder_emissao(emissao_id: str, request: Request, corpo: dict):
+    """O CLIENTE aprova ou pede revisão de uma emissão mandada pra ele. Grava COM O LOGIN DELE: quem decide é o
+    banco (só cliente, só emissão mandada pra ele, data do dia; depois ninguém edita nem apaga — seção 26).
+    Depois avisa a admin por e-mail (maquete dos perfis aprovada pelo Pedro, 26/09)."""
+    eu = _exige_login(request)
+    if not _UUID.match(str(emissao_id or "")):
+        raise HTTPException(404, "Emissão não encontrada.")
+    tipo = str((corpo or {}).get("tipo") or "")
+    if tipo not in ("aprovado", "revisao"):
+        raise HTTPException(400, "Responda com aprovado ou revisão.")
+    nota = _texto_sem_controle((corpo or {}).get("nota"), 1000)
+    if tipo == "revisao" and not nota:
+        raise HTTPException(400, "Conte o que precisa mudar.")
+    e = _um(_SERVICO("GET", "escritorio_emissoes", params={
+        "id": f"eq.{emissao_id}", "select": "id,projeto_id,arquivo_nome,copia_nome,revisao"}))
+    if not e:
+        raise HTTPException(404, "Emissão não encontrada.")
+    st, dados = _COMO_USUARIO(request, "POST", "escritorio_emissao_eventos", body={
+        "emissao_id": e["id"], "projeto_id": e["projeto_id"], "tipo": tipo, "em": _hoje_no_brasil(),
+        "nota": nota, "registrado_por": eu["id"]}, prefer="return=representation")
+    if st in (401, 403):
+        raise HTTPException(403, "Essa emissão não foi mandada pra você.")
+    if st >= 300 or st == 0 or not dados:
+        raise HTTPException(502, "Não consegui registrar a sua resposta agora. Tente de novo em instantes.")
+    evento_id = dados[0].get("id") if isinstance(dados, list) and dados else None
+    aviso = False
+    try:
+        aviso = _avisar_admin(e, tipo, nota, eu, evento_id)
+    except Exception as x:     # o aviso nunca desfaz a resposta já gravada
+        _registrar("escritorio:resposta-cliente", f"aviso à admin falhou: {type(x).__name__}")
+    return {"ok": True, "evento_id": evento_id, "aviso_enviado": aviso}

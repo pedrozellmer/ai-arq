@@ -95,6 +95,8 @@ class Banco:
             if method == "POST":
                 self.feitos.append({"id": len(self.feitos) + 100, **body})
             return 201, None
+        if path == "escritorio_emissao_destinos":
+            return (200, []) if method == "GET" else (204, None)
         if path == "profiles":
             return 200, [{"user_id": m["user_id"], "email": m["user_id"] + "@exemplo.com"} for m in self.membros]
         raise AssertionError("tabela inesperada: " + path)
@@ -228,7 +230,7 @@ def test_escolher_algo_que_nao_e_pasta_e_recusado():
 
 def test_pasta_escolhida_e_gravada_e_ja_compartilhada():
     b = Banco(pasta=None)
-    b.membros = [{"id": "m1", "user_id": "u1", "email_conta": "u1@exemplo.com"}]
+    b.membros = [{"id": "m1", "user_id": "u1", "papel": "freela", "email_conta": "u1@exemplo.com"}]
     g = Google(respostas={"/files/PASTA_NOVA_123?": (200, {"id": "PASTA_NOVA_123", "name": "Casa 2026", "mimeType": ed.PASTA})})
     r = ed.projeto_pasta(PROJ, REQ, {"pasta": "https://drive.google.com/drive/folders/PASTA_NOVA_123"})
     assert b.projeto["pasta_id"] == "PASTA_NOVA_123" and r["compartilhados"] == 1
@@ -278,8 +280,8 @@ def test_sem_pasta_e_sem_conexao_dizem_o_que_falta():
 # ── compartilhamento ──
 def test_sincronizar_da_a_quem_entrou_tira_de_quem_saiu_e_da_pasta_antiga():
     b = Banco()
-    b.membros = [{"id": "m-novo", "user_id": "u-novo", "email_conta": "u-novo@exemplo.com"},
-                 {"id": "m-fica", "user_id": "u-fica", "email_conta": "u-fica@exemplo.com"}]
+    b.membros = [{"id": "m-novo", "user_id": "u-novo", "papel": "freela", "email_conta": "u-novo@exemplo.com"},
+                 {"id": "m-fica", "user_id": "u-fica", "papel": "freela", "email_conta": "u-fica@exemplo.com"}]
     b.feitos = [
         {"id": 1, "membro_id": "m-fica", "pasta_id": "PASTA_PROJ", "permission_id": "p-fica", "email": "u-fica@exemplo.com"},
         {"id": 2, "membro_id": "m-saiu", "pasta_id": "PASTA_PROJ", "permission_id": "p-saiu", "email": "saiu@exemplo.com"},
@@ -295,7 +297,7 @@ def test_sincronizar_da_a_quem_entrou_tira_de_quem_saiu_e_da_pasta_antiga():
 
 def test_compartilhamento_que_falha_nao_derruba_e_fica_listado():
     b = Banco()
-    b.membros = [{"id": "m1", "user_id": "u1", "email_conta": "u1@exemplo.com"}]
+    b.membros = [{"id": "m1", "user_id": "u1", "papel": "freela", "email_conta": "u1@exemplo.com"}]
     Google(respostas={"/permissions": (400, {"error": {"message": "not a Google account"}})})
     r = ed.sincronizar(PROJ)
     assert r["compartilhados"] == 0 and r["falhas"] == ["u1@exemplo.com"] and b.feitos == []
@@ -305,7 +307,7 @@ def test_compartilhamento_que_falha_nao_derruba_e_fica_listado():
 def test_o_email_que_ganha_a_pasta_e_o_da_conta_nunca_o_do_perfil():
     # o profiles.email a própria pessoa edita pela API: o Banco falso devolve um e-mail "trocado" lá
     b = Banco()
-    b.membros = [{"id": "m1", "user_id": "u1", "email_conta": "conta.confirmada@exemplo.com"}]
+    b.membros = [{"id": "m1", "user_id": "u1", "papel": "freela", "email_conta": "conta.confirmada@exemplo.com"}]
     g = Google()
     ed.sincronizar(PROJ)
     criadas = [c["corpo"]["emailAddress"] for c in g.chamadas if c["m"] == "POST" and "/permissions" in c["url"]]
@@ -315,7 +317,7 @@ def test_o_email_que_ganha_a_pasta_e_o_da_conta_nunca_o_do_perfil():
 
 def test_sem_email_confirmado_nao_compartilha():
     b = Banco()
-    b.membros = [{"id": "m1", "user_id": "u1", "email_conta": None}]
+    b.membros = [{"id": "m1", "user_id": "u1", "papel": "freela", "email_conta": None}]
     g = Google()
     r = ed.sincronizar(PROJ)
     assert r["falhas"] == ["(sem e-mail confirmado)"] and not [c for c in g.chamadas if c["m"] == "POST" and "/permissions" in c["url"]]
@@ -330,7 +332,7 @@ def test_sem_conexao_avisa_em_vez_de_zero_calado():
 
 def test_acesso_dado_a_mao_pela_admin_nao_e_tocado_nem_na_entrada_nem_na_saida():
     b = Banco()
-    b.membros = [{"id": "m1", "user_id": "u1", "email_conta": "ja.editava@exemplo.com"}]
+    b.membros = [{"id": "m1", "user_id": "u1", "papel": "freela", "email_conta": "ja.editava@exemplo.com"}]
     g = Google(respostas={"/files/PASTA_PROJ/permissions?fields": (200, {"permissions": [
         {"id": "perm-manual", "emailAddress": "Ja.Editava@exemplo.com", "role": "writer", "type": "user"}]})})
     r = ed.sincronizar(PROJ)

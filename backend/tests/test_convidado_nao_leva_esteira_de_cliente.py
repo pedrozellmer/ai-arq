@@ -52,7 +52,12 @@ def varredura(monkeypatch):
             if estado["falha_membros"]:
                 return 500, None
             if (params or {}).get("status") == "eq.convidado":      # A17: convites ainda não aceitos
-                return 200, estado["pendentes"]
+                # 26/09 (perfis): o filtro de papel vale aqui como no banco — sem isto, trocar o filtro
+                # do servidor passaria verde
+                f = (params or {}).get("papel", "")
+                return 200, [p for p in estado["pendentes"]
+                             if not f or (f.startswith("eq.") and p["papel"] == f[3:])
+                             or (f.startswith("neq.") and p["papel"] != f[4:])]
             return 200, estado["membros"]
         if path == "escritorio_projetos":
             return 200, [{"id": "proj-1", "nome": "Projeto Exemplo"}, {"id": "proj-2", "nome": "Outro"}]
@@ -154,7 +159,7 @@ def test_a_porta_do_primeiro_acesso_tambem_pula_o_convidado():
 def test_A17_convite_ainda_nao_aceito_tambem_nao_leva_esteira_de_cliente(varredura):
     # 🩸 24/09: abriu o convite, criou conta e parou antes de aceitar → caía no boas-vindas de cliente
     varredura["users"] = [_user("u-pend", "pendente@exemplo.com", 3), _user("u-cli", "cliente@exemplo.com", 3)]
-    varredura["pendentes"] = [{"email": "Pendente@Exemplo.com", "convite_expira": ha(days=-10)}]
+    varredura["pendentes"] = [{"email": "Pendente@Exemplo.com", "papel": "freela", "convite_expira": ha(days=-10)}]
     tipos = varredura["rodar"]()
     assert tipos.get("boas_vindas") == 1, tipos          # só o cliente comum (controle)
     assert "nudge_onboarding" not in tipos and "convidado_area_propria" not in tipos, tipos
@@ -162,7 +167,7 @@ def test_A17_convite_ainda_nao_aceito_tambem_nao_leva_esteira_de_cliente(varredu
 
 def test_A17_convite_vencido_nao_segura_mais_a_esteira(varredura):
     varredura["users"] = [_user("u-pend", "pendente@exemplo.com", 3)]
-    varredura["pendentes"] = [{"email": "pendente@exemplo.com", "convite_expira": ha(days=1)}]   # venceu ontem
+    varredura["pendentes"] = [{"email": "pendente@exemplo.com", "papel": "freela", "convite_expira": ha(days=1)}]   # venceu ontem
     assert varredura["rodar"]().get("boas_vindas") == 1
 
 
@@ -170,14 +175,14 @@ def test_convidado_com_outro_email_reconhecido_pelo_visto_do_servidor(varredura)
     # 2ª revisão 24/09: entrou com OUTRO e-mail e parou antes de aceitar → o e-mail do convite não
     # bate. Quem reconhece é o `visto_por`, que o SERVIDOR grava quando a conta chega na confirmação.
     varredura["users"] = [_user("u-outro", "outro@exemplo.com", 3), _user("u-cli", "cliente@exemplo.com", 3)]
-    varredura["pendentes"] = [{"email": "convidado@exemplo.com", "convite_expira": ha(days=-10), "visto_por": "u-outro"}]
+    varredura["pendentes"] = [{"email": "convidado@exemplo.com", "papel": "freela", "convite_expira": ha(days=-10), "visto_por": "u-outro"}]
     tipos = varredura["rodar"]()
     assert tipos.get("boas_vindas") == 1, tipos          # só o cliente comum (controle no mesmo tick)
 
 
 def test_visto_de_convite_vencido_nao_segura_mais_a_esteira(varredura):
     varredura["users"] = [_user("u-outro", "outro@exemplo.com", 3)]
-    varredura["pendentes"] = [{"email": "convidado@exemplo.com", "convite_expira": ha(days=1), "visto_por": "u-outro"}]
+    varredura["pendentes"] = [{"email": "convidado@exemplo.com", "papel": "freela", "convite_expira": ha(days=1), "visto_por": "u-outro"}]
     assert varredura["rodar"]().get("boas_vindas") == 1
 
 
@@ -194,7 +199,22 @@ def test_convidado_com_outro_email_que_parou_no_cadastro_nao_leva_esteira(varred
     # O cadastro já grava o visto_por; sem ficha a regra é a do "termine seu cadastro"/boas-vindas.
     varredura["users"] = [_user("u-outro", "outro@exemplo.com", 2), _user("u-cli", "cliente@exemplo.com", 2)]
     varredura["sem_perfil"] = {"u-outro", "u-cli"}
-    varredura["pendentes"] = [{"email": "convidado@exemplo.com", "convite_expira": ha(days=-10), "visto_por": "u-outro"}]
+    varredura["pendentes"] = [{"email": "convidado@exemplo.com", "papel": "freela", "convite_expira": ha(days=-10), "visto_por": "u-outro"}]
     tipos = varredura["rodar"]()
     de_cliente_novo = sum(tipos.get(k, 0) for k in ("boas_vindas", "boas_vindas_cadastro", "nudge_cadastro", "nudge_onboarding"))
     assert de_cliente_novo == 1 and tipos.get("boas_vindas_cadastro") == 1, tipos   # só o cliente comum
+
+
+# ── 26/09 (perfis): o dono da obra e o fornecedor também vieram por convite ──
+def test_perfis_cliente_da_obra_nao_leva_esteira_nem_o_sua_area(varredura):
+    varredura["users"] = [_user("u-cli", "dono.da.obra@exemplo.com", 4)]
+    varredura["membros"] = [_membro("u-adm", "dono", "proj-1", 60), _membro("u-cli", "cliente", "proj-1", 4)]
+    tipos = varredura["rodar"]()
+    assert not ({"boas_vindas", "nudge_onboarding", "convidado_area_propria"} & set(tipos)), tipos
+
+
+def test_perfis_convite_de_cliente_ainda_nao_aceito_tambem_segura_a_esteira(varredura):
+    varredura["users"] = [_user("u-cli", "dono.da.obra@exemplo.com", 2)]
+    varredura["pendentes"] = [{"email": "dono.da.obra@exemplo.com", "papel": "cliente", "convite_expira": ha(days=-10)}]
+    tipos = varredura["rodar"]()
+    assert "boas_vindas" not in tipos, tipos

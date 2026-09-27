@@ -62,15 +62,15 @@ def _montar(banco, usuario):
 
 
 _LISTA = ("GET", "escritorio_membros", {"email": "eq.convidada@exemplo.com", "status": "eq.convidado"},
-          (200, [{"id": CID, "projeto_id": PROJ, "convite_expira": FUTURO},
-                 {"id": "vencido", "projeto_id": PROJ, "convite_expira": PASSADO}]))
+          (200, [{"id": CID, "projeto_id": PROJ, "convite_expira": FUTURO, "papel": "freela"},
+                 {"id": "vencido", "projeto_id": PROJ, "convite_expira": PASSADO, "papel": "freela"}]))
 _PROJETO = ("GET", "escritorio_projetos", {}, (200, [{"nome": "Projeto Exemplo"}]))
 _ADMIN = ("GET", "escritorio_membros", {"papel": "eq.dono"}, (200, [{"nome": "Admin Exemplo"}]))
 
 
 def _linha(email="convidada@exemplo.com", status="convidado", expira=FUTURO):
     return ("GET", "escritorio_membros", {"id": f"eq.{CID}"},
-            (200, [{"id": CID, "projeto_id": PROJ, "email": email, "nome": None, "status": status, "convite_expira": expira}]))
+            (200, [{"id": CID, "projeto_id": PROJ, "email": email, "nome": None, "status": status, "convite_expira": expira, "papel": "freela"}]))
 
 
 # ── a lista ──
@@ -78,7 +78,7 @@ def test_lista_traz_so_o_convite_em_aberto_e_no_prazo_do_email_da_conta():
     banco = _Banco([_LISTA, _PROJETO, _ADMIN])
     _montar(banco, CONVIDADA)
     r = esc.convites_pendentes_da_conta(REQ)
-    assert r == {"convites": [{"convite_id": CID, "projeto": "Projeto Exemplo", "convidado_por": "Admin Exemplo"}]}
+    assert r == {"convites": [{"convite_id": CID, "projeto": "Projeto Exemplo", "convidado_por": "Admin Exemplo", "perfil": "equipe"}]}
     busca = banco.chamadas[0]["params"]
     assert busca["email"] == "eq.convidada@exemplo.com" and busca["status"] == "eq.convidado"
     assert "convite_hash" not in busca["select"] and "email" not in busca["select"], "nada de código nem e-mail na resposta"
@@ -161,7 +161,7 @@ def test_o_token_continua_valendo_e_tem_precedencia():
     t = "T" * 43
     banco = _Banco([("GET", "escritorio_membros", {"convite_hash": f"eq.{esc.hash_do_token(t)}"},
                      (200, [{"id": "m1", "projeto_id": PROJ, "email": "outra@exemplo.com", "nome": "X",
-                             "status": "convidado", "convite_expira": FUTURO}])),
+                             "status": "convidado", "convite_expira": FUTURO, "papel": "freela"}])),
                     ("PATCH", "escritorio_membros", {}, (200, [{"id": "m1"}]))])
     _montar(banco, CONVIDADA)
     r = esc.aceitar_convite(REQ, {"token": t, "convite_id": CID, "outra_conta": True})
@@ -174,7 +174,7 @@ def test_aceite_de_conta_sem_email_confirmado_nao_grava_email_conta():
     t = "T" * 43
     banco = _Banco([("GET", "escritorio_membros", {"convite_hash": f"eq.{esc.hash_do_token(t)}"},
                      (200, [{"id": "m1", "projeto_id": PROJ, "email": "convidada@exemplo.com", "nome": "X",
-                             "status": "convidado", "convite_expira": FUTURO}])),
+                             "status": "convidado", "convite_expira": FUTURO, "papel": "freela"}])),
                     ("PATCH", "escritorio_membros", {}, (200, [{"id": "m1"}]))])
     _montar(banco, NAO_CONFIRMADA)
     esc.aceitar_convite(REQ, {"token": t})

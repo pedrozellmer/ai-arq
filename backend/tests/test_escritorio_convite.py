@@ -164,7 +164,7 @@ def test_nao_convida_o_proprio_email():
 
 
 def test_quem_ja_esta_ativo_e_409():
-    banco = _Banco([_PROJETO, ("GET", "escritorio_membros", {"email": "eq.equipe@exemplo.com"}, (200, [{"id": "m1", "status": "ativo"}]))])
+    banco = _Banco([_PROJETO, ("GET", "escritorio_membros", {"email": "eq.equipe@exemplo.com"}, (200, [{"id": "m1", "status": "ativo", "papel": "freela"}]))])
     _montar(banco)
     with pytest.raises(HTTPException) as e:
         esc.convidar(PROJ, REQ, {"email": "equipe@exemplo.com"})
@@ -173,7 +173,7 @@ def test_quem_ja_esta_ativo_e_409():
 
 def test_reconvite_troca_o_token_e_zera_a_conta_ligada():
     banco = _Banco([_PROJETO, _ADMIN,
-                    ("GET", "escritorio_membros", {"email": "eq.equipe@exemplo.com"}, (200, [{"id": "m1", "status": "removido"}])),
+                    ("GET", "escritorio_membros", {"email": "eq.equipe@exemplo.com"}, (200, [{"id": "m1", "status": "removido", "papel": "freela"}])),
                     ("PATCH", "escritorio_membros", {}, (200, [{"id": "m1"}]))])
     _montar(banco)
     r = esc.convidar(PROJ, REQ, {"email": "equipe@exemplo.com"})
@@ -204,13 +204,13 @@ def test_banco_fora_e_502_e_nao_404():
 def _convite(status="convidado", expira=FUTURO):
     return ("GET", "escritorio_membros", {"convite_hash": f"eq.{esc.hash_do_token('T' * 43)}"},
             (200, [{"id": "m1", "projeto_id": PROJ, "email": "equipe@exemplo.com", "nome": None,
-                    "status": status, "convite_expira": expira}]))
+                    "status": status, "convite_expira": expira, "papel": "freela"}]))
 
 
 def test_ver_convite_mostra_projeto_e_email_mascarado():
     _montar(_Banco([_convite(), ("GET", "escritorio_projetos", {}, (200, [{"nome": "Projeto Exemplo"}])), _ADMIN]))
     r = esc.ver_convite({"token": "T" * 43})
-    assert r == {"projeto": "Projeto Exemplo", "convidado_por": "Admin Exemplo", "email": "eq***@exemplo.com", "expirado": False}
+    assert r == {"projeto": "Projeto Exemplo", "convidado_por": "Admin Exemplo", "email": "eq***@exemplo.com", "expirado": False, "perfil": "equipe"}
 
 
 def test_token_que_nao_existe_e_404_e_banco_fora_e_502():
@@ -228,7 +228,7 @@ def test_aceitar_ativa_com_a_conta_logada_e_guarda_o_hash():
     banco = _Banco([_convite(), ("PATCH", "escritorio_membros", {}, (200, [{"id": "m1"}]))])
     _montar(banco, usuario=EQUIPE)
     r = esc.aceitar_convite(REQ, {"token": "T" * 43})
-    assert r == {"ok": True, "projeto_id": PROJ, "email_da_conta_diferente": False}
+    assert r == {"ok": True, "projeto_id": PROJ, "perfil": "equipe", "email_da_conta_diferente": False}
     patch = banco.escritas()[0]
     assert patch["body"]["user_id"] == EQUIPE["id"] and patch["body"]["status"] == "ativo"
     # o hash FICA (o status 'ativo' já impede reuso): o 2º clique sabe dizer "já foi usado"
@@ -311,7 +311,7 @@ def test_aceitar_sem_nome_pega_o_nome_do_cadastro_e_com_nome_nao_mexe():
     # o admin já tinha dado nome: o do cadastro NÃO passa por cima
     ja_tem = ("GET", "escritorio_membros", {"convite_hash": f"eq.{esc.hash_do_token('T' * 43)}"},
               (200, [{"id": "m1", "projeto_id": PROJ, "email": "equipe@exemplo.com", "nome": "Apelido dado pelo admin",
-                      "status": "convidado", "convite_expira": FUTURO}]))
+                      "status": "convidado", "convite_expira": FUTURO, "papel": "freela"}]))
     banco2 = _Banco([ja_tem, ("GET", "profiles", {}, (200, [{"full_name": "Pessoa Equipe"}])),
                      ("PATCH", "escritorio_membros", {}, (200, [{"id": "m1"}]))])
     _montar(banco2, usuario=EQUIPE)
@@ -383,7 +383,7 @@ def test_A2_email_do_convite_escapa_nome_hostil_com_a_moldura_de_verdade():
 
 # ── 2ª revisão (24/09): reenvio no teto não troca o link; o servidor liga a conta ao convite ──
 _PENDENTE_VALIDO = ("GET", "escritorio_membros", {"email": "eq.equipe@exemplo.com"},
-                    (200, [{"id": "m1", "status": "convidado", "convite_expira": FUTURO}]))
+                    (200, [{"id": "m1", "status": "convidado", "convite_expira": FUTURO, "papel": "freela"}]))
 _PATCH_OK = ("PATCH", "escritorio_membros", {}, (200, [{"id": "m1"}]))
 
 
@@ -416,7 +416,7 @@ def test_controle_reenvio_abaixo_do_teto_troca_o_link_e_manda():
 
 def test_reenvio_de_convite_vencido_no_teto_troca_o_link_e_devolve_pra_admin():
     vencido = ("GET", "escritorio_membros", {"email": "eq.equipe@exemplo.com"},
-               (200, [{"id": "m1", "status": "convidado", "convite_expira": PASSADO}]))
+               (200, [{"id": "m1", "status": "convidado", "convite_expira": PASSADO, "papel": "freela"}]))
     banco = _Banco([_PROJETO, _ADMIN, vencido, *_contagem(esc.CONVITES_POR_DIA + 1, 0), _PATCH_OK])
     enviados = _montar(banco)
     r = esc.convidar(PROJ, REQ, {"email": "equipe@exemplo.com"})     # link vencido não tem nada a perder
