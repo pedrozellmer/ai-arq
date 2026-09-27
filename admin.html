@@ -3665,6 +3665,7 @@ function renderInstagram(){
   hist.sort((a,b) => new Date(b.publish_at) - new Date(a.publish_at));
 
   document.getElementById('ig-list').innerHTML =
+    barraAprovarVarios('ig', IG_POSTS) +
     igSection('📅 Fila — a publicar', fila, true) +
     igSection('📚 Histórico', hist.slice(0, 40), false);
 }
@@ -3697,6 +3698,7 @@ function igCard(p, isFila){
   const showMedia = !['published','canceled'].includes(p.status);
   return `<div class="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
     <div class="flex flex-wrap items-center gap-2 mb-1.5">
+      ${caixaSelecao('ig', p)}
       <span class="text-xs font-semibold text-gray-800">${igRubrica(p.slot_key)}</span>
       <span class="text-xs text-gray-400">${igFmtDate(p.publish_at)}</span>
       <span class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border ${st.cls}">${st.icon} ${st.label}</span>
@@ -3760,6 +3762,98 @@ async function igSave(){
 }
 
 // ══════════════════════════════════════════════
+// APROVAR VÁRIOS DE UMA VEZ — Instagram e LinkedIn (27/09/2026)
+// Pedro: "deixa opção no admin, tanto linkedin quanto instagram, pra aprovar vários
+// ao mesmo tempo" (tinha acabado de aprovar 4 um por um, com 4 confirmações).
+// Só entra na seleção o que o botão individual também deixaria aprovar: rascunho
+// COM mídia (IG) / COM imagem e texto (LinkedIn). A aprovação vai UM POR VEZ pela
+// mesma rota do botão individual — a guarda do servidor vale igual — e uma falha
+// NÃO para as outras: no fim a tela diz quantos foram e quais não, e por quê.
+// ══════════════════════════════════════════════
+const SEL_APROVAR = { ig: {}, li: {} };   // objeto simples (não Set): o motor JS da bancada não tem Set
+function podeAprovarJunto(tipo, p){
+  if (!p || p.status !== 'pending_approval') return false;
+  if (tipo === 'ig') return igHasMedia(p);
+  return !!((p.image_url || '').trim() && (p.texto || '').trim());
+}
+// Só o que está marcado E ainda pode ser aprovado na lista carregada agora (seleção velha não vaza pra leva nova)
+function selIds(tipo){
+  const lista = (tipo === 'ig' ? IG_POSTS : LI_POSTS) || [];
+  return lista.filter(p => SEL_APROVAR[tipo][p.id] && podeAprovarJunto(tipo, p)).map(p => p.id);
+}
+function caixaSelecao(tipo, p){
+  if (!podeAprovarJunto(tipo, p)) return '';
+  return `<label class="inline-flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer" title="Selecionar pra aprovar junto">
+    <input type="checkbox" class="w-4 h-4" data-sel="${tipo}" data-id="${igEsc(p.id)}" ${SEL_APROVAR[tipo][p.id] ? 'checked' : ''} onchange="selMarcar('${tipo}','${igEsc(p.id)}',this.checked)"></label>`;
+}
+function barraAprovarVarios(tipo, posts){
+  const aptos = (posts || []).filter(p => podeAprovarJunto(tipo, p));
+  if (!aptos.length) return '';
+  const n = selIds(tipo).length;
+  return `<div class="flex flex-wrap items-center gap-2 mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+    <span class="text-xs text-emerald-800 font-semibold">${aptos.length} rascunho(s) prontos pra aprovar</span>
+    <button onclick="selTodos('${tipo}', true)" class="px-3 py-1.5 rounded-lg text-xs font-medium border border-emerald-300 text-emerald-800 bg-white hover:bg-emerald-50">☑️ Selecionar todos</button>
+    <button onclick="selTodos('${tipo}', false)" class="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-300 text-gray-600 bg-white hover:bg-gray-50">Limpar</button>
+    <button id="${tipo}-aprovar-sel" onclick="aprovarSelecionados('${tipo}')" ${n ? '' : 'disabled'} class="px-3 py-1.5 rounded-lg text-xs font-semibold ${n ? 'bg-emerald-600 text-white hover:opacity-90' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}">✅ Aprovar selecionados (<span id="${tipo}-sel-n">${n}</span>)</button>
+  </div>`;
+}
+function _rerenderSel(tipo){ if (tipo === 'ig') renderInstagram(); else renderLinkedin(); }
+function selMarcar(tipo, id, on){ SEL_APROVAR[tipo][id] = !!on; _rerenderSel(tipo); }
+function selTodos(tipo, on){
+  SEL_APROVAR[tipo] = {};
+  if (on) (tipo === 'ig' ? IG_POSTS : LI_POSTS).filter(p => podeAprovarJunto(tipo, p)).forEach(p => { SEL_APROVAR[tipo][p.id] = true; });
+  _rerenderSel(tipo);
+}
+// Aprova um por vez e NÃO para na primeira falha. `aprovarUm(id)` lança erro quando não deu.
+async function aprovarVarios(ids, aprovarUm){
+  const r = { ok: [], falhou: [] };
+  for (const id of ids) {
+    try { await aprovarUm(id); r.ok.push(id); }
+    catch (e) { r.falhou.push({ id, erro: String((e && e.message) || e) }); }
+  }
+  return r;
+}
+function resumoAprovacao(r, rotulo){
+  let t = `✅ ${r.ok.length} ${r.ok.length === 1 ? 'post aprovado' : 'posts aprovados'}.`;
+  if (r.falhou.length) {
+    t += `\n\n⚠️ ${r.falhou.length} não ${r.falhou.length === 1 ? 'foi' : 'foram'}:`;
+    r.falhou.forEach(f => { t += `\n• ${rotulo ? rotulo(f.id) : f.id}: ${f.erro}`; });
+  }
+  return t;
+}
+async function _mudarStatusPost(tipo, id, status){
+  const rota = tipo === 'ig' ? '/api/admin/instagram/posts/status' : '/api/admin/linkedin/posts/status';
+  const res = await authFetch(`${API_BASE}${rota}`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id, status }) });
+  let data = {};
+  try { data = await res.json(); } catch (_) {}
+  if (!res.ok) throw new Error(data.detail || ('erro ' + res.status));
+  return data;
+}
+let _aprovandoVarios = false;   // clique duplo não dispara duas levas
+async function aprovarSelecionados(tipo){
+  if (_aprovandoVarios) return;
+  const ids = selIds(tipo);
+  if (!ids.length) return;
+  const aviso = tipo === 'ig'
+    ? `Aprovar ${ids.length} post(s) do Instagram? O robô publica cada um sozinho na data marcada.`
+    : `Aprovar ${ids.length} post(s) do LinkedIn? Depois disso o Claude agenda cada um na página, na data marcada.`;
+  if (!confirm(aviso)) return;
+  _aprovandoVarios = true;
+  const btn = document.getElementById(tipo + '-aprovar-sel');
+  if (btn) { btn.disabled = true; btn.textContent = 'Aprovando…'; }
+  try {
+    const lista = tipo === 'ig' ? IG_POSTS : LI_POSTS;
+    const rotulo = id => { const p = lista.find(x => x.id === id); return p ? (p.slot_key || id) : id; };
+    const r = await aprovarVarios(ids, id => _mudarStatusPost(tipo, id, tipo === 'ig' ? 'pending' : 'approved'));
+    SEL_APROVAR[tipo] = {};
+    alert(resumoAprovacao(r, rotulo));
+  } finally {
+    _aprovandoVarios = false;
+    if (tipo === 'ig') loadInstagramPosts(); else loadLinkedinPosts();
+  }
+}
+
+// ══════════════════════════════════════════════
 // LINKEDIN — fila de aprovação dos posts da página (linkedin_posts)
 // Sem robô: aprovado = "pode publicar"; quem agenda na página marca Agendado.
 // ══════════════════════════════════════════════
@@ -3800,7 +3894,7 @@ function renderLinkedin(){
   const secao = (titulo, arr) => arr.length
     ? `<h3 class="text-sm font-bold text-gray-700 mt-6 mb-3">${titulo} <span class="text-gray-400 font-normal">(${arr.length})</span></h3><div class="space-y-4">${arr.map(liCard).join('')}</div>`
     : `<h3 class="text-sm font-bold text-gray-700 mt-6 mb-2">${titulo}</h3><p class="text-xs text-gray-400 mb-4">Nada aqui.</p>`;
-  document.getElementById('li-list').innerHTML = secao('📅 Fila', fila) + secao('📚 Histórico', hist.slice(0, 30));
+  document.getElementById('li-list').innerHTML = barraAprovarVarios('li', LI_POSTS) + secao('📅 Fila', fila) + secao('📚 Histórico', hist.slice(0, 30));
 }
 function liCard(p){
   const st = LI_STATUS[p.status] || { icon:'•', label:p.status, cls:'bg-gray-100 text-gray-600 border-gray-300' };
@@ -3825,6 +3919,7 @@ function liCard(p){
   // 🪤 tailwind.min.css é build ESTÁTICO: sm:w-44, h-44, space-y-3 e space-y-2.5 não existem nele (a imagem saía no tamanho original)
   return `<div class="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm" id="li-card-${p.id}">
     <div class="flex flex-wrap items-center gap-2 mb-3">
+      ${caixaSelecao('li', p)}
       <span class="text-sm font-semibold text-gray-800">${igEsc(p.tema || p.slot_key)}</span>
       <span class="text-xs text-gray-400">${igFmtDate(p.publish_at)}</span>
       <span class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border ${st.cls}">${st.icon} ${st.label}</span>
