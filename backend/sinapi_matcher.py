@@ -446,6 +446,85 @@ def match_item(description: str, limit: int = 3) -> List[Dict]:
     return []
 
 
+def _sem_acento(s: str) -> str:
+    import unicodedata
+    return unicodedata.normalize("NFKD", s or "").encode("ascii", "ignore").decode("ascii").lower()
+
+
+# O 1º número do tamanho não pode ser continuação de outro número nem a medida
+# do MEIO de um "60 x 50 x 60". "inox 50x40" passa: o x de "inox" é letra.
+_ANTES_DO_TAMANHO = r'(?<![\d.,x×])(?<![\d.,][x×]\s)(?<!\s[x×]\s)'
+
+
+def _tamanho_do_item(description: str) -> Optional[tuple]:
+    """Largura × altura do item em CM, que é como o SINAPI escreve ("80X210CM").
+
+    '80x210' e '80×210 cm' → (80, 210); '0,90x2,10m' → (90, 210).
+    None quando não é um tamanho de 2 medidas em cm/m: milímetro ('150×150 mm'),
+    polegada ('4×2"'), 3 medidas ('60×50×60', '9×19×19cm') — o SINAPI escreve
+    esses de outro jeito e a busca por tamanho traria outra coisa.
+    """
+    import re
+    m = re.search(_ANTES_DO_TAMANHO + r'(\d+(?:[.,]\d+)?)\s*(?:cm|m)?\s*[x×]\s*'
+                  r'(\d+(?:[.,]\d+)?)(?!\d)(?![.,]\d)\s*(mm|cm|m\b|")?(?!\s*[x×]\s*\d)',
+                  description or "", re.I)
+    if not m or (m.group(3) or "").lower() in ("mm", '"'):
+        return None
+    a, b = (float(v.replace(",", ".")) for v in m.group(1, 2))
+    if (m.group(3) or "").lower() == "m" or (a < 10 and b < 10):
+        a, b = a * 100, b * 100
+    if abs(a - round(a)) > 0.01 or abs(b - round(b)) > 0.01:
+        return None
+    return int(round(a)), int(round(b))
+
+
+def _tem_o_tamanho(descricao_sinapi: str, tamanho: tuple) -> bool:
+    """A composição tem EXATAMENTE esse tamanho de 2 medidas: "80X210CM" sim;
+    "180X210" (outro número), "80X210X5CM" e "19X19X39" (3 medidas) não."""
+    import re
+    return bool(re.search(_ANTES_DO_TAMANHO + r'%d\s*[x×]\s*%d(?!\d)(?![.,]\d)(?!\s*[x×]\s*\d)'
+                          % tamanho, descricao_sinapi or "", re.I))
+
+
+def _do_mesmo_tamanho(description: str, limit: int) -> List[Dict]:
+    """Composições do MESMO tamanho e da MESMA coisa que o item, da mais
+    parecida pra menos (nota honesta contra a descrição inteira).
+
+    🩸 27/09/2026 — o kit de porta certo não chegava na mesa. Nas 4 buscas por
+    texto o tamanho quase não pesa: os ~40 kits de porta (60/70/80/90 × pintura,
+    verniz, frisada… × com/sem fechadura) empatam na mesma nota, e a busca de
+    palavra-chave dá bônus a quem COMEÇA com "PORTA" — folha avulsa, recolocação
+    e carga e descarga passam na frente de "KIT DE PORTA". Nas 42 portas reais,
+    só 3 das 21 com tamanho lido tinham o kit com fechadura DAQUELE tamanho na
+    mesa. Buscar pelo tamanho ("80x210" traz 38 composições, todas porta ou kit
+    de porta 80x210) põe o kit certo na mesa em 9 de 21 — as 9 cujo tamanho o
+    SINAPI tem; as outras 12 são 2 folhas, 72x240, medida de bbox.
+
+    Dois filtros, porque tamanho sozinho traz outra coisa: "19x19" de um pilar
+    casava com bloco "19X19X39" e "40x40" de um azulejo com quadro "40X40X12":
+      - o tamanho tem que ser EXATO e de 2 medidas (`_tem_o_tamanho`);
+      - a composição tem que conter a palavra principal do item ("porta",
+        "porcelanato", "pilar"…).
+    """
+    tamanho = _tamanho_do_item(description)
+    chave = (_extract_keywords(description, n=1).split() or [""])[0]
+    raiz = _sem_acento(chave).strip(".,;:")
+    if raiz.endswith("s") and len(raiz) > 4:
+        raiz = raiz[:-1]
+    if not tamanho or len(raiz) < 3:
+        return []
+    rows = _supabase_rpc("search_sinapi", {"p_query": "%dx%d" % tamanho, "p_limit": limit})
+    rows = [r for r in (rows or []) if r.get("codigo")
+            and _tem_o_tamanho(r.get("descricao"), tamanho)
+            and raiz in _sem_acento(r.get("descricao"))]
+    if len(rows) > 1:
+        notas = {s.get("codigo"): (s.get("similarity") or 0) for s in (_supabase_rpc(
+            "sinapi_rescore", {"p_query": description[:200],
+                               "p_codigos": [r["codigo"] for r in rows]}) or [])}
+        rows.sort(key=lambda r: -notas.get(r["codigo"], 0))
+    return rows
+
+
 def candidates_for(description: str, limit: int = 20) -> List[Dict]:
     """Junta candidatos de VÁRIAS buscas — pra IA escolher depois.
 
@@ -487,6 +566,8 @@ def candidates_for(description: str, limit: int = 20) -> List[Dict]:
     q1 = _apply_pre_translation(_extract_keywords(desc, n=1))
     if q1 and q1 != q3:
         _fonte(_supabase_rpc("search_sinapi", {"p_query": q1, "p_limit": limit}), "simplified_1")
+    # e) mesmo TAMANHO e mesma coisa — o texto não sabe que 80x210 importa
+    _fonte(_do_mesmo_tamanho(desc, limit), "dimensao")
     if not por_fonte:
         return []
 
