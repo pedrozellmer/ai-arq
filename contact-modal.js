@@ -10,7 +10,6 @@
  * - Captura: nome, email, whatsapp opcional, tipo, assunto, mensagem
  * - POSTa em /api/contact (backend salva no Supabase)
  * - Mostra confirmação ao enviar
- * - Não interfere com chat-widget (são coisas diferentes)
  */
 (function () {
   if (window.aiArqContactInjected) return;
