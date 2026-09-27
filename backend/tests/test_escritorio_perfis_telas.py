@@ -160,3 +160,85 @@ def test_o_painel_so_leva_pro_escritorio_quem_e_so_de_fora():
 def test_sair_pelo_escritorio_apaga_a_lembranca_dos_projetos():
     s = _fn("sairDaConta")
     assert "localStorage.removeItem('aiarq_esc_mapa')" in s and "sb.auth.signOut()" in s
+
+
+# ── board de 27/09: os médios das telas ──
+def test_com_dois_clientes_cada_um_responde_a_sua():
+    """SEG-3/TELA-6: o 2º cliente lia "Você aprovou" pela aprovação do outro e perdia os botões."""
+    i = H.index("const esperaResposta = (e) => {")
+    espera = H[i:H.index("};", i)]
+    assert "if (souCliente()) return !respondeuEu(e) && (u.tipo === 'enviado' || !!u.pelo_cliente);" in espera
+    assert "const respondeuEu = (e) => evDa(e).some((x) => x.pelo_cliente && x.registrado_por === EU.id);" in H
+    assert "'Você aprovou'" not in H and "esc(quemRespondeu(x)) + (x.tipo === 'aprovado' ? ' aprovou'" in H
+    assert "if (x.registrado_por === EU.id) return 'Você';" in H
+    # só diz "avisado" quando o aviso saiu
+    r = _fn("responderEmissao")
+    assert "const avisou = !!(r.dados && r.dados.aviso_enviado);" in r and "avisou ? 'Aprovado — o escritório foi avisado'" in r
+
+
+def test_aguardando_cliente_so_com_o_cliente_vendo():
+    """TELA-7/CEO-3: a coluna contava "Com o cliente", mas o cliente não via o cartão."""
+    m = _fn("mover")
+    assert ("if (st === 'cliente' && t.status !== 'cliente' && !t.do_cliente && clientesAtivos().length"
+            " && mostrarAoCliente === undefined) {") in m
+    assert "confirmarDeFora([avisoCliente(t)], 'Mostrar e mover'" in m and "if (mostrarAoCliente) mud.do_cliente = true;" in m
+    s = _fn("salvarCartao")
+    assert "if (st === 'cliente' && st !== t.status && clientesAtivos().length) mud.do_cliente = true;" in s
+
+
+def test_abrir_cartao_pra_quem_e_de_fora_pede_ok_e_diz_o_que_ele_ve():
+    """TELA-3/CEO-4: marcar o marceneiro no cartão abria a conversa interna inteira pra ele, sem aviso."""
+    s = _fn("salvarCartao")
+    assert ".filter(deFora)" in s and "(fornecedor) vai ler este cartão" in s and "(cliente) vai ver o título" in s
+    assert "if (avisos.length) return confirmarDeFora(avisos, 'Salvar assim', () => gravarCartao(id, rascunho), () => abrirCartao(id, rascunho));" in s
+    assert "sb.from('escritorio_tarefas').update" not in s, "salvarCartao grava sem passar pelo aviso"
+    a = _fn("abrirCartao")
+    assert "const daEquipe = gente.filter((m) => !deFora(m)), deForaG = gente.filter(deFora);" in a
+    assert "<b>Visível pra quem é de fora:</b>" in a
+    # o @ não oferece o cliente (ele não vê comentário) nem o fornecedor que não está no cartão
+    assert "m.papel !== 'cliente' && (m.papel !== 'fornecedor' || CART.pessoas.includes(m.id))" in a
+    assert "gente.filter(podeMencionar)" in a
+
+
+def test_usar_pasta_mostra_a_previa_antes_de_ligar():
+    """TELA-1: ligar a pasta dava edição à equipe inteira num clique, com e-mail do Google que não se desfaz."""
+    u = _fn("usarPasta")
+    antes = u[:u.index("if (!confirmado) {")]
+    assert "apiEsc(" not in antes, "chama o servidor antes de decidir se é prévia"
+    previa = u[u.index("if (!confirmado) {"):u.index("return;", u.index("if (!confirmado) {"))]
+    assert "{ pasta: String(pasta).trim(), previa: true }" in previa and "usarPasta((v.pasta && v.pasta.id) || pasta, true)" in previa
+    assert "v.drive_inteiro" in previa and "v.outros_projetos" in previa
+
+
+def test_tirar_do_projeto_diz_o_que_houve_com_aquela_pessoa():
+    t = _fn("tirarDaPasta")
+    assert "saida === 'a_mao'" in t and "saida === 'outro_projeto'" in t
+    # a falha DELA vem das falhas de TIRAR; a de DAR acesso a outra pessoa não é culpa de quem saiu
+    assert "(!saida && (d.falhas_tirar || []).length)" in t and "(d.falhas || []).length" not in t
+    assert "Emitidos" in t, "pro cliente, o socorro aponta os arquivos emitidos (ele nunca esteve na pasta)"
+
+
+def test_apagar_dados_espera_o_drive_tirar_o_acesso():
+    a = _fn("apagarDadosPessoa")
+    i_pend = a.index("const pend = DEST.filter((d) => d.membro_id === id && d.permission_id).length;")
+    i_se = a.index("if (pend) {")
+    assert i_pend < i_se < a.index(".delete(") and "return abrirModal('Ainda não dá pra apagar'" in a[i_se:i_se + 200]
+
+
+def test_a_pasta_do_fornecedor_que_ja_entrou_se_escolhe_pelo_servidor():
+    """TELA-9: quem entrou sem pasta ficava sem pra sempre."""
+    e = _fn("editarPessoa")
+    assert "m.papel === 'fornecedor' && m.status !== 'removido'" in e and 'id="pe-pasta"' in e
+    s = _fn("salvarPessoa")
+    assert "apiEsc(`projetos/${PROJ.id}/membros/${id}/pasta`, 'POST', { pasta: sel.value || null })" in s
+    assert "drive_pasta_id:" not in s and "drive_pasta_nome:" not in s, "a tela gravando a pasta direto no banco"
+
+
+def test_cadastro_sem_o_convite_no_navegador_pergunta_ao_servidor():
+    """TELA-10/MKT-3: quem abria o convite num navegador e entrava por outro caía no cadastro LONGO."""
+    c = _ler("cadastro.html")
+    i = c.index("if (!_convite && window.API_BASE) {")
+    assert i < c.index("if (_convite) {", i), "a pergunta ao servidor tem que vir ANTES do bloco do convite"
+    bloco = c[i:c.index("if (_convite) {", i)]
+    assert "/api/escritorio/convite/pendentes" in bloco and "_voltaSemCodigo = true;" in bloco
+    assert "perfil: c0.perfil || 'equipe'" in bloco

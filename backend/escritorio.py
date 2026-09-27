@@ -286,11 +286,20 @@ def convidar(projeto_id: str, request: Request, corpo: dict):
         raise HTTPException(404, "Projeto não encontrado.")
     atual = _um(_SERVICO("GET", "escritorio_membros",
                          params={"projeto_id": f"eq.{projeto_id}", "email": f"eq.{email}",
-                                 "select": "id,status,convite_expira,papel"}))
+                                 "select": "id,status,convite_expira,papel,drive_pasta_id"}))
     if atual and atual["status"] == "ativo":
         raise HTTPException(409, "Essa pessoa já está no projeto.")
+    pasta_desligada = False
     if perfil_pedido is None and atual:
         papel, pasta_linha = atual["papel"], {}
+        # 27/09 (board REG-3): o reenvio mantém a subpasta do fornecedor — mas ela pode ter saído da pasta do
+        # projeto (a admin trocou a pasta, ou moveu no Drive). Confere de novo; fora do projeto, o convite sai sem.
+        if papel == "fornecedor" and atual.get("drive_pasta_id") and _PASTA_DO_FORNECEDOR:
+            try:
+                _PASTA_DO_FORNECEDOR(projeto_id, atual["drive_pasta_id"])
+            except HTTPException as x:
+                if x.status_code == 400:
+                    pasta_linha, pasta_desligada = {"drive_pasta_id": None, "drive_pasta_nome": None}, True
     else:
         papel = PERFIS[perfil_pedido or "equipe"]
         pasta = None
@@ -331,6 +340,14 @@ def convidar(projeto_id: str, request: Request, corpo: dict):
              **{k: v for k, v in campos.items() if v is not None}}
     if papel != "freela":
         linha["pode_baixar"] = False      # "pode baixar" é do quantitativo da EQUIPE; os de fora nunca
+    if atual and atual.get("papel") != papel:
+        # 🔒 27/09 (board SEG-2): voltou com OUTRO perfil (saiu da equipe e voltou como fornecedor, por exemplo). As
+        # marcações antigas nos cartões dariam a ele o que o perfil novo não vê (cartões internos, comentários, o
+        # resumo das @menções deles). Saem ANTES de mudar o papel; sem conseguir tirar, o convite não sai.
+        st_tp, _ = _SERVICO("DELETE", "escritorio_tarefa_pessoas", params={
+            "membro_id": f"eq.{atual['id']}", "projeto_id": f"eq.{projeto_id}"})
+        if st_tp >= 300 or st_tp == 0:
+            raise HTTPException(502, "Não consegui preparar o convite agora. Tente de novo em instantes.")
     if atual:  # convidado de novo (token novo) ou removido voltando
         linha.update({"status": "convidado", "user_id": None, "aceito_em": None, "removido_em": None})
         if atual["status"] != "convidado":
@@ -382,7 +399,8 @@ def convidar(projeto_id: str, request: Request, corpo: dict):
             if not enviado and not motivo:
                 motivo = "email_falhou"
     return {"ok": True, "membro_id": dados[0]["id"], "email_enviado": enviado, "motivo_sem_email": motivo,
-            "link": link, "expira_em": linha["convite_expira"], "perfil": PERFIL_DO_PAPEL[papel]}
+            "link": link, "expira_em": linha["convite_expira"], "perfil": PERFIL_DO_PAPEL[papel],
+            "pasta_desligada": pasta_desligada}
 
 
 def _recusa_se_nao_vale(m):
@@ -643,10 +661,13 @@ def email_da_emissao(escritorio: str, arquivo: str, projeto: str, nota, link: st
 
 
 def _avisar_admin(e: dict, tipo: str, nota, eu: dict, evento_id) -> bool:
+    # 🩸 27/09 (board SEG-3/MAIL-1): a pausa era POR EMISSÃO — com dois clientes (um casal), o "pediu revisão" do
+    # segundo 5 min depois do "aprovou" do primeiro não avisava ninguém, e a arquiteta seguia com a obra. Agora a
+    # pausa só cala a MESMA pessoa repetindo a MESMA resposta (o clique duplo); outra pessoa ou outra resposta avisa.
     desde = (datetime.now(timezone.utc) - timedelta(seconds=_PAUSA_DO_AVISO)).isoformat()
     st, recentes = _SERVICO("GET", "escritorio_emissao_eventos", params={
         "emissao_id": f"eq.{e['id']}", "pelo_cliente": "is.true", "criado_em": f"gte.{desde}",
-        "select": "id"})
+        "registrado_por": f"eq.{eu['id']}", "tipo": f"eq.{tipo}", "select": "id"})
     if st < 300 and st != 0 and recentes is not None:
         recentes = [r for r in recentes if str(r.get("id")) != str(evento_id)]
     if st >= 300 or st == 0 or recentes is None or recentes:

@@ -288,7 +288,9 @@ def test_sincronizar_da_a_quem_entrou_tira_de_quem_saiu_e_da_pasta_antiga():
         {"id": 3, "membro_id": "m-fica", "pasta_id": "PASTA_VELHA", "permission_id": "p-velha", "email": "u-fica@exemplo.com"}]
     g = Google()
     r = ed.sincronizar(PROJ)
-    assert r == {"compartilhados": 1, "tirados": 2, "falhas": []}
+    assert (r["compartilhados"], r["tirados"], r["falhas"]) == (1, 2, [])
+    # 27/09 (board TELA-8): o que houve com CADA pessoa — quem saiu teve o acesso tirado
+    assert r["saidas"]["m-saiu"] == "tirado" and r["falhas_tirar"] == [] and r["falhas_dar"] == []
     apagadas = sorted(c["url"].split("/permissions/")[1].split("?")[0] for c in g.chamadas if c["m"] == "DELETE")
     assert apagadas == ["p-saiu", "p-velha"]                           # nunca o "p-fica" (controle)
     criadas = [c["corpo"]["emailAddress"] for c in g.chamadas if c["m"] == "POST" and "/permissions" in c["url"]]

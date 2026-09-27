@@ -294,7 +294,7 @@ def test_tela_lote3():
     assert "Math.round((iA / et.length) * 100)" in h and "Math.round(((iA + 1) / et.length)" not in h
     assert "if (ja) return toast('Essa etapa já está na lista.', true);" in h
     # TELA-5
-    assert "const antes = viz[i - 1], depois = antes ? todos[todos.indexOf(antes) + 1] : todos[0];" in _corpo(h, "async function mover(id, st, i) {")
+    assert "const antes = viz[i - 1], depois = antes ? todos[todos.indexOf(antes) + 1] : todos[0];" in _corpo(h, "async function mover(id, st, i, mostrarAoCliente) {")
     assert "mud.posicao = Math.max(0, ...TAR.filter((x) => x.status === st).map((x) => x.posicao)) + 1;" in h
     assert "if (o.posicao === t.posicao) {" in _corpo(h, "async function subirDescer(id, d) {")
     # TELA-6: nome escapado no RegExp; placeholder sem prometer aviso

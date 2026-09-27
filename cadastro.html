@@ -578,6 +578,24 @@
     }
 
     // Chegou aqui = precisa preencher (ou não deu pra confirmar).
+    // 27/09 (board TELA-10/MKT-3): o convite não está guardado NESTE navegador — o dono da obra abriu o link no
+    // WhatsApp ou no app do Gmail e entrou por outro, ou veio pelo caminho "sem código". Caía no cadastro LONGO de
+    // profissional ("área de atuação", "como nos conheceu") e virava "cliente novo por indicação" nos números.
+    // Pergunta ao servidor se há convite em aberto pro e-mail CONFIRMADO desta conta (a mesma rota da página do
+    // convite): havendo, é convite — ficha curta pra cliente/fornecedor, origem "convite", e volta pro convite no fim.
+    // Falha não trava nada: segue a ficha de sempre.
+    if (!_convite && window.API_BASE) {
+      try {
+        const rp = await fetch(`${window.API_BASE}/api/escritorio/convite/pendentes`, {
+          method: 'POST', headers: { Authorization: 'Bearer ' + session.access_token } });
+        const dp = rp.ok ? await rp.json() : null;
+        const c0 = dp && Array.isArray(dp.convites) ? dp.convites[0] : null;
+        if (c0) {
+          _convite = { projeto: c0.projeto || '', por: c0.convidado_por || '', perfil: c0.perfil || 'equipe', doServidor: true };
+          _voltaSemCodigo = true;
+        }
+      } catch (_) {}
+    }
     if (_convite) {
       // 🏢 liga ESTA conta ao convite no servidor já aqui: o login pelo Google devolve pro cadastro,
       // não pro convite, e quem para antes de terminar a ficha levava a esteira de cliente novo

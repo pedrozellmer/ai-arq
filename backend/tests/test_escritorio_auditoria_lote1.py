@@ -119,10 +119,13 @@ def test_faxina_do_drive_roda_no_tick_antes_da_chave_dos_emails():
 def test_tirar_da_equipe_espera_o_drive_e_diz_o_que_aconteceu():
     h = _ler("escritorio.html")
     ct = _corpo(h, "async function confirmarTirar(id) {")
-    assert "if (m.status !== 'convidado' && PROJ.pasta_id) return tirarDaPasta(curto(m));" in ct
+    assert "if (m.status !== 'convidado' && PROJ.pasta_id) return tirarDaPasta(m);" in ct
     assert "sincronizarPasta(true)" not in ct, "a retirada calada voltou"
-    tp = _corpo(h, "async function tirarDaPasta(nome) {")
-    assert "else if (d.sem_conexao)" in tp and "(d.falhas || []).length" in tp and "if (!r.ok)" in tp
+    tp = _corpo(h, "async function tirarDaPasta(m) {")
+    assert "else if (d.sem_conexao)" in tp and "if (!r.ok)" in tp
+    # 27/09 (board TELA-8): o resultado é o DESTA pessoa (saidas), e a falha dela só pelas falhas de TIRAR
+    assert "saida = (d.saidas || {})[m.id]" in tp and "(d.falhas_tirar || []).length" in tp
+    assert "(d.falhas || []).length" not in tp, "voltou a culpar quem saiu por falha de DAR acesso a outra pessoa"
 
 
 # ── CONV-1 / LOG-A1 / LOG-A3: o convite ──

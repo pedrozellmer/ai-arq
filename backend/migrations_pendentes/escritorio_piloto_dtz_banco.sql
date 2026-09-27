@@ -1302,3 +1302,64 @@ begin
   end if;
   return new;
 end $$;
+
+-- ── 27. (27/09, board do Escritório) o registro do Drive não some com acesso pendente ──
+-- APLICADA em 27/09/2026 como `escritorio_board_acesso_pendente_e_papel_antes` (ok do Pedro: "pode aplicar").
+-- 1) SRV-1: quando a pessoa JÁ tinha um acesso menor à pasta (dado à mão pela admin) e o AI.arq promove, guarda o
+--    papel de antes — na saída o servidor DEVOLVE esse papel em vez de apagar o acesso dela. null = nós criamos.
+alter table public.escritorio_drive_permissoes add column if not exists papel_antes text;
+alter table public.escritorio_drive_permissoes drop constraint if exists escritorio_drive_permissoes_papel_antes_chk;
+alter table public.escritorio_drive_permissoes add constraint escritorio_drive_permissoes_papel_antes_chk
+  check (papel_antes is null or papel_antes in ('reader', 'commenter', 'writer'));
+
+-- 2) SEG-2: quem saiu e voltou (com outro perfil ou não) não vê as emissões antigas como "Aguardando você" — só as
+--    que ainda estão compartilhadas com ele no Drive (permission_id preenchido).
+create or replace function public.escritorio_emissao_minha(p_emissao uuid)
+ returns boolean
+ language sql
+ stable security definer
+ set search_path to ''
+as $function$
+  select exists (select 1 from public.escritorio_emissao_destinos d
+                   join public.escritorio_membros m on m.id = d.membro_id and m.projeto_id = d.projeto_id
+                  where d.emissao_id = p_emissao and m.user_id = (select auth.uid()) and m.status = 'ativo'
+                    and m.papel in ('cliente','fornecedor') and d.permission_id is not null)
+$function$;
+
+-- 3) SEG-1/REG-1: apagar PROJETO só pela rota do servidor (ela tira os acessos do Drive ANTES e não apaga com
+--    pendência). A política direta deixava a cascata levar o registro do que ainda estava compartilhado.
+drop policy if exists escritorio_projetos_apagar on public.escritorio_projetos;
+
+-- 4) SEG-1/REG-4: "Apagar dados" de quem saiu, ou apagar uma emissão, com o arquivo emitido AINDA compartilhado no
+--    Drive → o banco recusa (a cascata levaria o único registro, e a faxina horária nunca mais tiraria o acesso).
+--    O servidor (e a cascata que ele dispara) passa: ele revoga antes. 🔑 SEM security definer — senão o
+--    current_user vira o dono da função e escritorio_eh_servidor() liberaria todo mundo.
+create or replace function public.escritorio_acesso_pendente_guarda()
+ returns trigger
+ language plpgsql
+ set search_path to ''
+as $function$
+begin
+  if public.escritorio_eh_servidor() then
+    return old;
+  end if;
+  if tg_table_name = 'escritorio_membros' then
+    if exists (select 1 from public.escritorio_emissao_destinos d
+                where d.membro_id = old.id and d.projeto_id = old.projeto_id and d.permission_id is not null) then
+      raise exception 'ainda falta tirar no Google Drive o acesso desta pessoa aos arquivos emitidos (o AI.arq tenta de novo a cada hora); apague os dados depois'
+        using errcode = '42501';
+    end if;
+  elsif exists (select 1 from public.escritorio_emissao_destinos d
+                 where d.emissao_id = old.id and d.permission_id is not null) then
+    raise exception 'esta emissão ainda está compartilhada no Google Drive com quem recebeu'
+      using errcode = '42501';
+  end if;
+  return old;
+end $function$;
+
+drop trigger if exists escritorio_membros_acesso_pendente on public.escritorio_membros;
+create trigger escritorio_membros_acesso_pendente before delete on public.escritorio_membros
+  for each row execute function public.escritorio_acesso_pendente_guarda();
+drop trigger if exists escritorio_emissoes_acesso_pendente on public.escritorio_emissoes;
+create trigger escritorio_emissoes_acesso_pendente before delete on public.escritorio_emissoes
+  for each row execute function public.escritorio_acesso_pendente_guarda();

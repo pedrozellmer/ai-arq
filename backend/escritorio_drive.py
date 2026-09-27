@@ -395,23 +395,75 @@ def drive_pastas(request: Request, pai: str = "root"):
 @router.post("/projetos/{projeto_id}/pasta")
 def projeto_pasta(projeto_id: str, request: Request, corpo: dict):
     """A admin liga o projeto a uma pasta do Drive dela. O servidor confere que é pasta e que a conta
-    enxerga; grava; e já compartilha com a equipe ativa."""
+    enxerga; grava; e já compartilha com a equipe ativa.
+    27/09 (board TELA-1): com `previa: true` só DESCREVE o que vai acontecer (quantas pessoas da equipe ganham
+    edição, se a pasta é o Drive inteiro, se contém — ou está dentro de — a pasta de outro projeto seu, se
+    fornecedores perdem a subpasta) e NÃO grava. A tela mostra e só então liga: compartilhar manda e-mail do
+    Google, e esse não se desfaz. Sem `previa`, o de sempre (a tela antiga segue funcionando)."""
     eu = esc._exige_login(request)
     if esc._papel(request, projeto_id) != "dono":
         raise HTTPException(403, "Só a admin do projeto escolhe a pasta.")
     pasta = id_da_pasta(corpo.get("pasta"))
     tok = _acesso(eu["id"])
-    st, f = _drive("GET", f"files/{pasta}", tok, params={"fields": "id,name,mimeType,trashed", "supportsAllDrives": "true"})
+    st, f = _drive("GET", f"files/{pasta}", tok,
+                   params={"fields": "id,name,mimeType,trashed,parents", "supportsAllDrives": "true"})
     if st == 404 or (st == 200 and (not f or f.get("mimeType") != PASTA or f.get("trashed"))):
         raise HTTPException(400, "Isso não é uma pasta que a sua conta do Drive enxerga.")
     if st != 200:
         raise HTTPException(502, "O Google não respondeu agora. Tente de novo em instantes.")
+    if (corpo or {}).get("previa"):
+        return {"previa": _previa_da_pasta(projeto_id, eu["id"], tok, f)}
     st_u, _ = esc._SERVICO("PATCH", "escritorio_projetos",
                            body={"pasta_id": f["id"], "pasta_caminho": f.get("name") or "", "armazenamento": "google_drive"},
                            params={"id": f"eq.{projeto_id}"})
     if st_u >= 300:
         raise HTTPException(502, "Não consegui gravar a pasta agora. Tente de novo em instantes.")
     return {"ok": True, "pasta": {"id": f["id"], "nome": f.get("name") or ""}, **sincronizar(projeto_id)}
+
+
+def _previa_da_pasta(projeto_id: str, dono: str, tok: str, f: dict) -> dict:
+    """O que ligar a pasta `f` a este projeto vai fazer — pra admin confirmar ANTES (27/09, board TELA-1)."""
+    p = _dono_do_projeto(projeto_id)
+    st_m, membros = esc._SERVICO("GET", "escritorio_membros", params={
+        "projeto_id": f"eq.{projeto_id}", "status": "eq.ativo", "papel": "in.(freela,fornecedor)",
+        "select": "papel,drive_pasta_id"})
+    st_o, outros = esc._SERVICO("GET", "escritorio_projetos", params={
+        "dono": f"eq.{dono}", "id": f"neq.{projeto_id}", "pasta_id": "not.is.null", "select": "nome,pasta_id"})
+    membros = membros if st_m < 300 and st_m != 0 and membros is not None else None
+    troca = bool(p.get("pasta_id")) and p.get("pasta_id") != f["id"]
+    mistura = []
+    for o in (outros if st_o < 300 and st_o != 0 and outros else [])[:10]:
+        if (o["pasta_id"] == f["id"] or _onde_esta(tok, o["pasta_id"], f["id"]) == "dentro"
+                or _onde_esta(tok, f["id"], o["pasta_id"]) == "dentro"):
+            mistura.append(str(o.get("nome") or "outro projeto")[:160])
+    return {
+        "pasta": {"id": f["id"], "nome": f.get("name") or ""},
+        "drive_inteiro": not f.get("parents"),                 # a raiz do Meu Drive não tem pai
+        "equipe": None if membros is None else sum(1 for m in membros if m.get("papel") == "freela"),
+        "fornecedores_perdem": 0 if not troca or membros is None else sum(
+            1 for m in membros if m.get("papel") == "fornecedor" and m.get("drive_pasta_id")),
+        "troca": troca,
+        "outros_projetos": mistura,
+    }
+
+
+def _onde_esta(tok: str, alvo: str, raiz: str, limite: int = 12):
+    """27/09 (board REG-3/SRV-9): "dentro" / "fora" da pasta do projeto, ou None = não consegui saber (o Google não
+    respondeu). 🪤 Diferente de `_dentro_da_pasta`, que junta "fora" e "não sei" num False: quem TIRA acesso por
+    causa da resposta não pode confundir um soluço do Google com "a subpasta saiu do projeto"."""
+    atual, vistos = alvo, 0
+    while atual and vistos <= limite:
+        if atual == raiz:
+            return "dentro"
+        st, f = _drive("GET", f"files/{atual}", tok, params={"fields": "parents,trashed", "supportsAllDrives": "true"})
+        if st == 404:
+            return "fora"                      # a subpasta (ou um pai dela) não existe mais pra esta conta
+        if st != 200 or f is None:
+            return None
+        if f.get("trashed") or not f.get("parents"):
+            return "fora"                      # na lixeira, ou chegou na raiz do Drive sem passar pela do projeto
+        atual, vistos = f["parents"][0], vistos + 1
+    return None
 
 
 def _dentro_da_pasta(tok: str, alvo: str, raiz: str, limite: int = 12, bloquear_limitado: bool = False) -> bool:
@@ -469,6 +521,38 @@ def pasta_do_fornecedor(projeto_id: str, entrada) -> dict:
 
 
 esc._PASTA_DO_FORNECEDOR = pasta_do_fornecedor
+
+
+@router.post("/projetos/{projeto_id}/membros/{membro_id}/pasta")
+def membro_pasta(projeto_id: str, membro_id: str, request: Request, corpo: dict):
+    """27/09 (board TELA-9): a admin escolhe, troca ou tira (`pasta` vazio) a subpasta que um FORNECEDOR vê — também
+    depois que ele entrou. Antes só dava no convite: quem entrou sem pasta ficava sem pra sempre (o gatilho do banco,
+    com razão, não deixa a tela mexer nisso). Quem confere a subpasta e grava é o servidor; o Drive acompanha."""
+    esc._exige_login(request)
+    if esc._papel(request, projeto_id) != "dono":
+        raise HTTPException(403, "Só a admin do projeto escolhe a pasta do fornecedor.")
+    if not esc._UUID.match(str(membro_id or "")):
+        raise HTTPException(404, "Fornecedor não encontrado neste projeto.")
+    m = esc._um(esc._SERVICO("GET", "escritorio_membros", params={
+        "id": f"eq.{membro_id}", "projeto_id": f"eq.{projeto_id}", "select": "id,papel,status"}))
+    if not m or m.get("papel") != "fornecedor" or m.get("status") == "removido":
+        raise HTTPException(404, "Fornecedor não encontrado neste projeto.")
+    entrada = (corpo or {}).get("pasta")
+    if entrada:
+        pasta = pasta_do_fornecedor(projeto_id, entrada)
+        linha = {"drive_pasta_id": pasta["id"], "drive_pasta_nome": pasta["nome"]}
+    else:
+        linha = {"drive_pasta_id": None, "drive_pasta_nome": None}
+    st, feito = esc._SERVICO("PATCH", "escritorio_membros", body=linha, params={
+        "id": f"eq.{membro_id}", "projeto_id": f"eq.{projeto_id}", "status": f"eq.{m['status']}"},
+        prefer="return=representation")
+    if st >= 300 or st == 0:
+        raise HTTPException(502, "Não consegui gravar a pasta agora. Tente de novo em instantes.")
+    if feito == []:
+        raise HTTPException(409, "Essa pessoa mudou agora (entrou ou saiu do projeto). Atualize a lista.")
+    # ativo: o Drive acompanha já (tira a leitura da pasta antiga, dá na nova). Convidado: ganha no aceite.
+    r = sincronizar(projeto_id) if m["status"] == "ativo" else {}
+    return {"ok": True, "pasta": linha["drive_pasta_nome"], **r}
 
 
 @router.get("/projetos/{projeto_id}/arquivos")
@@ -851,9 +935,19 @@ def sincronizar(projeto_id: str) -> dict:
         ao sair;
       • quem segue ativo noutro projeto com a MESMA pasta não perde o acesso quando sai deste.
     26/09 (perfis): o FORNECEDOR ganha LEITURA só na subpasta que a admin separou pra ele; o CLIENTE não ganha
-    pasta (recebe arquivo por arquivo nas Emissões). Quem saiu perde também os arquivos emitidos que recebeu."""
+    pasta (recebe arquivo por arquivo nas Emissões). Quem saiu perde também os arquivos emitidos que recebeu.
+    27/09 (board do Escritório):
+      • "à mão" não é mais deduzido só porque a pessoa já tem acesso: se quem deu fomos NÓS, por outro projeto
+        com a mesma pasta, este registro também é nosso — e o acesso sai do Drive quando sair o último (SRV-1);
+      • papel MENOR dado à mão e promovido por nós: na saída volta o papel de antes (`papel_antes`) (SRV-1);
+      • o Google estourou o tempo ao compartilhar: relê a pasta e, se o acesso nasceu, registra como NOSSO; o
+        registro que não grava desfaz no Drive, como o `_mandar` (SRV-2);
+      • subpasta do fornecedor que não está mais dentro da pasta do projeto (trocou a pasta, moveu no Drive) perde a
+        leitura e é desligada dele: a admin escolhe outra (REG-3/SRV-9);
+      • devolve, por pessoa que saiu, o que houve (`saidas`), e separa as falhas de DAR das de TIRAR (TELA-8)."""
     p = _dono_do_projeto(projeto_id)
-    base = {"compartilhados": 0, "tirados": 0, "falhas": []}
+    base = {"compartilhados": 0, "tirados": 0, "falhas": [], "falhas_dar": [], "falhas_tirar": [], "saidas": {},
+            "fornecedor_sem_pasta": []}
     if not p.get("pasta_id"):
         return {**base, "sem_pasta": True}
     if not _conexao(p["dono"]):
@@ -863,21 +957,37 @@ def sincronizar(projeto_id: str) -> dict:
         "projeto_id": f"eq.{projeto_id}", "status": "eq.ativo", "papel": "in.(freela,fornecedor,cliente)",
         "select": "id,papel,email_conta,drive_pasta_id"})
     st_r, feitos = esc._SERVICO("GET", "escritorio_drive_permissoes", params={
-        "projeto_id": f"eq.{projeto_id}", "select": "id,membro_id,pasta_id,permission_id,email,ja_existia"})
+        "projeto_id": f"eq.{projeto_id}",
+        "select": "id,membro_id,pasta_id,permission_id,email,ja_existia,papel_antes"})
     if st_m >= 300 or st_r >= 300 or membros is None or feitos is None:
-        return {**base, "falhas": ["banco"]}
-    # quem deve ter o quê: a equipe EDITA a pasta do projeto; o fornecedor LÊ a subpasta dele (se a admin escolheu)
-    quer = {}
+        return {**base, "falhas": ["banco"], "falhas_tirar": ["banco"]}
+    # quem deve ter o quê: a equipe EDITA a pasta do projeto; o fornecedor LÊ a subpasta dele (se a admin escolheu
+    # e se ela ainda está dentro da pasta do projeto)
+    quer, incerto, sem_pasta_agora = {}, set(), []
     for m in membros:
         if m.get("papel") == "freela":
             quer[m["id"]] = (p["pasta_id"], "writer")
         elif m.get("papel") == "fornecedor" and m.get("drive_pasta_id"):
+            onde = _onde_esta(tok, m["drive_pasta_id"], p["pasta_id"])
+            if onde == "fora":
+                sem_pasta_agora.append(m["id"])            # fora de `quer`: a leitura antiga sai logo abaixo
+                continue
             quer[m["id"]] = (m["drive_pasta_id"], "reader")
+            if onde is None:
+                incerto.add(m["id"])                       # não sei: mantém o que tem, mas não dá acesso novo
+    for mid in sem_pasta_agora:
+        esc._SERVICO("PATCH", "escritorio_membros", body={"drive_pasta_id": None, "drive_pasta_nome": None},
+                     params={"id": f"eq.{mid}", "projeto_id": f"eq.{projeto_id}"})
     ativos = {m["id"]: str(m.get("email_conta") or "").strip().lower() for m in membros if m["id"] in quer}
     feito_por_membro = {f.get("membro_id"): f for f in feitos
                         if f.get("membro_id") in quer and f.get("pasta_id") == quer[f["membro_id"]][0]}
-    compartilhados, tirados, falhas = 0, 0, []
+    compartilhados, tirados, falhas_dar, falhas_tirar, saidas = 0, 0, [], [], {}
     enxerga = {}
+    grau = {"a_mao": 0, "outro_projeto": 1, "tirado": 2, "falhou": 3}
+
+    def _saida(mid, o_que):
+        if mid and grau[o_que] >= grau.get(saidas.get(mid), -1):
+            saidas[mid] = o_que
 
     def _enxerga(pasta):
         if pasta not in enxerga:
@@ -885,69 +995,121 @@ def sincronizar(projeto_id: str) -> dict:
             enxerga[pasta] = st_v == 200
         return enxerga[pasta]
 
+    def _outros_registros(pasta, email, campos="id"):
+        """Registros da mesma pessoa na mesma pasta em OUTROS projetos; None = não li."""
+        st_o, outros = esc._SERVICO("GET", "escritorio_drive_permissoes", params={
+            "pasta_id": f"eq.{pasta}", "email": f"eq.{email or ''}", "projeto_id": f"neq.{projeto_id}",
+            "select": campos})
+        return None if (st_o >= 300 or st_o == 0 or outros is None) else outros
+
+    def _desfazer(pasta, perm_id, papel_antes):
+        """Tira no Drive o que NÓS demos: devolve o papel de antes (se a admin tinha dado um menor) ou apaga."""
+        if papel_antes:
+            return _drive("PATCH", f"files/{pasta}/permissions/{perm_id}", tok,
+                          params={"supportsAllDrives": "true"}, corpo={"role": papel_antes})[0]
+        return _drive("DELETE", f"files/{pasta}/permissions/{perm_id}", tok, params={"supportsAllDrives": "true"})[0]
+
     # tira: quem saiu, o que ficou na pasta antiga (do projeto ou do fornecedor)
     for f in feitos:
         if f.get("membro_id") in quer and f.get("pasta_id") == quer[f["membro_id"]][0]:
             continue
-        apagar_registro = bool(f.get("ja_existia"))          # a admin deu à mão: fica como estava no Drive
-        if not apagar_registro:
-            st_o, outros = esc._SERVICO("GET", "escritorio_drive_permissoes", params={
-                "pasta_id": f"eq.{f['pasta_id']}", "email": f"eq.{f.get('email') or ''}",
-                "projeto_id": f"neq.{projeto_id}", "select": "id"})
-            if st_o >= 300 or outros is None:
-                falhas.append(f.get("email") or "?")
-                continue
-            apagar_registro = bool(outros)                    # outro projeto com a mesma pasta ainda usa
-        if apagar_registro:
+        mid = f.get("membro_id")
+        if f.get("ja_existia"):                              # a admin deu à mão: fica como estava no Drive
             esc._SERVICO("DELETE", "escritorio_drive_permissoes", params={"id": f"eq.{f['id']}"})
+            _saida(mid, "a_mao")
             continue
-        st_d, _ = _drive("DELETE", f"files/{f['pasta_id']}/permissions/{f['permission_id']}", tok,
-                         params={"supportsAllDrives": "true"})
+        outros = _outros_registros(f["pasta_id"], f.get("email"))
+        if outros is None:
+            falhas_tirar.append(f.get("email") or "?")
+            _saida(mid, "falhou")
+            continue
+        if outros:                                           # outro projeto com a mesma pasta ainda usa
+            esc._SERVICO("DELETE", "escritorio_drive_permissoes", params={"id": f"eq.{f['id']}"})
+            _saida(mid, "outro_projeto")
+            continue
+        st_d = _desfazer(f["pasta_id"], f["permission_id"], f.get("papel_antes"))
         if st_d in (200, 204) or (st_d == 404 and _enxerga(f["pasta_id"])):
             esc._SERVICO("DELETE", "escritorio_drive_permissoes", params={"id": f"eq.{f['id']}"})
             tirados += 1
+            _saida(mid, "tirado")
         else:
-            falhas.append(f.get("email") or "?")
+            falhas_tirar.append(f.get("email") or "?")
+            _saida(mid, "falhou")
     # dá: quem está ativo e ainda não tem
     ja_tem = {}          # pasta → {e-mail: permissão} de quem já tem acesso (lido uma vez por pasta)
     for membro_id, email in ativos.items():
         if membro_id in feito_por_membro:
             continue
+        if membro_id in incerto:
+            falhas_dar.append(email or "?")
+            continue
         pasta, papel_drive = quer[membro_id]
         if not email:
-            falhas.append("(sem e-mail confirmado)")
+            falhas_dar.append("(sem e-mail confirmado)")
             continue
         if pasta not in ja_tem:
             ja_tem[pasta] = _permissoes_da_pasta(tok, pasta)
         if ja_tem[pasta] is None:
-            falhas.append(email)
+            falhas_dar.append(email)
             continue
         antes = ja_tem[pasta].get(email)
-        # já tem o bastante (dado à mão pela admin): registra como ja_existia e não mexe
         basta = _PAPEIS_DE_EDICAO if papel_drive == "writer" else _PAPEIS_DE_EDICAO | {"reader", "commenter"}
         if antes and antes.get("role") in basta:
-            esc._SERVICO("POST", "escritorio_drive_permissoes", body={
-                "projeto_id": projeto_id, "membro_id": membro_id, "email": email, "pasta_id": pasta,
-                "permission_id": antes.get("id") or "", "ja_existia": True})
+            # já tem o bastante. Quem deu? Se foi NÓS, por outro projeto com a mesma pasta, este registro é nosso
+            # também (sai quando sair o último); se ninguém do AI.arq deu, foi a admin, à mão.
+            outros = _outros_registros(pasta, email, "ja_existia,papel_antes")
+            if outros is None:
+                falhas_dar.append(email)
+                continue
+            nossos = [o for o in outros if not o.get("ja_existia")]
+            registro = {"projeto_id": projeto_id, "membro_id": membro_id, "email": email, "pasta_id": pasta,
+                        "permission_id": antes.get("id") or "", "ja_existia": not nossos}
+            if nossos and nossos[0].get("papel_antes"):
+                registro["papel_antes"] = nossos[0]["papel_antes"]
+            st_g, _ = esc._SERVICO("POST", "escritorio_drive_permissoes", body=registro)
+            if st_g >= 300 or st_g == 0:
+                falhas_dar.append(email)
             continue
+        # tinha um papel MENOR dado à mão (ex.: leitor e a equipe precisa editar): guarda pra devolver na saída
+        papel_antes = antes.get("role") if antes and antes.get("role") in ("reader", "commenter") else None
         st_c, perm = _drive("POST", f"files/{pasta}/permissions", tok,
                             params={"sendNotificationEmail": "true", "supportsAllDrives": "true"},
                             corpo={"role": papel_drive, "type": "user", "emailAddress": email})
+        if st_c == 0:
+            # 🩸 tempo esgotado: o Google pode ter criado mesmo assim. Relê: se o acesso nasceu, é NOSSO.
+            relido = _permissoes_da_pasta(tok, pasta)
+            achou = (relido or {}).get(email)
+            if achou and achou.get("id") and achou.get("role") in basta:
+                st_c, perm = 200, {"id": achou["id"]}
         if st_c == 200 and perm and perm.get("id"):
-            esc._SERVICO("POST", "escritorio_drive_permissoes", body={
-                "projeto_id": projeto_id, "membro_id": membro_id, "email": email,
-                "pasta_id": pasta, "permission_id": perm["id"]})
+            registro = {"projeto_id": projeto_id, "membro_id": membro_id, "email": email,
+                        "pasta_id": pasta, "permission_id": perm["id"]}
+            if papel_antes:
+                registro["papel_antes"] = papel_antes
+            st_g, _ = esc._SERVICO("POST", "escritorio_drive_permissoes", body=registro)
+            if st_g >= 300 or st_g == 0:
+                # sem o registro, ninguém tiraria esse acesso depois (e a próxima volta o acharia "à mão"): desfaz
+                _desfazer(pasta, perm["id"], papel_antes)
+                falhas_dar.append(email)
+                continue
             compartilhados += 1
         else:
-            falhas.append(email)
+            falhas_dar.append(email)
     ativos_de_fora = {m["id"] for m in membros if m.get("papel") in ("cliente", "fornecedor")}
-    emi_tirados, emi_falhas = _tirar_emissoes_de_quem_saiu(projeto_id, tok, ativos_de_fora)
-    return {"compartilhados": compartilhados, "tirados": tirados + emi_tirados, "falhas": falhas + emi_falhas}
+    emi_tirados, emi_falhas = _tirar_emissoes_de_quem_saiu(projeto_id, tok, ativos_de_fora, saidas=saidas)
+    falhas_tirar += emi_falhas
+    return {"compartilhados": compartilhados, "tirados": tirados + emi_tirados,
+            "falhas": falhas_dar + falhas_tirar, "falhas_dar": falhas_dar, "falhas_tirar": falhas_tirar,
+            "saidas": saidas, "fornecedor_sem_pasta": sem_pasta_agora}
 
 
-def _tirar_emissoes_de_quem_saiu(projeto_id: str, tok: str, ativos_de_fora: set):
+def _tirar_emissoes_de_quem_saiu(projeto_id: str, tok: str, ativos_de_fora: set, saidas: dict = None):
     """Quem saiu do projeto (ou não é mais cliente/fornecedor ativo) perde o acesso aos ARQUIVOS emitidos que
-    recebeu. A linha do destino fica (é o histórico de pra quem foi); só o `permission_id` some."""
+    recebeu. A linha do destino fica (é o histórico de pra quem foi); só o `permission_id` some.
+    27/09 (board TELA-8): `saidas` (opcional) recebe, por pessoa, "tirado" ou "falhou" — a tela diz o que houve."""
+    def _marca(mid, o_que):
+        if saidas is not None and mid and (o_que == "falhou" or saidas.get(mid) != "falhou"):
+            saidas[mid] = o_que
     st, dest = esc._SERVICO("GET", "escritorio_emissao_destinos", params={
         "projeto_id": f"eq.{projeto_id}", "permission_id": "not.is.null",
         "select": "emissao_id,membro_id,permission_id"})
@@ -975,10 +1137,13 @@ def _tirar_emissoes_de_quem_saiu(projeto_id: str, tok: str, ativos_de_fora: set)
                 "emissao_id": f"eq.{d['emissao_id']}", "membro_id": f"eq.{d['membro_id']}"})
             if st_u >= 300 or st_u == 0:
                 falhas.append("banco (emissões)")
+                _marca(d.get("membro_id"), "falhou")
                 continue
             tirados += 1 if st_d != 404 else 0
+            _marca(d.get("membro_id"), "tirado")
         else:
             falhas.append("emissão")
+            _marca(d.get("membro_id"), "falhou")
     return tirados, falhas
 
 

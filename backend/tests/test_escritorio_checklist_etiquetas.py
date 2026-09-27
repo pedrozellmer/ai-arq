@@ -66,7 +66,7 @@ def test_tela_nao_depende_das_tabelas_novas():
     assert "const temChk = !ck.error && !et.error && !te.error;" in c and "TEM_CHK = temChk;" in c
     # a leitura das tabelas novas NÃO entra no laço que derruba a tela ("for (const r of [m, t, tp, a, papel]) if (r.error) throw")
     assert "for (const r of [m, t, tp, a, papel]) if (r.error) throw r.error;" in c
-    a = _funcao("async function abrirCartao(id) {")
+    a = _funcao("async function abrirCartao(id, rascunho) {")   # 27/09: volta do aviso "quem é de fora vai ver"
     assert "${TEM_CHK ? `<div id=\"ct-etq\">" in a and "${TEM_CHK ? `<div id=\"ct-chk\">" in a
 
 

@@ -402,7 +402,7 @@ function toast(t, erro) { const el = $('toast'); el.textContent = t; el.classNam
 function falhou(e, oque) {
   // a mensagem do banco (gatilho/RLS) já vem em português quando é regra nossa
   const m = String((e && (e.message || e.details)) || '');
-  const nossa = /(dono|admin|freela|convite|quem move|não muda|não sai|não se edita|A fazer)/i.test(m);
+  const nossa = /(dono|admin|freela|convite|quem move|não muda|não sai|não se edita|A fazer|Google Drive)/i.test(m);
   toast((oque ? oque + ': ' : '') + (nossa ? m : /row-level security|permission/i.test(m) ? 'você não tem permissão pra isso neste projeto.' : 'não deu certo agora. Tente de novo.'), true);
   console.error(oque, e);
 }
@@ -1115,21 +1115,42 @@ function sobre(e) {
   if (cs[i]) cs[i].before(l); else col.querySelector('.cards').append(l);
 }
 function soltar(e) { e.preventDefault(); const col = e.currentTarget, i = idxSob(col, e.clientY), id = ARR; limpaAlvo(); if (id) mover(id, col.dataset.st, i); }
-async function mover(id, st, i) {
+// 27/09 (board TELA-3/CEO-4 e TELA-7/CEO-3): cartão aberto pra quem é de FORA — o cliente vê título e descrição
+// ("O que depende de você"); o fornecedor marcado lê também os comentários. Antes de abrir, a tela diz o quê e pede ok.
+const clientesAtivos = () => MEMBROS.filter((m) => m.status === 'ativo' && m.papel === 'cliente');
+const avisoCliente = (t) => `O <b>cliente</b> vai ver este cartão em “O que depende de você”: o título${t && t.descricao ? ' e a descrição' : ''}.`;
+function confirmarDeFora(avisos, botao, seguir, voltar) {
+  abrirModal('Quem é de fora vai ver este cartão', `<ul class="lista" style="margin:0">${avisos.map((a) => `<li style="font-size:14px;line-height:1.5">${a}</li>`).join('')}</ul>
+    <p class="sub" style="margin:0">Conversa interna da equipe fica melhor num cartão só da equipe.</p>
+    <div class="rodape"><button class="btn" id="cdf-volta">${voltar ? 'Voltar ao cartão' : 'Cancelar'}</button><button class="btn btn-d" id="cdf-ok">${esc(botao)}</button></div>`);
+  $('cdf-volta').onclick = () => (voltar ? voltar() : fecharModal());
+  $('cdf-ok').onclick = () => { fecharModal(); seguir(); };
+}
+async function mover(id, st, i, mostrarAoCliente) {
   const t = TAR.find((x) => x.id === id);
   if (!podeLevar(t, st)) { toast('Daqui pra frente quem move é a admin do projeto.', true); return render(); }
+  // 27/09 (board TELA-7/CEO-3): "Aguardando cliente" contava como "Com o cliente" na capa, mas o cliente não via o
+  // cartão (ele só vê os marcados "Pendência do cliente"): cada lado achava que a bola estava com o outro. Com cliente
+  // no projeto, levar pra lá pergunta e liga a pendência — a capa, o filtro e a tela do cliente falam da mesma coisa.
+  if (st === 'cliente' && t.status !== 'cliente' && !t.do_cliente && clientesAtivos().length && mostrarAoCliente === undefined) {
+    render();                                   // o cartão volta pro lugar enquanto a admin decide
+    return confirmarDeFora([avisoCliente(t)], 'Mostrar e mover', () => mover(id, st, i, true));
+  }
   // 26/09 (auditoria TELA-5): o índice vem da tela (só os cartões visíveis), mas a posição é calculada com TODOS
   // os da coluna — com filtro ligado o ponto médio caía em cima de um cartão escondido
   const todos = TAR.filter((x) => x.status === st && x.id !== id).sort((a, b) => a.posicao - b.posicao);
   const viz = todos.filter(visivel);
   const antes = viz[i - 1], depois = antes ? todos[todos.indexOf(antes) + 1] : todos[0];
   const pos = antes && depois ? (antes.posicao + depois.posicao) / 2 : antes ? antes.posicao + 1 : depois ? depois.posicao - 1 : 1;
-  const velho = { status: t.status, posicao: t.posicao };
-  Object.assign(t, { status: st, posicao: pos }); render();                        // otimista
-  const { error } = await sb.from('escritorio_tarefas').update({ status: st, posicao: pos }).eq('id', id);
+  const velho = { status: t.status, posicao: t.posicao, do_cliente: t.do_cliente };
+  const mud = { status: st, posicao: pos };
+  if (mostrarAoCliente) mud.do_cliente = true;
+  Object.assign(t, mud); render();                                                // otimista
+  const { error } = await sb.from('escritorio_tarefas').update(mud).eq('id', id);
   if (error) { Object.assign(t, velho); render(); return falhou(error, 'Não movi'); }
-  if (velho.status !== st) toast('Movido para ' + stT(st));
+  if (velho.status !== st) toast('Movido para ' + stT(st) + (mostrarAoCliente ? ' · o cliente vê este cartão' : ''));
 }
+
 function addCartao(st, btn) {
   if (!souAdmin() && !ST_EQUIPE.includes(st)) return toast('Nesta coluna quem cria é a admin do projeto.', true);
   const slot = btn.parentElement;
@@ -1181,41 +1202,52 @@ async function salvarColuna(id) {
   if (error) return falhou(error, 'Não movi');
   fecharModal(); await recarregar(); toast('Movido para ' + stT(st));
 }
-async function abrirCartao(id) {
+async function abrirCartao(id, rascunho) {
   if (souFornecedor()) return abrirCartaoFornecedor(id);
   const t = TAR.find((x) => x.id === id); if (!t) return;
-  CART = { id, pessoas: pessoasDa(t).map((m) => m.id) };
+  // 27/09: `rascunho` = o que a pessoa editou e ainda não salvou (volta do aviso "quem é de fora vai ver")
+  const v = rascunho ? { ...t, ...rascunho.mud, status: rascunho.st } : t;
+  CART = { id, pessoas: rascunho ? [...rascunho.pessoas] : pessoasDa(t).map((m) => m.id) };
   const gente = MEMBROS.filter((m) => m.status === 'ativo');
-  const opc = ST.filter((s) => podeLevar(t, s.k)).map((s) => `<option value="${s.k}" ${s.k === t.status ? 'selected' : ''}>${s.t}</option>`).join('');
+  const opc = ST.filter((s) => podeLevar(t, s.k)).map((s) => `<option value="${s.k}" ${s.k === v.status ? 'selected' : ''}>${s.t}</option>`).join('');
   // o mesmo que o banco (escritorio_tarefa_apagar_guarda): a equipe só apaga o que criou e nunca passou pela admin
   const podeApagar = souAdmin() || (t.criado_por === EU.id && ST_EQUIPE.includes(t.status) && !t.passou_pela_admin);
   // 🗂️ 25/09 (Pedro: "o Trello é a referência"): conteúdo à esquerda (título, pessoas, etiqueta, prazo,
   // descrição, comentários) e, à direita, onde o cartão está e o que dá pra fazer com ele.
   const s = ST.find((x) => x.k === t.status) || {}, eu = meuMembro();
+  // 27/09 (board TELA-3/CEO-4): quem é de fora aparece SEPARADO da equipe, com o perfil, e o topo do cartão diz quem
+  // de fora já o vê. O @ não oferece o cliente (ele não vê comentário) nem o fornecedor que não está no cartão.
+  const chipP = (m) => `<button type="button" class="chip" aria-pressed="${CART.pessoas.includes(m.id)}" onclick="togP('${m.id}',this)">${av(m)}${esc(curto(m))}${deFora(m) ? ` <span class="pill ${m.papel === 'cliente' ? 'p-ok' : 'p-warn'}" style="font-size:10px;padding:1px 6px">${PERFIL_TXT[m.papel]}</span>` : ''}</button>`;
+  const daEquipe = gente.filter((m) => !deFora(m)), deForaG = gente.filter(deFora);
+  const veem = pessoasDa(t).filter(deFora).map((m) => `${esc(curto(m))} (${PERFIL_TXT[m.papel]})`);
+  if (t.do_cliente && clientesAtivos().length && !pessoasDa(t).some((m) => m.papel === 'cliente')) veem.push('o cliente (título e descrição)');
+  const podeMencionar = (m) => m.user_id !== EU.id && m.papel !== 'cliente' && (m.papel !== 'fornecedor' || CART.pessoas.includes(m.id));
   abrirModal('Tarefa', `<div class="cart">
     <div class="cart-main">
-      <div class="cart-tit">${svg('tar', 20)}<input id="ct-t" class="in cart-in" maxlength="300" value="${esc(t.titulo)}" aria-label="Título"></div>
+      ${veem.length ? `<div class="aviso" style="font-size:12.5px;margin:0"><b>Visível pra quem é de fora:</b> ${veem.join(', ')}.</div>` : ''}
+      <div class="cart-tit">${svg('tar', 20)}<input id="ct-t" class="in cart-in" maxlength="300" value="${esc(v.titulo)}" aria-label="Título"></div>
       <p class="sub" style="margin:-10px 0 0 32px">na coluna <b style="color:${s.cor || '#334155'}">${esc(s.t || stT(t.status))}</b></p>
       <div class="cart-meta">
-        <div><p class="lbl">Pessoas no cartão</p><div class="linha" id="ct-pes" style="gap:6px">${gente.map((m) => `<button type="button" class="chip" aria-pressed="${CART.pessoas.includes(m.id)}" onclick="togP('${m.id}',this)">${av(m)}${esc(curto(m))}</button>`).join('')}</div>
-          <p class="sub" style="margin:6px 0 0;font-size:12px">Clique pra marcar ou desmarcar quem faz.</p></div>
+        <div><p class="lbl">Pessoas no cartão</p><div class="linha" id="ct-pes" style="gap:6px">${daEquipe.map(chipP).join('')}</div>
+          ${deForaG.length ? `<p class="lbl" style="margin:8px 0 4px">De fora do escritório</p><div class="linha" style="gap:6px">${deForaG.map(chipP).join('')}</div>` : ''}
+          <p class="sub" style="margin:6px 0 0;font-size:12px">Clique pra marcar ou desmarcar quem faz.${deForaG.length ? ' Quem é de fora e está marcado vê este cartão (o fornecedor, também os comentários).' : ''}</p></div>
         ${t.etapa ? `<div><p class="lbl">Etapa</p>${etiqueta(t.etapa)}</div>` : ''}
         ${t.prazo ? `<div><p class="lbl">Prazo</p>${pillPrazo(t)}</div>` : ''}
       </div>
       ${TEM_CHK ? `<div id="ct-etq">${blocoEtiquetas(id)}</div>` : ''}
-      <div><p class="lbl sec">${svg('memo', 16)}Descrição</p><textarea id="ct-d" rows="4" class="in" maxlength="5000" placeholder="Detalhes, links, referências…">${esc(t.descricao || '')}</textarea></div>
+      <div><p class="lbl sec">${svg('memo', 16)}Descrição</p><textarea id="ct-d" rows="4" class="in" maxlength="5000" placeholder="Detalhes, links, referências…">${esc(v.descricao || '')}</textarea></div>
       ${TEM_CHK ? `<div id="ct-chk">${blocoChecklist(id)}</div>` : ''}
       <div><p class="lbl sec">${svg('atas', 16)}Comentários</p>
         <div class="coment">${eu ? av(eu) : ''}<div style="flex:1;min-width:0"><textarea id="ct-com" rows="2" class="in" maxlength="5000" placeholder="Escreva um comentário… use @ pra marcar alguém"></textarea>
-          <div class="linha" style="margin-top:6px;gap:6px">${gente.filter((m) => m.user_id !== EU.id).map((m) => `<button type="button" class="chip" onclick="mencionar('${m.id}')">@${esc(curto(m))}</button>`).join('')}<span style="flex:1"></span><button class="btn btn-p btn-s" onclick="comentar('${id}')">Comentar</button></div></div></div>
+          <div class="linha" style="margin-top:6px;gap:6px">${gente.filter(podeMencionar).map((m) => `<button type="button" class="chip" onclick="mencionar('${m.id}')">@${esc(curto(m))}</button>`).join('')}<span style="flex:1"></span><button class="btn btn-p btn-s" onclick="comentar('${id}')">Comentar</button></div></div></div>
         <ul class="lista" id="ct-coms" style="margin-top:10px"><li class="vazio">Carregando…</li></ul></div>
     </div>
     <aside class="cart-lado">
       <p class="lbl" style="margin:0">No cartão</p>
       <div><label class="lbl" for="ct-st">Coluna</label><select id="ct-st" class="in">${opc}</select></div>
-      <div><label class="lbl" for="ct-e">Etapa</label><select id="ct-e" class="in"><option value="">—</option>${(PROJ.etapas || []).map((e) => `<option ${e === t.etapa ? 'selected' : ''}>${esc(e)}</option>`).join('')}</select></div>
-      <div><label class="lbl" for="ct-p">Prazo</label><input id="ct-p" type="date" class="in" value="${esc(t.prazo || '')}"></div>
-      <label class="linha" style="font-size:13px;color:#334155;gap:6px;flex-wrap:nowrap"><input type="checkbox" id="ct-cli" ${t.do_cliente ? 'checked' : ''}> Pendência do cliente</label>
+      <div><label class="lbl" for="ct-e">Etapa</label><select id="ct-e" class="in"><option value="">—</option>${(PROJ.etapas || []).map((e) => `<option ${e === v.etapa ? 'selected' : ''}>${esc(e)}</option>`).join('')}</select></div>
+      <div><label class="lbl" for="ct-p">Prazo</label><input id="ct-p" type="date" class="in" value="${esc(v.prazo || '')}"></div>
+      <label class="linha" style="font-size:13px;color:#334155;gap:6px;flex-wrap:nowrap"><input type="checkbox" id="ct-cli" ${v.do_cliente ? 'checked' : ''}> Pendência do cliente</label>
       <p class="lbl" style="margin:8px 0 0">Ações</p>
       <button class="btn btn-s" onclick="subirDescer('${id}',-1)">↑ Subir na coluna</button><button class="btn btn-s" onclick="subirDescer('${id}',1)">↓ Descer na coluna</button>
       ${podeApagar ? `<button class="btn btn-r btn-s" onclick="apagarCartao('${id}')">Excluir cartão</button>` : ''}
@@ -1223,6 +1255,7 @@ async function abrirCartao(id) {
     <div class="rodape"><button class="btn" onclick="fecharModal()">Fechar</button><button class="btn btn-d" onclick="salvarCartao('${id}')">Salvar</button></div>`, true);
   carregarComentarios(id);
 }
+
 async function carregarComentarios(id) {
   const { data, error } = await sb.from('escritorio_comentarios').select('*').eq('tarefa_id', id).order('criado_em');
   const ul = $('ct-coms'); if (!ul) return;
@@ -1276,6 +1309,22 @@ async function salvarCartao(id) {
   const titulo = $('ct-t').value.trim(); if (!titulo) return toast('A tarefa precisa de um título.', true);
   const mud = { titulo, etapa: $('ct-e').value || null, prazo: $('ct-p').value || null, descricao: $('ct-d').value || null, do_cliente: $('ct-cli').checked };
   const st = $('ct-st').value;
+  // 27/09 (board TELA-7): levar pra "Aguardando cliente", com cliente no projeto, liga a pendência (o cliente passa a ver)
+  if (st === 'cliente' && st !== t.status && clientesAtivos().length) mud.do_cliente = true;
+  const rascunho = { mud, st, pessoas: [...CART.pessoas] };
+  // 27/09 (board TELA-3/CEO-4): marcar alguém de FORA, ou ligar a pendência do cliente, abre o cartão pra ele — pergunta
+  const antes = PESSOAS_T.filter((p) => p.tarefa_id === id).map((p) => p.membro_id), nc = CART.nComentarios;
+  const avisos = rascunho.pessoas.filter((p) => !antes.includes(p)).map((p) => MEMBROS.find((m) => m.id === p)).filter(deFora)
+    .map((m) => (m.papel === 'fornecedor'
+      ? `<b>${esc(nomeDe(m))}</b> (fornecedor) vai ler este cartão${nc ? ` e ${nc === 1 ? 'o comentário' : 'os ' + nc + ' comentários'} dele` : ' e os comentários'}.`
+      : `<b>${esc(nomeDe(m))}</b> (cliente) vai ver o título${mud.descricao ? ' e a descrição' : ''} deste cartão.`));
+  if (mud.do_cliente && !t.do_cliente && clientesAtivos().length) avisos.push(avisoCliente({ descricao: mud.descricao }));
+  if (avisos.length) return confirmarDeFora(avisos, 'Salvar assim', () => gravarCartao(id, rascunho), () => abrirCartao(id, rascunho));
+  return gravarCartao(id, rascunho);
+}
+async function gravarCartao(id, rascunho) {
+  const t = TAR.find((x) => x.id === id); if (!t) return fecharModal();
+  const mud = { ...rascunho.mud }, st = rascunho.st, pessoas = rascunho.pessoas;
   if (st !== t.status) {
     mud.status = st;
     // 26/09 (auditoria TELA-5): trocar a coluna pelo cartão levava a posição antiga e empatava com um cartão de lá
@@ -1285,7 +1334,7 @@ async function salvarCartao(id) {
   if (error) return falhou(error, 'Não salvei');
   // 26/09 (auditoria TELA-8): "antes" é o que está no banco (inclusive quem saiu do projeto e não aparece mais): salvar
   // o cartão tira essas marcações velhas
-  const antes = PESSOAS_T.filter((p) => p.tarefa_id === id).map((p) => p.membro_id), entram = CART.pessoas.filter((p) => !antes.includes(p)), saem = antes.filter((p) => !CART.pessoas.includes(p));
+  const antes = PESSOAS_T.filter((p) => p.tarefa_id === id).map((p) => p.membro_id), entram = pessoas.filter((p) => !antes.includes(p)), saem = antes.filter((p) => !pessoas.includes(p));
   const ops = [];
   if (entram.length) ops.push(sb.from('escritorio_tarefa_pessoas').insert(entram.map((m) => ({ tarefa_id: id, membro_id: m, projeto_id: PROJ.id }))));
   if (saem.length) ops.push(sb.from('escritorio_tarefa_pessoas').delete().eq('tarefa_id', id).in('membro_id', saem));
@@ -1293,6 +1342,7 @@ async function salvarCartao(id) {
   fecharModal(); await recarregar();
   if (res.some((r) => r.error)) toast('Salvei a tarefa, mas não consegui atualizar as pessoas. Tente de novo.', true); else toast('Salvo');
 }
+
 async function subirDescer(id, d) {
   const t = TAR.find((x) => x.id === id), viz = TAR.filter((x) => x.status === t.status).sort((a, b) => a.posicao - b.posicao), k = viz.indexOf(t), o = viz[k + d];
   if (!o) return;
@@ -1506,15 +1556,35 @@ async function escolherPasta(pai) {
   const u = $('ep-usar'); if (u) u.onclick = () => usarPasta(u.dataset.id);
   document.querySelectorAll('.ep-abrir').forEach((b) => { b.onclick = () => escolherPasta(b.dataset.id); });
 }
-async function usarPasta(pasta) {
+// 27/09 (board TELA-1): "Usar esta pasta" ligava (ou trocava) num clique — entrar em "Projetos 2026" e clicar achando
+// que escolhia a de baixo dava EDIÇÃO na pasta de todos os clientes, com e-mail do Google que não se desfaz. Agora o
+// servidor descreve antes (previa) e a admin confirma vendo quem ganha acesso e se mistura com outro projeto.
+async function usarPasta(pasta, confirmado) {
   if (!String(pasta || '').trim()) return toast('Escolha uma pasta ou cole o link.', true);
+  if (!confirmado) {
+    const pv = await apiEsc(`projetos/${PROJ.id}/pasta`, 'POST', { pasta: String(pasta).trim(), previa: true });
+    if (!pv.ok) return toast(pv.dados.detail || 'Não consegui ler essa pasta.', true);
+    const v = pv.dados.previa || {}, risco = v.drive_inteiro || (v.outros_projetos || []).length;
+    const itens = [];
+    if (v.drive_inteiro) itens.push('<b>Essa é a raiz do seu Google Drive.</b> A equipe ganharia edição em tudo. Escolha a pasta deste projeto.');
+    if ((v.outros_projetos || []).length) itens.push(`<b>Essa pasta se mistura com a de outro projeto seu</b> (${v.outros_projetos.map(esc).join(', ')}): a equipe deste projeto passaria a editar arquivos de lá.`);
+    itens.push(v.equipe == null ? 'Não consegui contar a equipe agora.' : v.equipe
+      ? `<b>${v.equipe} pessoa${v.equipe > 1 ? 's' : ''} da equipe</b> ganha${v.equipe > 1 ? 'm' : ''} acesso de edição a ela e recebe${v.equipe > 1 ? 'm' : ''} um e-mail do Google avisando (esse e-mail não se desfaz).`
+      : 'Ninguém da equipe ainda: quem você convidar ganha edição nela.');
+    if (v.troca) itens.push('A equipe perde o acesso à pasta antiga.' + (v.fornecedores_perdem ? ` ${v.fornecedores_perdem} fornecedor${v.fornecedores_perdem > 1 ? 'es' : ''} com subpasta da pasta antiga pode${v.fornecedores_perdem > 1 ? 'm' : ''} ficar sem a pasta e precisar de uma nova.` : ''));
+    abrirModal('Usar a pasta “' + ((v.pasta && v.pasta.nome) || 'escolhida') + '”?', `<ul class="lista" style="margin:0">${itens.map((x) => `<li style="font-size:14px;line-height:1.5">${x}</li>`).join('')}</ul>
+      <div class="rodape"><button class="btn" onclick="fecharModal()">Cancelar</button><button class="btn ${risco ? 'btn-r' : 'btn-d'}" id="up-ok">${risco ? 'Usar mesmo assim' : 'Usar esta pasta'}</button></div>`);
+    $('up-ok').onclick = () => usarPasta((v.pasta && v.pasta.id) || pasta, true);
+    return;
+  }
   const r = await apiEsc(`projetos/${PROJ.id}/pasta`, 'POST', { pasta: String(pasta).trim() });
   if (!r.ok) return toast(r.dados.detail || 'Não consegui ligar a pasta.', true);
   fecharModal();
   PROJ.pasta_id = r.dados.pasta.id; PROJ.pasta_caminho = r.dados.pasta.nome; ARQ_PASTA = ''; ARQ_TRILHA = [];
-  const f = (r.dados.falhas || []).length;
-  toast('Pasta ligada' + (r.dados.compartilhados ? ` · compartilhada com ${r.dados.compartilhados} pessoa(s)` : '') + (f ? ` · ${f} não deu (sem conta Google?)` : ''));
-  render();
+  const f = (r.dados.falhas_dar || r.dados.falhas || []).length, sp = (r.dados.fornecedor_sem_pasta || []).length;
+  toast('Pasta ligada' + (r.dados.compartilhados ? ` · compartilhada com ${r.dados.compartilhados} pessoa(s)` : '') + (f ? ` · ${f} não deu (sem conta Google?)` : '')
+    + (sp ? ` · ${sp} fornecedor${sp > 1 ? 'es' : ''} ficou sem pasta: escolha de novo em Equipe → Editar` : ''), !!(f || sp));
+  await recarregar();
 }
 async function sincronizarPasta(calado) {
   const r = await apiEsc(`projetos/${PROJ.id}/drive/sincronizar`, 'POST');
@@ -1542,8 +1612,17 @@ function pillEmissao(e) {
 // o servidor dá LEITURA só no arquivo emitido (nunca na pasta Emitidos) e registra pra quem foi
 const destinosDa = (e) => DEST.filter((d) => d.emissao_id === e.id);
 const deForaAtivos = () => MEMBROS.filter((m) => m.status === 'ativo' && deFora(m));
-// esperando o cliente: o último registro é "enviado" (a resposta dele, pelo sistema ou registrada, vem depois)
-const esperaResposta = (e) => { const u = ultimoEv(e); return !!u && u.tipo === 'enviado'; };
+// esperando o cliente: o último registro é "enviado" (a resposta dele, pelo sistema ou registrada, vem depois).
+// 🩸 27/09 (board SEG-3/TELA-6/MAIL-1): com DOIS clientes na obra (um casal), a aprovação de um fechava a do outro —
+// ele lia "Você aprovou" e perdia os botões. Pro CLIENTE, a emissão espera por ELE enquanto ELE não respondeu (a
+// resposta registrada à mão pelo escritório fecha pra todos, como antes). Pro escritório, o de sempre.
+const respondeuEu = (e) => evDa(e).some((x) => x.pelo_cliente && x.registrado_por === EU.id);
+const esperaResposta = (e) => {
+  const u = ultimoEv(e); if (!u) return false;
+  if (souCliente()) return !respondeuEu(e) && (u.tipo === 'enviado' || !!u.pelo_cliente);
+  return u.tipo === 'enviado';
+};
+const quemRespondeu = (x) => { if (x.registrado_por === EU.id) return 'Você'; const m = MEMBROS.find((y) => y.user_id === x.registrado_por); return m ? curto(m) : 'Outra pessoa do lado do cliente'; };
 function blocoMandarPra(jaTem, clienteMarcado) {
   const gente = deForaAtivos().filter((m) => !jaTem.includes(m.id));
   if (!gente.length) return deForaAtivos().length ? '' : '<p class="sub" style="margin:8px 0 0">Pra mandar pelo sistema, convide o cliente (ou o fornecedor) na <b>Equipe</b>, com o perfil dele.</p>';
@@ -1594,7 +1673,10 @@ function responderEmissao(id, tipo) {
     $('rs-ok').disabled = true;
     const r = await apiEsc(`emissoes/${e.id}/responder`, 'POST', { tipo, nota: nota || null });
     if (!r.ok) { $('rs-ok').disabled = false; return toast(r.dados.detail || 'Não consegui registrar agora. Tente de novo.', true); }
-    fecharModal(); toast(tipo === 'aprovado' ? 'Aprovado — o escritório foi avisado' : 'Pedido de revisão enviado ao escritório');
+    // 27/09 (board MAIL-1): só diz "avisado" quando o aviso saiu mesmo; a resposta fica registrada de qualquer jeito
+    const avisou = !!(r.dados && r.dados.aviso_enviado);
+    fecharModal(); toast(tipo === 'aprovado' ? (avisou ? 'Aprovado — o escritório foi avisado' : 'Aprovado — fica registrado, e o escritório vê no AI.arq')
+      : (avisou ? 'Pedido de revisão enviado ao escritório' : 'Pedido de revisão registrado — o escritório vê no AI.arq'));
     await recarregar();
   };
 }
@@ -1613,7 +1695,7 @@ function telaEmissoesDeFora() {
         <div class="emi-n">${lk ? `<a href="${esc(lk)}" target="_blank" rel="noopener">${esc(e.copia_nome || e.arquivo_nome)}</a>` : esc(e.copia_nome || e.arquivo_nome)}
           <small>emitida em ${esc(quandoArq(e.emitido_em))}</small>
           ${e.nota ? `<p class="emi-nota">“${esc(e.nota)}”</p>` : ''}
-          ${cli && evs.length ? `<ul class="emi-hist">${evs.filter((x) => x.tipo !== 'enviado').map((x) => `<li><b>${x.pelo_cliente ? (x.tipo === 'aprovado' ? 'Você aprovou' : 'Você pediu revisão') : (x.tipo === 'aprovado' ? 'O escritório registrou a sua aprovação' : 'O escritório registrou um pedido de revisão')}</b> · ${esc(dBR(x.em))}${x.nota ? ' — ' + esc(x.nota) : ''}</li>`).join('')}</ul>` : ''}
+          ${cli && evs.length ? `<ul class="emi-hist">${evs.filter((x) => x.tipo !== 'enviado').map((x) => `<li><b>${x.pelo_cliente ? esc(quemRespondeu(x)) + (x.tipo === 'aprovado' ? ' aprovou' : ' pediu revisão') : (x.tipo === 'aprovado' ? 'O escritório registrou a sua aprovação' : 'O escritório registrou um pedido de revisão')}</b> · ${esc(dBR(x.em))}${x.nota ? ' — ' + esc(x.nota) : ''}</li>`).join('')}</ul>` : ''}
         </div>
         <div class="emi-st">${cli ? (espera ? `<span class="pill p-warn"><i></i>Aguardando você</span><div class="linha" style="gap:6px"><button type="button" class="btn btn-s btn-r" onclick="responderEmissao('${e.id}','revisao')">Pedir revisão</button><button type="button" class="btn btn-s btn-d" onclick="responderEmissao('${e.id}','aprovado')">Aprovar</button></div>` : pillEmissao(e)) : ''}${lk ? `<a class="btn btn-s" href="${esc(lk)}" target="_blank" rel="noopener">Abrir</a>` : ''}</div></li>`;
     }).join('')}</ul></div>`).join('')}
@@ -2044,6 +2126,14 @@ function telaEquipe() {
 }
 function apagarDadosPessoa(id) {
   const m = MEMBROS.find((x) => x.id === id); if (!m || m.status !== 'removido') return;
+  // 🔒 27/09 (board SEG-1/REG-4): apagar a pessoa leva junto o registro dos arquivos emitidos pra ela — com a retirada
+  // no Drive ainda pendente, ninguém mais tiraria aquele acesso. Espera sair (o banco também barra).
+  const pend = DEST.filter((d) => d.membro_id === id && d.permission_id).length;
+  if (pend) {
+    return abrirModal('Ainda não dá pra apagar', `<p style="margin:0;font-size:14px;line-height:1.5">O Google Drive ainda não confirmou que <b>${esc(nomeDe(m))}</b> perdeu o acesso a ${pend === 1 ? '1 arquivo emitido' : pend + ' arquivos emitidos'} pra ela. O AI.arq tenta de novo a cada hora; apague os dados depois que sair.</p>
+      <div class="rodape"><button class="btn" id="adp-tenta">Tentar tirar agora</button><button class="btn btn-d" onclick="fecharModal()">Entendi</button></div>`),
+      ($('adp-tenta').onclick = async () => { fecharModal(); await sincronizarPasta(); await recarregar(); });
+  }
   abrirModal('Apagar os dados de ' + curto(m) + '?', `<p style="margin:0;font-size:14px;line-height:1.5">Somem o nome, a função, o e-mail, o telefone e a sua anotação sobre <b>${esc(nomeDe(m))}</b>. As tarefas e os comentários continuam no projeto. Não dá pra desfazer.</p>
     <div class="rodape"><button class="btn" onclick="fecharModal()">Voltar</button><button class="btn btn-r" id="adp-ok">Apagar dados</button></div>`);
   $('adp-ok').onclick = async () => {
@@ -2103,15 +2193,18 @@ function perfilDoConvite() {
   if (p === 'fornecedor') carregarPastasDoFornecedor();
 }
 // as subpastas de 1º nível da pasta do projeto (Emitidos e Fotos são do sistema: ficam de fora)
-async function carregarPastasDoFornecedor() {
-  const sel = $('cv-pasta'); if (!sel || sel.dataset.lido) return;
-  if (!PROJ.pasta_id) { $('cv-pasta-sub').textContent = 'Ligue a pasta do Drive ao projeto (em Arquivos) pra escolher uma subpasta pro fornecedor.'; sel.disabled = true; return; }
+// 27/09 (board TELA-9): serve ao convite E ao "Editar" do fornecedor que já entrou (`atual` = a pasta que ele vê hoje)
+async function carregarPastasDoFornecedor(selId = 'cv-pasta', subId = 'cv-pasta-sub', atual = null) {
+  const sel = $(selId); if (!sel || sel.dataset.lido) return;
+  if (!PROJ.pasta_id) { $(subId).textContent = 'Ligue a pasta do Drive ao projeto (em Arquivos) pra escolher uma subpasta pro fornecedor.'; sel.disabled = true; return; }
   sel.dataset.lido = '1';
   const r = await apiEsc(`projetos/${PROJ.id}/arquivos`);
   const ps = r.ok ? (r.dados.arquivos || []).filter((f) => f.pasta && f.nome !== 'Emitidos' && f.nome !== 'Fotos') : [];
-  if (!$('cv-pasta')) return;
+  if (!$(selId)) return;
+  if (atual && atual.id && !ps.some((p) => p.id === atual.id)) ps.unshift({ id: atual.id, nome: (atual.nome || 'pasta atual') + ' (a de hoje)' });
   ps.forEach((p) => { const o = document.createElement('option'); o.value = p.id; o.textContent = p.nome; sel.appendChild(o); });
-  if (!ps.length) $('cv-pasta-sub').textContent = r.ok ? 'A pasta do projeto não tem subpastas. Crie uma no Drive (ex.: Marcenaria) e abra o convite de novo.' : 'Não consegui ler as pastas agora. Dá pra convidar sem e escolher depois.';
+  if (atual && atual.id) sel.value = atual.id;
+  if (!ps.length) $(subId).textContent = r.ok ? 'A pasta do projeto não tem subpastas. Crie uma no Drive (ex.: Marcenaria) e abra de novo.' : 'Não consegui ler as pastas agora. Dá pra deixar sem e escolher depois, em Equipe → Editar.';
 }
 async function enviarConvite() {
   const corpo = { email: $('cv-e').value.trim(), nome: $('cv-n').value.trim() || null, funcao: $('cv-f').value.trim() || null, telefone: $('cv-t').value.trim() || null };
@@ -2141,6 +2234,7 @@ async function enviarConvite() {
   abrirModal(d.email_enviado ? 'Convite enviado' : 'Convite criado, e-mail não saiu', `<p style="margin:0;font-size:14px">${d.email_enviado ? 'O e-mail saiu para <b>' + esc(corpo.email) + '</b>.' : '<b>' + esc(porque) + '</b> O convite foi criado: mande o link abaixo pela conversa que vocês já usam.'}</p>
     <div><label class="lbl" for="cv-link">Link do convite (vale 14 dias, serve uma vez)</label><input id="cv-link" class="in" readonly value="${esc(d.link)}" onclick="this.select()"></div>
     <p class="sub" style="margin:0">Pode mandar pelo WhatsApp também. Quem abrir o link entra neste projeto — mande só pra pessoa certa.</p>
+    ${d.pasta_desligada ? '<p class="sub" style="margin:0;color:#92400E">A pasta que ele via não está mais dentro da pasta do projeto: o convite saiu sem pasta. Escolha outra em Equipe → Editar.</p>' : ''}
     <div class="rodape"><button class="btn" onclick="copiarLink()">Copiar link</button><button class="btn btn-d" onclick="fecharModal()">Pronto</button></div>`);
 }
 function copiarLink() { const i = $('cv-link'); try { navigator.clipboard.writeText(i.value).then(() => toast('Link copiado'), () => { i.select(); toast('Selecionei o link: copie com Ctrl+C'); }); } catch (_) { i.select(); } }
@@ -2152,9 +2246,12 @@ function editarPessoa(id) {
       <div><label class="lbl" for="pe-f">Função</label><input id="pe-f" class="in" maxlength="60" value="${esc(m.funcao || '')}"></div>
       <div><label class="lbl">E-mail</label><input class="in" readonly value="${esc(m.email || '')}" style="background:#F8FAFC"><span class="sub" style="display:block">${m.status === 'ativo' ? 'É o e-mail do convite. Pra trocar, convide o e-mail novo.' : 'Pra trocar, cancele e convide o e-mail certo.'}</span></div>
       <div><label class="lbl" for="pe-t">Telefone / WhatsApp</label><input id="pe-t" class="in" maxlength="40" inputmode="tel" value="${esc(m.telefone || '')}"></div></div>
+    ${m.papel === 'fornecedor' && m.status !== 'removido' ? `<div><label class="lbl" for="pe-pasta">Pasta do Drive que ele vê</label><select id="pe-pasta" class="in"><option value="">Nenhuma</option></select>
+      <span class="sub" style="display:block" id="pe-pasta-sub">Uma subpasta da pasta do projeto. Ele só lê.${m.status === 'ativo' ? ' Trocar tira o acesso à pasta de antes.' : ''}</span></div>` : ''}
     <div><label class="lbl" for="pe-o">Observação (só você vê)</label><textarea id="pe-o" rows="2" class="in" maxlength="1000">${esc(NOTAS[id] || '')}</textarea>
       <span class="sub" style="display:block">Valor combinado fica no financeiro, não aqui.</span></div>
     <div class="rodape"><button class="btn" onclick="fecharModal()">Cancelar</button><button class="btn btn-d" onclick="salvarPessoa('${id}')">Salvar</button></div>`);
+  if (m.papel === 'fornecedor' && m.status !== 'removido') carregarPastasDoFornecedor('pe-pasta', 'pe-pasta-sub', m.drive_pasta_id ? { id: m.drive_pasta_id, nome: m.drive_pasta_nome } : null);
 }
 async function salvarPessoa(id) {
   const mud = { nome: $('pe-n').value.trim() || null, funcao: $('pe-f').value.trim() || null, telefone: $('pe-t').value.trim() || null };
@@ -2165,6 +2262,15 @@ async function salvarPessoa(id) {
     ? await sb.from('escritorio_membro_notas').upsert({ membro_id: id, projeto_id: PROJ.id, observacao: obs, atualizado_em: new Date().toISOString() })
     : await sb.from('escritorio_membro_notas').delete().eq('membro_id', id);
   if (n.error) return falhou(n.error, 'Salvei os dados, mas não a observação');
+  // 27/09 (board TELA-9): a pasta do fornecedor quem grava é o servidor (confere que é subpasta do projeto e o Drive acompanha)
+  const m = MEMBROS.find((x) => x.id === id), sel = $('pe-pasta');
+  if (m && sel && !sel.disabled && sel.dataset.lido && (sel.value || '') !== (m.drive_pasta_id || '')) {
+    const r = await apiEsc(`projetos/${PROJ.id}/membros/${id}/pasta`, 'POST', { pasta: sel.value || null });
+    if (!r.ok) return toast('Salvei os dados, mas não a pasta: ' + (r.dados.detail || 'tente de novo.'), true);
+    fecharModal(); await recarregar();
+    const semDrive = (r.dados.saidas && r.dados.saidas[id] === 'falhou') || (r.dados.falhas_dar || []).length;
+    return toast(sel.value ? 'Dados salvos · pasta do fornecedor: ' + (r.dados.pasta || 'escolhida') + (semDrive ? ' (o Drive não confirmou agora: tento de novo)' : '') : 'Dados salvos · o fornecedor ficou sem pasta', !!semDrive);
+  }
   fecharModal(); await recarregar(); toast('Dados salvos');
 }
 function tirar(id) {
@@ -2177,16 +2283,24 @@ function tirar(id) {
 // 🩸 26/09 (auditoria do Escritório, 5 lentes): tirar alguém chamava a retirada da pasta do Drive "calada" — sem
 // conexão, token cortado ou erro do Google, a pessoa seguia EDITORA da pasta e a tela dizia "saiu". Agora espera
 // o resultado e diz o que aconteceu; o que ficar pendente o servidor tenta de novo a cada hora.
-async function tirarDaPasta(nome) {
+// 27/09 (board TELA-8): o resultado é POR PESSOA (o servidor devolve `saidas`). Antes a tela dizia "saiu da pasta"
+// quando o acesso ficou (dado à mão, ou outro projeto com a mesma pasta) e culpava quem saiu por uma falha ao DAR
+// acesso a outra pessoa. Pro cliente, o socorro aponta os arquivos emitidos (ele nunca esteve na pasta).
+async function tirarDaPasta(m) {
+  const nome = curto(m), cli = m.papel === 'cliente';
   const r = await apiEsc(`projetos/${PROJ.id}/drive/sincronizar`, 'POST');
-  const d = r.dados || {};
+  const d = r.dados || {}, saida = (d.saidas || {})[m.id];
   let problema = '';
   if (!r.ok) problema = d.detail || 'o Google não respondeu';
   else if (d.sem_conexao) problema = 'o seu Google Drive está desconectado do AI.arq';
-  else if ((d.falhas || []).length) problema = 'o Google recusou agora';
-  if (!problema) return toast(nome + ' saiu do projeto e da pasta do Drive');
-  abrirModal('Falta tirar o acesso à pasta', `<p style="margin:0;font-size:14px;line-height:1.5"><b>${esc(nome)}</b> saiu do projeto, mas <b>não consegui tirar o acesso dela à pasta do Drive</b>: ${esc(problema)}.</p>
-    <p class="sub" style="margin:0">Vou tentar de novo a cada hora. Se quiser garantir agora, abra a pasta no Drive, clique em <b>Compartilhar</b> e tire o acesso dela.</p>
+  else if (saida === 'falhou' || (!saida && (d.falhas_tirar || []).length)) problema = 'o Google recusou agora';
+  if (!problema) {
+    if (saida === 'a_mao') return toast(nome + ' saiu do projeto. No Drive, o acesso dela à pasta foi dado por você, fora do AI.arq: ficou como estava. Se quiser tirar, tire no Drive.');
+    if (saida === 'outro_projeto') return toast(nome + ' saiu do projeto, mas continua na pasta do Drive porque está em outro projeto seu que usa a mesma pasta.');
+    return toast(nome + (deFora(m) ? ' saiu do projeto e perdeu o acesso ao que recebeu pelo Drive' : ' saiu do projeto e da pasta do Drive'));
+  }
+  abrirModal(cli ? 'Falta tirar o acesso aos arquivos' : 'Falta tirar o acesso à pasta', `<p style="margin:0;font-size:14px;line-height:1.5"><b>${esc(nome)}</b> saiu do projeto, mas <b>não consegui tirar o acesso dela ${cli ? 'aos arquivos emitidos pra ela' : 'à pasta do Drive'}</b>: ${esc(problema)}.</p>
+    <p class="sub" style="margin:0">Vou tentar de novo a cada hora. Se quiser garantir agora, ${cli ? 'abra a pasta <b>Emitidos</b> (dentro da pasta do projeto) e, em cada arquivo mandado a ela, clique em <b>Compartilhar</b> e tire o acesso' : 'abra a pasta no Drive, clique em <b>Compartilhar</b> e tire o acesso dela'}.</p>
     <div class="rodape">${PROJ.pasta_id ? `<a class="btn" href="https://drive.google.com/drive/folders/${encodeURIComponent(PROJ.pasta_id)}" target="_blank" rel="noopener">Abrir a pasta no Drive</a>` : ''}<button class="btn btn-d" onclick="fecharModal()">Entendi</button></div>`);
 }
 async function confirmarTirar(id) {
@@ -2201,7 +2315,7 @@ async function confirmarTirar(id) {
   fecharModal();
   try { await recarregar(); } catch (e) { return falhou(e, 'Feito, mas não consegui atualizar a lista'); }
   if (!count) return toast(m.status === 'convidado' ? 'Essa pessoa já tinha entrado no projeto. Atualizei a lista.' : 'Nada mudou: atualizei a lista.', true);
-  if (m.status !== 'convidado' && PROJ.pasta_id) return tirarDaPasta(curto(m));   // espera e diz se o Drive saiu
+  if (m.status !== 'convidado' && PROJ.pasta_id) return tirarDaPasta(m);   // espera e diz o que houve com ELA no Drive
   toast(m.status === 'convidado' ? 'Convite cancelado' : curto(m) + ' saiu do projeto');
 }
 
