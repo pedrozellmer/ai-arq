@@ -4508,13 +4508,30 @@ def e_linha_de_armadura(descricao) -> bool:
 # 22/09 (1 job). Nenhuma com selo — mas com número que o cliente orça.
 # 🪤 Só a conta de densidade: "contagem visual" é leitura (fica); "1 vb por
 # boa prática" é verba (decisão do Pedro — `vb` não entra).
+#: 🩸 27/09 (revisão): a 1ª versão pegava ~metade — escapavam "1 split por
+#: ambiente" (palavra no meio), "0,22 spot/m²" e "4 parafusos/m²" (forma
+#: multiplicativa), "a cada ~9–12 m²" (faixa), "densidade ~0,22" (sem
+#: "típica") e "média 1,5 … por ambiente".
+_NUM_D = r"\d+(?:[.,]\d+)?"
 _RE_CONTAGEM_POR_DENSIDADE = _re.compile(
-    r"m\s*[²2]\s*÷\s*~?\s*\d+(?:[.,]\d+)?\s*m\s*[²2]"
-    r"|÷\s*~?\s*\d+(?:[.,]\d+)?\s*m\s*[²2]\s*(?:/|por)\s*\w"
-    r"|\b1\s+(?:\w+\s+)?a\s+cada\s+~?\s*\d+(?:[.,]\d+)?\s*m\s*[²2]"
-    r"|\b1\s+por\s+(?:ambiente|c[ôo]modo|sala|apartamento|apto)"
+    r"m\s*[²2]\s*÷\s*~?\s*" + _NUM_D + r"\s*m\s*[²2]"
+    r"|÷\s*~?\s*" + _NUM_D + r"\s*m\s*[²2]\s*(?:/|por)\s*\w"
+    r"|\b\d+\s+(?:\w+\s+)?a\s+cada\s+[~≈]?\s*" + _NUM_D
+    + r"(?:\s*[–-]\s*" + _NUM_D + r")?\s*m\s*[²2]"
+    r"|\b" + _NUM_D + r"\s+(?:\w+\s+){0,2}por\s+(?:ambiente|c[ôo]modo|sala|apartamento|apto)"
+    r"|\b" + _NUM_D + r"\s+[a-zà-ú]+\s*/\s*m\s*[²2]"
     r"|\bpor\s+boa\s+pr[áa]tica"
-    r"|\bdensidade\s+t[íi]pica",
+    r"|\bdensidade\s+(?:t[íi]pica|[~≈]?\s*\d)",
+    _re.IGNORECASE)
+#: A quantidade veio de FONTE OBJETIVA e a densidade é só conferência — irmã do
+#: `_RE_PESO_DE_LISTA` do aço. "4 INSERTs do bloco 'tanque'… 1 por apartamento";
+#: "Conforme quadro de luminárias: 32 un. Densidade de 1 a cada 12 m² confere".
+#: 🪤 "contagem visual" NÃO é fonte objetiva: a IA escreve "Contagem visual…
+#: (1.634 ÷ 8,78 m²/sprinkler)… estimada em ~185" — o número é da conta.
+_RE_CONTAGEM_DE_FONTE = _re.compile(
+    r"\binserts?\b|\bcontagem\s+de\s+blocos\b|\bblocos?\s+['\"‘’]"
+    r"|\b(?:conforme|lid[oa]s?\s+n[oa]|segundo\s+[oa])\s+(?:o\s+|a\s+)?"
+    r"(?:quadro|tabela|legenda|planilha|lista)\b",
     _re.IGNORECASE)
 _UNIDADES_CONTADAS = {"un", "und", "unid", "unidade", "unidades", "pç", "pc",
                       "peca", "peça", "pecas", "peças", "pt", "ponto", "pontos"}
@@ -4524,7 +4541,10 @@ def contagem_por_densidade(unidade, obs) -> bool:
     """A quantidade desta linha de PEÇA saiu de área × densidade típica?"""
     if str(unidade or "").strip().lower() not in _UNIDADES_CONTADAS:
         return False
-    return bool(_RE_CONTAGEM_POR_DENSIDADE.search(str(obs or "")))
+    t = str(obs or "")
+    if not _RE_CONTAGEM_POR_DENSIDADE.search(t):
+        return False
+    return not _RE_CONTAGEM_DE_FONTE.search(t)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -13110,9 +13110,9 @@ def _zera_contagem_por_densidade(items) -> int:
         except Exception:
             pass
         _o = _limpa_afirmacao_de_medida(obs)
-        _frase = ("Em branco: contagem por DENSIDADE (área ÷ m² por peça, '1 a cada N m²', "
-                  "'boa prática') não entra como número — é índice típico, não a "
-                  "contagem do seu projeto. A conta da leitura dava %s. Conte na planta "
+        _frase = ("Em branco: contagem por DENSIDADE (peças por m², '1 a cada N m²', "
+                  "'N por ambiente', 'boa prática') não entra como número — é índice "
+                  "típico, não a contagem do seu projeto. A conta da leitura dava %s. Conte na planta "
                   "ou na legenda do projeto complementar (elétrico, incêndio, "
                   "climatização) ou preencha na revisão." % _num_br(q).replace(",00", ""))
         it.observations = _frase + ((" | " + _o) if _o else "")

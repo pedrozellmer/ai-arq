@@ -27,12 +27,34 @@ _DENSIDADE = [
     # cobriam dois de uma vez)
     "Estimativa: 900 m² ÷ 10 m² = 90 luminárias.",
     "1 detector a cada 30 m² de área.",
+    # revisão 27/09: as redações que a 1ª versão deixava passar (todas reais)
+    "Estimativa: 1 split por ambiente listado = 8 equipamentos.",
+    "~1 a 2 interruptores por ambiente = ~30 pontos.",
+    "(1 sprinkler a cada ~9–12m²) = 8.",
+    "(densidade ~0,22 spot/m²) = 20.",
+    "≈ 65m² × 0,22 tomadas/m² ≈ 14.",
+    "4 parafusos/m² = 6000 un.",
+    "10 ambientes × média 1,5 interruptores por ambiente.",
+    "Densidade típica de escritório.",
+    "Densidade ~0,3 por m² sobre a área útil = 25.",
+    "2 tomadas a cada 10 m².",
+    # "contagem visual" com a conta de densidade: o número é da conta
+    "Contagem visual dos símbolos (1.634 ÷ 8,78 m²/sprinkler); estimada em ~185.",
 ]
 _NAO_E = [
     "Contagem visual estimada: 12 luminárias na planta de forro.",
     "Fonte: 12 INSERTs do bloco 'LUM-01' na planta de forro.",
     "Conforme legenda: 18 un.",
     "Tubulação 1 a cada 3 m de apoio.",
+    # revisão 27/09: fonte objetiva com a densidade só de conferência (irmã da
+    # exceção do aço de LISTA)
+    "Fonte: 4 INSERTs do bloco 'tanque' contados no DXF. Distribuição: 1 por apartamento.",
+    "Conforme quadro de luminárias: 32 un. Densidade típica de 1 a cada 12 m² confere.",
+    # uma frase por porta da exceção (a sabotagem de cada uma precisa derrubar)
+    "12 INSERTs contados; dá 1 por ambiente.",
+    "Contagem de blocos: 6; confere com 1 por apartamento.",
+    "Bloco 'SPK' = 40; 1 a cada 12 m² confere.",
+    "Lido na legenda: 18 un; 1 por sala.",
 ]
 
 
