@@ -1725,6 +1725,23 @@ _TOKENS_MECANICO = ("TOLERANC", "ISO 2768", "RUGOSID", "TRAT. TERMICO",
                     "TRAT TERMICO", "USINAG", "LISTA DE PECAS", "NBR 8404")
 
 
+def ressalva_da_escala_ambigua(dim_check) -> str:
+    """Texto da ressalva quando a régua das cotas terminou "ambigua" ('' se não).
+
+    🩸 27/09/2026 — "ambigua" = MAIS DE UM fator bateu com as cotas e nenhuma
+    régua desempatou: o fator ficou o do cabeçalho, sem prova. Isso É ressalva
+    de escala (m/m²/m³ não sai medido — nem pela IA nem pela chave do selo).
+    📏 No acervo: 4 arquivos em 3 jobs, 17 selos em m/m²/m³ que ninguém avisou
+    (ex.: elétrica industrial, prancha de corte com 352 m de leito ✓).
+    "nao-decidiu" NÃO entra: ali o cabeçalho é a única régua e costuma estar
+    certo (80 arquivos, 28 jobs).
+    """
+    if not dim_check or dim_check.get("status") != "ambigua":
+        return ""
+    return str(dim_check.get("motivo")
+               or "mais de um fator de unidade bate com as cotas")[:200]
+
+
 def _unidade_por_dimlfac(doc, unit_factor):
     """Decide a unidade pelo DIMLFAC das cotas. Devolve dict (nunca levanta).
 
@@ -4814,6 +4831,10 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         # linha — e o segundo é conserto possível, o primeiro não.
         # 🪤 Só REGISTRA. Não muda fator, selo nem quantidade.
         metadata["regua_cotas_status"] = _dim_status or "nao-decidiu"
+        # 🩸 27/09: régua "ambigua" É ressalva de escala — ver a função.
+        _amb = ressalva_da_escala_ambigua(dim_check)
+        if _amb:
+            metadata["escala_ambigua"] = _amb
         if dim_check.get("motivo"):
             metadata["regua_cotas_motivo"] = str(dim_check["motivo"])[:200]
         if dim_check.get("cotas_utilizaveis") is not None:

@@ -343,6 +343,8 @@ def extraction_has_quality_caveat(metadata) -> bool:
         # 🩸 26/09 (job 32a27efc): a folha de papel inteira desenhada no
         # modelo, cada vista numa escala — nenhum fator único mede a prancha.
         or metadata.get("escala_por_vista")
+        # 🩸 27/09: mais de um fator bateu com as cotas e nada desempatou.
+        or metadata.get("escala_ambigua")
     )
 
 
@@ -2743,7 +2745,8 @@ _UNIDADES_QUE_DEPENDEM_DE_ESCALA = {
 # vistas em escalas diferentes. É de ESCALA: a contagem de pilares e o kg do
 # quadro de aço da mesma prancha não dependem dela. 🪤 Chave própria, e não
 # `alerta_unidade`: a 5ª régua (rótulo de área que bate) apaga aquela.
-_RESSALVAS_SO_DE_ESCALA = ("unidade_suspeita", "alerta_unidade", "escala_por_vista")
+_RESSALVAS_SO_DE_ESCALA = ("unidade_suspeita", "alerta_unidade", "escala_por_vista",
+                           "escala_ambigua")
 
 
 def caveat_atinge_unidade(metadata, unidade: str) -> bool:
@@ -4816,6 +4819,45 @@ _RE_ADOCAO = _re.compile(
     r"predominante|dominante|de\s+praxe|t[íi]pic|aproximad|estimativa|"
     r"arbitrad|assumid|supondo|suposi)", _re.IGNORECASE)
 
+#: O começo do aviso que a rede de procedência (`selos_sem_geometria`, no
+#: main.py) escreve na linha que ela rebaixou. A chave do selo respeita.
+MARCA_LIDO_DE_TEXTO = "⚠ ESTIMADO — este número foi LIDO de um texto da prancha"
+
+#: 🩸 27/09/2026 — a dúvida SOBRE O NÚMERO (ou sobre o que ele é) que a IA
+#: escreveu na observação. Colhida das 28 promoções da chave ainda no ar na
+#: semana de 20–27/09 (20 delas traziam uma destas) e das que os clientes
+#: rejeitaram. 🪤 Só dúvida do NÚMERO: "a associação à largura do leito deve
+#: ser confirmada" é dúvida de especificação e não entra; "pintura das duas
+#: faces" é o serviço, não dúvida — só "contém/soma ambas as faces" é.
+_RE_RESSALVA_DO_NUMERO = _re.compile(
+    r"confirm\w*\s+(?:a\s+)?escala|escala\s+(?:incorreta|errada|suspeita)"
+    r"|unidade\s+(?:do\s+desenho\s+)?suspeita"
+    r"|marcad[oa]\s+como\s+estimad|marcar\s+(?:como\s+)?estimad"
+    r"|conferir\s+a\s+grandeza"
+    r"|(?:layer|acabamento)\s+mist[oa]"
+    r"|(?:cont[ée]m|inclui|soma)\s+(?:as\s+)?(?:ambas\s+as|duas)\s+faces"
+    r"|sobrepos|multiplicad|duplicad|dupla\s+contagem|em\s+dobro"
+    r"|provavelmente\s+(?:um\s+)?s[íi]mbolo|s[íi]mbolo\s+d[ae]\s+legenda"
+    r"|elemento\s+de\s+legenda"
+    r"|valor\s+(?:muito\s+)?(?:pequeno|baixo|alto)"
+    r"|pode\s+(?:incluir|estar|conter|ser\s+(?:trecho|elemento|s[íi]mbolo|legenda|detalhe))"
+    r"|maior\s+que\s+(?:a|o)\s+(?:cozinha|sala|ambiente|[áa]rea|terreno|lote|planta)"
+    r"|confirmar\s+se\s+(?:o|a)\s+(?:valor|comprimento|[áa]rea|quantidade|n[úu]mero)",
+    _re.IGNORECASE)
+#: "sem sobreposição", "não há duplicação": ressalva negada é garantia.
+_RE_NEGA_A_RESSALVA = _re.compile(r"\b(?:n[ãa]o|sem|nenhum\w*)\b[^.;|]{0,15}$",
+                                  _re.IGNORECASE)
+
+
+def ressalva_do_numero(obs) -> str:
+    """O trecho em que a observação duvida do próprio número ('' se não há)."""
+    t = str(obs or "")
+    for m in _RE_RESSALVA_DO_NUMERO.finditer(t):
+        if _RE_NEGA_A_RESSALVA.search(t[:m.start()]):
+            continue
+        return m.group(0)
+    return ""
+
 #: Grandeza que cada unidade aceita como prova. `m³` e `kg` ficam de FORA de
 #: propósito: o motor não mede volume nem peso — ele mede comprimento, área e
 #: contagem. Volume é sempre área×espessura ou seção×comprimento, e a
@@ -5036,6 +5078,18 @@ def selo_com_prova_da_geometria(items, indice):
             continue
         if q <= 0:
             continue                      # linha em branco não é medição
+        _obs = str(_campo_do_item(it, "observations", "") or "")
+        # 🩸 27/09/2026 — A DÚVIDA QUE A PRÓPRIA IA ESCREVEU. A chave só olha
+        # linha LARANJA — a que a IA deixou estimada — e a promovia porque o
+        # número bate com o layer, por cima do motivo que a IA deu. Das 28
+        # promoções ainda no ar na semana de 20–27/09, 20 diziam no texto
+        # "confirmar escala", "valor muito pequeno — escala incorreta",
+        # "múltiplas plantas sobrepostas… pode estar multiplicado", "layer MISTO,
+        # marcar estimado"; e a rede de procedência tinha acabado de rebaixar
+        # uma delas ("LIDO de um texto") quando a chave a devolveu. Bater com o
+        # layer prova que o número é do layer — não que o layer é o serviço.
+        if MARCA_LIDO_DE_TEXTO in _obs or ressalva_do_numero(_obs):
+            continue
         # 🩸 26/09 (job 32a27efc): a recuperação COPIA o número do layer numa
         # linha que a IA deixou zerada — e diz por que ela fica estimada ("a
         # soma do layer pode incluir traço que não é deste item"). Conferir a

@@ -18407,10 +18407,14 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     # e a contagem vira aviso ao cliente logo abaixo.
                     _falhou_rebaixar += 1
                 _o = str(getattr(_it, "observations", "") or "")
-                if "não é medição da geometria" not in _o:
+                # 🔑 27/09: o começo do aviso é a MARCA que a chave do selo
+                # respeita. 🪤 A checagem de "já avisei" procurava "não é medição
+                # da geometria" — frase que ninguém escreve (o texto é "não
+                # medido"): nunca batia.
+                from engine_rules import MARCA_LIDO_DE_TEXTO as _MARCA_TXT
+                if _MARCA_TXT not in _o:
                     _it.observations = _observacao_que_cabe(
-                        "⚠ ESTIMADO — este número foi LIDO de um texto da prancha, "
-                        "não medido da geometria. " + _o)
+                        _MARCA_TXT + ", não medido da geometria. " + _o)
             if _sem_geo:
                 _log_error("motor:selo-sem-geometria",
                            f"rebaixei {len(_sem_geo)} item(ns) que estavam MEDIDOS "
@@ -19706,6 +19710,93 @@ bloco — só cite os que estão no inventário deste arquivo."""
             _log_error("motor:selo-parcial-rebaixado", f"FALHOU: {_epar}",
                        job_id, severity="warning")
 
+        # ─────────────────────────────────────────────────────────────────
+        # 🔑 A CHAVE DO SELO (22/09/2026) — a ÚNICA régua que promove.
+        # Roda AQUI de propósito: depois das travas de rebaixamento e antes de
+        # TUDO que descreve o selo (recontagem do aviso do plano B, retrato,
+        # planilha, fusão com a revisão do cliente) e de gravar. Quem foi
+        # rebaixado por motivo que continua valendo não volta: as travas deixam
+        # MARCA na observação e a chave respeita (ver selo_com_prova_da_geometria).
+        # 🩸 Por quê existe: em 60 dias, 15 de 69 jobs com CAD entregaram ZERO
+        # linha medida, com a geometria medida no mesmo envio.
+        # 🩸 27/09/2026 — por que SAIU do fim (ficava depois da fusão, logo
+        # antes de gravar): tudo que descreve o selo já tinha sido escrito. Na
+        # semana de 20–27/09, 11 de 16 e-mails de "planilha pronta" se
+        # contradiziam ("✓ 383 medidos" no placar e "131 medidos do CAD" no aviso
+        # do mesmo e-mail), o retrato do selo contava menos brancos que a tabela
+        # em 6 de 6 jobs, e o .xlsx nascia SEM as promoções (a planilha era
+        # gerada antes da chave e ela não pedia pra refazer).
+        # ─────────────────────────────────────────────────────────────────
+        try:
+            from engine_rules import selo_com_prova_da_geometria as _chave_selo
+            try:
+                _idx_selo = _indice_geom
+            except NameError:
+                _idx_selo = None          # job sem CAD: nada a provar
+            if _idx_selo and any(_idx_selo.values()):
+                _promovidos = _chave_selo(all_items, _idx_selo)
+                for _pr in _promovidos:
+                    _alvo_selo = all_items[_pr["indice"]]
+                    _alvo_selo.confidence = _selo_medido_com_prova(_pr["motivo"])
+                    # o rastro fica na observação: sem ele ninguém audita depois
+                    _alvo_selo.observations = (
+                        "✓ MEDIDO — %s (conferido contra a geometria do arquivo). "
+                        % _pr["motivo"]) + str(_alvo_selo.observations or "")
+                _log_error("motor:selo-com-prova",
+                           f"linhas={len(all_items)} promovidas={len(_promovidos)} "
+                           f"indice_c={len(_idx_selo.get('comprimento') or [])} "
+                           f"indice_a={len(_idx_selo.get('area') or [])} "
+                           f"indice_n={len(_idx_selo.get('contagem') or [])}",
+                           job_id, severity="info")
+        except Exception as _esel:
+            print(f"[selo-com-prova] job={job_id}: nao rodou (segue): {_esel}")
+            _log_error("motor:selo-com-prova", f"FALHOU: {_esel}", job_id)
+
+        # ─────────────────────────────────────────────────────────────────
+        # 🔑 A TABELA IMPRESSA (22/09/2026) — nível 1 para CONTAGEM, em PDF.
+        # Mesma porta, mesma posição: depois das travas, antes de gravar.
+        # 📊 Alcance medido: 1.859 linhas em 134 projetos (90 d). Só contagem
+        # — área lida de legenda é o vazamento de 24/08 e fica de fora.
+        # ─────────────────────────────────────────────────────────────────
+        try:
+            from engine_rules import selo_da_tabela_impressa as _chave_tabela
+            # 🪤 import LOCAL, como os outros dois usos deste helper: ele
+            # mora no analyzer, não é nome de módulo aqui.
+            from analyzer import _pagina_do_ref_sheet
+            try:
+                _nums_tab = dict(_numeros_do_texto_por_prancha)
+            except NameError:
+                _nums_tab = {}
+            if _nums_tab:
+                _linhas_tab = []
+                for _itt in all_items:
+                    _rs_t = str(getattr(_itt, "ref_sheet", "") or "")
+                    _arq_t = _rs_t.split(" (")[0].strip()
+                    _linhas_tab.append({
+                        "arquivo": _arq_t.lower(), "prancha": _arq_t,
+                        "pagina": _pagina_do_ref_sheet(_rs_t) if _rs_t else None,
+                        "unidade": getattr(_itt, "unit", ""),
+                        "quantidade": getattr(_itt, "quantity", 0),
+                        "texto": getattr(_itt, "observations", ""),
+                        "descricao": getattr(_itt, "description", ""),
+                        "selo": getattr(_itt, "confidence", ""),
+                        "origem": getattr(_itt, "origem", "")})
+                _prom_tab = _chave_tabela(_linhas_tab, _nums_tab)
+                for _pt in _prom_tab:
+                    _alvo_t = all_items[_pt["indice"]]
+                    _alvo_t.confidence = _selo_medido_com_prova(_pt["motivo"])
+                    _alvo_t.observations = (
+                        "✓ MEDIDO da tabela impressa — %s. A contagem é do "
+                        "PROJETISTA; nós conferimos o número. " % _pt["motivo"]
+                    ) + str(_alvo_t.observations or "")
+                _log_error("motor:selo-da-tabela",
+                           f"linhas={len(all_items)} promovidas={len(_prom_tab)} "
+                           f"pranchas_com_texto={len(_nums_tab)}",
+                           job_id, severity="info")
+        except Exception as _etab:
+            print(f"[selo-da-tabela] job={job_id}: nao rodou (segue): {_etab}")
+            _log_error("motor:selo-da-tabela", f"FALHOU: {_etab}", job_id)
+
         # 🚨 AQUI é o fim da fila de quem rebaixa selo. A recontagem do aviso
         # do plano B roda de novo agora, com o número que o cliente vai ler.
         # 🩸 04/09 — medido no fonte: ANTES deste conserto havia **cinco**
@@ -19932,85 +20023,6 @@ bloco — só cite os que estão no inventário deste arquivo."""
         if _fusao.get("rejeitadas_tiradas"):
             _refazer_planilha.append(
                 f"{_fusao['rejeitadas_tiradas']} linha(s) rejeitada(s) pelo cliente tirada(s)")
-
-        # ─────────────────────────────────────────────────────────────────
-        # 🔑 A CHAVE DO SELO (22/09/2026) — a ÚNICA régua que promove.
-        # Roda AQUI de propósito: depois das 32 travas de rebaixamento e antes
-        # de gravar. Nenhuma trava é desarmada — quem foi rebaixado por motivo
-        # que continua valendo não volta, porque a prova exigida aqui é o
-        # NÚMERO da linha contra o que o motor mediu, não a redação.
-        # 🩸 Por quê: em 60 dias, 15 de 69 jobs com CAD entregaram ZERO linha
-        # medida, com a geometria medida no mesmo envio. Só sabíamos rebaixar.
-        # ─────────────────────────────────────────────────────────────────
-        try:
-            from engine_rules import selo_com_prova_da_geometria as _chave_selo
-            try:
-                _idx_selo = _indice_geom
-            except NameError:
-                _idx_selo = None          # job sem CAD: nada a provar
-            if _idx_selo and any(_idx_selo.values()):
-                _promovidos = _chave_selo(all_items, _idx_selo)
-                for _pr in _promovidos:
-                    _alvo_selo = all_items[_pr["indice"]]
-                    _alvo_selo.confidence = _selo_medido_com_prova(_pr["motivo"])
-                    # o rastro fica na observação: sem ele ninguém audita depois
-                    _alvo_selo.observations = (
-                        "✓ MEDIDO — %s (conferido contra a geometria do arquivo). "
-                        % _pr["motivo"]) + str(_alvo_selo.observations or "")
-                _log_error("motor:selo-com-prova",
-                           f"linhas={len(all_items)} promovidas={len(_promovidos)} "
-                           f"indice_c={len(_idx_selo.get('comprimento') or [])} "
-                           f"indice_a={len(_idx_selo.get('area') or [])} "
-                           f"indice_n={len(_idx_selo.get('contagem') or [])}",
-                           job_id, severity="info")
-        except Exception as _esel:
-            print(f"[selo-com-prova] job={job_id}: nao rodou (segue): {_esel}")
-            _log_error("motor:selo-com-prova", f"FALHOU: {_esel}", job_id)
-
-        # ─────────────────────────────────────────────────────────────────
-        # 🔑 A TABELA IMPRESSA (22/09/2026) — nível 1 para CONTAGEM, em PDF.
-        # Mesma porta, mesma posição: depois das travas, antes de gravar.
-        # 📊 Alcance medido: 1.859 linhas em 134 projetos (90 d). Só contagem
-        # — área lida de legenda é o vazamento de 24/08 e fica de fora.
-        # ─────────────────────────────────────────────────────────────────
-        try:
-            from engine_rules import selo_da_tabela_impressa as _chave_tabela
-            # 🪤 import LOCAL, como os outros dois usos deste helper: ele
-            # mora no analyzer, não é nome de módulo aqui.
-            from analyzer import _pagina_do_ref_sheet
-            try:
-                _nums_tab = dict(_numeros_do_texto_por_prancha)
-            except NameError:
-                _nums_tab = {}
-            if _nums_tab:
-                _linhas_tab = []
-                for _itt in all_items:
-                    _rs_t = str(getattr(_itt, "ref_sheet", "") or "")
-                    _arq_t = _rs_t.split(" (")[0].strip()
-                    _linhas_tab.append({
-                        "arquivo": _arq_t.lower(), "prancha": _arq_t,
-                        "pagina": _pagina_do_ref_sheet(_rs_t) if _rs_t else None,
-                        "unidade": getattr(_itt, "unit", ""),
-                        "quantidade": getattr(_itt, "quantity", 0),
-                        "texto": getattr(_itt, "observations", ""),
-                        "descricao": getattr(_itt, "description", ""),
-                        "selo": getattr(_itt, "confidence", ""),
-                        "origem": getattr(_itt, "origem", "")})
-                _prom_tab = _chave_tabela(_linhas_tab, _nums_tab)
-                for _pt in _prom_tab:
-                    _alvo_t = all_items[_pt["indice"]]
-                    _alvo_t.confidence = _selo_medido_com_prova(_pt["motivo"])
-                    _alvo_t.observations = (
-                        "✓ MEDIDO da tabela impressa — %s. A contagem é do "
-                        "PROJETISTA; nós conferimos o número. " % _pt["motivo"]
-                    ) + str(_alvo_t.observations or "")
-                _log_error("motor:selo-da-tabela",
-                           f"linhas={len(all_items)} promovidas={len(_prom_tab)} "
-                           f"pranchas_com_texto={len(_nums_tab)}",
-                           job_id, severity="info")
-        except Exception as _etab:
-            print(f"[selo-da-tabela] job={job_id}: nao rodou (segue): {_etab}")
-            _log_error("motor:selo-da-tabela", f"FALHOU: {_etab}", job_id)
 
         # Persistir itens individuais no Supabase pra permitir revisão inline
         # no navegador (endpoint /api/items/{job_id}). Sem isso, os itens só
@@ -36274,12 +36286,12 @@ def admin_merge_criar(eval_job_id: str, request: Request):
         _row = escolhidos[_a["indice"]]
         _row["confidence"] = "estimado"
         _ob = str(_row.get("observations") or "")
-        if "não é medição da geometria" not in _ob:
+        from engine_rules import MARCA_LIDO_DE_TEXTO as _MARCA_TXT
+        if _MARCA_TXT not in _ob:
             # 🩸 22/09/2026 (revisão): `[:1000]` comia o fim da observação que
             # a leitura de origem já gravou — onde mora o veredito dela.
             _row["observations"] = _observacao_que_cabe(
-                "⚠ ESTIMADO — este número foi LIDO de um texto da prancha, não "
-                "medido da geometria. " + _ob)
+                _MARCA_TXT + ", não medido da geometria. " + _ob)
     if _rebaixados:
         _log_error("admin:merge",
                    "rebaixei %d item(ns) que vinham MEDIDOS com procedência só "
