@@ -19,9 +19,12 @@ no formato pytest é colhido normalmente.
 import io
 import os
 import re
+import threading
 import urllib.error
 import urllib.parse
 import urllib.request
+
+import pytest
 
 _AQUI = os.path.dirname(os.path.abspath(__file__))
 
@@ -61,6 +64,42 @@ def _abrir_sem_producao(self, fullurl, *args, **kwargs):
 
 
 urllib.request.OpenerDirector.open = _abrir_sem_producao
+
+
+# ── ⏲️ 27/09/2026: timer aberto num teste NÃO dispara no teste seguinte ───────────────────────────────────────
+# `submit_item_review` (edit/reject) agenda o aprendizado da revisão num `threading.Timer` de 90 s. O monkeypatch
+# desfaz os dublês no fim do teste; o timer, não. 90 s depois ele disparava com as funções REAIS no meio de
+# qualquer outro teste do mesmo worker — foi o vermelho intermitente da sonda de vida no CI do ce156b4 ("a sonda
+# pagou por urllib.request.urlopen, main._supabase_insert()"). Medido na bancada inteira: 4 testes deixavam o
+# timer vivo. Aqui todo Timer iniciado durante um teste é cancelado no fim dele; quem precisa que um timer
+# dispare espera por ele DENTRO do teste.
+class TimersDoTeste:
+    def __init__(self):
+        self.iniciados = []
+
+    def armar(self, monkeypatch):
+        vigia = self
+
+        def _start_anotado(timer, *a, **k):
+            vigia.iniciados.append(timer)
+            # 🪤 procura o Thread.start NA HORA, não guarda o de agora: o guarda da sonda troca o start pra
+            # carimbar quem abriu cada thread, e um Timer aberto pela requisição tem que continuar carimbado.
+            return threading.Thread.start(timer, *a, **k)
+
+        _start_anotado.vigia = vigia
+        monkeypatch.setattr(threading.Timer, "start", _start_anotado)
+
+    def cancelar(self):
+        for t in self.iniciados:
+            t.cancel()
+
+
+@pytest.fixture(autouse=True)
+def _timer_nao_sobrevive_ao_teste(monkeypatch):
+    vigia = TimersDoTeste()
+    vigia.armar(monkeypatch)
+    yield vigia
+    vigia.cancelar()
 
 
 def _e_script(nome: str) -> bool:
