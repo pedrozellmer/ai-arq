@@ -1131,6 +1131,14 @@ _CARIMBO_SPLIT = _re.compile(r"[-_\s./\\|:$]+")
 # implantação. Por isso vive na lista de igualdade exata.
 _CARIMBO_PREFIXO = ("CARIMB", "LOGOTIP", "MOLDUR", "MULDUR", "TIMBRE")
 _CARIMBO_EXATO = {"FUNDO", "LOGO", "SELO", "MARGEM"}
+#: 🩸 27/09/2026 — "SELO" também é PEÇA DA OBRA: o selo corta-fogo do shaft, o
+#: selo acústico, o de vedação. O layer 'PAT-DW-SELO CORTA-FOGO' (drywall de
+#: shaft) virou "⚠ FONTE = CARIMBO DA PRANCHA" em 3 linhas de 3 envios do
+#: mesmo cliente — e numa delas a chave do selo pôs "✓ MEDIDO" na frente.
+#: Com um destes tokens junto, SELO é da obra. 90 dias: as 4 outras linhas de
+#: carimbo ('Fundo Logotipo', notas da prancha) continuam pegas.
+_SELO_DE_OBRA = {"CORTA", "FOGO", "CORTAFOGO", "ACUSTICO", "ACÚSTICO",
+                 "VEDACAO", "VEDAÇÃO", "VEDANTE"}
 
 
 def layer_is_carimbo(layer_name) -> bool:
@@ -1141,10 +1149,11 @@ def layer_is_carimbo(layer_name) -> bool:
     """
     if not layer_name:
         return False
-    for tok in _CARIMBO_SPLIT.split(str(layer_name).upper()):
-        if not tok:
-            continue
+    toks = [t for t in _CARIMBO_SPLIT.split(str(layer_name).upper()) if t]
+    for tok in toks:
         if tok in _CARIMBO_EXATO:
+            if tok == "SELO" and any(t in _SELO_DE_OBRA for t in toks):
+                continue          # selo corta-fogo/acústico/vedação é obra
             return True
         if tok.startswith(_CARIMBO_PREFIXO):
             return True
@@ -5048,6 +5057,8 @@ def prova_da_geometria(quantity, unit, obs, indice):
     for rotulo, valor in (indice or {}).get(grandeza, []):
         if layer_is_anotacao(rotulo):
             continue          # letras e setas não são obra (rede de 24/08)
+        if layer_is_carimbo(rotulo):
+            continue          # a mobília da prancha também não (27/09)
         if not _rotulo_citado(rotulo, obs):
             continue          # número igual de OUTRO layer é acaso (23/09)
         if _bate(quantity, valor):
@@ -5985,9 +5996,12 @@ _RE_DESENHO_FORA_DA_SOMA = _re.compile(
 _RE_DESENHO_VISTA = _re.compile(
     r"\b(?:corte|fachada|elevacao|elev|vista|perspectiva)\b")
 _RE_DESENHO_CORTE = _re.compile(r"\b(?:corte|secao|section)\b")
+#: 🩸 27/09: "PAGINAÇÃO DE PISO" (a planta do piso, sem a palavra "planta") não
+#: era desenho nenhum — e a folha de detalhe do banheiro somava a planta, a
+#: paginação e o forro do MESMO banheiro. Layout é planta pelo mesmo motivo.
 _RE_DESENHO_PLANTA = _re.compile(
     r"\b(?:planta|pavimento|pav|terreo|subsolo|garagem|cobertura|telhado|"
-    r"mezanino|andar)\b")
+    r"mezanino|andar|paginacao|layout|leiaute)\b")
 
 
 # 🩸 Medido no acervo local (24/09): o texto de LEGENDA "SIGLA DE AMPLIAÇÃO I
@@ -5998,7 +6012,7 @@ _RE_COMECO_DE_TITULO = _re.compile(
     r"^\s*(?:\d{1,3}\s*[.\-–:)]?\s*)?(?:planta|esquema|isometric|diagrama|unifilar|"
     r"detalhe|detalhamento|det\b|ampliacao|ampliad|situacao|localizacao|corte|"
     r"fachada|elevacao|elev\b|vista|perspectiva|pavimento|terreo|subsolo|garagem|"
-    r"cobertura|telhado|mezanino)")
+    r"cobertura|telhado|mezanino|paginacao|layout|leiaute)")
 
 
 # 🩸 25/09/2026 — títulos de uma folha industrial vinham `%%UCORTE "A-A"`: o

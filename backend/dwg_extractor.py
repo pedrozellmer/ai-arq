@@ -3401,9 +3401,24 @@ def _desenhos_no_modelo(msp, caixa=None) -> list:
         if not textos:
             return []
         hmax = max(t[3] for t in textos)
+        # 🩸 27/09/2026 — folha de DETALHE do banheiro (cliente que voltou): a
+        # letra maior da folha é do carimbo (60) e os títulos dos desenhos têm
+        # 7 — 12% dela. Nenhum passava, e a planta, a paginação e o forro do
+        # MESMO banheiro somaram (janela 4× no lugar de 1, ralo 4× no lugar
+        # de 2). Título de desenho tem a ESCALA logo embaixo ("escala 1:25");
+        # o título da folha no carimbo e o rótulo solto ("DET.03") não têm.
+        escalas = [(x, y) for t, x, y, h in textos if _RE_SO_ESCALA.match(t)]
+
+        def _escala_embaixo(t, x, y, h):
+            fim = x + 0.75 * h * len(t)
+            return any(y - 4 * h <= ey < y and x - 6 * h <= ex <= fim + 6 * h
+                       for ex, ey in escalas)
+
         titulos = []
         for t, x, y, h in textos:
-            if len(t) > 90 or h < 0.8 * hmax:
+            if len(t) > 90:
+                continue
+            if h < 0.8 * hmax and not _escala_embaixo(t, x, y, h):
                 continue
             tipo = tipo_do_desenho(t)
             if tipo in ("fora", "vista") and parece_titulo_de_desenho(t):
@@ -3437,6 +3452,32 @@ def _desenhos_no_modelo(msp, caixa=None) -> list:
                 continue
         if not segs:
             return []
+        # 🩸 27/09/2026 — planta-tipo de 955 m² (cliente que voltou): ~120
+        # inserções SOLTAS a dezenas de metros da folha (registros, cubas,
+        # tomadas 20A, IC/CG — 3% dos pontos) esticavam a caixa da folha pra 80
+        # mil unidades; a célula da malha virava 6 m e a folha inteira — planta
+        # e detalhes — virava UM bloco. A folha é onde está a MASSA do desenho:
+        # ponto a mais de 25% além do miolo de 90% (5% de cada ponta) é rascunho
+        # perdido. 🔑 Seguro por construção: tirar ponto DAQUI só pode fazer um
+        # desenho distante deixar de ser achado — nunca tira nada da soma.
+        # 🪤 Medido no acervo: cortar SEMPRE mexia nas folhas A1 desenhadas no
+        # modelo (elétrica industrial de 25/09): o campo de notas e o carimbo
+        # ficam nas pontas, a malha encolhia, as caixas dos cortes saíam menores
+        # e 100 m de corte voltavam pra soma. Só corta quando há ponto LONGE de
+        # verdade: a caixa inteira ≥ 4× a caixa do miolo (na planta do caso, 11×).
+        xs = sorted(c for s in segs for c in (s[0][0], s[1][0]))
+        ys = sorted(c for s in segs for c in (s[0][1], s[1][1]))
+        k = len(xs) // 20
+        rx0, rx1, ry0, ry1 = xs[k], xs[-1 - k], ys[k], ys[-1 - k]
+        mx, my = 0.25 * (rx1 - rx0), 0.25 * (ry1 - ry0)
+        caixa_miolo = (rx1 - rx0 + 2 * mx) * (ry1 - ry0 + 2 * my)
+        caixa_toda = (xs[-1] - xs[0]) * (ys[-1] - ys[0])
+        if caixa_miolo > 0 and caixa_toda >= 4 * caixa_miolo:
+            def _na_folha(p):
+                return rx0 - mx <= p[0] <= rx1 + mx and ry0 - my <= p[1] <= ry1 + my
+            segs = [s for s in segs if _na_folha(s[0]) and _na_folha(s[1])]
+            if not segs:
+                return []
         xs = [c for s in segs for c in (s[0][0], s[1][0])]
         ys = [c for s in segs for c in (s[0][1], s[1][1])]
         x0, y0, x1, y1 = min(xs), min(ys), max(xs), max(ys)
@@ -5026,7 +5067,13 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
     # honesto. Sem contar o descarte, a pergunta não tem resposta.
     # 🚨 Isto NÃO muda comportamento — só passa a contar. Trocar o filtro no
     # palpite é como eu perdi 5 de 5 ideias em 10/08.
-    _desc = {"anonimo": 0, "utilitario": 0, "anotacao": 0, "ilegivel": 0}
+    _desc = {"anonimo": 0, "utilitario": 0, "anotacao": 0, "ilegivel": 0, "duplicado": 0}
+    # 🩸 27/09/2026 — a janela JA7 da folha de detalhe do banheiro estava
+    # inserida DUAS vezes no MESMO ponto (cópia em cima da cópia, invisível no
+    # CAD) e saía "4 ✓" com a planta repetida; no desenho é 1. Duas inserções
+    # do mesmo bloco no mesmo ponto, mesma rotação, mesma escala e mesmos
+    # atributos são a mesma peça: conta uma.
+    _ja_inserido = set()
     _amostra_anonimo = []
 
     # 🩸 25/09/2026, job 73c6f0ed (projeto elétrico exportado do Revit): a
@@ -5128,6 +5175,19 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         if _is_annotation_block(bname):
             _desc["anotacao"] += 1
             continue
+        try:
+            _d = insert.dxf
+            _chave_ins = (bname, round(x, 4), round(y, 4), round(float(_d.get("rotation", 0) or 0), 3),
+                          round(float(_d.get("xscale", 1) or 1), 4),
+                          round(float(_d.get("yscale", 1) or 1), 4),
+                          tuple(sorted((a.dxf.tag, a.dxf.text) for a in insert.attribs)))
+        except Exception:
+            _chave_ins = None
+        if _chave_ins is not None:
+            if _chave_ins in _ja_inserido:
+                _desc["duplicado"] += 1
+                continue
+            _ja_inserido.add(_chave_ins)
 
         if bname not in block_counter:
             block_counter[bname] = {
