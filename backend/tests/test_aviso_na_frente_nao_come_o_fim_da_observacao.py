@@ -127,9 +127,12 @@ def test_o_rebaixamento_por_procedencia_de_TEXTO_nao_come_o_fim():
 
 def test_o_rebaixamento_por_ESCALA_divergente_nao_come_o_fim():
     it = _item("Condutos no teto", "m", 9.92, _obs_longa(), selo="confirmado")
+    # 26/09: o laço passou a usar a MARCA que a chave do selo procura, importada
+    # no process_job ao lado de _e_escala — vem no escopo como os outros nomes locais.
+    from engine_rules import MARCA_ESCALA_DIVERGENTE
     _roda_laco("pode estar 1000× fora. Confira contra a prancha. ", all_items=[it],
                _e_escala=lambda u: True, _da_suspeita=lambda _i: True,
-               _CfE=Confidence, _reb=0)
+               _CfE=Confidence, _reb=0, _MARCA_ESC_DIV=MARCA_ESCALA_DIVERGENTE)
     _confere(it.observations, "⚠ ESTIMADO — as pranchas deste projeto")
 
 
