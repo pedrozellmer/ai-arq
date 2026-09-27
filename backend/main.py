@@ -25921,6 +25921,12 @@ def _render_email_by_type_raw(key: str):
             "Admin Exemplo", "admin@exemplo.com", projeto, "https://ai.arq.br/convite.html#t=EXEMPLO",
             moldura=_email_wrap)
         return _as, _html
+    if key == "escritorio_resposta_cliente":
+        # 26/09 (perfis): o MESMO builder do envio (escritorio.py), com um pedido de revisão de exemplo
+        _as, _html, _txt = _escritorio.email_da_resposta(
+            "Cliente Exemplo", "Planta baixa_R02.pdf", projeto, "revisao",
+            "A porta da despensa ficou atrás da geladeira.", "https://ai.arq.br/escritorio.html", moldura=_email_wrap)
+        return _as, _html
     if key in ("leitura_nova", "leitura_combinada"):
         # Exemplo com ganho E com uma prancha que piorou, pra o preview mostrar
         # o quadro de honestidade dos dois lados.
