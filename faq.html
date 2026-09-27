@@ -74,7 +74,7 @@
       "name": "O AI.arq funciona com projetos em BIM/Revit/AutoCAD?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Sim — projeto feito no Revit funciona. Exporte em DWG ou DXF (Arquivo → Exportar → Formatos CAD) e mande pra gente. O AI.arq aceita PDF, DWG e DXF; nos dois últimos o sistema extrai a geometria direto do desenho — áreas, perímetros, comprimento de parede, contagem de blocos — e por isso mede com mais precisão. Arquivos .rvt e .ifc a gente não lê — e isso é escolha, não falta. Nesses formatos a quantidade que aparece é a que o autor do modelo digitou nos parâmetros. A gente só marca de branco (“medido”) aquilo que mediu com as próprias mãos, a partir da geometria do desenho. Repassar número de terceiro com selo de medido seria quebrar a regra que sustenta a planilha inteira."
+        "text": "Sim — projeto feito no Revit funciona. Exporte em DWG ou DXF (Arquivo → Exportar → Formatos CAD) e mande pra gente. O AI.arq aceita PDF, DWG e DXF; nos dois últimos o sistema extrai a geometria direto do desenho — áreas, perímetros, comprimento de parede, contagem de blocos — e por isso mede com mais precisão. Arquivos .rvt e .ifc a gente não lê — e isso é escolha, não falta. Nesses formatos a quantidade que aparece é a que o autor do modelo digitou nos parâmetros. A gente só marca de branco (“medido”) aquilo que mediu com as próprias mãos, a partir da geometria do desenho. Repassar número de terceiro com selo de medido seria quebrar a regra que sustenta a planilha inteira. Vale lembrar: se você tem um modelo BIM completo e bem parametrizado, ele já gera as tabelas de quantidades sozinho. O AI.arq resolve o outro caso — o mais comum — que é o projeto que existe só como desenho: DWG, DXF ou PDF, muitas vezes recebido de outra pessoa."
       }
     },
     {
@@ -82,7 +82,7 @@
       "name": "Como exporto meu projeto pra ter o melhor resultado?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "A regra de ouro: 🥇 DXF é o melhor — mede de verdade e não passa pela conversão de DWG, que é onde mais arquivo trava. DWG também mede, mas os de AutoCAD Architecture/MEP (objetos AEC) às vezes não abrem — se der erro, exporte DXF. PDF vetorial também é lido, mas sai como estimativa. No CAD a gente extrai a geometria (áreas, comprimentos, contagem de blocos), então as quantidades saem medidas; no PDF o motor mede a geometria quando dá e a IA lê textos e legendas, mas tudo sai como estimativa pra você conferir, porque é regra nossa não selar número de PDF como medido: a escala dele vem de uma declaração (o carimbo). Planta escaneada não mede. Passo a passo por programa: AutoCAD Botão do Aplicativo (o \"A\" no topo à esquerda) → Salvar Como → Outros Formatos. Em \"Arquivos do tipo\", escolha um DXF (ex.: AutoCAD 2018 DXF). Dê um nome, escolha a pasta e Salvar."
+        "text": "A regra de ouro: 🥇 DXF é o melhor — mede de verdade e não passa pela conversão de DWG, que é onde mais arquivo trava. DWG também mede, mas os de AutoCAD Architecture/MEP (objetos AEC) às vezes não abrem — se der erro, exporte DXF. PDF vetorial também é lido, mas sai como estimativa. No CAD a gente extrai a geometria (áreas, comprimentos, contagem de blocos), então as quantidades saem medidas; no PDF o motor mede a geometria quando dá e a IA lê textos e legendas, mas tudo sai como estimativa pra você conferir, porque é regra nossa não selar número de PDF como medido: a escala dele vem de uma declaração (o carimbo). Planta escaneada não mede. Passo a passo por programa: AutoCAD Botão do Aplicativo (o \"A\" no topo à esquerda) → Salvar Como → Outros Formatos. Em \"Arquivos do tipo\", escolha um DXF (ex.: AutoCAD 2018 DXF). Dê um nome, escolha a pasta e Salvar. (o .dwg nativo já serve) Fonte: Autodesk Revit Aba Arquivo → Exportar → Formatos CAD → DWG (ou DXF). Ajuste a configuração (camadas) e escolha a vista/folha, ou um conjunto → Avançar. Escolha a pasta; em \"Arquivos do tipo\", a versão do AutoCAD (DWG) ou DXF → OK. Arquivos .rvt e .ifc não entram direto — exporte antes. Fonte: Autodesk ArchiCAD Abra a planta ou prancha (não funciona em tabela, índice ou lista). Arquivo → Salvar como → escolha DWG ou DXF. No campo Tradutor, deixe um padrão (ex.: \"For as-is output\") e Salvar. Várias pranchas de uma vez: Documento → Publicar. Fonte: Graphisoft SketchUp (Pro) Pra planta, ajuste a vista: Câmera → Vistas Padrão + projeção paralela. Arquivo → Exportar → Gráfico 2D (planta) ou Modelo 3D. Escolha .dwg ou .dxf → Opções → OK → Exportar. Exportar CAD só existe no SketchUp Pro. Fonte: Trimble Só tenho PDF Exporte um PDF vetorial: no AutoCAD, botão do Aplicativo → Exportar → PDF. No Revit/ArchiCAD, use Imprimir/Plotar → PDF. Nunca \"plotar como imagem\" nem escanear/fotografar a planta — o desenho vira pixel, as cotas somem e a IA não consegue medir. Se der, mande o DWG/DXF junto — a gente mede e completa o que o PDF deixou como estimativa. Dicas que ajudam ainda mais: Salve numa versão compatível (DXF 2018, 2013 ou 2010) — objetos muito recentes ou especiais (comuns em projetos MEP) às vezes não convertem. Desenhe esquadrias, peças e equipamentos como blocos, não como linhas soltas — é assim que a IA conta quantos são. Só tem PDF mesmo? Sem problema, a gente processa — só lembre que sai como estimativa pra conferir, e os números você ajusta."
       }
     },
     {
@@ -90,7 +90,7 @@
       "name": "Quantas pranchas posso enviar por projeto?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Sem limite de arquivos. Durante o beta é grátis e ilimitado, sem cartão — o que está abaixo é a tabela prevista para depois (pode mudar). O que conta é a quantidade de pranchas reais dentro deles — você pode enviar 1 PDF com 12 pranchas, ou 12 DWGs com 1 prancha cada, o preço é o mesmo. As 3 faixas: Pequeno (1-5 pranchas) R$ 97, Médio (6-10) R$ 157, Grande (11-20) R$ 247. Acima de 20 pranchas: R$ 247 + R$ 10 por prancha extra, sem teto. Dúvidas ou casos especiais: contato@ai.arq.br."
+        "text": "Sem limite de arquivos. Durante o beta é grátis e ilimitado, sem cartão — a tabela abaixo é a prevista para depois (pode mudar). O que conta é a quantidade de pranchas reais dentro deles — você pode enviar 1 PDF com 12 pranchas, ou 12 DWGs com 1 prancha cada, o preço é o mesmo. As 3 faixas: Pequeno (1-5 pranchas) R$ 97, Médio (6-10) R$ 157, Grande (11-20) R$ 247. Acima de 20 pranchas: R$ 247 + R$ 10 por prancha extra, sem teto. Dúvidas ou casos especiais: contato@ai.arq.br."
       }
     },
     {
@@ -106,7 +106,7 @@
       "name": "O que a planilha gerada contém?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Importante: o AI.arq entrega uma planilha de quantitativos (itens + unidades + quantidades + descrições SINAPI nos itens com correspondência) — sem preços preenchidos. A precificação e o fechamento do orçamento são feitos por você ou pelo seu orçamentista. A planilha (.xlsx) tem até 3 abas: • Aba 1 — Resumo Comparativo: análise do que sai, entra e permanece (especialmente útil em reformas). • Aba 2 — Orçamento: itens organizados em até 18 disciplinas (Serviços Preliminares, Demolição, Fechamentos, Revestimentos, Pisos, Forros, Portas, Divisórias, Persianas, Iluminação, Elétrica, Hidráulica, Gás, AC, Incêndio, Marcenaria, Mobiliário, Complementares)."
+        "text": "Importante: o AI.arq entrega uma planilha de quantitativos (itens + unidades + quantidades + descrições SINAPI nos itens com correspondência) — sem preços preenchidos. A precificação e o fechamento do orçamento são feitos por você ou pelo seu orçamentista. A planilha (.xlsx) tem até 3 abas: • Aba 1 — Resumo Comparativo: análise do que sai, entra e permanece (especialmente útil em reformas). • Aba 2 — Orçamento: itens organizados em até 18 disciplinas (Serviços Preliminares, Demolição, Fechamentos, Revestimentos, Pisos, Forros, Portas, Divisórias, Persianas, Iluminação, Elétrica, Hidráulica, Gás, AC, Incêndio, Marcenaria, Mobiliário, Complementares). É nesta aba que você ou o orçamentista preenche os preços unitários para compor o orçamento. • Aba 3 — Referências SINAPI (quando há matches): para os itens do quantitativo com correspondência, traz o código oficial SINAPI com a descrição padronizada da composição, unidade e % de compatibilidade. Serve pra justificar tecnicamente o quantitativo aos fornecedores. Recursos transversais: • 4 cores por tipo de item: branco (medido), laranja (estimado), cinza (metadado), roxo (custo indireto). • Coluna REF. PRANCHA com rastreabilidade por item. • Fórmulas automáticas de subtotal por disciplina + BDI configurável (vem com 27,5% como ponto de partida — ajuste pro seu caso) + contingência (10%). Para referência: o Acórdão 2.622/2013 do TCU traz faixa de 20,34% a 25% para construção de edifícios em obra pública. • Seções OMISSOS, EXCLUSOS e SUGESTÕES (custos indiretos típicos — linhas em roxo). • Alertas automáticos na coluna de observação: quando um valor foge da faixa típica do tipo de item, quando duas linhas parecem medir a mesma coisa (mesmo layer) e quando aparece uma categoria que costuma ficar de fora do orçamento (hidráulica, esquadria, ar-condicionado). • Coluna amarela de preço unitário em branco, para o orçamentista ou fornecedor preencher."
       }
     },
     {
@@ -114,7 +114,7 @@
       "name": "Quais são as etapas do processamento?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Upload + classificação: você envia DXF/DWG/PDF, escolhe a tipologia (residencial, escritório, varejo, hospitalar, educacional) e, para cada prancha, classifica o tipo ou detalhe de ambiente. Extração do CAD: DWG/DXF — dados geométricos extraídos direto (blocos, polylines, hachuras). PDF — texto extraído e imagens recortadas por região de legenda. Análise com IA: cada prancha vai para a IA (Claude), que aplica convenções NBR e identifica itens, materiais, quantidades e especificações. Calibração por densidade: ratios históricos de projetos similares sinalizam itens fora do padrão (alertas de anomalia)."
+        "text": "Upload + classificação: você envia DXF/DWG/PDF, escolhe a tipologia (residencial, escritório, varejo, hospitalar, educacional) e, para cada prancha, classifica o tipo ou detalhe de ambiente. Extração do CAD: DWG/DXF — dados geométricos extraídos direto (blocos, polylines, hachuras). PDF — texto extraído e imagens recortadas por região de legenda. Análise com IA: cada prancha vai para a IA (Claude), que aplica convenções NBR e identifica itens, materiais, quantidades e especificações. Calibração por densidade: ratios históricos de projetos similares sinalizam itens fora do padrão (alertas de anomalia). Enriquecimento com SINAPI: os itens com correspondência ganham referência oficial na aba \"Referências SINAPI\" (código + descrição padronizada + % de compatibilidade). Geração: itens consolidados em planilha .xlsx com fórmulas de subtotal, BDI e contingência prontas. Revisão: você revisa no navegador (aprovar/editar/comentar item a item) ou baixa e corrige offline. Comparativo de orçamentos (opcional): quando os fornecedores devolvem, você faz upload das planilhas e o AI.arq gera XLSX + PPT executivo com sua marca."
       }
     },
     {
@@ -122,7 +122,7 @@
       "name": "Qual a precisão do AI.arq?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "A precisão depende da qualidade do arquivo: DWG/DXF permitem medição geométrica direta; PDF vetorial é lido, mas sai como estimativa — é regra nossa não selar número de PDF como medido, porque a escala dele vem de uma declaração (o carimbo); planta escaneada não mede. Por isso cada item volta marcado como medido (do CAD) ou estimativa (pra revisar) — você sempre sabe no que confiar. Por que medir e não só \"olhar\" a planta? Mesmo os modelos de IA mais avançados do mundo, quando contam itens só pela imagem de uma planta, erram muito: um benchmark acadêmico de 2026 (AECV-Bench) mediu entre 40% e 55% de acerto na contagem de portas e janelas. Por isso o AI.arq lê a geometria do arquivo CAD em vez de adivinhar pela imagem — e te mostra, item a item, o que foi medido e o que é estimativa."
+        "text": "A precisão depende da qualidade do arquivo: DWG/DXF permitem medição geométrica direta; PDF vetorial é lido, mas sai como estimativa — é regra nossa não selar número de PDF como medido, porque a escala dele vem de uma declaração (o carimbo); planta escaneada não mede. Por isso cada item volta marcado como medido (do CAD) ou estimativa (pra revisar) — você sempre sabe no que confiar. Por que medir e não só \"olhar\" a planta? Mesmo os modelos de IA mais avançados do mundo, quando contam itens só pela imagem de uma planta, erram muito: um benchmark acadêmico de 2026 (AECV-Bench) mediu entre 40% e 55% de acerto na contagem de portas e janelas (AECV-Bench, 2026). Por isso o AI.arq lê a geometria do arquivo CAD em vez de adivinhar pela imagem — e te mostra, item a item, o que foi medido e o que é estimativa. Fonte: AECV-Bench (2026), benchmark acadêmico de leitura de plantas — arxiv.org/abs/2601.04819. Toda planilha deve ser revisada por profissional."
       }
     },
     {
@@ -130,7 +130,7 @@
       "name": "Por que alguns itens ficam em laranja?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "A planilha usa 4 cores com significados diferentes (não é uma escala de \"pior pra melhor\" — cada cor indica um tipo de item): Branco — MEDIDO: quantidade medida ou contada diretamente do CAD (hachura, bloco, polyline). É a parte mais sólida — ainda assim, a revisão por arquiteto/engenheiro é sempre recomendada. Laranja — ESTIMADO / VERIFICAR: quantidade sugerida pela IA (fórmula, ratio de densidade, inferência da legenda). Revisar antes de usar. Cinza — METADADO: informação do projeto (área total, área de layout, postos de trabalho). Não é item orçável — é contexto."
+        "text": "A planilha usa 4 cores com significados diferentes (não é uma escala de \"pior pra melhor\" — cada cor indica um tipo de item): Branco — MEDIDO: quantidade medida ou contada diretamente do CAD (hachura, bloco, polyline). É a parte mais sólida — ainda assim, a revisão por arquiteto/engenheiro é sempre recomendada. Laranja — ESTIMADO / VERIFICAR: quantidade sugerida pela IA (fórmula, ratio de densidade, inferência da legenda). Revisar antes de usar. Cinza — METADADO: informação do projeto (área total, área de layout, postos de trabalho). Não é item orçável — é contexto. Roxo — CUSTO INDIRETO / GESTÃO: checklist de itens que não aparecem nas pranchas mas toda obra precisa (gerente de contrato, mestre de obra, seguro, as-built, fee). Você preenche a quantidade conforme o prazo real. Obs: a coluna amarela (MAT R$ / M.O. R$) é onde você preenche os preços — aparece em todas as linhas, independentemente da cor do item."
       }
     },
     {
@@ -138,7 +138,7 @@
       "name": "Como a IA calcula as quantidades?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Quando a legenda ou o quadro da prancha informa a quantidade, ela é usada diretamente. Quando não, o motor mede a geometria do CAD: comprimentos de paredes, dutos e tubulações por camada do desenho; áreas de ambientes e de hachuras, quando a camada tem uma hachura só (camada com várias sai como estimado, porque a soma não mede um acabamento sozinho); e contagens de blocos (portas, janelas, luminárias, pilares, louças). Cada linha sai com um selo: medido (veio da geometria) ou estimado (veio de índice ou de um dado informado por você, como o pé-direito — nesse caso a conta aparece na observação do item). A escala da prancha é conferida pelas próprias cotas do desenho. O que não fazemos: dimensionamento normativo por conta própria (lux, sprinklers, tomadas, BTU) nem percentual de perda."
+        "text": "Quando a legenda ou o quadro da prancha informa a quantidade, ela é usada diretamente. Quando não, o motor mede a geometria do CAD: • Comprimentos de paredes, dutos e tubulações, por camada do desenho • Áreas de ambientes e de hachuras — quando a camada tem uma hachura só. Camada com várias (o “ARQ-PISO” que mistura porcelanato e cerâmica) sai como estimado, porque a soma não mede um acabamento sozinho • Contagens de blocos: portas, janelas, luminárias, pilares, louças Cada linha sai com um selo: medido (veio da geometria) ou estimado (veio de índice ou de um dado informado por você, como o pé-direito — nesse caso a conta aparece na observação do item, ex.: “perímetro das paredes × pé-direito informado”). A escala da prancha é conferida pelas próprias cotas do desenho, e o projeto mostra quantas bateram. O que a gente não faz: aplicar dimensionamento normativo por conta própria (lux de iluminação, sprinklers por área, tomadas por posto, BTU por m²) nem acrescentar percentual de perda ou desperdício. Isso é decisão de projeto e do orçamentista — o quantitativo entrega a medida do desenho, com a origem de cada número rastreável. Na prática isso pesa mais em piso, forro e revestimento, que quase sempre chegam como camada com várias hachuras: nesses três a maior parte das linhas sai como estimada, pra revisar. Comprimento e contagem de blocos são os que mais viram medido. Base técnica: catálogo oficial SINAPI (Caixa), com ~10 mil composições carregadas no sistema como vocabulário de referência."
       }
     },
     {
@@ -154,7 +154,7 @@
       "name": "E se o sistema não conseguir ler meu arquivo? (inclui DWG de elétrica/MEP que não abriu)",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Quando o sistema não consegue extrair itens de uma prancha, ele avisa de forma clara — não entrega uma planilha vazia sem explicação. As causas mais comuns: • O PDF é uma imagem escaneada ou fotografada da planta. O sistema lê PDF vetorial exportado direto do CAD (AutoCAD, Revit) — não foto. • O arquivo chegou incompleto — conexão instável durante o envio. • A prancha tem só o desenho, sem cotas nem legendas legíveis. • É um DWG de AutoCAD MEP/Architecture (elétrica, hidráulica, ar-condicionado) com “objetos inteligentes” (AEC). Nenhum conversor abre esse tipo direto — nem o nosso, nem o “Salvar como DXF” comum. O DWG comum (arquitetônico) converte normal; só os de MEP travam."
+        "text": "Quando o sistema não consegue extrair itens de uma prancha, ele avisa de forma clara — não entrega uma planilha vazia sem explicação. As causas mais comuns: • O PDF é uma imagem escaneada ou fotografada da planta. O sistema lê PDF vetorial exportado direto do CAD (AutoCAD, Revit) — não foto. • O arquivo chegou incompleto — conexão instável durante o envio. • A prancha tem só o desenho, sem cotas nem legendas legíveis. • É um DWG de AutoCAD MEP/Architecture (elétrica, hidráulica, ar-condicionado) com “objetos inteligentes” (AEC). Nenhum conversor abre esse tipo direto — nem o nosso, nem o “Salvar como DXF” comum. O DWG comum (arquitetônico) converte normal; só os de MEP travam. O que fazer: reenvie o arquivo exportado direto do CAD (PDF vetorial ou DWG), numa conexão estável, e reprocesse o projeto. DWG de elétrica/MEP que não abriu? No AutoCAD, abra o arquivo e rode o comando EXPORTTOAUTOCAD (ou _AECEXPORTTOAUTOCAD) — isso transforma os objetos inteligentes em linhas comuns. Depois → Salvar Como → DXF 2013 e suba esse DXF. Aí a gente mede. (Nossa tela de upload avisa na hora se detectar um arquivo desse tipo.)"
       }
     },
     {
@@ -162,7 +162,7 @@
       "name": "Quanto custa usar o AI.arq?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Hoje: R$ 0 — durante o beta aberto é grátis e ilimitado, sem cartão, quantos projetos quiser. Tabela prevista para quando a cobrança começar (pode mudar, e a gente avisa antes): três planos com economia de escala — quanto maior o projeto, mais barato por prancha. Pequeno R$ 97 Até 5 pranchas R$ 19,40 / prancha MAIS COMUM Médio R$ 157 6 a 10 pranchas R$ 15,70 / prancha · −19% Grande R$ 247 11 a 20 pranchas R$ 12,35 / prancha · −36%"
+        "text": "Hoje: R$ 0 — durante o beta aberto é grátis e ilimitado, sem cartão, quantos projetos quiser. Tabela prevista para quando a cobrança começar (pode mudar, e a gente avisa antes): três planos com economia de escala — quanto maior o projeto, mais barato por prancha. Pequeno R$ 97 Até 5 pranchas R$ 19,40 / prancha MAIS COMUM Médio R$ 157 6 a 10 pranchas R$ 15,70 / prancha · −19% Grande R$ 247 11 a 20 pranchas R$ 12,35 / prancha · −36% Acima de 20 pranchas: R$ 247 + R$ 10 por prancha adicional. O que conta como prancha? Páginas dentro de PDFs e layouts dentro de DWG/DXF são contados separadamente. PDF de 12 páginas = 12 pranchas. DWG com 3 layouts = 3 pranchas. Quando a cobrança começar, o sistema vai mostrar a contagem antes de você pagar. O modelo previsto é por projeto, sem mensalidade ou assinatura."
       }
     },
     {
@@ -194,7 +194,7 @@
       "name": "Preciso usar todas as features? É obrigatório?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Não. Cada feature funciona sozinha. Não tem venda casada. ✓ Só quantitativo? Ok — você gera a planilha e usa do jeito que quiser, em qualquer ferramenta. ✓ Só comparativo de fornecedores? Em breve vamos disponibilizar uma página separada. Hoje, o comparativo aparece dentro do projeto (mesmo que você não use o quantitativo do AI.arq como base). ✓ Só referências SINAPI? Vêm junto com o quantitativo automaticamente quando há matches — não é cobrada separada. ✓ Só PPT com sua marca? Só é gerado quando você tiver cotações pra comparar. É brinde do comparativo, não é cobrado à parte. Quando a cobrança começar, o previsto é pagar só pelo processamento do quantitativo (preço previsto por faixa de pranchas — veja \"Preços e Pagamento\")."
+        "text": "Não. Cada feature funciona sozinha. Não tem venda casada. ✓ Só quantitativo? Ok — você gera a planilha e usa do jeito que quiser, em qualquer ferramenta. ✓ Só comparativo de fornecedores? Em breve vamos disponibilizar uma página separada. Hoje, o comparativo aparece dentro do projeto (mesmo que você não use o quantitativo do AI.arq como base). ✓ Só referências SINAPI? Vêm junto com o quantitativo automaticamente quando há matches — não é cobrada separada. ✓ Só PPT com sua marca? Só é gerado quando você tiver cotações pra comparar. É brinde do comparativo, não é cobrado à parte. Quando a cobrança começar, o previsto é pagar só pelo processamento do quantitativo (preço previsto por faixa de pranchas — veja \"Preços e Pagamento\"). O previsto é que todo o resto (referências SINAPI, comparativo, PPT, agente de chat) venha incluído, sem taxa extra e sem obrigatoriedade de uso."
       }
     },
     {
@@ -202,7 +202,7 @@
       "name": "O AI.arq faz cronograma de obra?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Faz. Depois que o quantitativo fica pronto, dá pra gerar um cronograma físico a partir dele: as etapas da obra distribuídas no tempo, com o peso de cada uma. O cronograma é de prazo e avanço — não traz valores em reais, porque o AI.arq não precifica. Você escolhe a data de início e a duração, ajusta as etapas na tela, e baixa em PDF ou como apresentação com a sua marca — dá pra levar direto pra reunião com o cliente. Como todo o resto, no beta está incluso — sem custo adicional."
+        "text": "Faz. Depois que o quantitativo fica pronto, dá pra gerar um cronograma físico a partir dele: as etapas da obra distribuídas no tempo, com o peso de cada uma. É um cronograma de prazo e avanço — o AI.arq não precifica, mas, se você digitar o valor de cada etapa, ele distribui o desembolso mês a mês, no mesmo ritmo do cronograma. Você escolhe a data de início e a duração, ajusta as etapas na tela, e baixa em PDF ou como apresentação com a sua marca — dá pra levar direto pra reunião com o cliente. Como todo o resto, no beta está incluso — sem custo adicional."
       }
     },
     {
@@ -210,7 +210,7 @@
       "name": "O AI.arq gera memorial descritivo?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Gera um rascunho escrito a partir dos itens que a IA levantou do seu CAD, organizado na ordem das etapas da obra — e você edita direto na tela, parágrafo por parágrafo, antes de baixar em Word (.docx). O texto é honesto: cada quantidade indica se foi medida do CAD ou se é estimativa a confirmar, e o que o desenho não informa (traço de concreto, sondagem, método executivo) vira um campo destacado [A PREENCHER PELO RESPONSÁVEL TÉCNICO] pra completar ali mesmo. É uma base pra você editar e assinar — não substitui o memorial de responsabilidade do RT. Dica: revise as quantidades antes de gerar, o texto sai melhor. No beta está incluso, sem custo adicional."
+        "text": "Gera um rascunho editável na tela, escrito a partir dos itens que a IA levantou do seu CAD, organizado na ordem das etapas da obra — o mesmo documento que prefeitura, banco e incorporação pedem. Você ajusta parágrafo por parágrafo e baixa em Word (.docx) já com as suas edições. O texto é honesto: cada quantidade indica se foi medida do CAD ou se é estimativa a confirmar, e o que o desenho não informa (traço de concreto, sondagem, método executivo) vira um campo destacado [A PREENCHER PELO RESPONSÁVEL TÉCNICO]. É uma base pra você editar e assinar — não substitui o memorial de responsabilidade do RT. Dica: revise as quantidades antes de gerar, o texto sai melhor. No beta está incluso — sem custo adicional."
       }
     },
     {
@@ -306,7 +306,7 @@
       "name": "Quais dados pessoais são coletados?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "• Via Google: nome, e-mail e foto de perfil • Via cadastro: nome completo, WhatsApp, empresa, área de atuação e cargo (CPF/CNPJ é opcional e só será usado quando a cobrança começar — no beta o uso é grátis e ele não é usado) • Via uso: Arquivos enviados — PDF, DWG e DXF (armazenados por até 90 dias em storage criptografado, excluídos automaticamente) e histórico de projetos • Via pagamento: processado pelo Stripe — não armazenamos dados de cartão Consulte nossa Política de Privacidade para detalhes completos."
+        "text": "• Via Google: nome, e-mail e foto de perfil • Via cadastro: nome completo, WhatsApp, empresa, área de atuação e cargo (CPF/CNPJ é opcional e só será usado quando a cobrança começar — no beta o uso é grátis e ele não é usado) • Via uso: Arquivos enviados — PDF, DWG e DXF (armazenados por até 90 dias em storage criptografado, excluídos automaticamente) e histórico de projetos • Via pagamento, quando a cobrança começar: processado pelo Stripe — não armazenamos dados de cartão Consulte nossa Política de Privacidade para detalhes completos."
       }
     },
     {
@@ -314,7 +314,7 @@
       "name": "Por que vocês não pedem CPF no cadastro?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Durante o beta, todos os projetos são grátis e você não precisa de CPF/CNPJ pra usar — o campo é opcional. Ele existe pro dia em que a cobrança começar: aí vamos precisar dele pra identificar quem pagou no documento fiscal. Enquanto o uso é gratuito, o CPF/CNPJ não é usado pra nada — fica guardado no seu perfil e você pode pedir pra gente apagar quando quiser. Quem nunca vai pagar nunca precisa preencher."
+        "text": "Durante o beta, todos os projetos são grátis e você não precisa de CPF/CNPJ pra usar — o campo é opcional. Ele existe pro dia em que a cobrança começar: aí vamos precisar dele pra identificar quem pagou no documento fiscal. Enquanto o uso é gratuito, o CPF/CNPJ não é usado pra nada — fica guardado no seu perfil e você pode pedir pra gente apagar quando quiser. Quem nunca vai pagar nunca precisa preencher. Quando a cobrança começar, o checkout (cartão, pelo Stripe) vai conferir se o CPF/CNPJ está preenchido no seu perfil. Se não estiver, abre uma janelinha pra você informar antes do pagamento."
       }
     },
     {
@@ -978,8 +978,8 @@
                 </div>
               </div>
               <p class="text-xs text-gray-500 mb-2"><strong>Acima de 20 pranchas:</strong> R$ 247 + R$ 10 por prancha adicional.</p>
-              <p class="text-xs text-gray-500 mb-2"><strong>O que conta como prancha?</strong> P&aacute;ginas dentro de PDFs e layouts dentro de DWG/DXF s&atilde;o contados separadamente. PDF de 12 p&aacute;ginas = 12 pranchas. DWG com 3 layouts = 3 pranchas. O sistema detecta e mostra a contagem antes de voc&ecirc; pagar.</p>
-              <p class="text-xs text-gray-500">Pagamento por projeto, sem mensalidade ou assinatura.</p>
+              <p class="text-xs text-gray-500 mb-2"><strong>O que conta como prancha?</strong> P&aacute;ginas dentro de PDFs e layouts dentro de DWG/DXF s&atilde;o contados separadamente. PDF de 12 p&aacute;ginas = 12 pranchas. DWG com 3 layouts = 3 pranchas. Quando a cobran&ccedil;a come&ccedil;ar, o sistema vai mostrar a contagem antes de voc&ecirc; pagar.</p>
+              <p class="text-xs text-gray-500">O modelo previsto &eacute; por projeto, sem mensalidade ou assinatura.</p>
             </div>
           </div>
         </div>
@@ -1051,7 +1051,7 @@
                 <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1.5 shrink-0">✓</span> <strong>Só referências SINAPI?</strong> Vêm junto com o quantitativo automaticamente quando há matches — não é cobrada separada.</li>
                 <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1.5 shrink-0">✓</span> <strong>Só PPT com sua marca?</strong> Só é gerado quando você tiver cotações pra comparar. É brinde do comparativo, não é cobrado à parte.</li>
               </ul>
-              <p class="mt-3">Você paga só pelo <strong>processamento do quantitativo</strong> (preço por faixa de pranchas — veja "Preços e Pagamento"). Todo o resto (referências SINAPI, comparativo, PPT, agente de chat) está incluído, sem taxa extra e sem obrigatoriedade de uso.</p>
+              <p class="mt-3">Quando a cobrança começar, o previsto é pagar só pelo <strong>processamento do quantitativo</strong> (preço previsto por faixa de pranchas — veja "Preços e Pagamento"). O previsto é que todo o resto (referências SINAPI, comparativo, PPT, agente de chat) venha incluído, sem taxa extra e sem obrigatoriedade de uso.</p>
             </div>
           </div>
         </div>
@@ -1066,7 +1066,7 @@
           </button>
           <div class="faq-answer px-5">
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
-              <p class="mb-2">Faz. Depois que o quantitativo fica pronto, dá pra gerar um <strong>cronograma f&iacute;sico</strong> a partir dele: as etapas da obra distribu&iacute;das no tempo, com o peso de cada uma. &Eacute; um cronograma de <strong>prazo e avan&ccedil;o</strong> &mdash; n&atilde;o traz valores em reais, porque o AI.arq n&atilde;o precifica.</p>
+              <p class="mb-2">Faz. Depois que o quantitativo fica pronto, dá pra gerar um <strong>cronograma f&iacute;sico</strong> a partir dele: as etapas da obra distribu&iacute;das no tempo, com o peso de cada uma. &Eacute; um cronograma de <strong>prazo e avan&ccedil;o</strong> &mdash; o AI.arq n&atilde;o precifica, mas, se voc&ecirc; digitar o valor de cada etapa, ele distribui o desembolso m&ecirc;s a m&ecirc;s, no mesmo ritmo do cronograma.</p>
               <p class="mb-2">Voc&ecirc; escolhe a data de in&iacute;cio e a dura&ccedil;&atilde;o, ajusta as etapas na tela, e baixa em <strong>PDF</strong> ou como <strong>apresenta&ccedil;&atilde;o</strong> com a sua marca &mdash; d&aacute; pra levar direto pra reuni&atilde;o com o cliente.</p>
               <p class="text-gray-500">Como todo o resto, no beta est&aacute; incluso &mdash; sem custo adicional.</p>
             </div>
@@ -1312,7 +1312,7 @@
                 <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>Via Google:</strong> nome, e-mail e foto de perfil</li>
                 <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>Via cadastro:</strong> nome completo, WhatsApp, empresa, &aacute;rea de atua&ccedil;&atilde;o e cargo (CPF/CNPJ &eacute; opcional e s&oacute; ser&aacute; usado quando a cobran&ccedil;a come&ccedil;ar &mdash; no beta o uso &eacute; gr&aacute;tis e ele n&atilde;o &eacute; usado)</li>
                 <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>Via uso:</strong> Arquivos enviados &mdash; PDF, DWG e DXF (armazenados por at&eacute; 90 dias em storage criptografado, exclu&iacute;dos automaticamente) e hist&oacute;rico de projetos</li>
-                <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>Via pagamento:</strong> processado pelo Stripe &mdash; n&atilde;o armazenamos dados de cart&atilde;o</li>
+                <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>Via pagamento, quando a cobran&ccedil;a come&ccedil;ar:</strong> processado pelo Stripe &mdash; n&atilde;o armazenamos dados de cart&atilde;o</li>
               </ul>
               <p class="mt-3 text-xs text-gray-500">Consulte nossa <a href="privacidade.html" class="text-indigo-500 underline">Pol&iacute;tica de Privacidade</a> para detalhes completos.</p>
             </div>
@@ -1328,7 +1328,7 @@
           <div class="faq-answer px-5">
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
               <p>Durante o beta, todos os projetos s&atilde;o gr&aacute;tis e voc&ecirc; n&atilde;o precisa de CPF/CNPJ pra usar &mdash; o campo &eacute; opcional. Ele existe pro dia em que a cobran&ccedil;a come&ccedil;ar: a&iacute; vamos precisar dele pra identificar quem pagou no documento fiscal. <strong>Enquanto o uso &eacute; gratuito, o CPF/CNPJ n&atilde;o &eacute; usado pra nada</strong> &mdash; fica guardado no seu perfil e voc&ecirc; pode pedir pra gente apagar quando quiser. Quem nunca vai pagar nunca precisa preencher.</p>
-              <p class="mt-2 text-xs text-gray-500">No checkout do Stripe (cart&atilde;o) o sistema confere se o CPF/CNPJ est&aacute; preenchido no seu perfil. Se n&atilde;o estiver, abre uma janelinha pra voc&ecirc; informar antes do pagamento.</p>
+              <p class="mt-2 text-xs text-gray-500">Quando a cobran&ccedil;a come&ccedil;ar, o checkout (cart&atilde;o, pelo Stripe) vai conferir se o CPF/CNPJ est&aacute; preenchido no seu perfil. Se n&atilde;o estiver, abre uma janelinha pra voc&ecirc; informar antes do pagamento.</p>
             </div>
           </div>
         </div>
@@ -1545,7 +1545,7 @@
           </button>
           <div class="faq-answer px-5">
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
-              Erra, sim — por isso cada linha volta carimbada como MEDIDO ou ESTIMADO, e não como "correto". Na revisão dentro do site você aprova, edita ou comenta item a item, e o que você corrige fica registrado no projeto. Suas correções calibram os alertas dos SEUS próximos projetos — a sua quantidade nunca é copiada pra projeto de mais ninguém, e nome de cliente, fornecedor, obra e valores em R$ ficam isolados no seu projeto. O que sai dali pra base comum são só PROPORÇÕES anônimas (do tipo \"itens por m²\"), sem número absoluto e sem nada que identifique você ou a obra — é o que a Política de Privacidade chama de métricas adimensionais anonimizadas, e é o que faz o alerta de fora do padrão funcionar pra todo mundo. A revisão por arquiteto ou engenheiro habilitado continua sendo obrigatória antes de qualquer contratação.
+              Erra, sim — por isso cada linha volta carimbada como MEDIDO ou ESTIMADO, e não como "correto". Na revisão dentro do site você aprova, edita ou comenta item a item, e o que você corrige fica registrado no projeto. Suas correções calibram os alertas dos SEUS próximos projetos — a sua quantidade nunca é copiada pra projeto de mais ninguém, e nome de cliente, fornecedor, obra e valores em R$ ficam isolados no seu projeto. O que sai dali pra base comum são só PROPORÇÕES anônimas (do tipo "itens por m²"), sem número absoluto e sem nada que identifique você ou a obra — é o que a Política de Privacidade chama de métricas adimensionais anonimizadas, e é o que faz o alerta de fora do padrão funcionar pra todo mundo. A revisão por arquiteto ou engenheiro habilitado continua sendo obrigatória antes de qualquer contratação.
             </div>
           </div>
         </div>
