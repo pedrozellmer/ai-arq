@@ -4831,8 +4831,10 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         # linha — e o segundo é conserto possível, o primeiro não.
         # 🪤 Só REGISTRA. Não muda fator, selo nem quantidade.
         metadata["regua_cotas_status"] = _dim_status or "nao-decidiu"
-        # 🩸 27/09: régua "ambigua" É ressalva de escala — ver a função.
-        _amb = ressalva_da_escala_ambigua(dim_check)
+        # 🩸 27/09: régua "ambigua" É ressalva de escala — ver a função. Se o
+        # consenso do projeto trocou o fator (escala provada por cota em outra
+        # prancha), a ambiguidade desta foi resolvida: não é ressalva.
+        _amb = "" if _unit_consenso else ressalva_da_escala_ambigua(dim_check)
         if _amb:
             metadata["escala_ambigua"] = _amb
         if dim_check.get("motivo"):
@@ -5890,7 +5892,10 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
                 f"{_v5['n_batem']} rótulo(s) de área da própria prancha conferem "
                 f"com a geometria medida ({_ex}) — escala provada pelo desenho.")
             # a prova supera a ressalva de ESCALA (não as outras)
-            for _k in ("unidade_suspeita", "alerta_unidade"):
+            # 🩸 27/09: a régua ambígua também — o rótulo desempata o que as
+            # cotas não desempataram. A folha de papel (escala_por_vista) NÃO:
+            # um rótulo prova UMA vista, não a folha inteira.
+            for _k in ("unidade_suspeita", "alerta_unidade", "escala_ambigua"):
                 if metadata.get(_k):
                     metadata[f"{_k}_superada_por_rotulo"] = metadata.pop(_k)
             logger.info("[unit-rotulo] %s", metadata["unidade_provada_por_rotulo"])

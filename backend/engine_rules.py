@@ -3527,7 +3527,17 @@ def retrato_do_selo(items):
     # exatamente "o que o `selos_sem_geometria` ainda acusaria depois de ter
     # rodado" — que é 0 quando ele funcionou. Zero divergência possível.
     try:
-        branco_sem_prova = len(selos_sem_geometria(items or []))
+        # 🩸 27/09/2026 — a chave do selo e a tabela impressa passaram a rodar
+        # ANTES deste retrato. As promoções delas são prova própria (número
+        # contra a geometria; número contra a tabela da prancha) e a rede de
+        # procedência, que olha palavra, acusaria as da tabela sempre ("tabela")
+        # e algumas da chave ("sem legenda explícita") — alarme CRÍTICO falso,
+        # culpando um guarda que não regrediu. Promoção pelas portas não conta.
+        _lista = list(items or [])
+        branco_sem_prova = sum(
+            1 for a in selos_sem_geometria(_lista)
+            if not promovida_por_uma_porta(
+                _campo_do_item(_lista[a["indice"]], "observations", "")))
     except Exception:
         branco_sem_prova = 0
     n = brancos = zerados = laranja_com_prova = 0
@@ -4829,14 +4839,18 @@ MARCA_LIDO_DE_TEXTO = "⚠ ESTIMADO — este número foi LIDO de um texto da pra
 #: rejeitaram. 🪤 Só dúvida do NÚMERO: "a associação à largura do leito deve
 #: ser confirmada" é dúvida de especificação e não entra; "pintura das duas
 #: faces" é o serviço, não dúvida — só "contém/soma ambas as faces" é.
+#: 🩸 27/09 (revisão): "cotas confirmam a escala" é garantia — só o PEDIDO
+#: ("confirmar/confirme a escala") é dúvida; "piso sobreposto" é o serviço —
+#: só sobreposição de desenho/planta/layer é dúvida.
 _RE_RESSALVA_DO_NUMERO = _re.compile(
-    r"confirm\w*\s+(?:a\s+)?escala|escala\s+(?:incorreta|errada|suspeita)"
+    r"confirm(?:ar|e)\s+(?:a\s+)?escala|escala\s+(?:incorreta|errada|suspeita)"
     r"|unidade\s+(?:do\s+desenho\s+)?suspeita"
     r"|marcad[oa]\s+como\s+estimad|marcar\s+(?:como\s+)?estimad"
     r"|conferir\s+a\s+grandeza"
     r"|(?:layer|acabamento)\s+mist[oa]"
     r"|(?:cont[ée]m|inclui|soma)\s+(?:as\s+)?(?:ambas\s+as|duas)\s+faces"
-    r"|sobrepos|multiplicad|duplicad|dupla\s+contagem|em\s+dobro"
+    r"|sobreposi[çc]|(?:plantas?|layers?|desenhos?|vistas?|pranchas?)\s+sobrepost"
+    r"|multiplicad|duplicad|duplica[çc]|dupla\s+contagem|em\s+dobro"
     r"|provavelmente\s+(?:um\s+)?s[íi]mbolo|s[íi]mbolo\s+d[ae]\s+legenda"
     r"|elemento\s+de\s+legenda"
     r"|valor\s+(?:muito\s+)?(?:pequeno|baixo|alto)"
@@ -4844,19 +4858,44 @@ _RE_RESSALVA_DO_NUMERO = _re.compile(
     r"|maior\s+que\s+(?:a|o)\s+(?:cozinha|sala|ambiente|[áa]rea|terreno|lote|planta)"
     r"|confirmar\s+se\s+(?:o|a)\s+(?:valor|comprimento|[áa]rea|quantidade|n[úu]mero)",
     _re.IGNORECASE)
-#: "sem sobreposição", "não há duplicação": ressalva negada é garantia.
+#: "sem sobreposição", "não há duplicação": ressalva NEGADA é garantia — mas só
+#: nesta família. 🪤 27/09 (revisão): "não é possível confirmar a escala" e
+#: "sem cotas para confirmar a escala" são a dúvida mais natural que existe; a
+#: negação valendo pra tudo deixava a chave promover justamente essas.
 _RE_NEGA_A_RESSALVA = _re.compile(r"\b(?:n[ãa]o|sem|nenhum\w*)\b[^.;|]{0,15}$",
                                   _re.IGNORECASE)
+_RE_RESSALVA_QUE_SE_NEGA = _re.compile(
+    r"sobrepos|multiplicad|duplica|dupla\s+contagem|em\s+dobro", _re.IGNORECASE)
+#: A nota que a deduplicação de m² escreve na linha que ela MANTÉM (main.py,
+#: "mais brando — informativo"): fala das OUTRAS linhas, não desta. As outras
+#: levam "⚠ Possível sobreposição: outro item…" — essa continua barrando.
+_RE_NOTA_DA_VENCEDORA = _re.compile(
+    r"⚠\s*\d+\s+outros\s+itens\s+m²\s+do\s+mesmo\s+layer\s+'[^']*'\s+marcados\s+"
+    r"como\s+estimado\s+\(poss[íi]vel\s+sobreposi[çc][ãa]o:[^)]*\)", _re.IGNORECASE)
 
 
 def ressalva_do_numero(obs) -> str:
     """O trecho em que a observação duvida do próprio número ('' se não há)."""
-    t = str(obs or "")
+    t = _RE_NOTA_DA_VENCEDORA.sub(" ", str(obs or ""))
     for m in _RE_RESSALVA_DO_NUMERO.finditer(t):
-        if _RE_NEGA_A_RESSALVA.search(t[:m.start()]):
+        if (_RE_RESSALVA_QUE_SE_NEGA.match(m.group(0))
+                and _RE_NEGA_A_RESSALVA.search(t[:m.start()])):
             continue
         return m.group(0)
     return ""
+
+
+#: 🩸 27/09/2026 — o começo do que as duas PORTAS de promoção escrevem na
+#: observação (chave do selo e tabela impressa). Quem roda depois delas (o
+#: retrato do selo) precisa saber que a linha foi promovida com prova própria.
+PREFIXO_SELO_DA_CHAVE = "✓ MEDIDO — "
+PREFIXO_SELO_DA_TABELA = "✓ MEDIDO da tabela impressa — "
+
+
+def promovida_por_uma_porta(obs) -> bool:
+    """A linha ganhou o selo por uma das portas (chave ou tabela impressa)?"""
+    t = str(obs or "")
+    return t.startswith(PREFIXO_SELO_DA_CHAVE) or t.startswith(PREFIXO_SELO_DA_TABELA)
 
 #: Grandeza que cada unidade aceita como prova. `m³` e `kg` ficam de FORA de
 #: propósito: o motor não mede volume nem peso — ele mede comprimento, área e

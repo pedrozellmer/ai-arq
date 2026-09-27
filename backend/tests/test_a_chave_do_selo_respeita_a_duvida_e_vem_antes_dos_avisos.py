@@ -54,6 +54,12 @@ _DUVIDAS = [
     "Valor muito pequeno para o ambiente.",
     "Confirmar a escala do arquivo.",
     "Possível escala incorreta no arquivo.",
+    # revisão 27/09: a dúvida NEGADA da forma mais natural continua dúvida
+    "Não é possível confirmar a escala do arquivo.",
+    "Sem cotas para confirmar a escala.",
+    # a nota das linhas que a deduplicação de m² REBAIXOU continua barrando
+    "Área hachurada. | ⚠ Possível sobreposição: outro item (42.1 m²) compartilha "
+    "o mesmo layer 'PISO'. Verifique se não há duplicação.",
 ]
 _SEM_DUVIDA = [
     "Fonte: comprimento do layer ELETRICA = 104,33 m (COMPRIMENTOS POR LAYER).",
@@ -61,6 +67,11 @@ _SEM_DUVIDA = [
     "Fonte: área hachurada do layer PISO = 42,10 m². Sem sobreposição com o item 3.",
     "Não há duplicação entre pranchas.",
     "Pintura das duas faces da parede.",
+    # revisão 27/09: garantia, o serviço, e a nota da linha VENCEDORA do dedup
+    "As cotas confirmam a escala da prancha.",
+    "Piso sobreposto ao existente.",
+    "Área hachurada. | ⚠ 2 outros itens m² do mesmo layer 'PISO' marcados como "
+    "estimado (possível sobreposição: 3.1 m²; 2.0 m²)",
 ]
 
 
@@ -163,6 +174,54 @@ def test_a_chave_e_a_tabela_rodam_antes_de_tudo_que_descreve_o_selo():
             "não chega a quem descreve o selo" % (ultima_promocao, nome, min(linhas)))
 
 
+def test_o_existente_e_rebaixado_ANTES_da_chave():
+    """Revisão 27/09: [EXISTENTE] zera a quantidade e vira vb — rodando depois,
+    a chave promovia a linha e ela terminava laranja, zerada e com '✓ MEDIDO'."""
+    fn = _process_job()
+    exist = _chamadas(fn, "existente_nao_leva_quantidade")
+    assert exist and min(exist) < _chamadas(fn, "_chave_selo")[0], exist
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  4) O retrato do selo, que agora roda DEPOIS das portas
+# ══════════════════════════════════════════════════════════════════════════
+def _branco(obs, u="un", q=3):
+    return {"description": "Luminária", "unit": u, "quantity": q, "confidence": "confirmado",
+            "origem": "vision_pdf", "observations": obs}
+
+
+def test_o_retrato_nao_acusa_promocao_das_portas():
+    """Revisão 27/09: a rede de procedência olha PALAVRA — acusaria toda
+    promoção da tabela impressa ('tabela') e as da chave com 'legenda' no texto,
+    e o alarme CRÍTICO culparia um guarda que não regrediu."""
+    itens = [
+        _branco(er.PREFIXO_SELO_DA_TABELA + "3 lido na tabela da prancha 2. A contagem é do "
+                "PROJETISTA; nós conferimos o número. Conforme tabela de luminárias."),
+        _branco(er.PREFIXO_SELO_DA_CHAVE + "comprimento medido no layer 'CSN-08' = 3,60 "
+                "(conferido contra a geometria do arquivo). Sem legenda explícita; "
+                "texto da prancha.", u="ml", q=3.6),
+    ]
+    assert er.retrato_do_selo(itens)["branco_sem_prova"] == 0
+
+
+def test_CONTROLE_o_retrato_ainda_acusa_selo_de_texto_sem_porta():
+    itens = [_branco("Conforme tabela de luminárias da prancha 2.")]
+    assert er.retrato_do_selo(itens)["branco_sem_prova"] == 1
+
+
+def test_a_ambigua_chega_ao_cliente_como_alerta_de_escala():
+    arq = main_resumo({"escala_ambigua": "empate entre os fatores 0.01, 0.001",
+                       "unidade_desenho": "Milímetros"})
+    assert arq["status"] == "alerta", arq
+    assert "mais de um fator" in arq["alerta"], arq
+    assert main_resumo({"unidade_desenho": "Milímetros"})["status"] == "sem_prova"
+
+
+def main_resumo(md):
+    import main
+    return main._resumo_escala_arquivo("prancha.dxf", md)
+
+
 def test_a_rede_de_procedencia_escreve_a_marca_que_a_chave_respeita():
     fn = _process_job()
     usos = [n for n in ast.walk(fn) if isinstance(n, ast.alias)
@@ -176,3 +235,8 @@ def test_a_rede_de_procedencia_escreve_a_marca_que_a_chave_respeita():
     src = open(os.path.join(os.path.dirname(_AQUI), "main.py"), encoding="utf-8").read()
     assert er.MARCA_LIDO_DE_TEXTO not in src, (
         "o main escreve a marca da rede à mão — use MARCA_LIDO_DE_TEXTO")
+    # o mesmo pros prefixos das portas: o retrato os reconhece pela constante
+    for pref in (er.PREFIXO_SELO_DA_CHAVE, er.PREFIXO_SELO_DA_TABELA):
+        assert '"%s%%s' % pref not in src, "o main escreve o prefixo da porta à mão: %r" % pref
+    nomes = {n.name for n in ast.walk(fn) if isinstance(n, ast.alias)}
+    assert {"PREFIXO_SELO_DA_CHAVE", "PREFIXO_SELO_DA_TABELA"} <= nomes, nomes

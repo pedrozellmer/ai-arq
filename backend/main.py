@@ -13350,6 +13350,15 @@ def _resumo_escala_arquivo(caminho: str, md: dict) -> dict:
             return {"nome": nome, "status": "alerta",
                     "declarada": md.get("unidade_desenho") or "?",
                     "alerta": str(md.get("alerta_unidade") or "")[:240]}
+        if md.get("escala_ambigua"):
+            # 🩸 27/09/2026 — régua "ambigua": mais de um fator bate com as cotas,
+            # e m/m²/m³ desta prancha saem estimados (ressalva de escala). Sem
+            # isto a prancha caía em "sem_prova" ("confira uma medida-chave") e o
+            # cliente não sabia POR QUE o metro saiu laranja.
+            return {"nome": nome, "status": "alerta",
+                    "declarada": md.get("unidade_desenho") or "?",
+                    "alerta": ("a escala não foi provada: mais de um fator de unidade "
+                               "bate com as cotas (%s)" % str(md["escala_ambigua"])[:160])}
     except Exception:
         pass
     return {"nome": nome, "status": "sem_prova",
@@ -19710,6 +19719,20 @@ bloco — só cite os que estão no inventário deste arquivo."""
             _log_error("motor:selo-parcial-rebaixado", f"FALHOU: {_epar}",
                        job_id, severity="warning")
 
+        # 🩸 14/09: item marcado `[EXISTENTE ...]` não pode sair com quantidade —
+        # ninguém compra o que já está instalado, e linha com número entra na
+        # soma. Roda ANTES da recontagem do aviso pra que os selos que ela conta
+        # já sejam os finais. Ver `existente_nao_leva_quantidade`.
+        try:
+            _n_exist = existente_nao_leva_quantidade(all_items)
+            if _n_exist:
+                _log_error("motor:existente-sem-quantidade",
+                           "tirei a quantidade de %d item(ns) marcados [EXISTENTE] — "
+                           "levantamento fica na observação, fora da soma" % _n_exist,
+                           job_id, severity="warning")
+        except Exception as _eex:
+            print(f"[existente] nao-fatal: {_eex}")
+
         # ─────────────────────────────────────────────────────────────────
         # 🔑 A CHAVE DO SELO (22/09/2026) — a ÚNICA régua que promove.
         # Roda AQUI de propósito: depois das travas de rebaixamento e antes de
@@ -19728,7 +19751,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # gerada antes da chave e ela não pedia pra refazer).
         # ─────────────────────────────────────────────────────────────────
         try:
-            from engine_rules import selo_com_prova_da_geometria as _chave_selo
+            from engine_rules import (selo_com_prova_da_geometria as _chave_selo,
+                                      PREFIXO_SELO_DA_CHAVE as _PREF_CHAVE)
             try:
                 _idx_selo = _indice_geom
             except NameError:
@@ -19739,8 +19763,10 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     _alvo_selo = all_items[_pr["indice"]]
                     _alvo_selo.confidence = _selo_medido_com_prova(_pr["motivo"])
                     # o rastro fica na observação: sem ele ninguém audita depois
-                    _alvo_selo.observations = (
-                        "✓ MEDIDO — %s (conferido contra a geometria do arquivo). "
+                    # 🔑 27/09: o prefixo é a MARCA da porta — o retrato do selo,
+                    # que agora roda depois, não conta promoção como "sem prova".
+                    _alvo_selo.observations = _PREF_CHAVE + (
+                        "%s (conferido contra a geometria do arquivo). "
                         % _pr["motivo"]) + str(_alvo_selo.observations or "")
                 _log_error("motor:selo-com-prova",
                            f"linhas={len(all_items)} promovidas={len(_promovidos)} "
@@ -19785,8 +19811,9 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 for _pt in _prom_tab:
                     _alvo_t = all_items[_pt["indice"]]
                     _alvo_t.confidence = _selo_medido_com_prova(_pt["motivo"])
-                    _alvo_t.observations = (
-                        "✓ MEDIDO da tabela impressa — %s. A contagem é do "
+                    from engine_rules import PREFIXO_SELO_DA_TABELA as _PREF_TAB
+                    _alvo_t.observations = _PREF_TAB + (
+                        "%s. A contagem é do "
                         "PROJETISTA; nós conferimos o número. " % _pt["motivo"]
                     ) + str(_alvo_t.observations or "")
                 _log_error("motor:selo-da-tabela",
@@ -19824,20 +19851,6 @@ bloco — só cite os que estão no inventário deste arquivo."""
                            job_id, severity="info")
         except Exception as _eap:
             print(f"[so-pdf] aviso nao-fatal: {_eap}")
-
-        # 🩸 14/09: item marcado `[EXISTENTE ...]` não pode sair com quantidade —
-        # ninguém compra o que já está instalado, e linha com número entra na
-        # soma. Roda ANTES da recontagem do aviso pra que os selos que ela conta
-        # já sejam os finais. Ver `existente_nao_leva_quantidade`.
-        try:
-            _n_exist = existente_nao_leva_quantidade(all_items)
-            if _n_exist:
-                _log_error("motor:existente-sem-quantidade",
-                           "tirei a quantidade de %d item(ns) marcados [EXISTENTE] — "
-                           "levantamento fica na observação, fora da soma" % _n_exist,
-                           job_id, severity="warning")
-        except Exception as _eex:
-            print(f"[existente] nao-fatal: {_eex}")
 
         try:
             _recontar_aviso_planob()
