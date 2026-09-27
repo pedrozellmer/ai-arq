@@ -25,6 +25,8 @@ import os
 import re
 import sys
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -59,6 +61,15 @@ def test_a_sonda_existe():
     assert r.json() == {"ok": True}, r.text
 
 
+class _Pisadas(list):
+    """As pisadas da REQUISIÇÃO — o custo da sonda. `alheias` guarda as das
+    threads de fundo: também barradas, mas não cobradas da sonda."""
+
+    def __init__(self):
+        super().__init__()
+        self.alheias = []
+
+
 def _minar_todas_as_saidas(monkeypatch):
     """Mina TODA porta que sai do processo — e devolve a lista de pisadas.
 
@@ -91,12 +102,56 @@ def _minar_todas_as_saidas(monkeypatch):
         import psutil
     except ImportError:
         psutil = None
+    import threading
 
-    pisadas = []
+    # 🩸 27/09/2026 — a bancada do CI no ce156b4 (commit que só mexia no SITE)
+    # acusou a sonda de pagar por `urllib.request.urlopen, main._supabase_insert()`;
+    # o commit seguinte, com o MESMO backend, passou. A mina registrava QUALQUER
+    # thread do processo, e uma thread de FUNDO deixada por outro teste do mesmo
+    # worker do `-n auto` pisou nela durante a medição. Reproduzido com uma
+    # thread artificial: a mensagem sai idêntica à do CI.
+    # 🔑 A sonda não é "a função liveness" (filtrar por ela esconderia custo de
+    # middleware): é a REQUISIÇÃO, e a requisição tem linhagem. No TestClient,
+    # cada GET abre uma thread de portal NOVA a partir da thread do teste;
+    # middleware e rota async rodam nela, rota `def` roda numa worker thread
+    # aberta pelo portal. Conta como custo da sonda a thread do teste e toda
+    # thread aberta por ela, direta ou indiretamente, depois de armar. Thread
+    # que já existia (e as filhas dela) continua minada, sem rede de verdade,
+    # mas vai pra `pisadas.alheias`, não pra conta da sonda.
+    # 🪤 O que isto NÃO atribui à sonda: trabalho entregue a uma thread que JÁ
+    # existia (fila, pool global). Nenhum middleware de hoje faz isso; se um
+    # fizer, o custo sai desta conta.
+    dona = threading.current_thread()
+    pais = {}
+    _start_original = threading.Thread.start
+
+    def _start_com_pai(self, *a, **k):
+        pais[self] = threading.current_thread()
+        return _start_original(self, *a, **k)
+
+    monkeypatch.setattr(threading.Thread, "start", _start_com_pai)
+
+    def _da_requisicao():
+        t, vistos = threading.current_thread(), set()
+        while t is not None and t not in vistos:
+            if t is dona:
+                return True
+            vistos.add(t)
+            t = pais.get(t)
+        return False
+
+    pisadas = _Pisadas()
+
+    def _pisar(o_que):
+        if _da_requisicao():
+            pisadas.append(o_que)
+        else:
+            pisadas.alheias.append("%s [thread de fundo: %s]"
+                                   % (o_que, threading.current_thread().name))
 
     def _mina(nome):
         def _explode(*a, **k):
-            pisadas.append(nome)
+            _pisar(nome)
             raise AssertionError("a sonda de vida tocou em %s" % nome)
         return _explode
 
@@ -115,7 +170,7 @@ def _minar_todas_as_saidas(monkeypatch):
         def _talvez(self, endereco, *a, **k):
             destino = endereco[0] if isinstance(endereco, tuple) else endereco
             if str(destino) not in _LOCAIS:
-                pisadas.append("%s -> %s" % (nome, destino))
+                _pisar("%s -> %s" % (nome, destino))
                 raise AssertionError("a sonda de vida abriu socket pra %s"
                                      % (destino,))
             return orig(self, endereco, *a, **k)
@@ -186,9 +241,9 @@ def _minar_todas_as_saidas(monkeypatch):
             _de_onde = ("%s:%d em %s(): %s" % (
                 os.path.basename(_meus[-1].filename), _meus[-1].lineno,
                 _meus[-1].name, (_meus[-1].line or "").strip())) if _meus else "?"
-            pisadas.append("%s (%s) [nosso código: %s] <- %s"
-                           % (nome, str(arquivo)[:70], _de_onde[:160],
-                              " | ".join(_quem)[:300]))
+            _pisar("%s (%s) [nosso código: %s] <- %s"
+                   % (nome, str(arquivo)[:70], _de_onde[:160],
+                      " | ".join(_quem)[:300]))
             raise AssertionError("a sonda de vida abriu %s" % (arquivo,))
         return _explode
 
@@ -353,6 +408,135 @@ def test_a_sonda_e_TRIVIAL(monkeypatch):
         "a sonda mais rápida de 10 levou %.1f ms — ela responde a cada 30 s e "
         "decide se o Render mata a instância; alguém pôs trabalho dentro dela"
         % melhor)
+
+
+_OS_DOIS_GUARDAS = pytest.mark.parametrize(
+    "guarda", [test_a_sonda_e_TRIVIAL, test_a_sonda_NAO_toca_em_banco_nem_rede],
+    ids=["TRIVIAL", "NAO_toca"])
+
+
+def _paga_o_banco():
+    """O custo que a sonda não pode ter: gravar no Supabase. Best-effort, como
+    o `_log_error` de verdade — a resposta segue 200 e só a mina denuncia."""
+    try:
+        M._supabase_insert("error_log", {"stage": "controle-da-sonda"})
+    except Exception:
+        pass
+
+
+def _thread_de_fundo(pode_ir, terminou):
+    """Imita a thread que outro teste do mesmo worker deixou rodando: um envio
+    que falha e grava no error_log (urlopen, depois _supabase_insert) e que
+    ainda abre uma filha que faz o mesmo. Nasce ANTES das minas."""
+    import threading
+    import urllib.request
+
+    def _envio_que_falha():
+        try:
+            urllib.request.urlopen("https://exemplo.invalid/", timeout=1)
+        except Exception:
+            _paga_o_banco()
+
+    def _corre():
+        if not pode_ir.wait(10):
+            return          # sem mina armada, nada de rede de verdade
+        _envio_que_falha()
+        filha = threading.Thread(target=_envio_que_falha, name="filha-do-fundo")
+        filha.start()
+        filha.join(10)
+        terminou.set()
+
+    fundo = threading.Thread(target=_corre, name="fundo-de-outro-teste",
+                             daemon=True)
+    fundo.start()
+    return fundo
+
+
+@_OS_DOIS_GUARDAS
+def test_CONTROLE_thread_de_fundo_NAO_e_custo_da_sonda(monkeypatch, guarda):
+    """🩸 27/09/2026 — o falso vermelho do ce156b4, reproduzido: a thread de
+    fundo pisa nas minas DEPOIS de armadas e ANTES da medição (sem corrida:
+    o guarda só segue quando ela terminou). O guarda tem que passar, e as
+    pisadas dela têm que ter sido barradas e anotadas como alheias — senão
+    este controle passaria sem a thread ter pisado em nada."""
+    import threading
+    pode_ir, terminou = threading.Event(), threading.Event()
+    fundo = _thread_de_fundo(pode_ir, terminou)
+    _minar_de_verdade = _minar_todas_as_saidas
+    armadas = []
+
+    def _minar_e_soltar_o_fundo(mp):
+        pisadas = _minar_de_verdade(mp)
+        armadas.append(pisadas)
+        pode_ir.set()
+        assert terminou.wait(10), "a thread de fundo não terminou de pisar"
+        return pisadas
+
+    monkeypatch.setattr(sys.modules[__name__], "_minar_todas_as_saidas",
+                        _minar_e_soltar_o_fundo)
+    try:
+        guarda(monkeypatch)
+    finally:
+        pode_ir.set()
+        fundo.join(10)
+    alheias = armadas[0].alheias
+    for esperada in ("urllib.request.urlopen [thread de fundo: fundo-de-outro-teste]",
+                     "main._supabase_insert() [thread de fundo: fundo-de-outro-teste]",
+                     "urllib.request.urlopen [thread de fundo: filha-do-fundo]",
+                     "main._supabase_insert() [thread de fundo: filha-do-fundo]"):
+        assert esperada in alheias, (esperada, alheias)
+
+
+def _custo_dentro_da_requisicao(monkeypatch, onde):
+    """Põe `_paga_o_banco` DENTRO da requisição do /health, no app de verdade.
+    Antes das minas o banco é um dublê mudo: o aquecimento não sai pra rede."""
+    import threading
+    from fastapi.routing import APIRoute
+    from starlette.middleware import Middleware
+    from starlette.middleware.base import BaseHTTPMiddleware
+
+    monkeypatch.setattr(M, "_supabase_insert", lambda *a, **k: False)
+    if onde == "middleware":
+        async def _middleware_que_paga(request, call_next):
+            _paga_o_banco()
+            return await call_next(request)
+        monkeypatch.setattr(M.app, "user_middleware", [
+            Middleware(BaseHTTPMiddleware, dispatch=_middleware_que_paga)]
+            + list(M.app.user_middleware))
+        monkeypatch.setattr(M.app, "middleware_stack", None)   # remonta
+        return
+    if onde == "rota async":
+        async def liveness():
+            _paga_o_banco()
+            return {"ok": True}
+    elif onde == "rota def":          # roda numa worker thread, não no portal
+        def liveness():
+            _paga_o_banco()
+            return {"ok": True}
+    else:                             # thread aberta pela própria rota
+        async def liveness():
+            t = threading.Thread(target=_paga_o_banco)
+            t.start()
+            t.join()
+            return {"ok": True}
+    outras = [r for r in M.app.router.routes
+              if getattr(r, "path", None) != "/health"]
+    monkeypatch.setattr(M.app.router, "routes",
+                        [APIRoute("/health", liveness, methods=["GET"])] + outras)
+
+
+@pytest.mark.parametrize("onde", ["middleware", "rota async", "rota def",
+                                  "thread aberta pela rota"])
+@_OS_DOIS_GUARDAS
+def test_CONTROLE_custo_na_requisicao_CONTINUA_reprovando(monkeypatch, guarda,
+                                                          onde):
+    """O outro lado do conserto de 27/09: separar a thread de fundo não pode
+    esconder custo da REQUISIÇÃO — nem no middleware, nem na rota rodando em
+    worker thread, nem numa thread que a rota abre."""
+    _custo_dentro_da_requisicao(monkeypatch, onde)
+    with pytest.raises(AssertionError, match=r"(pagou|saiu do processo) por "
+                                             r"main\._supabase_insert\(\)"):
+        guarda(monkeypatch)
 
 
 def test_a_sonda_e_UMA_INSTRUCAO():
