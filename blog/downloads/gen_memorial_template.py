@@ -17,6 +17,47 @@ INDIGO = RGBColor(0x4F, 0x46, 0xE5)
 DARK = RGBColor(0x0F, 0x17, 0x2A)
 GRAY = RGBColor(0x47, 0x55, 0x69)
 
+# 🔗 26/09/2026 (auditoria de aquisição): o arquivo baixado é a última coisa que
+# o visitante do post do memorial vê — e o "ai.arq.br" era texto puro, sem link
+# (0 hyperlinks no .docx, 0 anotações URI no .pdf). A marca `?origem=` faz quem
+# vier do arquivo chegar com origem própria no cadastro.
+URL_DO_MODELO = "https://ai.arq.br/?origem=modelo-memorial"
+
+
+def add_link(p, texto, url, size=Pt(9), color=INDIGO, italic=True):
+    """Link CLICÁVEL de verdade: w:hyperlink + relação External no .docx (o
+    python-docx não tem API pra isso). O Word leva o link pro PDF exportado."""
+    from docx.oxml.shared import OxmlElement, qn
+    from docx.opc.constants import RELATIONSHIP_TYPE as RT
+    r_id = p.part.relate_to(url, RT.HYPERLINK, is_external=True)
+    link = OxmlElement('w:hyperlink')
+    link.set(qn('r:id'), r_id)
+    run = OxmlElement('w:r')
+    rpr = OxmlElement('w:rPr')
+    fontes = OxmlElement('w:rFonts')
+    fontes.set(qn('w:ascii'), 'Calibri')
+    fontes.set(qn('w:hAnsi'), 'Calibri')
+    rpr.append(fontes)
+    if italic:
+        rpr.append(OxmlElement('w:i'))
+    cor = OxmlElement('w:color')
+    cor.set(qn('w:val'), str(color))
+    rpr.append(cor)
+    tam = OxmlElement('w:sz')
+    tam.set(qn('w:val'), str(int(size.pt * 2)))
+    rpr.append(tam)
+    sub = OxmlElement('w:u')
+    sub.set(qn('w:val'), 'single')
+    rpr.append(sub)
+    run.append(rpr)
+    t = OxmlElement('w:t')
+    t.text = texto
+    t.set(qn('xml:space'), 'preserve')
+    run.append(t)
+    link.append(run)
+    p._p.append(link)
+    return link
+
 
 def add_h1(doc, text):
     p = doc.add_paragraph()
@@ -149,11 +190,12 @@ def main():
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     p.paragraph_format.space_before = Pt(120)
-    run = p.add_run('Modelo gerado por AI.arq · ai.arq.br')
+    run = p.add_run('Modelo gerado por AI.arq · ')
     run.font.size = Pt(9)
     run.italic = True
     run.font.color.rgb = GRAY
     run.font.name = 'Calibri'
+    add_link(p, 'ai.arq.br', URL_DO_MODELO)
 
     doc.add_page_break()
 
@@ -161,7 +203,7 @@ def main():
     add_h1(doc, 'Como usar este modelo')
     add_p(doc,
         'Este é um modelo genérico de memorial descritivo de obra. '
-        'Foi estruturado pra atender 95% dos casos típicos do mercado brasileiro. '
+        'Foi estruturado pra atender a maioria dos casos típicos do mercado brasileiro. '
         'Adapte cada seção pra realidade do seu projeto.')
     add_p(doc, 'Recomendações de preenchimento:', italic=False)
     add_p(doc, '• Substitua os textos em [colchetes] pelos dados reais do projeto.')
@@ -367,11 +409,13 @@ def main():
 
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = p.add_run('Pra acelerar a planilha de quantitativos, acesse ai.arq.br')
+    run = p.add_run('Tem o desenho em DWG, DXF ou PDF? A AI.arq gera a planilha de quantitativos '
+                    'e um rascunho de memorial por disciplina a partir dele: ')
     run.font.size = Pt(9)
     run.italic = True
     run.font.color.rgb = INDIGO
     run.font.name = 'Calibri'
+    add_link(p, 'ai.arq.br', URL_DO_MODELO)
 
     docx_path = os.path.join(THIS_DIR, "memorial-descritivo-obra-modelo.docx")
     doc.save(docx_path)

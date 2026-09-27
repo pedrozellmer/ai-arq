@@ -10,14 +10,14 @@
 <link rel="apple-touch-icon" href="apple-touch-icon-v2.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AI.arq — Quantidade medida do CAD, pra engenharia e arquitetura</title>
-<meta name="description" content="A IA lê seu DXF, DWG ou PDF e devolve a QUANTIDADE de cada item — medida da geometria do desenho —, em planilha por disciplina e em minutos, com a coluna de preço em branco pro seu orçamentista. Pra engenharia civil, arquitetura e orçamento de obra. Grátis e ilimitado durante o beta, sem cartão.">
+<meta name="description" content="A IA lê seu DXF, DWG ou PDF e devolve a QUANTIDADE de cada item — medida da geometria em DXF/DWG ou marcada como estimativa pra revisar —, em planilha por disciplina, com a coluna de preço em branco pro seu orçamentista. Pra engenharia civil, arquitetura e orçamento de obra. Grátis e ilimitado durante o beta, sem cartão.">
 <link rel="canonical" href="https://ai.arq.br/">
 
 <!-- Open Graph / WhatsApp / Facebook / LinkedIn -->
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://ai.arq.br/">
 <meta property="og:title" content="AI.arq — Quantidade medida do CAD, pra engenharia e arquitetura">
-<meta property="og:description" content="A IA lê seu DXF, DWG ou PDF e devolve a QUANTIDADE de cada item — medida da geometria do desenho —, por disciplina e em minutos. Quantidade, não preço: a coluna de preço vai em branco pro orçamentista. Pra engenharia civil, arquitetura e orçamento de obra.">
+<meta property="og:description" content="A IA lê seu DXF, DWG ou PDF e devolve a QUANTIDADE de cada item — medida da geometria em DXF/DWG ou marcada como estimativa pra revisar —, por disciplina. Quantidade, não preço: a coluna de preço vai em branco pro orçamentista. Pra engenharia civil, arquitetura e orçamento de obra.">
 <meta property="og:image" content="https://ai.arq.br/og-image.png">
 <!-- Dimensoes declaradas: sem elas o buscador precisa baixar a imagem pra saber
      se serve, e no caminho pode preferir outra que ja conhece. Em 04/08/2026 a
@@ -39,7 +39,7 @@
 
 <!-- Schema.org SoftwareApplication -->
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"SoftwareApplication","name":"AI.arq","applicationCategory":"BusinessApplication","operatingSystem":"Web","image":"https://ai.arq.br/og-image.png","logo":"https://ai.arq.br/og-image.png","offers":{"@type":"Offer","price":"0","priceCurrency":"BRL","description":"Grátis durante o beta, sem limite de projetos. Quando a cobrança for ativada (com aviso antes): R$97 / R$157 / R$247 conforme número de pranchas."},"description":"Quantitativo com IA pra engenharia civil, arquitetura e orçamento de obra no Brasil. A IA lê PDF, DWG e DXF e devolve planilha de quantitativos por disciplina com referência SINAPI.","inLanguage":"pt-BR","url":"https://ai.arq.br/","sameAs":["https://www.capterra.com/p/10183565/AI-arq/"],"publisher":{"@type":"Organization","name":"AI.arq","url":"https://ai.arq.br/","logo":{"@type":"ImageObject","url":"https://ai.arq.br/og-image.png","width":1200,"height":630}}}
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"AI.arq","applicationCategory":"BusinessApplication","operatingSystem":"Web","image":"https://ai.arq.br/og-image.png","logo":"https://ai.arq.br/og-image.png","offers":{"@type":"Offer","price":"0","priceCurrency":"BRL","description":"Hoje: R$ 0 — grátis durante o beta, sem limite de projetos. Tabela prevista para quando a cobrança for ativada (pode mudar; com aviso antes): R$97 / R$157 / R$247 conforme número de pranchas."},"description":"Quantitativo com IA pra engenharia civil, arquitetura e orçamento de obra no Brasil. A IA lê PDF, DWG e DXF e devolve planilha de quantitativos por disciplina com referência SINAPI nos itens em que há correspondência.","inLanguage":"pt-BR","url":"https://ai.arq.br/","sameAs":["https://www.capterra.com/p/10183565/AI-arq/"],"publisher":{"@type":"Organization","name":"AI.arq","url":"https://ai.arq.br/","logo":{"@type":"ImageObject","url":"https://ai.arq.br/og-image.png","width":1200,"height":630}}}
 </script>
 <link rel="stylesheet" href="/tailwind.min.css">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -168,7 +168,7 @@
             </div>
             <div>
               <div class="text-3xl font-bold gradient-text">SINAPI</div>
-              <div class="text-xs md:text-sm text-gray-500 mt-1">Referência em cada item</div>
+              <div class="text-xs md:text-sm text-gray-500 mt-1">Referência onde há correspondência</div>
             </div>
           </div>
 
@@ -183,7 +183,7 @@
           <div class="mt-4 grid gap-3 md:grid-cols-2 text-left">
             <div class="rounded-lg border border-indigo-200 bg-white p-4">
               <p class="text-sm font-semibold text-gray-800"><span aria-hidden="true">📐</span> Cada item rastreável</p>
-              <p class="mt-1 text-xs text-gray-500">Linha-a-linha mostra de qual prancha veio, qual elemento do CAD e a referência SINAPI. Auditável.</p>
+              <p class="mt-1 text-xs text-gray-500">Linha-a-linha mostra de qual prancha veio, qual elemento do CAD e a referência SINAPI, quando há correspondência. Auditável.</p>
             </div>
             <div class="rounded-lg border border-amber-200 bg-white p-4">
               <p class="text-sm font-semibold text-gray-800"><span aria-hidden="true">🔎</span> Raio-x de cada item: medido vs. estimado</p>
@@ -241,7 +241,7 @@
       <p class="text-sm font-semibold text-indigo-900"><span aria-hidden="true">📊</span> No nosso beta (154 projetos: 101 em CAD, 53 só PDF)</p>
       <p class="mt-2 text-3xl font-bold text-indigo-700">Em CAD, <span class="whitespace-nowrap">1 em cada 4</span> linhas j&aacute; vem conferida</p>
       <p class="mt-2 text-sm text-indigo-800">A planilha volta com n&uacute;mero em <strong>68,4%</strong> das linhas em CAD e <strong>52,3%</strong> s&oacute; com PDF. A diferen&ccedil;a maior est&aacute; no que voc&ecirc; pode usar <em>sem conferir</em>: em CAD, <strong>25,0%</strong> das linhas saem carimbadas como <strong>medidas</strong> da geometria; em PDF, <strong>3 em 5.222</strong> &mdash; o motor mede o desenho, mas a escala vem do carimbo da prancha, e carimbo &eacute; declara&ccedil;&atilde;o, n&atilde;o prova. Ent&atilde;o tudo do PDF sai como estimativa, com a proced&ecirc;ncia escrita na linha.</p>
-      <p class="mt-3 text-xs text-indigo-500"><span aria-hidden="true">👉</span> Mande <strong>DXF</strong> sempre que puder (ou DWG) &mdash; o DXF &eacute; o que mede melhor e nunca trava na convers&atilde;o. <span class="text-indigo-400">Fonte: base do AI.arq, projetos conclu&iacute;dos em ago/2026 &mdash; 79 em CAD (4.447 itens) e 11 s&oacute; PDF (387 itens).</span></p>
+      <p class="mt-3 text-xs text-indigo-500"><span aria-hidden="true">👉</span> Mande <strong>DXF</strong> sempre que puder (ou DWG) &mdash; o DXF &eacute; o que mede melhor e n&atilde;o passa pela convers&atilde;o de DWG, que &eacute; onde mais arquivo trava. <span class="text-indigo-400">Fonte: base do AI.arq, projetos conclu&iacute;dos at&eacute; set/2026 &mdash; 154 projetos: 101 em CAD e 53 s&oacute; PDF.</span></p>
       <div class="mt-4 text-center">
         <a href="/exemplo.html" class="inline-flex items-center gap-1.5 text-sm font-semibold text-indigo-700 hover:text-indigo-900">Ver um quantitativo de exemplo, do jeito que sai — sem cadastro <span aria-hidden="true">&rarr;</span></a>
       </div>
@@ -320,7 +320,7 @@
         </div>
         <div class="absolute -top-2 left-1/2 ml-6 flex h-8 w-8 items-center justify-center rounded-full bg-indigo-100 text-indigo-700 text-sm font-bold">3</div>
         <h3 class="mt-6 text-lg font-semibold text-gray-900">Planilha + referências SINAPI</h3>
-        <p class="mt-3 text-gray-600 text-sm leading-relaxed">XLSX com 18 disciplinas e código de cores por nível de confiança. <strong>Aba "Referências SINAPI"</strong> traz códigos oficiais e insumos esperados de cada item — justifica o quantitativo pros fornecedores.</p>
+        <p class="mt-3 text-gray-600 text-sm leading-relaxed">XLSX com 18 disciplinas e código de cores por nível de confiança. <strong>Aba "Referências SINAPI"</strong> traz códigos oficiais e insumos esperados dos itens com correspondência (os sem par vêm sinalizados) — justifica o quantitativo pros fornecedores.</p>
       </div>
       <!-- Passo 4 -->
       <div class="text-center relative">
@@ -441,7 +441,7 @@
           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
         </div>
         <h3 class="mt-4 font-semibold text-gray-900">Referências SINAPI</h3>
-        <p class="mt-2 text-sm text-gray-600 leading-relaxed">Cada item do quantitativo tem referência oficial — código SINAPI e os insumos esperados de cada item. Justifica o quantitativo tecnicamente.</p>
+        <p class="mt-2 text-sm text-gray-600 leading-relaxed">Os itens do quantitativo vêm com o código SINAPI de referência quando há correspondência confiável, com os insumos esperados; os sem par vêm sinalizados. Justifica o quantitativo tecnicamente.</p>
       </div>
       <div class="bg-gradient-to-br from-amber-50 to-white rounded-xl p-6 border-2 border-amber-100 card-hover">
         <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-amber-500 text-white">
@@ -538,13 +538,13 @@
     <div class="text-center">
       <span class="inline-block mb-4 bg-green-100 text-green-700 text-sm font-medium px-3 py-1 rounded-full">Grátis no beta</span>
       <h2 class="text-3xl font-bold text-gray-900 md:text-4xl">Pague por projeto, sem mensalidade</h2>
-      <p class="mt-4 text-gray-600 max-w-2xl mx-auto">Preço fechado por faixa de pranchas. <strong>Quanto maior o projeto, mais barato por prancha.</strong> Durante o beta, é tudo por nossa conta — quantos projetos quiser.</p>
+      <p class="mt-4 text-gray-600 max-w-2xl mx-auto">Preço previsto por faixa de pranchas. <strong>Quanto maior o projeto, mais barato por prancha.</strong> Durante o beta, é tudo por nossa conta — quantos projetos quiser.</p>
       <a href="precos.html" class="mt-5 inline-flex items-center gap-2 text-sm font-medium text-indigo-600 hover:text-indigo-700 transition">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
         Calculadora de preço: ver quanto custa o meu projeto →
       </a>
       <p class="mt-4 mx-auto max-w-2xl text-sm text-indigo-900 bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-2.5">
-        <span aria-hidden="true">🧪</span> <strong>Beta aberto:</strong> por enquanto os projetos processados não são cobrados. Esta é a tabela que passa a valer quando a cobrança for ativada — e você é avisado com antecedência, com o valor sempre na tela antes de confirmar.
+        <span aria-hidden="true">🧪</span> <strong>Beta aberto:</strong> por enquanto os projetos processados não são cobrados. Esta é a tabela prevista para quando a cobrança for ativada — pode mudar até lá — e você é avisado com antecedência, com o valor sempre na tela antes de confirmar.
       </p>
     </div>
 
@@ -631,7 +631,7 @@
           <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-50 text-purple-600 shrink-0"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/></svg></div>
           <div>
             <p class="text-sm font-semibold text-gray-900">Códigos SINAPI sugeridos</p>
-            <p class="text-xs text-gray-500 mt-0.5">Pra cada item, a IA sugere o código SINAPI correspondente pra facilitar a compra.</p>
+            <p class="text-xs text-gray-500 mt-0.5">Nos itens com correspondência, a IA sugere o código SINAPI pra facilitar a compra.</p>
           </div>
         </div>
         <div class="flex items-start gap-3">
@@ -780,7 +780,7 @@
         <button type="button" onclick="closeExportModal()" aria-label="Fechar" class="text-gray-400 hover:text-gray-600 text-lg shrink-0">&#10005;</button>
       </div>
       <div class="px-5 py-3 border-b border-gray-100 bg-indigo-50/60">
-        <p class="text-xs text-indigo-900"><b>A regra de ouro:</b> <b>🥇 DXF</b> &eacute; o melhor &mdash; a gente <b>mede</b> a geometria (item sai branco). <b>DWG</b> tamb&eacute;m mede, mas os de AutoCAD Architecture/MEP n&atilde;o abrem (veja a aba El&eacute;trica/MEP). <b>PDF</b> a gente l&ecirc; pela imagem, sai <b>estimativa</b> (laranja) pra conferir. Na d&uacute;vida, <b>mande DXF</b>.</p>
+        <p class="text-xs text-indigo-900"><b>A regra de ouro:</b> <b>🥇 DXF</b> &eacute; o melhor &mdash; a gente <b>mede</b> a geometria (item sai branco). <b>DWG</b> tamb&eacute;m mede, mas os de AutoCAD Architecture/MEP n&atilde;o abrem (veja a aba El&eacute;trica/MEP). <b>PDF</b> vetorial tamb&eacute;m &eacute; lido &mdash; o motor mede quando d&aacute; e a IA l&ecirc; textos e legendas &mdash;, mas sai <b>estimativa</b> (laranja) pra conferir &mdash; regra nossa pra PDF, cuja escala vem de uma declara&ccedil;&atilde;o (o carimbo). Planta escaneada n&atilde;o mede. Na d&uacute;vida, <b>mande DXF</b>.</p>
       </div>
       <div class="px-5 pt-3 flex flex-wrap gap-1.5" id="export-tabs"></div>
       <div class="px-5 pb-5 pt-3 overflow-y-auto" id="export-content"></div>

@@ -997,7 +997,7 @@ function openEdit(itemId, focusQty) {
   // produção: 8 de 8 edições em linha com unidade fora da lista (kg=7, m=1)
   // saíram com unidade VAZIA; 0 de 78 com unidade da lista perderam. Atribuir
   // .value = "kg" num select sem essa opção zera o campo em silêncio, e a
-  // armadura — 232 itens em 20 projetos — é justamente medida em kg.
+  // armadura, que aparece em muitos projetos, é justamente medida em kg.
   // 🪤 Acrescentar kg/m/t/l à lista NÃO basta: o motor pode emitir unidade
   // nova amanhã. A garantia é injetar a unidade do item quando ela faltar.
   const _selUnit = document.getElementById('edit-unit');

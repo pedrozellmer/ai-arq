@@ -34,7 +34,7 @@
       "name": "O que é o AI.arq?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "O AI.arq é uma plataforma que cobre o ciclo de quantitativo, comparativo e apresentação (sem precificar — isso fica com seu orçamentista): (1) Lê o CAD — você envia DXF, DWG ou PDF e a IA gera a planilha de quantitativos (itens, unidades e quantidades — sem preços) em poucos minutos. (2) Referências SINAPI — cada item vem com código oficial SINAPI (descrição padronizada, unidade e % de compatibilidade), pra justificar o quantitativo aos fornecedores. (3) Compara propostas — quando os fornecedores devolvem as cotações, você sobe as planilhas e o AI.arq gera o comparativo pareado (ranking, discrepâncias, cobertura)."
+        "text": "O AI.arq é uma plataforma que cobre o ciclo de quantitativo, comparativo e apresentação (sem precificar — isso fica com seu orçamentista): (1) Lê o CAD — você envia DXF, DWG ou PDF e a IA gera a planilha de quantitativos (itens, unidades e quantidades — sem preços). (2) Referências SINAPI — os itens vêm com o código SINAPI de referência quando há correspondência confiável (descrição padronizada, unidade e % de compatibilidade); os sem par vêm sinalizados. Serve pra justificar o quantitativo aos fornecedores. (3) Compara propostas — quando os fornecedores devolvem as cotações, você sobe as planilhas e o AI.arq gera o comparativo pareado (ranking, discrepâncias, cobertura). (4) Apresenta pro cliente final — com um clique, XLSX e PPT executivo saem com a logo e cor do seu escritório, prontos pra enviar por WhatsApp ou e-mail. (5) Memorial e cronograma — do mesmo quantitativo saem um rascunho de memorial descritivo por disciplina (com carimbo RASCUNHO e o que falta marcado [A PREENCHER], pra você completar e assinar) e um cronograma físico da obra (não calculamos preço: se você informar o valor de cada etapa, ele distribui o desembolso mês a mês)."
       }
     },
     {
@@ -82,7 +82,7 @@
       "name": "Como exporto meu projeto pra ter o melhor resultado?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "A regra de ouro: 🥇 DXF é o melhor — mede de verdade e nunca trava na conversão. DWG também mede, mas os de AutoCAD Architecture/MEP (objetos AEC) às vezes não abrem — se der erro, exporte DXF. PDF é leitura visual, sai como estimativa. No CAD a gente extrai a geometria (áreas, comprimentos, contagem de blocos), então as quantidades saem medidas; no PDF a IA lê pela imagem, então sai tudo como estimativa pra você conferir. Passo a passo por programa: AutoCAD Botão do Aplicativo (o \"A\" no topo à esquerda) → Salvar Como → Outros Formatos. Em \"Arquivos do tipo\", escolha um DXF (ex.: AutoCAD 2018 DXF). Dê um nome, escolha a pasta e Salvar."
+        "text": "A regra de ouro: 🥇 DXF é o melhor — mede de verdade e não passa pela conversão de DWG, que é onde mais arquivo trava. DWG também mede, mas os de AutoCAD Architecture/MEP (objetos AEC) às vezes não abrem — se der erro, exporte DXF. PDF vetorial também é lido, mas sai como estimativa. No CAD a gente extrai a geometria (áreas, comprimentos, contagem de blocos), então as quantidades saem medidas; no PDF o motor mede a geometria quando dá e a IA lê textos e legendas, mas tudo sai como estimativa pra você conferir, porque é regra nossa não selar número de PDF como medido: a escala dele vem de uma declaração (o carimbo). Planta escaneada não mede. Passo a passo por programa: AutoCAD Botão do Aplicativo (o \"A\" no topo à esquerda) → Salvar Como → Outros Formatos. Em \"Arquivos do tipo\", escolha um DXF (ex.: AutoCAD 2018 DXF). Dê um nome, escolha a pasta e Salvar."
       }
     },
     {
@@ -90,7 +90,7 @@
       "name": "Quantas pranchas posso enviar por projeto?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Sem limite de arquivos. Durante o beta é grátis e ilimitado, sem cartão — o que está abaixo é a tabela que passará a valer depois. O que conta é a quantidade de pranchas reais dentro deles — você pode enviar 1 PDF com 12 pranchas, ou 12 DWGs com 1 prancha cada, o preço é o mesmo. As 3 faixas: Pequeno (1-5 pranchas) R$ 97, Médio (6-10) R$ 157, Grande (11-20) R$ 247. Acima de 20 pranchas: R$ 247 + R$ 10 por prancha extra, sem teto. Dúvidas ou casos especiais: contato@ai.arq.br."
+        "text": "Sem limite de arquivos. Durante o beta é grátis e ilimitado, sem cartão — o que está abaixo é a tabela prevista para depois (pode mudar). O que conta é a quantidade de pranchas reais dentro deles — você pode enviar 1 PDF com 12 pranchas, ou 12 DWGs com 1 prancha cada, o preço é o mesmo. As 3 faixas: Pequeno (1-5 pranchas) R$ 97, Médio (6-10) R$ 157, Grande (11-20) R$ 247. Acima de 20 pranchas: R$ 247 + R$ 10 por prancha extra, sem teto. Dúvidas ou casos especiais: contato@ai.arq.br."
       }
     },
     {
@@ -106,7 +106,7 @@
       "name": "O que a planilha gerada contém?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Importante: o AI.arq entrega uma planilha de quantitativos (itens + unidades + quantidades + descrições SINAPI) — sem preços preenchidos. A precificação e o fechamento do orçamento são feitos por você ou pelo seu orçamentista. A planilha (.xlsx) tem até 3 abas: • Aba 1 — Resumo Comparativo: análise do que sai, entra e permanece (especialmente útil em reformas). • Aba 2 — Orçamento: itens organizados em até 18 disciplinas (Serviços Preliminares, Demolição, Fechamentos, Revestimentos, Pisos, Forros, Portas, Divisórias, Persianas, Iluminação, Elétrica, Hidráulica, Gás, AC, Incêndio, Marcenaria, Mobiliário, Complementares)."
+        "text": "Importante: o AI.arq entrega uma planilha de quantitativos (itens + unidades + quantidades + descrições SINAPI nos itens com correspondência) — sem preços preenchidos. A precificação e o fechamento do orçamento são feitos por você ou pelo seu orçamentista. A planilha (.xlsx) tem até 3 abas: • Aba 1 — Resumo Comparativo: análise do que sai, entra e permanece (especialmente útil em reformas). • Aba 2 — Orçamento: itens organizados em até 18 disciplinas (Serviços Preliminares, Demolição, Fechamentos, Revestimentos, Pisos, Forros, Portas, Divisórias, Persianas, Iluminação, Elétrica, Hidráulica, Gás, AC, Incêndio, Marcenaria, Mobiliário, Complementares)."
       }
     },
     {
@@ -122,7 +122,7 @@
       "name": "Qual a precisão do AI.arq?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "A precisão depende da qualidade do arquivo: DWG/DXF permitem medição geométrica direta; PDF depende de as cotas estarem no desenho. Por isso cada item volta marcado como medido (do CAD) ou estimativa (pra revisar) — você sempre sabe no que confiar. Por que medir e não só \"olhar\" a planta? Mesmo os modelos de IA mais avançados do mundo, quando contam itens só pela imagem de uma planta, erram muito: um benchmark acadêmico de 2026 (AECV-Bench) mediu entre 40% e 55% de acerto na contagem de portas e janelas. Por isso o AI.arq lê a geometria do arquivo CAD em vez de adivinhar pela imagem — e te mostra, item a item, o que foi medido e o que é estimativa."
+        "text": "A precisão depende da qualidade do arquivo: DWG/DXF permitem medição geométrica direta; PDF vetorial é lido, mas sai como estimativa — é regra nossa não selar número de PDF como medido, porque a escala dele vem de uma declaração (o carimbo); planta escaneada não mede. Por isso cada item volta marcado como medido (do CAD) ou estimativa (pra revisar) — você sempre sabe no que confiar. Por que medir e não só \"olhar\" a planta? Mesmo os modelos de IA mais avançados do mundo, quando contam itens só pela imagem de uma planta, erram muito: um benchmark acadêmico de 2026 (AECV-Bench) mediu entre 40% e 55% de acerto na contagem de portas e janelas. Por isso o AI.arq lê a geometria do arquivo CAD em vez de adivinhar pela imagem — e te mostra, item a item, o que foi medido e o que é estimativa."
       }
     },
     {
@@ -162,7 +162,7 @@
       "name": "Quanto custa usar o AI.arq?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Três planos com economia de escala — quanto maior o projeto, mais barato por prancha. Durante o beta, grátis e ilimitado. Pequeno R$ 97 Até 5 pranchas R$ 19,40 / prancha MAIS COMUM Médio R$ 157 6 a 10 pranchas R$ 15,70 / prancha · −19% Grande R$ 247 11 a 20 pranchas R$ 12,35 / prancha · −36%"
+        "text": "Hoje: R$ 0 — durante o beta aberto é grátis e ilimitado, sem cartão, quantos projetos quiser. Tabela prevista para quando a cobrança começar (pode mudar, e a gente avisa antes): três planos com economia de escala — quanto maior o projeto, mais barato por prancha. Pequeno R$ 97 Até 5 pranchas R$ 19,40 / prancha MAIS COMUM Médio R$ 157 6 a 10 pranchas R$ 15,70 / prancha · −19% Grande R$ 247 11 a 20 pranchas R$ 12,35 / prancha · −36%"
       }
     },
     {
@@ -170,7 +170,7 @@
       "name": "Quais formas de pagamento são aceitas?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Cartão de crédito/débito, processado pelo Stripe — a mesma plataforma de pagamentos utilizada por empresas como Uber, Spotify e Amazon. Não armazenamos dados do seu cartão; todo o fluxo financeiro ocorre diretamente nos servidores do Stripe (certificado PCI-DSS)."
+        "text": "Hoje não há pagamento: o beta é grátis. Quando a cobrança começar, o pagamento previsto é por cartão de crédito/débito, processado pelo Stripe. Não armazenamos dados do seu cartão; todo o fluxo financeiro ocorre diretamente nos servidores do Stripe (certificado PCI-DSS)."
       }
     },
     {
@@ -186,7 +186,7 @@
       "name": "Tem mensalidade ou assinatura?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Não. Você paga por projeto processado, sem assinatura, mensalidade ou taxa oculta — usa quando precisa. Durante o beta nada é cobrado, e quantos projetos quiser; a tabela por número de pranchas só passa a valer quando a cobrança começar, e a gente avisa antes."
+        "text": "Não. O modelo previsto é por projeto processado, sem assinatura, mensalidade ou taxa oculta — usa quando precisa. Hoje, durante o beta, nada é cobrado, e quantos projetos quiser; a tabela prevista por número de pranchas só vale quando a cobrança começar (pode mudar), e a gente avisa antes."
       }
     },
     {
@@ -194,7 +194,7 @@
       "name": "Preciso usar todas as features? É obrigatório?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Não. Cada feature funciona sozinha. Não tem venda casada. ✓ Só quantitativo? Ok — você gera a planilha e usa do jeito que quiser, em qualquer ferramenta. ✓ Só comparativo de fornecedores? Em breve vamos disponibilizar uma página separada. Hoje, o comparativo aparece dentro do projeto (mesmo que você não use o quantitativo do AI.arq como base). ✓ Só referências SINAPI? Vêm junto com o quantitativo automaticamente quando há matches — não é cobrada separada. ✓ Só PPT com sua marca? Só é gerado quando você tiver cotações pra comparar. É brinde do comparativo, não é cobrado à parte. Você paga só pelo processamento do quantitativo (preço por faixa de pranchas — veja \"Preços e Pagamento\")."
+        "text": "Não. Cada feature funciona sozinha. Não tem venda casada. ✓ Só quantitativo? Ok — você gera a planilha e usa do jeito que quiser, em qualquer ferramenta. ✓ Só comparativo de fornecedores? Em breve vamos disponibilizar uma página separada. Hoje, o comparativo aparece dentro do projeto (mesmo que você não use o quantitativo do AI.arq como base). ✓ Só referências SINAPI? Vêm junto com o quantitativo automaticamente quando há matches — não é cobrada separada. ✓ Só PPT com sua marca? Só é gerado quando você tiver cotações pra comparar. É brinde do comparativo, não é cobrado à parte. Quando a cobrança começar, o previsto é pagar só pelo processamento do quantitativo (preço previsto por faixa de pranchas — veja \"Preços e Pagamento\")."
       }
     },
     {
@@ -258,7 +258,7 @@
       "name": "O que é a aba \"Referências SINAPI\" na planilha?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Uma aba na planilha gerada que, pra cada item do quantitativo, mostra: • Código SINAPI (Caixa) sugerido + descrição padronizada e unidade • Até 2 sugestões de composição por item, da mais compatível pra menos • Similaridade entre descrição do item e a composição (% de compatibilidade) • Item sem match vem sinalizado, com orientação pra buscar o código manualmente no site da Caixa Serve pra justificar tecnicamente o quantitativo pros fornecedores e dar credibilidade à planilha. Base: catálogo oficial SINAPI (Caixa), ~10 mil composições. Sem preço — o código serve pra consultar o valor atualizado direto na fonte."
+        "text": "Uma aba na planilha gerada que, para os itens do quantitativo com correspondência, mostra: • Código SINAPI (Caixa) sugerido + descrição padronizada e unidade • Até 2 sugestões de composição por item, da mais compatível pra menos • Similaridade entre descrição do item e a composição (% de compatibilidade) • Item sem match vem sinalizado, com orientação pra buscar o código manualmente no site da Caixa Serve pra justificar tecnicamente o quantitativo pros fornecedores e dar credibilidade à planilha. Base: catálogo oficial SINAPI (Caixa), ~10 mil composições. Sem preço — o código serve pra consultar o valor atualizado direto na fonte."
       }
     },
     {
@@ -290,7 +290,7 @@
       "name": "Quem tem acesso aos meus dados?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Apenas os parceiros essenciais para o funcionamento do Serviço: • Anthropic (Claude API): recebe imagens das pranchas para análise com IA. • Stripe: processa pagamentos (não armazenamos dados de cartão). • Supabase: banco de dados do perfil do usuário (criptografado). • Google: autenticação OAuth (nome, e-mail, foto). Não vendemos dados. Seus PDFs não são usados para treinar modelos de IA."
+        "text": "Apenas os parceiros essenciais para o funcionamento do Serviço: • Anthropic (Claude API): recebe imagens das pranchas para análise com IA. • Stripe: vai processar os pagamentos quando a cobrança começar (não armazenamos dados de cartão). • Supabase: banco de dados do perfil do usuário (criptografado). • Google: autenticação OAuth (nome, e-mail, foto). Não vendemos dados. Seus PDFs não são usados para treinar modelos de IA."
       }
     },
     {
@@ -370,7 +370,7 @@
       "name": "E se a prancha não tiver cota?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Ela é processada, mas mede menos. A escala do desenho é conferida pelas próprias cotas da prancha; sem cota a gente não confirma o fator, e comprimento e área saem como estimativa, em laranja, pra você revisar. O que continua saindo medido é a contagem — portas, janelas, luminárias, louças — porque contar bloco não depende de escala."
+        "text": "Ela é processada, mas mede menos. A escala do desenho é conferida pelas próprias cotas da prancha; sem cota a gente não confirma o fator, e comprimento e área saem como estimativa, em laranja, pra você revisar. Em DWG/DXF, o que continua saindo medido é a contagem — portas, janelas, luminárias, louças — porque contar bloco não depende de escala; em PDF, até a contagem sai como estimativa."
       }
     },
     {
@@ -378,7 +378,7 @@
       "name": "O AI.arq dá o preço da minha obra?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Não, e isso é escolha. A gente entrega quantidade — item, unidade e quantidade, com o código SINAPI de referência ao lado — e deixa a coluna de preço em branco pra você ou pro seu orçamentista preencher. Preço de material e de mão de obra muda por praça, por fornecedor e por semana; quem tem essa informação é quem compra. O que a gente faz é te dar o quantitativo rastreável em cima do qual esse preço vai ser posto."
+        "text": "Não, e isso é escolha. A gente entrega quantidade — item, unidade e quantidade, com o código SINAPI de referência ao lado dos itens em que há correspondência — e deixa a coluna de preço em branco pra você ou pro seu orçamentista preencher. Preço de material e de mão de obra muda por praça, por fornecedor e por semana; quem tem essa informação é quem compra. O que a gente faz é te dar o quantitativo rastreável em cima do qual esse preço vai ser posto."
       }
     },
     {
@@ -418,7 +418,7 @@
       "name": "A planilha do AI.arq serve pra licitação ou obra pública?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Serve como ponto de partida, não como planilha de licitação pronta. A gente entrega o quantitativo com o código SINAPI de referência ao lado de cada item, que é o que ajuda a justificar tecnicamente a quantidade — mas sem preço, sem pesquisa de mercado e sem assinatura de responsável técnico. Fechar a planilha orçamentária, escolher as composições definitivas e assinar continua sendo trabalho do profissional habilitado, e os itens marcados como estimativa precisam ser conferidos antes de qualquer uso oficial."
+        "text": "Serve como ponto de partida, não como planilha de licitação pronta. A gente entrega o quantitativo com o código SINAPI de referência ao lado dos itens em que há correspondência confiável (os sem par vêm sinalizados), que é o que ajuda a justificar tecnicamente a quantidade — mas sem preço, sem pesquisa de mercado e sem assinatura de responsável técnico. Fechar a planilha orçamentária, escolher as composições definitivas e assinar continua sendo trabalho do profissional habilitado, e os itens marcados como estimativa precisam ser conferidos antes de qualquer uso oficial."
       }
     },
     {
@@ -574,10 +574,11 @@
           <div class="faq-answer px-5">
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
               O AI.arq &eacute; uma plataforma que cobre o <strong>ciclo de quantitativo, comparativo e apresenta&ccedil;&atilde;o</strong> (sem precificar &mdash; isso fica com seu or&ccedil;amentista):
-              <br>(1) <strong>L&ecirc; o CAD</strong> &mdash; voc&ecirc; envia DXF, DWG ou PDF e a IA gera a planilha de quantitativos (itens, unidades e quantidades &mdash; <strong>sem pre&ccedil;os</strong>) em poucos minutos.
-              <br>(2) <strong>Refer&ecirc;ncias SINAPI</strong> &mdash; cada item vem com c&oacute;digo oficial SINAPI (descri&ccedil;&atilde;o padronizada, unidade e % de compatibilidade), pra justificar o quantitativo aos fornecedores.
+              <br>(1) <strong>L&ecirc; o CAD</strong> &mdash; voc&ecirc; envia DXF, DWG ou PDF e a IA gera a planilha de quantitativos (itens, unidades e quantidades &mdash; <strong>sem pre&ccedil;os</strong>).
+              <br>(2) <strong>Refer&ecirc;ncias SINAPI</strong> &mdash; os itens v&ecirc;m com o c&oacute;digo SINAPI de refer&ecirc;ncia quando h&aacute; correspond&ecirc;ncia confi&aacute;vel (descri&ccedil;&atilde;o padronizada, unidade e % de compatibilidade); os sem par v&ecirc;m sinalizados. Serve pra justificar o quantitativo aos fornecedores.
               <br>(3) <strong>Compara propostas</strong> &mdash; quando os fornecedores devolvem as cota&ccedil;&otilde;es, voc&ecirc; sobe as planilhas e o AI.arq gera o comparativo pareado (ranking, discrep&acirc;ncias, cobertura).
               <br>(4) <strong>Apresenta pro cliente final</strong> &mdash; com um clique, XLSX e PPT executivo saem com a <strong>logo e cor do seu escrit&oacute;rio</strong>, prontos pra enviar por WhatsApp ou e-mail.
+              <br>(5) <strong>Memorial e cronograma</strong> &mdash; do mesmo quantitativo saem um <strong>rascunho de memorial descritivo</strong> por disciplina (com carimbo RASCUNHO e o que falta marcado [A PREENCHER], pra voc&ecirc; completar e assinar) e um <strong>cronograma f&iacute;sico</strong> da obra (n&atilde;o calculamos pre&ccedil;o: se voc&ecirc; informar o valor de cada etapa, ele distribui o desembolso m&ecirc;s a m&ecirc;s).
             </div>
           </div>
         </div>
@@ -682,7 +683,7 @@
           </button>
           <div class="faq-answer px-5">
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
-              <p class="mb-3">A regra de ouro: <strong>🥇 DXF &eacute; o melhor</strong> &mdash; mede de verdade e nunca trava na convers&atilde;o. <strong>DWG</strong> tamb&eacute;m mede, mas os de AutoCAD Architecture/MEP (objetos AEC) &agrave;s vezes n&atilde;o abrem &mdash; se der erro, exporte DXF. <strong>PDF</strong> &eacute; leitura visual, sai como <strong>estimativa</strong>. No CAD a gente extrai a geometria (&aacute;reas, comprimentos, contagem de blocos), ent&atilde;o as quantidades saem <strong>medidas</strong>; no PDF a IA l&ecirc; pela imagem, ent&atilde;o sai tudo como estimativa pra voc&ecirc; conferir.</p>
+              <p class="mb-3">A regra de ouro: <strong>🥇 DXF &eacute; o melhor</strong> &mdash; mede de verdade e n&atilde;o passa pela convers&atilde;o de DWG, que &eacute; onde mais arquivo trava. <strong>DWG</strong> tamb&eacute;m mede, mas os de AutoCAD Architecture/MEP (objetos AEC) &agrave;s vezes n&atilde;o abrem &mdash; se der erro, exporte DXF. <strong>PDF</strong> vetorial tamb&eacute;m &eacute; lido, mas sai como <strong>estimativa</strong>. No CAD a gente extrai a geometria (&aacute;reas, comprimentos, contagem de blocos), ent&atilde;o as quantidades saem <strong>medidas</strong>; no PDF o motor mede a geometria quando d&aacute; e a IA l&ecirc; textos e legendas, mas tudo sai como estimativa pra voc&ecirc; conferir, porque &eacute; regra nossa n&atilde;o selar n&uacute;mero de PDF como medido: a escala dele vem de uma declara&ccedil;&atilde;o (o carimbo). Planta escaneada n&atilde;o mede.</p>
               <p class="mb-2 font-medium text-gray-700">Passo a passo por programa:</p>
               <div class="space-y-3 mb-4">
                 <div>
@@ -751,7 +752,7 @@
           </button>
           <div class="faq-answer px-5">
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
-              Sem limite de arquivos. <strong>Durante o beta é grátis e ilimitado, sem cartão</strong> — a tabela abaixo é a que passará a valer depois.
+              Sem limite de arquivos. <strong>Durante o beta é grátis e ilimitado, sem cartão</strong> — a tabela abaixo é a prevista para depois (pode mudar).
               O que conta é a quantidade de <strong>pranchas reais</strong> dentro deles — você pode enviar 1 PDF com 12 pranchas, ou 12 DWGs com 1 prancha cada, o preço é o mesmo. As 3 faixas: <strong>Pequeno (1-5 pranchas) R$ 97</strong>, <strong>Médio (6-10) R$ 157</strong>, <strong>Grande (11-20) R$ 247</strong>. Acima de 20 pranchas: R$ 247 + R$ 10 por prancha extra, sem teto. D&uacute;vidas ou casos especiais: <a href="mailto:contato@ai.arq.br" class="text-indigo-500 underline">contato@ai.arq.br</a>.
             </div>
           </div>
@@ -778,12 +779,12 @@
           </button>
           <div class="faq-answer px-5">
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
-              <p class="mb-3"><strong>Importante:</strong> o AI.arq entrega uma <strong>planilha de quantitativos</strong> (itens + unidades + quantidades + descri&ccedil;&otilde;es SINAPI) &mdash; <strong>sem pre&ccedil;os preenchidos</strong>. A precifica&ccedil;&atilde;o e o fechamento do or&ccedil;amento s&atilde;o feitos por voc&ecirc; ou pelo seu or&ccedil;amentista.</p>
+              <p class="mb-3"><strong>Importante:</strong> o AI.arq entrega uma <strong>planilha de quantitativos</strong> (itens + unidades + quantidades + descri&ccedil;&otilde;es SINAPI nos itens com correspond&ecirc;ncia) &mdash; <strong>sem pre&ccedil;os preenchidos</strong>. A precifica&ccedil;&atilde;o e o fechamento do or&ccedil;amento s&atilde;o feitos por voc&ecirc; ou pelo seu or&ccedil;amentista.</p>
               <p class="mb-3">A planilha (.xlsx) tem at&eacute; <strong>3 abas</strong>:</p>
               <ul class="space-y-2 ml-1">
                 <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>Aba 1 &mdash; Resumo Comparativo:</strong> an&aacute;lise do que sai, entra e permanece (especialmente &uacute;til em reformas).</li>
                 <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>Aba 2 &mdash; Or&ccedil;amento:</strong> itens organizados em at&eacute; 18 disciplinas (Servi&ccedil;os Preliminares, Demoli&ccedil;&atilde;o, Fechamentos, Revestimentos, Pisos, Forros, Portas, Divis&oacute;rias, Persianas, Ilumina&ccedil;&atilde;o, El&eacute;trica, <strong>Hidr&aacute;ulica</strong>, <strong>G&aacute;s</strong>, AC, Inc&ecirc;ndio, Marcenaria, Mobili&aacute;rio, Complementares). &Eacute; nesta aba que voc&ecirc; ou o or&ccedil;amentista preenche os pre&ccedil;os unit&aacute;rios para compor o or&ccedil;amento.</li>
-                <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1.5 shrink-0">&bull;</span> <strong class="text-emerald-700">Aba 3 &mdash; Refer&ecirc;ncias SINAPI</strong> (quando h&aacute; matches): para cada item do quantitativo, traz o c&oacute;digo oficial SINAPI com a descri&ccedil;&atilde;o padronizada da composi&ccedil;&atilde;o, unidade e % de compatibilidade. Serve pra justificar tecnicamente o quantitativo aos fornecedores.</li>
+                <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1.5 shrink-0">&bull;</span> <strong class="text-emerald-700">Aba 3 &mdash; Refer&ecirc;ncias SINAPI</strong> (quando h&aacute; matches): para os itens do quantitativo com correspond&ecirc;ncia, traz o c&oacute;digo oficial SINAPI com a descri&ccedil;&atilde;o padronizada da composi&ccedil;&atilde;o, unidade e % de compatibilidade. Serve pra justificar tecnicamente o quantitativo aos fornecedores.</li>
               </ul>
               <p class="mt-3 mb-2 font-medium text-gray-700">Recursos transversais:</p>
               <ul class="space-y-1 ml-1">
@@ -811,7 +812,7 @@
                 <li><strong>Extra&ccedil;&atilde;o do CAD:</strong> DWG/DXF &mdash; dados geom&eacute;tricos extra&iacute;dos direto (blocos, polylines, hachuras). PDF &mdash; texto extra&iacute;do e imagens recortadas por regi&atilde;o de legenda.</li>
                 <li><strong>An&aacute;lise com IA:</strong> cada prancha vai para a IA (Claude), que aplica conven&ccedil;&otilde;es NBR e identifica itens, materiais, quantidades e especifica&ccedil;&otilde;es.</li>
                 <li><strong>Calibra&ccedil;&atilde;o por densidade:</strong> ratios hist&oacute;ricos de projetos similares sinalizam itens fora do padr&atilde;o (alertas de anomalia).</li>
-                <li><strong>Enriquecimento com SINAPI:</strong> cada item ganha refer&ecirc;ncia oficial na aba "Refer&ecirc;ncias SINAPI" (c&oacute;digo + descri&ccedil;&atilde;o padronizada + % de compatibilidade).</li>
+                <li><strong>Enriquecimento com SINAPI:</strong> os itens com correspond&ecirc;ncia ganham refer&ecirc;ncia oficial na aba "Refer&ecirc;ncias SINAPI" (c&oacute;digo + descri&ccedil;&atilde;o padronizada + % de compatibilidade).</li>
                 <li><strong>Gera&ccedil;&atilde;o:</strong> itens consolidados em planilha .xlsx com f&oacute;rmulas de subtotal, BDI e conting&ecirc;ncia prontas.</li>
                 <li><strong>Revis&atilde;o:</strong> voc&ecirc; revisa no navegador (aprovar/editar/comentar item a item) ou baixa e corrige offline.</li>
                 <li><strong>Comparativo de or&ccedil;amentos (opcional):</strong> quando os fornecedores devolvem, voc&ecirc; faz upload das planilhas e o AI.arq gera XLSX + PPT executivo com sua marca.</li>
@@ -842,7 +843,7 @@
           </button>
           <div class="faq-answer px-5">
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
-              <p>A precis&atilde;o depende da qualidade do arquivo: <strong>DWG/DXF</strong> permitem medi&ccedil;&atilde;o geom&eacute;trica direta; <strong>PDF</strong> depende de as cotas estarem no desenho. Por isso cada item volta marcado como <strong>medido</strong> (do CAD) ou <strong>estimativa</strong> (pra revisar) &mdash; voc&ecirc; sempre sabe no que confiar.</p>
+              <p>A precis&atilde;o depende da qualidade do arquivo: <strong>DWG/DXF</strong> permitem medi&ccedil;&atilde;o geom&eacute;trica direta; <strong>PDF</strong> vetorial &eacute; lido, mas sai como estimativa &mdash; &eacute; regra nossa n&atilde;o selar n&uacute;mero de PDF como medido, porque a escala dele vem de uma declara&ccedil;&atilde;o (o carimbo); planta escaneada n&atilde;o mede. Por isso cada item volta marcado como <strong>medido</strong> (do CAD) ou <strong>estimativa</strong> (pra revisar) &mdash; voc&ecirc; sempre sabe no que confiar.</p>
               <p class="mt-3"><strong>Por que medir e n&atilde;o s&oacute; "olhar" a planta?</strong> Mesmo os modelos de IA mais avan&ccedil;ados do mundo, quando contam itens s&oacute; pela imagem de uma planta, erram muito: um benchmark acad&ecirc;mico de 2026 (AECV-Bench) mediu <strong>entre 40% e 55% de acerto</strong> na contagem de portas e janelas (<a href="https://arxiv.org/abs/2601.04819" target="_blank" rel="noopener" class="underline">AECV-Bench, 2026</a>). Por isso o AI.arq l&ecirc; a <strong>geometria do arquivo CAD</strong> em vez de adivinhar pela imagem &mdash; e te mostra, item a item, o que foi medido e o que &eacute; estimativa.</p>
               <p class="mt-2 text-xs text-gray-400">Fonte: AECV-Bench (2026), benchmark acad&ecirc;mico de leitura de plantas &mdash; <a href="https://arxiv.org/abs/2601.04819" target="_blank" rel="noopener" class="underline hover:text-indigo-600">arxiv.org/abs/2601.04819</a>.</p>
               <p class="mt-3 text-xs text-gray-500">Toda planilha deve ser revisada por profissional.</p>
@@ -954,7 +955,7 @@
           </button>
           <div class="faq-answer px-5">
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
-              <p class="mb-3">Tr&ecirc;s planos com <strong>economia de escala</strong> &mdash; quanto maior o projeto, mais barato por prancha. Durante o beta, gr&aacute;tis e ilimitado.</p>
+              <p class="mb-3"><strong>Hoje: R$ 0</strong> &mdash; durante o beta aberto &eacute; gr&aacute;tis e ilimitado, sem cart&atilde;o, quantos projetos quiser. Tabela <strong>prevista</strong> para quando a cobran&ccedil;a come&ccedil;ar (pode mudar, e a gente avisa antes): tr&ecirc;s planos com <strong>economia de escala</strong> &mdash; quanto maior o projeto, mais barato por prancha.</p>
               <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
                 <div class="rounded-lg border border-gray-200 bg-gray-50 p-4 text-center">
                   <p class="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-1">Pequeno</p>
@@ -991,7 +992,7 @@
           </button>
           <div class="faq-answer px-5">
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
-              <strong>Cart&atilde;o de cr&eacute;dito/d&eacute;bito</strong>, processado pelo <strong>Stripe</strong> &mdash; a mesma plataforma de pagamentos utilizada por empresas como Uber, Spotify e Amazon. N&atilde;o armazenamos dados do seu cart&atilde;o; todo o fluxo financeiro ocorre diretamente nos servidores do Stripe (certificado PCI-DSS).
+              Hoje n&atilde;o h&aacute; pagamento: o beta &eacute; gr&aacute;tis. Quando a cobran&ccedil;a come&ccedil;ar, o pagamento previsto &eacute; por <strong>cart&atilde;o de cr&eacute;dito/d&eacute;bito</strong>, processado pelo <strong>Stripe</strong>. N&atilde;o armazenamos dados do seu cart&atilde;o; todo o fluxo financeiro ocorre diretamente nos servidores do Stripe (certificado PCI-DSS).
             </div>
           </div>
         </div>
@@ -1017,7 +1018,7 @@
           </button>
           <div class="faq-answer px-5">
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
-              N&atilde;o. Voc&ecirc; paga por projeto processado, sem assinatura, mensalidade ou taxa oculta &mdash; usa quando precisa. <strong>Durante o beta nada &eacute; cobrado</strong>, e quantos projetos quiser; a tabela por n&uacute;mero de pranchas s&oacute; passa a valer quando a cobran&ccedil;a come&ccedil;ar, e a gente avisa antes.
+              N&atilde;o. O modelo previsto &eacute; por projeto processado, sem assinatura, mensalidade ou taxa oculta &mdash; usa quando precisa. <strong>Hoje, durante o beta, nada &eacute; cobrado</strong>, e quantos projetos quiser; a tabela prevista por n&uacute;mero de pranchas s&oacute; vale quando a cobran&ccedil;a come&ccedil;ar (pode mudar), e a gente avisa antes.
             </div>
           </div>
         </div>
@@ -1181,7 +1182,7 @@
           </button>
           <div class="faq-answer px-5">
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
-              <p class="mb-2">Uma aba na planilha gerada que, pra cada item do quantitativo, mostra:</p>
+              <p class="mb-2">Uma aba na planilha gerada que, para os itens do quantitativo com correspondência, mostra:</p>
               <ul class="space-y-1 ml-4 mb-2">
                 <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1 shrink-0">•</span> Código SINAPI (Caixa) sugerido + descrição padronizada e unidade</li>
                 <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1 shrink-0">•</span> Até 2 sugestões de composição por item, da mais compatível pra menos</li>
@@ -1269,7 +1270,7 @@
               <p class="mb-3">Apenas os parceiros essenciais para o funcionamento do Servi&ccedil;o:</p>
               <ul class="space-y-1.5 ml-1">
                 <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>Anthropic (Claude API):</strong> recebe imagens das pranchas para an&aacute;lise com IA.</li>
-                <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>Stripe:</strong> processa pagamentos (n&atilde;o armazenamos dados de cart&atilde;o).</li>
+                <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>Stripe:</strong> vai processar os pagamentos quando a cobran&ccedil;a come&ccedil;ar (n&atilde;o armazenamos dados de cart&atilde;o).</li>
                 <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>Supabase:</strong> banco de dados do perfil do usu&aacute;rio (criptografado).</li>
                 <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>Google:</strong> autentica&ccedil;&atilde;o OAuth (nome, e-mail, foto).</li>
               </ul>
@@ -1440,7 +1441,7 @@
           </button>
           <div class="faq-answer px-5">
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
-              Ela é processada, mas mede menos. A escala do desenho é conferida pelas próprias cotas da prancha; sem cota a gente não confirma o fator, e comprimento e área saem como estimativa, em laranja, pra você revisar. O que continua saindo medido é a contagem — portas, janelas, luminárias, louças — porque contar bloco não depende de escala.
+              Ela é processada, mas mede menos. A escala do desenho é conferida pelas próprias cotas da prancha; sem cota a gente não confirma o fator, e comprimento e área saem como estimativa, em laranja, pra você revisar. Em DWG/DXF, o que continua saindo medido é a contagem — portas, janelas, luminárias, louças — porque contar bloco não depende de escala; em PDF, até a contagem sai como estimativa.
             </div>
           </div>
         </div>
@@ -1453,7 +1454,7 @@
           </button>
           <div class="faq-answer px-5">
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
-              Não, e isso é escolha. A gente entrega quantidade — item, unidade e quantidade, com o código SINAPI de referência ao lado — e deixa a coluna de preço em branco pra você ou pro seu orçamentista preencher. Preço de material e de mão de obra muda por praça, por fornecedor e por semana; quem tem essa informação é quem compra. O que a gente faz é te dar o quantitativo rastreável em cima do qual esse preço vai ser posto.
+              Não, e isso é escolha. A gente entrega quantidade — item, unidade e quantidade, com o código SINAPI de referência ao lado dos itens em que há correspondência — e deixa a coluna de preço em branco pra você ou pro seu orçamentista preencher. Preço de material e de mão de obra muda por praça, por fornecedor e por semana; quem tem essa informação é quem compra. O que a gente faz é te dar o quantitativo rastreável em cima do qual esse preço vai ser posto.
             </div>
           </div>
         </div>
@@ -1518,7 +1519,7 @@
           </button>
           <div class="faq-answer px-5">
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
-              Serve como ponto de partida, não como planilha de licitação pronta. A gente entrega o quantitativo com o código SINAPI de referência ao lado de cada item, que é o que ajuda a justificar tecnicamente a quantidade — mas sem preço, sem pesquisa de mercado e sem assinatura de responsável técnico. Fechar a planilha orçamentária, escolher as composições definitivas e assinar continua sendo trabalho do profissional habilitado, e os itens marcados como estimativa precisam ser conferidos antes de qualquer uso oficial.
+              Serve como ponto de partida, não como planilha de licitação pronta. A gente entrega o quantitativo com o código SINAPI de referência ao lado dos itens em que há correspondência confiável (os sem par vêm sinalizados), que é o que ajuda a justificar tecnicamente a quantidade — mas sem preço, sem pesquisa de mercado e sem assinatura de responsável técnico. Fechar a planilha orçamentária, escolher as composições definitivas e assinar continua sendo trabalho do profissional habilitado, e os itens marcados como estimativa precisam ser conferidos antes de qualquer uso oficial.
             </div>
           </div>
         </div>

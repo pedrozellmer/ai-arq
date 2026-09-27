@@ -1768,8 +1768,8 @@ function _kpiCustoIA(custoFixoPorProjeto){
 // converte o pior risco de reembolso em NÃO-COBRANÇA automática.
 // 18/09/2026 — item 11 da fila: a RÉGUA SEPARADA em "com CAD" e "só-PDF".
 // Só-PDF é 0% cobrável POR REGRA (70f98a2); quando ele cresce, a régua
-// misturada "cai" sem o motor ter piorado — em setembro só-PDF foi de 9 pra 21
-// entregas e, dentro do CAD, a receita por dia SUBIU 52%. Esta sub-linha é o
+// misturada "cai" sem o motor ter piorado — em setembro as entregas só-PDF
+// mais que dobraram e, dentro do CAD, a receita por dia SUBIU. Esta sub-linha é o
 // que impede ler mudança de mistura como queda. Função pura: a bancada roda
 // no dukpy. Sem os campos (RPC velha) devolve vazio — nunca inventa.
 function subLinhaPopulacoes(m) {
@@ -1779,7 +1779,7 @@ function subLinhaPopulacoes(m) {
   const pEnt = Number(p.entregas)||0, pCob = Number(p.cobraveis)||0;
   const cPct = cEnt ? Math.round(100*cCob/cEnt) : 0;
   const dia = (m.dias && c.receita_por_dia != null) ? ` · <b>${costFmt(Number(c.receita_por_dia)||0)}</b>/dia` : '';
-  // 🚨 só-PDF cobrável > 0 é resquício de antes de 15/09 (11 projetos) — a
+  // 🚨 só-PDF cobrável > 0 é resquício de antes de 15/09 — a
   // sub-linha DIZ, em vez de somar calada com o CAD.
   const pdfTxt = pCob > 0
     ? `só-PDF: ${pEnt} entregas, <span class="text-amber-700">${pCob} ${pCob===1?'cobrável':'cobráveis'} de antes da regra de 15/09</span>`
@@ -2423,8 +2423,8 @@ async function mergeEstudar(jobId){
 // 'unsafe-inline' (autoriza o handler) e connect-src tem curinga *.supabase.co
 // (destino de exfiltração autorizado). Era o ÚNICO dos 6 lugares que renderizam
 // project_name sem escapar.
-// 🪤 Buraco VAZIO, não sangramento: SQL em produção deu 0 de 330 projetos com
-// sinal de payload no nome. Guarda: test_admin_escapa_dado_do_cliente.py
+// 🪤 Buraco VAZIO, não sangramento: SQL em produção não achou nenhum projeto
+// com sinal de payload no nome. Guarda: test_admin_escapa_dado_do_cliente.py
 // 🪤 E a explicação mora AQUI, fora do template literal: a primeira versão
 // deste comentário citava o payload entre crases, DENTRO da template string —
 // crase fecha a string e o JavaScript da página inteira quebrou. Um guarda
@@ -5688,8 +5688,9 @@ async function carregarMovimentoDoSite() {
   }
 
   // ── a inflação do Cloudflare, dita em número ────────────────────────────
-  // 🔑 Medido 02/09: 1.327 "únicos" contra 403 endereços de gente em 7 dias
-  // (3,3×); por dia vai de 1,9× a 6,4×. Foi esse número que custou duas manhãs.
+  // 🔑 Medido 02/09: os "únicos" do Cloudflare davam algumas vezes os endereços
+  // de gente da semana, e a razão varia muito de um dia pro outro. Foi esse
+  // número que custou duas manhãs.
   const infl = document.getElementById('mov-inflacao');
   if (infl) {
     const f = d.inflacao_7d || {};
@@ -5780,8 +5781,8 @@ function barrasDoMovimento(serie) {
     const semIps = x => (x.ips_gente === null || x.ips_gente === undefined);
     // 🚨 21/09/2026 — A FRASE SE CALAVA E O DESENHO CONTINUAVA MENTINDO.
     // O veredito passou a recusar julgamento em dia com a coleta no teto, mas
-    // as barras deste mesmo cartão desenhavam 63 → 38 → 19 em cor de dia
-    // medido, com "19 endereços" no hover, três centímetros abaixo da frase
+    // as barras deste mesmo cartão desenhavam a queda em cor de dia
+    // medido, com o número cortado no hover, três centímetros abaixo da frase
     // que dizia "não dá pra comparar". O cartão se contradizia — e o que se lê
     // primeiro é o desenho. Foi o gráfico, não a frase, que o Pedro mandou.
     // 🪤 `=== true` de propósito: linha antiga tem NULL, que é "não sei", e
@@ -5789,8 +5790,8 @@ function barrasDoMovimento(serie) {
     const truncado = x => (x.coleta_truncada === true);
     const semMedida = x => semIps(x) || truncado(x);
     // 🚨 22/09/2026 — DIA SEM A MARCA FOI MEDIDO COM O TETO ANTIGO (400) e saiu
-    // cortado: recoletados com o teto perguntado à zona, 19, 20 e 21/09 pularam
-    // de 19→65, 34→72 e 13→120 endereços. A barra continua com o número (apagar
+    // cortado: recoletados com o teto perguntado à zona, os dias 19, 20 e 21/09
+    // mais que dobraram de endereços. A barra continua com o número (apagar
     // metade do gráfico esconderia o histórico), mas fica esmaecida e o hover
     // DIZ que aquele número não se compara com os novos — o mesmo tratamento
     // que os dias contados no relógio de Greenwich já tinham.
@@ -6097,8 +6098,9 @@ function pintarFormato90d(d) {
 }
 
 // Quadro Clientes: "o cliente volta?" com a pergunta escrita no rotulo.
-// 🔑 Medido em 02/09: 74 clientes; 2+ projetos = 40 (uso, nao retorno);
-// voltou OUTRO DIA = 8; outra semana = 5. O numero grande e o de outro dia.
+// 🔑 Medido em 02/09: mais da metade dos clientes tinha 2+ projetos (uso, nao
+// retorno), mas so uma fracao pequena voltou OUTRO DIA, e menos ainda em outra
+// semana. O numero que importa e o de outro dia.
 function pintarRetornoNoQuadroDeClientes() {
   const el = document.getElementById('panel-clients-volta');
   if (!el) return;
@@ -6588,9 +6590,9 @@ async function loadOrigem(){
   // ── QUEM VOLTOU (retenção) ────────────────────────────────────────────
   //
   // 🚨 "Voltou" = subiu projeto em OUTRO DIA. NÃO é "tem mais de 1 projeto".
-  // Medido em 12/08/2026: 28 de 50 clientes têm >1 projeto (56%) e só 5
-  // voltaram noutro dia (10%) — quase todo mundo sobe 2-3 arquivos na MESMA
-  // sessão. Foi esse engano que virou os "57% de retenção" que eram 2%.
+  // Medido em 12/08/2026: mais da metade dos clientes tinha >1 projeto, mas só
+  // uma fração pequena voltou noutro dia — quase todo mundo sobe 2-3 arquivos na
+  // MESMA sessão. Foi esse engano que inflou a "retenção" várias vezes.
   // O card mostra os DOIS números de propósito, com o enganoso rotulado, pra
   // ninguém (eu inclusive) reler errado daqui a um mês.
   //

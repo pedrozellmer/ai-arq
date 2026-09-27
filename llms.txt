@@ -1,8 +1,13 @@
 # AI.arq
 
-> A AI.arq lê a prancha de CAD que o profissional já tem (DWG, DXF ou PDF) e devolve uma planilha de quantitativos por disciplina, com código SINAPI de referência e cada linha marcada como MEDIDO (saiu da geometria do desenho) ou ESTIMADO (precisa de conferência). É um SaaS brasileiro, em beta aberto, para arquitetos, engenheiros e orçamentistas.
+> A AI.arq lê a prancha de CAD que o profissional já tem (DWG, DXF ou PDF) e devolve uma planilha de quantitativos por disciplina, com código SINAPI de referência nos itens em que há correspondência e cada linha marcada como MEDIDO (saiu da geometria do desenho) ou ESTIMADO (precisa de conferência). É um SaaS brasileiro, em beta aberto, para engenheiros, orçamentistas e arquitetos.
 
-O que entregamos é QUANTIDADE. A planilha traz item, unidade, quantidade, descrição e o código SINAPI correspondente, organizada em até 18 disciplinas — entre elas demolição, acabamentos, piso, elétrica, hidráulica, gás, climatização, incêndio, marcenaria e mobiliário. Aceitamos DXF, DWG e PDF exportado direto do CAD. O DXF costuma medir mais: no PDF a medição depende de o desenho trazer cota escrita, e planta escaneada, fotografada ou plotada como imagem não permite medir, porque vira pixel. Cada linha volta rotulada: MEDIDO quando a quantidade saiu da geometria do desenho, ESTIMADO quando veio de inferência e precisa ser revisada antes do uso. Não é preciso traçar nem clicar em cima do desenho, não é preciso ter AutoCAD e não há plugin: o arquivo é enviado pelo site e a planilha volta pronta para download.
+O que entregamos é QUANTIDADE. A planilha traz item, unidade, quantidade, descrição e o código SINAPI de referência nos itens em que há correspondência confiável (os sem par vêm sinalizados), organizada em até 18 disciplinas — entre elas demolição, acabamentos, piso, elétrica, hidráulica, gás, climatização, incêndio, marcenaria e mobiliário. Aceitamos DXF, DWG e PDF exportado direto do CAD. O DXF costuma medir mais. PDF vetorial também é lido — o motor mede a geometria quando dá e a IA lê textos e legendas —, mas tudo que vem de PDF sai como ESTIMADO — é regra nossa: a escala de um PDF vem de uma declaração (o carimbo), e mesmo quando as cotas conferem a gente não sela número de PDF como medido. Planta escaneada, fotografada ou plotada como imagem não permite medir, porque vira pixel. Cada linha volta rotulada: MEDIDO quando a quantidade saiu da geometria do desenho, ESTIMADO quando veio de inferência e precisa ser revisada antes do uso. Não é preciso traçar nem clicar em cima do desenho, não é preciso ter AutoCAD e não há plugin: o arquivo é enviado pelo site e a planilha volta pronta para download.
+
+Documentos que saem do mesmo quantitativo:
+
+- Rascunho de memorial descritivo, organizado por disciplina na ordem da obra, com a quantidade e a origem de cada item (medido do CAD ou estimativa a confirmar). O que o desenho não informa vem em campos [A PREENCHER]: endereço e proprietário, o RRT/ART do responsável técnico e, em cada disciplina, o que falta especificar (por exemplo traço do concreto e sondagem, argamassas, quadros de cargas, marcas e método executivo). O rascunho não cita norma nenhuma. Sai em Word ou PDF, com carimbo RASCUNHO, e não substitui o memorial assinado (RRT/ART).
+- Cronograma FÍSICO da obra: etapas, prazos e peso de cada uma, a partir do quantitativo. Não calcula preço: se o profissional informar o valor de cada etapa, o cronograma distribui esse valor mês a mês.
 
 O que a AI.arq NÃO faz (registrado aqui para evitar descrição errada):
 
@@ -13,16 +18,16 @@ O que a AI.arq NÃO faz (registrado aqui para evitar descrição errada):
 - Não somos a Caixa nem o IBGE. A SINAPI é usada como referência pública de código e descrição de serviço.
 - Não inventamos o que o desenho não informa. Sem cota, sem escala confirmada ou sem pé-direito, a linha volta zerada ou marcada como estimativa, e não preenchida com um número plausível.
 
-Condição comercial: durante o beta, o uso é GRÁTIS e ILIMITADO, sem cartão de crédito — todos os projetos, não só o primeiro, de qualquer tamanho. Nada é cobrado hoje. A tabela que passará a valer depois do beta está publicada na página de preços, e o aviso vem antes de qualquer cobrança começar.
+Condição comercial: durante o beta, o uso é GRÁTIS e ILIMITADO, sem cartão de crédito — todos os projetos, não só o primeiro, de qualquer tamanho. Nada é cobrado hoje. A tabela prevista para depois do beta está publicada na página de preços — é uma previsão e pode mudar —, e o aviso vem antes de qualquer cobrança começar.
 
-In English: AI.arq is a Brazilian SaaS that reads the 2D CAD sheets a professional already has (DWG, DXF or PDF) and returns a construction quantity takeoff spreadsheet, broken down by discipline, with SINAPI reference codes, each line labelled either as measured from the drawing or as estimated and pending review. It delivers quantities, not construction prices, and it does not replace the professional. It is not BIM and does not require BIM. Free and unlimited during the open beta, no credit card — every project, not just the first one. The site and its content are in Brazilian Portuguese.
+In English: AI.arq is a Brazilian SaaS that reads the 2D CAD sheets a professional already has (DWG, DXF or PDF) and returns a construction quantity takeoff spreadsheet, broken down by discipline, with SINAPI reference codes where a reliable match exists, each line labelled either as measured from the drawing or as estimated and pending review. PDF files are read, but everything that comes from a PDF is labelled as estimated, by our own rule: a PDF's scale comes from a declaration (the title block), so even when the dimensions check out we never seal a PDF number as measured. From the same takeoff it also drafts a descriptive specification (memorial descritivo, marked as a draft to be completed and signed by the professional) and a physical construction schedule (it does not price; if the professional enters each stage's value, it spreads it month by month). It delivers quantities, not construction prices, and it does not replace the professional. It is not BIM and does not require BIM. Free and unlimited during the open beta, no credit card — every project, not just the first one. The site and its content are in Brazilian Portuguese.
 
 ## Comece por aqui
 
 - [Página inicial](https://ai.arq.br/): o que a AI.arq faz, como enviar a prancha e o que volta na planilha.
 - [Exemplo de planilha pronta](https://ai.arq.br/exemplo.html): quantitativo completo de um projeto-exemplo, com as linhas MEDIDO e ESTIMADO destacadas e a planilha disponível para baixar.
 - [Perguntas frequentes](https://ai.arq.br/faq.html): formatos aceitos, o que significa MEDIDO e ESTIMADO, disciplinas cobertas, uso da SINAPI, limites do serviço e como conferir o resultado.
-- [Preços](https://ai.arq.br/precos.html): grátis e ilimitado durante o beta, sem cartão; a tabela publicada ali é a que passará a valer depois do beta.
+- [Preços](https://ai.arq.br/precos.html): grátis e ilimitado durante o beta, sem cartão; a tabela publicada ali é a prevista para depois do beta e pode mudar.
 - [Criar conta e enviar um projeto](https://ai.arq.br/login.html?novo=1): cadastro gratuito, sem cartão de crédito.
 - [Blog](https://ai.arq.br/blog/): índice completo dos artigos sobre quantitativo, leitura de projeto e orçamento de obra.
 
@@ -30,9 +35,14 @@ In English: AI.arq is a Brazilian SaaS that reads the 2D CAD sheets a profession
 
 - [Como extrair o quantitativo de um DWG/DXF automaticamente, sem BIM](https://ai.arq.br/blog/posts/extrair-quantitativo-do-dwg-automatico-sem-bim.html): o caminho de ponta a ponta, do arquivo de CAD à planilha, sem passar por modelagem BIM.
 - [Quantitativo de obra com IA: como funciona e dá pra confiar?](https://ai.arq.br/blog/posts/quantitativo-de-obra-com-ia.html): o que a leitura automática acerta, onde ela erra e o que precisa ser conferido pelo profissional.
-- [DWG, DXF ou PDF: o que os nossos dados mostram sobre qual formato medir](https://ai.arq.br/blog/posts/dwg-ou-pdf-quantitativo-o-que-os-dados-mostram.html): por que o arquivo vetorial mede melhor que o PDF e o que muda no resultado.
+- [DWG, DXF ou PDF: o que os nossos dados mostram sobre qual formato medir](https://ai.arq.br/blog/posts/dwg-ou-pdf-quantitativo-o-que-os-dados-mostram.html): por que o DWG/DXF sai medido e o PDF sai como estimativa, e o que muda no resultado.
 - [Quantitativo manual, automático ou BIM: comparativo honesto por cenário](https://ai.arq.br/blog/posts/quantitativo-manual-automatico-ou-bim-comparativo.html): quando cada abordagem compensa, incluindo os casos em que a automação não é a melhor escolha.
 - [Como ler um PDF de planta arquitetônica](https://ai.arq.br/blog/posts/como-ler-pdf-planta-arquitetonica.html): guia visual de escala, cotas e legendas para quem só tem o PDF do projeto.
+
+## Documentos a partir do quantitativo
+
+- [Memorial descritivo de obra: modelo em PDF e DOCX](https://ai.arq.br/blog/posts/memorial-descritivo-de-obra-modelo-pdf-docx.html): modelo gratuito de 10 seções e, para quem tem o desenho, o rascunho de memorial por disciplina que a AI.arq gera a partir do quantitativo.
+- [Cronograma físico-financeiro: como montar (modelo Excel)](https://ai.arq.br/blog/posts/cronograma-fisico-financeiro-obra-modelo.html): modelo pronto; a AI.arq gera a parte FÍSICA a partir do quantitativo, e o financeiro em reais fica com o profissional.
 
 ## Quantitativo x orçamento: onde termina o nosso trabalho
 
@@ -53,8 +63,6 @@ In English: AI.arq is a Brazilian SaaS that reads the 2D CAD sheets a profession
 
 ## Optional
 
-- [Cronograma físico-financeiro: como montar (modelo Excel)](https://ai.arq.br/blog/posts/cronograma-fisico-financeiro-obra-modelo.html): etapa seguinte ao quantitativo, com modelo pronto.
-- [Memorial descritivo de obra: modelo em PDF e DOCX](https://ai.arq.br/blog/posts/memorial-descritivo-de-obra-modelo-pdf-docx.html): documento que acompanha o projeto, com modelo gratuito.
 - [IA na arquitetura: ferramentas, workflow e o que realmente muda](https://ai.arq.br/blog/posts/ia-arquitetura-o-que-muda-2026.html): panorama do uso de IA no escritório, além do quantitativo.
 - [Termos de uso](https://ai.arq.br/termos.html): condições do serviço durante o beta.
 - [Política de privacidade](https://ai.arq.br/privacidade.html): tratamento dos arquivos enviados e dos dados de cadastro.

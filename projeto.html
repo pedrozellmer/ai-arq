@@ -1566,9 +1566,9 @@ async function enviarRespostasProc() {
 //     — a mesma doença do creep em 95% que consertamos em 03/08.
 // O texto novo só afirma o que é FATO no instante em que ele aparece: os
 // arquivos chegaram e passaram pela conferência do envio.
-// 🔑 O aviso por e-mail não é promessa vazia: medido em 30 dias, 85 dos 88
-// projetos concluídos (96,6%) receberam e-mail na conclusão. A 1ª consulta que
-// fiz dizia 20,5% porque contava o VÍNCULO job_id no log, não o e-mail.
+// 🔑 O aviso por e-mail não é promessa vazia: medido em 30 dias, quase todos
+// os projetos concluídos receberam e-mail na conclusão. A 1ª consulta que fiz
+// dava bem menos porque contava o VÍNCULO job_id no log, não o e-mail.
 // Função PURA porque é o que o guarda consegue CHAMAR (lição de 14/09).
 function _textoDaEspera(nArquivos) {
   var n = Number(nArquivos);
@@ -2827,9 +2827,9 @@ function renderHeader(p) {
   // 🩸 17/09/2026 — ESTA TELA DECIDIA SOZINHA UMA POLÍTICA DE COTA, e decidia
   // errado: desabilitava o botão quando `reprocess_count >= 1`, mas o contador
   // sobe por caminhos que NÃO são este botão (retomada automática depois de
-  // queda, filhote de avaliação). Medido em 17/09: 16 projetos de 12 clientes
-  // com o botão desabilitado sem NUNCA terem reprocessado — e 6 deles não
-  // tinham recebido nada (4 com zero medida, 2 com erro). Ficaram trancados
+  // queda, filhote de avaliação). Medido em 17/09: projetos de vários clientes
+  // com o botão desabilitado sem NUNCA terem reprocessado — e parte deles não
+  // tinha recebido nada (zero medida ou erro). Ficaram trancados
   // fora justamente da porta que resolveria o problema deles.
   // 🔑 E no beta não existe cota nenhuma: a promessa pública é ilimitada.
   // Quem decide política é o SERVIDOR — se um dia houver limite, ele responde

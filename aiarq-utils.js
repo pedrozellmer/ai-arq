@@ -214,13 +214,14 @@
   // milhares de eventos de <div> sem nome — muito dado e nenhuma resposta — e
   // aumenta a superfície de dado pessoal sem necessidade. Marcamos só os pontos
   // que respondem uma dúvida MEDIDA. Hoje são duas:
-  //   1) a janela de 2 minutos: 39 de 39 clientes que subiram projeto em 60
-  //      dias fizeram isso em menos de 30 min, mediana 2 min. Ninguém voltou
-  //      depois. Queremos saber onde os 17% que nunca sobem param.
+  //   1) a janela de 2 minutos: todos os clientes que subiram projeto nos
+  //      últimos 60 dias fizeram isso em menos de 30 min, mediana de 2 min.
+  //      Ninguém voltou depois. Queremos saber onde param os que nunca sobem.
   //   2) o funil da revisão: `revision_feedback` tem 0 linhas desde sempre.
   //
-  // 🪤 O DENOMINADOR É 37%. `trackEvent` só dispara pra quem aceitou cookie de
-  // análise — medido em 11/08: 19 de 51 clientes. Serve pra COMPARAR (o botão A
+  // 🪤 O DENOMINADOR É PARCIAL. `trackEvent` só dispara pra quem aceitou cookie
+  // de análise — medido em 11/08: bem menos da metade dos clientes. Serve pra
+  // COMPARAR (o botão A
   // é mais clicado que o B), NÃO pra número absoluto ("42% dos clientes
   // clicam"). Ver o aviso no painel de Atividade.
   document.addEventListener('click', function (ev) {

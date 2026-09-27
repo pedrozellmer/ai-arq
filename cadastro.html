@@ -414,8 +414,8 @@
   // WhatsApp, área, como conheceu, termos, idade).
   //
   // 🪤 Por que eu não sei responder isso hoje: até 26/08 o `/api/track`
-  // descartava a maior parte dos eventos — 68 pessoas COMPLETARAM o cadastro e
-  // só 13 registraram ter tocado num campo, o que é impossível. Qualquer
+  // descartava a maior parte dos eventos — muita gente COMPLETOU o cadastro sem
+  // registrar ter tocado num campo, o que é impossível. Qualquer
   // conclusão sobre o funil antes dessa data é ruído.
   //
   // 🔒 Grava o NOME do campo, NUNCA o valor digitado.
@@ -783,9 +783,9 @@
   // 🆕 26/09/2026: `src_landing` = a PÁGINA do site onde a pessoa chegou da
   // primeira vez (home, post X, FAQ…). O navegador já guardava isso em
   // `aiarq_src.landing` e o cadastro jogava fora; "por qual página entrou quem
-  // se cadastrou" só existia na telemetria, que vê quem aceita cookie (18 dos
-  // 32 cadastros da semana de 21/09). É `location.pathname` — caminho, nunca a
-  // query — e o corte em 80 é repetido aqui porque o localStorage é do visitante.
+  // se cadastrou" só existia na telemetria, que vê só quem aceita cookie. É
+  // `location.pathname` — caminho, nunca a query — e o corte em 80 é repetido
+  // aqui porque o localStorage é do visitante.
   function _origemParaConta(s) {
     if (!s || !s.label) return null;
     return {

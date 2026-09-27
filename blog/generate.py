@@ -87,7 +87,7 @@ FOOTER = '''
         <div class="flex h-8 w-8 items-center justify-center rounded-lg gradient-main text-white font-bold text-xs">AI</div>
         <span class="text-lg font-bold text-gray-900">AI<span class="gradient-text">.arq</span></span>
       </div>
-      <p class="text-sm text-gray-500">Quantitativo de obra com IA, em 5 minutos.</p>
+      <p class="text-sm text-gray-500">Quantitativo de obra com IA, direto do seu CAD.</p>
     </div>
     <div>
       <h2 class="text-sm font-semibold text-gray-900 mb-3">Produto</h2>
@@ -359,14 +359,18 @@ def calc_read_time(post):
     return minutes
 
 
-def render_sources(sources, data_ref=""):
+def render_sources(sources, data_ref="", data_publicacao=""):
     """Renderiza bloco de fontes no rodapé do post.
 
-    🪤 28/07/2026: `data_ref` é a data de PUBLICAÇÃO do post, não a de hoje.
-    Antes usava datetime.now(), então toda regeneração do blog reescrevia os 25
-    posts carimbando "Última atualização: <hoje>" — mesmo sem uma vírgula ter
-    mudado. Além de sujar o diff, republicar post intocado como "atualizado
-    hoje" é enganoso com o leitor e o Google penaliza data inflada.
+    🪤 28/07/2026: `data_ref` nunca é a data de hoje. Antes usava
+    datetime.now(), então toda regeneração do blog reescrevia os 25 posts
+    carimbando "Última atualização: <hoje>" — mesmo sem uma vírgula ter mudado.
+    Republicar post intocado como "atualizado hoje" engana o leitor e o Google
+    penaliza data inflada.
+    26/09/2026: `data_ref` é a data em que o TEXTO mudou por último
+    (data_de_atualizacao) ou, sem ela, a de publicação. Quando as duas diferem,
+    o rodapé diz que as normas foram conferidas NA PUBLICAÇÃO: trocar um CTA não
+    é reconferir norma, e a frase de antes daria a entender que foi.
     """
     if not sources:
         return ""
@@ -449,6 +453,14 @@ def render_sources(sources, data_ref=""):
             items_html += f'<li>{cite}</li>'
         items_html += '</ul></div>'
 
+    if data_publicacao and data_publicacao != data_ref:
+        nota_data = (f"Última atualização: {data_ref}. As normas e documentos citados foram conferidos "
+                     f"na publicação ({data_publicacao}) e podem ter sido revisados depois — sempre "
+                     f"consulte a versão vigente.")
+    else:
+        nota_data = (f"Última atualização: {data_ref}. Normas e documentos citados podem ter sido "
+                     f"revisados após esta data — sempre consulte a versão vigente.")
+
     return f'''
     <aside class="aiarq-sources mt-12 p-6 rounded-2xl bg-gray-50 border border-gray-200">
       <h3 class="flex items-center gap-2 text-sm font-bold text-gray-900 uppercase tracking-wide mb-5">
@@ -457,7 +469,7 @@ def render_sources(sources, data_ref=""):
       </h3>
       {items_html}
       <p class="mt-4 text-xs text-gray-400 italic">
-        Última atualização: {data_ref}. Normas e documentos citados podem ter sido revisados após esta data — sempre consulte a versão vigente.
+        {nota_data}
       </p>
     </aside>
     '''
@@ -551,7 +563,27 @@ def render_related_posts(post):
     '''
 
 
+def data_de_atualizacao(post):
+    """A data (AAAA-MM-DD) em que o TEXTO do post mudou por último, ou None.
+
+    🩸 26/09/2026 (auditoria de aquisição): eram DOIS campos — o JSON-LD lia
+    `update_date`, o sitemap lia `updated` — e o rodapé usava a publicação. O
+    post "DWG, DXF ou PDF" mostrava 3 datas (tela 31/08, dateModified 23/08,
+    lastmod 22/07), e o do memorial parecia parado desde 26/04. Agora é UM
+    campo, `update_date` (`updated` fica aceito como apelido), lido pelos três.
+    Preencher só quando o CORPO mudar — nunca por regeneração — e nunca mexer
+    no título de post publicado. Post ainda NÃO publicado não leva update_date
+    (daria dateModified antes de datePublished): o guarda cobra
+    publicação ≤ update_date ≤ hoje.
+    """
+    return post.get("update_date") or post.get("updated") or None
+
+
 def render_post_html(post):
+    # 🔑 26/09/2026: os 2 botões do CTA do fim do post levam data-track
+    # (blog-cta-cadastro / blog-cta-exemplo). O clique no CTA nunca tinha sido
+    # medido; um nome só serve pra todos os posts porque o evento já grava a
+    # página (`path`). A métrica que conta é o `src_landing` do cadastro.
     # 24/08/2026: nota de atualizacao datada, pra post JA PUBLICADO cujo
     # numero envelheceu. Mora aqui (na fonte) e nao no HTML gerado: o deploy
     # regenera os posts, e uma edicao a mao no HTML e apagada antes de chegar
@@ -565,9 +597,11 @@ def render_post_html(post):
     sections_html = "".join(render_section(s, post.get("downloads")) for s in post["sections"])
 
     # Adiciona bloco de fontes no fim, se houver
+    _atualizado = data_de_atualizacao(post)
     sources_html = render_sources(
         post.get("sources", []),
-        data_ref=datetime.fromisoformat(post["publish_date"]).strftime("%d/%m/%Y"),
+        data_ref=datetime.fromisoformat(_atualizado or post["publish_date"]).strftime("%d/%m/%Y"),
+        data_publicacao=datetime.fromisoformat(post["publish_date"]).strftime("%d/%m/%Y"),
     )
 
     # Bloco "Leia também" — internal linking entre posts irmãos (SEO)
@@ -602,7 +636,7 @@ def render_post_html(post):
         # estruturado contradizendo o visivel e o que tira o rich result da
         # pagina, e o Google trata a pagina como velha justamente quando ela
         # acabou de ser atualizada.
-        "dateModified": (post.get("update_date") or publish_date_iso),
+        "dateModified": (f"{_atualizado}T10:00:00-03:00" if _atualizado else publish_date_iso),
         "author": {"@type": "Organization", "name": "AI.arq"},
         "publisher": {
             "@type": "Organization",
@@ -763,13 +797,13 @@ def render_post_html(post):
     <h3 class="text-xl font-bold text-gray-900 mb-3">⚡ Pronto pra acelerar seu trabalho?</h3>
     <p class="text-gray-700 mb-5">{_inline_md(post["cta"])}</p>
     <div class="flex flex-wrap items-center gap-3">
-      <a href="/login.html?novo=1" class="inline-flex items-center gap-2 gradient-main text-white font-semibold px-6 py-3 rounded-xl no-underline shadow-btn">
+      <a href="/login.html?novo=1" data-track="blog-cta-cadastro" class="inline-flex items-center gap-2 gradient-main text-white font-semibold px-6 py-3 rounded-xl no-underline shadow-btn">
         Começar grátis
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg>
       </a>
       <!-- Caminho de baixo atrito: leitor orgânico que não quer se cadastrar
            ainda vê a prova (25 itens reais, sem login) em vez de bater no muro -->
-      <a href="/exemplo.html" class="inline-flex items-center gap-2 px-6 py-3 rounded-xl border-2 border-indigo-200 text-indigo-700 font-semibold no-underline hover:bg-indigo-50">
+      <a href="/exemplo.html" data-track="blog-cta-exemplo" class="inline-flex items-center gap-2 px-6 py-3 rounded-xl border-2 border-indigo-200 text-indigo-700 font-semibold no-underline hover:bg-indigo-50">
         Ver um quantitativo real →
       </a>
     </div>
@@ -1056,10 +1090,10 @@ def render_sitemap():
                 f"{SITE_URL}/blog/posts/{post['slug']}.html",
                 "0.8",
                 "monthly",
-                # `updated` é opcional em posts.json — quando o texto for
+                # `update_date` (ver data_de_atualizacao) — quando o texto for
                 # corrigido depois de publicado, preencher lá pro Google saber
                 # que vale reler. Sem ele, vale a data de publicação.
-                post.get("updated") or post["publish_date"],
+                data_de_atualizacao(post) or post["publish_date"],
             ))
 
     xml = '<?xml version="1.0" encoding="UTF-8"?>\n'

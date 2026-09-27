@@ -1113,7 +1113,7 @@ function catAtual(){ const sel=document.getElementById('f-cat'); const liv=docum
 function montarCategorias(pre){
   const sel=document.getElementById('f-cat'), liv=document.getElementById('f-cat-livre');
   const labels=[...FASES_ORDEM]; L.forEach(l=>{ if(l.cat && !labels.includes(l.cat)) labels.push(l.cat); });
-  // sem cronograma salvo e sem lançamento (219 dos 229 projetos concluídos): as disciplinas do quantitativo servem de categoria
+  // sem cronograma salvo e sem lançamento (a grande maioria dos projetos concluídos): as disciplinas do quantitativo servem de categoria
   if(!labels.length) ITENS.forEach(it=>{ const d=String(it.discipline||'').trim(); if(d && !labels.includes(d)) labels.push(d); });
   if(pre && !labels.includes(pre)) labels.unshift(pre);
   sel.innerHTML = labels.map(c=>`<option>${esc(c)}</option>`).join('') + '<option value="__outra__">Outra categoria…</option>';
