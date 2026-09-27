@@ -43,14 +43,57 @@ _CURINGA = "\x01"          # marca de "aqui entra um valor" nos dois lados
 # ══════════════════════════════════════════════════════════════════════════
 #  Lado do backend
 # ══════════════════════════════════════════════════════════════════════════
+_NOME = "[A-Za-z_][A-Za-z0-9_]*"
+_RE_INCLUI = re.compile("app[.]include_router[(](%s)" % _NOME)
+_RE_IMPORTA = re.compile("^(?:from (%s) import router as (%s)|import (%s) as (%s))" % ((_NOME,) * 4), re.M)
+_RE_PREFIXO = re.compile('APIRouter[(][^)]*prefix="([^"]*)"')
+_RE_ROTA_DO_ROTEADOR = re.compile('@router[.](get|post|put|patch|delete)[(][ ]*"([^"]+)"')
+
+
+def _roteadores_incluidos(src):
+    """[módulo] de cada `app.include_router(...)` do main.py, pelo nome com que foi importado."""
+    apelidos = {}
+    for m in _RE_IMPORTA.finditer(src):
+        modulo, apelido = (m.group(1), m.group(2)) if m.group(1) else (m.group(3), m.group(4))
+        apelidos[apelido] = modulo
+    saida = []
+    for m in _RE_INCLUI.finditer(src):
+        assert m.group(1) in apelidos, (
+            "include_router(%s) sem import reconhecível — o guarda deixaria as rotas dele de fora" % m.group(1))
+        saida.append(apelidos[m.group(1)])
+    return saida
+
+
 def _rotas_do_backend(src=None):
-    """{caminho: {métodos aceitos}} a partir dos decoradores do FastAPI."""
+    """{caminho: {métodos aceitos}} a partir dos decoradores do FastAPI.
+
+    🩸 26/09: só lia `@app.` do main.py. As rotas dos roteadores incluídos — o Escritório inteiro,
+    com prefixo `/api/escritorio` — ficavam de fora, e a 1ª página da lista que chamou uma delas
+    (admin-usuario → `/api/escritorio/admin/limpar-conta`) saiu como "rota que não existe". Agora
+    lê também cada roteador que o main.py inclui, somando o prefixo dele."""
+    do_disco = src is None
     if src is None:
         src = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
     rotas = {}
     for m in re.finditer(r'@app\.(get|post|put|patch|delete)\(\s*"([^"]+)"', src):
         rotas.setdefault(m.group(2), set()).add(m.group(1).upper())
+    if do_disco:
+        for modulo in _roteadores_incluidos(src):
+            fonte = io.open(os.path.join(_BACKEND, modulo + ".py"), encoding="utf-8").read()
+            p = _RE_PREFIXO.search(fonte)
+            prefixo = p.group(1) if p else ""
+            for m in _RE_ROTA_DO_ROTEADOR.finditer(fonte):
+                rotas.setdefault(prefixo + m.group(2), set()).add(m.group(1).upper())
     return rotas
+
+
+def test_CONTROLE_o_guarda_enxerga_as_rotas_dos_roteadores():
+    """Controle do conserto de 26/09: as rotas com prefixo entram, e uma inventada continua de fora."""
+    rotas = _rotas_do_backend()
+    assert "POST" in rotas.get("/api/escritorio/admin/limpar-conta", set())
+    assert "POST" in rotas.get("/api/escritorio/drive/confirmar", set())
+    assert any(r.startswith("/api/instagram/") for r in rotas), "roteador com `from x import router as y` ficou de fora"
+    assert _casa("/api/escritorio/admin/limpar-conta-inventada", rotas) is None
 
 
 # ══════════════════════════════════════════════════════════════════════════

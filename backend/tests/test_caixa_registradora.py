@@ -252,6 +252,43 @@ def test_CONTROLE_a_peneira_ENXERGA_a_forma_async():
         "sairiam da cobertura caladas")
 
 
+# 24/09 (Escritório, Parte 2): rota que entrega arquivo pode conferir com
+# `_require_project_viewer(..., baixar=True)` — que É o `_require_project_owner` por dentro
+# e só acrescenta a equipe que a admin autorizou a baixar. A ordem continua valendo.
+# 26/09 (auditoria SRV-9): nas rotas async a conferência vai pro threadpool —
+# `await run_in_threadpool(_require_project_viewer, request, job_id, baixar=True)` — e o guarda
+# só conhecia a forma com parêntese colado: acusou "não confere dono" numa rota que confere.
+_FORMAS_DO_GUARDA_DE_DONO = (
+    "_require_project_owner(", "_require_project_viewer(",
+    "run_in_threadpool(_require_project_owner,", "run_in_threadpool(_require_project_viewer,",
+)
+
+
+def _onde_confere_o_dono(corpo):
+    achados = [i for i in (corpo.find(f) for f in _FORMAS_DO_GUARDA_DE_DONO) if i >= 0]
+    return min(achados) if achados else -1
+
+
+def test_CONTROLE_a_ordem_vale_tambem_na_forma_do_threadpool():
+    """O guarda aceita a forma nova E continua reprovando a caixa ANTES dela."""
+    certo = """@app.get("/api/coisa/{job_id}/export/xlsx")
+async def exporta_coisa(job_id: str, request: Request):
+    await run_in_threadpool(_require_project_viewer, request, job_id, baixar=True)
+    await _require_entregavel_pago_async(job_id)
+    return FileResponse(caminho, media_type="x")
+@app.get("/outra")
+"""
+    errado = certo.replace(
+        "    await run_in_threadpool(_require_project_viewer, request, job_id, baixar=True)\n", "").replace(
+        "    return FileResponse", "    await run_in_threadpool(_require_project_viewer, request, job_id, baixar=True)\n    return FileResponse")
+    assert errado != certo and errado.count("run_in_threadpool") == 1
+    (_, c1), = _rotas_que_entregam_arquivo(certo)
+    (_, c2), = _rotas_que_entregam_arquivo(errado)
+    assert 0 <= _onde_confere_o_dono(c1) < _CHAMA_A_CAIXA.search(c1).start()
+    assert _onde_confere_o_dono(c2) > _CHAMA_A_CAIXA.search(c2).start(), (
+        "o guarda deixou de ver a caixa ANTES da conferência na forma do threadpool")
+
+
 def test_a_trava_vem_DEPOIS_do_guarda_de_dono():
     """🪤 Ordem importa: quem NÃO é dono tem que levar 401/403, não 402. Dizer
     "pague" pra alguém que nem é dono do projeto vaza a existência dele."""
@@ -262,11 +299,7 @@ def test_a_trava_vem_DEPOIS_do_guarda_de_dono():
         if not m:
             continue
         vistas += 1
-        # 24/09 (Escritório, Parte 2): rota que entrega arquivo pode conferir com
-        # `_require_project_viewer(..., baixar=True)` — que É o `_require_project_owner` por dentro
-        # e só acrescenta a equipe que a admin autorizou a baixar. A ordem continua valendo.
-        achados = [i for i in (corpo.find("_require_project_owner("), corpo.find("_require_project_viewer(")) if i >= 0]
-        i_dono = min(achados) if achados else -1
+        i_dono = _onde_confere_o_dono(corpo)
         assert i_dono >= 0, "%s trava pagamento mas não confere dono" % nome
         assert i_dono < m.start(), (
             "%s pergunta o pagamento ANTES de saber se é o dono" % nome)
