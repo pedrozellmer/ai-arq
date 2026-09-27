@@ -215,3 +215,48 @@ def test_privacidade_e_termos_citam_microsoft_e_linkedin():
             assert nome in txt, (
                 "%s não cita %s — o site recebe nome e e-mail por ele e a "
                 "política tem que dizer" % (pagina, nome))
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  5. A TELA "CRIAR SUA CONTA" NÃO FALA SÓ DE SENHA (26/09)
+# ══════════════════════════════════════════════════════════════════════════
+def _subtitulo_do_cadastro(src):
+    """A frase que o modo "Criar sua conta" põe debaixo do título."""
+    src = sem_comentarios_js(src)
+    i = src.find("tituloEl.textContent = 'Criar sua conta'")
+    if i < 0:
+        return ""
+    j = src.find("subtituloEl.innerHTML", i)
+    return src[j:src.find("\n", j)] if j >= 0 else ""
+
+
+def _cita_os_botoes(frase):
+    # 🪤 o login.html escreve o acento ESCAPADO (barra + u00f5, a barra existe
+    # de verdade no arquivo). O Python e o editor traduzem esse escape se ele
+    # for digitado — por isso a barra é montada com chr(92).
+    escapado = "bot" + chr(92) + "u00f5es"
+    return escapado in frase or "botões" in frase
+
+
+def test_criar_conta_fala_dos_botoes_e_nao_so_da_senha():
+    """Pedro, 26/09: a tela dizia só "Escolha uma senha de pelo menos 8
+    caracteres" — logo acima de três botões que criam a conta SEM senha.
+    Quem lê acha que senha é obrigatória."""
+    frase = _subtitulo_do_cadastro(_login())
+    assert frase, "sumiu o subtítulo do modo Criar sua conta"
+    assert _cita_os_botoes(frase), (
+        "o subtítulo de Criar sua conta voltou a falar só de senha: %s" % frase)
+
+
+def test_controle_positivo_a_frase_antiga_seria_reprovada():
+    b = chr(92)
+    antiga = ("subtituloEl.innerHTML = '<strong>Gr" + b + "u00e1tis durante o beta</strong> "
+              + b + "u2014 quantos projetos quiser, sem cart" + b + "u00e3o. Escolha uma senha"
+              " de pelo menos 8 caracteres.';")
+    nova = ("subtituloEl.innerHTML = '<strong>Gr" + b + "u00e1tis durante o beta</strong> "
+            + b + "u2014 quantos projetos quiser, sem cart" + b + "u00e3o. Crie com um clique"
+            " pelos bot" + b + "u00f5es abaixo, ou com e-mail e uma senha de pelo menos 8"
+            " caracteres.';")
+    assert not _cita_os_botoes(antiga)
+    # 🧪 e a frase nova, no MESMO formato escapado do arquivo, passa
+    assert _cita_os_botoes(nova)
