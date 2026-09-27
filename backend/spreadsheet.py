@@ -992,7 +992,11 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
         '6. Itens em CINZA (Premissas): metadados do projeto extraídos do arquivo — revisar no original.',
         '7. Itens em ROXO (Sugestões): checklist de custos indiretos típicos — preencher quantidade conforme o projeto.',
         '8. Contingência 10% — reserva técnica para imprevistos. Ajustar conforme risco do projeto.',
-        '9. Perdas de material (5-10% típico) NÃO aplicadas automaticamente — adicionar ao preencher a coluna de custo se pertinente.',
+        # 🪤 27/09/2026: dizia "Perdas (5-10% típico) NÃO aplicadas — adicionar ao preencher a
+        # coluna de custo". Mas a coluna REF aponta composição SINAPI, que já traz a perda nos
+        # coeficientes (Manual de Metodologias e Conceitos da Caixa): somar 5-10% em cima conta
+        # a perda DUAS vezes — o "Erro caro Nº 9" que o Instagram ensina em 06/10.
+        '9. Perdas de material NÃO aplicadas: as composições SINAPI da coluna REF já têm a perda nos coeficientes — só acrescente perda se a composição que você usar não tiver.',
         '10. OMISSOS: itens que podem ser necessários mas não foram incluídos — avaliar com equipe de projeto.',
         '11. EXCLUSOS: itens padrão de mercado excluídos do escopo de empreiteiras.',
         '12. Planilha gerada por AI.arq (ai.arq.br) — validar com engenheiro de custos.',
