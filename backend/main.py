@@ -32862,7 +32862,9 @@ _TRACK_ALLOWED = {
     "view_comparativo", "cotacao_enviada", "cotacao_erro", "comparativo_erro",
     "planilha_revisada_enviada", "planilha_revisada_erro",
     "reprocesso_pedido", "reprocesso_erro", "reprocesso_bloqueado",
-    "chat_pergunta",       # o chat do quantitativo (o de dentro do projeto)
+    # 27/09/2026 — saíram "chat_pergunta", "chat_portao_exibido" e "chat_lead_ok": quem disparava os
+    # três era o chat PÚBLICO (chat-widget.js, apagado em 27/09). O chat de dentro do projeto nunca
+    # disparou "chat_pergunta" — o comentário antigo dizia que sim. As linhas antigas seguem no banco.
     # os convites que completam o quantitativo — o de área já existia; o de pé-direito nasceu mudo
     "convite-pd:exibido", "convite-pd:submit-ok", "convite-pd:submit-erro", "convite-pd:submit-invalido",
     "proc_perguntas:exibido", "proc_perguntas:respondido", "proc_perguntas:recusado",
@@ -32871,7 +32873,6 @@ _TRACK_ALLOWED = {
     "signup_criado",       # criou conta por e-mail/senha (o Google já tinha)
     "signup_bloqueado",    # a validação do cadastro barrou — e em QUAL campo
     "login_falhou",        # senha errada ou e-mail não confirmado (nunca o e-mail digitado)
-    "chat_portao_exibido", "chat_lead_ok",   # o chat público pede nome+e-mail ANTES de responder
     "contato_abriu", "contato_enviado", "contato_falhou",
     "view_blog",           # a vitrine /blog/ (os posts já têm view_blog_post)
     # 🩸 auditoria 06/09: "abriu" e "exportou" não dizem se alguém USOU. O memorial ficou 30 dias
