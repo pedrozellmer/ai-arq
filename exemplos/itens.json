@@ -185,10 +185,10 @@
   {
    "desc": "Contrapiso desempenado e=4cm",
    "un": "m²",
-   "qtd": 118.5,
+   "qtd": 108.3,
    "disc": "Pisos e Rodapés",
    "medido": true,
-   "obs": "Fonte: área da polilinha do perímetro externo, layer 'ARQ-AREA' = 118,50 m²",
+   "obs": "Fonte: área hachurada dos layers 'PISO-PORCELANATO' + 'PISO-VINILICO' = 108,30 m²",
    "sinapi": [
     {
      "codigo": "88478",
@@ -210,10 +210,10 @@
   {
    "desc": "Piso porcelanato retificado 60x60",
    "un": "m²",
-   "qtd": 96.3,
+   "qtd": 86.1,
    "disc": "Pisos e Rodapés",
    "medido": true,
-   "obs": "Fonte: área hachurada do layer 'PISO-PORCELANATO' = 96,30 m²",
+   "obs": "Fonte: área hachurada do layer 'PISO-PORCELANATO' = 86,10 m²",
    "sinapi": [
     {
      "codigo": "87261",
