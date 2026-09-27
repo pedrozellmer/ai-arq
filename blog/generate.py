@@ -26,6 +26,18 @@ def hoje_editorial():
 
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 SITE_URL = "https://ai.arq.br"
+# 🔗 26/09/2026 (auditoria de aquisição): a MESMA organização em todo lugar.
+# O @id amarra o autor/publisher dos posts e do índice ao nó completo que
+# mora no index.html (sameAs, e-mail). Logo quadrado de 512 px: o favicon de
+# 32 px ficava abaixo do mínimo de 112 px que o Google pede pra logo.
+ORGANIZACAO = {
+    "@type": "Organization",
+    "@id": SITE_URL + "/#org",
+    "name": "AI.arq",
+    "url": SITE_URL + "/",
+    "logo": {"@type": "ImageObject", "url": SITE_URL + "/email-logo.png",
+             "width": 512, "height": 512},
+}
 
 with open(os.path.join(THIS_DIR, "posts.json"), "r", encoding="utf-8") as f:
     DATA = json.load(f)
@@ -103,6 +115,7 @@ FOOTER = '''
       <ul class="space-y-2 text-sm text-gray-600">
         <li><a href="/blog/" class="hover:text-indigo-600">Blog</a></li>
         <li><a href="/faq.html" class="hover:text-indigo-600">FAQ</a></li>
+        <li><a href="/sobre.html" class="hover:text-indigo-600">Sobre</a></li>
         <li><a href="javascript:void(0)" onclick="aiArqContactOpen()" class="hover:text-indigo-600">Contato</a></li>
       </ul>
     </div>
@@ -637,12 +650,8 @@ def render_post_html(post):
         # pagina, e o Google trata a pagina como velha justamente quando ela
         # acabou de ser atualizada.
         "dateModified": (f"{_atualizado}T10:00:00-03:00" if _atualizado else publish_date_iso),
-        "author": {"@type": "Organization", "name": "AI.arq"},
-        "publisher": {
-            "@type": "Organization",
-            "name": "AI.arq",
-            "logo": {"@type": "ImageObject", "url": f"{SITE_URL}/favicon.png"}
-        },
+        "author": ORGANIZACAO,
+        "publisher": ORGANIZACAO,
         "image": f"{SITE_URL}/blog/og/{post['slug']}.png",
         "url": canonical_url,
         "mainEntityOfPage": {"@type": "WebPage", "@id": canonical_url},
@@ -933,9 +942,7 @@ def render_index_html():
         "@type": "Blog",
         "name": "Blog do AI.arq",
         "url": SITE_URL + "/blog/",
-        "publisher": {"@type": "Organization", "name": "AI.arq",
-                      "logo": {"@type": "ImageObject",
-                               "url": SITE_URL + "/favicon.png"}},
+        "publisher": ORGANIZACAO,
         "blogPost": [
             {"@type": "BlogPosting", "headline": p["title"],
              "url": SITE_URL + "/blog/posts/" + p["slug"] + ".html",
@@ -965,6 +972,12 @@ def render_index_html():
 <meta property="og:title" content="Blog AI.arq — Quantitativos, SINAPI, IA na arquitetura">
 <meta property="og:description" content="Conteúdo prático sobre quantitativos de obra, SINAPI, TCPO, BDI e IA aplicada à arquitetura.">
 <meta property="og:image" content="{SITE_URL}/blog/og/index.png">
+<meta property="og:locale" content="pt_BR">
+<meta property="og:site_name" content="AI.arq">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Blog AI.arq — Quantitativos, SINAPI, IA na arquitetura">
+<meta name="twitter:description" content="Conteúdo prático sobre quantitativos de obra, SINAPI, TCPO, BDI e IA aplicada à arquitetura.">
+<meta name="twitter:image" content="{SITE_URL}/blog/og/index.png">
 <script type="application/ld+json">
 {json.dumps(schema_indice, ensure_ascii=False, indent=2)}
 </script>
@@ -1071,6 +1084,7 @@ def render_sitemap():
         (f"{SITE_URL}/exemplo.html", "0.8", "monthly"),
         (f"{SITE_URL}/blog/", "0.9", "weekly"),
         (f"{SITE_URL}/faq.html", "0.7", "monthly"),
+        (f"{SITE_URL}/sobre.html", "0.5", "monthly"),
         (f"{SITE_URL}/termos.html", "0.3", "yearly"),
         (f"{SITE_URL}/privacidade.html", "0.3", "yearly"),
         # 🪤 Esta lista é a fonte da verdade do sitemap: ele é REESCRITO do zero

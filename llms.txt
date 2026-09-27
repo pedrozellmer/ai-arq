@@ -29,6 +29,7 @@ In English: AI.arq is a Brazilian SaaS that reads the 2D CAD sheets a profession
 - [Perguntas frequentes](https://ai.arq.br/faq.html): formatos aceitos, o que significa MEDIDO e ESTIMADO, disciplinas cobertas, uso da SINAPI, limites do serviço e como conferir o resultado.
 - [Preços](https://ai.arq.br/precos.html): grátis e ilimitado durante o beta, sem cartão; a tabela publicada ali é a prevista para depois do beta e pode mudar.
 - [Criar conta e enviar um projeto](https://ai.arq.br/login.html?novo=1): cadastro gratuito, sem cartão de crédito.
+- [Sobre a AI.arq](https://ai.arq.br/sobre.html): quem faz, como mede (DWG/DXF medido, PDF como estimativa) e o que o serviço não faz.
 - [Blog](https://ai.arq.br/blog/): índice completo dos artigos sobre quantitativo, leitura de projeto e orçamento de obra.
 
 ## Quantitativo a partir de CAD (DWG, DXF e PDF)

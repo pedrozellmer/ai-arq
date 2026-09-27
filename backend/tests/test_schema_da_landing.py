@@ -88,11 +88,21 @@ def test_todo_sameAs_e_url_absoluta_e_https():
 def test_nao_repete_o_proprio_dominio_no_sameAs():
     """🪤 `sameAs` existe pra apontar pra FORA. Listar ai.arq.br ali é dizer
     "este site é o mesmo que este site" — ruído que não corrobora nada, e foi
-    justamente a falta de fonte externa que a medição de 31/08 apontou."""
+    justamente a falta de fonte externa que a medição de 31/08 apontou.
+
+    🪤 26/09: compara o DOMÍNIO do link, não o texto. O Instagram da marca é
+    `instagram.com/ai.arq.br/` — o usuário tem o nome do domínio, e a versão
+    que procurava "ai.arq.br" em qualquer lugar da URL o reprovava."""
     for u in _todos_os_sameas():
-        assert "ai.arq.br" not in u, (
+        assert not _e_o_proprio_dominio(u), (
             "sameAs aponta pro próprio domínio (%r) — corroboração externa é "
             "outra fonte, não nós mesmos" % u)
+
+
+def _e_o_proprio_dominio(url):
+    from urllib.parse import urlparse
+    host = (urlparse(url).hostname or "").lower()
+    return host == "ai.arq.br" or host.endswith(".ai.arq.br")
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -119,4 +129,11 @@ def test_CONTROLE_sameAs_relativo_e_reprovado():
 
 def test_CONTROLE_sameAs_do_proprio_dominio_e_reprovado():
     ruim = _sameas_de('{"sameAs":["https://ai.arq.br/precos.html"]}')
-    assert ruim and "ai.arq.br" in ruim[0], "o controle está mal montado"
+    assert ruim and _e_o_proprio_dominio(ruim[0]), "o controle está mal montado"
+    assert _e_o_proprio_dominio("https://www.ai.arq.br/"), "subdomínio também é o próprio"
+
+
+def test_CONTROLE_perfil_externo_com_o_nome_da_marca_passa():
+    """O @ai.arq.br do Instagram é FORA — é exatamente o que o sameAs quer."""
+    assert not _e_o_proprio_dominio("https://www.instagram.com/ai.arq.br/")
+    assert not _e_o_proprio_dominio("https://ai.arq.br.golpe.com/")

@@ -26,6 +26,11 @@
     <priority>0.7</priority>
   </url>
   <url>
+    <loc>https://ai.arq.br/sobre.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
     <loc>https://ai.arq.br/termos.html</loc>
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>
