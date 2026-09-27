@@ -5249,68 +5249,113 @@ def selo_com_prova_da_geometria(items, indice):
 #:   (2) o mesmo bloco/layer citado, com a MESMA quantidade, em pranchas do
 #:       MESMO pavimento (o título diz o mesmo andar, ou nenhum, e uma delas é
 #:       temática — layout, forro, pontos, piso…). Andar diferente nunca junta.
-#: 📏 30 dias: (1) 44 linhas em 2 projetos; (2) 30 grupos em 5 projetos.
+#: 🩸 Revisão de 27/09 (executada): a 1ª versão juntava andares que a régua não
+#: reconhecia — "PRIMEIRO × SEGUNDO PAVIMENTO", "PAV 01 × PAV 02", "BLOCO_A",
+#: as páginas de um PDF de elétrica — porque "nenhum diz andar + um é temático"
+#: bastava. Agora o TEMA tem que ser diferente: o mesmo tema em duas pranchas
+#: (layout × layout, elétrica p1 × p2) é o jeito de desenhar ANDARES, e nunca
+#: junta. O andar também é lido do nome da vista (hint), e a régua de andar
+#: conhece ordinal, "pav 01", nível, lote, casa, sobrado, tipo.
+#: 📏 30 dias (1ª versão): (1) 44 linhas em 2 projetos; (2) 30 grupos em 5.
 MARCA_MESMA_PECA = "⚠ MESMA PEÇA"
-_RE_ID_REVIT_NO_BLOCO = _re.compile(r"-\s?(\d{6,8})(?=[-'’\"\s)]|$)")
+#: O nome entre aspas: a aspa não pode vir colada em letra ("caixa d'água:
+#: bloco 'CX'" virava o nome "água: bloco "; "'P1' e 'P2'" virava " e ").
+_RE_CITADO_ENTRE_ASPAS = _re.compile(r"(?<!\w)['‘]([^'’\n]{3,120})['’](?!\w)")
+#: O id do Revit mora DENTRO do nome do bloco, colado no hífen, e é o último
+#: pedaço ou vem antes da vista: "…0_70x2_10-2314776-PLANTA DE PISO",
+#: "…PPT03-4728387". Fora do nome ("SINAPI - 103328", "ARQ-123456-R01" como
+#: número de prancha) não conta; zero à esquerda também não ("P1-000123").
+_RE_ID_NO_NOME = _re.compile(r"-([1-9]\d{5,7})(?=-|$)")
 _RE_IDS_EM_PROSA = _re.compile(
-    r"\bIDs?\s*:?\s*((?:[A-Z]{0,2}\d{2,8}\s*(?:,|\be\b)\s*)*[A-Z]{0,2}\d{2,8})")
+    r"\bIDs?\b\s*:?\s*((?:[A-Z]{0,2}\d{2,8}\s*(?:[,;]|\be\b)\s*)*[A-Z]{0,2}\d{2,8})",
+    _re.IGNORECASE)
 #: 🪤 Biblioteca de bloco com DATA no nome ("…-esteiras-04112022"): a data é a
-#: mesma em peças diferentes — não é id de instância.
+#: mesma em peças diferentes — não é id de instância. (Em prosa, "IDs 120512"
+#: é id: a IA disse que é.)
 _RE_PARECE_DATA = _re.compile(
     r"^(?:(?:0[1-9]|[12]\d|3[01])(?:0[1-9]|1[0-2])(?:(?:19|20)\d\d|\d\d)"
     r"|(?:19|20)\d\d(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01]))$")
-_RE_CITADO_ENTRE_ASPAS = _re.compile(r"['‘]([^'’\n]{3,120})['’]")
 #: O andar/unidade que o TÍTULO da prancha diz (com o que o identifica:
 #: "bloco A" ≠ "bloco B"). Irmã de `dwg_extractor._RE_PAVIMENTO_OU_UNIDADE`,
 #: que só pergunta SE diz; aqui é preciso saber QUAL.
 _RE_PAVIMENTO_DO_TITULO = _re.compile(
-    r"t[eé]rreo|superior|subsolo|cobertura|mezanino|\d+\s*[ºª°o]?\s*(?:pav\w*|andar)"
-    r"|pavimento\s+\d+|\bbloco\s+\w+|\btorre\s+\w+|\bcasa\s+\d+|\bunidade\s*\w*"
-    r"|\bapto?\.?\s*\d+", _re.IGNORECASE)
+    r"t[eé]rreo|superior|inferior|subsolo|cobertura|mezanino|[aá]tico|sobreloja|garagem"
+    r"|(?:primeir|segund|terceir|quart|quint|sext|s[eé]tim|oitav|non|d[eé]cim)[oa]"
+    r"\s+(?:pav\w*|andar|n[íi]vel)"
+    r"|\d+\s*[ºª°o]?\s*(?:pav\w*|andar)"
+    r"|pav(?:imento)?\.?[\s_-]*\d+|andar[\s_-]*\d+|n[íi]vel[\s_-]*[+-]?[\d,.]+"
+    r"|\bpav\w*\.?[\s_-]+tipo|\btipo[\s_-]*\d+"
+    r"|\b(?:bloco|torre|casa|lote|sobrado|edif[íi]cio|pr[ée]dio|unidade|quadra)[\s_-]*[^\W_]+"
+    r"|\bapto?\.?[\s_-]*\d+",
+    _re.IGNORECASE)
 
 
 def ids_de_elemento_citados(obs) -> set:
     """Os números de elemento do Revit que a observação cita."""
     t = str(obs or "")
-    ids = set(_RE_ID_REVIT_NO_BLOCO.findall(t))
+    ids = set()
+    for nome in _RE_CITADO_ENTRE_ASPAS.findall(t):
+        ids.update(x for x in _RE_ID_NO_NOME.findall(nome.strip())
+                   if not _RE_PARECE_DATA.match(x))
     for m in _RE_IDS_EM_PROSA.finditer(t):
-        ids.update(x for x in _re.findall(r"\d+", m.group(1)) if 6 <= len(x) <= 8)
-    return {x for x in ids if not _RE_PARECE_DATA.match(x)}
+        ids.update(x for x in _re.findall(r"\d+", m.group(1))
+                   if 6 <= len(x) <= 8 and x[0] != "0")
+    return ids
 
 
 def _pavimentos_do_titulo(titulo) -> frozenset:
-    return frozenset(" ".join(_minusculo_sem_acento(m.group(0)).split())
-                     for m in _RE_PAVIMENTO_DO_TITULO.finditer(str(titulo or "")))
+    out = set()
+    for m in _RE_PAVIMENTO_DO_TITULO.finditer(str(titulo or "")):
+        s = " ".join(_re.split(r"[\s_.\-]+", _minusculo_sem_acento(m.group(0)))).strip()
+        out.add(_re.sub(r"\b0+(\d)", r"\1", s))       # "pav 01" = "pav 1"
+    return frozenset(out)
+
+
+def _temas_do_titulo(titulo) -> frozenset:
+    from dwg_extractor import _RE_PLANTA_TEMATICA
+    return frozenset(_minusculo_sem_acento(m.group(0))
+                     for m in _RE_PLANTA_TEMATICA.finditer(str(titulo or "")))
+
+
+def _andares_diferentes(t1, t2) -> bool:
+    """Os dois títulos NOMEIAM andares/unidades, e não os mesmos."""
+    a, b = _pavimentos_do_titulo(t1), _pavimentos_do_titulo(t2)
+    return bool(a) and bool(b) and a != b
 
 
 def mesmo_pavimento_entre_pranchas(t1, t2) -> bool:
-    """Duas pranchas (arquivos) desenham o MESMO pavimento?
+    """Duas pranchas desenham o MESMO pavimento, com assuntos diferentes?
 
-    Só quando os títulos dizem o MESMO andar/unidade (ou nenhum dos dois diz) e
-    um deles é planta temática. Na dúvida, não: andar diferente é quantidade."""
-    from dwg_extractor import _RE_PLANTA_TEMATICA
+    Só quando os títulos dizem o MESMO andar/unidade (ou nenhum dos dois diz) E
+    os temas são DIFERENTES (planta baixa × layout, pontos × forro). O mesmo
+    tema dos dois lados é como se desenham andares — não junta. Na dúvida, não:
+    andar diferente é quantidade."""
     if not str(t1 or "").strip() or not str(t2 or "").strip():
         return False
     if _pavimentos_do_titulo(t1) != _pavimentos_do_titulo(t2):
         return False
-    return bool(_RE_PLANTA_TEMATICA.search(str(t1)) or _RE_PLANTA_TEMATICA.search(str(t2)))
+    return _temas_do_titulo(t1) != _temas_do_titulo(t2)
 
 
 def selos_da_mesma_peca(linhas) -> list:
     """As linhas com selo que contam a MESMA peça de outra linha com selo, de
     outra prancha. Devolve [{indice, prancha_da_outra, motivo}].
 
-    `linhas`: [{prancha, servico, unidade, quantidade, texto, selo, origem}] —
-    `servico` é o substantivo da descrição (porta, janela…): id igual em
-    serviço diferente (a tela da porta, a ferragem) não é a mesma linha.
+    `linhas`: [{prancha, titulo, servico, unidade, quantidade, texto, selo,
+    origem}] — `titulo` é a prancha + o nome da vista (é nele que se lê o
+    andar); `servico` é o substantivo da descrição (porta, janela…): id igual
+    em serviço diferente (a tela da porta, a ferragem) não é a mesma linha.
 
     Fica o selo na linha de MAIOR quantidade (a planta mais completa); empate,
-    a que vem primeiro. 🚨 Só rebaixa, e só o selo — não mexe no número.
+    a que vem primeiro. Pelo id, só sai o selo quando TODOS os ids da linha já
+    estão em linhas com selo de outra prancha — id que só cruza em parte é peça
+    a mais, e "não some" seria mentira (revisão 27/09).
+    🚨 Só rebaixa, e só o selo — não mexe no número.
     """
     ordem = sorted(range(len(linhas or [])),
                    key=lambda i: (-_num_ou_zero(linhas[i].get("quantidade")), i))
-    donos_id = {}        # (servico, unidade, id) -> prancha da linha que ficou
-    donos_nome = {}      # (servico, unidade, nome) -> [(prancha, quantidade)]
+    donos_id = {}        # (servico, unidade, id) -> (prancha, titulo) da que ficou
+    donos_nome = {}      # (servico, unidade, nome) -> [(prancha, titulo, qtd)]
     saem = []
     for i in ordem:
         ln = linhas[i]
@@ -5320,6 +5365,7 @@ def selos_da_mesma_peca(linhas) -> list:
             continue
         q = _num_ou_zero(ln.get("quantidade"))
         pr = str(ln.get("prancha") or "").strip()
+        tit = str(ln.get("titulo") or pr).strip()
         sv = str(ln.get("servico") or "").strip().lower()
         un = str(ln.get("unidade") or "").strip().lower()
         if q <= 0 or not pr or not sv:
@@ -5329,17 +5375,17 @@ def selos_da_mesma_peca(linhas) -> list:
         nomes = {" ".join(_minusculo_sem_acento(n).split())
                  for n in _RE_CITADO_ENTRE_ASPAS.findall(txt)}
         motivo, outra = "", ""
-        for x in sorted(ids):
-            p = donos_id.get((sv, un, x))
-            if p and p.lower() != pr.lower():
-                motivo, outra = "o elemento %s do Revit está nas duas" % x, p
-                break
+        donos = [donos_id.get((sv, un, x)) for x in sorted(ids)]
+        if donos and all(d and d[0].lower() != pr.lower()
+                         and not _andares_diferentes(d[1], tit) for d in donos):
+            motivo = "elemento %s do Revit nas duas" % min(ids)
+            outra = donos_id[(sv, un, min(ids))][0]
         if not motivo:
             for n in sorted(nomes):
-                for p, q2 in donos_nome.get((sv, un, n), []):
+                for p, t2, q2 in donos_nome.get((sv, un, n), []):
                     if (p.lower() != pr.lower() and _bate(q, q2)
-                            and mesmo_pavimento_entre_pranchas(p, pr)):
-                        motivo, outra = ("mesmo '%s' com a mesma quantidade, no mesmo "
+                            and mesmo_pavimento_entre_pranchas(t2, tit)):
+                        motivo, outra = ("mesmo '%s', mesma quantidade, mesmo "
                                          "pavimento" % n[:40]), p
                         break
                 if motivo:
@@ -5348,9 +5394,9 @@ def selos_da_mesma_peca(linhas) -> list:
             saem.append({"indice": i, "prancha_da_outra": outra, "motivo": motivo})
             continue
         for x in ids:
-            donos_id.setdefault((sv, un, x), pr)
+            donos_id.setdefault((sv, un, x), (pr, tit))
         for n in nomes:
-            donos_nome.setdefault((sv, un, n), []).append((pr, q))
+            donos_nome.setdefault((sv, un, n), []).append((pr, tit, q))
     return saem
 
 

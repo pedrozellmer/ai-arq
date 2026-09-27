@@ -119,6 +119,73 @@ def test_mesmo_pavimento_entre_pranchas():
     assert not mesmo_pavimento_entre_pranchas("FL08-CORTES", "FL09-FACHADAS")
 
 
+def test_REVISAO_andares_que_a_regua_nao_conhecia_nao_juntam():
+    # temas diferentes dos dois lados: só o ANDAR segura
+    for t1, t2 in (("LAYOUT - PRIMEIRO PAVIMENTO", "FORRO - SEGUNDO PAVIMENTO"),
+                   ("LAYOUT PAV 01", "FORRO PAV 02"),
+                   ("LAYOUT_PAVIMENTO_01", "FORRO_PAVIMENTO_02"),
+                   ("LAYOUT PAVIMENTO-1", "FORRO PAVIMENTO-2"),
+                   ("LAYOUT ANDAR 1", "FORRO ANDAR 2"),
+                   ("LAYOUT 2º ANDAR", "FORRO 3º ANDAR"),
+                   ("LAYOUT NIVEL 1", "FORRO NIVEL 2"),
+                   ("LAYOUT BLOCO_A", "FORRO BLOCO_B"),
+                   ("LAYOUT LOTE 01", "FORRO LOTE 02"),
+                   ("LAYOUT CASA A", "FORRO CASA B"),
+                   ("LAYOUT SOBRADO 1", "FORRO SOBRADO 2"),
+                   ("LAYOUT TIPO 1", "FORRO TIPO 2")):
+        assert not mesmo_pavimento_entre_pranchas(t1, t2), (t1, t2)
+    # o MESMO tema dos dois lados é como se desenham andares
+    for t1, t2 in (("PROJETO ELETRICO.pdf (p1)", "PROJETO ELETRICO.pdf (p2)"),
+                   ("FL05-PLANTA DE REVESTIMENTOS", "FL10-PLANTA DE REVESTIMENTOS 1-100"),
+                   ("PAV 01", "PAV 02")):
+        assert not mesmo_pavimento_entre_pranchas(t1, t2), (t1, t2)
+    # e o que continua juntando: mesmo andar escrito de dois jeitos, tema diferente
+    assert mesmo_pavimento_entre_pranchas("LAYOUT PAV 01", "FORRO PAV 1")
+    assert mesmo_pavimento_entre_pranchas("BLOCO_A_LAYOUT", "BLOCO_A_FORRO")
+
+
+def test_REVISAO_id_so_dentro_do_nome_do_bloco():
+    assert ids_de_elemento_citados("Código SINAPI - 103328, prancha ARQ-123456-R01") == set()
+    assert ids_de_elemento_citados("bloco 'P1-000123'") == set()
+    assert ids_de_elemento_citados("bloco 'PORTA-4728387', 2 un") == {"4728387"}
+    assert ids_de_elemento_citados("id 2314776") == {"2314776"}
+    assert ids_de_elemento_citados("Id: 2314776") == {"2314776"}
+    # em prosa a IA disse que é id: data não filtra
+    assert ids_de_elemento_citados("IDs 120512, 230915") == {"120512", "230915"}
+
+
+def test_REVISAO_id_em_andares_diferentes_ou_so_em_parte_nao_junta():
+    ter = _ln("ARQ04 - PLANTA BAIXA - TERREO.dwg", 3, "bloco 'Bacia Deca-1234567'",
+              servico="bacia")
+    sup = _ln("ARQ05 - PLANTA BAIXA - SUPERIOR.dwg", 2, "bloco 'Bacia Deca-1234567'",
+              servico="bacia")
+    assert selos_da_mesma_peca([ter, sup]) == []
+    a = _ln("FL02-PLANTA LAYOUT.dxf", 3, "IDs 1111111, 2222222, 3333333")
+    b = _ln("FL04-PLANTA DE PISOS.dxf", 3, "IDs 3333333, 4444444, 5555555")
+    assert selos_da_mesma_peca([a, b]) == [], "uma porta em comum não faz as outras duas sumirem"
+
+
+def test_REVISAO_aspa_colada_em_letra_nao_abre_nome():
+    for x, y in (("blocos 'P1' e 'P2'", "blocos 'J1' e 'J2'"),
+                 ("caixa d'água: bloco 'CX-1000'", "caixa d'água: bloco 'CX-2000'")):
+        linhas = [_ln("FL02-PLANTA LAYOUT.dxf", 6, x, servico="caixa"),
+                  _ln("FL06-PLANTA DE FORRO.dxf", 6, y, servico="caixa")]
+        assert selos_da_mesma_peca(linhas) == [], (x, y)
+
+
+def test_REVISAO_o_andar_do_nome_da_vista_conta():
+    a = BudgetItem(item_num="1", description="Luminária de embutir 60x60", unit="un",
+                   quantity=8, observations="bloco 'LUM-60x60' = 8 un",
+                   ref_sheet="ARQ-03 LAYOUT.dwg (PLANTA TÉRREO)",
+                   confidence=Confidence("confirmado"), origem="dxf_geom")
+    b = BudgetItem(item_num="2", description="Luminária de embutir 60x60", unit="un",
+                   quantity=8, observations="bloco 'LUM-60x60' = 8 un",
+                   ref_sheet="ARQ-04 FORRO.dwg (PLANTA SUPERIOR)",
+                   confidence=Confidence("confirmado"), origem="dxf_geom")
+    assert main._tira_selo_da_mesma_peca([a, b]) == 0
+    assert b.confidence == Confidence("confirmado")
+
+
 def _item(ref, obs, q=1, conf="confirmado", desc="Portão de abrir 2 folhas PPT03"):
     return BudgetItem(item_num="1", description=desc, unit="un", quantity=q,
                       observations=obs, ref_sheet=ref, confidence=Confidence(conf),

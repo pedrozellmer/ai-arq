@@ -13132,7 +13132,11 @@ def _tira_selo_da_mesma_peca(items) -> int:
     from engine_rules import (selos_da_mesma_peca, MARCA_MESMA_PECA,
                               PREFIXO_SELO_DA_CHAVE, PREFIXO_SELO_DA_TABELA)
     from models import Confidence
+    # 🩸 revisão 27/09: o andar mora às vezes só no nome da VISTA ("ARQ-03
+    # LAYOUT.dwg (PLANTA TÉRREO)") — `_prancha_de_verdade` o joga fora.
     linhas = [{"prancha": _prancha_de_verdade(getattr(it, "ref_sheet", "")),
+               "titulo": (_prancha_de_verdade(getattr(it, "ref_sheet", "")) + " "
+                          + _vista_do_ref_sheet(getattr(it, "ref_sheet", ""))),
                "servico": _primary_noun(getattr(it, "description", "") or ""),
                "unidade": getattr(it, "unit", ""),
                "quantidade": getattr(it, "quantity", 0),
@@ -13150,9 +13154,10 @@ def _tira_selo_da_mesma_peca(items) -> int:
         _outra = s["prancha_da_outra"]
         _outra = _outra if len(_outra) <= 48 else _outra[:47] + "…"
         it.confidence = Confidence("estimado")
+        # "não some" antes da prancha: a tela corta em 110 caracteres
         it.observations = (
-            "%s da linha com selo da prancha %s (%s): o selo fica numa linha só "
-            "— não some as duas. " % (MARCA_MESMA_PECA, _outra, s["motivo"])) + obs
+            "%s — não some: o selo ficou na prancha %s (%s). "
+            % (MARCA_MESMA_PECA, _outra, s["motivo"])) + obs
     return len(saem)
 
 
