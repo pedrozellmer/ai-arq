@@ -535,6 +535,34 @@ Responda SÓ um array JSON, um objeto por item, sem texto em volta:
 [{{"i": 0, "codigo": "87263"}}, {{"i": 1, "codigo": null}}]"""
 
 
+# Teto do texto que vai pra IA, por candidato e por item. Não é corte de leitura:
+# a maior composição da base tem 324 car. sem o bordão, e a maior descrição de
+# item no banco tem 500 (27/09/2026). Só segura um texto patológico de inflar o
+# prompt — cada candidato se repete 60× por item.
+_TETO_TEXTO_IA = 500
+
+
+def _texto_pra_ia(descricao: str) -> str:
+    """O que a IA lê de uma composição: o texto inteiro, sem o bordão do fim.
+
+    🩸 27/09/2026 — era `[:110]`. O kit de porta COM fechadura (91314) e o SEM
+    fechadura (91320) ficavam IGUAIS letra por letra no corte: a diferença
+    ("FECHADURA COM EXECUÇÃO DO FURO" × "SEM FECHADURA") começa no 111º
+    caractere. Na base toda, 2.835 dos 10.284 códigos eram gêmeos de outro
+    (mesmo texto visível, mesma unidade) — a IA escolhia entre eles no chute.
+
+    Sai só o que não separa uma composição da outra, e só no FIM do texto:
+      - o selo de versão "AF_10/2025" (e _PS/_PE) — 9.908 composições;
+      - " - FORNECIMENTO E INSTALAÇÃO" — 2.718. Medido: tirá-lo não cria gêmeo
+        nenhum, e "FORNECIMENTO E INSTALAÇÃO (EXCLUSIVE HIDRÔMETRO)" fica.
+    Com isso a IA lê em média 119 car. por candidato (eram 104) e 0 gêmeos.
+    """
+    import re
+    t = re.sub(r"\s*AF_\d{2}/\d{4}(_[A-Z]+)?\s*$", "", descricao or "").rstrip(" .")
+    t = re.sub(r"\s*-\s*FORNECIMENTO E INSTALA[ÇC][ÃA]O\s*\.?\s*$", "", t).rstrip(" .")
+    return t[:_TETO_TEXTO_IA]
+
+
 def _client():
     """Client Anthropic, ou None se não houver chave (matcher segue sem a IA)."""
     api_key = os.getenv("ANTHROPIC_API_KEY")
@@ -574,11 +602,11 @@ def pick_best_batch(items: List[Dict], batch_size: int = 12,
         linhas = []
         for i, it in lote:
             cands = "\n".join(
-                f'     - {c.get("codigo")}: {(c.get("descricao") or "")[:110]} [un: {c.get("unidade") or "?"}]'
+                f'     - {c.get("codigo")}: {_texto_pra_ia(c.get("descricao"))} [un: {c.get("unidade") or "?"}]'
                 for c in it['candidates']
             )
             linhas.append(
-                f'  i={i} | ITEM: {(it.get("description") or "")[:110]} '
+                f'  i={i} | ITEM: {(it.get("description") or "")[:_TETO_TEXTO_IA]} '
                 f'[un: {it.get("unit") or "?"}]\n     CANDIDATOS:\n{cands}')
         try:
             from llm_retry import call_with_retry
