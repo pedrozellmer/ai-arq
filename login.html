@@ -278,7 +278,10 @@
         redirectTo: 'https://ai.arq.br/cadastro.html',
         // O Supabase EXIGE o escopo `email` da Microsoft — sem ele a conta
         // chega sem e-mail e o login é recusado.
-        scopes: 'email',
+        // `profile` traz o NOME: no 1º login real (26/09) só com `email` a
+        // conta chegou sem nome e o cadastro abria com o campo vazio — pelo
+        // Google o nome já vem preenchido.
+        scopes: 'email profile',
         // Mesmo motivo do Google: quem tem a conta pessoal E a do escritório
         // abertas precisa escolher, não entrar calado na errada.
         queryParams: { prompt: 'select_account' }

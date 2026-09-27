@@ -103,15 +103,18 @@ def test_controle_positivo_botao_visivel_seria_reprovado():
 def _microsoft_ok(trecho):
     return (trecho is not None
             and re.search(r"scopes\s*:\s*['\"][^'\"]*\bemail\b", trecho) is not None
+            # 26/09: o 1º login real chegou SEM NOME — só `email` não traz o `name`
+            and re.search(r"scopes\s*:\s*['\"][^'\"]*\bprofile\b", trecho) is not None
             and re.search(r"queryParams\s*:\s*\{[^}]*prompt\s*:\s*['\"]select_account", trecho) is not None
             and "cadastro.html" in trecho)
 
 
 def test_microsoft_pede_email_pergunta_a_conta_e_volta_pro_cadastro():
     assert _microsoft_ok(_chamada_oauth(_login(), "azure")), (
-        "o login com Microsoft precisa de scopes 'email' (o Supabase recusa a "
-        "conta sem e-mail), prompt select_account dentro de queryParams e "
-        "redirectTo no cadastro.html")
+        "o login com Microsoft precisa de scopes 'email profile' (sem email o "
+        "Supabase recusa a conta; sem profile o nome não vem e o cadastro abre "
+        "vazio), prompt select_account dentro de queryParams e redirectTo no "
+        "cadastro.html")
 
 
 def test_linkedin_volta_pro_cadastro():
@@ -125,22 +128,35 @@ def test_linkedin_volta_pro_cadastro():
 def test_controle_positivo_a_chamada_incompleta_seria_reprovada():
     sem_email = """signInWithOAuth({
       provider: 'azure',
-      options: { redirectTo: 'https://ai.arq.br/cadastro.html',
+      options: { redirectTo: 'https://ai.arq.br/cadastro.html', scopes: 'profile',
+                 queryParams: { prompt: 'select_account' } }
+    """
+    sem_nome = """signInWithOAuth({
+      provider: 'azure',
+      options: { redirectTo: 'https://ai.arq.br/cadastro.html', scopes: 'email',
                  queryParams: { prompt: 'select_account' } }
     """
     prompt_fora = """signInWithOAuth({
       provider: 'azure',
-      options: { redirectTo: 'https://ai.arq.br/cadastro.html', scopes: 'email',
+      options: { redirectTo: 'https://ai.arq.br/cadastro.html', scopes: 'email profile',
                  prompt: 'select_account' }
     """
     pro_painel = """signInWithOAuth({
       provider: 'azure',
-      options: { redirectTo: 'https://ai.arq.br/dashboard.html', scopes: 'email',
+      options: { redirectTo: 'https://ai.arq.br/dashboard.html', scopes: 'email profile',
+                 queryParams: { prompt: 'select_account' } }
+    """
+    certo = """signInWithOAuth({
+      provider: 'azure',
+      options: { redirectTo: 'https://ai.arq.br/cadastro.html', scopes: 'email profile',
                  queryParams: { prompt: 'select_account' } }
     """
     assert not _microsoft_ok(sem_email)
+    assert not _microsoft_ok(sem_nome)
     assert not _microsoft_ok(prompt_fora)
     assert not _microsoft_ok(pro_painel)
+    # 🧪 e a versão certa PASSA — senão os quatro "não" acima provariam nada
+    assert _microsoft_ok(certo)
 
 
 def test_cada_botao_tem_o_seu_ouvinte():
