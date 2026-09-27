@@ -16161,7 +16161,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                 # adversarial provou o buraco movendo o bloco pra depois de
                                 # o item ser montado: código morto, 19 guardas verdes.
                                 from engine_rules import selo_apos_regra_da_soma as _regra_soma
-                                conf, obs_raw, _somou = _regra_soma(conf, obs_raw)
+                                conf, obs_raw, _somou = _regra_soma(conf, obs_raw, qty)
                                 if _somou:
                                     _rebaixado_pela_fonte = True
 

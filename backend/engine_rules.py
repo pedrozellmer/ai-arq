@@ -780,6 +780,55 @@ _RE_TERMO_MULTIPLICADO = _re.compile(r"(?:\d\s*[×x*]|[×x*]\s*[\d(])")
 #: "tomada 2P+T": nome de produto, não adição.
 _RE_PRODUTO_P_MAIS_T = (_re.compile(r"\dP\s*$", _re.IGNORECASE),
                         _re.compile(r"\s*T\b", _re.IGNORECASE))
+#: "(CA-50 + CA-60)": nome das CLASSES de aço, não adição — mesma família do
+#: "2P+T". 🩸 27/09 (job 32a27efc): "Total geral declarado: 371,11 kg (CA-50 +
+#: CA-60)" rebaixava a linha de CA-60 lida do resumo do aço.
+_RE_CLASSE_DE_ACO = (_re.compile(r"CA-?\s*\d{2}\s*$", _re.IGNORECASE),
+                     _re.compile(r"\s*CA-?\s*\d{2}\b", _re.IGNORECASE))
+
+#: 🩸 27/09/2026 — A CONFERÊNCIA DO TOTAL NÃO É A FONTE. Job 32a27efc: cada
+#: bitola lida do RESUMO DO AÇO saía laranja porque a IA conferia o total na
+#: observação — "Total declarado: 255,93 kg (42,65 + 213,28 = 255,93 ✓)" —, e
+#: a linha era a de 42,65. O número da linha é PARCELA de uma conta que fecha;
+#: quem somou foi a conferência, não a linha. 📏 No acervo, 7 linhas (todas
+#: deste job); as 208 contagens rebaixadas e as de m²/m têm a quantidade no
+#: RESULTADO, ou palavras entre os números — e continuam caindo.
+#: 🔑 Estreita de propósito: só conta puramente NUMÉRICA ("a + b = c" ou
+#: "c = a + b"), que FECHA, e em que a linha é uma parcela e não o total.
+#: "tipo 1 = 1 un + tipo 2 = 1 un = 2 un" não casa (há palavra colada no "+"),
+#: senão o "2" de "tipo 2" passaria por parcela.
+_NUM_CONF = r"\d(?:[\d.,]*\d)?"
+_UN_CONF = r"(?:\s*(?:kg|m²|m2|m³|m3|ml|m|un)\b)?"
+_RE_CONFERENCIA = _re.compile(
+    r"(?P<parc>" + _NUM_CONF + r"(?:\s*\+\s*" + _NUM_CONF + r")+)" + _UN_CONF
+    + r"\s*=\s*(?P<tot>" + _NUM_CONF + r")"
+    r"|(?P<tot2>" + _NUM_CONF + r")" + _UN_CONF + r"\s*=\s*(?P<parc2>"
+    + _NUM_CONF + r"(?:\s*\+\s*" + _NUM_CONF + r")+)",
+    _re.IGNORECASE)
+
+
+def _conferencias_do_total(texto, quantidade):
+    """Trechos (ini, fim) de `texto` que CONFEREM um total do qual a
+    quantidade da linha é só uma parcela. Ver _RE_CONFERENCIA."""
+    try:
+        q = float(quantidade)
+    except (TypeError, ValueError):
+        return []
+    if q <= 0:
+        return []
+    trechos = []
+    for m in _RE_CONFERENCIA.finditer(texto):
+        parc = m.group("parc") or m.group("parc2")
+        termos = [num_br_para_float(t) for t in _re.split(r"\s*\+\s*", parc)]
+        total = num_br_para_float(m.group("tot") or m.group("tot2"))
+        if total is None or any(t is None for t in termos):
+            continue
+        if not any(_bate(q, t) for t in termos):
+            continue                 # a linha não é parcela (é o total, ou outra conta)
+        if not _bate(sum(termos), total):
+            continue                 # a conta não fecha: não é conferência
+        trechos.append(m.span())
+    return trechos
 #: 🪤 Aqui havia uma exceção pra "cotas +792.63, +795.57" — e a SABOTAGEM provou
 #: que ela era INALCANÇÁVEL: a vírgula colada antes do "+" já reprova no lado
 #: ESQUERDO, que exige dígito seguido só de letra/espaço/parêntese. Código que
@@ -808,6 +857,8 @@ def _tem_aritmetica_de_parcelas(texto: str) -> bool:
             continue                      # sem número à direita
         if _RE_PRODUTO_P_MAIS_T[0].search(esq) and _RE_PRODUTO_P_MAIS_T[1].match(dir_):
             continue                      # "2P+T"
+        if _RE_CLASSE_DE_ACO[0].search(esq) and _RE_CLASSE_DE_ACO[1].match(dir_):
+            continue                      # "CA-50 + CA-60"
         if (_RE_TERMO_MULTIPLICADO.search(esq)
                 or _RE_TERMO_MULTIPLICADO.search(dir_)):
             continue                      # fórmula de dimensão, não parcelas
@@ -815,7 +866,7 @@ def _tem_aritmetica_de_parcelas(texto: str) -> bool:
     return False
 
 
-def a_fonte_declarada_e_uma_soma(obs) -> bool:
+def a_fonte_declarada_e_uma_soma(obs, quantidade=None) -> bool:
     """A observação diz, ela mesma, que o número veio de somar parcelas?
 
     🚨 18/09/2026 — REGRA DURA Nº1, medida. O prompt manda, com todas as letras:
@@ -863,10 +914,14 @@ def a_fonte_declarada_e_uma_soma(obs) -> bool:
             if _RE_NEGACAO.search(_o[:m.start()]):
                 continue
             return True
+    # 🩸 27/09: a conta que só CONFERE um total do qual a linha é parcela sai
+    # da varredura (em branco, pra não mexer nas posições do resto).
+    for ini, fim in reversed(_conferencias_do_total(texto, quantidade)):
+        texto = texto[:ini] + " " * (fim - ini) + texto[fim:]
     return _tem_aritmetica_de_parcelas(texto)
 
 
-def selo_apos_regra_da_soma(conf, obs):
+def selo_apos_regra_da_soma(conf, obs, quantidade=None):
     """Aplica a regra ao par (selo, observação). Devolve `(conf, obs, rebaixou)`.
 
     🚨 18/09/2026 — esta função existe por causa do SEGUNDO achado da revisão
@@ -881,7 +936,7 @@ def selo_apos_regra_da_soma(conf, obs):
     🔑 Agora o rebaixamento é uma função que o guarda CHAMA, e o que sobra no
     `main.py` é uma linha só — cuja POSIÇÃO ainda importa e é cobrada à parte.
     """
-    if conf == "confirmado" and a_fonte_declarada_e_uma_soma(obs):
+    if conf == "confirmado" and a_fonte_declarada_e_uma_soma(obs, quantidade):
         aviso = ("⚠ SOMA, não leitura direta — a quantidade veio de somar "
                  "parcelas, então não sai como medida. Confira o total antes "
                  "de orçar. ")
@@ -1763,6 +1818,25 @@ _QUADRO_DE_ACO = (
     "quadro de ferragens", "quadro de ferro",
 )
 
+#: 🩸 27/09/2026 (job 32a27efc) — o MESMO quadro, escrito de dois jeitos que a
+#: lista não via: com "DO" ("quadro 'RESUMO DO AÇO'", como o Eberick intitula)
+#: e com o título espaçado letra a letra ("R E S U M O D O A Ç O +10%"). As
+#: duas linhas de aço lidas dele saíam "LIDO de um texto" enquanto a vizinha,
+#: do mesmo quadro, ficava com selo. 📏 3 linhas no acervo, todas deste job.
+#: 🔑 Compara SEM espaço nenhum, dos dois lados — só isso e o "do"; a exceção
+#: continua sendo só o quadro de aço nomeado.
+_QUADRO_DE_ACO_SEM_ESPACO = tuple(sorted(
+    {p.replace(" ", "") for p in _QUADRO_DE_ACO}
+    | {"resumodoaço", "resumodoaco", "quadrodoaço", "quadrodoaco"}))
+
+
+def _cita_o_quadro_de_aco(obs_minusculo):
+    """A observação (já em minúsculas) nomeia o quadro/resumo de aço?"""
+    if any(p in obs_minusculo for p in _QUADRO_DE_ACO):
+        return True
+    compacto = _re.sub(r"\s+", "", obs_minusculo)
+    return any(p in compacto for p in _QUADRO_DE_ACO_SEM_ESPACO)
+
 
 def quantidades_da_geometria(items):
     """Quantas linhas têm QUANTIDADE que saiu da geometria do desenho.
@@ -1858,7 +1932,7 @@ def selos_sem_geometria(items):
             continue                     # "layer 'X' = 9,92 m" é medição
         # ⚖️ Quadro de aço: tabela com colunas rotuladas, conferida contra a NBR
         # e contra o total da prancha. Ver o comentário longo em _QUADRO_DE_ACO.
-        if any(p in obs for p in _QUADRO_DE_ACO):
+        if _cita_o_quadro_de_aco(obs):
             continue
         if not any(p in obs for p in _PROCEDENCIA_TEXTO):
             continue                     # não sabemos o que é: não acusa
