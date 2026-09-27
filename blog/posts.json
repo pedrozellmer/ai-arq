@@ -129,7 +129,8 @@
           "label": "Modelo editável (Word)",
           "hint": "Pra editar no Word/Docs · 40 KB"
         }
-      ]
+      ],
+      "download_nota": "Do seu CAD, o AI.arq gera um rascunho de memorial organizado por disciplina, com a origem de cada quantidade — não este modelo de 10 seções, que é pra preencher à mão."
     },
     {
       "slug": "quadro-de-areas-modelo-excel-nbr-12721",
@@ -147,6 +148,7 @@
           "hint": "Por pavimento · privativa × comum · equivalente · 11 KB"
         }
       ],
+      "download_nota": "O AI.arq não monta o quadro de áreas: do seu CAD, ele devolve as áreas que a prancha permite medir, separadas entre medidas e estimadas, pra você conferir e preencher o quadro.",
       "sections": [
         {
           "h2": "Baixe a planilha modelo",
@@ -212,6 +214,7 @@
           "hint": "1 página A4 — os 6 comandos com as pegadinhas documentadas · 4 KB"
         }
       ],
+      "download_nota": "O AI.arq mede e conta direto do DWG/DXF, sem esses comandos; a cola é pra quem faz na mão no AutoCAD.",
       "sections": [
         {
           "h2": "Baixe a cola",
@@ -326,6 +329,7 @@
           "hint": "Previsto × executado × acumulado + memória de cálculo · 10 KB"
         }
       ],
+      "download_nota": "O AI.arq não gera o boletim de medição: a coluna prevista sai da planilha de quantitativos que ele devolve a partir do seu CAD.",
       "sections": [
         {
           "h2": "Baixe o modelo",
@@ -403,6 +407,7 @@
           "hint": "1 página A4, com a fonte de cada exigência · 4 KB"
         }
       ],
+      "download_nota": "O AI.arq não monta a documentação da Caixa: do seu CAD, ele gera a planilha de quantitativos, um rascunho de memorial descritivo e o cronograma físico.",
       "sections": [
         {
           "h2": "Baixe o checklist",
@@ -1779,7 +1784,8 @@
           "label": "Modelo de cronograma físico-financeiro",
           "hint": "Gantt 18 meses + curva S automática · 12 KB"
         }
-      ]
+      ],
+      "download_nota": "O AI.arq gera o cronograma físico a partir do quantitativo do seu projeto — e, se você digitar o valor de cada etapa, distribui o desembolso mês a mês. O modelo é pra quem prefere montar à mão."
     },
     {
       "slug": "memorial-descritivo-cau-prefeitura-sp-rj-bh",
@@ -2066,7 +2072,8 @@
           "label": "Checklist imprimível de vistoria",
           "hint": "1 página A4, direto da tabela abaixo · 4 KB"
         }
-      ]
+      ],
+      "download_nota": "O AI.arq não confere acessibilidade: este checklist é pra sua revisão do projeto."
     },
     {
       "slug": "quantitativo-arquitetura-sinapi-planilha-modelo",
@@ -2181,20 +2188,21 @@
           "label": "Planilha modelo por disciplina",
           "hint": "18 abas + consolidação · 34 KB"
         }
-      ]
+      ],
+      "download_nota": "O AI.arq gera essa planilha a partir do seu CAD, com código SINAPI de referência nos itens em que há correspondência. O modelo é pra quem prefere montar à mão."
     },
     {
       "slug": "quantitativo-vs-orcamento-arquiteto-nao-precisa-virar-orcamentista",
       "title": "Quantitativo x Orçamento: o que é função do arquiteto",
       "description": "Quantitativo é a lista do o quê e quanto — função de quem projeta. Orçamento é quanto custa, função do orçamentista. A distinção técnica e jurídica.",
-      "keywords": "quantitativo vs orçamento, diferença quantitativo orçamento, arquiteto orçamentista, função orçamentista obra, planilha quantitativos arquitetura, orçamento de obra, BDI, Aldo Mattos",
+      "keywords": "quantitativo vs orçamento, arquiteto orçamentista, função do arquiteto no orçamento, função orçamentista obra, tabela CAU/BR orçamento, planilha quantitativos arquitetura",
       "category": "BDI/Orçamento",
       "publish_date": "2026-11-15",
       "intro": "Existe uma confusão recorrente nos escritórios de arquitetura: muitos profissionais acreditam que entregar um orçamento detalhado faz parte do escopo do projeto. Não faz. Quantitativo e orçamento são produtos técnicos distintos, com responsáveis distintos, metodologia distinta e responsabilidade jurídica distinta. O autor do projeto entrega o quantitativo — a lista do que precisa ser construído e em qual magnitude. O orçamentista, profissional habilitado em engenharia de custos, pega esse quantitativo e transforma em orçamento, com cotação de mercado, encargos sociais, leis sociais, BDI e cronograma físico-financeiro. Quando arquiteto tenta fazer as duas coisas, normalmente uma das duas sai mal feita. Esse post explica a distinção segundo a literatura técnica brasileira (Aldo Mattos, Maçahico Tisaka), a normativa vigente (NBR 12721, Lei 14.133/2021) e a tabela de honorários do CAU/BR — e mostra por que delegar a precificação é mais profissional do que tentar abraçar tudo.",
       "sections": [
         {
           "h2": "Definição técnica: quantitativo é uma coisa, orçamento é outra",
-          "body": "Aldo Mattos, no livro de referência brasileiro \"Como preparar orçamentos de obras\" (3ª edição, Oficina de Textos, 2019), trabalha uma distinção que muita gente do dia a dia ignora: levantamento de quantitativos e orçamentação são etapas sequenciais e independentes do processo de custos, não a mesma coisa.\n\nO quantitativo (também chamado de levantamento ou tomada de quantitativos) é a lista exaustiva de tudo que será construído, com suas respectivas medidas. Quantos metros quadrados de alvenaria, quantos metros lineares de tubulação hidráulica, quantos pontos elétricos, quantas portas de cada tipo. É puramente uma leitura técnica do projeto, feita pelo autor ou por equipe de orçamento sob coordenação do autor.\n\nO orçamento, por outro lado, é a aplicação de preços unitários e composições de custo sobre esse quantitativo, com adição de encargos sociais, leis sociais e BDI (Benefícios e Despesas Indiretas). É uma atividade de engenharia de custos, com metodologia própria, fontes de preços específicas (SINAPI, cotações de mercado regionais) e responsabilidade técnica diferente.\n\nA ABNT NBR 12721:2006, que trata da avaliação de custos unitários de construção para incorporação imobiliária, formaliza essa separação ao tratar de \"quantitativo\" e \"orçamento\" como conceitos distintos, com finalidades e métodos de cálculo próprios."
+          "body": "Aldo Mattos, no livro de referência brasileiro \"Como preparar orçamentos de obras\" (3ª edição, Oficina de Textos, 2019), trabalha uma distinção que muita gente do dia a dia ignora: levantamento de quantitativos e orçamentação são etapas sequenciais e independentes do processo de custos, não a mesma coisa.\n\nO quantitativo (também chamado de levantamento ou tomada de quantitativos) é a lista exaustiva de tudo que será construído, com suas respectivas medidas. Quantos metros quadrados de alvenaria, quantos metros lineares de tubulação hidráulica, quantos pontos elétricos, quantas portas de cada tipo. É puramente uma leitura técnica do projeto, feita pelo autor ou por equipe de orçamento sob coordenação do autor.\n\nO orçamento, por outro lado, é a aplicação de preços unitários e composições de custo sobre esse quantitativo, com adição de encargos sociais, leis sociais e BDI (Benefícios e Despesas Indiretas). É uma atividade de engenharia de custos, com metodologia própria, fontes de preços específicas (SINAPI, cotações de mercado regionais) e responsabilidade técnica diferente.\n\nA ABNT NBR 12721:2006, que trata da avaliação de custos unitários de construção para incorporação imobiliária, formaliza essa separação ao tratar de \"quantitativo\" e \"orçamento\" como conceitos distintos, com finalidades e métodos de cálculo próprios.\n\nO glossário dos três termos, com um exemplo lado a lado, está em <a href=\"/blog/posts/diferenca-entre-orcamento-e-quantitativo.html\">Diferença entre orçamento e quantitativo de obra</a>. Aqui o foco é outro: o que é função do arquiteto e o que é do orçamentista."
         },
         {
           "h2": "Por que essa separação é mais que técnica — é jurídica",
@@ -2336,7 +2344,7 @@
           "body": "O passo mais demorado do caminho inverso é o levantamento da planta. Contar tomada, medir parede, listar porta, agrupar piso por ambiente — tudo isso consome horas dependendo do projeto.\n\nÉ exatamente o ponto em que ferramenta de IA aplicada a CAD ajuda. O AI.arq faz esse levantamento direto do arquivo de projeto (PDF, DWG ou DXF). Lê todas as pranchas, conta elementos, mede áreas e comprimentos da geometria (em DWG/DXF; o que vem de PDF sai como estimativa) e devolve a planilha agrupada por disciplina. A partir dela, gera também um rascunho do memorial por disciplina, com a quantidade e a origem de cada item e o que falta marcado [A PREENCHER PELO RESPONSÁVEL TÉCNICO]. Ele lista os ambientes que identificou, mas não amarra cada item a um cômodo — se o seu memorial for organizado ambiente por ambiente, essa distribuição ainda é trabalho seu. Vale lembrar que o AI.arq entrega quantitativo, não precificação — o preço continua sendo decisão do arquiteto e do orçamentista habilitado, em diálogo com fornecedores locais.\n\nCom a planilha pronta em minutos, o arquiteto pula direto pra etapa de redação. O memorial vira tarefa mais curta, e sai coerente com a planta por construção — porque foi a IA que leu a planta, contou os itens e devolveu a tabela que serve de base pra cada parágrafo do texto.\n\nNão é substituição de profissional. É inversão de tempo. O arquiteto continua sendo o autor técnico do memorial; só não perde mais o dia inteiro contando tomada na planta."
         }
       ],
-      "cta": "Pra testar o caminho inverso sem pagar nada de cara, sobe seu CAD em ai.arq.br. A IA lê a planta e devolve a planilha de quantitativos por disciplina em poucos minutos, com referência SINAPI nos itens em que há correspondência confiável. Daí o memorial fica natural pra escrever em cima — cada parágrafo já com seu número correspondente. No beta, é tudo grátis, quantos projetos quiser.",
+      "cta": "Pra testar o caminho inverso sem pagar nada de cara, sobe seu CAD em ai.arq.br. A IA lê a planta e devolve a planilha de quantitativos por disciplina, com referência SINAPI nos itens em que há correspondência confiável. Daí o memorial fica natural pra escrever em cima — cada parágrafo já com seu número correspondente. No beta, é tudo grátis, quantos projetos quiser.",
       "sources": [
         {
           "type": "norm",

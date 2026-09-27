@@ -214,7 +214,7 @@ def _slug_download(arquivo):
     return ("baixar-" + base)[:40].rstrip("-")
 
 
-def download_buttons_html(downloads):
+def download_buttons_html(downloads, nota=None):
     """Monta os botões de download DO POST.
 
     🪤 01/08/2026: isto era um bloco FIXO apontando pro memorial descritivo.
@@ -245,8 +245,13 @@ def download_buttons_html(downloads):
             '        <div class="font-semibold text-gray-900 leading-tight">' + d["label"] + '</div>\n'
             '        <div class="text-xs text-gray-500 mt-0.5">' + d.get("hint", "") + '</div>\n'
             '      </div>\n      ' + _DL_SETA + '\n    </a>')
+    # 27/09/2026 (auditoria, pauta): post com modelo pra baixar diz, AO LADO do
+    # download, se o AI.arq gera aquele documento — senão quem baixa o modelo
+    # de boletim/quadro de áreas sai achando que o produto faz aquilo, ou que
+    # não tem nada a ver com ele. Campo "download_nota" do posts.json.
+    rodape = ('\n  <p class="aiarq-dl-nota mt-3 text-sm text-gray-600">' + nota + '</p>') if nota else ""
     return ('<div class="aiarq-downloads my-8 p-6 rounded-2xl border border-gray-200 bg-gray-50">\n'
-            '  <div class="grid gap-3 sm:grid-cols-2">' + "".join(cards) + '\n  </div>\n</div>\n')
+            '  <div class="grid gap-3 sm:grid-cols-2">' + "".join(cards) + '\n  </div>' + rodape + '\n</div>\n')
 
 
 _DOWNLOAD_BUTTONS_LEGADO = '''
@@ -289,7 +294,7 @@ def _flush_buffer(buf, kind, body_html):
     return body_html
 
 
-def render_section(s, downloads=None):
+def render_section(s, downloads=None, download_nota=None):
     """Renderiza uma seção (h2 + body).
 
     Parser:
@@ -347,7 +352,7 @@ def render_section(s, downloads=None):
     # 3ª passada: renderiza
     for kind, items in merged:
         if kind == "download":
-            body_html += download_buttons_html(downloads)
+            body_html += download_buttons_html(downloads, download_nota)
         elif kind == "numbered":
             body_html += "<ol>" + "".join(f"<li>{_inline_md(t)}</li>" for t in items) + "</ol>"
         elif kind == "bullet":
@@ -607,7 +612,8 @@ def render_post_html(post):
         '<div class="' + _cls + '">' + _nota + '</div>') if _nota else ""
 
     """Gera HTML completo de um post."""
-    sections_html = "".join(render_section(s, post.get("downloads")) for s in post["sections"])
+    sections_html = "".join(render_section(s, post.get("downloads"), post.get("download_nota"))
+                            for s in post["sections"])
 
     # Adiciona bloco de fontes no fim, se houver
     _atualizado = data_de_atualizacao(post)
