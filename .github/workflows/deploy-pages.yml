@@ -96,7 +96,8 @@ jobs:
           # Copia SOMENTE as pastas que o site público usa.
           # NUNCA copiar: backend/ (código), frontend/ (app Next.js + node_modules),
           # docs/, _local/, email-templates/ — são internos e não podem ir pro ar.
-          for d in assets blog exemplos indique instagram_assets; do
+          # 27/09/2026: + linkedin_assets (imagens dos posts da página; o admin mostra a prévia por URL).
+          for d in assets blog exemplos indique instagram_assets linkedin_assets; do
             if [ -d "$d" ]; then cp -r "$d" _site/; fi
           done
           # Limpa o blog: remove generate.py e posts.json (não devem ir pro deploy)
