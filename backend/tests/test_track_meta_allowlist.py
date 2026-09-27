@@ -109,9 +109,11 @@ def gravar(meta, event="signup_saiu_da_tela", monkeypatch=None, quem="anonimo"):
             "o /api/track gravou a identidade que o CORPO afirmou (%r) em vez "
             "da que o token provou — dá pra encher a atividade de qualquer "
             "cliente com evento inventado" % row["user_id"])
-        assert row["user_email"] == _DO_TOKEN["email"], row["user_email"]
+        # 🔒 27/09/2026 (LGPD): o e-mail não é mais gravado — nem o do token,
+        # nem o que o corpo afirmou. Guarda próprio: test_usage_events_sem_email.
+        assert not row.get("user_email"), row
     else:
-        assert row["user_id"] == "" and row["user_email"] == "", (
+        assert row["user_id"] == "" and not row.get("user_email"), (
             "evento anônimo saiu com identidade: %r" % row)
     return row
 

@@ -33444,10 +33444,14 @@ async def track_event(payload: TrackPayload, request: Request):
     if (payload.user_id or payload.user_email):
         # tolerante: evento é bônus, nunca motivo pra derrubar a chamada
         _u_track = _get_user_from_request(request, tolerante=True)
+    # 🔒 27/09/2026 (LGPD, minimização): o e-mail NÃO é gravado — só o
+    # `user_id`. Medido: 4.879 de 4.879 eventos com e-mail também tinham o id,
+    # e o e-mail de todos batia com o da conta. Quem precisa do e-mail junta
+    # pela conta (`admin_activity`, a ficha do usuário e as RPCs do admin).
+    # Guarda: test_usage_events_sem_email.py.
     row = {
         "event": ev,  # já validado contra a allowlist
         "user_id": (_u_track["id"] if _u_track else "")[:80],
-        "user_email": (_u_track["email"] if _u_track else "")[:200],
         "job_id": (payload.job_id or "")[:80],
         "path": (payload.path or "")[:200],
         "meta": _meta,
@@ -33638,10 +33642,32 @@ def admin_activity(request: Request, days: int = 30, limit: int = 200):
     _st_ue, rows = _supa_rest_tudo(
         "usage_events",
         params={"created_at": f"gte.{since_url}",
-                "select": "event,user_email,user_id,job_id,path,meta,created_at",
+                "select": "event,user_id,job_id,path,meta,created_at",
                 "order": "created_at.desc,id.asc"}, timeout=20)
     if _st_ue != 200:
         raise HTTPException(500, "Erro lendo usage_events (HTTP %s)" % _st_ue)
+
+    # 🔒 27/09/2026 (LGPD): `usage_events` não guarda mais o e-mail. O e-mail
+    # que este painel mostra — e que o filtro das contas da casa, lá embaixo,
+    # usa — vem da CONTA, pelo `user_id`. Medido em 27/09: 4.879 de 4.879
+    # eventos com e-mail tinham o id, 0 com conta apagada, 0 com e-mail
+    # diferente do da conta. É a mesma resposta, sem a cópia do e-mail.
+    # 🪤 `_auth_admin_list_users` engole a falha e devolve lista vazia ou
+    # parcial. Sem dizer, os eventos do Pedro deixariam de ser filtrados e o
+    # painel inflaria calado — por isso `eventos_sem_conta_achada` vai pra tela.
+    try:
+        _ausers = _auth_admin_list_users()
+    except Exception as _ae:
+        print(f"[activity] auth users falhou (não crítico): {_ae}")
+        _ausers = []
+    _email_da_conta = {str(_au.get("id")): (_au.get("email") or "").strip()
+                       for _au in _ausers if _au.get("id")}
+    _sem_conta = 0
+    for _r in rows:
+        _uid = (_r.get("user_id") or "").strip()
+        _r["user_email"] = _email_da_conta.get(_uid, "") if _uid else ""
+        if _uid and _uid not in _email_da_conta:
+            _sem_conta += 1
 
     # ── Mistura o USO REAL do produto (tabela projects) ───────────────────
     # usage_events é opt-in (só quem aceitou o cookie de analytics), então
@@ -33689,11 +33715,7 @@ def admin_activity(request: Request, days: int = 30, limit: int = 200):
     # 🪤 O paginador certo já existia (`_auth_admin_list_users`, com teto de 5
     # páginas = 1000 contas) e este ponto simplesmente não o usava — mesma
     # família do teto de mil linhas do PostgREST, achada na mesma varredura.
-    try:
-        _ausers = _auth_admin_list_users()
-    except Exception as _ae:
-        print(f"[activity] auth users falhou (não crítico): {_ae}")
-        _ausers = []
+    # (27/09: a lista agora é lida lá em cima, junto com os eventos.)
     for _au in _ausers:
         _acreated = _au.get("created_at") or ""
         try:
@@ -33768,6 +33790,9 @@ def admin_activity(request: Request, days: int = 30, limit: int = 200):
         # `active_30d` morreu: só existia um consumidor (o cartão da Atividade)
         # e o nome mentia a janela. Ver contrato em test_painel_admin_nao_mente.
         "active_window": len(seen_janela),
+        # 27/09: evento de conta logada cujo dono não veio na lista do auth —
+        # sem o e-mail, o filtro das contas da casa não vale pra ele.
+        "eventos_sem_conta_achada": _sem_conta,
         "by_event": by_event,
         # 18/09: o DETALHE que a telemetria grava, por evento — e os ZEROS.
         "meta_por_evento": _meta_por_evento(rows),
@@ -39730,9 +39755,27 @@ def admin_ficha_usuario(chave: str, request: Request):
                        "&order=created_at.desc&limit=" + str(_MAX), "cashback")
                 if uid else [])
 
-    eventos = _por_email("usage_events",
-                     "user_email=eq." + q_em + "&select=event,path,job_id,meta,created_at"
-                     "&order=created_at.desc&limit=" + str(_MAX), "eventos de uso")
+    # 🔒 27/09/2026 (LGPD): `usage_events` não guarda mais o e-mail — lê pelo
+    # `user_id` (todo evento com e-mail já tinha o id; medido 4.879 de 4.879).
+    # 🪤 Busca por e-mail de conta SEM perfil (25 em 27/09) não tem o id em
+    # mãos; antes a seção achava os eventos pelo e-mail. Sem este desvio pela
+    # lista do auth ela passaria a vir vazia, calada, com cara de "não fez nada".
+    uid_eventos = uid
+    if not uid_eventos and em:
+        try:
+            uid_eventos = next((str(_a.get("id")) for _a in _auth_admin_list_users()
+                                if (_a.get("email") or "").strip().lower() == em
+                                and _a.get("id")), "")
+        except Exception:
+            uid_eventos = ""
+        if not uid_eventos:
+            _falhas.append("eventos de uso: sem perfil e a conta nao apareceu na "
+                           "lista do auth — nao da pra ler pelo user_id")
+    eventos = (_busca("usage_events",
+                      "user_id=eq." + _up.quote(uid_eventos) + "&select=event,path,"
+                      "job_id,meta,created_at&order=created_at.desc&limit=" + str(_MAX),
+                      "eventos de uso")
+               if uid_eventos else [])
     emails = _por_email("email_sent_log",
                     "email=eq." + q_em + "&select=kind,subject,sent_at&order=sent_at.desc"
                     "&limit=" + str(_MAX), "e-mails enviados")

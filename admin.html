@@ -1110,7 +1110,8 @@
              clientes. Já cometi esse erro com os "57% de retenção" que eram 2%.
              Medido em 11/08/2026: 19 de 51 clientes com cadastro nos últimos 90
              dias aparecem em `usage_events`. Método: profiles × distinct
-             user_id/user_email de usage_events. Repetir a conta antes de citar. -->
+             user_id de usage_events (desde 27/09 o evento não guarda mais o
+             e-mail — cruzar pelo id). Repetir a conta antes de citar. -->
         <div class="flex items-start gap-2.5 rounded-xl bg-amber-50 border border-amber-100 px-4 py-3 mb-5">
           <span class="text-base shrink-0" aria-hidden="true">&#9888;&#65039;</span>
           <p class="text-xs text-amber-900 leading-relaxed">
@@ -4040,6 +4041,14 @@ function htmlSilencio(lista, baseDias) {
       `<div class="flex items-center justify-between text-xs text-gray-500"><span>${escapeHtml(actLabel(z.event))}</span><span>${escapeHtml(String(z.n_periodo))} · último ${escapeHtml(actFmtTime(z.ultimo))}</span></div>`
     ).join('')}</div></details>`;
 }
+// 27/09/2026 (LGPD): o e-mail do evento vem da CONTA, pelo user_id. Se a lista
+// de contas falhar, o evento fica sem e-mail e o filtro das contas da casa não
+// vale pra ele — os números incham calados. A tela diz. Pura, pro dukpy.
+function htmlAvisoSemConta(n) {
+  const k = Number(n) || 0;
+  if (k <= 0) return '';
+  return `<p class="text-xs text-amber-700 sm:col-span-3">⚠️ ${escapeHtml(String(k))} evento${k === 1 ? '' : 's'} de conta logada sem dono na lista de contas — pra ${k === 1 ? 'ele' : 'eles'} o filtro das contas da casa não vale e os números acima podem estar inflados. Recarregue; se continuar, a leitura das contas (auth) está falhando.</p>`;
+}
 function actFmtTime(iso) {
   try {
     return window.fmtBR(iso, { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
@@ -4072,7 +4081,7 @@ async function loadActivity() {
         <p class="text-xs font-medium text-gray-600 mb-1">Ativos ${d.window_days} dias</p>
         <p class="text-3xl font-bold text-gray-900">${d.active_window}</p>
         <p class="text-[11px] text-gray-500">pessoas com pelo menos 1 evento na janela do seletor (${d.window_days} dias)</p>
-      </div>`;
+      </div>` + htmlAvisoSemConta(d.eventos_sem_conta_achada);
 
     // Funil do topo (visitantes únicos): landing → cadastro → completou
     const fn = d.funnel || {};
