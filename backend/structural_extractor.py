@@ -758,6 +758,152 @@ def parse_steel_table(texts) -> dict | None:
 
 
 # ---------------------------------------------------------------------------
+# (a2) QUADRO DE CONSUMO do Eberick (Formas | Superfície | Volume) — POSIÇÃO
+# ---------------------------------------------------------------------------
+# 🩸 26/09/2026 — job 32a27efc (muro de arrimo, 7 DXF do Eberick). O quadro
+#
+#                 <pavimento>
+#             Formas   Superfície   Volume
+#   Elemento  (m2)     (m2)         (m3)
+#   Vigas     20.00    8.00         2.500        (números ilustrativos)
+#   Pilares   10.00    -            0.700
+#   Total     -        8.00         3.200
+#   Índices (por m2)   -   -        0.256
+#   Superfície total: 12.50 m2
+#
+# chegava à IA só pela lista TEXTOS/LEGENDAS: sem posição, sem o "-" (menos de
+# 3 letras) e ordenado por repetição e ordem alfabética. Ela casou célula com
+# coluna pela ORDEM da lista e trocou 17 linhas: o Índice (m³ por m²) virou
+# volume de pilar, a Superfície virou fôrma, o Total virou volume de viga.
+# 🔑 Coluna pelo X da linha de unidades, linha pelo Y, tolerância relativa à
+# altura do texto (não depende da unidade do desenho). O próprio quadro traz as
+# provas: Σ Superfície = Total, Σ Volume = Total e Volume ÷ "Superfície total"
+# = Índice. Leitura que não fecha vira [REFERÊNCIA].
+# 🪤 Trocar dois elementos na MESMA coluna passa nas provas (soma não vê
+# permutação): aí só a posição protege.
+# 📏 26/09: 5 quadros em 4 das 7 pranchas do caso, 20 de 20 linhas batendo com
+# a verdade; 0 quadros em 20 DXF de controle de outros clientes.
+_QC_TRACO = {"-", "–", "—"}
+_QC_FORMAS = re.compile(r"^f[oô]rmas?\b", re.IGNORECASE)
+_QC_SUPERF = re.compile(r"^superf[ií]cie$", re.IGNORECASE)
+_QC_VOLUME = re.compile(r"^volume$", re.IGNORECASE)
+_QC_UNID = re.compile(r"^\(m[23²³]\)$", re.IGNORECASE)
+_QC_TOTAL = re.compile(r"^total$", re.IGNORECASE)
+_QC_INDICE = re.compile(r"^[ií]ndices?\b", re.IGNORECASE)
+_QC_SUP_TOTAL = re.compile(r"^superf[ií]cie\s+total\s*:?\s*(\d+(?:[.,]\d+)?)\s*m", re.IGNORECASE)
+
+
+def parse_quadro_consumo(texts) -> list:
+    """Lê o(s) quadro(s) de consumo "Formas | Superfície | Volume" dos TEXTOs
+    do CAD, por posição. Devolve [] quando não há quadro (NUNCA inventa): só
+    reconhece com Formas, Superfície e Volume na MESMA linha, nessa ordem.
+
+    Cada quadro: {"pavimento", "layer", "cabecalho_xy", "elementos": {nome:
+    {"formas", "superficie", "volume"}}, "total", "indice", "area_pavimento",
+    "provas", "confiavel", "motivos"}. Célula "-" fica "-"; número vira float.
+    "confiavel" só quando a prova do volume existe e TODAS as provas aplicáveis
+    passam — sem linha Total nada prova o encaixe das colunas."""
+    cel = []
+    for t in texts or []:
+        txt = " ".join(str(getattr(t, "text", "") or "").split())
+        pos = getattr(t, "position", None)
+        if txt and pos:
+            cel.append((txt, float(pos[0]), float(pos[1]),
+                        float(getattr(t, "height", 0) or 0), getattr(t, "layer", "") or ""))
+    quadros = []
+    for _t, x, y, h, lay in cel:
+        if h <= 0 or not _QC_FORMAS.match(_t):
+            continue          # sem altura não há tolerância relativa: não lê
+        mesma = [c for c in cel if abs(c[2] - y) <= 0.6 * h and c[1] > x]
+        sx = min((c[1] for c in mesma if _QC_SUPERF.match(c[0])), default=None)
+        vx = min((c[1] for c in mesma if _QC_VOLUME.match(c[0])
+                  and sx is not None and c[1] > sx), default=None)
+        if vx is None:
+            continue
+        passo_col = min(sx - x, vx - sx)
+        x_min, x_max = x - 2.5 * (vx - x), vx + passo_col
+        # centros das colunas: a linha "(m2) (m2) (m3)" logo abaixo do cabeçalho
+        und = sorted(c[1] for c in cel if _QC_UNID.match(c[0])
+                     and 0 < y - c[2] <= 2.5 * h and x - passo_col < c[1] < x_max)
+        centros = und if len(und) == 3 else [x, sx, vx]
+        abaixo = sorted((c for c in cel if y - c[2] > 0.3 * h and x_min <= c[1] <= x_max
+                         and not _QC_UNID.match(c[0]) and c[0].lower() != "elemento"),
+                        key=lambda c: (-c[2], c[1]))
+        linhas: list = []
+        for c in abaixo:
+            if linhas and abs(linhas[-1][0] - c[2]) <= 0.6 * h:
+                linhas[-1][1].append(c)
+            else:
+                linhas.append((c[2], [c]))
+        elementos: dict = {}
+        total = indice = area = passo = None
+        motivos: list = []
+        y_ant, n_dados = y, 0
+        for ly, cs in linhas:
+            gap = y_ant - ly
+            if (n_dados == 0 and gap > 5 * h) or (passo is not None and gap > 2.2 * passo):
+                break                          # longe demais: acabou (ou nunca foi) quadro
+            st = [c for c in cs if _QC_SUP_TOTAL.match(c[0])]
+            if st:                             # "Superfície total: X m2" fecha o quadro
+                area = _num(_QC_SUP_TOTAL.match(st[0][0]).group(1))
+                break
+            rot = [c for c in cs if c[1] < centros[0] - 0.5 * passo_col
+                   and _num(c[0]) is None and c[0] not in _QC_TRACO]
+            vals = [c for c in cs if c not in rot
+                    and (_num(c[0]) is not None or c[0] in _QC_TRACO)]
+            if not rot or not vals:
+                if n_dados:
+                    break
+                continue
+            if n_dados and passo is None:
+                passo = gap
+            n_dados += 1
+            y_ant = ly
+            nome = " ".join(r[0] for r in sorted(rot, key=lambda r: r[1]))
+            cols = {"formas": None, "superficie": None, "volume": None}
+            for c in vals:
+                k = ("formas", "superficie", "volume")[
+                    min(range(3), key=lambda i: abs(c[1] - centros[i]))]
+                if cols[k] is not None:
+                    motivos.append(f"duas células na coluna {k} da linha {nome!r}")
+                cols[k] = "-" if c[0] in _QC_TRACO else _num(c[0])
+            if _QC_TOTAL.match(nome):
+                total = cols
+            elif _QC_INDICE.match(nome):
+                indice = cols["volume"] if isinstance(cols["volume"], float) else None
+            else:
+                elementos[nome] = cols
+        if not elementos:
+            continue
+        # pavimento: o texto logo ACIMA do cabeçalho, dentro da largura do quadro
+        acima = [c for c in cel if 0 < c[2] - y <= 2.5 * h and x_min <= c[1] <= x_max
+                 and _num(c[0]) is None]
+        pav = min(acima, key=lambda c: (c[2] - y, c[1]))[0] if acima else ""
+        provas: dict = {}
+        if total:
+            for k, casas in (("superficie", 2), ("volume", 3), ("formas", 2)):
+                if isinstance(total[k], float):
+                    soma = sum(e[k] for e in elementos.values() if isinstance(e[k], float))
+                    tol = max(0.51 * 10 ** -casas * len(elementos), 0.002 * abs(total[k]))
+                    provas["soma_" + k] = {"soma": round(soma, 4), "total": total[k],
+                                           "ok": abs(soma - total[k]) <= tol}
+        if indice is not None and area and total and isinstance(total["volume"], float):
+            calc = total["volume"] / area
+            provas["indice"] = {"calculado": round(calc, 4), "indice": indice,
+                                "ok": abs(calc - indice) <= 0.0015}
+        confiavel = ("soma_volume" in provas and not motivos
+                     and all(p["ok"] for p in provas.values()))
+        if "soma_volume" not in provas:
+            motivos.append("sem linha Total com volume: o encaixe das colunas não foi provado")
+        motivos += [f"prova {k} reprovou: {p}" for k, p in provas.items() if not p["ok"]]
+        quadros.append({"pavimento": pav, "layer": lay, "cabecalho_xy": (round(x, 1), round(y, 1)),
+                        "elementos": elementos, "total": total, "indice": indice,
+                        "area_pavimento": area, "provas": provas, "confiavel": confiavel,
+                        "motivos": motivos})
+    return sorted(quadros, key=lambda q: (-q["cabecalho_xy"][1], q["cabecalho_xy"][0]))
+
+
+# ---------------------------------------------------------------------------
 # (b) PILARES — contagem geométrica (retângulos/círculos fechados + blocos)
 # ---------------------------------------------------------------------------
 
@@ -859,6 +1005,19 @@ def count_pillars(extraction) -> dict | None:
         if idx in labels:
             d["nomes"].append(labels[idx])
     for d in por_secao.values():
+        # 🩸 26/09/2026 — job 32a27efc, prancha 0007: o dedupe acima é por CENTRO,
+        # e a mesma folha tinha 2 plantas (dois níveis) com P3..P7 desenhados nas
+        # duas: 33 retângulos, 28 rótulos. O `set()` escondia a repetição.
+        # 🔑 Rótulo em 2+ retângulos da MESMA seção = o mesmo pilar em 2 vistas
+        # ou 2 pilares com o mesmo nome: não sabemos qual, então só AVISA — o
+        # número não muda (o que falta é fato; "é o mesmo pilar" é hipótese).
+        # Chave por seção: P33 novo 15x24 e P33 existente 40x40 são pilares
+        # diferentes (prancha 0004 do mesmo caso).
+        _vistos: dict = {}
+        for _n in d["nomes"]:
+            _vistos[_n] = _vistos.get(_n, 0) + 1
+        d["repetidos"] = sorted(n for n, c in _vistos.items() if c > 1)
+        d["distintos"] = len(_vistos) + (d["qtd"] - len(d["nomes"]))
         d["nomes"] = sorted(set(d["nomes"]))
 
     # Blocos que TÊM 'pilar' no nome/layer mas NÃO são o pilar de concreto:
@@ -946,6 +1105,12 @@ def extract_structural_measurements(extraction) -> dict:
     except Exception:
         pass
     try:
+        cons = parse_quadro_consumo(getattr(extraction, "texts", None) or [])
+        if cons:
+            result["consumo"] = cons
+    except Exception:
+        pass
+    try:
         pil = count_pillars(extraction)
         if pil:
             result["pilares"] = pil
@@ -1007,15 +1172,66 @@ def structural_prompt_section(struct: dict) -> str:
             L.append("  → Leitura com inconsistência: use como base mas marque TUDO 'estimado'.")
         L.append("")
 
+    # 🩸 26/09/2026 — job 32a27efc: ver `parse_quadro_consumo`. Uma linha por
+    # pavimento × elemento, já com a coluna certa — a IA não casa célula nenhuma.
+    # 🔑 SEMPRE "estimado", inclusive [TABELA]: é número do projetista lido de
+    # tabela, não geometria (o selo continua só pro _QUADRO_DE_ACO).
+    consumo = struct.get("consumo")
+    if consumo:
+        L.append("QUADRO DE CONSUMO DO PROJETISTA (Formas | Superfície | Volume do quadro da prancha),")
+        L.append("lido por POSIÇÃO (linha × coluna), não pela geometria:")
+        for q in consumo:
+            tag = "[TABELA]" if q.get("confiavel") else "[REFERÊNCIA]"
+            pav = q.get("pavimento") or "?"
+            for nome, c in q.get("elementos", {}).items():
+                partes = []
+                if isinstance(c.get("formas"), float):
+                    partes.append(f"fôrma {c['formas']:.2f} m²")
+                if isinstance(c.get("volume"), float):
+                    partes.append(f"volume {c['volume']:.3f} m³")
+                L.append(f"  {tag} pavimento '{pav}' · {nome}: {' · '.join(partes) or 'sem número'}")
+            pv = q.get("provas", {})
+            conf = []
+            if "soma_volume" in pv:
+                conf.append(f"Σ volume {pv['soma_volume']['soma']:.3f} = Total "
+                            f"{pv['soma_volume']['total']:.3f} {'✓' if pv['soma_volume']['ok'] else '✗'}")
+            if "indice" in pv:
+                conf.append(f"índice {q['total']['volume']:.3f}/{q['area_pavimento']:.2f} = "
+                            f"{q['indice']:.3f} {'✓' if pv['indice']['ok'] else '✗'}")
+            L.append(f"    conferido '{pav}': " + ("; ".join(conf) if conf
+                                                   else "SEM prova (quadro sem linha Total)"))
+        _lyr = ", ".join(sorted({q.get("layer") or "?" for q in consumo}))
+        L.append("  → Um item por pavimento e elemento (fôrma em m², concreto em m³), quantidade")
+        L.append("    LITERAL e SEMPRE confidence=\"estimado\" — também no [TABELA]: é número do")
+        L.append("    projetista lido de tabela, não medição. Na observação: 'quadro de consumo do")
+        L.append("    projetista, pavimento X, linha Y, coluna Z'.")
+        L.append("  → NÃO use como quantidade: a coluna Superfície (não é fôrma), 'Índices (por m2)'")
+        L.append("    (m³ por m², não é volume), 'Superfície total' (área do pavimento) nem a linha")
+        L.append("    Total (soma das linhas: dupla contagem).")
+        L.append(f"  → Os números do layer {_lyr} em TEXTOS/LEGENDAS são ESTAS células: não releia lá.")
+        L.append("  → O MESMO pavimento com os MESMOS valores em outra prancha (ou repetido nesta) é")
+        L.append("    o mesmo quadro desenhado de novo: gere UMA vez, NUNCA some entre pranchas.")
+        L.append("  → [REFERÊNCIA] = as provas do próprio quadro não fecharam: use só como base.")
+        L.append("")
+
     pil = struct.get("pilares")
     if pil:
         if pil.get("rects_qtd"):
             lyr = ", ".join(pil.get("layers", []))
             L.append(f"PILARES (contagem geométrica — retângulos/círculos fechados no layer {lyr}):")
-            L.append(f"  [MEDIDO] {pil['rects_qtd']} pilares contados")
+            _rep = any(s.get("repetidos") for s in pil.get("por_secao", []))
+            L.append(f"  {'[REFERÊNCIA]' if _rep else '[MEDIDO]'} {pil['rects_qtd']} pilares contados")
             for s in pil.get("por_secao", []):
                 nomes = f" ({', '.join(s['nomes'])})" if s.get("nomes") else ""
-                L.append(f"  [MEDIDO] seção {s['secao_cm']}: {s['qtd']} un{nomes}")
+                if s.get("repetidos"):
+                    L.append(f"  [REFERÊNCIA] seção {s['secao_cm']}: {s['qtd']} desenhos de pilar{nomes}"
+                             f" — mas {', '.join(s['repetidos'])} aparece(m) em mais de um desenho:"
+                             f" {s['distintos']} pilares distintos pelo nome. Pode ser o MESMO pilar"
+                             f" em 2 plantas/níveis da folha (não soma) ou pilares diferentes com o"
+                             f" mesmo nome (soma). Gere o item com {s['qtd']}, confidence=\"estimado\","
+                             f" e escreva na observação os dois números e os nomes repetidos.")
+                else:
+                    L.append(f"  [MEDIDO] seção {s['secao_cm']}: {s['qtd']} un{nomes}")
             L.append("  → Gere um item por seção: \"Pilar de concreto — seção <s>\", unidade un,")
             L.append("    quantidade literal, confirmado. A seção veio da geometria (medida).")
             L.append("  → O comprimento do layer de pilar em 'COMPRIMENTOS POR LAYER' é o PERÍMETRO")
