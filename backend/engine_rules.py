@@ -4497,6 +4497,37 @@ def e_linha_de_armadura(descricao) -> bool:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+#  A CONTAGEM POR DENSIDADE (27/09/2026) — irmã do peso por taxa
+# ─────────────────────────────────────────────────────────────────────────────
+# 🩸 Triagem de 20–27/09: "Estimativa: ~1.323 m² ÷ 11 m²/luminária (densidade
+# típica hospitalar)" = 120 luminárias; "1 detector a cada ~30 m²"; "Estimativa
+# por boa prática"; "~1 por ambiente". É a mesma conta do aço por taxa — índice
+# de livro × área —, só que em peça contada. Regra nº1: não é a contagem do
+# projeto do cliente; regra nº3: razão típica só ALERTA.
+# 📏 Setembro: 13 linhas `un` em 7 jobs, TODAS de leitura de PDF; 4 depois de
+# 22/09 (1 job). Nenhuma com selo — mas com número que o cliente orça.
+# 🪤 Só a conta de densidade: "contagem visual" é leitura (fica); "1 vb por
+# boa prática" é verba (decisão do Pedro — `vb` não entra).
+_RE_CONTAGEM_POR_DENSIDADE = _re.compile(
+    r"m\s*[²2]\s*÷\s*~?\s*\d+(?:[.,]\d+)?\s*m\s*[²2]"
+    r"|÷\s*~?\s*\d+(?:[.,]\d+)?\s*m\s*[²2]\s*(?:/|por)\s*\w"
+    r"|\b1\s+(?:\w+\s+)?a\s+cada\s+~?\s*\d+(?:[.,]\d+)?\s*m\s*[²2]"
+    r"|\b1\s+por\s+(?:ambiente|c[ôo]modo|sala|apartamento|apto)"
+    r"|\bpor\s+boa\s+pr[áa]tica"
+    r"|\bdensidade\s+t[íi]pica",
+    _re.IGNORECASE)
+_UNIDADES_CONTADAS = {"un", "und", "unid", "unidade", "unidades", "pç", "pc",
+                      "peca", "peça", "pecas", "peças", "pt", "ponto", "pontos"}
+
+
+def contagem_por_densidade(unidade, obs) -> bool:
+    """A quantidade desta linha de PEÇA saiu de área × densidade típica?"""
+    if str(unidade or "").strip().lower() not in _UNIDADES_CONTADAS:
+        return False
+    return bool(_RE_CONTAGEM_POR_DENSIDADE.search(str(obs or "")))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 #  O PESO DE AÇO CONTRA A MASSA NOMINAL (22/09/2026)
 # ─────────────────────────────────────────────────────────────────────────────
 # 🩸 22/09/2026 — job f8d8e6d8, 3ª prancha: a observação traz "CTot = 1473,3 m"

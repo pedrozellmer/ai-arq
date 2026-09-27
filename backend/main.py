@@ -13083,6 +13083,43 @@ def _zera_peso_por_taxa(items) -> int:
     return len(alvos)
 
 
+def _zera_contagem_por_densidade(items) -> int:
+    """Peça cuja quantidade SAIU de área × densidade típica fica em branco.
+
+    🩸 27/09/2026 — irmã de `_zera_peso_por_taxa`: "~1.323 m² ÷ 11 m²/luminária
+    (densidade típica hospitalar)" virava 120 luminárias numa planilha que o
+    cliente orça. A régua mora em `engine_rules.contagem_por_densidade`. Fora do
+    CAD e da revisão do cliente, como a do aço. Continua estimado; a conta da
+    leitura fica escrita. Devolve quantas linhas zerou."""
+    from engine_rules import contagem_por_densidade, _num_br
+    from models import Confidence
+    n = 0
+    for it in items:
+        if getattr(it, "origem", "") in ("dxf_geom", "revisao_cliente"):
+            continue
+        try:
+            q = float(getattr(it, "quantity", 0) or 0)
+        except (TypeError, ValueError):
+            continue
+        obs = str(getattr(it, "observations", "") or "")
+        if q <= 0 or not contagem_por_densidade(getattr(it, "unit", ""), obs):
+            continue
+        it.quantity = 0
+        try:
+            it.confidence = Confidence("estimado")
+        except Exception:
+            pass
+        _o = _limpa_afirmacao_de_medida(obs)
+        _frase = ("Em branco: contagem por DENSIDADE (área ÷ m² por peça, '1 a cada N m²', "
+                  "'boa prática') não entra como número — é índice típico, não a "
+                  "contagem do seu projeto. A conta da leitura dava %s. Conte na planta "
+                  "ou na legenda do projeto complementar (elétrico, incêndio, "
+                  "climatização) ou preencha na revisão." % _num_br(q).replace(",00", ""))
+        it.observations = _frase + ((" | " + _o) if _o else "")
+        n += 1
+    return n
+
+
 def _confere_peso_de_aco(items) -> tuple:
     """Confere cada linha de aço contra comprimento total × massa nominal.
 
@@ -19055,6 +19092,17 @@ bloco — só cite os que estão no inventário deste arquivo."""
                            job_id, severity="info")
         except Exception as _eat:
             _log_error("motor:aco-por-taxa", f"FALHOU: {_eat}", job_id,
+                       severity="warning")
+        # 🩸 27/09 — a irmã: peça contada por área × densidade típica.
+        try:
+            _n_dens = _zera_contagem_por_densidade(all_items)
+            if _n_dens:
+                _log_error("motor:contagem-por-densidade",
+                           "%d linha(s) de peça contada por DENSIDADE ficaram em branco "
+                           "(regra nº1: índice não é contagem)" % _n_dens,
+                           job_id, severity="info")
+        except Exception as _edn:
+            _log_error("motor:contagem-por-densidade", f"FALHOU: {_edn}", job_id,
                        severity="warning")
         try:
             _n_aco_corr, _n_aco_alerta = _confere_peso_de_aco(all_items)
