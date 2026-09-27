@@ -4512,37 +4512,59 @@ def e_linha_de_armadura(descricao) -> bool:
 #: ambiente" (palavra no meio), "0,22 spot/m²" e "4 parafusos/m²" (forma
 #: multiplicativa), "a cada ~9–12 m²" (faixa), "densidade ~0,22" (sem
 #: "típica") e "média 1,5 … por ambiente".
+#: 🩸 27/09 (2ª revisão, executada): ainda escapavam "Uma luminária a cada",
+#: "para cada", "1 sprinkler/12 m²", "(1/10 m²)", "0,22 spots por m²",
+#: "450 m² ÷ 9 = 50", "a cada 10 m², 1 detector", "1 por quarto"; e
+#: "densidade 1800 kg/m³" era pega (densidade só vale POR m²).
 _NUM_D = r"\d+(?:[.,]\d+)?"
 _RE_CONTAGEM_POR_DENSIDADE = _re.compile(
-    r"m\s*[²2]\s*÷\s*~?\s*" + _NUM_D + r"\s*m\s*[²2]"
+    r"m\s*[²2]\s*÷\s*~?\s*" + _NUM_D + r"\s*(?:m\s*[²2]|=)"
     r"|÷\s*~?\s*" + _NUM_D + r"\s*m\s*[²2]\s*(?:/|por)\s*\w"
-    r"|\b\d+\s+(?:\w+\s+)?a\s+cada\s+[~≈]?\s*" + _NUM_D
+    r"|(?:\b\d+|\buma?)\s+(?:\w+\s+)?(?:a|para)\s+cada\s+[~≈]?\s*" + _NUM_D
     + r"(?:\s*[–-]\s*" + _NUM_D + r")?\s*m\s*[²2]"
-    r"|\b" + _NUM_D + r"\s+(?:\w+\s+){0,2}por\s+(?:ambiente|c[ôo]modo|sala|apartamento|apto)"
-    r"|\b" + _NUM_D + r"\s+[a-zà-ú]+\s*/\s*m\s*[²2]"
+    r"|\ba\s+cada\s+[~≈]?\s*" + _NUM_D + r"\s*m\s*[²2]\s*,?\s*(?:\d+|uma?)\s"
+    r"|\b" + _NUM_D + r"\s+(?:\w+\s+){0,2}por\s+(?:ambiente|c[ôo]modo|sala|quarto|banheiro"
+    r"|dormit[óo]rio|su[íi]te)"
+    r"|\b" + _NUM_D + r"\s+[a-zà-ú]+(?:\s*/\s*|\s+por\s+)m\s*[²2]"
+    r"|\b\d+(?:\s+[a-zà-ú]+)?\s*/\s*" + _NUM_D + r"\s*m\s*[²2]"
     r"|\bpor\s+boa\s+pr[áa]tica"
-    r"|\bdensidade\s+(?:t[íi]pica|[~≈]?\s*\d)",
+    r"|\bdensidade\s+(?:t[íi]pica|m[ée]dia|[~≈]?\s*" + _NUM_D
+    + r"\s*(?:[a-zà-ú]+\s*)?(?:/|por)\s*m\s*[²2])",
+    _re.IGNORECASE)
+#: 🪤 "Por apartamento" é planta-tipo × repetição ("1 chuveiro por apartamento
+#: × 24 aptos"): contagem do desenho, não índice. Só é densidade quando a linha
+#: se diz estimativa (2ª revisão de 27/09).
+_RE_POR_APARTAMENTO = _re.compile(
+    r"\b" + _NUM_D + r"\s+(?:\w+\s+){0,2}por\s+(?:apartamento|apto)", _re.IGNORECASE)
+_RE_SE_DIZ_ESTIMATIVA = _re.compile(
+    r"\bestimativa\b|\bestimad[oa]s?\b|\bt[íi]pic[oa]\b|\badotad[oa]\b|\bm[ée]dia\b",
     _re.IGNORECASE)
 #: A quantidade veio de FONTE OBJETIVA e a densidade é só conferência — irmã do
 #: `_RE_PESO_DE_LISTA` do aço. "4 INSERTs do bloco 'tanque'… 1 por apartamento";
 #: "Conforme quadro de luminárias: 32 un. Densidade de 1 a cada 12 m² confere".
 #: 🪤 "contagem visual" NÃO é fonte objetiva: a IA escreve "Contagem visual…
 #: (1.634 ÷ 8,78 m²/sprinkler)… estimada em ~185" — o número é da conta.
+#: 2ª revisão: "lidos DA legenda", "Tabela de luminárias …: 32 un" (sem
+#: "conforme") e "… confere" também são fonte com conferência.
 _RE_CONTAGEM_DE_FONTE = _re.compile(
     r"\binserts?\b|\bcontagem\s+de\s+blocos\b|\bblocos?\s+['\"‘’]"
-    r"|\b(?:conforme|lid[oa]s?\s+n[oa]|segundo\s+[oa])\s+(?:o\s+|a\s+)?"
-    r"(?:quadro|tabela|legenda|planilha|lista)\b",
+    r"|\b(?:conforme|lid[oa]s?\s+(?:n|d)[oa]s?|segundo\s+[oa])\s+(?:o\s+|a\s+)?"
+    r"(?:quadro|tabela|legenda|planilha|lista)\b"
+    r"|\b(?:legenda|quadro|tabela)\b[^.;:\n]{0,60}:\s*\d"
+    r"|\bconfer(?:e|id[oa]s?)\b",
     _re.IGNORECASE)
 _UNIDADES_CONTADAS = {"un", "und", "unid", "unidade", "unidades", "pç", "pc",
-                      "peca", "peça", "pecas", "peças", "pt", "ponto", "pontos"}
+                      "peca", "peça", "pecas", "peças", "pt", "ponto", "pontos",
+                      "cj", "conj", "jg", "jogo", "jogos"}
 
 
 def contagem_por_densidade(unidade, obs) -> bool:
     """A quantidade desta linha de PEÇA saiu de área × densidade típica?"""
-    if str(unidade or "").strip().lower() not in _UNIDADES_CONTADAS:
+    if str(unidade or "").strip().lower().rstrip(".") not in _UNIDADES_CONTADAS:
         return False
     t = str(obs or "")
-    if not _RE_CONTAGEM_POR_DENSIDADE.search(t):
+    if not (_RE_CONTAGEM_POR_DENSIDADE.search(t)
+            or (_RE_POR_APARTAMENTO.search(t) and _RE_SE_DIZ_ESTIMATIVA.search(t))):
         return False
     return not _RE_CONTAGEM_DE_FONTE.search(t)
 

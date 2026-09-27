@@ -40,6 +40,16 @@ _DENSIDADE = [
     "2 tomadas a cada 10 m².",
     # "contagem visual" com a conta de densidade: o número é da conta
     "Contagem visual dos símbolos (1.634 ÷ 8,78 m²/sprinkler); estimada em ~185.",
+    # 2ª revisão de 27/09: as que ainda escapavam (uma forma por frase)
+    "Uma luminária a cada 10 m².",
+    "1 luminária para cada 10 m².",
+    "1 sprinkler/12 m² = 30.",
+    "0,22 spots por m² = 14.",
+    "450 m² ÷ 9 = 50.",
+    "A cada 10 m², 1 detector.",
+    "1 por quarto = 3.",
+    "Densidade média de escritório.",
+    "Estimativa: 1 chuveiro por apartamento = 24.",
 ]
 _NAO_E = [
     "Contagem visual estimada: 12 luminárias na planta de forro.",
@@ -52,9 +62,20 @@ _NAO_E = [
     "Conforme quadro de luminárias: 32 un. Densidade típica de 1 a cada 12 m² confere.",
     # uma frase por porta da exceção (a sabotagem de cada uma precisa derrubar)
     "12 INSERTs contados; dá 1 por ambiente.",
-    "Contagem de blocos: 6; confere com 1 por apartamento.",
-    "Bloco 'SPK' = 40; 1 a cada 12 m² confere.",
-    "Lido na legenda: 18 un; 1 por sala.",
+    # 🪤 3ª rodada: sem "confere" (virou porta própria) e sem "por apartamento"
+    # (não é mais densidade) — senão a frase não prova a SUA porta
+    "Contagem de blocos: 6; 1 por sala.",
+    "Bloco 'SPK' = 40; 1 a cada 12 m².",
+    "Lido na legenda, 18 un; 1 por sala.",
+    "Conforme quadro de pontos, 1 por sala.",
+    # 2ª revisão de 27/09: contagem de fonte que a exceção não via (uma porta
+    # por frase) e densidade que não é por m²
+    "12 pontos, 1 por sala, lidos da legenda.",
+    "Tabela de luminárias da prancha E-02: 32 un; densidade 0,3 un/m².",
+    "Projeto de incêndio: 40 sprinklers; 1 a cada 12 m² confere.",
+    "Densidade 1800 kg/m³; 12 un contadas.",
+    # planta-tipo × repetição é contagem do desenho
+    "1 chuveiro por apartamento × 24 aptos = 24.",
 ]
 
 
@@ -69,6 +90,11 @@ def test_CONTROLE_contagem_lida_e_outra_unidade_nao_sao_densidade():
     # verba "por boa prática" é decisão do Pedro, não entra aqui
     assert not contagem_por_densidade("vb", "Canteiro estimado por boa prática.")
     assert not contagem_por_densidade("m²", _DENSIDADE[0])
+
+
+def test_unidade_de_peca_escrita_de_outro_jeito():
+    for u in ("un.", "und.", "cj", "conj", "jg"):
+        assert contagem_por_densidade(u, _DENSIDADE[0]), u
 
 
 def _item(obs, origem="vision_pdf", unit="un", q=120):
