@@ -19,8 +19,11 @@ jobs (1,2% das contagens de bloco confirmadas).
   2. o extrator grava `amostras_legenda` pelas posições que FICARAM depois da
      leitura por folha, e conta pra IA na MESMA linha do bloco;
   3. `selo_apos_amostra_de_legenda` SÓ REBAIXA a linha cuja quantidade é a
-     contagem do bloco (a amostra está dentro do número) — e o motor a chama
-     entre a trava de anotação e a da soma.
+     contagem do bloco (a amostra está dentro do número) ou a contagem MENOS
+     as amostras (conta) — e o motor a chama entre a trava de anotação e a
+     da soma.
+🔑 O N de amostras é PISO: a regra não acha todo símbolo da legenda. O aviso
+diz "no máximo M−N" na planta, nunca um número exato que não foi medido.
 Dados 100% sintéticos: o repo é público.
 """
 import ast
@@ -173,6 +176,61 @@ def test_CONTROLE_coluna_longe_demais_na_vertical_nao_e_coluna():
     assert amostras_de_legenda(ins, tx) == {}
 
 
+@pytest.mark.parametrize("desvio_x, fator_h, coluna", [
+    (0.4, 1.0, True),       # mesmo x com folga de meia altura
+    (1.0, 1.0, False),      # uma altura ao lado: não é a mesma coluna
+    (0.0, 1.08, True),      # mesma altura com folga de 10%
+    (0.0, 1.5, False),      # texto 50% maior: é outra coisa (título, cota)
+])
+def test_a_coluna_e_mesmo_x_E_mesma_altura(desvio_x, fator_h, coluna):
+    """🪤 A coluna é o que derrubou os 6 falsos: x e altura têm de bater."""
+    ins, tx = _coluna([("BUCHA DE REDUÇÃO", "- BUCHA DE REDUÇÃO."), (None, "- LUVA."),
+                       (None, "- CURVA 90.")])
+    x0 = tx[0][1]
+    tx = [tx[0]] + [(s, x0 + desvio_x * H, y, fator_h * H) for s, _x, y, _h in tx[1:]]
+    assert _n(amostras_de_legenda(ins, tx), "BUCHA DE REDUÇÃO") == (1 if coluna else 0)
+
+
+def test_rotulos_de_alturas_diferentes_cada_um_com_a_sua_janela():
+    """Duas legendas do mesmo bloco, em alturas de FAIXAS diferentes, e um
+    título enorme com o nome: as duas amostras saem. A de h=3,9 está a 9h do
+    símbolo — na faixa dela há um rótulo de h=2, e a janela tem de ser a do
+    MAIOR da faixa."""
+    ins_a, tx_a = _coluna([("BUCHA DE REDUÇÃO", "- BUCHA DE REDUÇÃO."), (None, "- LUVA."),
+                           (None, "- CURVA 90.")])
+    ins_b, tx_b = _coluna([("BUCHA DE REDUÇÃO", "- BUCHA DE REDUÇÃO."), (None, "- LUVA."),
+                           (None, "- CURVA 90.")], x=5000.0, h=3.9, passo=12.0,
+                          folga=9 * 3.9)
+    ins_c, tx_c = _coluna([("BUCHA DE REDUÇÃO", "- BUCHA DE REDUÇÃO."), (None, "- LUVA."),
+                           (None, "- CURVA 90.")], x=9000.0, h=10.0, passo=30.0,
+                          lado=10.0)
+    titulo = [("PLANTA DE BUCHAS", 20000.0, 900.0, 500.0)]
+    res = amostras_de_legenda(ins_a + ins_b + ins_c, tx_a + tx_b + tx_c + titulo)
+    assert sorted(res.get("BUCHA DE REDUÇÃO", [])) == [(100.0, 60.0), (5000.0, 60.0),
+                                                       (9000.0, 60.0)], res
+
+
+def test_titulo_alto_com_o_nome_nao_deixa_a_regra_quadratica():
+    """🪤 Revisão de 26/09: com uma janela só (a do rótulo mais alto), um
+    título "PLANTA DE TOMADAS" de h enorme fazia cada inserção varrer todos os
+    rótulos do nome — 10 mil × 10 mil levava 21 s. Por faixa de altura: 0,2 s.
+    8 mil × 8 mil aqui: ~0,15 s com as faixas, ~11 s sem elas; o teto de 3 s
+    deixa 20× de folga pra máquina lenta."""
+    import random
+    import time
+    rnd = random.Random(2)
+    ins, tx = [], []
+    for _k in range(8000):
+        x, y = rnd.uniform(0, 100000), rnd.uniform(0, 70000)
+        ins.append(("TOMADA BAIXA", (x, y, x + 30, y + 30), (x, y)))
+        x, y = rnd.uniform(0, 100000), rnd.uniform(0, 70000)
+        tx.append(("TOMADA BAIXA 100VA", x, y, 25.0))
+    tx.append(("PLANTA DE TOMADAS", 50000.0, 69000.0, 9000.0))
+    t0 = time.perf_counter()
+    amostras_de_legenda(ins, tx)
+    assert time.perf_counter() - t0 < 3.0
+
+
 @pytest.mark.parametrize("ins, tx", [
     ([], [("PILAR NASCE", 0, 0, 2)]),
     ([("IND PILAR NASCE", (0, 0, 1, 1), (0, 0))], []),
@@ -233,7 +291,7 @@ def test_o_extrator_marca_o_simbolo_da_legenda(tmp_path):
     b = _bloco(ex, "IND PILAR NASCE")
     assert (b.count, b.amostras_legenda) == (1, 1)
     assert _bloco(ex, "Eixos do pilar").amostras_legenda == 0
-    assert ex.metadata.get("amostras_de_legenda") == {"IND PILAR NASCE": 1}
+    assert ex.metadata.get("blocos_da_legenda") == {"IND PILAR NASCE": 1}
 
 
 def test_a_peca_da_planta_continua_peca(tmp_path):
@@ -248,7 +306,7 @@ def test_a_ia_fica_sabendo_na_MESMA_linha_do_bloco(tmp_path):
     linhas = [ln for ln in secao.splitlines() if "IND PILAR NASCE" in ln]
     assert len(linhas) == 1, secao
     assert "IND PILAR NASCE: 3 un" in linhas[0]
-    assert "[1 delas = símbolo desenhado na LEGENDA, não peça]" in linhas[0]
+    assert "[ao menos 1 delas = símbolo desenhado na LEGENDA, não peça]" in linhas[0]
     assert not any("LEGENDA, não peça" in ln for ln in secao.splitlines()
                    if "Eixos do pilar" in ln)
 
@@ -263,8 +321,72 @@ def test_CONTROLE_sem_legenda_nada_muda(tmp_path):
     doc.saveas(p)
     ex = dx.extract_dxf(p)
     assert _bloco(ex, "IND PILAR NASCE").amostras_legenda == 0
-    assert "amostras_de_legenda" not in ex.metadata
+    assert "blocos_da_legenda" not in ex.metadata
     assert "LEGENDA, não peça" not in ex.to_structured_prompt()
+
+
+def _prancha_de_tomadas(tmp_path):
+    """Legenda com DUAS amostras do mesmo bloco (a tomada existente e a nova),
+    uma tomada na planta, e — no MESMO ponto da 1ª amostra — uma inserção
+    larga demais pra ser símbolo (15 alturas)."""
+    doc = ezdxf.new("R2018")
+    doc.header["$INSUNITS"] = 4
+    blk = doc.blocks.new("TOMADA BAIXA")
+    blk.add_circle((0, 0), 0.15)
+    msp = doc.modelspace()
+    h, x, y = 2.0, 740.0, 170.0
+    for k, rot in enumerate(("TOMADA BAIXA - H=40cm", "TOMADA BAIXA EXISTENTE",
+                             "PONTO DE FORÇA")):
+        msp.add_text(rot, dxfattribs={"height": h, "insert": (x + 2.5 * h, y - 3 * k * h - 0.6 * h)})
+    for k in range(2):
+        msp.add_blockref("TOMADA BAIXA", (x + 0.75 * h, y - 3 * k * h + 0.75 * h),
+                         dxfattribs={"xscale": 10, "yscale": 10})
+    msp.add_blockref("TOMADA BAIXA", (x + 0.75 * h, y + 0.75 * h),
+                     dxfattribs={"xscale": 100, "yscale": 100})
+    msp.add_blockref("TOMADA BAIXA", (100, 100), dxfattribs={"xscale": 10, "yscale": 10})
+    p = str(tmp_path / "tomadas.dxf")
+    doc.saveas(p)
+    return p
+
+
+def test_duas_amostras_do_mesmo_bloco_somam(tmp_path):
+    """📏 No acervo há bloco com 2 amostras (INTERR, SPRIN, DETEC, 'baixa').
+    A inserção larga no mesmo ponto da amostra NÃO é amostra: o ponto conta
+    uma vez só."""
+    ex = dx.extract_dxf(_prancha_de_tomadas(tmp_path))
+    b = _bloco(ex, "TOMADA BAIXA")
+    assert (b.count, b.amostras_legenda) == (4, 2)
+    assert ex.metadata.get("blocos_da_legenda") == {"TOMADA BAIXA": 2}
+    assert "TOMADA BAIXA: 4 un  [ao menos 2 delas = símbolo desenhado na LEGENDA, " \
+           "não peça]" in ex.to_structured_prompt()
+
+
+def _extracao(blocos):
+    return dx.DXFExtraction(filename="x.dxf", blocks=blocos, walls=[], hatches=[],
+                            texts=[], layers=[], dimensions=[])
+
+
+def test_nome_fragmentado_pelo_conversor_soma_as_amostras_na_nota():
+    """Os nomes que o conversor partiu viram UMA linha — e as amostras de
+    cada nome somam nela."""
+    txt = _extracao([dx.BlockCount("TOMADA_1", 3, assinatura="CIRCLE:1", amostras_legenda=1),
+                     dx.BlockCount("TOMADA_2", 2, assinatura="CIRCLE:1", amostras_legenda=1),
+                     dx.BlockCount("LUMINARIA", 9, assinatura="LINE:4")]).to_structured_prompt()
+    assert ("  TOMADA: 5 un  [2 nomes do conversor, mesma peca]  [ao menos 2 delas = "
+            "símbolo desenhado na LEGENDA, não peça]") in txt, txt
+    assert "LUMINARIA: 9 un\n" in txt
+
+
+def test_esquadria_com_amostra_tambem_leva_a_nota():
+    """A porta desenhada no quadro de esquadrias sai na seção ESQUADRIAS."""
+    txt = _extracao([dx.BlockCount("PORTA P1", 5, width_m=0.8, height_m=2.1,
+                                   amostras_legenda=1),
+                     dx.BlockCount("PORTA P2", 3, width_m=0.7, height_m=2.1)]).to_structured_prompt()
+    p1 = [ln for ln in txt.splitlines() if ln.startswith("  PORTA P1:")]
+    p2 = [ln for ln in txt.splitlines() if ln.startswith("  PORTA P2:")]
+    assert len(p1) == 1 and p1[0].endswith(
+        "[ao menos 1 delas = símbolo desenhado na LEGENDA, não peça]"), p1
+    assert p2 and "LEGENDA" not in p2[0]
 
 
 def _folha_com_legenda_no_detalhe(tmp_path):
@@ -289,7 +411,7 @@ def test_o_numero_sai_das_posicoes_que_FICARAM_depois_da_leitura_por_folha(tmp_p
     ex = dx.extract_dxf(_folha_com_legenda_no_detalhe(tmp_path))
     b = _bloco(ex, "IND PILAR NASCE")
     assert (b.count, b.amostras_legenda) == (1, 0)
-    assert "amostras_de_legenda" not in ex.metadata
+    assert "blocos_da_legenda" not in ex.metadata
 
 
 def test_CONTROLE_sem_a_leitura_por_folha_o_simbolo_volta_a_ser_amostra(tmp_path, monkeypatch):
@@ -300,9 +422,11 @@ def test_CONTROLE_sem_a_leitura_por_folha_o_simbolo_volta_a_ser_amostra(tmp_path
 
 
 # ══════════════════════════════════════════════════════════════════════════
-#  3. O SELO — só rebaixa, e só a contagem que inclui a amostra
+#  3. O SELO — só rebaixa: a contagem que inclui a amostra e a que a desconta
 # ══════════════════════════════════════════════════════════════════════════
-AMOSTRAS = {"IND PILAR NASCE": (1, 1), "SECCIONAMENTO DE ELETRODUTO": (7, 1)}
+AMOSTRAS = {"IND PILAR NASCE": (1, 1), "SECCIONAMENTO DE ELETRODUTO": (7, 1),
+            "tomada baixa": (5, 2), "SPRINKLER": (2, 2)}
+_VISIVEL = 110       # a tela mostra os 110 primeiros caracteres da observação
 
 #: as três formas com que a IA escreveu a linha no caso (texto reescrito)
 OBS_DO_CASO = [
@@ -316,22 +440,78 @@ OBS_DO_CASO = [
 def test_P1_a_linha_do_caso_sai_laranja_com_o_aviso_na_frente(obs):
     conf, nova, mexeu = rebaixa("confirmado", obs, 1, "un", AMOSTRAS)
     assert (conf, mexeu) == ("estimado", True)
-    assert nova.startswith("⚠ 1 das 1 inserções do bloco 'IND PILAR NASCE' são o SÍMBOLO "
-                           "desenhado na LEGENDA da prancha — na planta: 0."), nova
+    assert nova.startswith("⚠ A única inserção contada é o SÍMBOLO desenhado na LEGENDA "
+                           "da prancha — na planta: nenhuma (bloco 'IND PILAR NASCE'). "
+                           "Confirme a quantidade. "), nova
     assert nova.endswith(obs), "a observação da IA fica inteira, depois do aviso"
 
 
-def test_P2_contagem_inflada_rebaixa_e_diz_quantas_sao_da_planta():
+def test_todas_as_insercoes_sao_amostra_na_planta_nenhuma():
+    obs = "Fonte: 2 INSERTs do bloco 'SPRINKLER'."
+    nova = rebaixa("confirmado", obs, 2, "un", AMOSTRAS)[1]
+    assert nova.startswith("⚠ As 2 inserções contadas são o SÍMBOLO desenhado na LEGENDA "
+                           "da prancha — na planta: nenhuma (bloco 'SPRINKLER')."), nova
+
+
+def test_P2_contagem_inflada_rebaixa_e_diz_NO_MAXIMO_quantas_sao_da_planta():
     obs = "Fonte: 7 INSERTs do bloco 'SECCIONAMENTO DE ELETRODUTO'."
     conf, nova, mexeu = rebaixa("confirmado", obs, 7, "un", AMOSTRAS)
     assert (conf, mexeu) == ("estimado", True)
-    assert nova.startswith("⚠ 1 das 7 inserções do bloco 'SECCIONAMENTO DE ELETRODUTO' "
-                           "são o SÍMBOLO desenhado na LEGENDA da prancha — na planta: 6."), nova
+    assert nova.startswith("⚠ 1 das 7 inserções contadas é o SÍMBOLO desenhado na LEGENDA "
+                           "da prancha — na planta: no máximo 6 (bloco 'SECCIONAMENTO DE "
+                           "ELETRODUTO')."), nova
 
 
-def test_P2_CONTROLE_a_IA_ja_descontou_a_amostra_fica_como_esta():
-    obs = "Fonte: bloco 'SECCIONAMENTO DE ELETRODUTO', 7 INSERTs menos 1 da legenda."
-    assert rebaixa("confirmado", obs, 6, "un", AMOSTRAS) == ("confirmado", obs, False)
+def test_o_N_e_PISO_o_aviso_nao_afirma_numero_que_nao_mediu():
+    """🩸 Revisão de 26/09: 'tomada baixa' com as 5 inserções na coluna da
+    LEGENDA; a regra achou 2 (3 rótulos não repetiam o nome). O aviso dizia
+    "na planta: 3" — a verdade era 0. "No máximo 3" é verdade."""
+    obs = "Fonte: 5 INSERTs do bloco 'tomada baixa'."
+    nova = rebaixa("confirmado", obs, 5, "un", AMOSTRAS)[1]
+    assert nova.startswith("⚠ 2 das 5 inserções contadas são o SÍMBOLO desenhado na LEGENDA "
+                           "da prancha — na planta: no máximo 3 (bloco 'tomada baixa')."), nova
+
+
+@pytest.mark.parametrize("obs", [
+    "Fonte: bloco 'SECCIONAMENTO DE ELETRODUTO', 7 INSERTs menos 1 da legenda.",
+    "Bloco 'SECCIONAMENTO DE ELETRODUTO' = 7 − 1 (legenda) = 6 un.",
+    "Contagem do bloco 'SECCIONAMENTO DE ELETRODUTO', excluída a amostra da legenda.",
+])
+def test_P4_a_IA_descontou_a_amostra_e_CONTA_nao_sai_medida(obs):
+    """A nota do prompt convida a descontar — e o N é piso. 7 − 1 = 6 é conta
+    (regra dura nº1), e a trava da soma não reconhece "menos"/"excluída"."""
+    conf, nova, mexeu = rebaixa("confirmado", obs, 6, "un", AMOSTRAS)
+    assert (conf, mexeu) == ("estimado", True)
+    assert nova.startswith("⚠ Conta, não leitura: 7 inserções menos 1 da LEGENDA — a legenda "
+                           "pode ter outros símbolos que o motor não achou (bloco "
+                           "'SECCIONAMENTO DE ELETRODUTO'). Confirme a quantidade. "), nova
+    assert nova.endswith(obs)
+
+
+def test_P4_o_desconto_do_caso_de_revisao_tambem_rebaixa():
+    obs = "Fonte: bloco 'tomada baixa' = 5 − 2 (legenda) = 3 un."
+    assert rebaixa("confirmado", obs, 3, "un", AMOSTRAS)[:1] == ("estimado",)
+
+
+@pytest.mark.parametrize("qtd", [4, 2, 8])
+def test_CONTROLE_quantidade_que_nao_e_contagem_nem_desconto_fica(qtd):
+    obs = "Fonte: bloco 'tomada baixa', só as do térreo."
+    assert rebaixa("confirmado", obs, qtd, "un", AMOSTRAS) == ("confirmado", obs, False)
+
+
+@pytest.mark.parametrize("qtd, nome, essencial", [
+    (7, "SECCIONAMENTO DE ELETRODUTO", "na planta: no máximo 6 "),
+    (5, "tomada baixa", "na planta: no máximo 3 "),
+    (1, "IND PILAR NASCE", "na planta: nenhuma "),
+    (6, "SECCIONAMENTO DE ELETRODUTO", "Conta, não leitura: 7 inserções menos 1 da LEGENDA — "
+                                       "a legenda pode ter outros símbolos"),
+])
+def test_o_essencial_cabe_na_parte_VISIVEL_mesmo_com_nome_longo(qtd, nome, essencial):
+    """Nome do Revit chega a 60 caracteres: o nome do bloco vai no FIM do aviso."""
+    longo = nome + " - " + "X" * 60
+    nova = rebaixa("confirmado", "Fonte: bloco '%s'." % longo, qtd, "un",
+                   {longo: AMOSTRAS[nome]})[1]
+    assert essencial in nova[:_VISIVEL], nova
 
 
 @pytest.mark.parametrize("unit", ["m", "m²", "kg", "vb"])
@@ -444,6 +624,22 @@ def test_a_contagem_das_amostras_vem_da_extracao():
     assert "extraction" in {x.id for x in ast.walk(dc.generators[0].iter) if isinstance(x, ast.Name)}
     assert isinstance(dc.value, ast.Tuple)
     assert [getattr(e, "attr", None) for e in dc.value.elts] == ["count", "amostras_legenda"]
+
+
+def test_o_numero_CHEGA_ao_log_de_geometria_pela_chave_que_o_extrator_grava(tmp_path):
+    """🪤 Contar e não gravar é o mesmo que não contar — e ler a chave errada
+    ('amostras_legenda' é a das HACHURAS) grava o número de outra coisa."""
+    chave = "blocos_da_legenda"
+    assert dx.extract_dxf(_prancha(tmp_path)).metadata.get(chave), "o extrator não grava a chave"
+    logs =[n for n in ast.walk(_process_job()) if isinstance(n, ast.Call)
+            and getattr(n.func, "id", "") == "_log_error" and n.args
+            and isinstance(n.args[0], ast.Constant) and n.args[0].value == "motor:geometria"
+            and len(n.args) > 1 and isinstance(n.args[1], ast.JoinedStr)]
+    lidas = [c.args[0].value for lg in logs for c in ast.walk(lg.args[1])
+             if isinstance(c, ast.Call) and getattr(c.func, "attr", "") == "get"
+             and c.args and isinstance(c.args[0], ast.Constant)]
+    assert lidas.count(chave) == 2, (
+        "o log `motor:geometria` não lê metadata['%s'] (condição + valor): %s" % (chave, lidas))
 
 
 def test_a_regra_NAO_foi_reimplementada_no_motor():

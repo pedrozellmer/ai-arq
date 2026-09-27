@@ -4880,10 +4880,15 @@ def selo_apos_amostra_de_legenda(conf, obs, quantity, unit, amostras):
     contagens de bloco confirmadas).
 
     🔑 A prova é a mesma de `contagem_de_bloco_citada`: a linha cita o bloco E
-    a quantidade é IGUAL à contagem (a amostra está dentro do número). Se a IA
-    já descontou (quantidade ≠ contagem), a linha fica como está.
-    🚨 SÓ REBAIXA: não mexe na quantidade, não apaga. O aviso vai na FRENTE
-    (a tela mostra 110 caracteres).
+    a quantidade é IGUAL à contagem (a amostra está dentro do número).
+    🔑 O N é PISO, não conta fechada: a regra não acha todo símbolo da legenda
+    (rótulo que não repete o nome escapa). 🩸 Revisão de 26/09: 'tomada baixa'
+    com as 5 inserções na coluna da LEGENDA, a regra achou 2, e o aviso dizia
+    "na planta: 3" — a verdade era 0. Por isso "no máximo M−N"; "nenhuma" só
+    quando TODAS as inserções são amostra. E a linha em que a IA DESCONTOU
+    (quantidade = M−N) também não sai medida: é conta, e o N pode faltar.
+    🚨 SÓ REBAIXA: não mexe na quantidade, não apaga. O aviso vai na FRENTE e o
+    nome do bloco no fim (a tela mostra 110 caracteres; nome do Revit tem 60).
     """
     if conf != "confirmado" or not amostras:
         return conf, obs, False
@@ -4897,12 +4902,25 @@ def selo_apos_amostra_de_legenda(conf, obs, quantity, unit, amostras):
             pares[nome] = (m, n)
     nome = contagem_de_bloco_citada(obs, quantity, unit,
                                     {k: v[0] for k, v in pares.items()})
+    if nome:
+        m, n = pares[nome]
+        if n >= m:
+            abre = "A única inserção contada é" if m == 1 else "As %d inserções contadas são" % m
+            planta = "nenhuma"
+        else:
+            abre = "%d das %d inserções contadas %s" % (n, m, "é" if n == 1 else "são")
+            planta = "no máximo %d" % (m - n)
+        aviso = ("⚠ %s o SÍMBOLO desenhado na LEGENDA da prancha — na planta: %s "
+                 "(bloco '%s'). Confirme a quantidade. " % (abre, planta, nome))
+        return "estimado", aviso + str(obs or ""), True
+    nome = contagem_de_bloco_citada(obs, quantity, unit,
+                                    {k: v[0] - v[1] for k, v in pares.items()})
     if not nome:
         return conf, obs, False
     m, n = pares[nome]
-    aviso = ("⚠ %d das %d inserções do bloco '%s' são o SÍMBOLO desenhado na "
-             "LEGENDA da prancha — na planta: %d. Confirme a quantidade. "
-             % (n, m, nome, max(m - n, 0)))
+    aviso = ("⚠ Conta, não leitura: %d inserções menos %d da LEGENDA — a legenda pode "
+             "ter outros símbolos que o motor não achou (bloco '%s'). Confirme a "
+             "quantidade. " % (m, n, nome))
     return "estimado", aviso + str(obs or ""), True
 
 

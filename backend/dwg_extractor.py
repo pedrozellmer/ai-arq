@@ -355,6 +355,7 @@ class DXFExtraction:
                     area = b.width_m * b.height_m
                     lines.append(
                         f"  {b.name}: {b.count} un  |  ~{b.width_m:.2f}m × {b.height_m:.2f}m = {area:.2f} m²"
+                        f"{_nota_da_legenda(getattr(b, 'amostras_legenda', 0))}"
                     )
                 lines.append("  Regra TCPO: vãos com área ≤ 2 m² NÃO se desconta da pintura; > 2 m² desconta o excedente.")
                 lines.append("")
@@ -422,9 +423,7 @@ class DXFExtraction:
                         _seq[_r] = _seq.get(_r, 0) + 1
                         rotulo = f"{rotulo} (tipo {_seq[_r]})"
                     _nota = f"  [{n_nomes} nomes do conversor, mesma peca]" if n_nomes > 1 else ""
-                    if _amo_grupo[(_r, _a)]:
-                        _nota += (f"  [{_amo_grupo[(_r, _a)]} delas = símbolo desenhado "
-                                  f"na LEGENDA, não peça]")
+                    _nota += _nota_da_legenda(_amo_grupo[(_r, _a)])
                     lines.append(f"  {rotulo}: {count} un{_nota}")
                 if _juntados:
                     lines.append(f"  ({_juntados} grupo(s) tinham nomes duplicados pelo "
@@ -3058,6 +3057,13 @@ _LEG_PALAVRAS_FORA = frozenset({"de", "da", "do", "das", "dos", "com", "para", "
                                 "na", "no", "ind", "blk", "bloco", "the"})
 
 
+def _nota_da_legenda(n):
+    """A nota da MESMA linha do bloco no prompt. 🔑 "ao menos": a regra não
+    acha todo símbolo de legenda (rótulo que não repete o nome escapa) — o N é
+    piso, não conta fechada."""
+    return f"  [ao menos {n} delas = símbolo desenhado na LEGENDA, não peça]" if n else ""
+
+
 def _palavras_do_rotulo(s):
     """Palavras de ≥3 caracteres, sem acento e minúsculas; fora número e ligação."""
     s = unicodedata.normalize("NFD", str(s or ""))
@@ -3126,7 +3132,11 @@ def amostras_de_legenda(insercoes, textos):
         return coluna[i]
 
     def _rotulos_do(nome):
-        """Textos que repetem o nome (p) — uma vez por nome, em ordem de x."""
+        """Textos que repetem o nome (p) — uma vez por nome, em ordem de x,
+        separados por FAIXA de altura (potência de 2).
+        🪤 Com uma janela só, a do rótulo mais alto, um título "PLANTA DE
+        TOMADAS" (h enorme) alargava a janela de toda inserção: 10 mil × 10
+        mil levava 21 s. Por faixa, cada janela usa a altura da sua faixa."""
         if nome not in rotulos:
             tb = _palavras_do_rotulo(nome)
             cands = set()
@@ -3141,9 +3151,28 @@ def amostras_de_legenda(insercoes, textos):
                 comum = (tb & tt) | {a for a in tb for b in tt if b.startswith(a) and a != b}
                 if comum and (len(comum) >= 2 or tb <= tt or max(len(c) for c in comum) >= 5):
                     ok.append(i)
-            ok.sort(key=lambda i: tx[i][0])
-            rotulos[nome] = ([tx[i][0] for i in ok], ok, max((tx[i][2] for i in ok), default=0.0))
+            faixas = defaultdict(list)
+            for i in ok:
+                faixas[math.frexp(tx[i][2])[1]].append(i)
+            rotulos[nome] = []
+            for f in faixas.values():
+                f.sort(key=lambda i: tx[i][0])
+                rotulos[nome].append(([tx[i][0] for i in f], f, max(tx[i][2] for i in f)))
         return rotulos[nome]
+
+    def _tem_rotulo(nome, x0, y0, x1, y1):
+        for rx, ri, hmax in _rotulos_do(nome):
+            # só os rótulos cujo x pode cair na janela (a de cada um usa o seu h)
+            for i in ri[bisect_left(rx, x0 - hmax):bisect_right(rx, x1 + _LEG_JANELA_H * hmax)]:
+                x, y, h, _p = tx[i]
+                if not (x0 - h <= x <= x1 + _LEG_JANELA_H * h):
+                    continue
+                if max(0.0, y0 - (y + h), y - y1) > h or (x1 - x0) > _LEG_LARGURA_H * h:
+                    continue
+                if not _em_coluna(i):
+                    continue
+                return True
+        return False
 
     out = {}
     for ins in insercoes or []:
@@ -3152,18 +3181,8 @@ def amostras_de_legenda(insercoes, textos):
             x0, y0, x1, y1 = (float(v) for v in caixa)
         except (TypeError, ValueError):
             continue
-        rx, ri, hmax = _rotulos_do(nome)
-        # só os rótulos cujo x pode cair na janela (a de cada um usa o seu h)
-        for i in ri[bisect_left(rx, x0 - hmax):bisect_right(rx, x1 + _LEG_JANELA_H * hmax)]:
-            x, y, h, _p = tx[i]
-            if not (x0 - h <= x <= x1 + _LEG_JANELA_H * h):
-                continue
-            if max(0.0, y0 - (y + h), y - y1) > h or (x1 - x0) > _LEG_LARGURA_H * h:
-                continue
-            if not _em_coluna(i):
-                continue
+        if _tem_rotulo(nome, x0, y0, x1, y1):
             out.setdefault(nome, []).append(pos)
-            break
     return out
 
 
@@ -5928,7 +5947,8 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
                     b.amostras_legenda += 1
         _am_bl = {b.name: b.amostras_legenda for b in blocks if b.amostras_legenda}
         if _am_bl:
-            metadata["amostras_de_legenda"] = _am_bl
+            # nome ≠ 'amostras_legenda' (as HACHURAS da legenda, 24/09)
+            metadata["blocos_da_legenda"] = _am_bl
 
     return DXFExtraction(
         filename=os.path.basename(filepath),

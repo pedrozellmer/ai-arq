@@ -15238,13 +15238,13 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                                 f"{_blocos_colados_abertos(extraction)}"
                                 # 🔑 24/09: hachuras de AMOSTRA DA LEGENDA tiradas da medição
                                 f"{(' amostras_legenda=[' + str((getattr(extraction, 'metadata', None) or {}).get('amostras_legenda')) + ']') if (getattr(extraction, 'metadata', None) or {}).get('amostras_legenda') else ''}"
-                                # 🩸 26/09: BLOCOS cujo símbolo da legenda foi contado (job 32a27efc)
-                                f"{(' blocos_da_legenda=' + str((getattr(extraction, 'metadata', None) or {}).get('amostras_de_legenda'))[:300]) if (getattr(extraction, 'metadata', None) or {}).get('amostras_de_legenda') else ''}"
                                 # 🔬 27/08: POR QUE `pilares` deu esse número.
                                 # Prancha de FÔRMA com 2.545 linhas e 198 cotas
                                 # devolvia `pilares=0` sem dizer se o desenho
                                 # não tem pilar ou se o NOME do layer não bateu.
                                 f"{_descarte_de_pilares(extraction)}"
+                                # 🩸 26/09: BLOCOS cujo símbolo da legenda foi contado (job 32a27efc)
+                                f"{(' blocos_da_legenda=' + str((getattr(extraction, 'metadata', None) or {}).get('blocos_da_legenda'))[:300]) if (getattr(extraction, 'metadata', None) or {}).get('blocos_da_legenda') else ''}"
                                 # 🩸 14/09: QUAIS layers a allowlist de área
                                 # recusou. 88,7% das recusas de polígono são
                                 # por NOME, e o nome já era coletado e jogado
@@ -16127,8 +16127,9 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                 # NÃO É PEÇA. "Pilar nasce = 1 un ✓ MEDIDO" em 3
                                 # pranchas: o único INSERT era o desenhado na
                                 # "LEGENDA PILARES:". Contagem que bate com um bloco
-                                # que tem amostra de legenda sai laranja e diz
-                                # quantas são da planta. Decisão em engine_rules,
+                                # que tem amostra de legenda sai laranja (e a que
+                                # descontou a amostra também: é conta, e a regra
+                                # não acha toda amostra). Decisão em engine_rules,
                                 # aqui é uma linha só (a lição da soma, logo abaixo).
                                 from engine_rules import (
                                     selo_apos_amostra_de_legenda as _regra_amostra)
