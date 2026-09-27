@@ -114,7 +114,7 @@ class Google:
         caminho = u.path.split("/drive/v3/", 1)[1]
         if caminho == "files" and method == "GET" and "name='Emitidos'" in q["q"]:   # procura a pasta Emitidos
             assert f"'{RAIZ}' in parents" in q["q"]
-            return 200, {"files": [{"id": EMIT}] if self.emitidos_existe else []}
+            return 200, {"files": [{"id": EMIT, "ownedByMe": True}] if self.emitidos_existe else []}   # a da dona (lote 3, DRV-3)
         if caminho == "files" and method == "GET":        # procura a cópia pelo nome (a cópia ficou sem resposta)
             assert f"'{EMIT}' in parents" in q["q"]
             achou = [{"id": "COPIA_ACHADA_001", "name": "Planta baixa_R00.dwg", "webViewLink": "https://drive.google.com/file/d/COPIA_ACHADA_001/view"}]

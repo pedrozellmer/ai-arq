@@ -189,7 +189,11 @@ def test_volta_do_google_guarda_cifrado_e_volta_pra_aba_do_projeto():
                       "/about": (200, {"user": {"emailAddress": "dona@exemplo.com"}})})
     estado = ed.assinar_estado({"u": DONA["id"], "p": PROJ, "exp": time.time() + 60})
     r = ed.drive_callback(state=estado, code="codigo")
-    assert r.headers["location"].endswith(f"escritorio.html?drive=ok#/p/{PROJ}/arquivos")
+    # 26/09 (auditoria DRV-9): a volta do Google deixa a conexão PENDENTE; a tela logada confirma
+    loc = r.headers["location"]
+    assert "escritorio.html?drive=confirmar&c=" in loc and loc.endswith(f"#/p/{PROJ}/arquivos") and b.conexoes == {}
+    c = urllib.parse.parse_qs(urllib.parse.urlparse(loc).query)["c"][0]
+    ed.drive_confirmar(REQ, {"c": c})
     guardado = b.conexoes[DONA["id"]]
     assert "r-novo" not in guardado["token_cifrado"] and ed.decifrar(guardado["token_cifrado"]) == "r-novo"
 

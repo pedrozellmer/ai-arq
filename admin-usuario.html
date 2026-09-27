@@ -205,8 +205,9 @@ function renderHeader(u){
           ${statusBadge(u)}
         </div>
         <div class="text-sm text-gray-500 mt-0.5">${esc(u.email||'--')}</div>
-        <div class="flex items-center gap-2 mt-3">
+        <div class="flex items-center gap-2 mt-3 flex-wrap">
           ${waBtn}
+          <button type="button" onclick="limparEscritorio(this)" title="Rodar ANTES de excluir a conta no Supabase" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-800 text-sm font-medium">Antes de excluir: limpar Escritório</button>
           <button onclick="navigator.clipboard.writeText('${esc(u.email||'')}');this.textContent='Copiado!';setTimeout(()=>this.textContent='Copiar e-mail',1200)" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium">Copiar e-mail</button>
         </div>
       </div>
@@ -214,6 +215,27 @@ function renderHeader(u){
     <div class="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3 mt-5 pt-5 border-t text-sm">
       ${campos.map(c=>`<div><div class="text-[11px] uppercase tracking-wide text-gray-400">${c[0]}</div><div class="text-gray-800 mt-0.5">${c[1]}</div></div>`).join('')}
     </div>`;
+}
+
+// 🔒 26/09 (auditoria LGPD-1/DRV-8): pedido de exclusão de conta — ANTES de apagar o usuário no Supabase. A cascata
+// do banco apaga o registro do que o Escritório compartilhou no Google Drive, mas não o compartilhamento: isto tira a
+// pessoa dos projetos em que é equipe e, onde ela é dona, desfaz os acessos que o AI.arq deu e revoga o Google.
+async function limparEscritorio(btn){
+  const id = getParam('id'); if(!id) return;
+  if(!confirm('Antes de excluir a conta: tirar esta pessoa do Escritório e desfazer o que o AI.arq compartilhou no Google Drive? Não dá pra desfazer.')) return;
+  btn.disabled = true; btn.textContent = 'Limpando…';
+  try {
+    const res = await authFetch(`${API_BASE}/api/escritorio/admin/limpar-conta`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ user_id: id }) });
+    const d = await res.json().catch(()=>({}));
+    if(!res.ok) throw new Error(d.detail || ('HTTP ' + res.status));
+    alert(`Escritório limpo: saiu de ${d.saiu_de||0} projeto(s) como equipe; ${d.tirados||0} acesso(s) tirado(s) no Drive` +
+      (d.google_revogado ? '; autorização do Google revogada' : '') +
+      (d.pendentes ? `; ${d.pendentes} PENDENTE(s) — veja o registro de erros antes de excluir` : '. Agora pode excluir a conta.'));
+    btn.textContent = d.pendentes ? 'Limpeza com pendência' : 'Escritório limpo';
+  } catch(e){
+    alert('Não consegui limpar: ' + (e.message || e));
+    btn.disabled = false; btn.textContent = 'Antes de excluir: limpar Escritório';
+  }
 }
 
 function projBadge(s){

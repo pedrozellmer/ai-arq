@@ -279,6 +279,13 @@ def convidar(projeto_id: str, request: Request, corpo: dict):
             raise HTTPException(429, "Hoje o convite já saiu por e-mail o bastante, então o link não foi trocado: "
                                      "o do último e-mail continua valendo. Se a pessoa não acha o e-mail, cancele "
                                      "o convite e convide de novo, que o link novo aparece aqui pra você mandar.")
+    # 🩸 26/09 (auditoria SRV-8): o nome da admin era lido DEPOIS de gravar o link novo — um soluço nessa leitura
+    # matava o link antigo e perdia o novo. Agora lê antes; sem ela, o e-mail sai com o da conta logada.
+    try:
+        admin = _um(_SERVICO("GET", "escritorio_membros",
+                             params={"projeto_id": f"eq.{projeto_id}", "papel": "eq.dono", "select": "nome,email"})) or {}
+    except HTTPException:
+        admin = {}
     token = novo_token()
     linha = {"convite_hash": hash_do_token(token),
              "convite_expira": (agora + timedelta(days=VALIDADE_DIAS)).isoformat(),
@@ -289,17 +296,20 @@ def convidar(projeto_id: str, request: Request, corpo: dict):
         if atual["status"] != "convidado":
             linha["visto_por"] = None   # quem saiu e volta: a conta que abriu o convite antigo não vale mais
             linha["pode_baixar"] = False  # e a permissão de baixar recomeça desligada (a admin libera de novo)
+        # 🩸 26/09 (auditoria CONV-4): sem o filtro de status, um reenvio no MESMO instante do aceite desfazia o aceite
+        # (gravava status=convidado, user_id=NULL por cima de quem acabou de entrar)
         status, dados = _SERVICO("PATCH", "escritorio_membros", body=linha,
-                                 params={"id": f"eq.{atual['id']}", "projeto_id": f"eq.{projeto_id}"},
+                                 params={"id": f"eq.{atual['id']}", "projeto_id": f"eq.{projeto_id}",
+                                         "status": f"eq.{atual['status']}"},
                                  prefer="return=representation")
+        if status < 300 and dados == []:
+            raise HTTPException(409, "Essa pessoa acabou de entrar no projeto (ou o convite mudou agora). Atualize a lista.")
     else:
         linha.update({"projeto_id": projeto_id, "email": email, "papel": "freela", "status": "convidado"})
         status, dados = _SERVICO("POST", "escritorio_membros", body=linha, prefer="return=representation")
     if status >= 300 or not dados:
         raise HTTPException(502, "Não consegui registrar o convite agora. Tente de novo em instantes.")
 
-    admin = _um(_SERVICO("GET", "escritorio_membros",
-                         params={"projeto_id": f"eq.{projeto_id}", "papel": "eq.dono", "select": "nome,email"})) or {}
     quem = admin.get("nome") or eu.get("email") or "Alguém"
     link = link_do_convite(token)
     assunto, html, texto = email_do_convite(quem, admin.get("email") or eu.get("email"), projeto["nome"], link)

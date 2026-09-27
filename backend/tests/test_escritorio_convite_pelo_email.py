@@ -199,7 +199,7 @@ def test_a_pagina_do_convite_procura_pelo_email_quando_nao_tem_codigo():
     assert "if (!token) return semCodigo();" in h
     assert "api('convite/pendentes', {}, SESSAO)" in h
     assert "CONVITE_ID ? { convite_id: CONVITE_ID } : { token, outra_conta: OUTRA_CONTA || undefined }" in h
-    s = h[h.index("async function semCodigo() {"):h.index("async function iniciar() {")]
+    s = h[h.index("async function semCodigo(opcoes) {"):h.index("async function iniciar() {")]
     assert "sb.from('profiles')" in s and "location.href = 'cadastro.html'" in s, "sem ficha não entra no projeto"
 
 # controle positivo (26/09): aceitar e-mail não confirmado (`if not eu:` em _email_da_conta) reprovou 3;

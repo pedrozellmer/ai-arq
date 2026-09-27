@@ -138,7 +138,7 @@ def test_confirmacao_mostra_pra_quem_foi_o_convite_e_trata_o_428():
 
 def test_sem_codigo_sem_ficha_volta_pro_convite_e_mostra_todos_os_convites():
     h = _ler("convite.html")
-    s = _corpo(h, "async function semCodigo() {", "\n  }\n")
+    s = _corpo(h, "async function semCodigo(opcoes) {", "\n  }\n")
     assert s.index("sessionStorage.setItem('aiarq_convite_sem_codigo', '1')") < s.index("location.href = 'cadastro.html'")
     assert "lista.forEach((c) => {" in s and "b.textContent = " in s and "innerHTML" not in s
     cad = _ler("cadastro.html")

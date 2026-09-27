@@ -49,6 +49,7 @@ ESCOPO = "https://www.googleapis.com/auth/drive"
 CLIENT_ID = os.environ.get("GOOGLE_DRIVE_CLIENT_ID", "558106235498-326qm7cs59908avo3mkmvjr7vusak0sf.apps.googleusercontent.com")
 PASTA = "application/vnd.google-apps.folder"
 _VIDA_DO_ESTADO = 600          # 10 min pra voltar do Google
+_TETO_DA_LISTA = 2000         # itens numa pasta (a lista segue as páginas até aqui e avisa se cortou)
 _CACHE_ACESSO: dict = {}      # user_id → (access_token, expira_em)
 
 
@@ -245,10 +246,69 @@ def drive_iniciar(request: Request, corpo: dict):
     return {"url": "https://accounts.google.com/o/oauth2/v2/auth?" + urllib.parse.urlencode(q)}
 
 
-def _volta(projeto: str, resultado: str) -> RedirectResponse:
+def _volta(projeto: str, resultado: str, pendente: str = "") -> RedirectResponse:
     destino = f"{SITE}/escritorio.html?drive={urllib.parse.quote(resultado)}"
+    if pendente:
+        destino += f"&c={urllib.parse.quote(pendente)}"
     destino += f"#/p/{projeto}/arquivos" if projeto else "#/"
     return RedirectResponse(destino, status_code=302)
+
+
+# 🔒 26/09 (auditoria DRV-9): o retorno do Google não tem login — quem é a pessoa vinha só do `state`. Alguém do
+# piloto podia mandar o link do /iniciar pra OUTRA pessoa: ela autorizava com a conta Google dela e o Drive dela
+# ficava ligado na conta de quem mandou. Agora a conexão nasce PENDENTE (10 min, em memória: 1 worker) e só vale
+# quando a tela LOGADA como quem começou confirma — mostrando qual conta Google vai ser ligada.
+_PENDENTES: dict = {}
+
+
+def _guardar_pendente(user_id: str, refresh: str, email) -> str:
+    agora = time.time()
+    for k in [k for k, v in _PENDENTES.items() if v["exp"] < agora]:
+        _PENDENTES.pop(k, None)
+    chave = base64.urlsafe_b64encode(os.urandom(18)).decode("ascii").rstrip("=")
+    _PENDENTES[chave] = {"u": user_id, "cifrado": cifrar(refresh), "email": email, "exp": agora + _VIDA_DO_ESTADO}
+    return chave
+
+
+@router.post("/drive/confirmar")
+def drive_confirmar(request: Request, corpo: dict):
+    """A tela logada confirma a conexão que voltou do Google. Só a MESMA conta que começou em /iniciar."""
+    eu = esc._exige_login(request)
+    chave = str((corpo or {}).get("c") or "")
+    p = _PENDENTES.get(chave)
+    if not p or p["exp"] < time.time():
+        _PENDENTES.pop(chave, None)
+        raise HTTPException(404, "Essa conexão expirou. Conecte o Drive de novo.")
+    if p["u"] != eu["id"]:
+        # não consome: quem começou ainda pode confirmar na aba dele
+        raise HTTPException(403, "Essa conexão foi começada por outra conta do AI.arq.")
+    if (corpo or {}).get("recusar") is True:
+        _PENDENTES.pop(chave, None)
+        try:
+            _HTTP("POST", "https://oauth2.googleapis.com/revoke", form={"token": decifrar(p["cifrado"])})
+        except HTTPException:
+            pass
+        return {"ok": True, "recusado": True}
+    st_s, _ = esc._SERVICO("POST", "escritorio_drive_conexoes",
+                           body={"user_id": eu["id"], "google_email": p["email"], "token_cifrado": p["cifrado"],
+                                 "atualizado_em": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())},
+                           params={"on_conflict": "user_id"},
+                           prefer="resolution=merge-duplicates,return=minimal")
+    if st_s >= 300 or st_s == 0:
+        raise HTTPException(502, "Não consegui gravar a conexão agora. Tente de novo em instantes.")
+    _PENDENTES.pop(chave, None)
+    _CACHE_ACESSO.pop(eu["id"], None)
+    return {"ok": True, "email": p["email"]}
+
+
+@router.post("/drive/pendente")
+def drive_pendente(request: Request, corpo: dict):
+    """Qual conta Google a confirmação vai ligar (pra tela mostrar antes do clique). Só pra quem começou."""
+    eu = esc._exige_login(request)
+    p = _PENDENTES.get(str((corpo or {}).get("c") or ""))
+    if not p or p["exp"] < time.time() or p["u"] != eu["id"]:
+        raise HTTPException(404, "Essa conexão expirou. Conecte o Drive de novo.")
+    return {"email": p["email"]}
 
 
 @router.get("/drive/callback")
@@ -274,16 +334,8 @@ def drive_callback(state: str = "", code: str = "", error: str = ""):
         return _volta(projeto, "erro")
     st_a, sobre = _drive("GET", "about", r.get("access_token"), params={"fields": "user(emailAddress)"})
     email = ((sobre or {}).get("user") or {}).get("emailAddress") if st_a == 200 else None
-    st_s, _ = esc._SERVICO("POST", "escritorio_drive_conexoes",
-                           body={"user_id": dados["u"], "google_email": email,
-                                 "token_cifrado": cifrar(r["refresh_token"]),
-                                 "atualizado_em": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())},
-                           params={"on_conflict": "user_id"},
-                           prefer="resolution=merge-duplicates,return=minimal")
-    if st_s >= 300:
-        return _volta(projeto, "erro")
-    _CACHE_ACESSO.pop(dados["u"], None)
-    return _volta(projeto, "ok")
+    # 🔒 26/09 (auditoria DRV-9): nada é gravado aqui — a tela logada confirma (POST /drive/confirmar)
+    return _volta(projeto, "confirmar", _guardar_pendente(dados["u"], r["refresh_token"], email))
 
 
 @router.get("/drive/status")
@@ -316,12 +368,22 @@ def drive_pastas(request: Request, pai: str = "root"):
     eu = esc._exige_login(request)
     tok = _acesso(eu["id"])
     pai = "root" if pai in ("", "root") else id_da_pasta(pai)
-    st, r = _drive("GET", "files", tok, params={
-        "q": f"'{pai}' in parents and mimeType='{PASTA}' and trashed=false",
-        "fields": "files(id,name)", "orderBy": "name", "pageSize": "200",
-        "supportsAllDrives": "true", "includeItemsFromAllDrives": "true"})
-    if st != 200 or r is None:
-        raise HTTPException(502, "O Google não respondeu agora. Tente de novo em instantes.")
+    # 26/09 (auditoria DRV-5): da 201ª pasta em diante a admin não conseguia escolher — segue as páginas
+    pastas, pagina = [], None
+    while True:
+        params = {"q": f"'{pai}' in parents and mimeType='{PASTA}' and trashed=false",
+                  "fields": "nextPageToken,files(id,name)", "orderBy": "name", "pageSize": "500",
+                  "supportsAllDrives": "true", "includeItemsFromAllDrives": "true"}
+        if pagina:
+            params["pageToken"] = pagina
+        st, r = _drive("GET", "files", tok, params=params)
+        if st != 200 or r is None:
+            raise HTTPException(502, "O Google não respondeu agora. Tente de novo em instantes.")
+        pastas += r.get("files", [])
+        pagina = r.get("nextPageToken")
+        if not pagina or len(pastas) >= _TETO_DA_LISTA:
+            break
+    r = {"files": pastas}
     atual = {"id": "root", "nome": "Meu Drive", "pai": None}
     if pai != "root":
         st_p, p = _drive("GET", f"files/{pai}", tok, params={"fields": "id,name,parents", "supportsAllDrives": "true"})
@@ -352,14 +414,19 @@ def projeto_pasta(projeto_id: str, request: Request, corpo: dict):
     return {"ok": True, "pasta": {"id": f["id"], "nome": f.get("name") or ""}, **sincronizar(projeto_id)}
 
 
-def _dentro_da_pasta(tok: str, alvo: str, raiz: str, limite: int = 12) -> bool:
-    """`alvo` é a própria pasta do projeto ou está dentro dela (sobe pelos pais, com limite)."""
+def _dentro_da_pasta(tok: str, alvo: str, raiz: str, limite: int = 12, bloquear_limitado: bool = False) -> bool:
+    """`alvo` é a própria pasta do projeto ou está dentro dela (sobe pelos pais, com limite).
+    `bloquear_limitado` (a EQUIPE, 26/09 — auditoria DRV-6): pasta com "acesso limitado" no Drive
+    (inheritedPermissionsDisabled) no caminho recusa — a lista é feita com a conta da DONA, que enxerga tudo."""
     atual, vistos = alvo, 0
+    campos = "parents,inheritedPermissionsDisabled" if bloquear_limitado else "parents"
     while atual and vistos <= limite:
         if atual == raiz:
             return True
-        st, f = _drive("GET", f"files/{atual}", tok, params={"fields": "parents", "supportsAllDrives": "true"})
+        st, f = _drive("GET", f"files/{atual}", tok, params={"fields": campos, "supportsAllDrives": "true"})
         if st != 200 or not f or not f.get("parents"):
+            return False
+        if bloquear_limitado and f.get("inheritedPermissionsDisabled"):
             return False
         atual, vistos = f["parents"][0], vistos + 1
     return False
@@ -383,8 +450,10 @@ def _ancestrais_ate(tok: str, alvo: str, raiz: str, limite: int = 12):
 def projeto_arquivos(projeto_id: str, request: Request, pasta: str = ""):
     """A lista da pasta do projeto (ou de uma subpasta DELA), pra admin e pra equipe, com a chave da dona."""
     esc._exige_login(request)
-    if not esc._papel(request, projeto_id):
+    papel = esc._papel(request, projeto_id)
+    if not papel:
         raise HTTPException(403, "Você não faz parte deste projeto.")
+    equipe = papel != "dono"
     p = _dono_do_projeto(projeto_id)
     if not p.get("pasta_id"):
         return {"sem_pasta": True}
@@ -392,16 +461,34 @@ def projeto_arquivos(projeto_id: str, request: Request, pasta: str = ""):
         return {"sem_conexao": True, "pasta": {"id": p["pasta_id"], "nome": p.get("pasta_caminho") or ""}}
     tok = _acesso(p["dono"])
     alvo = p["pasta_id"] if not pasta else id_da_pasta(pasta)
-    if alvo != p["pasta_id"] and not _dentro_da_pasta(tok, alvo, p["pasta_id"]):
+    if alvo != p["pasta_id"] and not _dentro_da_pasta(tok, alvo, p["pasta_id"], bloquear_limitado=equipe):
         raise HTTPException(403, "Essa pasta não é deste projeto.")
-    st, r = _drive("GET", "files", tok, params={
-        "q": f"'{alvo}' in parents and trashed=false",
-        "fields": "files(id,name,mimeType,modifiedTime,webViewLink,iconLink,size,lastModifyingUser(displayName))",
-        "orderBy": "folder,name", "pageSize": "300",
-        "supportsAllDrives": "true", "includeItemsFromAllDrives": "true"})
-    if st != 200 or r is None:
-        raise HTTPException(502, "O Google não respondeu agora. Tente de novo em instantes.")
-    return {"pasta": {"id": p["pasta_id"], "nome": p.get("pasta_caminho") or "", "atual": alvo},
+    # 26/09 (auditoria DRV-5): pageSize 300 cortava calado (e o Google pode devolver MENOS por página) — segue as
+    # páginas até o teto e diz quando cortou, em vez de a tela chamar 300 de "tudo"
+    arquivos, pagina, truncado = [], None, False
+    while True:
+        params = {"q": f"'{alvo}' in parents and trashed=false",
+                  "fields": "nextPageToken,files(id,name,mimeType,modifiedTime,webViewLink,iconLink,size,lastModifyingUser(displayName),inheritedPermissionsDisabled)",
+                  "orderBy": "folder,name", "pageSize": "500",
+                  "supportsAllDrives": "true", "includeItemsFromAllDrives": "true"}
+        if pagina:
+            params["pageToken"] = pagina
+        st, r = _drive("GET", "files", tok, params=params)
+        if st != 200 or r is None:
+            raise HTTPException(502, "O Google não respondeu agora. Tente de novo em instantes.")
+        arquivos += r.get("files", [])
+        pagina = r.get("nextPageToken")
+        if not pagina:
+            break
+        if len(arquivos) >= _TETO_DA_LISTA:
+            truncado = True
+            break
+    # 26/09 (auditoria DRV-6): a lista usa a conta da DONA, que vê tudo — o que a admin marcou com "acesso limitado"
+    # no Drive (a equipe não abre lá) também não aparece pra equipe aqui
+    if equipe:
+        arquivos = [f for f in arquivos if not f.get("inheritedPermissionsDisabled")]
+    r = {"files": arquivos}
+    return {"pasta": {"id": p["pasta_id"], "nome": p.get("pasta_caminho") or "", "atual": alvo}, "truncado": truncado,
             "arquivos": [{"id": f["id"], "nome": f.get("name") or "", "pasta": f.get("mimeType") == PASTA,
                           "tipo": f.get("mimeType") or "", "link": f.get("webViewLink") or "",
                           "icone": f.get("iconLink") or "", "tamanho": f.get("size"),
@@ -437,12 +524,16 @@ def _pasta_emitidos(tok: str, raiz: str) -> str:
     """A pasta "Emitidos" direto dentro da pasta do projeto — criada na 1ª emissão."""
     st, r = _drive("GET", "files", tok, params={
         "q": f"'{raiz}' in parents and name='{EMITIDOS}' and mimeType='{PASTA}' and trashed=false",
-        "fields": "files(id)", "orderBy": "createdTime", "pageSize": "5",
+        "fields": "files(id,ownedByMe,driveId)", "orderBy": "createdTime", "pageSize": "10",
         "supportsAllDrives": "true", "includeItemsFromAllDrives": "true"})
     if st != 200 or r is None:
         raise HTTPException(502, "O Google não respondeu agora. Tente de novo em instantes.")
-    if r.get("files"):
-        return r["files"][0]["id"]
+    # 26/09 (auditoria DRV-3): no Drive pessoal, quem cria a pasta é o DONO dela — uma "Emitidos" criada por alguém
+    # da equipe continuaria dele depois que ele saísse. Só reaproveita a da dona (ou de Drive compartilhado, onde
+    # tudo é do próprio drive); senão cria a dela.
+    for f in r.get("files", []):
+        if f.get("ownedByMe") or f.get("driveId"):
+            return f["id"]
     st_c, nova = _drive("POST", "files", tok, params={"supportsAllDrives": "true", "fields": "id"},
                         corpo={"name": EMITIDOS, "mimeType": PASTA, "parents": [raiz]})
     if st_c != 200 or not nova or not nova.get("id"):
@@ -664,6 +755,95 @@ def sincronizar(projeto_id: str) -> dict:
         else:
             falhas.append(email)
     return {"compartilhados": compartilhados, "tirados": tirados, "falhas": falhas}
+
+
+def limpar_conta(user_id: str) -> dict:
+    """🔒 26/09 (auditoria LGPD-1/DRV-8): pedido de exclusão de conta (hoje manual, por e-mail). ANTES de apagar o usuário
+    — a cascata do banco apaga o REGISTRO do que o AI.arq compartilhou, mas não o compartilhamento no Google —
+    desfaz o que o Escritório fez no Drive:
+      • onde a pessoa é EQUIPE: sai do projeto (removido) e a pasta é sincronizada (ela perde o acesso);
+      • onde ela é DONA: saem os acessos que NÓS demos à equipe (menos os que ela já tinha dado à mão) e a autorização
+        do Google é revogada.
+    Devolve o que fez e quanto ficou pendente (o pendente fica registrado)."""
+    feito = {"saiu_de": 0, "tirados": 0, "pendentes": 0, "projetos_da_dona": 0, "google_revogado": False}
+    st, linhas = esc._SERVICO("GET", "escritorio_membros", params={
+        "user_id": f"eq.{user_id}", "select": "id,projeto_id,papel,status"})
+    if st >= 300 or st == 0 or linhas is None:
+        raise HTTPException(502, "O banco não respondeu agora. Tente de novo em instantes.")
+    agora = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    for m in linhas:
+        if m.get("papel") != "freela" or m.get("status") != "ativo":
+            continue
+        st_p, _ = esc._SERVICO("PATCH", "escritorio_membros", body={"status": "removido", "removido_em": agora},
+                               params={"id": f"eq.{m['id']}", "status": "eq.ativo"})
+        if st_p >= 300 or st_p == 0:
+            feito["pendentes"] += 1
+            continue
+        feito["saiu_de"] += 1
+        try:
+            r = sincronizar(m["projeto_id"])
+            feito["tirados"] += r.get("tirados", 0)
+            if r.get("falhas") or r.get("sem_conexao"):
+                feito["pendentes"] += 1
+        except Exception:
+            feito["pendentes"] += 1
+    st_d, projs = esc._SERVICO("GET", "escritorio_projetos", params={"dono": f"eq.{user_id}", "select": "id"})
+    if st_d >= 300 or st_d == 0 or projs is None:
+        raise HTTPException(502, "O banco não respondeu agora. Tente de novo em instantes.")
+    conexao = _conexao(user_id)
+    tok = None
+    if conexao:
+        try:
+            tok = _acesso(user_id)
+        except HTTPException:
+            tok = None
+    for p in projs:
+        feito["projetos_da_dona"] += 1
+        st_r, feitos = esc._SERVICO("GET", "escritorio_drive_permissoes", params={
+            "projeto_id": f"eq.{p['id']}", "select": "id,pasta_id,permission_id,ja_existia"})
+        if st_r >= 300 or feitos is None:
+            feito["pendentes"] += 1
+            continue
+        for f in feitos:
+            if not f.get("ja_existia"):
+                if not tok:
+                    feito["pendentes"] += 1
+                    continue
+                st_x, _ = _drive("DELETE", f"files/{f['pasta_id']}/permissions/{f['permission_id']}", tok,
+                                 params={"supportsAllDrives": "true"})
+                if st_x not in (200, 204, 404):
+                    feito["pendentes"] += 1
+                    continue
+                feito["tirados"] += 1
+            esc._SERVICO("DELETE", "escritorio_drive_permissoes", params={"id": f"eq.{f['id']}"})
+    if conexao:
+        try:
+            _HTTP("POST", "https://oauth2.googleapis.com/revoke", form={"token": decifrar(conexao["token_cifrado"])})
+            feito["google_revogado"] = True
+        except HTTPException:
+            pass
+        esc._SERVICO("DELETE", "escritorio_drive_conexoes", params={"user_id": f"eq.{user_id}"})
+        _CACHE_ACESSO.pop(user_id, None)
+    if feito["pendentes"]:
+        esc._registrar("escritorio:limpar-conta", f"conta {user_id}: {feito['pendentes']} acesso(s) no Drive não tirado(s)")
+    return feito
+
+
+def _email_da_administracao() -> str:
+    import main as _main          # o mesmo ADMIN_EMAIL de todas as rotas de admin (lido só na hora)
+    return _main.ADMIN_EMAIL
+
+
+@router.post("/admin/limpar-conta")
+def admin_limpar_conta(request: Request, corpo: dict):
+    """Só a administração do AI.arq (a página de cada usuário no admin chama antes de excluir a conta)."""
+    eu = esc._exige_login(request)
+    if str(eu.get("email") or "").strip().lower() != _email_da_administracao():
+        raise HTTPException(403, "Só a administração do AI.arq.")
+    uid = str((corpo or {}).get("user_id") or "")
+    if not re.fullmatch(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", uid):
+        raise HTTPException(400, "user_id inválido.")
+    return {"ok": True, **limpar_conta(uid)}
 
 
 def faxina(limite: int = 20) -> dict:

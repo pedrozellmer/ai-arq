@@ -1992,6 +1992,12 @@ def _require_project_owner(request, job_id: str):
     owner = _get_project_owner(job_id)
     if owner is None:
         raise HTTPException(404, "Projeto não encontrado")
+    # 26/09 (auditoria SRV-7): o dono já lido fica no request — o `_require_project_viewer` lia de NOVO depois do
+    # 403, e uma falha nessa 2ª leitura virava "restrito ao dono" pra equipe
+    try:
+        request.state.dono_do_projeto = owner
+    except Exception:
+        pass
 
     # 🚨 FECHADO EM 28/07/2026. Antes: `if not owner or owner == "anonymous":
     # return owner` — ou seja, projeto sem dono era LIBERADO sem login nenhum.
@@ -2078,7 +2084,7 @@ def _require_project_viewer(request, job_id: str, baixar: bool = False):
         if negado.status_code != 403:
             raise
         user = _usuario_ja_validado(request)
-        owner = _get_project_owner(job_id)
+        owner = getattr(getattr(request, "state", None), "dono_do_projeto", None) or _get_project_owner(job_id)
         if not user or not owner or owner == "anonymous":
             raise
         eq = _equipe_do_projeto_medido(job_id, str(user.get("id") or ""))
@@ -4719,7 +4725,9 @@ def _send_email_smtp(to_email: str, subject: str, html_body: str, text_body: str
             except Exception:
                 pass
         # ── chegou aqui = a mensagem FOI aceita pelo servidor ──────────────
-        print(f"[email] OK -> {to_email}: {subject}"
+        # 🔒 26/09 (auditoria LGPD-7): o log do Render levava o e-mail e o assunto em claro ("Fulana te convidou:
+        # Projeto X") — inclusive de terceiro convidado que nunca aceitou os termos. Agora a mesma marca da falha.
+        print(f"[email] OK -> pessoa={_marca_do_email(to_email)} ({log_kind or 'email'})"
               + (f" (na tentativa {_tentativa})" if _tentativa > 1 else ""))
         if _duvida:
             # 🩸 ACHADO A1, a metade honesta. A casa escolheu PROTEGER O
@@ -22092,7 +22100,7 @@ async def get_status(job_id: str, request: Request):
     o nome do arquivo enviado. A linha do projeto é inserida de forma síncrona no
     /api/process antes de devolver o job_id, então o owner já existe quando o
     frontend começa a pollar. Projetos anônimos ficam livres via _require_project_owner."""
-    _require_project_viewer(request, job_id)
+    await run_in_threadpool(_require_project_viewer, request, job_id)
     if job_id not in jobs:
         raise HTTPException(404, "Job não encontrado")
     return jobs[job_id]
@@ -22210,7 +22218,7 @@ async def respostas_processamento(job_id: str, request: Request):
 
 @app.get("/api/download/{job_id}")
 async def download_file(job_id: str, request: Request):
-    _require_project_viewer(request, job_id, baixar=True)
+    await run_in_threadpool(_require_project_viewer, request, job_id, baixar=True)
     await _require_entregavel_pago_async(job_id)
     """Baixa a planilha gerada. Tenta cache local primeiro; se sumiu
     (Render redeploy), busca no Supabase Storage."""
@@ -23974,9 +23982,13 @@ def emails_auto_tick(request: Request, dry: int = 0):
         if ok:
             _email_auto_registrar(a["email"], a["kind"], ref=a.get("ref", ""))
             enviados.append(a)
+    # 🔒 26/09 (auditoria LGPD-7): a resposta do tick (guardada pelo pg_net no banco) e o log levavam a lista com
+    # e-mail e nome de cada destinatário. Agora só a contagem por tipo, como o dry=1 já fazia.
+    from collections import Counter as _Counter_env
+    por_tipo_env = dict(_Counter_env(a["kind"] for a in enviados))
     if enviados:
-        print(f"[emails-auto] tick enviou {len(enviados)}: {[(a['kind'], a['email']) for a in enviados]}")
-    return {"status": "ok", "enviados": len(enviados), "detalhe": enviados,
+        print(f"[emails-auto] tick enviou {len(enviados)}: {por_tipo_env}")
+    return {"status": "ok", "enviados": len(enviados), "por_tipo": por_tipo_env,
             "alertas_cadastro": _cad}
 
 
@@ -29491,7 +29503,7 @@ async def memorial_docx(job_id: str, request: Request):
     invenção. v1.1: se o cliente EDITOU na tela (memorial.html), o .docx sai
     da versão salva em project_memorial. Download exige downloadProtected no
     frontend (armadilha nº9: <a href> não manda Authorization)."""
-    _require_project_viewer(request, job_id, baixar=True)
+    await run_in_threadpool(_require_project_viewer, request, job_id, baixar=True)
     await _require_entregavel_pago_async(job_id)
     import tempfile
     try:
@@ -29757,7 +29769,12 @@ def _memorial_carregar_salvo(job_id: str):
     import urllib.parse
     _st, _rows = _supa_rest_service(
         "GET", f"project_memorial?job_id=eq.{urllib.parse.quote(job_id)}&select=conteudo&limit=1")
-    if _st == 200 and isinstance(_rows, list) and _rows:
+    # 🩸 26/09 (auditoria SRV-6): leitura que FALHA não é "não tem salvo" — virava o memorial automático no
+    # lugar do texto editado (e a tela, com salvo:false, deixava salvar por cima e apagar a versão editada)
+    if _st != 200 or not isinstance(_rows, list):
+        _log_error("memorial:ler", f"project_memorial HTTP {_st}", job_id, severity="warning")
+        raise HTTPException(502, "Não consegui ler o memorial salvo agora — recarregue em instantes.")
+    if _rows:
         return _rows[0].get("conteudo") or None
     return None
 
@@ -29766,7 +29783,7 @@ def _memorial_carregar_salvo(job_id: str):
 async def memorial_pdf(job_id: str, request: Request):
     """Memorial em PDF (WeasyPrint, mesmo motor do cronograma). Prefere a
     versão editada/salva, igual ao .docx."""
-    _require_project_viewer(request, job_id, baixar=True)
+    await run_in_threadpool(_require_project_viewer, request, job_id, baixar=True)
     await _require_entregavel_pago_async(job_id)
     import tempfile
     try:
@@ -29803,7 +29820,7 @@ async def memorial_estrutura(job_id: str, request: Request):
     `?fresco=1` ignora a salva e remonta com os números de agora — é o botão
     'atualizar' de quando o cliente corrige o quantitativo depois. Não grava
     nada: o texto novo só entra no lugar quando ele salvar."""
-    _require_project_viewer(request, job_id)
+    await run_in_threadpool(_require_project_viewer, request, job_id)
     fresco = str(request.query_params.get("fresco") or "") in ("1", "true", "sim")
     try:
         salvo = None if fresco else _memorial_carregar_salvo(job_id)
@@ -30191,7 +30208,7 @@ def projeto_acesso(job_id: str, request: Request):
 async def projeto_coerencia(job_id: str, request: Request):
     """Diz quais entregáveis salvos ficaram velhos depois que o cliente mexeu
     no quantitativo. Só leitura — quem refaz é o cliente, com um clique."""
-    _require_project_viewer(request, job_id)
+    await run_in_threadpool(_require_project_viewer, request, job_id)
     try:
         return _coerencia_do_projeto(job_id)
     except Exception as e:
@@ -30657,7 +30674,12 @@ def get_cronograma_full(job_id: str, request: Request):
     3 chamadas de rede SÍNCRONAS antes do primeiro await — com --workers 1 isso
     segurava o laço de eventos do site inteiro (auditoria 06/09)."""
     _require_project_viewer(request, job_id)
-    saved = _supabase_get_cronograma(job_id)
+    # 🩸 26/09 (auditoria SRV-6): `_supabase_get_cronograma` engole a falha — "não consegui ler" virava
+    # "ainda não gerado". A régua com status separa os dois.
+    st, saved = _fin_cronograma_salvo(None, job_id)
+    if st != 200:
+        _log_error("cronograma:ler", f"cronogramas HTTP {st}", job_id, severity="warning")
+        raise HTTPException(502, "não consegui ler o cronograma agora — recarregue em instantes")
     if not saved:
         raise HTTPException(404, "Cronograma ainda não gerado para este projeto")
     try:
@@ -30680,7 +30702,12 @@ def _build_cronograma_for_export(job_id: str, request=None) -> tuple:
     leituras REST (RLS). Sem request, usa anon key (compat legado).
     """
     import urllib.request, json as _json
-    saved = _supabase_get_cronograma(job_id, request=request)
+    # 🩸 26/09 (auditoria SRV-6): leitura que falhava virava "não tem salvo" e o PDF/planilha/PPT saíam do
+    # cronograma AUTOMÁTICO no lugar do editado. Falhou = 502; não existe = segue gerando, como sempre.
+    _st_cron, saved = _fin_cronograma_salvo(request, job_id)
+    if _st_cron != 200:
+        _log_error("cronograma:ler", f"cronogramas HTTP {_st_cron}", job_id, severity="warning")
+        raise HTTPException(502, "não consegui ler o cronograma agora — tente de novo em instantes")
 
     # Branding co-branded (nome projeto + cliente + logo + cor + arquiteto)
     branding = _get_branding_context(job_id, request=request)
@@ -30792,7 +30819,7 @@ async def export_cronograma_pdf(job_id: str, request: Request,
                                 template: str = "", accent: str = ""):
     """Exporta cronograma como PDF co-branded. Usa os novos templates (WeasyPrint,
     5 direcoes, cor da marca); se falhar, cai no gerador antigo (reportlab)."""
-    _require_project_viewer(request, job_id, baixar=True)
+    await run_in_threadpool(_require_project_viewer, request, job_id, baixar=True)
     await _require_entregavel_pago_async(job_id)
     import tempfile
     from fastapi.responses import FileResponse
@@ -30843,7 +30870,7 @@ async def export_cronograma_xlsx(job_id: str, request: Request):
 
     Vira "físico-FINANCEIRO" só quando o cliente informou valor; sem valor sai
     o cronograma físico de sempre, sem falar em dinheiro em lugar nenhum."""
-    _require_project_viewer(request, job_id, baixar=True)
+    await run_in_threadpool(_require_project_viewer, request, job_id, baixar=True)
     await _require_entregavel_pago_async(job_id)
     import tempfile
     from fastapi.responses import FileResponse
@@ -30872,7 +30899,7 @@ async def export_cronograma_pptx(job_id: str, request: Request,
                                  template: str = "", accent: str = ""):
     """Exporta cronograma como PPTX (5 slides). Novo: renderiza o PDF dos templates
     e insere 1 imagem full-bleed por slide (A4 paisagem). Fallback: gerador antigo."""
-    _require_project_viewer(request, job_id, baixar=True)
+    await run_in_threadpool(_require_project_viewer, request, job_id, baixar=True)
     await _require_entregavel_pago_async(job_id)
     import tempfile
     from fastapi.responses import FileResponse
@@ -33590,7 +33617,7 @@ async def get_sheet_pdf(job_id: str, request: Request, ref: str = ""):
     Antes (até 2026-06-02) o endpoint era público — qualquer um com job_id
     válido baixava a prancha. Fix IDOR aplicado adicionando
     _require_project_owner."""
-    _require_project_viewer(request, job_id)
+    await run_in_threadpool(_require_project_viewer, request, job_id)
     from fastapi.responses import Response
 
     if not ref:
@@ -33688,7 +33715,7 @@ async def pranchas_com_imagem(job_id: str, request: Request):
     ninguém recebe promessa que a gente não pode cumprir. O contrário — mostrar
     tudo quando não sei — é justamente a promessa quebrada que isto evita.
     """
-    _require_project_viewer(request, job_id)
+    await run_in_threadpool(_require_project_viewer, request, job_id)
     try:
         _corpo = await request.json()
     except Exception:

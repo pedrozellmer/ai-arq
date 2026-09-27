@@ -932,6 +932,9 @@
       // 🔒 A5 (24/09): o convite pendente fica no navegador; sem limpar, a PRÓXIMA conta que
       // entrar aqui herdaria o convite de outra pessoa.
       try { window.aiarqConvite && window.aiarqConvite.limpar(); } catch (_) {}
+      // 26/09 (auditoria LGPD-9): o nome dos projetos do Escritório (quase sempre o nome do cliente) ficava no
+      // navegador depois do Sair — no computador compartilhado, o próximo lia
+      try { localStorage.removeItem('aiarq_esc_mapa'); sessionStorage.removeItem('aiarq_esc_ctx'); } catch (_) {}
       if (window.sbClient && window.sbClient.auth) {
         window.sbClient.auth.signOut().finally(function () {
           window.location.href = 'login.html';

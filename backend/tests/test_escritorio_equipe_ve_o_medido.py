@@ -147,18 +147,30 @@ BAIXAR = {("GET", "/api/download/{job_id}"), ("GET", "/api/cronograma/{job_id}/e
           ("GET", "/api/memorial/{job_id}"), ("GET", "/api/memorial/{job_id}/pdf")}
 
 
-def _rotas_com_a_checagem_nova():
+def _rotas_com_a_checagem_nova(async_fora_do_laco=None):
+    """{(método, rota): pede_baixar}. 26/09 (auditoria SRV-9): nas rotas ASYNC a checagem vai pro threadpool
+    (`await run_in_threadpool(_require_project_viewer, request, job_id…)`) — são até 5 idas ao banco, e com
+    --workers 1 elas travavam o site inteiro. `async_fora_do_laco` (lista) recebe as async que NÃO fazem isso."""
     fonte = open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
     achadas = {}
     for m in re.finditer(r'@app\.(get|post|put|patch|delete)\("([^"]+)"\)', fonte):
-        d = re.search(r'\n(?:async )?def [^\n]*\n', fonte[m.start():])
+        d = re.search(r'\n((?:async )?def [^\n]*)\n', fonte[m.start():])
         ini = m.start() + d.end()
         f = re.search(r'\n(?:@app\.|def |async def |class )', fonte[ini:])
         corpo = fonte[ini: ini + (f.start() if f else len(fonte) - ini)]
-        chamada = re.search(r'_require_project_viewer\(request, job_id(, baixar=True)?\)', corpo)
+        chamada = re.search(r'_require_project_viewer(?:\(|, )request, job_id(, baixar=True)?\)', corpo)
         if chamada:
             achadas[(m.group(1).upper(), m.group(2))] = bool(chamada.group(1))
+            if (async_fora_do_laco is not None and d.group(1).startswith("async")
+                    and "await run_in_threadpool(_require_project_viewer, request, job_id" not in corpo):
+                async_fora_do_laco.append(m.group(2))
     return achadas
+
+
+def test_rota_async_checa_a_equipe_fora_do_laco():
+    presas = []
+    _rotas_com_a_checagem_nova(presas)
+    assert presas == [], f"rota async checando a equipe DENTRO do laço de eventos: {presas}"
 
 
 def test_so_as_rotas_de_leitura_aceitam_a_equipe():

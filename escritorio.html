@@ -299,6 +299,11 @@
   .chk-x{border:0;background:transparent;color:#94A3B8;font-size:18px;line-height:1;cursor:pointer;padding:0 4px;border-radius:6px;opacity:0}
   .chk-lista li:hover .chk-x,.chk-x:focus-visible{opacity:1} .chk-x:hover{color:#DC2626;background:#FEF2F2}
   @media (hover:none){ .chk-x{opacity:1} }
+  /* 26/09: o "×" de apagar o retorno do cliente (Emissões) usa a mesma classe — lá ele fica visível sempre */
+  .emi-hist .chk-x{opacity:.75;font-size:15px;padding:0 3px}
+  /* 26/09 (auditoria TELA-12): editar / apagar no próprio comentário */
+  .lnk{border:0;background:none;padding:0;color:#4F46E5;font:inherit;font-size:12px;cursor:pointer;text-decoration:underline}
+  .lnk:hover{color:#3730A3}
   .etq-tog{--ec:#64748B;font-size:12px;font-weight:700;border-radius:6px;padding:4px 10px;cursor:pointer;font-family:inherit;border:2px solid var(--ec);color:var(--ec);background:#fff}
   .etq-tog[aria-pressed="true"]{background:var(--ec);color:#fff}
   .etq-form{display:flex;flex-direction:column;gap:8px;margin-top:8px;padding:10px;border:1px solid #E2E8F0;border-radius:12px;background:#F8FAFC}
@@ -397,7 +402,10 @@ const nomeDe = (m) => (m && (m.nome || (m.email || '').split('@')[0])) || '—';
 const curto = (m) => nomeDe(m).split(' ')[0];
 const iniciais = (m) => nomeDe(m).split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0].toUpperCase()).join('') || '·';
 const av = (m) => { const c = corDe((m && m.id) || nomeDe(m)); /* m some quando o autor saiu do projeto */ return `<span class="av" style="background:${c[2]};color:${c[0]}" title="${esc(nomeDe(m))}">${esc(iniciais(m))}</span>`; };
-const pessoasDa = (t) => PESSOAS_T.filter((p) => p.tarefa_id === t.id).map((p) => MEMBROS.find((m) => m.id === p.membro_id)).filter(Boolean);
+// 26/09 (auditoria TELA-8): quem SAIU do projeto não fica mais no cartão (e salvar o cartão tira a marcação dele)
+const pessoasDa = (t) => PESSOAS_T.filter((p) => p.tarefa_id === t.id).map((p) => MEMBROS.find((m) => m.id === p.membro_id)).filter((m) => m && m.status !== 'removido');
+// 26/09 (auditoria TELA-10): convite vencido (14 dias, a mesma conta do pillConvite) não é "aguardando"
+const conviteVivo = (m) => m.status === 'convidado' && new Date(new Date(m.convidado_em).getTime() + 14 * 864e5) >= new Date();
 const avs = (t) => `<span class="avs">${pessoasDa(t).map(av).join('')}</span>`;
 const aberta = (t) => !['aprov', 'ok'].includes(t.status);
 const atrasada = (t) => aberta(t) && t.prazo && dias(t.prazo) < 0;
@@ -605,7 +613,7 @@ function telaLista() {
   return `${faixa('tar', 'Escritório', n ? `${n} projeto${n > 1 ? 's' : ''}: tarefas, atas, equipe e a pasta do Drive de cada um.` : 'Tarefas, atas, equipe e a pasta do Drive de cada projeto.',
       NO_PILOTO ? '<button class="btn" onclick="trazerMedido()">Trazer projeto medido</button><button class="btn btn-g" onclick="novoProjeto()">+ Novo projeto</button>' : '')}
     ${n ? `<div class="grade g2 g3">${PROJETOS.map((p) => {
-      const c = corDe(p.id), et = p.etapas || [], i = et.indexOf(p.etapa_atual), pct = et.length && i >= 0 ? Math.round(((i + 1) / et.length) * 100) : 0;
+      const c = corDe(p.id), et = p.etapas || [], i = et.indexOf(p.etapa_atual), pct = et.length && i >= 0 ? Math.round((i / et.length) * 100) : 0;   // TELA-9: só as concluídas
       return `<a class="card pj rise" style="--c1:${c[0]};--c2:${c[1]}" href="#/p/${p.id}/capa">
         <div class="pj-topo"><span class="pj-ini">${esc(iniciais({ nome: String(p.nome || '').split(/\s+/).filter((w) => /^[A-Za-zÀ-ÿ0-9]/.test(w) && !/^(d[aeo]s?|e)$/i.test(w)).join(' ') || p.nome }))}</span></div>
         <div class="pj-corpo">
@@ -675,10 +683,18 @@ function novoProjeto() {
       <div class="linha" style="margin-top:8px;flex-wrap:nowrap"><input id="np-nova" class="in" maxlength="80" placeholder="ex.: Aprovação na prefeitura"><button class="btn" onclick="addEt()">Acrescentar</button></div></div>
     <div class="rodape"><button class="btn" onclick="fecharModal()">Cancelar</button><button class="btn btn-d" id="np-ok" onclick="criarProjeto()">Criar projeto</button></div>`);
 }
-function addEt() { const v = $('np-nova').value.trim(); if (!v) return; $('np-et').insertAdjacentHTML('beforeend', `<label class="chip"><input type="checkbox" checked value="${esc(v)}">${esc(v)}</label>`); $('np-nova').value = ''; }
+// 26/09 (auditoria TELA-11): etapa com o nome repetido fazia o "Concluir etapa" voltar pra primeira ocorrência
+const chaveEtapa = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+function addEt() {
+  const v = $('np-nova').value.trim(); if (!v) return;
+  const ja = [...document.querySelectorAll('#np-et input[type=checkbox]')].some((i) => chaveEtapa(i.value) === chaveEtapa(v));
+  if (ja) return toast('Essa etapa já está na lista.', true);
+  $('np-et').insertAdjacentHTML('beforeend', `<label class="chip"><input type="checkbox" checked value="${esc(v)}">${esc(v)}</label>`); $('np-nova').value = ''; }
 async function criarProjeto() {
   const nome = $('np-nome').value.trim(); if (!nome) { toast('Dê um nome ao projeto.', true); return; }
-  const etapas = [...document.querySelectorAll('#np-et input:checked')].map((i) => i.value);
+  const vistas = new Set();
+  const etapas = [...document.querySelectorAll('#np-et input:checked')].map((i) => i.value)
+    .filter((e) => { const k = chaveEtapa(e); if (vistas.has(k)) return false; vistas.add(k); return true; });
   $('np-ok').disabled = true;
   const { data, error } = await sb.from('escritorio_projetos').insert({ dono: EU.id, nome, cliente_nome: $('np-cli').value.trim() || null, etapas, etapa_atual: etapas[0] || null }).select().single();
   $('np-ok').disabled = false;
@@ -696,7 +712,8 @@ function telaCapa() {
   // 26/09 (Pedro): cada KPI é um atalho pra tela dele (acao = JS fixo daqui, nunca texto de gente)
   const kpi = (estado, ic, rot, val, det, acao) => `<button type="button" class="kpi kpi-btn ${estado}" onclick="${acao}"><div class="kpi-top"><span class="kpi-ico">${svg(ic, 17)}</span><p class="rot">${rot}</p></div><p class="val tab">${val}</p><p class="det">${det}</p></button>`;
   const ativos = MEMBROS.filter((m) => m.status === 'ativo');
-  const convidados = MEMBROS.filter((m) => m.status === 'convidado').length;
+  const convidados = MEMBROS.filter(conviteVivo).length;
+  const vencidos = MEMBROS.filter((m) => m.status === 'convidado' && !conviteVivo(m)).length;
   const tool = (href, ic, t, d, soVoce) => `<a class="tool" href="${href}" style="--c1:${COR[ic][0]};--c2:${COR[ic][1]};--bg:${COR[ic][2]}"><span class="ti">${svg(ic, 22)}</span><span><b>${t}${soVoce ? `<span class="so-voce">${svg('cad', 10)}só você</span>` : ''}</b><span>${d}</span></span></a>`;
   const J = p.job_id ? encodeURIComponent(p.job_id) : '';
   const prox = p.proxima_entrega || p.proxima_entrega_data;
@@ -720,7 +737,7 @@ function telaCapa() {
         ${resumoAndamento(et, iA, abertas)}
         <dl class="dl">
           ${p.cliente_nome ? `<dt>Cliente</dt><dd>${esc(p.cliente_nome)}</dd>` : ''}
-          <dt>Equipe</dt><dd>${ativos.map((m) => `${av(m)}<span style="margin-right:6px">${esc(curto(m))}</span>`).join('')}${convidados ? `<span class="pill p-warn"><i></i>${convidados} convite${convidados > 1 ? 's' : ''} aguardando</span>` : ''}</dd>
+          <dt>Equipe</dt><dd>${ativos.map((m) => `${av(m)}<span style="margin-right:6px">${esc(curto(m))}</span>`).join('')}${convidados ? `<span class="pill p-warn"><i></i>${convidados} convite${convidados > 1 ? 's' : ''} aguardando</span>` : ''}${vencidos ? `<span class="pill p-late"><i></i>${vencidos} convite${vencidos > 1 ? 's' : ''} venceu${vencidos > 1 ? 'ram' : ''}: reenvie na Equipe</span>` : ''}</dd>
         </dl>
       </div>
       <div class="lado">
@@ -738,7 +755,7 @@ function telaCapa() {
     ${kpi(abertas.some(atrasada) ? 'alerta' : '', 'tar', 'Tarefas abertas', abertas.length, `${abertas.filter(atrasada).length} atrasada(s) · ${revisar.length} aguardando revisão`, "FILTRO='todas';FILTRO_E='';ir('tarefas')")}
     ${kpi(doCli.some(atrasada) ? 'alerta' : doCli.length ? '' : 'ok', 'cli', 'Com o cliente', doCli.length, doCli.length ? 'pendências do cliente' : 'nada com o cliente', "FILTRO='cliente';FILTRO_E='';ir('tarefas')")}
     ${kpi('', 'atas', 'Atas', ATAS.length, ATAS[0] ? 'última em ' + dBR(ATAS[0].data) : 'nenhuma ainda', "ir('atas')")}
-    ${kpi(convidados ? 'alerta' : 'ok', 'eq', 'Equipe', ativos.length, convidados + ' convite(s) aguardando', "ir('equipe')")}
+    ${kpi(convidados || vencidos ? 'alerta' : 'ok', 'eq', 'Equipe', ativos.length, convidados + ' convite(s) aguardando' + (vencidos ? ` · ${vencidos} vencido(s)` : ''), "ir('equipe')")}
   </div>
   <section class="card rise"><h2 class="h2">Tudo do projeto</h2>
     <p class="sub">O escritório e as ferramentas que o AI.arq já tinha, no mesmo lugar.</p>
@@ -768,7 +785,9 @@ function telaCapa() {
 // 25/09 (Pedro: "essa parte branca fica muito vazia"): o resumo do andamento, ao lado da próxima entrega.
 // Tudo contado das tarefas e etapas que a tela já tem; nada estimado.
 function resumoAndamento(et, iA, abertas) {
-  const pct = et.length && iA >= 0 ? Math.round(((iA + 1) / et.length) * 100) : 0;
+  // 26/09 (auditoria TELA-9): andamento = etapas CONCLUÍDAS (as antes da atual). Contar a atual dava 11% no
+  // primeiro dia e 100% com a última ainda aberta.
+  const pct = et.length && iA >= 0 ? Math.round((iA / et.length) * 100) : 0;
   const porSt = ST.map((s) => ({ s, n: TAR.filter((t) => t.status === s.k).length })).filter((x) => x.n);
   const total = porSt.reduce((a, x) => a + x.n, 0);
   const prox = abertas.filter((t) => t.prazo).sort((a, b) => String(a.prazo).localeCompare(String(b.prazo))).slice(0, 3);
@@ -917,7 +936,33 @@ async function apagarChk(cid, tid) {
 function blocoEtiquetas(tid) {
   const marcadas = TETQ.filter((x) => x.tarefa_id === tid).map((x) => x.etiqueta_id);
   return `<p class="lbl">Etiquetas</p><div class="linha" style="gap:6px">${ETQ.map((e) => `<button type="button" class="etq-tog" aria-pressed="${marcadas.includes(e.id)}" style="--ec:${corOk(e.cor)}" onclick="togEtq('${tid}','${e.id}')">${esc(e.nome)}</button>`).join('') || '<span class="sub" style="margin:0">Nenhuma ainda.</span>'}
-    ${souAdmin() ? `<button type="button" class="chip" onclick="formEtiqueta('${tid}')">+ nova</button>` : ''}</div><div id="etq-form"></div>`;
+    ${souAdmin() ? `<button type="button" class="chip" onclick="formEtiqueta('${tid}')">+ nova</button>${ETQ.length ? `<button type="button" class="chip" onclick="gerirEtiquetas('${tid}')">editar</button>` : ''}` : ''}</div><div id="etq-form"></div>`;
+}
+// 26/09 (auditoria TELA-12): etiqueta com nome errado não podia ser renomeada nem apagada (o banco deixa a admin)
+function gerirEtiquetas(tid) {
+  if (!souAdmin()) return;
+  const b = $('etq-form'); if (!b) return;
+  b.innerHTML = `<ul class="lista" style="margin-top:8px">${ETQ.map((e) => `<li style="gap:6px;flex-wrap:nowrap"><span class="etq mini" style="background:${corOk(e.cor)}">&nbsp;</span>
+      <input class="in" data-eid="${e.id}" maxlength="40" value="${esc(e.nome)}" aria-label="Nome da etiqueta" style="flex:1">
+      <button type="button" class="btn btn-s" onclick="renomearEtiqueta('${e.id}','${tid}')">Salvar</button>
+      <button type="button" class="btn btn-s" onclick="apagarEtiqueta('${e.id}','${tid}')">Apagar</button></li>`).join('')}</ul>`;
+}
+async function renomearEtiqueta(eid, tid) {
+  const inp = document.querySelector(`#etq-form input[data-eid="${eid}"]`), nome = String((inp && inp.value) || '').trim();
+  if (!nome) return toast('A etiqueta precisa de um nome.', true);
+  const { error } = await sb.from('escritorio_etiquetas').update({ nome }).eq('id', eid).eq('projeto_id', PROJ.id);
+  if (error) return falhou(error, String(error.code) === '23505' ? 'Já existe uma etiqueta com esse nome' : 'Não renomeei');
+  const e = ETQ.find((x) => x.id === eid); if (e) e.nome = nome;
+  toast('Etiqueta renomeada'); redesenharEtq(tid);
+}
+async function apagarEtiqueta(eid, tid) {
+  const e = ETQ.find((x) => x.id === eid); if (!e) return;
+  const n = TETQ.filter((x) => x.etiqueta_id === eid).length;
+  if (!window.confirm(`Apagar a etiqueta "${e.nome}"?${n ? ` Ela sai de ${n} cartão(ões).` : ''}`)) return;
+  const { error } = await sb.from('escritorio_etiquetas').delete().eq('id', eid).eq('projeto_id', PROJ.id);
+  if (error) return falhou(error, 'Não apaguei a etiqueta');
+  ETQ = ETQ.filter((x) => x.id !== eid); TETQ = TETQ.filter((x) => x.etiqueta_id !== eid);
+  toast('Etiqueta apagada'); redesenharEtq(tid);
 }
 function redesenharEtq(tid) { const b = $('ct-etq'); if (b) b.innerHTML = blocoEtiquetas(tid); render(); }
 async function togEtq(tid, eid) {
@@ -961,8 +1006,11 @@ function soltar(e) { e.preventDefault(); const col = e.currentTarget, i = idxSob
 async function mover(id, st, i) {
   const t = TAR.find((x) => x.id === id);
   if (!podeLevar(t, st)) { toast('Daqui pra frente quem move é a admin do projeto.', true); return render(); }
-  const viz = TAR.filter((x) => x.status === st && x.id !== id && visivel(x)).sort((a, b) => a.posicao - b.posicao);
-  const antes = viz[i - 1], depois = viz[i];
+  // 26/09 (auditoria TELA-5): o índice vem da tela (só os cartões visíveis), mas a posição é calculada com TODOS
+  // os da coluna — com filtro ligado o ponto médio caía em cima de um cartão escondido
+  const todos = TAR.filter((x) => x.status === st && x.id !== id).sort((a, b) => a.posicao - b.posicao);
+  const viz = todos.filter(visivel);
+  const antes = viz[i - 1], depois = antes ? todos[todos.indexOf(antes) + 1] : todos[0];
   const pos = antes && depois ? (antes.posicao + depois.posicao) / 2 : antes ? antes.posicao + 1 : depois ? depois.posicao - 1 : 1;
   const velho = { status: t.status, posicao: t.posicao };
   Object.assign(t, { status: st, posicao: pos }); render();                        // otimista
@@ -1015,7 +1063,7 @@ async function abrirCartao(id) {
       <div><p class="lbl sec">${svg('memo', 16)}Descrição</p><textarea id="ct-d" rows="4" class="in" maxlength="5000" placeholder="Detalhes, links, referências…">${esc(t.descricao || '')}</textarea></div>
       ${TEM_CHK ? `<div id="ct-chk">${blocoChecklist(id)}</div>` : ''}
       <div><p class="lbl sec">${svg('atas', 16)}Comentários</p>
-        <div class="coment">${eu ? av(eu) : ''}<div style="flex:1;min-width:0"><textarea id="ct-com" rows="2" class="in" maxlength="5000" placeholder="Escreva um comentário… use @ pra chamar alguém"></textarea>
+        <div class="coment">${eu ? av(eu) : ''}<div style="flex:1;min-width:0"><textarea id="ct-com" rows="2" class="in" maxlength="5000" placeholder="Escreva um comentário… use @ pra marcar alguém"></textarea>
           <div class="linha" style="margin-top:6px;gap:6px">${gente.filter((m) => m.user_id !== EU.id).map((m) => `<button type="button" class="chip" onclick="mencionar('${m.id}')">@${esc(curto(m))}</button>`).join('')}<span style="flex:1"></span><button class="btn btn-p btn-s" onclick="comentar('${id}')">Comentar</button></div></div></div>
         <ul class="lista" id="ct-coms" style="margin-top:10px"><li class="vazio">Carregando…</li></ul></div>
     </div>
@@ -1037,15 +1085,45 @@ async function carregarComentarios(id) {
   const ul = $('ct-coms'); if (!ul) return;
   if (error) { ul.innerHTML = '<li class="vazio">Não consegui carregar os comentários.</li>'; return; }
   if (CART && CART.id === id) CART.nComentarios = data.length;   // o "Excluir" diz quantos vão junto
-  ul.innerHTML = data.length ? data.map((c) => { const m = MEMBROS.find((x) => x.user_id === c.autor); return `<li style="align-items:flex-start">${av(m)}<div style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;padding:8px 10px"><p class="sub" style="margin:0"><b style="color:#334155">${esc(curto(m))}</b> · ${new Date(c.criado_em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: FUSO })}</p><p style="margin:2px 0 0;font-size:13.5px;white-space:pre-wrap">${esc(c.texto).replace(/@([A-Za-zÀ-ÿ]+)/g, '<span class="men">@$1</span>')}</p></div></li>`; }).join('') : '<li class="vazio">Nenhum comentário ainda.</li>';
+  COMS = data;
+  ul.innerHTML = data.length ? data.map((c) => { const m = MEMBROS.find((x) => x.user_id === c.autor); return `<li style="align-items:flex-start">${av(m)}<div style="flex:1;min-width:0;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;padding:8px 10px"><p class="sub" style="margin:0"><b style="color:#334155">${esc(curto(m))}</b> · ${new Date(c.criado_em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: FUSO })}${c.editado_em ? ' · editado' : ''}${c.autor === EU.id ? ` · <button type="button" class="lnk" onclick="editarComentario('${c.id}','${id}')">editar</button>` : ''}${c.autor === EU.id || souAdmin() ? ` · <button type="button" class="lnk" onclick="apagarComentario('${c.id}','${id}')">apagar</button>` : ''}</p><p style="margin:2px 0 0;font-size:13.5px;white-space:pre-wrap">${esc(c.texto).replace(/@([A-Za-zÀ-ÿ]+)/g, '<span class="men">@$1</span>')}</p></div></li>`; }).join('') : '<li class="vazio">Nenhum comentário ainda.</li>';
 }
 function togP(id, b) { const i = CART.pessoas.indexOf(id); if (i >= 0) CART.pessoas.splice(i, 1); else CART.pessoas.push(id); b.setAttribute('aria-pressed', String(i < 0)); }
 // 🔒 recebe o ID, nunca o nome: nome vem do cadastro da pessoa e, dentro de onclick, esc() não protege
 // (o navegador desfaz &#39; em ' ANTES de rodar o JS do atributo — era XSS guardado pro admin).
 function mencionar(id) { const n = curto(MEMBROS.find((x) => x.id === id)); const ta = $('ct-com'); ta.value = (ta.value && !ta.value.endsWith(' ') ? ta.value + ' ' : ta.value) + '@' + n + ' '; ta.focus(); }
+// 26/09 (auditoria TELA-6): o nome de gente entra num RegExp — escapado, senão um '(' sem par derrubava o comentário
+const escRe = (s) => String(s || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// 26/09 (auditoria TELA-12): o banco deixa o AUTOR editar o comentário e o autor ou a admin apagar; a tela não tinha
+// caminho — comentário no cartão errado (ou com um dado que não devia) ficava pra sempre
+let COMS = [];
+function editarComentario(cid, tid) {
+  const c = COMS.find((x) => x.id === cid); if (!c || c.autor !== EU.id) return;
+  abrirModal('Editar comentário', `<textarea id="ec-t" class="in" rows="4" maxlength="5000">${esc(c.texto)}</textarea>
+    <div class="rodape"><button class="btn" onclick="abrirCartao('${tid}')">Voltar</button><button class="btn btn-d" id="ec-ok">Salvar</button></div>`);
+  $('ec-ok').onclick = async () => {
+    const txt = $('ec-t').value.trim(); if (!txt) return toast('O comentário não pode ficar vazio.', true);
+    $('ec-ok').disabled = true;
+    const { error } = await sb.from('escritorio_comentarios').update({ texto: txt }).eq('id', cid);
+    if (error) { $('ec-ok').disabled = false; return falhou(error, 'Não salvei o comentário'); }
+    toast('Comentário editado'); abrirCartao(tid);
+  };
+}
+function apagarComentario(cid, tid) {
+  const c = COMS.find((x) => x.id === cid); if (!c) return;
+  abrirModal('Apagar o comentário?', `<p style="margin:0;font-size:14px;white-space:pre-wrap">${esc(c.texto.slice(0, 300))}</p>
+    <div class="rodape"><button class="btn" onclick="abrirCartao('${tid}')">Voltar</button><button class="btn btn-r" id="ac-ok">Apagar</button></div>`);
+  $('ac-ok').onclick = async () => {
+    $('ac-ok').disabled = true;
+    const { error, count } = await sb.from('escritorio_comentarios').delete({ count: 'exact' }).eq('id', cid);
+    if (error) { $('ac-ok').disabled = false; return falhou(error, 'Não apaguei'); }
+    if (!count) { toast('Só quem escreveu (ou a admin) apaga o comentário.', true); return abrirCartao(tid); }
+    toast('Comentário apagado'); abrirCartao(tid);
+  };
+}
 async function comentar(id) {
   const txt = $('ct-com').value.trim(); if (!txt) return;
-  const mencoes = MEMBROS.filter((m) => m.status === 'ativo' && m.user_id !== EU.id && new RegExp('@' + curto(m) + '(?![A-Za-zÀ-ÿ])').test(txt)).map((m) => m.id);
+  const mencoes = MEMBROS.filter((m) => m.status === 'ativo' && m.user_id !== EU.id && new RegExp('@' + escRe(curto(m)) + '(?![A-Za-zÀ-ÿ])').test(txt)).map((m) => m.id);
   const { error } = await sb.from('escritorio_comentarios').insert({ tarefa_id: id, projeto_id: PROJ.id, texto: txt, mencoes, autor: EU.id });
   if (error) return falhou(error, 'Não comentei');
   $('ct-com').value = ''; carregarComentarios(id); toast('Comentado');
@@ -1055,10 +1133,16 @@ async function salvarCartao(id) {
   const titulo = $('ct-t').value.trim(); if (!titulo) return toast('A tarefa precisa de um título.', true);
   const mud = { titulo, etapa: $('ct-e').value || null, prazo: $('ct-p').value || null, descricao: $('ct-d').value || null, do_cliente: $('ct-cli').checked };
   const st = $('ct-st').value;
-  if (st !== t.status) mud.status = st;
+  if (st !== t.status) {
+    mud.status = st;
+    // 26/09 (auditoria TELA-5): trocar a coluna pelo cartão levava a posição antiga e empatava com um cartão de lá
+    mud.posicao = Math.max(0, ...TAR.filter((x) => x.status === st).map((x) => x.posicao)) + 1;
+  }
   const { error } = await sb.from('escritorio_tarefas').update(mud).eq('id', id);
   if (error) return falhou(error, 'Não salvei');
-  const antes = pessoasDa(t).map((m) => m.id), entram = CART.pessoas.filter((p) => !antes.includes(p)), saem = antes.filter((p) => !CART.pessoas.includes(p));
+  // 26/09 (auditoria TELA-8): "antes" é o que está no banco (inclusive quem saiu do projeto e não aparece mais): salvar
+  // o cartão tira essas marcações velhas
+  const antes = PESSOAS_T.filter((p) => p.tarefa_id === id).map((p) => p.membro_id), entram = CART.pessoas.filter((p) => !antes.includes(p)), saem = antes.filter((p) => !CART.pessoas.includes(p));
   const ops = [];
   if (entram.length) ops.push(sb.from('escritorio_tarefa_pessoas').insert(entram.map((m) => ({ tarefa_id: id, membro_id: m, projeto_id: PROJ.id }))));
   if (saem.length) ops.push(sb.from('escritorio_tarefa_pessoas').delete().eq('tarefa_id', id).in('membro_id', saem));
@@ -1069,6 +1153,13 @@ async function salvarCartao(id) {
 async function subirDescer(id, d) {
   const t = TAR.find((x) => x.id === id), viz = TAR.filter((x) => x.status === t.status).sort((a, b) => a.posicao - b.posicao), k = viz.indexOf(t), o = viz[k + d];
   if (!o) return;
+  // 26/09 (auditoria TELA-5): posições empatadas faziam "subir/descer" trocar um número pelo mesmo — nada mudava.
+  // Empatou: a coluna ganha 1, 2, 3… antes da troca.
+  if (o.posicao === t.posicao) {
+    const r0 = await Promise.all(viz.map((x, n) => sb.from('escritorio_tarefas').update({ posicao: n + 1 }).eq('id', x.id)));
+    if (r0.some((x) => x.error)) return falhou(r0.find((x) => x.error).error, 'Não mudei a ordem');
+    viz.forEach((x, n) => { x.posicao = n + 1; });
+  }
   const [a, b] = [o.posicao, t.posicao];
   const r = await Promise.all([sb.from('escritorio_tarefas').update({ posicao: a }).eq('id', t.id), sb.from('escritorio_tarefas').update({ posicao: b }).eq('id', o.id)]);
   if (r.some((x) => x.error)) return falhou(r.find((x) => x.error).error, 'Não mudei a ordem');
@@ -1163,7 +1254,9 @@ async function carregarArquivos() {
   const nP = arqs.filter((f) => f.pasta).length, nA = arqs.length - nP;
   // 26/09: a admin emite daqui (cópia com R00, R01… em "Emitidos"); dentro de Emitidos não — lá já são as cópias
   const podeEmitir = souAdmin() && !(ARQ_TRILHA.length === 1 && ARQ_TRILHA[0].nome === 'Emitidos');
-  corpo.innerHTML = trilha + (arqs.length ? `<p class="sub" style="margin:0 0 10px">${nP ? `${nP} pasta${nP > 1 ? 's' : ''}` : ''}${nP && nA ? ' · ' : ''}${nA ? `${nA} arquivo${nA > 1 ? 's' : ''}` : ''}</p>
+  // 26/09 (auditoria DRV-5): pasta enorme corta no teto — a contagem diz que é parcial, em vez de parecer tudo
+  const parcial = d.truncado ? ' · <b>mostrando os primeiros; a pasta tem mais — abra no Drive pra ver tudo</b>' : '';
+  corpo.innerHTML = trilha + (arqs.length ? `<p class="sub" style="margin:0 0 10px">${nP ? `${nP} pasta${nP > 1 ? 's' : ''}` : ''}${nP && nA ? ' · ' : ''}${nA ? `${nA} arquivo${nA > 1 ? 's' : ''}` : ''}${parcial}</p>
     <div class="arq-cab-l" aria-hidden="true"><span></span><span>Nome</span><span>Última modificação</span><span>Tamanho</span>${podeEmitir ? '<span></span>' : ''}</div><ul class="arq-lista">${arqs.map((f) => {
     const ic = ehIconeDoGoogle(f.icone) ? `<img src="${esc(f.icone)}" alt="" width="20" height="20">` : svg(f.pasta ? 'pastas' : 'arq', 20);
     // o que o Google Drive guarda: quando mudou (data E hora, no fuso de Brasília) e quem mudou por último
@@ -1213,6 +1306,26 @@ document.addEventListener('click', (ev) => {
   else { const k = ARQ_TRILHA.findIndex((t) => t.id === id); ARQ_TRILHA = k >= 0 ? ARQ_TRILHA.slice(0, k + 1) : [...ARQ_TRILHA, { id, nome }]; ARQ_PASTA = id; }
   carregarArquivos();
 });
+// 🔒 26/09 (auditoria DRV-9): volta do Google com a conexão PENDENTE — mostra qual conta Google vai ser ligada e só
+// grava com o clique DESTA conta logada (o link do Google mandado pra outra pessoa não liga o Drive dela aqui)
+async function confirmarDrive(c) {
+  if (!/^[A-Za-z0-9_-]{10,64}$/.test(String(c || ''))) return toast('Não consegui conectar o Drive. Tente de novo.', true);
+  const p = await apiEsc('drive/pendente', 'POST', { c });
+  if (!p.ok) return toast(p.dados.detail || 'Essa conexão expirou. Conecte o Drive de novo.', true);
+  abrirModal('Ligar este Google Drive?', `<p style="margin:0;font-size:14px;line-height:1.5">O AI.arq vai usar o Google Drive da conta <b>${esc(p.dados.email || 'escolhida no Google')}</b> nos seus projetos do Escritório.</p>
+    <p class="sub" style="margin:0">Se não foi você que pediu pra conectar agora, recuse.</p>
+    <div class="rodape"><button class="btn" id="cd-nao">Não, recusar</button><button class="btn btn-d" id="cd-sim">Ligar o Drive</button></div>`);
+  const decidir = async (recusar) => {
+    $('cd-sim').disabled = $('cd-nao').disabled = true;
+    const r = await apiEsc('drive/confirmar', 'POST', recusar ? { c, recusar: true } : { c });
+    fecharModal();
+    if (!r.ok) return toast(r.dados.detail || 'Não consegui conectar o Drive. Tente de novo.', true);
+    toast(recusar ? 'Conexão recusada' : 'Google Drive conectado');
+    if (VIEW === 'arquivos') carregarArquivos();
+  };
+  $('cd-sim').onclick = () => decidir(false);
+  $('cd-nao').onclick = () => decidir(true);
+}
 // 26/09 (auditoria DRV-2/LGPD-2): a tela prometia "cortar o acesso aqui" e não tinha o botão
 function desconectarDrive() {
   abrirModal('Desconectar o Google Drive?', `<p style="margin:0;font-size:14px;line-height:1.5">O AI.arq deixa de ler as suas pastas e a equipe deixa de ver a pasta <b>por aqui</b>.</p>
@@ -1394,8 +1507,40 @@ function telaAtas() {
       ${(a.participantes || []).length ? `<p class="sub">Presentes: ${a.participantes.map(esc).join(', ')}</p>` : ''}</div></div>
       <div class="grade g2" style="margin-top:12px"><div><p class="lbl">Decisões</p>${(a.decisoes || []).length ? `<ul style="margin:0;padding-left:18px;font-size:13.5px;color:#334155">${a.decisoes.map((d) => `<li>${esc(d)}</li>`).join('')}</ul>` : '<p class="vazio">—</p>'}</div>
       <div><p class="lbl">Tarefas que saíram daqui</p>${ts.length ? `<ul class="lista">${ts.map((t) => `<li><span style="width:8px;height:8px;border-radius:50%;background:${(ST.find((s) => s.k === t.status) || {}).cor}"></span><span style="flex:1;font-size:13px">${esc(t.titulo)}<span class="sub" style="display:block;margin:0">${stT(t.status)}</span></span>${pillPrazo(t)}${avs(t)}</li>`).join('')}</ul>` : '<p class="vazio">Nenhuma.</p>'}</div></div>
-      ${a.proxima_reuniao ? `<p class="sub" style="margin-top:10px">Próxima reunião: <b>${esc(a.proxima_reuniao)}</b></p>` : ''}</section>`; }).join('')
+      ${a.proxima_reuniao ? `<p class="sub" style="margin-top:10px">Próxima reunião: <b>${esc(a.proxima_reuniao)}</b></p>` : ''}${souAdmin() || a.criado_por === EU.id ? `<div class="linha" style="gap:6px;margin-top:10px"><button type="button" class="btn btn-s" onclick="editarAta('${a.id}')">Editar</button><button type="button" class="btn btn-s" onclick="apagarAta('${a.id}')">Apagar ata</button></div>` : ''}</section>`; }).join('')
       : '<div class="card"><p class="vazio">Nenhuma ata ainda.</p></div>'}`;
+}
+// 26/09 (auditoria TELA-12): ata com data ou título errado não tinha conserto na tela
+function editarAta(id) {
+  const a = ATAS.find((x) => x.id === id); if (!a) return;
+  abrirModal('Editar ata', `<div class="grade g2"><div><label class="lbl" for="ea-t">Título</label><input id="ea-t" class="in" maxlength="200" value="${esc(a.titulo || '')}"></div>
+      <div><label class="lbl" for="ea-d">Data</label><input id="ea-d" type="date" class="in" value="${esc(String(a.data || '').slice(0, 10))}"></div></div>
+    <div><label class="lbl" for="ea-dec">Decisões (uma por linha)</label><textarea id="ea-dec" class="in" rows="4" maxlength="5000">${esc((a.decisoes || []).join('\n'))}</textarea></div>
+    <div><label class="lbl" for="ea-p">Próxima reunião</label><input id="ea-p" class="in" maxlength="200" value="${esc(a.proxima_reuniao || '')}"></div>
+    <div class="rodape"><button class="btn" onclick="fecharModal()">Cancelar</button><button class="btn btn-d" id="ea-ok">Salvar</button></div>`);
+  $('ea-ok').onclick = async () => {
+    const titulo = $('ea-t').value.trim(), data = $('ea-d').value;
+    if (!titulo || !/^\d{4}-\d{2}-\d{2}$/.test(data)) return toast('A ata precisa de título e data.', true);
+    const decisoes = $('ea-dec').value.split('\n').map((s) => s.trim()).filter(Boolean);
+    $('ea-ok').disabled = true;
+    const { error } = await sb.from('escritorio_atas').update({ titulo, data, decisoes, proxima_reuniao: $('ea-p').value.trim() || null }).eq('id', id);
+    if (error) { $('ea-ok').disabled = false; return falhou(error, 'Não salvei a ata'); }
+    fecharModal(); await recarregar(); toast('Ata salva');
+  };
+}
+function apagarAta(id) {
+  const a = ATAS.find((x) => x.id === id); if (!a) return;
+  const n = TAR.filter((t) => t.ata_id === id).length;
+  abrirModal('Apagar a ata?', `<p style="margin:0;font-size:14px;line-height:1.5"><b>${esc(a.titulo)}</b> (${esc(dBR(a.data))}) some.${n ? ` As ${n} tarefa${n > 1 ? 's' : ''} que saíram dela <b>continuam no quadro</b>.` : ''}</p>
+    <div class="rodape"><button class="btn" onclick="fecharModal()">Voltar</button><button class="btn btn-r" id="aa-ok">Apagar</button></div>`);
+  $('aa-ok').onclick = async () => {
+    $('aa-ok').disabled = true;
+    const { error, count } = await sb.from('escritorio_atas').delete({ count: 'exact' }).eq('id', id);
+    if (error) { $('aa-ok').disabled = false; return falhou(error, 'Não apaguei a ata'); }
+    fecharModal();
+    if (!count) return toast('Só quem registrou a ata (ou a admin) apaga.', true);
+    await recarregar(); toast('Ata apagada');
+  };
 }
 function linhaTarefaAta(i) {
   const gente = MEMBROS.filter((m) => m.status === 'ativo');
@@ -1440,7 +1585,10 @@ async function salvarAta() {
 // ══════════════ EQUIPE ══════════════
 function telaEquipe() {
   const vis = MEMBROS.filter((m) => m.status !== 'removido');
-  const at = vis.filter((m) => m.status === 'ativo').length, cv = vis.filter((m) => m.status === 'convidado').length;
+  const at = vis.filter((m) => m.status === 'ativo').length, cv = vis.filter(conviteVivo).length;
+  // 26/09 (auditoria LGPD-3): quem SAIU some da lista, mas os dados (e-mail, telefone, a sua anotação) ficavam pra
+  // sempre sem nenhum botão que alcançasse — só por SQL. Agora a admin vê e apaga.
+  const saiu = souAdmin() ? MEMBROS.filter((m) => m.status === 'removido') : [];
   return `${faixa('eq', 'Equipe', `${at} no projeto${cv ? ` · ${cv} convite${cv > 1 ? 's' : ''} aguardando` : ''}. Cada pessoa vê só este projeto.`,
       souAdmin() ? '<button class="btn btn-p" onclick="convidar()">+ Convidar pessoa</button>' : '')}
     <div class="aviso"><b>Quem você convida entra no projeto, não no escritório.</b><br>
@@ -1453,7 +1601,25 @@ function telaEquipe() {
         ${m.papel === 'dono' ? '<span class="pill p-ind">admin · vê tudo</span>' : m.status === 'ativo' ? '<span class="pill p-ok"><i></i>no projeto</span>' : pillConvite(m)}
         ${souAdmin() && PROJ.job_id && m.papel !== 'dono' ? `<label class="chip" title="Planilha, cronograma e memorial do projeto medido ligado"><input type="checkbox" ${m.pode_baixar ? 'checked' : ''} onchange="mudarBaixar('${m.id}', this.checked, this)"> pode baixar arquivos</label>` : ''}
         ${souAdmin() && m.papel !== 'dono' ? `<button class="btn btn-s" onclick="editarPessoa('${m.id}')">Editar</button>${m.status === 'convidado' ? `<button class="btn btn-s" onclick="reenviar('${m.id}')">Reenviar convite</button>` : ''}<button class="btn btn-s" onclick="tirar('${m.id}')">${m.status === 'convidado' ? 'Cancelar convite' : 'Tirar do projeto'}</button>` : ''}
-      </li>`).join('')}</ul></section>`;
+      </li>`).join('')}</ul></section>
+    ${saiu.length ? `<section class="card"><h2 class="h2">Saíram do projeto</h2>
+      <p class="sub">Os dados de contato e a sua anotação continuam guardados até você apagar. As tarefas e os comentários dessas pessoas ficam no projeto.</p>
+      <ul class="lista" style="margin-top:8px">${saiu.map((m) => `<li style="flex-wrap:wrap">${av(m)}<div style="flex:1;min-width:180px"><b style="font-size:14px">${esc(nomeDe(m))}</b>
+        <span class="sub" style="display:block;margin:0">${esc(m.funcao || '')}${m.removido_em ? ' · saiu em ' + esc(dBR(m.removido_em)) : ''}</span></div>
+        <button class="btn btn-s" onclick="reenviar('${m.id}')">Convidar de novo</button><button class="btn btn-s" onclick="apagarDadosPessoa('${m.id}')">Apagar dados</button></li>`).join('')}</ul></section>` : ''}`;
+}
+function apagarDadosPessoa(id) {
+  const m = MEMBROS.find((x) => x.id === id); if (!m || m.status !== 'removido') return;
+  abrirModal('Apagar os dados de ' + curto(m) + '?', `<p style="margin:0;font-size:14px;line-height:1.5">Somem o nome, a função, o e-mail, o telefone e a sua anotação sobre <b>${esc(nomeDe(m))}</b>. As tarefas e os comentários continuam no projeto. Não dá pra desfazer.</p>
+    <div class="rodape"><button class="btn" onclick="fecharModal()">Voltar</button><button class="btn btn-r" id="adp-ok">Apagar dados</button></div>`);
+  $('adp-ok').onclick = async () => {
+    $('adp-ok').disabled = true;
+    const { error, count } = await sb.from('escritorio_membros').delete({ count: 'exact' }).eq('id', id).eq('status', 'removido');
+    if (error) { $('adp-ok').disabled = false; return falhou(error, 'Não apaguei'); }
+    fecharModal();
+    if (!count) return toast('Essa pessoa não está mais como "saiu" — atualizei a lista.', true), recarregar();
+    await recarregar(); toast('Dados apagados');
+  };
 }
 // 🏢 Parte 2 (24/09, decisão do Pedro): baixar arquivos do projeto medido ligado é POR PESSOA, e só a admin
 // liga. O banco garante (só quem é dono edita linha de membro); aqui é a chave.
@@ -1573,6 +1739,14 @@ async function confirmarTirar(id) {
   if (window.trackEvent) trackEvent('view_escritorio');
   // voltou do Google (conectar o Drive): diz o que houve e limpa o endereço
   const volta = new URLSearchParams(location.search).get('drive');
+  // 🔒 26/09 (auditoria DRV-9): a conexão volta PENDENTE e só vale com a confirmação desta conta logada
+  if (volta === 'confirmar') {
+    const c = new URLSearchParams(location.search).get('c') || '';
+    history.replaceState(null, '', location.pathname + location.hash);
+    navegar();
+    setTimeout(() => confirmarDrive(c), 500);
+    return;
+  }
   if (volta) {
     const msg = { ok: ['Google Drive conectado', false], negado: ['Você não autorizou o Drive', true],
       'sem-permissao': ['Faltou marcar a permissão do Drive na tela do Google. Tente de novo e marque a caixinha.', true],

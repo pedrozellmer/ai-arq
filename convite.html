@@ -229,6 +229,12 @@
     if (!m && daAba === token && _p && _p.t !== token) { esquecerAba(); location.reload(); return; }
     window.aiarqConvite.limparSe(token);
     esquecerAba();
+    // 26/09 (auditoria CONV-6): link trocado por um REENVIO (404) com a pessoa logada — o convite novo está no banco
+    // pro e-mail dela: procura por ele antes de dizer "não vale mais"
+    if (r.status === 404 && SESSAO && !recusado.jaProcurou) {
+      recusado.jaProcurou = true;
+      return semCodigo({ seNadaAchar: () => erro('Este link não vale mais', (r.dados && r.dados.detail) || 'Peça um novo a quem te convidou.', false) });
+    }
     if (r.status === 409) {
       // A13 (24/09): o servidor distingue "já foi usado" (409) de "trocado ou cancelado" (404).
       erro('Este convite já foi usado', (r.dados && r.dados.detail) || 'Se foi você, entre na sua conta: o projeto está no seu Escritório.', false);
@@ -277,7 +283,9 @@
   // mas LOGADA: o servidor procura os convites em aberto pro e-mail (confirmado) da conta e o aceite vai
   // pelo convite_id — a prova passa a ser o e-mail, e o servidor confere que é o mesmo do convite.
   let CONVITE_ID = '';
-  async function semCodigo() {
+  async function semCodigo(opcoes) {
+    opcoes = opcoes || {};
+    token = '';   // daqui em diante o aceite vai pelo convite_id (o código, se havia, não vale)
     try { SESSAO = (await sb.auth.getSession()).data.session; } catch (_) {}
     if (!SESSAO) {
       erro('Não achei o convite', 'Abra o link do e-mail de convite de novo — ou entre na sua conta: se o convite foi para o seu e-mail, ele aparece aqui.', false);
@@ -289,6 +297,7 @@
     if (r.status !== 200) return erro('Não deu pra procurar o seu convite agora', r.dados.detail || 'Tente de novo em instantes.', true);
     const lista = (r.dados && r.dados.convites) || [];
     if (!lista.length) {
+      if (opcoes.seNadaAchar) return opcoes.seNadaAchar();
       erro('Nenhum convite em aberto para esta conta',
         'Não achei convite pendente para ' + (SESSAO.user.email || 'esta conta') + '. Se o convite foi para outro e-mail, entre com ele — ou abra de novo o link do e-mail.', false);
       $('btn-site').textContent = 'Abrir o Escritório';
