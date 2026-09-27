@@ -4938,6 +4938,72 @@ def _email_img(arquivo: str, alt: str, margem: str = "14px 0 4px") -> str:
             f'display:block;margin:{margem};border:0;">')
 
 
+# ── MODO ESCURO DOS E-MAILS (27/09/2026) ─────────────────────────────────────
+# Pedro, no iPhone com Gmail no escuro: o botão roxo com letra branca chegava
+# LILÁS COM LETRA ESCURA — o Gmail inverte as cores sozinho e IGNORA o
+# `prefers-color-scheme` que o e-mail manda. Duas frentes, porque os programas
+# se dividem em dois grupos (Litmus, "Ultimate Guide to Dark Mode in Email"):
+#  1. GMAIL (iOS/Android): quem decide é ele — inverte as cores do jeito dele
+#     (cartão cinza, botão lilás, legível). O truque de "blindar" o botão foi
+#     TESTADO no iPhone do Pedro em 27/09 e piorou o contraste (ver o CTA no
+#     _email_wrap). Decisão do Pedro: não brigar com o Gmail.
+#  2. MAIL DO IPHONE / OUTLOOK: aceitam o tema escuro de verdade. Em vez de dar
+#     classe a cada elemento dos 22 e-mails (e esquecer um), o tema troca pela
+#     COR que está no `style`: a paleta dos e-mails é pequena (levantada em
+#     27/09 — ~20 cores de texto, ~10 de fundo), e cada uma tem a sua escura.
+# 🪤 Cor nova num e-mail que não esteja aqui fica com a cor clara no escuro —
+# o guarda `test_emails_no_modo_escuro` lista as que faltam.
+_ESCURO_TEXTO = {
+    # títulos e negrito
+    "#0f172a": "#f1f5f9", "#111827": "#f1f5f9", "#1e1b4b": "#e0e7ff",
+    # texto corrido
+    "#475569": "#cbd5e1", "#334155": "#cbd5e1", "#374151": "#cbd5e1",
+    "#4b5563": "#cbd5e1", "#6b7280": "#aab4c0",
+    # links e caixas azuis
+    "#4f46e5": "#a5b4fc", "#312e81": "#c7d2fe", "#3730a3": "#c7d2fe",
+    # caixas âmbar e verdes
+    "#78350f": "#fde68a", "#7c4a12": "#fde68a", "#b45309": "#fbbf24",
+    "#15803d": "#86efac", "#14532d": "#bbf7d0", "#128c4a": "#4ade80",
+}
+_ESCURO_FUNDO = {
+    "#eaeef3": "#0b1120",                       # fora do cartão
+    "#ffffff": "#131c2e", "#fff": "#131c2e",    # o cartão
+    "#f8fafc": "#1b2538", "#f1f5f9": "#1b2538",
+    "#eef2ff": "#1e1b4b",                       # caixa azul
+    "#fffbeb": "#2b2110", "#fff7ed": "#2b2110", "#fef3c7": "#3a2c0c",  # âmbar
+    "#f0fdf4": "#0f2a1b", "#dcfce7": "#123821",  # verde
+}
+_ESCURO_BORDA = {
+    "#eef2f7": "#243047", "#e2e8f0": "#243047", "#e5e7eb": "#243047",
+    "#c7d2fe": "#3730a3", "#fed7aa": "#7c4a12",
+}
+
+
+def _css_do_escuro() -> str:
+    regras = []
+    for claro, escuro in _ESCURO_TEXTO.items():
+        regras.append('[style*="color:%s" i]{color:%s !important;}' % (claro, escuro))
+    for claro, escuro in _ESCURO_FUNDO.items():
+        regras.append('[style*="background:%s" i],[style*="background-color:%s" i]'
+                      '{background:%s !important;}' % (claro, claro, escuro))
+    for claro, escuro in _ESCURO_BORDA.items():
+        regras.append('[style*="%s" i][style*="border" i]{border-color:%s !important;}'
+                      % (claro, escuro))
+    return "".join(regras)
+
+
+_EMAIL_HEAD = (
+    '<meta http-equiv="Content-Type" content="text/html; charset=utf-8">'
+    '<meta name="viewport" content="width=device-width,initial-scale=1">'
+    '<meta name="color-scheme" content="light dark">'
+    '<meta name="supported-color-schemes" content="light dark">'
+    '<style>'
+    ':root{color-scheme:light dark;supported-color-schemes:light dark;}'
+    '@media (prefers-color-scheme: dark){' + _css_do_escuro() + '}'
+    '</style>'
+)
+
+
 def _email_wrap(title: str, body_html: str, cta_text: str = "", cta_url: str = "", badge: str = "",
                 badge_color: str = "green",
                 reason: str = "Você está recebendo este e-mail porque tem uma conta no AI.arq.",
@@ -4951,6 +5017,13 @@ def _email_wrap(title: str, body_html: str, cta_text: str = "", cta_url: str = "
     """
     cta = ""
     if cta_text and cta_url:
+        # 🩸 27/09 — botão SIMPLES de propósito. O "truque do Gmail" (degradê +
+        # gmail-blend, github.com/matthieuSolente/email-darkmode) foi testado
+        # PELO SMTP DE VERDADE no iPhone do Pedro (Gmail, modo escuro): o fundo
+        # ficou roxo, mas a letra ficou ESCURA — roxo escuro + letra escura tem
+        # MENOS contraste que o lilás que o Gmail faz sozinho. Descartado.
+        # 🪤 NÃO testar e-mail pelo conector do Gmail: ele apaga background,
+        # <img> e <style> antes de mandar (2 testes inválidos em 27/09).
         cta = ('<tr><td style="padding:22px 30px 8px;">'
                f'<a href="{cta_url}" style="background:#4F46E5;color:#ffffff;text-decoration:none;'
                'padding:14px 26px;border-radius:10px;font-size:15px;font-weight:600;'
@@ -4985,7 +5058,12 @@ def _email_wrap(title: str, body_html: str, cta_text: str = "", cta_url: str = "
     if preheader:
         pre_html = ('<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">'
                     f'{preheader}' + ('&zwnj;&nbsp;' * 30) + '</div>')
+    # 🌙 Documento COMPLETO (antes era só o <div>): o tema escuro mora num
+    # <style> do <head>. Ninguém concatena nada depois do retorno (conferido
+    # nos 22 chamadores em 27/09) — então fechar o </html> aqui é seguro.
     return (
+        '<!DOCTYPE html><html lang="pt-BR"><head>' + _EMAIL_HEAD + '</head>'
+        '<body class="body" style="margin:0;padding:0;background:#eaeef3;">'
         f'{pre_html}'
         '<div style="background:#eaeef3;padding:28px 14px;font-family:Arial,sans-serif;">'
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
@@ -5017,6 +5095,7 @@ def _email_wrap(title: str, body_html: str, cta_text: str = "", cta_url: str = "
         '</div></td></tr>'
         '</table>'
         '</td></tr></table></div>'
+        '</body></html>'
     )
 
 
