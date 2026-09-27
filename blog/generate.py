@@ -832,8 +832,9 @@ def render_post_html(post):
 
 {FOOTER}
 
-<!-- Chat widget + Modal de contato (compartilhados com o resto do site) -->
-<script src="/chat-widget.js"></script>
+<!-- WhatsApp + Modal de contato (os mesmos do resto do site). O chat público saiu do site em
+     21/07 (0 lead) e só tinha sobrado aqui, por herança do modelo do blog — trocado em 27/09. -->
+<script src="/whatsapp-button.js" defer></script>
 <script src="/contact-modal.js"></script>
 <script src="/cookie-consent.js" defer></script>
 <!-- 28/08/2026 - TELEMETRIA NO BLOG. O blog e a MAIOR porta de entrada do
@@ -1035,8 +1036,8 @@ def render_index_html():
 }})();
 </script>
 
-<!-- Chat widget + Modal de contato -->
-<script src="/chat-widget.js"></script>
+<!-- WhatsApp + Modal de contato (os mesmos do resto do site) -->
+<script src="/whatsapp-button.js" defer></script>
 <script src="/contact-modal.js"></script>
 <script src="/cookie-consent.js" defer></script>
 <!-- 28/08/2026 - TELEMETRIA NO BLOG. O blog e a MAIOR porta de entrada do
