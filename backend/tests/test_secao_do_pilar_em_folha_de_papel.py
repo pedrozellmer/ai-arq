@@ -65,6 +65,55 @@ def test_a_extracao_leva_a_ressalva_de_folha_de_papel_aos_pilares(monkeypatch):
     assert r["pilares"]["escala_de_papel"] == "1:125 (119 cotas)", r
 
 
+def _folha_de_papel(janela=False):
+    """Folha A1 desenhada no modelo (mm de papel) com 6 cotas em 1:125 —
+    a mesma receita de test_folha_de_papel_no_modelo."""
+    import ezdxf
+    doc = ezdxf.new("R2010", setup=True)
+    doc.header["$INSUNITS"] = 4
+    doc.header["$EXTMIN"] = (0, 0, 0)
+    doc.header["$EXTMAX"] = (841.0, 594.0, 0)
+    msp = doc.modelspace()
+    msp.add_lwpolyline([(0, 0), (841, 0), (841, 594), (0, 594)], close=True)
+    doc.dimstyles.new("E125", dxfattribs={"dimlfac": 12.5})
+    for k in range(6):
+        x0 = 20.0 + 30.0 * k
+        msp.add_linear_dim(base=(x0, 28), p1=(x0, 20), p2=(x0 + 24, 20),
+                           dimstyle="E125").render()
+    if janela:
+        lay = doc.layouts.new("FOLHA 01")
+        vp = lay.add_viewport(center=(400, 300), size=(700, 500),
+                              view_center_point=(420, 297), view_height=594)
+        vp.dxf.view_target_point = (0, 0, 0)
+    return doc
+
+
+def _prompt_da_folha(tmp_path, monkeypatch, janela):
+    """Pelo caminho de produção: extract_dxf grava a ressalva, e o prompt do
+    DXFExtraction chama extract_structural_measurements → a seção de pilares.
+    🔑 Sem isto, a chave 'escala_por_vista' só existe escrita à mão nos testes:
+    se o extrator a renomeasse, o conserto desligaria calado (revisão 27/09)."""
+    import dwg_extractor as dx
+    monkeypatch.setattr(se, "count_pillars", _pil_fixo)
+    p = str(tmp_path / "folha.dxf")
+    _folha_de_papel(janela).saveas(p)
+    ext = dx.extract_dxf(p)
+    return ext.metadata, ext.to_structured_prompt()
+
+
+def test_ponta_a_ponta_a_folha_de_papel_chega_ao_prompt(tmp_path, monkeypatch):
+    md, txt = _prompt_da_folha(tmp_path, monkeypatch, janela=False)
+    assert md.get("escala_por_vista"), md
+    assert "desenho ≈ 15x24 cm (seção NÃO medida)" in txt, txt[-3000:]
+    assert "[MEDIDO] seção 15x24" not in txt
+
+
+def test_CONTROLE_ponta_a_ponta_folha_no_layout_segue_medindo(tmp_path, monkeypatch):
+    md, txt = _prompt_da_folha(tmp_path, monkeypatch, janela=True)
+    assert "escala_por_vista" not in md, md
+    assert "[MEDIDO] seção 15x24 cm: 32 un" in txt, txt[-3000:]
+
+
 def test_CONTROLE_sem_a_ressalva_nada_muda(monkeypatch):
     monkeypatch.setattr(se, "count_pillars", _pil_fixo)
     for md in ({}, {"escala_por_vista": ""}, None):

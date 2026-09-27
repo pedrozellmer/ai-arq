@@ -1231,8 +1231,10 @@ def structural_prompt_section(struct: dict) -> str:
             lyr = ", ".join(pil.get("layers", []))
             L.append(f"PILARES (contagem geométrica — retângulos/círculos fechados no layer {lyr}):")
             _rep = any(s.get("repetidos") for s in pil.get("por_secao", []))
-            # 🔑 Em folha de papel a CONTAGEM vale (contar não depende da escala);
-            # a SEÇÃO não: é o tamanho do desenho, não o do pilar.
+            # 🔑 Em folha de papel a SEÇÃO é o tamanho do desenho, não o do pilar.
+            # A contagem segue a de antes — mas não é imune: o filtro de tamanho
+            # dos retângulos (fora_de_escala) usa o fator da prancha, e numa folha
+            # lida em mm (a 0001 do caso) ele descarta todos. Pré-existente.
             _papel = pil.get("escala_de_papel")
             L.append(f"  {'[REFERÊNCIA]' if _rep else '[MEDIDO]'} {pil['rects_qtd']} pilares contados")
             for s in pil.get("por_secao", []):
@@ -1251,7 +1253,9 @@ def structural_prompt_section(struct: dict) -> str:
             if _papel:
                 L.append(f"  ⚠ Folha desenhada em ESCALA DE PAPEL ({_papel}): a geometria não tem")
                 L.append("    as medidas reais — o '≈' acima é só o tamanho do DESENHO. A seção do")
-                L.append("    item é a ESCRITA na prancha (ex.: '(30x19)' junto do pilar ou na tabela),")
+                # 🪤 Exemplo NEUTRO: um número de verdade aqui (o '(30x19)' do caso) é
+                # condição plantada — sem seção escrita, a IA copiava o do exemplo.
+                L.append("    item é a ESCRITA na prancha (ex.: '(AxB)' junto do pilar ou na tabela),")
                 L.append("    dita na observação; sem ela, escreva 'seção a confirmar'. NUNCA a do '≈'.")
             L.append("  → Gere um item por seção: \"Pilar de concreto — seção <s>\", unidade un,")
             # 🔑 A regra geral não pode desdizer a linha [REFERÊNCIA] logo acima.
