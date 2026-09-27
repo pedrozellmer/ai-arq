@@ -336,20 +336,20 @@
    "disc": "Divisórias e Vidros",
    "medido": true,
    "obs": "Fonte: 6 INSERTs do bloco 'PORTA-MAD-80X210'",
+   "nota": "27/09/2026 (achado ESTR-05): o escolhido da rodada de 17/07 era o 91297 — folha e dobradiças, SEM batente e SEM fechadura; quem orçasse por ele contava os dois zero vez. Trocado pelo kit 91314, que traz os três. O 91297 fica como alternativa, com a nota de texto que o sinapi_rescore dá hoje (0,375). A busca de hoje (candidates_for) não traz nenhum dos dois pra esta descrição — produto, ver com o Pedro.",
    "sinapi": [
+    {
+     "codigo": "91314",
+     "unidade": "UN",
+     "descricao": "KIT DE PORTA DE MADEIRA PARA PINTURA, SEMI-OCA (LEVE OU MÉDIA), PADRÃO POPULAR, 80X210CM, ESPESSURA DE 3,5CM, ITENS INCLUSOS: DOBRADIÇAS, MONTAGEM E INSTALAÇÃO DO BATENTE, FECHADURA COM EXECUÇÃO DO FURO - FORNECIMENTO E INSTALAÇÃO. AF_10/2025",
+     "papel": "escolhido"
+    },
     {
      "codigo": "91297",
      "unidade": "UN",
      "descricao": "PORTA DE MADEIRA FRISADA, SEMI-OCA (LEVE OU MÉDIA), 80X210CM, ESPESSURA DE 3,5CM, INCLUSO DOBRADIÇAS - FORNECIMENTO E INSTALAÇÃO. AF_10/2025",
-     "papel": "escolhido"
-    },
-    {
-     "codigo": "106319",
-     "unidade": "UN",
-     "descricao": "PORTA DE ABRIR COM MOLA HIDRÁULICA, EM VIDRO TEMPERADO, 80X210 CM, ESPESSURA 10 MM, INCLUSIVE ACESSÓRIOS. AF_11/2025",
      "papel": "alternativa",
-     "busca_simplificada": true,
-     "semelhanca_texto": 0.25
+     "semelhanca_texto": 0.375
     }
    ]
   },
