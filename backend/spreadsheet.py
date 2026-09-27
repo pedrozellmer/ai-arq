@@ -1015,7 +1015,7 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
         wsm = wb.create_sheet('Referências SINAPI')
         wsm.sheet_properties.tabColor = '059669'  # verde
 
-        widths_m = [7, 45, 5, 10, 12, 12, 50, 6, 8]
+        widths_m = [7, 45, 5, 10, 12, 12, 50, 6, 12]
         for i, w in enumerate(widths_m, 1):
             wsm.column_dimensions[get_column_letter(i)].width = w
 
@@ -1042,7 +1042,7 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
         hdrs_m = ['ITEM', 'DESCRIÇÃO DO QUANTITATIVO', 'UN', 'QTDE',
                   'BASE', 'CÓDIGO',
                   'COMPOSIÇÃO OFICIAL (referência)',
-                  'UN.', 'MATCH %']
+                  'UN.', 'SEMELHANÇA %']
         for c, h in enumerate(hdrs_m, 1):
             cl = wsm.cell(row=rm, column=c, value=h)
             cl.font = F_HDR; cl.fill = P_HDR; cl.alignment = AC; cl.border = BD
@@ -1073,7 +1073,7 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
                                 'nenhum é o mesmo serviço. Buscar manualmente em '
                                 'https://www.caixa.gov.br/sinapi')
                          if _reprovados else
-                         ('Sem match SINAPI (descrição muito específica) — '
+                         ('Sem correspondência no SINAPI (descrição muito específica) — '
                           'buscar manualmente em https://www.caixa.gov.br/sinapi')).font = F_NOTE
                 for c in range(1, 10):
                     wsm.cell(row=rm, column=c).border = BD
@@ -1088,7 +1088,7 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
             wsm.cell(row=rm, column=3, value=item.unit).font = F_N
             wsm.cell(row=rm, column=4, value=item.quantity).font = F_N
             wsm.merge_cells(start_row=rm, start_column=5, end_row=rm, end_column=9)
-            wsm.cell(row=rm, column=5, value='↓ matches encontrados ↓').font = F_NOTE
+            wsm.cell(row=rm, column=5, value='↓ candidatos encontrados ↓').font = F_NOTE
             for c in range(1, 10):
                 wsm.cell(row=rm, column=c).border = BD
                 wsm.cell(row=rm, column=c).alignment = AC if c in (1, 3, 4, 5) else AL
@@ -1127,8 +1127,8 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
         # Rodapé
         wsm.merge_cells(start_row=rm + 1, start_column=1, end_row=rm + 1, end_column=9)
         wsm.cell(row=rm + 1, column=1, value=(
-            'Como ler: MATCH % indica a similaridade entre a descrição do item '
-            'e a composição SINAPI. Acima de 70% = referência forte. 40-70% = '
+            'Como ler: SEMELHANÇA % indica o quanto a descrição do item se parece '
+            'com a da composição SINAPI. Acima de 70% = referência forte. 40-70% = '
             'revisar. Abaixo de 30% = candidato fraco, buscar código manualmente '
             'em https://www.caixa.gov.br/sinapi.')).font = F_NOTE
 
