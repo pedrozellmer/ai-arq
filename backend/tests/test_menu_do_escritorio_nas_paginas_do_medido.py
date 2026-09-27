@@ -126,6 +126,7 @@ def test_o_grupo_escritorio_fica_em_cima():
     assert g.index("titulo: 'Escritório'") < g.index("titulo: 'Quantitativo e obra'")
     h = _ler("escritorio.html")
     r = h[h.index("function renderMoldura() {"):]
-    assert r.index('<div class="s-grp-t">Escritório</div>') < r.index("${obra}")
+    # 27/09 (maquete "andamento e marca" aprovada): o título do grupo é o nome do escritório ("Escritório" sem marca)
+    assert r.index('<div class="s-grp-t">${esc(nomeEscritorio())}</div>') < r.index("${obra}")
 
 # controle positivo (25/09): tirar "c.job === JOB && " do menu-lateral.js reprovou o 2º teste.
