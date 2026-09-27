@@ -235,6 +235,113 @@ def site_ok_da_contagem(erros):
     return int(erros) == 0
 
 
+# ── de onde chegou TODO mundo (27/09/2026) ──────────────────────────────────
+# 🎯 Pedro, marketing: saber de onde vem quem visita pra decidir onde pôr esforço.
+# A origem que já existia (`origem_30d`) só enxerga quem ACEITOU o cookie (~56% dos
+# cadastros da semana recorde). O Cloudflare vê todo mundo — e a REFERÊNCIA que o
+# navegador manda ao abrir a página (clientRefererHost) diz de onde a pessoa veio.
+# 🪤 O que ela NÃO diz: app (Instagram, LinkedIn, ChatGPT no celular, WhatsApp) muitas
+# vezes abre o link SEM referência — cai em "direto ou app". E a resposta de IA do
+# Google (Modo IA, Visão geral) chega como google.com: não dá pra separar da busca.
+
+# (sufixos do host, canal). A ORDEM importa: gemini.google.com antes de google.
+_REFERENCIAS = (
+    (("gemini.google.com",), "Gemini"),
+    (("mail.google.com", "com.google.android.gm", "outlook.live.com", "outlook.office.com",
+      "outlook.office365.com", "mail.yahoo.com"), "E-mail"),
+    (("com.google.android.googlequicksearchbox",), "Google (busca e IA do Google)"),
+    (("chatgpt.com", "chat.openai.com"), "ChatGPT"),
+    (("perplexity.ai",), "Perplexity"),
+    (("copilot.microsoft.com",), "Copilot"),
+    (("claude.ai",), "Claude"),
+    (("bing.com",), "Bing"),
+    (("duckduckgo.com",), "DuckDuckGo"),
+    (("search.yahoo.com", "yahoo.com"), "Yahoo"),
+    (("linkedin.com", "lnkd.in", "com.linkedin.android"), "LinkedIn"),
+    (("instagram.com", "com.instagram.android"), "Instagram"),
+    (("facebook.com", "fb.com", "com.facebook.katana"), "Facebook"),
+    (("t.co", "x.com", "twitter.com"), "X (Twitter)"),
+    (("youtube.com", "youtu.be"), "YouTube"),
+    (("whatsapp.com", "wa.me"), "WhatsApp"),
+    (("capterra.com", "capterra.com.br"), "Capterra"),
+    (("github.com",), "GitHub"),
+)
+SEM_REFERENCIA = "direto ou app (sem referência)"
+
+
+def canal_da_referencia(host) -> "str | None":
+    """O canal de chegada a partir do host da referência. None = navegação DENTRO do site.
+
+    🔑 Casa por SUFIXO de domínio inteiro ("l.instagram.com" é Instagram), nunca por
+    pedaço de texto: "notlinkedin.com" não é LinkedIn. Host que não está na lista
+    fica com o nome dele — site desconhecido também é resposta.
+    """
+    h = str(host or "").strip().lower().rstrip(".")
+    if not h:
+        return SEM_REFERENCIA
+    if h == "ai.arq.br" or h.endswith(".ai.arq.br"):
+        return None
+    for sufixos, canal in _REFERENCIAS:
+        if any(h == s or h.endswith("." + s) for s in sufixos):
+            return canal
+    # google.com, google.com.br, www.google.co.uk…
+    partes = h.split(".")
+    if "google" in partes[:2] and len(partes) >= 2:
+        return "Google (busca e IA do Google)"
+    return h
+
+
+def origens_do_dia(ini: str, fim: str, nossos: set, teto: int):
+    """(lista por canal, truncada?) do dia. (None, None) = NÃO CONSEGUI MEDIR.
+
+    Consulta PRÓPRIA, separada da principal: juntar a referência às dimensões de lá
+    multiplicaria os grupos (IP × página × referência) e empurraria gente pra fora do
+    teto — o defeito de 17–19/09. Aqui só entram páginas HTML com 200.
+    🪤 Falha aqui NÃO derruba o dia: a série principal continua sendo gravada e a
+    coluna fica nula, que o painel mostra como "sem medição".
+    """
+    try:
+        q = ("""query { viewer { zones(filter: {zoneTag: "%s"}) {
+          httpRequestsAdaptiveGroups(limit: %d,
+            filter: {datetime_geq: "%s", datetime_leq: "%s", clientRequestHTTPHost: "ai.arq.br",
+                     edgeResponseContentTypeName: "html", edgeResponseStatus: 200},
+            orderBy: [count_DESC]) {
+            count dimensions { clientRefererHost clientIP userAgentBrowser }
+          } } } }""" % (_ZONA, teto, ini, fim))
+        r = _graphql(q, timeout=90)
+    except Exception as e:
+        print("[metricas] origens do dia: %s" % e)
+        return None, None
+    if not isinstance(r, dict) or r.get("errors"):
+        print("[metricas] origens do dia recusadas: %s" % (str(r.get("errors"))[:200] if isinstance(r, dict) else type(r)))
+        return None, None
+    zonas = (((r.get("data") or {}).get("viewer") or {}).get("zones"))
+    if not zonas or (zonas[0] or {}).get("httpRequestsAdaptiveGroups") is None:
+        return None, None
+    grupos = zonas[0]["httpRequestsAdaptiveGroups"]
+    por_canal = {}
+    for g in grupos:
+        dim = g.get("dimensions") or {}
+        ip = dim.get("clientIP") or ""
+        if ip in nossos or _e_robo(dim.get("userAgentBrowser") or ""):
+            continue
+        host = str(dim.get("clientRefererHost") or "").strip().lower()
+        canal = canal_da_referencia(host)
+        if canal is None:
+            continue      # clique de uma página nossa pra outra: não é chegada
+        c = por_canal.setdefault(canal, {"ips": set(), "hosts": {}})
+        c["ips"].add(ip)
+        if host:
+            c["hosts"].setdefault(host, set()).add(ip)
+    lista = []
+    for canal, c in por_canal.items():
+        hosts = sorted(c["hosts"].items(), key=lambda kv: -len(kv[1]))[:3]
+        lista.append({"origem": canal, "enderecos": len(c["ips"]),
+                      "hosts": [h for h, _ in hosts]})
+    lista.sort(key=lambda x: (-x["enderecos"], x["origem"]))
+    return lista[:15], len(grupos) >= teto
+
+
 def coletar(dia: date, ips_da_casa=None) -> dict:
     """Números de UM dia (de Brasília), já separados. Levanta se não der — quem chama decide.
 
@@ -315,6 +422,8 @@ def coletar(dia: date, ips_da_casa=None) -> dict:
     # uma resposta, "está tudo bem" não é.
     erros_5xx = erros_5xx_do_dia(ini, fim)
     site_ok = site_ok_da_contagem(erros_5xx)
+    # 🔑 De onde chegou todo mundo — consulta à parte (ver origens_do_dia). None = não medi.
+    top_origens, origens_truncada = origens_do_dia(ini, fim, nossos, teto)
 
     topo = sorted(({"pagina": k, "enderecos": len(v)} for k, v in por_pagina.items()),
                   key=lambda x: -x["enderecos"])[:12]
@@ -331,7 +440,8 @@ def coletar(dia: date, ips_da_casa=None) -> dict:
             # foi assim que três dias de robô viraram "vale olhar".
             "grupos_recebidos": len(grupos),
             "coleta_truncada": len(grupos) >= teto,
-            "top_paginas": topo, "fonte": "tick"}
+            "top_paginas": topo, "fonte": "tick",
+            "top_origens": top_origens, "origens_truncada": origens_truncada}
 
 
 # ── a pergunta que o Pedro faz de verdade ───────────────────────────────────

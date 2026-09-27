@@ -405,6 +405,15 @@
               <div id="mov-origem" class="text-sm text-gray-700 space-y-1">&mdash;</div>
               <p id="mov-origem-nota" class="mt-1 text-[11px] text-gray-400 leading-snug"></p>
             </div>
+            <!-- 🔑 27/09/2026: de onde chegou TODO mundo — a referência que o navegador
+                 manda ao abrir a página, lida no Cloudflare. Não depende de cookie.
+                 🪤 App (Instagram, LinkedIn, ChatGPT no celular) muitas vezes chega sem
+                 referência, e a resposta de IA do Google chega como Google. -->
+            <div>
+              <p class="text-xs font-semibold text-gray-500 mb-2">De onde chegou todo mundo (7 dias)</p>
+              <div id="mov-referencia" class="text-sm text-gray-700 space-y-1">&mdash;</div>
+              <p id="mov-referencia-nota" class="mt-1 text-[11px] text-gray-400 leading-snug"></p>
+            </div>
           </div>
 
           <p class="mt-2 text-[11px] text-gray-400 leading-snug">
@@ -5930,6 +5939,15 @@ async function carregarMovimentoDoSite() {
     }
   }
 
+  // ── de onde chegou TODO mundo (Cloudflare, sem cookie) ─────────────────
+  const refEl = document.getElementById('mov-referencia');
+  const refNota = document.getElementById('mov-referencia-nota');
+  if (refEl) {
+    const r = htmlOrigensDoSite(d.origens_7d);
+    refEl.innerHTML = r.html;
+    if (refNota) refNota.textContent = r.nota;
+  }
+
   // ── a inflação do Cloudflare, dita em número ────────────────────────────
   // 🔑 Medido 02/09: os "únicos" do Cloudflare davam algumas vezes os endereços
   // de gente da semana, e a razão varia muito de um dia pro outro. Foi esse
@@ -6014,6 +6032,35 @@ async function carregarMovimentoDoSite() {
   }
 
   if (barras) barras.innerHTML = barrasDoMovimento(serie);
+}
+
+// 🔑 27/09/2026 — "De onde chegou todo mundo (7 dias)". Função à parte pra o guarda
+// EXECUTAR o desenho (mesmo motivo de `barrasDoMovimento`).
+// 🪤 Três estados, nunca dois: `o` nulo = a leitura falhou; `dias_somados` 0 = ainda
+// não há dia medido (a coleta começou em 27/09) — nenhum dos dois pode virar "ninguém veio".
+// 🔒 O nome do site de origem vem de FORA (qualquer um manda a referência que quiser): esc().
+function htmlOrigensDoSite(o) {
+  if (!o || !Array.isArray(o.origens)) {
+    return { html: '<span class="text-gray-400">sem medição — não consegui ler agora</span>', nota: '' };
+  }
+  if (!o.dias_somados) {
+    return { html: '<span class="text-gray-400">ainda sem dia medido — a contagem começa com a coleta de amanhã</span>',
+             nota: o.dias_fora ? (o.dias_fora + ' dia(s) da semana sem essa medida (coleta antiga ou truncada).') : '' };
+  }
+  if (!o.origens.length) {
+    return { html: '<span class="text-gray-400">ninguém chegou de fora nos dias medidos</span>', nota: '' };
+  }
+  const html = o.origens.map(x => {
+    const dica = (x.hosts && x.hosts.length) ? x.hosts.join(', ') : x.origem;
+    return '<div class="flex items-baseline justify-between gap-3">' +
+      '<span class="text-gray-600 truncate" title="' + esc(dica) + '">' + esc(x.origem) + '</span>' +
+      '<span class="font-semibold tabular-nums">' + (Number(x.enderecos) || 0) + '</span></div>';
+  }).join('');
+  const nota = 'Endereços de gente por dia, somados em ' + o.dias_somados + ' dia(s)' +
+    (o.dias_fora ? ' (' + o.dias_fora + ' fora: sem medida ou truncado)' : '') +
+    '. Vem da referência do navegador, sem cookie. App (Instagram, LinkedIn, ChatGPT no celular) ' +
+    'costuma chegar sem referência, em "direto ou app"; a IA do Google chega como Google.';
+  return { html, nota };
 }
 
 // 🔑 EXTRAÍDA do `carregarMovimentoDoSite` em 21/09/2026 para o guarda poder

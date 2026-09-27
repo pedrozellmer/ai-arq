@@ -39651,6 +39651,34 @@ def admin_ficha_usuario(chave: str, request: Request):
     }
 
 
+def _origens_7d(dias7: list) -> dict:
+    """De onde chegou TODO mundo nos últimos dias da série (Cloudflare, sem cookie).
+
+    Soma "endereços por dia" por canal — como o `top_paginas_7d`, é comparação entre
+    canais, não gente única na semana (quem volta em dois dias conta duas vezes).
+    🪤 Só entra dia MEDIDO e INTEIRO: `top_origens` nulo é "não medi" (dia antigo ou
+    consulta que falhou) e `origens_truncada` é conta que bateu no teto. Os dois ficam
+    fora da soma e são DITOS no retorno — o cartão não afirma sobre 7 dias quando somou 2.
+    """
+    medidos = [l for l in (dias7 or [])
+               if isinstance(l.get("top_origens"), list) and l.get("origens_truncada") is not True]
+    soma, hosts = {}, {}
+    for l in medidos:
+        for o in l["top_origens"]:
+            nome = str(o.get("origem") or "")
+            if not nome:
+                continue
+            soma[nome] = soma.get(nome, 0) + int(o.get("enderecos") or 0)
+            for h in (o.get("hosts") or []):
+                hosts.setdefault(nome, [])
+                if h not in hosts[nome]:
+                    hosts[nome].append(h)
+    lista = sorted(({"origem": k, "enderecos": v, "hosts": hosts.get(k, [])[:3]} for k, v in soma.items()),
+                   key=lambda x: (-x["enderecos"], x["origem"]))[:10]
+    return {"origens": lista, "dias_somados": len(medidos),
+            "dias_fora": len(dias7 or []) - len(medidos)}
+
+
 @app.get("/api/admin/metricas")
 def admin_metricas(request: Request, dias: int = 30):
     """A série + a frase que responde "está normal?". Só admin."""
@@ -39734,6 +39762,9 @@ def admin_metricas(request: Request, dias: int = 30):
         "top_paginas_7d_meta": _topo_meta,
         # 🔑 De onde veio quem aceitou o cookie (30 dias) — None se a RPC falhar.
         "origem_30d": _origem_das_visitas(30),
+        # 🔑 De onde chegou TODO mundo (7 dias) — referência do navegador, Cloudflare,
+        # sem depender de cookie. Outra régua: não soma com a de cima.
+        "origens_7d": _origens_7d(_dias7),
         "inflacao_7d": _infl,
         # 🚨 18/09/2026 — O FUNIL PASSOU A TER UMA RÉGUA SÓ. Ver `_funil_do_site`:
         # o que estava aqui dividia contas do BANCO por endereços do CLOUDFLARE e
