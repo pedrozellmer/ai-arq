@@ -35,6 +35,9 @@ def _prep(monkeypatch, insert_ok=True):
                         lambda tabela, linha: (gravados.append((tabela, linha)),
                                                insert_ok)[1])
     monkeypatch.setattr(main, "_supa_rows", lambda *a, **k: [])
+    # 27/09: a checagem de nota repetida lê o banco direto — sem este dublê o teste só passava porque a
+    # produção respondia "nenhuma nota ainda" (a bancada agora não alcança o Supabase: ver conftest.py)
+    monkeypatch.setattr(main, "_supa_rest_service", lambda *a, **k: (200, []))
     monkeypatch.setattr(main, "_log_error", lambda *a, **k: None)
     monkeypatch.setattr(main, "_alerta_nps", lambda *a, **k: None)
     monkeypatch.setattr(main, "_alerta_avaliacao_projeto", lambda *a, **k: None)

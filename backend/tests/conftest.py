@@ -19,8 +19,48 @@ no formato pytest é colhido normalmente.
 import io
 import os
 import re
+import urllib.error
+import urllib.parse
+import urllib.request
 
 _AQUI = os.path.dirname(os.path.abspath(__file__))
+
+
+# ── 🔒 27/09/2026 (auditoria SI): a bancada NÃO alcança o Supabase de produção ─────────────────────────────
+# `main.py` e `sinapi_matcher.py` caem no endereço de PRODUÇÃO, com a chave pública, quando a env falta — e nem
+# este PC nem o CI têm as variáveis. Medido nos logs do Supabase (24 h): a bancada daqui e a do CI mandavam
+# milhares de chamadas pra produção e ~2.900 voltavam recusadas (gravar no error_log, update_project_status,
+# DELETE em project_items…). Nada gravou SÓ porque a chave de servidor não estava no ambiente: com ela, a bancada
+# escreveria de verdade na produção. Rodada inteira com este bloqueio: 7.510 ok, 1 teste dependia da produção
+# (test_avaliacao_um_clique, consertado com dublê).
+# Aqui toda abertura de URL do urllib (urlopen e build_opener passam por OpenerDirector.open) para *.supabase.co
+# vira erro de rede — o mesmo caso que o código já trata quando o Supabase cai. Teste que precisa de resposta do
+# banco usa dublê (monkeypatch), como os outros.
+class ProducaoBloqueadaNosTestes(urllib.error.URLError):
+    """Um teste tentou chamar o Supabase de verdade."""
+
+
+def host_bloqueado(host) -> bool:
+    h = str(host or "").lower().rstrip(".")
+    return h == "supabase.co" or h.endswith(".supabase.co")
+
+
+_abrir_original = urllib.request.OpenerDirector.open
+
+
+def _abrir_sem_producao(self, fullurl, *args, **kwargs):
+    alvo = fullurl if isinstance(fullurl, str) else getattr(fullurl, "full_url", "")
+    try:
+        partes = urllib.parse.urlsplit(alvo)
+    except Exception:
+        partes = None
+    if partes is not None and host_bloqueado(partes.hostname):
+        raise ProducaoBloqueadaNosTestes(
+            "teste tentou chamar o Supabase de verdade (%s%s) — use um dublê" % (partes.hostname, partes.path))
+    return _abrir_original(self, fullurl, *args, **kwargs)
+
+
+urllib.request.OpenerDirector.open = _abrir_sem_producao
 
 
 def _e_script(nome: str) -> bool:
