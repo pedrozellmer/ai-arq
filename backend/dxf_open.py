@@ -42,6 +42,25 @@ def recuperar_dxf(filepath: str, motivo: str = ""):
     try:
         doc, auditor = _rec.readfile(filepath)
     except Exception as _erec:
+        # 🩸 27/09/2026 — o 4º degrau: TEXTO COM QUEBRA DE LINHA CRUA. Ver
+        # `_dxf_com_textos_emendados`. Mora aqui pelo mesmo motivo do 3º.
+        if _pode_ser_texto_com_quebra(_erec):
+            emendado = f"{filepath}.texto_emendado.dxf"
+            n = _dxf_com_textos_emendados(filepath, emendado)
+            if not n:
+                raise
+            print(f"[dxf] {filepath}: {n} linha(s) solta(s) de TEXTO emendada(s) "
+                  f"de volta no valor de onde saíram; relendo")
+            try:
+                return ezdxf.readfile(emendado)
+            except Exception as _e1:
+                if not _pode_ser_sortentstable(_e1):
+                    return _rec.readfile(emendado)[0]
+                # os dois defeitos no mesmo arquivo: tira a tabela do emendado
+                limpo = f"{filepath}.sem_sortents.dxf"
+                if not _dxf_sem_sortentstable(emendado, limpo):
+                    raise
+                return ezdxf.readfile(limpo)
         # 🚨 23/09/2026 — O 3º DEGRAU MORA AQUI, NÃO NO `abrir_dxf`.
         # Eu escrevi este conserto primeiro lá em cima e ele NÃO RODOU no
         # caso do cliente: `dwg_extractor.extract_from_file` — o caminho que
@@ -134,6 +153,66 @@ def _dxf_sem_sortentstable(origem: str, destino: str) -> int:
                 f_out.write(cod)
                 f_out.write(val)
     return tirados
+
+
+def _pode_ser_texto_com_quebra(exc) -> bool:
+    """A exceção do ezdxf é a do par desalinhado: onde devia vir um CÓDIGO de
+    grupo (um número) veio texto? Pela palavra, como a da SORTENTSTABLE."""
+    return "invalid group code" in str(exc or "").lower()
+
+
+def _e_codigo_de_grupo(linha: bytes) -> bool:
+    """A linha pode ser um código de grupo DXF? (número inteiro de 0 a 1071)"""
+    s = linha.strip()
+    if not s or len(s) > 5:
+        return False
+    try:
+        return 0 <= int(s) <= 1071
+    except ValueError:
+        return False
+
+
+def _dxf_com_textos_emendados(origem: str, destino: str) -> int:
+    """Reescreve o DXF emendando as linhas soltas de texto de volta no VALOR de
+    onde saíram. Devolve quantas linhas emendou.
+
+    🩸 27/09/2026, cliente que VOLTOU (jobs a11f9f9a em 16/09 e dfb805c7 hoje —
+    a MESMA planta, R16 e R17, 955 m²). O ODA recusou pela tabela de estilos;
+    o libredwg assumiu e escreveu um MTEXT cujo texto ("Nº de chapas de gesso /
+    12,5 ou 15 mm") ele leu ALÉM do fim — o lixo de memória que vem junto traz
+    uma quebra de linha CRUA. Todo DXF ASCII é uma sequência de PARES (código,
+    valor), uma linha cada; a quebra no meio do valor empurra o resto do
+    arquivo uma linha, e o ezdxf acha texto onde esperava código:
+
+        normal:  Invalid group code "12,5 ou 15 mm…" at line 3015621
+        recover: Invalid group code "Embedded Object" at line 3015629
+
+    🪤 O lixo muda de máquina pra máquina: o MESMO DWG, no libredwg 0.14 do
+    Windows, sai com "^J" no lugar da quebra e abre normal. Por isso o caso
+    não se reproduz fora do servidor sem injetar a quebra.
+
+    🔑 Lê em pares, como o 3º degrau. Depois de cada valor, enquanto a linha
+    seguinte NÃO puder ser um código de grupo, ela é continuação do valor e é
+    emendada nele (com espaço). Streaming: estes arquivos têm 50 MB.
+    """
+    emendas = 0
+    with open(origem, "rb") as f_in, open(destino, "wb") as f_out:
+        cod = f_in.readline()
+        while cod:
+            val = f_in.readline()
+            if not val:
+                f_out.write(cod)      # linha ímpar no fim: preserva
+                break
+            prox = f_in.readline()
+            while prox and not _e_codigo_de_grupo(prox):
+                fim = b"\r\n" if prox.endswith(b"\r\n") else b"\n"
+                val = val.rstrip(b"\r\n") + b" " + prox.rstrip(b"\r\n") + fim
+                emendas += 1
+                prox = f_in.readline()
+            f_out.write(cod)
+            f_out.write(val)
+            cod = prox
+    return emendas
 
 
 def abrir_dxf(filepath: str):
