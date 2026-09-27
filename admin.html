@@ -6210,6 +6210,9 @@ function _referralLabel(u) {
     blog: '📝 Blog', anuncio: '📢 Anúncio', youtube: '▶️ YouTube', outro: '✏️ Outro',
     // Canal de IA — desdobrado em uma por linha em 26/08.
     ia: '🤖 IA (não especificada)',      // legado: 3 perfis de 12/08 a 26/08
+    // 27/09: a resposta de IA do Google (Visão geral / Modo IA) separada de
+    // 'google' — conta no filtro "IA" (startsWith('ia')), não no "Google".
+    ia_google: '🤖 Google IA (Visão geral)',
     ia_chatgpt: '🤖 ChatGPT', ia_gemini: '🤖 Gemini', ia_claude: '🤖 Claude',
     ia_copilot: '🤖 Copilot', ia_perplexity: '🤖 Perplexity',
     ia_outra: '🤖 Outra IA'
@@ -6429,11 +6432,18 @@ const OG_SRC_LABEL = { google:'🔍 Google', instagram:'📷 Instagram', faceboo
   linkedin:'💼 LinkedIn', indicacao:'🤝 Indicação', evento:'🎤 Evento', blog:'📝 Blog',
   anuncio:'📢 Anúncio', youtube:'▶️ YouTube', outro:'✏️ Outro',
   // canal novo (12/08): recomendação de IA — ver _fonteNormalizada
-  ia:'🤖 Uma IA indicou' };
+  ia:'🤖 Uma IA indicou',
+  // 27/09: as IAs desdobradas (26/08) nunca tinham entrado AQUI — o gráfico
+  // mostrava "✏️ ia_gemini" como se fosse texto digitado. + a IA do Google.
+  ia_google:'🤖 Google IA (Visão geral)', ia_chatgpt:'🤖 ChatGPT', ia_gemini:'🤖 Gemini',
+  ia_claude:'🤖 Claude', ia_copilot:'🤖 Copilot', ia_perplexity:'🤖 Perplexity',
+  ia_outra:'🤖 Outra IA' };
 // Cores de marca por fonte + paleta pra regiões/semanas (dashboard colorido).
 const OG_SRC_COLOR = { google:'#4285F4', instagram:'#E1306C', facebook:'#1877F2',
   linkedin:'#0A66C2', indicacao:'#10B981', evento:'#F59E0B', blog:'#8B5CF6',
-  anuncio:'#EF4444', youtube:'#FF0000', outro:'#64748B', ia:'#7C3AED', __none:'#CBD5E1' };
+  anuncio:'#EF4444', youtube:'#FF0000', outro:'#64748B', ia:'#7C3AED', __none:'#CBD5E1',
+  ia_google:'#7C3AED', ia_chatgpt:'#7C3AED', ia_gemini:'#7C3AED', ia_claude:'#7C3AED',
+  ia_copilot:'#7C3AED', ia_perplexity:'#7C3AED', ia_outra:'#7C3AED' };
 const OG_PALETTE = ['#6366F1','#06B6D4','#10B981','#F59E0B','#EF4444','#8B5CF6',
   '#EC4899','#14B8A6','#F97316','#3B82F6','#A855F7','#22C55E','#EAB308','#0EA5E9'];
 

@@ -110,6 +110,49 @@ def test_ia_outra_EXIGE_dizer_qual():
         "só 'uma IA', que é o que a gente já tinha e não servia")
 
 
+# ══════════════════════════════════════════════════════════════════════════
+#  27/09/2026 — OS OUTROS DOIS MAPAS (gráfico do admin + ficha do usuário)
+# ══════════════════════════════════════════════════════════════════════════
+# 🪤 O guarda acima só lia o `_referralLabel` (a tabela). Havia mais dois
+# mapas — `OG_SRC_LABEL` no gráfico de origem do admin.html e na ficha do
+# admin-usuario.html — e NENHUM conhecia as IAs desdobradas em 26/08: o
+# gráfico mostrava "✏️ ia_gemini" e a ficha "ia_gemini", cru. Mesma doença de
+# 26/08, um arquivo ao lado. Achado ao pôr a `ia_google` (IA do Google).
+def _mapa_og(arquivo):
+    html = _ler(arquivo)
+    i = html.find("const OG_SRC_LABEL = {")
+    assert i > 0, "não achei o OG_SRC_LABEL em %s" % arquivo
+    bloco = html[i:html.find("};", i)]
+    return set(re.findall(r"(\w+)\s*:\s*'", bloco))
+
+
+def _faltando(opcoes, mapa):
+    return sorted(set(opcoes) - set(mapa))
+
+
+def test_TODA_opcao_tem_rotulo_no_GRAFICO_e_na_FICHA():
+    opcoes = _opcoes_do_cadastro()
+    for arquivo in ("admin.html", "admin-usuario.html"):
+        falta = _faltando(opcoes, _mapa_og(arquivo))
+        assert not falta, (
+            "opção do cadastro sem rótulo no OG_SRC_LABEL de %s: %s — aparece "
+            "crua ('✏️ valor') no gráfico/ficha" % (arquivo, falta))
+
+
+def test_a_IA_do_Google_e_separada_da_pesquisa_e_conta_como_IA():
+    """27/09: a semana recorde veio da IA autodeclarada, e o Google é o maior
+    canal. 'Pesquisa no Google' e 'resposta de IA do Google' agora são opções
+    diferentes — e a da IA começa com 'ia', pra cair no filtro de IA."""
+    opcoes = _opcoes_do_cadastro()
+    assert "google" in opcoes and "ia_google" in opcoes
+    assert "ia_google".startswith("ia")
+
+
+def test_controle_positivo_opcao_sem_rotulo_seria_pega():
+    assert _faltando(["google", "ia_google"], {"google"}) == ["ia_google"]
+    assert _faltando(["google"], {"google", "ia"}) == []
+
+
 def test_as_IAs_NOMEADAS_nao_pedem_detalhe():
     """Quem marcou ChatGPT já respondeu qual. Pedir de novo é atrito de graça
     num formulário que já perde 12 cadastros incompletos."""

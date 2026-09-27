@@ -210,7 +210,14 @@
             <option value="" disabled selected>Selecione</option>
             <option value="instagram">Instagram (@ai.arq.br)</option>
             <option value="indicacao">Indica&#231;&#227;o de algu&#233;m</option>
-            <option value="google">Pesquisa no Google</option>
+            <!-- 🔎 27/09/2026: "Pesquisa no Google" SEPARADA da resposta de IA do
+                 Google (Visão geral / Modo IA), que mora no grupo das IAs como
+                 `ia_google`. Motivo: a semana recorde (21–26/09) veio da IA
+                 autodeclarada (4 → 13), e o Google é o maior canal — sem separar,
+                 a IA do Google some dentro de "Pesquisa no Google".
+                 🪤 QUEBRA A SÉRIE: até 26/09 'google' incluía quem leu a Visão
+                 geral. Comparar 'google' antes × depois só somando os dois. -->
+            <option value="google">Pesquisa no Google (resultado da busca)</option>
             <option value="linkedin">LinkedIn</option>
             <option value="blog">Blog / artigo</option>
             <!-- 🆕 12/08/2026: canal REAL que a gente não enxergava. Três
@@ -230,6 +237,7 @@
                  🪤 O valor legado 'ia' continua no banco em 3 perfis — o admin
                  tem que seguir sabendo traduzir ele. -->
             <optgroup label="Uma IA me indicou">
+              <option value="ia_google">Google &mdash; resposta de IA (Vis&#227;o geral / Modo IA)</option>
               <option value="ia_chatgpt">ChatGPT</option>
               <option value="ia_gemini">Gemini</option>
               <option value="ia_claude">Claude</option>
