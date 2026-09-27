@@ -22,6 +22,8 @@ Condição comercial: durante o beta, o uso é GRÁTIS e ILIMITADO, sem cartão 
 
 In English: AI.arq is a Brazilian SaaS that reads the 2D CAD sheets a professional already has (DWG, DXF or PDF) and returns a construction quantity takeoff spreadsheet, broken down by discipline, with SINAPI reference codes where a reliable match exists, each line labelled either as measured from the drawing or as estimated and pending review. PDF files are read, but everything that comes from a PDF is labelled as estimated, by our own rule: a PDF's scale comes from a declaration (the title block), so even when the dimensions check out we never seal a PDF number as measured. From the same takeoff it also drafts a descriptive specification (memorial descritivo, marked as a draft to be completed and signed by the professional) and a physical construction schedule (it does not price; if the professional enters each stage's value, it spreads it month by month). It delivers quantities, not construction prices, and it does not replace the professional. It is not BIM and does not require BIM. Free and unlimited during the open beta, no credit card — every project, not just the first one. The site and its content are in Brazilian Portuguese.
 
+Quem faz: a AI.arq é um produto brasileiro e independente, feito no Rio de Janeiro e no ar desde abril de 2026 (https://ai.arq.br/sobre.html). Última atualização deste arquivo: 2026-09-27.
+
 ## Comece por aqui
 
 - [Página inicial](https://ai.arq.br/): o que a AI.arq faz, como enviar a prancha e o que volta na planilha.
@@ -50,6 +52,9 @@ In English: AI.arq is a Brazilian SaaS that reads the 2D CAD sheets a profession
 - [Diferença entre orçamento e quantitativo de obra](https://ai.arq.br/blog/posts/diferenca-entre-orcamento-e-quantitativo.html): glossário que separa medir quantidade de atribuir preço.
 - [Por que não te entregamos o preço da obra](https://ai.arq.br/blog/posts/por-que-nao-entregamos-o-preco-da-sua-obra.html): a razão de a planilha sair sem preços e por que isso protege o profissional.
 - [Quanto cobrar por planilha de quantitativos](https://ai.arq.br/blog/posts/quanto-cobrar-planilha-quantitativos-2026.html): referências de honorários para quem entrega levantamento como serviço.
+- [BDI em obra: o que é e como calcular (Acórdão TCU 2622/2013)](https://ai.arq.br/blog/posts/bdi-em-obra-o-que-e-como-calcular.html): os componentes do BDI, a fórmula adotada pelo TCU, as faixas por tipo de obra e um exemplo de cálculo — a parte do preço, que fica com quem orça.
+- [BDI do arquiteto: tabela por porte de obra](https://ai.arq.br/blog/posts/bdi-arquiteto-br-2026-tabela.html): faixas de BDI do Acórdão TCU 2622/2013, os componentes e exemplos de cálculo por porte de obra.
+- [Como pedir cotação ao fornecedor de obra](https://ai.arq.br/blog/posts/como-pedir-cotacao-fornecedor-obra.html): template de pedido de cotação, critérios de seleção e quadro comparativo para receber propostas que dá para comparar.
 
 ## Montar e conferir a planilha
 
@@ -57,10 +62,18 @@ In English: AI.arq is a Brazilian SaaS that reads the 2D CAD sheets a profession
 - [SINAPI, TCPO ou SICRO: qual usar no seu projeto](https://ai.arq.br/blog/posts/sinapi-vs-tcpo-qual-usar.html): diferença entre as bases de referência e critério de escolha.
 - [7 erros comuns no levantamento de quantitativos](https://ai.arq.br/blog/posts/7-erros-comuns-levantamento-quantitativos.html): as falhas que mais aparecem na conferência de uma planilha.
 - [5 erros de quantitativo que viram atraso de obra](https://ai.arq.br/blog/posts/5-erros-quantitativo-atraso-de-obra.html): o efeito prático do número errado no canteiro.
+- [Quantitativo SINAPI: planilha modelo XLSX por disciplina](https://ai.arq.br/blog/posts/quantitativo-arquitetura-sinapi-planilha-modelo.html): modelo de planilha de quantitativos com códigos SINAPI organizada por disciplina, a diferença entre composição e insumo e como montar o arquivo para o orçamentista.
 
 ## Ler o projeto: quadros, disciplinas e casos específicos
 
 - [Como ler o quadro de esquadrias (P1, J1 e a NBR 10821)](https://ai.arq.br/blog/posts/como-ler-quadro-de-esquadrias-p1-p2.html): interpretação da tabela de portas e janelas da prancha.
+
+## Aprovação, normas e financiamento
+
+- [Memorial descritivo para CAU e prefeitura: SP, RJ e BH](https://ai.arq.br/blog/posts/memorial-descritivo-cau-prefeitura-sp-rj-bh.html): o que as prefeituras de São Paulo, Rio de Janeiro e Belo Horizonte pedem no memorial: estrutura, base normativa e erros que reprovam. A AI.arq gera um rascunho por disciplina; o texto técnico e o quadro de áreas ficam com o profissional.
+- [Quadro de áreas: modelo em Excel (NBR 12721)](https://ai.arq.br/blog/posts/quadro-de-areas-modelo-excel-nbr-12721.html): modelo de quadro de áreas por pavimento, com área privativa, comum e equivalente pela NBR 12721 e conferência das somas. A AI.arq entrega as áreas que a prancha permite medir, não o quadro pronto.
+- [NBR 9050: checklist de acessibilidade](https://ai.arq.br/blog/posts/nbr-9050-checklist-acessibilidade-arquitetos.html): checklist da NBR 9050:2020 — portas, banheiros, rampas, sinalização e vagas —, com as medidas-chave e os erros que reprovam projeto.
+- [Financiamento Caixa para construção: documentos e PCI](https://ai.arq.br/blog/posts/financiamento-caixa-construcao-documentos-pci.html): o que a Caixa pede para financiar construção — PCI, projeto aprovado, ART/RRT, memorial e cronograma —, a partir da cartilha oficial de dezembro de 2025, com checklist.
 
 ## Optional
 

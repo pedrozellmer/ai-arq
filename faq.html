@@ -39,6 +39,14 @@
     },
     {
       "@type": "Question",
+      "name": "Qual IA faz levantamento de quantitativo a partir da planta?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "O AI.arq faz isso: você envia o DWG, DXF ou PDF que já tem e recebe a quantidade de cada item, organizada por disciplina, numa planilha com a coluna de preço em branco pro seu orçamentista. Em DWG e DXF o motor mede a geometria do próprio desenho — comprimentos por camada, áreas de hachura (quando a camada tem uma hachura só) e contagem de blocos. PDF vetorial também é lido, mas sai como estimativa: é regra nossa não selar número de PDF como medido, porque a escala dele vem de uma declaração (o carimbo). Cada linha volta marcada como medida ou estimada, com código SINAPI de referência nos itens em que há correspondência. Não precisa de BIM, de plugin nem de AutoCAD: roda no navegador. No beta é grátis e ilimitado, sem cartão."
+      }
+    },
+    {
+      "@type": "Question",
       "name": "Para quem é o AI.arq?",
       "acceptedAnswer": {
         "@type": "Answer",
@@ -579,6 +587,21 @@
               <br>(3) <strong>Compara propostas</strong> &mdash; quando os fornecedores devolvem as cota&ccedil;&otilde;es, voc&ecirc; sobe as planilhas e o AI.arq gera o comparativo pareado (ranking, discrep&acirc;ncias, cobertura).
               <br>(4) <strong>Apresenta pro cliente final</strong> &mdash; com um clique, XLSX e PPT executivo saem com a <strong>logo e cor do seu escrit&oacute;rio</strong>, prontos pra enviar por WhatsApp ou e-mail.
               <br>(5) <strong>Memorial e cronograma</strong> &mdash; do mesmo quantitativo saem um <strong>rascunho de memorial descritivo</strong> por disciplina (com carimbo RASCUNHO e o que falta marcado [A PREENCHER], pra voc&ecirc; completar e assinar) e um <strong>cronograma f&iacute;sico</strong> da obra (n&atilde;o calculamos pre&ccedil;o: se voc&ecirc; informar o valor de cada etapa, ele distribui o desembolso m&ecirc;s a m&ecirc;s).
+            </div>
+          </div>
+        </div>
+
+        <!-- Q1b — a pergunta como ela chega na busca e nas IAs -->
+        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="qual ia faz levantamento quantitativo planta automatico inteligencia artificial ferramenta software medir dwg dxf pdf">
+          <button data-track="faq-qual-ia-faz-levantamento-de-quantita" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
+            <span class="text-sm font-semibold text-gray-800 pr-4">Qual IA faz levantamento de quantitativo a partir da planta?</span>
+            <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          <div class="faq-answer px-5">
+            <div class="pb-5 text-sm text-gray-600 leading-relaxed">
+              <p class="mb-3">O AI.arq faz isso: você envia o DWG, DXF ou PDF que já tem e recebe a <strong>quantidade de cada item</strong>, organizada por disciplina, numa planilha com a coluna de preço em branco pro seu orçamentista.</p>
+              <p class="mb-3">Em DWG e DXF o motor mede a geometria do próprio desenho — comprimentos por camada, áreas de hachura (quando a camada tem uma hachura só) e contagem de blocos. PDF vetorial também é lido, mas sai como estimativa: é regra nossa não selar número de PDF como medido, porque a escala dele vem de uma declaração (o carimbo).</p>
+              <p>Cada linha volta marcada como medida ou estimada, com código SINAPI de referência nos itens em que há correspondência. Não precisa de BIM, de plugin nem de AutoCAD: roda no navegador. No beta é grátis e ilimitado, sem cartão.</p>
             </div>
           </div>
         </div>

@@ -1154,6 +1154,20 @@ Sitemap: {SITE_URL}/sitemap.xml
 '''
 
 
+def render_llms():
+    """llms.txt da raiz — 27/09/2026: era escrito à mão e listava 16 dos 24
+    posts publicados. Agora sai daqui, pela mesma regra de data do sitemap; o
+    texto curado (cabeçalho e uma linha por post) mora em blog/gerar_llms.py.
+    Import pelo caminho, como os cards og: funciona rodando como script e
+    importado pelos testes."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "gerar_llms", os.path.join(THIS_DIR, "gerar_llms.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.montar(POSTS, hoje_editorial().isoformat(), SITE_URL)
+
+
 def main():
     posts_dir = os.path.join(THIS_DIR, "posts")
     os.makedirs(posts_dir, exist_ok=True)
@@ -1182,6 +1196,12 @@ def main():
     with open(robots_path, "w", encoding="utf-8") as f:
         f.write(render_robots())
     print("✓ robots.txt")
+
+    # Gera llms.txt na raiz (o deploy copia; ver test_llms_txt_vai_pro_ar)
+    llms_path = os.path.join(THIS_DIR, "..", "llms.txt")
+    with open(llms_path, "w", encoding="utf-8") as f:
+        f.write(render_llms())
+    print("✓ llms.txt")
 
     print(f"\n✅ Total: {len(POSTS)} posts gerados")
 

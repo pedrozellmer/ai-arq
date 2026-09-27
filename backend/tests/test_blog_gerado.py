@@ -67,6 +67,17 @@ def _posts():
     return sorted(n for n in os.listdir(d) if n.endswith(".html"))
 
 
+def test_o_gerador_escreve_o_llms_txt_igual_ao_do_repo(gerado):
+    """27/09/2026: o llms.txt passou a sair do generate.py (ver
+    test_llms_txt_e_gerado.py). Se a chamada sumir do main(), o deploy serve o
+    arquivo velho do repo e post novo nunca mais entra — sem teste reclamar."""
+    escrito = os.path.join(os.path.dirname(gerado), "llms.txt")
+    assert os.path.exists(escrito), "blog/generate.py rodou e não escreveu o llms.txt"
+    no_repo = io.open(os.path.join(_RAIZ, "llms.txt"), encoding="utf-8").read()
+    assert _estavel(no_repo) == _estavel(io.open(escrito, encoding="utf-8").read()), (
+        "llms.txt do repo difere do que blog/generate.py escreve — rode o gerador")
+
+
 @pytest.mark.parametrize("nome", _posts())
 def test_post_commitado_e_igual_ao_gerado(nome, gerado):
     """Se estes dois divergem, o que está no ar é o GERADO — a edição no repo
