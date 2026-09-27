@@ -25305,6 +25305,127 @@ async def admin_instagram_post_update(request: Request):
     return {"status": "ok", "demoted": demoted}
 
 
+# ══════════════════════════════════════════════════
+#  LinkedIn — fila de aprovação dos posts da PÁGINA (27/09/2026)
+#  Pedro: "vamos colocar no nosso site no admin pra eu aprovar antes… tipo o instagram".
+#  Diferente do IG, NÃO há robô publicando: a API de páginas do LinkedIn exige app de
+#  desenvolvedor ligado à conta dele, e ele pediu pra não vincular nada ao perfil. Então:
+#  pending_approval (esperando o Pedro) → approved (ele aprovou; falta agendar na página)
+#  → scheduled (agendado no LinkedIn) → published. Os dois últimos são marcados por quem
+#  agenda (fora do painel); o painel só aprova, devolve pra rascunho, cancela e edita.
+# ══════════════════════════════════════════════════
+
+_LI_ADMIN_STATUSES = {"pending_approval", "approved", "canceled"}
+_LI_TRAVADOS = ("scheduled", "published")   # já estão no LinkedIn: mexer aqui não muda lá
+
+
+def _li_ler_post(pid: str) -> dict:
+    import urllib.request as _ur
+    try:
+        q = (f"{SUPABASE_URL}/rest/v1/linkedin_posts"
+             f"?id=eq.{pid}&select=id,status,texto,image_url")
+        r = _ur.Request(q, method="GET")
+        r.add_header("apikey", SUPABASE_KEY)
+        r.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        found = _json.loads(_ur.urlopen(r, timeout=15).read().decode("utf-8"))
+    except Exception as _e:
+        raise HTTPException(502, f"Não consegui ler o post: {str(_e)[:120]}")
+    if not found:
+        raise HTTPException(404, "post não encontrado")
+    return found[0]
+
+
+def _li_gravar(pid: str, patch: dict) -> None:
+    import urllib.request as _ur
+    try:
+        u = f"{SUPABASE_URL}/rest/v1/linkedin_posts?id=eq.{pid}"
+        r = _ur.Request(u, data=_json.dumps(patch).encode("utf-8"), method="PATCH")
+        r.add_header("apikey", SUPABASE_KEY)
+        r.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        r.add_header("Content-Type", "application/json")
+        r.add_header("Prefer", "return=minimal")
+        _ur.urlopen(r, timeout=15)
+    except Exception as _e:
+        raise HTTPException(502, f"Não consegui salvar: {str(_e)[:120]}")
+
+
+@app.get("/api/admin/linkedin/posts")
+def admin_linkedin_posts(request: Request, limit: int = 100):
+    """Lista a fila do LinkedIn (admin): rascunhos, aprovados, agendados e publicados."""
+    _require_admin(request)
+    from datetime import datetime as _dt, timezone as _tz
+    import urllib.request as _ur
+    limit = max(1, min(limit, 300))
+    try:
+        q = (f"{SUPABASE_URL}/rest/v1/linkedin_posts"
+             f"?select=id,slot_key,tema,texto,image_url,publish_at,status,notes,linkedin_url,"
+             f"approved_at,created_at&order=publish_at.desc&limit={limit}")
+        r = _ur.Request(q, method="GET")
+        r.add_header("apikey", SUPABASE_KEY)
+        r.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        rows = _json.loads(_ur.urlopen(r, timeout=15).read().decode("utf-8"))
+    except Exception as _e:
+        print(f"[li-admin] list erro: {_e}")
+        raise HTTPException(502, "Não consegui listar os posts do LinkedIn")
+    return {"posts": rows, "now": _dt.now(_tz.utc).isoformat()}
+
+
+@app.post("/api/admin/linkedin/posts/status")
+async def admin_linkedin_post_status(request: Request):
+    """Aprova (->approved), devolve pra rascunho (->pending_approval) ou cancela um post."""
+    _require_admin(request)
+    from datetime import datetime as _dt, timezone as _tz
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    pid = str((data or {}).get("id") or "").strip()
+    novo = str((data or {}).get("status") or "").strip()
+    if not pid or not _IG_UUID_RE.match(pid):
+        raise HTTPException(400, "id inválido")
+    if novo not in _LI_ADMIN_STATUSES:
+        raise HTTPException(400, f"status inválido (use: {', '.join(sorted(_LI_ADMIN_STATUSES))})")
+    post = _li_ler_post(pid)
+    if (post.get("status") or "") in _LI_TRAVADOS:
+        raise HTTPException(409, "Esse post já está no LinkedIn (agendado ou publicado) — mudar aqui não muda lá.")
+    # GUARDA: aprovar é dizer "pode publicar ISTO" — sem imagem ou sem texto não há o que aprovar.
+    if novo == "approved" and not ((post.get("image_url") or "").strip() and (post.get("texto") or "").strip()):
+        raise HTTPException(400, "Esse post ainda não tem imagem ou texto. Não dá pra aprovar.")
+    patch = {"status": novo, "updated_at": _dt.now(_tz.utc).isoformat()}
+    patch["approved_at"] = patch["updated_at"] if novo == "approved" else None
+    _li_gravar(pid, patch)
+    return {"status": "ok", "new_status": novo}
+
+
+@app.post("/api/admin/linkedin/posts/update")
+async def admin_linkedin_post_update(request: Request):
+    """Edita o texto (e as notas) de um post que ainda não foi pro LinkedIn."""
+    _require_admin(request)
+    from datetime import datetime as _dt, timezone as _tz
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    pid = str((data or {}).get("id") or "").strip()
+    if not pid or not _IG_UUID_RE.match(pid):
+        raise HTTPException(400, "id inválido")
+    patch = {k: data[k] for k in ("texto", "notes") if k in (data or {})}
+    if not patch:
+        raise HTTPException(400, "nada pra atualizar")
+    if "texto" in patch:
+        patch["texto"] = str(patch["texto"] or "")
+        if not patch["texto"].strip():
+            raise HTTPException(400, "O texto não pode ficar vazio.")
+        if len(patch["texto"]) > 3000:
+            raise HTTPException(400, "O LinkedIn aceita até 3.000 caracteres (este tem %d)." % len(patch["texto"]))
+    post = _li_ler_post(pid)
+    if (post.get("status") or "") in _LI_TRAVADOS:
+        raise HTTPException(409, "Esse post já está no LinkedIn — editar aqui não muda lá.")
+    patch["updated_at"] = _dt.now(_tz.utc).isoformat()
+    _li_gravar(pid, patch)
+    return {"status": "ok"}
+
+
 @app.post("/api/newsletter/tick")
 def newsletter_tick(request: Request):
     """Chamado pelo pg_cron. Dispara 1 newsletter agendada vencida por vez, com

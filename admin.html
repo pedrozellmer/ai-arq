@@ -185,6 +185,10 @@
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="5" stroke-width="2"/><circle cx="12" cy="12" r="3.5" stroke-width="2"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg>
       <span>Instagram</span>
     </button>
+    <button onclick="switchTab('linkedin')" data-tab="linkedin" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3" stroke-width="2"/><path stroke-linecap="round" stroke-width="2" d="M8 10v7M8 7v.01M12 17v-4a2 2 0 014 0v4M12 10v7"/></svg>
+      <span>LinkedIn</span>
+    </button>
     <button onclick="switchTab('emails')" data-tab="emails" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
       <span>Emails</span>
@@ -1284,6 +1288,18 @@
         <div id="ig-list"><p class="text-gray-400 text-sm">Carregando&hellip;</p></div>
       </div>
 
+      <div id="tab-linkedin" class="tab-content hidden">
+        <div class="mb-5 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+          <div>
+            <h2 class="text-xl font-bold text-gray-900">LinkedIn</h2>
+            <p class="text-sm text-gray-500 mt-1">Os posts da <b>p&aacute;gina do AI.arq</b> (nunca o seu perfil). Aqui voc&ecirc; l&ecirc;, edita e <b>aprova</b>. O LinkedIn n&atilde;o tem rob&ocirc; publicando sozinho: depois que voc&ecirc; aprova, o Claude agenda na p&aacute;gina e o post muda pra <b>Agendado no LinkedIn</b>.</p>
+          </div>
+          <button onclick="loadLinkedinPosts()" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-300 text-gray-700 font-medium text-sm hover:bg-gray-50 transition whitespace-nowrap">&#128260; Atualizar</button>
+        </div>
+        <div id="li-stats" class="grid gap-3 grid-cols-2 sm:grid-cols-4 mb-2"></div>
+        <div id="li-list"><p class="text-gray-400 text-sm">Carregando&hellip;</p></div>
+      </div>
+
     </div>
   </main>
 </div>
@@ -1495,6 +1511,7 @@ function switchTab(tabName, interno) {
   if (tabName === 'mensagens') loadMessages();
   if (tabName === 'newsletter') { loadNewsletterPreview(); loadNewsletterScheduled(); }
   if (tabName === 'instagram') loadInstagramPosts();
+  if (tabName === 'linkedin') loadLinkedinPosts();
   if (tabName === 'calendario') loadCalendario();
   if (tabName === 'motor') { loadOndeErra(); loadQualidadeSemanal(); loadMotorHealth(); loadOps(); loadFunilRevisao(); loadVozCliente(); loadRevisionFeedback(); }
   if (tabName === 'financeiro') loadCosts();
@@ -3487,12 +3504,13 @@ async function loadCalendario(){
     // publicado). O fetch dava 404, caía no catch e o painel anunciava "a fila
     // secou" com 10 posts agendados até outubro. Falha de leitura agora vira
     // AVISO DE FALHA, nunca "não tem nada". (31/07)
-    const [blogRaw, igRaw, nlRaw] = await Promise.all([
+    const [blogRaw, igRaw, nlRaw, liRaw] = await Promise.all([
       authFetch(`${API_BASE}/api/admin/blog/agenda`)
         .then(r => r.ok ? r.json() : { _erro: 'HTTP ' + r.status })
         .catch(e => ({ _erro: String(e).slice(0, 60) })),
       authFetch(`${API_BASE}/api/admin/instagram/posts?limit=300`).then(r => r.json()).catch(() => ({})),
       authFetch(`${API_BASE}/api/admin/newsletter/scheduled`).then(r => r.json()).catch(() => ({})),
+      authFetch(`${API_BASE}/api/admin/linkedin/posts?limit=300`).then(r => r.json()).catch(() => ({})),
     ]);
     const hoje = calDiaBR(new Date().toISOString());
     const ini = calDiaBR(new Date(Date.now() - 3 * 864e5).toISOString());
@@ -3524,6 +3542,18 @@ async function loadCalendario(){
         titulo: (p.slot_key ? p.slot_key + ' — ' : '') + String(p.caption || '').slice(0, 60),
         status: st, acao: () => switchTab('instagram'),
       });
+    }
+    // LINKEDIN — sem robô: "aprovado" ainda precisa ser agendado na página
+    for (const p of (liRaw.posts || [])) {
+      if (p.status === 'canceled' || !p.publish_at) continue;
+      const d = calDiaBR(p.publish_at);
+      if (d < ini || d > fim) continue;
+      const st = p.status === 'published' ? 'publicado'
+               : p.status === 'scheduled' ? 'agendado'
+               : p.status === 'approved' ? 'aprovado'
+               : p.status === 'pending_approval' ? 'esperando você'
+               : p.status;
+      itens.push({ dia: d, canal: '💼 LinkedIn', titulo: p.tema || p.slot_key, status: st, acao: () => switchTab('linkedin') });
     }
     // NEWSLETTER
     for (const n of (nlRaw.scheduled || [])) {
@@ -3581,6 +3611,7 @@ async function loadCalendario(){
       'agendado':       '<span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">✓ agendado</span>',
       'agendada':       '<span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">✓ agendada</span>',
       'esperando você': '<span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">⏳ esperando você</span>',
+      'aprovado':       '<span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">👍 aprovado, falta agendar</span>',
     })[st] || `<span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700">✗ ${esc(st)}</span>`;
     window._calAcoes = [];
     tl.innerHTML = Object.keys(porDia).sort().map(dia => {
@@ -3723,6 +3754,118 @@ async function igSave(){
     if (!res.ok) throw new Error(data.detail || 'erro');
     if (data.demoted) alert('Esse post estava agendado e ficou sem imagem — voltou pra Rascunho. Coloque a imagem e aprove de novo pra reagendar.');
     igCloseModal(); loadInstagramPosts();
+  } catch(e) { alert('Não deu pra salvar: ' + e.message); }
+}
+
+// ══════════════════════════════════════════════
+// LINKEDIN — fila de aprovação dos posts da página (linkedin_posts)
+// Sem robô: aprovado = "pode publicar"; quem agenda na página marca Agendado.
+// ══════════════════════════════════════════════
+const LI_STATUS = {
+  pending_approval: { icon:'📝', label:'Esperando você',          cls:'bg-amber-50 text-amber-800 border-amber-300' },
+  approved:         { icon:'👍', label:'Aprovado — falta agendar', cls:'bg-indigo-50 text-indigo-700 border-indigo-300' },
+  scheduled:        { icon:'🕓', label:'Agendado no LinkedIn',     cls:'bg-emerald-50 text-emerald-700 border-emerald-300' },
+  published:        { icon:'✅', label:'Publicado',                cls:'bg-emerald-50 text-emerald-700 border-emerald-300' },
+  canceled:         { icon:'🚫', label:'Cancelado',                cls:'bg-gray-100 text-gray-500 border-gray-300' },
+};
+let LI_POSTS = [];
+async function loadLinkedinPosts(){
+  const box = document.getElementById('li-list');
+  box.innerHTML = '<p class="text-gray-400 text-sm">Carregando…</p>';
+  try {
+    const res = await authFetch(`${API_BASE}/api/admin/linkedin/posts?limit=100`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'erro');
+    LI_POSTS = data.posts || [];
+    renderLinkedin();
+  } catch(e) {
+    box.innerHTML = `<p class="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl p-4">Não consegui carregar: ${igEsc(e.message)}</p>`;
+  }
+}
+function renderLinkedin(){
+  const c = {};
+  LI_POSTS.forEach(p => { c[p.status] = (c[p.status] || 0) + 1; });
+  document.getElementById('li-stats').innerHTML = [
+    ['📝','Esperando você', c.pending_approval || 0, 'text-amber-700'],
+    ['👍','Aprovados', c.approved || 0, 'text-indigo-700'],
+    ['🕓','Agendados', c.scheduled || 0, 'text-emerald-700'],
+    ['✅','Publicados', c.published || 0, 'text-emerald-700'],
+  ].map(([i,l,n,cls]) => `<div class="rounded-2xl border bg-white p-4 shadow-sm"><p class="text-xs text-gray-500 mb-1">${i} ${l}</p><p class="text-2xl font-bold ${cls}">${n}</p></div>`).join('');
+  const fila = LI_POSTS.filter(p => ['pending_approval','approved','scheduled'].includes(p.status))
+    .sort((a,b) => new Date(a.publish_at) - new Date(b.publish_at));
+  const hist = LI_POSTS.filter(p => ['published','canceled'].includes(p.status))
+    .sort((a,b) => new Date(b.publish_at) - new Date(a.publish_at));
+  const secao = (titulo, arr) => arr.length
+    ? `<h3 class="text-sm font-bold text-gray-700 mt-6 mb-3">${titulo} <span class="text-gray-400 font-normal">(${arr.length})</span></h3><div class="space-y-4">${arr.map(liCard).join('')}</div>`
+    : `<h3 class="text-sm font-bold text-gray-700 mt-6 mb-2">${titulo}</h3><p class="text-xs text-gray-400 mb-4">Nada aqui.</p>`;
+  document.getElementById('li-list').innerHTML = secao('📅 Fila', fila) + secao('📚 Histórico', hist.slice(0, 30));
+}
+function liCard(p){
+  const st = LI_STATUS[p.status] || { icon:'•', label:p.status, cls:'bg-gray-100 text-gray-600 border-gray-300' };
+  const travado = ['scheduled','published'].includes(p.status);
+  const temTudo = !!((p.image_url || '').trim() && (p.texto || '').trim());
+  let acoes = '';
+  if (p.status === 'pending_approval') {
+    acoes = `<button onclick="liAprovar('${p.id}')" ${temTudo ? '' : 'disabled title="Falta imagem ou texto"'} class="px-3 py-1.5 rounded-lg text-xs font-semibold ${temTudo ? 'bg-emerald-600 text-white hover:opacity-90' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}">✅ Aprovar</button>`;
+  } else if (p.status === 'approved') {
+    acoes = `<button onclick="liStatus('${p.id}','pending_approval')" class="px-3 py-1.5 rounded-lg text-xs font-medium border border-amber-300 text-amber-700 hover:bg-amber-50">↩️ Voltar pra rascunho</button>`;
+  } else if (p.status === 'canceled') {
+    acoes = `<button onclick="liStatus('${p.id}','pending_approval')" class="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-300 text-gray-600 hover:bg-gray-50">↩️ Reativar</button>`;
+  }
+  if (!travado) {
+    acoes += `<button onclick="liEditar('${p.id}')" class="px-3 py-1.5 rounded-lg text-xs font-medium border border-indigo-200 text-indigo-700 hover:bg-indigo-50">✏️ Editar texto</button>`;
+    if (p.status !== 'canceled') acoes += `<button onclick="liCancelar('${p.id}')" class="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-300 text-gray-600 hover:bg-gray-50">🚫 Cancelar</button>`;
+  }
+  const link = p.linkedin_url ? `<a href="${igEsc(p.linkedin_url)}" target="_blank" rel="noopener" class="text-xs text-indigo-600 underline">ver no LinkedIn</a>` : '';
+  const img = p.image_url
+    ? `<a href="${igEsc(p.image_url)}" target="_blank" rel="noopener" class="shrink-0" title="Abrir a imagem inteira"><img src="${igEsc(p.image_url)}" alt="imagem do post" class="w-44 max-w-full rounded-xl border border-gray-200 bg-gray-50" loading="lazy"></a>`
+    : '<div class="shrink-0 w-44 max-w-full rounded-xl border border-dashed border-amber-300 bg-amber-50 flex items-center justify-center text-xs text-amber-800" style="height:176px">⚠️ sem imagem</div>';
+  // 🪤 tailwind.min.css é build ESTÁTICO: sm:w-44, h-44, space-y-3 e space-y-2.5 não existem nele (a imagem saía no tamanho original)
+  return `<div class="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm" id="li-card-${p.id}">
+    <div class="flex flex-wrap items-center gap-2 mb-3">
+      <span class="text-sm font-semibold text-gray-800">${igEsc(p.tema || p.slot_key)}</span>
+      <span class="text-xs text-gray-400">${igFmtDate(p.publish_at)}</span>
+      <span class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border ${st.cls}">${st.icon} ${st.label}</span>
+      ${link}
+      <span class="text-[11px] text-gray-300 ml-auto font-mono">${igEsc(p.slot_key)}</span>
+    </div>
+    <div class="flex flex-col sm:flex-row gap-4">
+      ${img}
+      <div class="flex-1 min-w-0">
+        <div id="li-texto-${p.id}" class="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap break-words">${igEsc(p.texto || '')}</div>
+        <p class="text-[11px] text-gray-400 mt-2">${(p.texto || '').length} de 3.000 caracteres</p>
+        ${p.notes ? `<p class="text-xs text-gray-500 mt-2 bg-gray-50 rounded-lg p-2">📌 ${igEsc(p.notes)}</p>` : ''}
+      </div>
+    </div>
+    <div class="flex flex-wrap gap-2 mt-3">${acoes}</div>
+  </div>`;
+}
+async function liStatus(id, status){
+  try {
+    const res = await authFetch(`${API_BASE}/api/admin/linkedin/posts/status`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id, status }) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'erro');
+    loadLinkedinPosts();
+  } catch(e) { alert('Não deu: ' + e.message); }
+}
+function liAprovar(id){ if (confirm('Aprovar esse post? Depois disso o Claude agenda na página do LinkedIn, na data marcada.')) liStatus(id, 'approved'); }
+function liCancelar(id){ if (confirm('Cancelar esse post? Ele sai da fila.')) liStatus(id, 'canceled'); }
+function liEditar(id){
+  const p = LI_POSTS.find(x => x.id === id); if (!p) return;
+  const box = document.getElementById('li-texto-' + id); if (!box) return;
+  box.innerHTML = `<textarea id="li-ed-${id}" rows="16" class="w-full text-sm border border-gray-300 rounded-xl p-3 font-sans">${igEsc(p.texto || '')}</textarea>
+    <div class="flex gap-2 mt-2">
+      <button onclick="liSalvar('${id}')" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 text-white hover:opacity-90">💾 Salvar</button>
+      <button onclick="renderLinkedin()" class="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-300 text-gray-600 hover:bg-gray-50">Desistir</button>
+    </div>`;
+}
+async function liSalvar(id){
+  const texto = document.getElementById('li-ed-' + id).value;
+  try {
+    const res = await authFetch(`${API_BASE}/api/admin/linkedin/posts/update`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id, texto }) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'erro');
+    loadLinkedinPosts();
   } catch(e) { alert('Não deu pra salvar: ' + e.message); }
 }
 
