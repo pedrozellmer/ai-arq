@@ -146,6 +146,49 @@ def bloco_ex(ex, eol="\n"):
     return "const EX = " + cab + ',"itens":[' + eol + corpo + eol + "  ]};"
 
 
+# 27/09/2026 (auditoria de aquisição, C10): o <div id="itens"> chegava VAZIO no HTML
+# servido — os 25 itens só existiam dentro do <script>. Robô que não roda JS (a maioria
+# dos leitores de IA) via a página do exemplo sem o exemplo. Agora o gerador escreve uma
+# tabela simples ali dentro, da MESMA fonte do `const EX`; o JS continua trocando pela
+# versão visual. Sem <div> dentro, pra o fim do bloco não ser ambíguo.
+_BLOCO_ITENS = re.compile(r'(<div id="itens" class="mt-4">)(.*?)(</div>)', re.S)
+
+
+def _fmt_qtd(q):
+    """Como o `fmtQt` do JS: pt-BR, até 2 casas, sem zero sobrando (118.5 → 118,5)."""
+    inteiro, _, frac = ("%.2f" % q).partition(".")
+    frac = frac.rstrip("0")
+    inteiro = "{:,}".format(int(inteiro)).replace(",", ".")
+    return inteiro + ("," + frac if frac else "")
+
+
+def tabela_estatica(ex, eol="\n"):
+    """A tabela dos itens em HTML puro, legível sem JavaScript."""
+    import html as _h
+    e = lambda s: _h.escape(str(s), quote=False)  # noqa: E731
+    linhas = ['<table class="w-full text-sm">',
+              "<caption>Os %d itens do exemplo: %d medidos da geometria e %d estimados</caption>"
+              % (ex["total"], ex["medidos"], ex["estimados"]),
+              "<thead><tr><th>Item</th><th>Descrição</th><th>Un.</th><th>Quantidade</th>"
+              "<th>Confiança</th><th>SINAPI</th></tr></thead>", "<tbody>"]
+    ordem, grupos = [], {}
+    for it in ex["itens"]:
+        if it["disc"] not in grupos:
+            ordem.append(it["disc"])
+            grupos[it["disc"]] = []
+        grupos[it["disc"]].append(it)
+    for disc in ordem:
+        linhas.append('<tr><th colspan="6">%s</th></tr>' % e(disc))
+        for it in grupos[disc]:
+            sin = ("%s — %s… [%s]" % (e(it["sinapi"]["cod"]), e(it["sinapi"]["comp"]), e(it["sinapi"]["un"]))
+                   if it["sinapi"] else "sem equivalente no SINAPI")
+            linhas.append("<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>"
+                          % (e(it["num"]), e(it["desc"]), e(it["un"]), _fmt_qtd(it["qtd"]),
+                             "Medido" if it["medido"] else "Estimado", sin))
+    linhas += ["</tbody>", "</table>"]
+    return eol.join(linhas)
+
+
 def frases_que_a_pagina_tem_que_ter(ex, indiretos):
     """A prosa da página cita as contagens. Se o dado mudar, a prosa muda junto — ou o script para."""
     pct = round(100 * ex["medidos"] / ex["total"])
@@ -204,7 +247,12 @@ def conferir(pagina=PAGINA, xlsx=XLSX):
         problemas.append("página: não achei o bloco `const EX = {...};`")
     elif m.group(0).replace("\r\n", "\n") != bloco_ex(ex):
         problemas.append("página: a tabela (const EX) não é a que sai do itens.json + gerador")
-    problemas += ["página: a prosa não diz %r" % fr for fr in frases_que_a_pagina_tem_que_ter(ex, indiretos)
+    t = _BLOCO_ITENS.search(html)
+    if not t:
+        problemas.append('página: não achei o <div id="itens" class="mt-4">')
+    elif t.group(2).replace("\r\n", "\n") != tabela_estatica(ex):
+        problemas.append("página: a tabela estática (sem JS) não é a que sai do itens.json + gerador")
+    problemas +=["página: a prosa não diz %r" % fr for fr in frases_que_a_pagina_tem_que_ter(ex, indiretos)
                   if fr not in html]
     return problemas
 
@@ -219,6 +267,8 @@ def regerar():
     eol = "\r\n" if "\r\n" in html else "\n"
     assert _BLOCO_EX.search(html), "não achei o bloco `const EX = {...};` no exemplo.html"
     novo_html = _BLOCO_EX.sub(lambda _m: bloco_ex(ex, eol), html, count=1)
+    assert _BLOCO_ITENS.search(novo_html), 'não achei o <div id="itens" class="mt-4"> no exemplo.html'
+    novo_html = _BLOCO_ITENS.sub(lambda m: m.group(1) + tabela_estatica(ex, eol) + m.group(3), novo_html, count=1)
     faltam = [fr for fr in frases_que_a_pagina_tem_que_ter(ex, indiretos) if fr not in novo_html]
     if faltam:
         os.remove(tmp_xlsx)
