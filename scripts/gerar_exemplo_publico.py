@@ -1,0 +1,244 @@
+# -*- coding: utf-8 -*-
+"""Gera o exemplo público — a planilha E a tabela da página — a partir de UMA fonte: exemplos/itens.json.
+
+🩸 27/09/2026 — A planilha do exemplo era de 17/07 e o gerador seguiu andando: em 24/08 a planilha
+ganhou ORIGEM DA MEDIÇÃO e ESPECIFICAÇÃO (9 → 11 colunas); em 27/09 a aba SINAPI parou de falar
+"match" e a nota de perdas mudou. Quem baixava o exemplo pra "ver como volta" recebia uma planilha
+que não sai mais (achado PROD-11 da revisão do plano de outubro do Instagram — o exemplo é o 1º link
+da bio o mês inteiro). Página e planilha já tinham se descolado uma vez (d5b45d6, 17/07): por isso
+as duas saem da MESMA rodada, e a numeração da página é LIDA da planilha gerada.
+
+Uso:
+    python scripts/gerar_exemplo_publico.py             # regera o .xlsx e a tabela do exemplo.html
+    python scripts/gerar_exemplo_publico.py --conferir  # só confere; sai 1 se algo ficou velho
+
+Nada aqui chama IA nem busca no SINAPI: os candidatos da rodada de 17/07 estão gravados no itens.json.
+"""
+import argparse
+import io
+import json
+import os
+import re
+import sys
+import tempfile
+
+RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(RAIZ, "backend"))
+
+FONTE = os.path.join(RAIZ, "exemplos", "itens.json")
+XLSX = os.path.join(RAIZ, "exemplos", "quantitativo-exemplo-aiarq.xlsx")
+PAGINA = os.path.join(RAIZ, "exemplo.html")
+_BLOCO_EX = re.compile(r"const EX = \{.*?\]\};", re.S)
+_NUM_ITEM = re.compile(r"^\d+\.\d+$")
+_NUM_INDIRETO = re.compile(r"^S\.\d+$")
+
+
+def carregar():
+    with io.open(FONTE, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _itens_do_modelo(dados, numeros=None):
+    """BudgetItems do jeito que o motor entrega pro gerador. `numeros` (desc → nº) vem da 1ª
+    passada: a aba SINAPI escreve o item_num que recebe, e a aba Orçamento renumera por
+    disciplina — sem a 2ª passada as duas abas dariam números diferentes pro mesmo item."""
+    from models import BudgetItem, Confidence
+    from spreadsheet import REF_MIN_CONFIDENCE
+    itens = []
+    fila = dados["itens"]
+    if numeros:
+        # 2ª passada na ordem da numeração: a aba SINAPI lista na ordem em que recebe, e assim
+        # ela lê 1.1, 1.2, 2.1… como a aba Orçamento (dentro da disciplina, a ordem não muda).
+        fila = sorted(fila, key=lambda i: _chave_num(numeros[i["desc"]]))
+    for it in fila:
+        matches = []
+        for c in it["sinapi"]:
+            m = {"codigo": c["codigo"], "descricao": c["descricao"], "unidade": c["unidade"]}
+            if c.get("busca_simplificada"):
+                m["_match_level"] = "simplified"
+            if c["papel"] == "escolhido":
+                # A nota de texto do escolhido não aparece na planilha ("✓ IA conferiu"); só
+                # precisa passar do corte da coluna REF, como passou na rodada de 17/07.
+                m["_llm_picked"] = True
+                m["similarity"] = REF_MIN_CONFIDENCE
+            elif c["papel"] == "reprovado":
+                m["_llm_rejected"] = True
+            else:
+                m["similarity"] = c["semelhanca_texto"]
+            matches.append(m)
+        if matches and any(c["papel"] == "escolhido" for c in it["sinapi"]):
+            assert it["sinapi"][0]["papel"] == "escolhido", (
+                "%r: o escolhido tem que vir primeiro — é ele que vai pra coluna REF" % it["desc"])
+        itens.append(BudgetItem(
+            item_num=(numeros or {}).get(it["desc"], "0"),
+            description=it["desc"], unit=it["un"], quantity=it["qtd"], discipline=it["disc"],
+            observations=it["obs"],
+            confidence=Confidence.CONFIRMADO if it["medido"] else Confidence.ESTIMADO,
+            origem="dxf_geom" if it["medido"] else "",
+            sinapi_matches=matches))
+    return itens
+
+
+def _projeto(dados):
+    from models import ProjectData
+    p = dados["projeto"]
+    return ProjectData(name=p["name"], address=p["address"], architect=p["architect"], phase=p["phase"],
+                       total_area=p["total_area"], layout_area=p["layout_area"],
+                       no_intervention_area=p["no_intervention_area"])
+
+
+def _ler_orcamento(caminho, descricoes):
+    """(desc → nº na aba Orçamento, quantas linhas de custo indireto S.x)."""
+    from openpyxl import load_workbook
+    ws = load_workbook(caminho)["Orçamento"]
+    numeros, indiretos = {}, 0
+    for linha in ws.iter_rows(values_only=True):
+        num, desc = (str(linha[0]) if linha[0] is not None else ""), linha[1]
+        if _NUM_ITEM.match(num) and desc in descricoes:
+            numeros[desc] = num
+        elif _NUM_INDIRETO.match(num):
+            indiretos += 1
+    return numeros, indiretos
+
+
+def gerar_planilha(dados, destino):
+    """Roda o gerador de verdade (2 passadas) e devolve (desc → nº, nº de linhas de custo indireto)."""
+    from spreadsheet import generate_spreadsheet
+    descricoes = {it["desc"] for it in dados["itens"]}
+    tipologia = dados["projeto"]["tipologia"]
+    with tempfile.TemporaryDirectory() as tmp:
+        rascunho = os.path.join(tmp, "passada1.xlsx")
+        generate_spreadsheet(_projeto(dados), _itens_do_modelo(dados), rascunho, typology=tipologia)
+        numeros, _ = _ler_orcamento(rascunho, descricoes)
+    faltando = descricoes - set(numeros)
+    assert not faltando, "o gerador não escreveu estes itens na aba Orçamento: %s" % sorted(faltando)
+    generate_spreadsheet(_projeto(dados), _itens_do_modelo(dados, numeros), destino, typology=tipologia)
+    numeros2, indiretos = _ler_orcamento(destino, descricoes)
+    assert numeros2 == numeros, "a numeração mudou entre as duas passadas"
+    return numeros, indiretos
+
+
+def _chave_num(num):
+    a, b = num.split(".")
+    return int(a), int(b)
+
+
+def ex_da_pagina(dados, numeros):
+    """O objeto EX da página, na ordem da planilha. A composição vai cortada em 70 caracteres —
+    a página emenda "…" e o código do lado; o texto inteiro está na aba SINAPI."""
+    linhas = []
+    for it in sorted(dados["itens"], key=lambda i: _chave_num(numeros[i["desc"]])):
+        esc = next((c for c in it["sinapi"] if c["papel"] == "escolhido"), None)
+        linhas.append({"num": numeros[it["desc"]], "desc": it["desc"], "un": it["un"], "qtd": it["qtd"],
+                       "disc": it["disc"], "medido": it["medido"],
+                       "sinapi": ({"cod": esc["codigo"], "comp": esc["descricao"][:70], "un": esc["unidade"]}
+                                  if esc else None)})
+    medidos = sum(1 for i in dados["itens"] if i["medido"])
+    return {"total": len(linhas), "medidos": medidos, "estimados": len(linhas) - medidos,
+            "area": dados["projeto"]["total_area"], "itens": linhas}
+
+
+def bloco_ex(ex, eol="\n"):
+    """O texto do `const EX = {...};` no formato que a página já usava (1 item por linha)."""
+    cab = json.dumps({k: ex[k] for k in ("total", "medidos", "estimados", "area")},
+                     ensure_ascii=False, separators=(",", ":"))[:-1]
+    corpo = ("," + eol).join("  " + json.dumps(i, ensure_ascii=False) for i in ex["itens"])
+    return "const EX = " + cab + ',"itens":[' + eol + corpo + eol + "  ]};"
+
+
+def frases_que_a_pagina_tem_que_ter(ex, indiretos):
+    """A prosa da página cita as contagens. Se o dado mudar, a prosa muda junto — ou o script para."""
+    pct = round(100 * ex["medidos"] / ex["total"])
+    n_disc = len({i["disc"] for i in ex["itens"]})
+    n_sinapi = sum(1 for i in ex["itens"] if i["sinapi"])
+    area = ("%.1f" % ex["area"]).replace(".", ",")
+    return [
+        "%d itens quantificados em %d disciplinas" % (ex["total"], n_disc),
+        "%d itens em %d disciplinas" % (ex["total"], n_disc),
+        "%d deles com refer" % n_sinapi,
+        "os outros %d n" % (ex["total"] - n_sinapi),
+        "%d linhas de custo indireto" % indiretos,
+        'id="rx-med">%d<' % ex["medidos"],
+        'id="rx-est">%d<' % ex["estimados"],
+        "width:%d%%" % pct,
+        "%d%% medido · %d%% a confirmar" % (pct, 100 - pct),
+        "Neste exemplo, %d%%" % pct,
+        "%s m" % area,
+    ]
+
+
+def _celulas(caminho):
+    from openpyxl import load_workbook
+    wb = load_workbook(caminho)
+    return {ws.title: {c.coordinate: c.value for linha in ws.iter_rows() for c in linha if c.value is not None}
+            for ws in wb.worksheets}
+
+
+def diferencas_da_planilha(esperada, atual):
+    """Compara VALOR de célula (o .xlsx carrega data de criação — bytes nunca batem)."""
+    a, b = _celulas(esperada), _celulas(atual)
+    difs = []
+    if list(a) != list(b):
+        difs.append("abas: %s × %s" % (list(a), list(b)))
+    for aba in a:
+        for coord in sorted(set(a[aba]) | set(b.get(aba, {}))):
+            va, vb = a[aba].get(coord), b.get(aba, {}).get(coord)
+            if va != vb:
+                difs.append("%s!%s: gerador diz %r, arquivo tem %r" % (aba, coord, str(va)[:60], str(vb)[:60]))
+    return difs
+
+
+def conferir(pagina=PAGINA, xlsx=XLSX):
+    """Lista do que está velho (vazia = tudo em dia). Não escreve nada."""
+    dados = carregar()
+    problemas = []
+    with tempfile.TemporaryDirectory() as tmp:
+        novo = os.path.join(tmp, "exemplo.xlsx")
+        numeros, indiretos = gerar_planilha(dados, novo)
+        problemas += ["planilha: " + d for d in diferencas_da_planilha(novo, xlsx)[:15]]
+    ex = ex_da_pagina(dados, numeros)
+    with io.open(pagina, encoding="utf-8", newline="") as f:
+        html = f.read()
+    m = _BLOCO_EX.search(html)
+    if not m:
+        problemas.append("página: não achei o bloco `const EX = {...};`")
+    elif m.group(0).replace("\r\n", "\n") != bloco_ex(ex):
+        problemas.append("página: a tabela (const EX) não é a que sai do itens.json + gerador")
+    problemas += ["página: a prosa não diz %r" % fr for fr in frases_que_a_pagina_tem_que_ter(ex, indiretos)
+                  if fr not in html]
+    return problemas
+
+
+def regerar():
+    dados = carregar()
+    tmp_xlsx = XLSX + ".tmp.xlsx"
+    numeros, indiretos = gerar_planilha(dados, tmp_xlsx)
+    ex = ex_da_pagina(dados, numeros)
+    with io.open(PAGINA, encoding="utf-8", newline="") as f:
+        html = f.read()
+    eol = "\r\n" if "\r\n" in html else "\n"
+    assert _BLOCO_EX.search(html), "não achei o bloco `const EX = {...};` no exemplo.html"
+    novo_html = _BLOCO_EX.sub(lambda _m: bloco_ex(ex, eol), html, count=1)
+    faltam = [fr for fr in frases_que_a_pagina_tem_que_ter(ex, indiretos) if fr not in novo_html]
+    if faltam:
+        os.remove(tmp_xlsx)
+        sys.exit("A prosa do exemplo.html não bate com os dados — atualize à mão e rode de novo:\n  "
+                 + "\n  ".join(faltam))
+    os.replace(tmp_xlsx, XLSX)
+    tmp_html = PAGINA + ".tmp"
+    with io.open(tmp_html, "w", encoding="utf-8", newline="") as f:
+        f.write(novo_html)
+    os.replace(tmp_html, PAGINA)
+    print("exemplo regerado: %d itens (%d medidos), %d linhas de custo indireto"
+          % (ex["total"], ex["medidos"], indiretos))
+
+
+if __name__ == "__main__":
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("--conferir", action="store_true", help="só confere; sai 1 se algo ficou velho")
+    args = ap.parse_args()
+    if args.conferir:
+        probs = conferir()
+        print("\n".join(probs) if probs else "exemplo em dia com o gerador")
+        sys.exit(1 if probs else 0)
+    regerar()

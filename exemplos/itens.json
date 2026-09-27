@@ -1,305 +1,582 @@
 {
- "total": 25,
- "medidos": 18,
- "estimados": 7,
- "area": 118.5,
+ "_leia": "Fonte ÚNICA do exemplo público (projeto fictício). A planilha exemplos/quantitativo-exemplo-aiarq.xlsx e a tabela do exemplo.html saem daqui: python scripts/gerar_exemplo_publico.py. Nunca edite a planilha nem a tabela da página à mão.",
+ "_sinapi": "Candidatos da rodada de 17/07/2026 (busca por texto + escolha da IA); texto oficial de sinapi_composicao, sync 2026-03. papel: escolhido = '✓ IA conferiu' (vai pra REF); alternativa = mostrada com a semelhança do texto; reprovado = a IA disse que não é o mesmo serviço.",
+ "projeto": {
+  "name": "Reforma de Escritório — Exemplo AI.arq (fictício)",
+  "address": "Projeto de demonstração — dados fictícios",
+  "architect": "Exemplo AI.arq",
+  "phase": "Projeto Executivo",
+  "total_area": 118.5,
+  "layout_area": 118.5,
+  "no_intervention_area": 0.0,
+  "tipologia": "office"
+ },
  "itens": [
   {
-   "num": "1.1",
    "desc": "Administração da obra e mobilização de canteiro",
    "un": "vb",
    "qtd": 1.0,
    "disc": "Serviços Preliminares",
    "medido": false,
-   "sinapi": {
-    "cod": "90776",
-    "sim": 100
-   }
+   "obs": "Sem desenho para este item: a IA o incluiu pela lista de serviços de uma reforma — defina a quantidade conforme o contrato.",
+   "sinapi": [
+    {
+     "codigo": "90776",
+     "unidade": "H",
+     "descricao": "ENCARREGADO GERAL COM ENCARGOS COMPLEMENTARES",
+     "papel": "reprovado"
+    }
+   ]
   },
   {
-   "num": "1.2",
    "desc": "Limpeza final da obra",
    "un": "m²",
    "qtd": 118.5,
    "disc": "Serviços Preliminares",
    "medido": true,
-   "sinapi": {
-    "cod": "99815",
-    "sim": 100
-   }
+   "obs": "Fonte: área da polilinha do perímetro externo, layer 'ARQ-AREA' = 118,50 m²",
+   "sinapi": [
+    {
+     "codigo": "99815",
+     "unidade": "UN",
+     "descricao": "LIMPEZA DE BANCADA DE PIA COM PLACA DE ROCHA E CUBA DE INOX, INCLUSIVE METAIS CORRESPONDENTES. AF_10/2025_PS",
+     "papel": "reprovado"
+    }
+   ]
   },
   {
-   "num": "2.1",
    "desc": "Demolição de alvenaria de vedação (e=15cm)",
    "un": "m²",
    "qtd": 22.4,
    "disc": "Demolição e Remoção",
    "medido": false,
-   "sinapi": {
-    "cod": "97624",
-    "sim": 95
-   }
+   "obs": "Paredes marcadas 'a demolir' na planta, sem layer próprio: a IA estimou o comprimento pelo desenho — confira no CAD.",
+   "sinapi": [
+    {
+     "codigo": "97622",
+     "unidade": "M3",
+     "descricao": "DEMOLIÇÃO DE ALVENARIA DE BLOCO FURADO, DE FORMA MANUAL, SEM REAPROVEITAMENTO. AF_09/2023",
+     "papel": "escolhido"
+    },
+    {
+     "codigo": "97632",
+     "unidade": "M",
+     "descricao": "DEMOLIÇÃO DE RODAPÉ CERÂMICO, DE FORMA MANUAL, SEM REAPROVEITAMENTO. AF_09/2023",
+     "papel": "alternativa",
+     "busca_simplificada": true,
+     "semelhanca_texto": 0.32
+    }
+   ]
   },
   {
-   "num": "2.2",
    "desc": "Remoção de divisória existente",
    "un": "m²",
    "qtd": 18.0,
    "disc": "Demolição e Remoção",
    "medido": true,
-   "sinapi": {
-    "cod": "97635",
-    "sim": 100
-   }
+   "obs": "Fonte: comprimento do layer 'ARQ-DEMOLIR-DIV' = 7,20 m × altura 2,50 m (cota do corte AA) = 18,00 m²",
+   "sinapi": [
+    {
+     "codigo": "97638",
+     "unidade": "M2",
+     "descricao": "REMOÇÃO DE CHAPAS E PERFIS DE DRYWALL, DE FORMA MANUAL, SEM REAPROVEITAMENTO. AF_09/2023",
+     "papel": "escolhido",
+     "busca_simplificada": true
+    },
+    {
+     "codigo": "97660",
+     "unidade": "UN",
+     "descricao": "REMOÇÃO DE INTERRUPTORES/TOMADAS ELÉTRICAS, DE FORMA MANUAL, SEM REAPROVEITAMENTO. AF_09/2023",
+     "papel": "alternativa",
+     "busca_simplificada": true,
+     "semelhanca_texto": 0.36
+    }
+   ]
   },
   {
-   "num": "3.1",
    "desc": "Alvenaria de bloco cerâmico e=14cm",
    "un": "m²",
    "qtd": 41.2,
-   "disc": "Alvenaria e Vedações",
+   "disc": "Fechamentos Verticais",
    "medido": true,
-   "sinapi": {
-    "cod": "89306",
-    "sim": 93
-   }
+   "obs": "Fonte: comprimento do layer 'ARQ-ALV-CONSTRUIR' = 16,48 m × altura 2,50 m (cota do corte AA) = 41,20 m²",
+   "sinapi": [
+    {
+     "codigo": "89290",
+     "unidade": "M2",
+     "descricao": "ALVENARIA ESTRUTURAL DE BLOCOS CERÂMICOS 14X19X29, (ESPESSURA DE 14 CM), UTILIZANDO PALHETA E ARGAMASSA DE ASSENTAMENTO COM PREPARO EM BETONEIRA. AF_03/2023",
+     "papel": "escolhido"
+    },
+    {
+     "codigo": "104441",
+     "unidade": "M2",
+     "descricao": "ALVENARIA DE BLOCOS DE CONCRETO ESTRUTURAL 14X19X39 CM (ESPESSURA 14 CM), FBK = 8 MPA, UTILIZANDO PALHETA. AF_10/2022",
+     "papel": "alternativa",
+     "busca_simplificada": true,
+     "semelhanca_texto": 0.52
+    }
+   ]
   },
   {
-   "num": "3.2",
    "desc": "Divisória em drywall (2 faces, com lã)",
    "un": "m²",
    "qtd": 33.8,
-   "disc": "Alvenaria e Vedações",
+   "disc": "Fechamentos Verticais",
    "medido": true,
-   "sinapi": {
-    "cod": "102238",
-    "sim": 100
-   }
+   "obs": "Fonte: comprimento do layer 'ARQ-DRYWALL' = 13,52 m × altura 2,50 m (cota do corte AA) = 33,80 m²",
+   "sinapi": [
+    {
+     "codigo": "96361",
+     "unidade": "M2",
+     "descricao": "PAREDE COM SISTEMA EM CHAPAS DE GESSO PARA DRYWALL, USO INTERNO, COM DUAS FACES SIMPLES E ESTRUTURA METÁLICA COM GUIAS DUPLAS PARA PAREDES COM ÁREA LÍQUIDA MAIOR OU IGUAL A 6 M2, COM VÃOS. AF_07/2023_PS",
+     "papel": "escolhido"
+    },
+    {
+     "codigo": "102450",
+     "unidade": "M2",
+     "descricao": "DIVISORIA (N2) - PAINEL/VIDRO - PAINEL C/ MSO/COMEIA E=35MM - PERFIS SIMPLES ACO GALVANIZADO PINTADO. AF_10/2025",
+     "papel": "alternativa",
+     "busca_simplificada": true,
+     "semelhanca_texto": 0.28
+    }
+   ]
   },
   {
-   "num": "4.1",
+   "desc": "Pintura látex acrílica em parede (2 demãos)",
+   "un": "m²",
+   "qtd": 214.0,
+   "disc": "Revestimentos",
+   "medido": false,
+   "obs": "Estimada pela IA: perímetro das paredes × altura, descontando as portas — as paredes existentes não têm layer de acabamento. Confira no CAD.",
+   "sinapi": [
+    {
+     "codigo": "88489",
+     "unidade": "M2",
+     "descricao": "PINTURA LÁTEX ACRÍLICA PREMIUM, APLICAÇÃO MANUAL EM PAREDES, DUAS DEMÃOS. AF_04/2023",
+     "papel": "escolhido",
+     "busca_simplificada": true
+    },
+    {
+     "codigo": "102491",
+     "unidade": "M2",
+     "descricao": "PINTURA DE PISO COM TINTA ACRÍLICA, APLICAÇÃO MANUAL, 2 DEMÃOS, INCLUSO FUNDO PREPARADOR. AF_05/2021",
+     "papel": "alternativa",
+     "busca_simplificada": true,
+     "semelhanca_texto": 0.4
+    }
+   ]
+  },
+  {
+   "desc": "Pintura em forro de gesso",
+   "un": "m²",
+   "qtd": 101.7,
+   "disc": "Revestimentos",
+   "medido": false,
+   "obs": "Estimada pela IA com a área do forro de gesso — confirme se o forro inteiro recebe pintura.",
+   "sinapi": [
+    {
+     "codigo": "102232",
+     "unidade": "M2",
+     "descricao": "PINTURA TINTA DE ACABAMENTO (PIGMENTADA) POLIURETÂNICA EM MADEIRA, 3 DEMÃOS. AF_01/2021",
+     "papel": "reprovado"
+    }
+   ]
+  },
+  {
    "desc": "Contrapiso desempenado e=4cm",
    "un": "m²",
    "qtd": 118.5,
-   "disc": "Pisos",
+   "disc": "Pisos e Rodapés",
    "medido": true,
-   "sinapi": {
-    "cod": "88478",
-    "sim": 100
-   }
+   "obs": "Fonte: área da polilinha do perímetro externo, layer 'ARQ-AREA' = 118,50 m²",
+   "sinapi": [
+    {
+     "codigo": "88478",
+     "unidade": "M2",
+     "descricao": "CONTRAPISO COM ARGAMASSA AUTONIVELANTE, APLICADO SOBRE LAJE, ADERIDO, ESPESSURA 4CM. AF_07/2021",
+     "papel": "escolhido",
+     "busca_simplificada": true
+    },
+    {
+     "codigo": "88476",
+     "unidade": "M2",
+     "descricao": "CONTRAPISO COM ARGAMASSA AUTONIVELANTE, APLICADO SOBRE LAJE, ADERIDO, ESPESSURA 2CM. AF_07/2021",
+     "papel": "alternativa",
+     "busca_simplificada": true,
+     "semelhanca_texto": 0.37
+    }
+   ]
   },
   {
-   "num": "4.2",
    "desc": "Piso porcelanato retificado 60x60",
    "un": "m²",
    "qtd": 96.3,
-   "disc": "Pisos",
+   "disc": "Pisos e Rodapés",
    "medido": true,
-   "sinapi": {
-    "cod": "98671",
-    "sim": 100
-   }
+   "obs": "Fonte: área hachurada do layer 'PISO-PORCELANATO' = 96,30 m²",
+   "sinapi": [
+    {
+     "codigo": "87261",
+     "unidade": "M2",
+     "descricao": "REVESTIMENTO CERÂMICO PARA PISO COM PLACAS TIPO PORCELANATO DE DIMENSÕES 60X60 CM APLICADA EM AMBIENTES DE ÁREA MENOR QUE 5 M². AF_02/2023_PE",
+     "papel": "escolhido"
+    },
+    {
+     "codigo": "101735",
+     "unidade": "M2",
+     "descricao": "PISO DE BORRACHA ESPORTIVO, ESPESSURA 15MM, ASSENTADO COM ARGAMASSA. AF_02/2026",
+     "papel": "alternativa",
+     "busca_simplificada": true,
+     "semelhanca_texto": 0.15
+    }
+   ]
   },
   {
-   "num": "4.3",
    "desc": "Rodapé em porcelanato h=7cm",
    "un": "m",
    "qtd": 84.6,
-   "disc": "Pisos",
+   "disc": "Pisos e Rodapés",
    "medido": true,
-   "sinapi": {
-    "cod": "88650",
-    "sim": 100
-   }
+   "obs": "Fonte: comprimento do layer 'ARQ-RODAPE' = 84,60 m",
+   "sinapi": [
+    {
+     "codigo": "88650",
+     "unidade": "M",
+     "descricao": "RODAPÉ CERÂMICO DE 7CM DE ALTURA COM PLACAS TIPO ESMALTADA DE DIMENSÕES 60X60CM. AF_02/2023",
+     "papel": "escolhido",
+     "busca_simplificada": true
+    },
+    {
+     "codigo": "104619",
+     "unidade": "M",
+     "descricao": "RODAPÉ CERÂMICO DE 7CM DE ALTURA COM PLACAS TIPO ESMALTADA DE DIMENSÕES 80X80CM. AF_02/2023",
+     "papel": "alternativa",
+     "busca_simplificada": true,
+     "semelhanca_texto": 0.27
+    }
+   ]
   },
   {
-   "num": "4.4",
    "desc": "Piso vinílico em manta (sala de reunião)",
    "un": "m²",
    "qtd": 22.2,
-   "disc": "Pisos",
+   "disc": "Pisos e Rodapés",
    "medido": true,
-   "sinapi": {
-    "cod": "106790",
-    "sim": 100
-   }
+   "obs": "Fonte: área hachurada do layer 'PISO-VINILICO' = 22,20 m²",
+   "sinapi": [
+    {
+     "codigo": "101728",
+     "unidade": "M2",
+     "descricao": "PISO VINÍLICO FLEXÍVEL EM MANTA, PADRÃO LISO, ESPESSURA 2 MM, FIXADO COM COLA. AF_02/2026",
+     "papel": "escolhido"
+    },
+    {
+     "codigo": "101735",
+     "unidade": "M2",
+     "descricao": "PISO DE BORRACHA ESPORTIVO, ESPESSURA 15MM, ASSENTADO COM ARGAMASSA. AF_02/2026",
+     "papel": "alternativa",
+     "busca_simplificada": true,
+     "semelhanca_texto": 0.2
+    }
+   ]
   },
   {
-   "num": "5.1",
    "desc": "Forro de gesso acartonado liso",
    "un": "m²",
    "qtd": 101.7,
    "disc": "Forros",
    "medido": true,
-   "sinapi": {
-    "cod": "106129",
-    "sim": 17
-   }
+   "obs": "Fonte: área hachurada do layer 'FORRO-GESSO' = 101,70 m²",
+   "sinapi": [
+    {
+     "codigo": "96114",
+     "unidade": "M2",
+     "descricao": "FORRO EM DRYWALL, PARA AMBIENTES COMERCIAIS, INCLUSIVE ESTRUTURA BIRECIONAL DE FIXAÇÃO. AF_08/2023_PS",
+     "papel": "escolhido",
+     "busca_simplificada": true
+    },
+    {
+     "codigo": "96113",
+     "unidade": "M2",
+     "descricao": "FORRO EM PLACAS DE GESSO, PARA AMBIENTES COMERCIAIS. AF_08/2023_PS",
+     "papel": "alternativa",
+     "busca_simplificada": true,
+     "semelhanca_texto": 0.41
+    }
+   ]
   },
   {
-   "num": "5.2",
    "desc": "Sanca de gesso perimetral",
    "un": "m",
    "qtd": 46.0,
    "disc": "Forros",
    "medido": false,
-   "sinapi": {
-    "cod": "99054",
-    "sim": 100
-   }
+   "obs": "A sanca não tem layer próprio: a IA estimou o perímetro pelo contorno do forro — confira no CAD.",
+   "sinapi": [
+    {
+     "codigo": "99054",
+     "unidade": "M2",
+     "descricao": "ACABAMENTOS PARA FORRO (SANCA DE GESSO, MONTADA NA OBRA). AF_08/2023_PS",
+     "papel": "escolhido"
+    },
+    {
+     "codigo": "86904",
+     "unidade": "UN",
+     "descricao": "LAVATÓRIO LOUÇA BRANCA SUSPENSO, *40 X 30* CM OU EQUIVALENTE, PADRÃO POPULAR - FORNECIMENTO E INSTALAÇÃO. AF_02/2026",
+     "papel": "alternativa",
+     "busca_simplificada": true,
+     "semelhanca_texto": 0.15
+    }
+   ]
   },
   {
-   "num": "6.1",
-   "desc": "Pintura látex acrílica em parede (2 demãos)",
-   "un": "m²",
-   "qtd": 214.0,
-   "disc": "Pintura",
-   "medido": false,
-   "sinapi": {
-    "cod": "95626",
-    "sim": 64
-   }
-  },
-  {
-   "num": "6.2",
-   "desc": "Pintura em forro de gesso",
-   "un": "m²",
-   "qtd": 101.7,
-   "disc": "Pintura",
-   "medido": false,
-   "sinapi": {
-    "cod": "102232",
-    "sim": 100
-   }
-  },
-  {
-   "num": "7.1",
    "desc": "Porta de madeira 80x210 com batente e ferragens",
    "un": "un",
    "qtd": 6.0,
-   "disc": "Esquadrias",
+   "disc": "Divisórias e Vidros",
    "medido": true,
-   "sinapi": {
-    "cod": "105472",
-    "sim": 75
-   }
+   "obs": "Fonte: 6 INSERTs do bloco 'PORTA-MAD-80X210'",
+   "sinapi": [
+    {
+     "codigo": "91297",
+     "unidade": "UN",
+     "descricao": "PORTA DE MADEIRA FRISADA, SEMI-OCA (LEVE OU MÉDIA), 80X210CM, ESPESSURA DE 3,5CM, INCLUSO DOBRADIÇAS - FORNECIMENTO E INSTALAÇÃO. AF_10/2025",
+     "papel": "escolhido"
+    },
+    {
+     "codigo": "106319",
+     "unidade": "UN",
+     "descricao": "PORTA DE ABRIR COM MOLA HIDRÁULICA, EM VIDRO TEMPERADO, 80X210 CM, ESPESSURA 10 MM, INCLUSIVE ACESSÓRIOS. AF_11/2025",
+     "papel": "alternativa",
+     "busca_simplificada": true,
+     "semelhanca_texto": 0.25
+    }
+   ]
   },
   {
-   "num": "7.2",
    "desc": "Porta de vidro temperado 90x210",
    "un": "un",
    "qtd": 2.0,
-   "disc": "Esquadrias",
+   "disc": "Divisórias e Vidros",
    "medido": true,
-   "sinapi": {
-    "cod": "102182",
-    "sim": 100
-   }
+   "obs": "Fonte: 2 INSERTs do bloco 'PORTA-VIDRO-90X210'",
+   "sinapi": [
+    {
+     "codigo": "102184",
+     "unidade": "UN",
+     "descricao": "PORTA DE ABRIR COM MOLA HIDRÁULICA, EM VIDRO TEMPERADO, 90X210 CM, ESPESSURA 10 MM, INCLUSIVE ACESSÓRIOS. AF_11/2025",
+     "papel": "escolhido"
+    },
+    {
+     "codigo": "106319",
+     "unidade": "UN",
+     "descricao": "PORTA DE ABRIR COM MOLA HIDRÁULICA, EM VIDRO TEMPERADO, 80X210 CM, ESPESSURA 10 MM, INCLUSIVE ACESSÓRIOS. AF_11/2025",
+     "papel": "alternativa",
+     "busca_simplificada": true,
+     "semelhanca_texto": 0.57
+    }
+   ]
   },
   {
-   "num": "8.1",
    "desc": "Luminária LED de embutir 60x60",
    "un": "un",
    "qtd": 24.0,
    "disc": "Iluminação",
    "medido": true,
-   "sinapi": {
-    "cod": "105542",
-    "sim": 100
-   }
+   "obs": "Fonte: 24 INSERTs do bloco 'LUM-EMB-60X60'",
+   "sinapi": [
+    {
+     "codigo": "105542",
+     "unidade": "UN",
+     "descricao": "LUMINÁRIA LED DE EMBUTIR - QUADRADA 60X60CM, INCLUSO DRIVER - FORNECIMENTO E INSTALAÇÃO. AF_09/2024",
+     "papel": "escolhido"
+    },
+    {
+     "codigo": "103786",
+     "unidade": "UN",
+     "descricao": "LUMINÁRIA TIPO PLAFON QUADRADA, DE EMBUTIR, COM LED DE 12 W - FORNECIMENTO E INSTALAÇÃO. AF_09/2024",
+     "papel": "alternativa",
+     "busca_simplificada": true,
+     "semelhanca_texto": 0.44
+    }
+   ]
   },
   {
-   "num": "8.2",
    "desc": "Spot LED de embutir redondo",
    "un": "un",
    "qtd": 18.0,
    "disc": "Iluminação",
    "medido": true,
-   "sinapi": {
-    "cod": "106773",
-    "sim": 64
-   }
+   "obs": "Fonte: 18 INSERTs do bloco 'SPOT-EMB-RED'",
+   "sinapi": [
+    {
+     "codigo": "105546",
+     "unidade": "UN",
+     "descricao": "LUMINÁRIA TIPO SPOT, DE EMBUTIR, COM 1 LÂMPADA LED PAR20 - FORNECIMENTO E INSTALAÇÃO. AF_09/2024",
+     "papel": "escolhido",
+     "busca_simplificada": true
+    },
+    {
+     "codigo": "105545",
+     "unidade": "UN",
+     "descricao": "LUMINÁRIA TIPO SPOT, DE SOBREPOR, COM 1 LÂMPADA LED PAR20 - FORNECIMENTO E INSTALAÇÃO. AF_09/2024",
+     "papel": "alternativa",
+     "busca_simplificada": true,
+     "semelhanca_texto": 0.28
+    }
+   ]
   },
   {
-   "num": "8.3",
    "desc": "Pendente decorativo sobre bancada",
    "un": "un",
    "qtd": 3.0,
    "disc": "Iluminação",
    "medido": true,
-   "sinapi": {
-    "cod": "95696",
-    "sim": 100
-   }
+   "obs": "Fonte: 3 INSERTs do bloco 'PENDENTE-BANCADA'",
+   "sinapi": [
+    {
+     "codigo": "95696",
+     "unidade": "UN",
+     "descricao": "SPRINKLER TIPO PENDENTE, 68 °C, UNIÃO POR ROSCA DN 15 (1/2\") - FORNECIMENTO E INSTALAÇÃO. AF_01/2026",
+     "papel": "reprovado"
+    }
+   ]
   },
   {
-   "num": "9.1",
    "desc": "Ponto de tomada 2P+T 10A",
    "un": "un",
    "qtd": 32.0,
    "disc": "Instalações Elétricas e Dados",
    "medido": true,
-   "sinapi": {
-    "cod": "92010",
-    "sim": 97
-   }
+   "obs": "Fonte: 32 INSERTs do bloco 'TOM-2P+T-10A'",
+   "sinapi": [
+    {
+     "codigo": "91996",
+     "unidade": "UN",
+     "descricao": "TOMADA MÉDIA DE EMBUTIR (1 MÓDULO), 2P+T 10 A, INCLUINDO SUPORTE E PLACA - FORNECIMENTO E INSTALAÇÃO. AF_03/2023",
+     "papel": "escolhido"
+    },
+    {
+     "codigo": "91997",
+     "unidade": "UN",
+     "descricao": "TOMADA MÉDIA DE EMBUTIR (1 MÓDULO), 2P+T 20 A, INCLUINDO SUPORTE E PLACA - FORNECIMENTO E INSTALAÇÃO. AF_03/2023",
+     "papel": "alternativa",
+     "busca_simplificada": true,
+     "semelhanca_texto": 0.33
+    }
+   ]
   },
   {
-   "num": "9.2",
    "desc": "Ponto de interruptor",
    "un": "un",
    "qtd": 14.0,
    "disc": "Instalações Elétricas e Dados",
    "medido": true,
-   "sinapi": {
-    "cod": "91955",
-    "sim": 65
-   }
+   "obs": "Fonte: 14 INSERTs do bloco 'INTERRUPTOR'",
+   "sinapi": [
+    {
+     "codigo": "91952",
+     "unidade": "UN",
+     "descricao": "INTERRUPTOR SIMPLES (1 MÓDULO), 10A/250V, SEM SUPORTE E SEM PLACA - FORNECIMENTO E INSTALAÇÃO. AF_03/2023",
+     "papel": "escolhido",
+     "busca_simplificada": true
+    },
+    {
+     "codigo": "91954",
+     "unidade": "UN",
+     "descricao": "INTERRUPTOR PARALELO (1 MÓDULO), 10A/250V, SEM SUPORTE E SEM PLACA - FORNECIMENTO E INSTALAÇÃO. AF_03/2023",
+     "papel": "alternativa",
+     "busca_simplificada": true,
+     "semelhanca_texto": 0.61
+    }
+   ]
   },
   {
-   "num": "9.3",
    "desc": "Ponto de rede/dados RJ45 cat6",
    "un": "un",
    "qtd": 20.0,
    "disc": "Instalações Elétricas e Dados",
    "medido": true,
-   "sinapi": null
+   "obs": "Fonte: 20 INSERTs do bloco 'PT-REDE-RJ45'",
+   "sinapi": [
+    {
+     "codigo": "106077",
+     "unidade": "UN",
+     "descricao": "TOMADA RJ45 CAT 6E (COMPLETA) - FORNECIMENTO E INSTALAÇÃO. AF_08/2025",
+     "papel": "escolhido"
+    },
+    {
+     "codigo": "98307",
+     "unidade": "UN",
+     "descricao": "TOMADA DE REDE RJ45 - FORNECIMENTO E INSTALAÇÃO. AF_08/2025",
+     "papel": "alternativa",
+     "semelhanca_texto": 0.4
+    }
+   ]
   },
   {
-   "num": "10.1",
-   "desc": "Ar-condicionado split cassete 36.000 BTU",
-   "un": "un",
-   "qtd": 2.0,
-   "disc": "Ar-Condicionado",
-   "medido": true,
-   "sinapi": {
-    "cod": "103272",
-    "sim": 73
-   }
-  },
-  {
-   "num": "11.1",
    "desc": "Bacia sanitária com caixa acoplada",
    "un": "un",
    "qtd": 3.0,
    "disc": "Instalações Hidráulicas",
    "medido": false,
-   "sinapi": {
-    "cod": "86888",
-    "sim": 100
-   }
+   "obs": "Fonte: texto layer 'ARQ-TEXTO' — 'SANITÁRIOS: 3 BACIAS C/ CAIXA ACOPLADA'. Texto é declaração, não medição: não há bloco no desenho.",
+   "sinapi": [
+    {
+     "codigo": "86888",
+     "unidade": "UN",
+     "descricao": "BACIA SANITÁRIA COM CAIXA ACOPLADA LOUÇA BRANCA - FORNECIMENTO E INSTALAÇÃO. AF_02/2026",
+     "papel": "escolhido"
+    },
+    {
+     "codigo": "100848",
+     "unidade": "UN",
+     "descricao": "BACIA SANITÁRIA INFANTIL LOUÇA BRANCA, COM TUBO DE LIGAÇÃO CROMADO - FORNECIMENTO E INSTALAÇÃO. AF_02/2026_PS",
+     "papel": "alternativa",
+     "busca_simplificada": true,
+     "semelhanca_texto": 0.45
+    }
+   ]
   },
   {
-   "num": "11.2",
    "desc": "Cuba de apoio + torneira (copa)",
    "un": "un",
    "qtd": 1.0,
    "disc": "Instalações Hidráulicas",
    "medido": false,
-   "sinapi": {
-    "cod": "106773",
-    "sim": 100
-   }
+   "obs": "Fonte: texto layer 'ARQ-TEXTO' — 'COPA: CUBA DE APOIO C/ TORNEIRA'. Texto é declaração, não medição: não há bloco no desenho.",
+   "sinapi": [
+    {
+     "codigo": "106773",
+     "unidade": "UN",
+     "descricao": "CUBA DE EMBUTIR REDONDA EM LOUÇA BRANCA, 36 CM OU EQUIVALENTE - FORNECIMENTO E INSTALAÇÃO. AF_02/2026",
+     "papel": "reprovado"
+    }
+   ]
+  },
+  {
+   "desc": "Ar-condicionado split cassete 36.000 BTU",
+   "un": "un",
+   "qtd": 2.0,
+   "disc": "Ar-Condicionado",
+   "medido": true,
+   "obs": "Fonte: 2 INSERTs do bloco 'AC-CASSETE-36K'",
+   "sinapi": [
+    {
+     "codigo": "103271",
+     "unidade": "UN",
+     "descricao": "AR CONDICIONADO SPLIT ON/OFF, CASSETE (TETO), FRIO 4 VIAS 36000 BTU/H - FORNECIMENTO E INSTALAÇÃO. AF_11/2021_PE",
+     "papel": "escolhido"
+    },
+    {
+     "codigo": "89866",
+     "unidade": "UN",
+     "descricao": "JOELHO 90 GRAUS, PVC, SOLDÁVEL, DN 25MM, INSTALADO EM DRENO DE AR-CONDICIONADO - FORNECIMENTO E INSTALAÇÃO. AF_08/2022",
+     "papel": "alternativa",
+     "busca_simplificada": true,
+     "semelhanca_texto": 0.4
+    }
+   ]
   }
  ]
 }
