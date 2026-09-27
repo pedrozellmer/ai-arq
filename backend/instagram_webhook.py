@@ -955,6 +955,40 @@ async def insights_sync(request: Request, force: bool = False):
             except Exception:
                 pass
 
+    res = _sincronizar_insights()
+    if res.get("ok") and "errors" in res:
+        res["insights"] = _supa_select(
+            "instagram_post_insights",
+            "select=*&order=synced_at.desc",
+        )
+    return res
+
+
+@router.post("/insights/tick")
+def insights_tick(request: Request):
+    """Coleta semanal dos números dos posts — chamada pelo pg_cron
+    `aiarq_ig_insights_tick` (segunda, 9h de Brasília).
+
+    🩸 26/09/2026: a coleta só existia atrás do login de admin (`/insights/sync`)
+    e a grade dizia "adicionar ao pg_cron" — ninguém adicionou. A última coleta
+    foi em 16/08: setembro inteiro ficou sem número, e o plano de outubro ia ser
+    feito no escuro. Mesmo portão dos outros ticks (X-Tick-Secret; sem
+    TICK_SECRET no ambiente, segue aberto). Resposta curta de propósito: o
+    pg_net guarda o corpo de cada chamada, e a lista inteira não serve ao cron.
+    """
+    _tick = os.getenv("TICK_SECRET", "")
+    if _tick and request.headers.get("X-Tick-Secret", "") != _tick:
+        raise HTTPException(401, "Tick não autorizado")
+    res = _sincronizar_insights()
+    if "errors" in res:
+        res["n_errors"] = len(res["errors"])
+        res["errors"] = res["errors"][:10]
+    return res
+
+
+def _sincronizar_insights() -> dict:
+    """Busca na Graph API os números de todo post publicado e grava em
+    `instagram_post_insights`. Sem portão e sem cache — quem chama decide."""
     api = MetaGraphAPI()
     if not api.access_token:
         return {"ok": False, "error": "META_ACCESS_TOKEN não configurado"}
@@ -1003,11 +1037,7 @@ async def insights_sync(request: Request, force: bool = False):
         else:
             errors.append({"slot": slot_key, "error": "upsert failed"})
 
-    fresh = _supa_select(
-        "instagram_post_insights",
-        "select=*&order=synced_at.desc",
-    )
-    return {"ok": True, "synced": synced, "errors": errors, "insights": fresh}
+    return {"ok": True, "synced": synced, "errors": errors}
 
 
 @router.get("/insights/list")
