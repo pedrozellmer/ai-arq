@@ -172,8 +172,11 @@ def _rodar_os_rebaixamentos(itens, job_id="job-teste"):
     # 🩸 22/09/2026: o aviso do parcial passou a ser juntado por
     # `_observacao_que_cabe` (o `[:1000]` comia o fim da observação) — a
     # função REAL entra no escopo, como os outros colaboradores.
+    # 🩸 27/09: a fatia passou a conter a regra da MESMA PEÇA entre pranchas
+    # (depois da chave e da tabela impressa, antes do fim da fila) — entra real.
     ns = {"all_items": itens, "_selos_sem_medida": _ssm, "job_id": job_id,
           "_observacao_que_cabe": _m._observacao_que_cabe,
+          "_tira_selo_da_mesma_peca": _m._tira_selo_da_mesma_peca,
           "_log_error": lambda *a, **k: logs.append(
               " ".join(str(x) for x in a))}
     exec(compile(_fatia_dos_rebaixamentos(), "rebaixa-selo", "exec"), ns)
