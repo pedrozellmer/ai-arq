@@ -230,33 +230,32 @@ def _subtitulo_do_cadastro(src):
     return src[j:src.find("\n", j)] if j >= 0 else ""
 
 
-def _cita_os_botoes(frase):
-    # 🪤 o login.html escreve o acento ESCAPADO (barra + u00f5, a barra existe
-    # de verdade no arquivo). O Python e o editor traduzem esse escape se ele
-    # for digitado — por isso a barra é montada com chr(92).
-    escapado = "bot" + chr(92) + "u00f5es"
-    return escapado in frase or "botões" in frase
+def _fala_de_senha(frase):
+    return "senha" in frase.lower()
 
 
-def test_criar_conta_fala_dos_botoes_e_nao_so_da_senha():
-    """Pedro, 26/09: a tela dizia só "Escolha uma senha de pelo menos 8
-    caracteres" — logo acima de três botões que criam a conta SEM senha.
-    Quem lê acha que senha é obrigatória."""
+def test_criar_conta_nao_fala_de_senha_no_subtitulo():
+    """Pedro, 26/09: a tela dizia "Escolha uma senha de pelo menos 8
+    caracteres" logo acima de três botões que criam a conta SEM senha — quem
+    lê acha que senha é obrigatória. A 1ª tentativa ("Crie com um clique
+    pelos botões abaixo…") ele achou feia, com razão: o mercado (Notion,
+    Figma, Canva) não explica os botões, e a regra da senha mora no próprio
+    campo — o nosso já diz "Crie uma senha (mín. 8 caracteres)"."""
     frase = _subtitulo_do_cadastro(_login())
     assert frase, "sumiu o subtítulo do modo Criar sua conta"
-    assert _cita_os_botoes(frase), (
-        "o subtítulo de Criar sua conta voltou a falar só de senha: %s" % frase)
+    assert not _fala_de_senha(frase), (
+        "o subtítulo de Criar sua conta voltou a falar de senha: %s" % frase)
+
+
+def test_a_regra_da_senha_continua_no_campo():
+    """🧪 Controle: tirar a frase de cima não pode sumir com o aviso dos 8
+    caracteres — ele tem que continuar no placeholder do campo de senha."""
+    src = sem_comentarios_js(_login())
+    assert "Crie uma senha (m" in src and "8 caracteres)" in src
 
 
 def test_controle_positivo_a_frase_antiga_seria_reprovada():
-    b = chr(92)
-    antiga = ("subtituloEl.innerHTML = '<strong>Gr" + b + "u00e1tis durante o beta</strong> "
-              + b + "u2014 quantos projetos quiser, sem cart" + b + "u00e3o. Escolha uma senha"
-              " de pelo menos 8 caracteres.';")
-    nova = ("subtituloEl.innerHTML = '<strong>Gr" + b + "u00e1tis durante o beta</strong> "
-            + b + "u2014 quantos projetos quiser, sem cart" + b + "u00e3o. Crie com um clique"
-            " pelos bot" + b + "u00f5es abaixo, ou com e-mail e uma senha de pelo menos 8"
-            " caracteres.';")
-    assert not _cita_os_botoes(antiga)
-    # 🧪 e a frase nova, no MESMO formato escapado do arquivo, passa
-    assert _cita_os_botoes(nova)
+    antiga = "subtituloEl.innerHTML = '<strong>Gratis</strong> Escolha uma senha de pelo menos 8 caracteres.';"
+    nova = "subtituloEl.innerHTML = '<strong>Gratis durante o beta</strong> quantos projetos quiser, sem cartao.';"
+    assert _fala_de_senha(antiga)
+    assert not _fala_de_senha(nova)
