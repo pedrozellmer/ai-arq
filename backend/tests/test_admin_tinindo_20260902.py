@@ -112,15 +112,17 @@ def test_a_coleta_pede_ao_cloudflare_o_dia_de_BRASILIA(monkeypatch):
 def test_a_contagem_do_dia_corta_as_03h_UTC_que_e_meia_noite_em_brasilia(monkeypatch):
     """🚨 `_contar_do_dia` cortava em T00:00:00Z: cadastro das 22h de Brasília
     caía no dia seguinte. Medido: 24/08 dava 2 em UTC e 3 em Brasília."""
-    pedidos = {}
+    pedidos = []
 
     def _espiao(metodo, tabela, params=None, **k):
-        pedidos[tabela] = params or {}
+        pedidos.append(params or {})
         return 200, []
     monkeypatch.setattr(_m, "_supa_rest_service", _espiao)
     for t in ("projects", "profiles"):
+        # 27/09: `projects` é contado na view `projetos_de_cliente` — o que
+        # importa aqui é a FAIXA pedida, seja qual for o nome da tabela
         _m._contar_do_dia(t, date(2026, 9, 1))
-        faixa = pedidos[t].get("and", "")
+        faixa = pedidos[-1].get("and", "")
         assert "created_at.gte.2026-09-01T03:00:00Z" in faixa, (
             "%s: o início do dia não é 00h de Brasília: %s" % (t, faixa))
         assert "created_at.lt.2026-09-02T03:00:00Z" in faixa, (

@@ -445,7 +445,10 @@ def test_a_contagem_pede_uma_coluna_que_EXISTE_em_cada_tabela():
     pedido de verdade. Colunas conferidas no information_schema em 02/09.
     """
     reais = {"profiles": {"user_id", "full_name", "email", "created_at"},
-             "projects": {"job_id", "status", "created_at", "is_eval"}}
+             # 27/09: a contagem de projetos lê a VIEW (a regra de cliente do
+             # banco); colunas conferidas na definição da view em 27/09
+             "projetos_de_cliente": {"job_id", "status", "created_at", "is_eval",
+                                     "parent_job_id"}}
     pedidos = {}
 
     def _espiao(metodo, tabela, params=None, **k):
@@ -455,17 +458,24 @@ def test_a_contagem_pede_uma_coluna_que_EXISTE_em_cada_tabela():
     _orig = _m._supa_rest_service
     try:
         _m._supa_rest_service = _espiao
-        for tabela in ("profiles", "projects"):
-            _m._contar_do_dia(tabela, date(2026, 9, 1))
+        for o_que, tabela in (("profiles", "profiles"), ("projects", "projetos_de_cliente")):
+            _m._contar_do_dia(o_que, date(2026, 9, 1))
+            assert tabela in pedidos, "a contagem de %r não leu `%s`: %r" % (o_que, tabela, pedidos)
             col = (pedidos[tabela].get("select") or "").split(",")[0].strip()
             assert col in reais[tabela], (
                 "a contagem pede a coluna %r em `%s`, que NAO existe la - o "
                 "PostgREST devolve 400 e a contagem vira None calada" % (col, tabela))
+            for filtro in pedidos[tabela]:
+                if filtro not in ("select", "and"):
+                    assert filtro in reais[tabela], (
+                        "filtro por %r em `%s`, coluna que NAO existe la" % (filtro, tabela))
         # 🪤 `profiles` não tem `is_eval`; mandar o filtro é 400 na certa.
         assert "is_eval" not in pedidos["profiles"], (
             "voltou a mandar is_eval pra `profiles`, que nao tem essa coluna")
-        assert "is_eval" in pedidos["projects"], (
-            "parou de tirar as avaliacoes da contagem de projetos de cliente")
+        assert "projects" not in pedidos, (
+            "voltou a contar na tabela inteira: avaliação e conta da casa entram")
+        assert pedidos["projetos_de_cliente"].get("parent_job_id") == "is.null", (
+            "o reprocesso voltou a contar como projeto do dia")
     finally:
         _m._supa_rest_service = _orig
 

@@ -33676,10 +33676,16 @@ def admin_activity(request: Request, days: int = 30, limit: int = 200):
     # e é dado operacional do serviço (não cookie de navegação), então entra
     # sempre. Assim o painel para de mostrar quase só o admin.
     # mesmo teto de 1000 do bloco acima; 254 projetos hoje, mas o número só sobe
+    # 🩸 27/09/2026 — auditoria de telemetria, item 2: lia `projects` inteira, e
+    # "Subiu projeto" dava 169 em 30 dias quando os de cliente eram 102. O resto
+    # eram 63 avaliações, 3 reprocessos de cliente e 1 projeto da casa. Agora
+    # lê a view `projetos_de_cliente` (a regra `eh_projeto_de_cliente` do
+    # banco, a mesma do resto do painel). O reprocesso vira linha à parte,
+    # nunca "subiu projeto".
     _st_pr, _projects = _supa_rest_tudo(
-        "projects",
+        "projetos_de_cliente",
         params={"created_at": f"gte.{since_url}",
-                "select": "user_email,user_id,job_id,status,created_at,completed_at",
+                "select": "user_email,user_id,job_id,status,created_at,completed_at,parent_job_id",
                 "order": "created_at.desc,id.asc"}, timeout=20)
     if _st_pr != 200:
         _projects = []
@@ -33696,6 +33702,9 @@ def admin_activity(request: Request, days: int = 30, limit: int = 200):
         _ca = _p.get("created_at") or ""
         _st = (_p.get("status") or "").strip()
         _cp = _p.get("completed_at") or ""
+        if _p.get("parent_job_id"):
+            rows.append({**_base, "event": "project_reprocess", "created_at": _ca})
+            continue
         rows.append({**_base, "event": "start_project", "created_at": _ca})
         if _st == "done" and _cp:
             rows.append({**_base, "event": "project_done", "created_at": _cp})
@@ -33748,6 +33757,9 @@ def admin_activity(request: Request, days: int = 30, limit: int = 200):
     # Tira as contas internas/do Pedro do painel: ele entra todo dia e dominaria
     # (poluia a Atividade). _email_eh_interno pega o email dele + aliases (+smoke).
     # Anonimos (sem email) continuam contando.
+    # 🔑 27/09 — Pedro: "mantém a régua de hoje". Nos EVENTOS só o dono sai da
+    # conta (a outra conta da casa segue contando, como no funil e na origem);
+    # os PROJETOS já vêm da view de cliente, lá em cima.
     rows = [r for r in rows if not _email_eh_interno(r.get("user_email") or "")]
 
     by_event, by_user = {}, {}
@@ -39539,10 +39551,17 @@ def _contar_do_dia(o_que: str, dia) -> int:
     _p = {"select": "user_id" if o_que == "profiles" else "job_id",
           "and": "(created_at.gte.%sT03:00:00Z,created_at.lt.%sT03:00:00Z)"
                  % (dia, dia + _td1(days=1))}
+    # 🩸 27/09/2026 — auditoria de telemetria, item 2: aqui dizia "de CLIENTE" e
+    # só tirava a avaliação. De 31/08 a 26/09 `metricas_diarias.projetos` somou
+    # 101, contra 97 projetos de cliente que não são reprocesso (entraram 3
+    # reprocessos e 1 da casa). A view traz a regra do banco; o reprocesso sai
+    # pelo `parent_job_id`.
+    _tabela = o_que
     if o_que == "projects":
-        _p["is_eval"] = "not.is.true"
+        _tabela = "projetos_de_cliente"
+        _p["parent_job_id"] = "is.null"
     try:
-        st, linhas = _supa_rest_service("GET", o_que, params=_p)
+        st, linhas = _supa_rest_service("GET", _tabela, params=_p)
         return len(linhas or []) if st == 200 else None
     except Exception:
         return None
