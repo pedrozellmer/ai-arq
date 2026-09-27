@@ -622,7 +622,10 @@ def pick_best_batch(items: List[Dict], batch_size: int = 12,
             if not m:
                 print(f"[sinapi-pick] sem JSON na resposta: {txt[:120]}")
                 continue
-            for e in json.loads(m.group(0)):
+            # strict=False: caractere de controle cru DENTRO de string (TAB,
+            # quebra de linha) derrubava o lote inteiro — 12 itens sem a IA.
+            # Visto 1× em 32 chamadas reais (27/09/2026).
+            for e in json.loads(m.group(0), strict=False):
                 idx = e.get("i")
                 cod = e.get("codigo")
                 if not isinstance(idx, int):
