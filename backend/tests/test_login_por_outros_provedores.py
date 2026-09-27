@@ -259,3 +259,26 @@ def test_controle_positivo_a_frase_antiga_seria_reprovada():
     nova = "subtituloEl.innerHTML = '<strong>Gratis durante o beta</strong> quantos projetos quiser, sem cartao.';"
     assert _fala_de_senha(antiga)
     assert not _fala_de_senha(nova)
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  6. "NÃO TEM CONTA? JÁ TEM CONTA? ENTRAR" (27/09)
+# ══════════════════════════════════════════════════════════════════════════
+def _link_leva_a_pergunta(src):
+    """O JS pôs uma PERGUNTA no texto do link? (a pergunta mora no <span>)"""
+    return re.search(r"linkSignup\.textContent\s*=\s*'[^']*tem conta", src) is not None
+
+
+def test_a_pergunta_da_conta_e_separada_do_link():
+    """A tela de Criar conta mostrava "Não tem conta? Já tem conta? Entrar":
+    o texto fixo "Não tem conta?" ficava na frente e o JS trocava só o link.
+    Agora a pergunta é um <span id="pergunta-conta"> e o link só diz
+    Entrar / Cadastre-se."""
+    src = _login()
+    assert 'id="pergunta-conta"' in src
+    assert not _link_leva_a_pergunta(sem_comentarios_js(src))
+
+
+def test_controle_positivo_o_jeito_antigo_seria_reprovado():
+    assert _link_leva_a_pergunta("linkSignup.textContent = 'Já tem conta? Entrar';")
+    assert not _link_leva_a_pergunta("linkSignup.textContent = 'Entrar';")
