@@ -34,8 +34,10 @@ medição mostrou, e quase tudo corrige o que eu achava:
 chegam. Não importa se vieram como 1 arquivo de 900 MB (disco) ou 1000 de 1 MB
 (RAM) — o total é o mesmo, e é ele que a máquina paga.
 
-🔒 Só as três rotas de upload. Middleware que conta o corpo de TODA requisição
-pagaria por nada nas outras, e aumentaria o raio de qualquer defeito meu.
+🔒 As três rotas de upload com o teto grande (450 MB) e, desde 27/09/2026
+(auditoria SI), QUALQUER outro formulário com arquivo com o teto de 60 MB — ver
+`TETO_FORMULARIO`. Corpo que não é formulário (JSON das telas) segue sem contar:
+contar toda requisição pagaria por nada e aumentaria o raio de um defeito meu.
 """
 import os
 
@@ -49,6 +51,17 @@ TETO_PADRAO = int(os.environ.get("AIARQ_TETO_CORPO_MB", "450")) * 1024 * 1024
 CAMINHOS_DE_UPLOAD = ("/api/process", "/add-file", "/api/estimate-price")
 
 
+#: 60 MB — o teto de QUALQUER outro formulário com arquivo (auditoria SI, 27/09/2026).
+#: 🩸 O teto acima cobria só as três rotas grandes, mas o FastAPI lê o formulário
+#: inteiro ANTES de a rota conferir o login — o mesmo mecanismo do item 1 lá em
+#: cima valia pras outras 8 rotas que recebem arquivo (cotações, planilha revisada,
+#: cliente, cashback, calibração, lote do financeiro, fotos do Escritório): qualquer
+#: um, sem conta, prendia memória nelas. A maior legítima é o envio de fotos do
+#: Escritório, que a própria rota limita a 40 MB; 60 MB dá folga sem abrir a porta.
+#: 🔑 Pelo TIPO do corpo, não por lista: rota nova que receba arquivo já nasce coberta.
+TETO_FORMULARIO = int(os.environ.get("AIARQ_TETO_FORMULARIO_MB", "60")) * 1024 * 1024
+
+
 def vigiado(metodo, caminho):
     """Esta requisição entra na contagem?
 
@@ -60,6 +73,20 @@ def vigiado(metodo, caminho):
         return False
     c = caminho or ""
     return any(c.endswith(sufixo) for sufixo in CAMINHOS_DE_UPLOAD)
+
+
+def formulario_com_arquivo(metodo, content_type):
+    """Corpo `multipart/form-data` num método que carrega corpo? (é o que o parser lê antes da rota)"""
+    if (metodo or "").upper() not in ("POST", "PUT", "PATCH"):
+        return False
+    return str(content_type or "").strip().lower().startswith("multipart/form-data")
+
+
+def content_type_do_scope(scope):
+    for chave, valor in scope.get("headers") or []:
+        if chave.lower() == b"content-type":
+            return valor.decode("latin-1")
+    return ""
 
 
 class Contador:
@@ -95,10 +122,11 @@ class TetoDeCorpo:
     meu é pior que o abuso que ela previne. O estouro do teto, esse sim, fecha.
     """
 
-    def __init__(self, app, teto=None, vigia=None):
+    def __init__(self, app, teto=None, vigia=None, teto_formulario=None):
         self.app = app
         self.teto = TETO_PADRAO if teto is None else teto
         self.vigia = vigia or vigiado
+        self.teto_formulario = TETO_FORMULARIO if teto_formulario is None else teto_formulario
 
     async def __call__(self, scope, receive, send):
         if scope.get("type") != "http":
@@ -107,12 +135,19 @@ class TetoDeCorpo:
             entra = self.vigia(scope.get("method"), scope.get("path"))
         except Exception:
             entra = False          # falha aberta: defeito meu não barra ninguém
+        teto, grande = self.teto, True
         if not entra:
-            return await self.app(scope, receive, send)
+            try:
+                formulario = formulario_com_arquivo(scope.get("method"), content_type_do_scope(scope))
+            except Exception:
+                formulario = False     # falha aberta, igual ao vigia
+            if not formulario:
+                return await self.app(scope, receive, send)
+            teto, grande = self.teto_formulario, False
 
         from fastapi import HTTPException
-        contador = Contador(self.teto)
-        teto_mb = self.teto // (1024 * 1024)
+        contador = Contador(teto)
+        teto_mb = teto // (1024 * 1024)
 
         async def receive_contando():
             msg = await receive()
@@ -124,6 +159,11 @@ class TetoDeCorpo:
             except Exception:
                 return msg         # falha aberta
             if estourou:
+                if not grande:
+                    raise HTTPException(
+                        413,
+                        "O arquivo passou do tamanho que esta tela aceita (máx. ~%d MB "
+                        "no total). Mande um arquivo menor ou em partes." % teto_mb)
                 raise HTTPException(
                     413,
                     "Arquivos muito grandes (máx. ~%d MB no total). Envie as "
