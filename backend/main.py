@@ -39165,7 +39165,7 @@ def metricas_tick(request: Request, dias: int = 3):
         return {"status": "sem_token", "gravados": 0}
 
     _casa = _ips_da_casa()
-    gravados, falhas = [], []
+    gravados, falhas, _erros_origens = [], [], []
     # 🪤 02/09/2026: `date.today()` aqui é o relógio do Render (UTC). Disparado à
     # mão às 22h de Brasília, "ontem" virava o dia que ainda estava em curso.
     # O dia de referência é o de Brasília, como no resto da casa.
@@ -39176,6 +39176,13 @@ def metricas_tick(request: Request, dias: int = 3):
         except Exception as e:
             falhas.append("%s: %s" % (dia, e))
             continue
+        # 🔑 27/09/2026 — "de onde chegou" que falhou não derruba o dia, mas tem que CHEGAR
+        # a alguém. A 1ª versão só fazia print e a recusa do Cloudflare ficou invisível.
+        # 🪤 `pop` e não `get`: `_erro_origens` NÃO é coluna — ir junto no POST derrubaria a
+        # gravação do dia inteiro.
+        _erro_or = linha.pop("_erro_origens", None)
+        if _erro_or:
+            _erros_origens.append("%s: %s" % (dia, _erro_or))
         # 🚨 DIA VAZIO NÃO SOBRESCREVE DIA GRAVADO. Fora da janela de ~7 dias o
         # Cloudflare responde 200 com zero grupos — que é "não tenho mais esse
         # dia", não "não houve movimento". Gravar isso apagaria a medida boa com
@@ -39216,12 +39223,17 @@ def metricas_tick(request: Request, dias: int = 3):
             falhas.append("%s gravação: %s" % (dia, e))
     if falhas:
         _log_error("metricas:tick", "falhas: %s" % falhas[:3], severity="error")
+    if _erros_origens:
+        _log_error("metricas:origens", "de onde chegou (Web Analytics) sem medida: %s"
+                   % _erros_origens[:3], severity="warning")
     # 🪤 22/09/2026: a resposta dizia só QUANTAS falhas, nunca QUAIS. Quem
     # dispara à mão (recoleta) precisa saber que o dia não foi atualizado e por
     # quê — contador sozinho é recusa silenciosa dentro de uma rodada que
     # responde "ok".
     return {"status": "ok", "gravados": gravados, "falhas": len(falhas),
-            "motivos": falhas[:8]}
+            "motivos": falhas[:8],
+            # quem dispara à mão vê na hora se a parte "de onde chegou" mediu
+            "origens_sem_medida": _erros_origens[:3]}
 
 
 # 🔑 Páginas da ÁREA LOGADA: quem chega nelas JÁ é cliente. Na lista "páginas
@@ -39652,9 +39664,9 @@ def admin_ficha_usuario(chave: str, request: Request):
 
 
 def _origens_7d(dias7: list) -> dict:
-    """De onde chegou TODO mundo nos últimos dias da série (Cloudflare, sem cookie).
+    """De onde chegou TODO mundo nos últimos dias da série (Web Analytics do Cloudflare, sem cookie).
 
-    Soma "endereços por dia" por canal — como o `top_paginas_7d`, é comparação entre
+    Soma as VISITAS (página aberta vindo de fora do site) por canal — é comparação entre
     canais, não gente única na semana (quem volta em dois dias conta duas vezes).
     🪤 Só entra dia MEDIDO e INTEIRO: `top_origens` nulo é "não medi" (dia antigo ou
     consulta que falhou) e `origens_truncada` é conta que bateu no teto. Os dois ficam
@@ -39668,13 +39680,13 @@ def _origens_7d(dias7: list) -> dict:
             nome = str(o.get("origem") or "")
             if not nome:
                 continue
-            soma[nome] = soma.get(nome, 0) + int(o.get("enderecos") or 0)
+            soma[nome] = soma.get(nome, 0) + int(o.get("visitas") or 0)
             for h in (o.get("hosts") or []):
                 hosts.setdefault(nome, [])
                 if h not in hosts[nome]:
                     hosts[nome].append(h)
-    lista = sorted(({"origem": k, "enderecos": v, "hosts": hosts.get(k, [])[:3]} for k, v in soma.items()),
-                   key=lambda x: (-x["enderecos"], x["origem"]))[:10]
+    lista = sorted(({"origem": k, "visitas": v, "hosts": hosts.get(k, [])[:3]} for k, v in soma.items()),
+                   key=lambda x: (-x["visitas"], x["origem"]))[:10]
     return {"origens": lista, "dias_somados": len(medidos),
             "dias_fora": len(dias7 or []) - len(medidos)}
 
@@ -39762,8 +39774,9 @@ def admin_metricas(request: Request, dias: int = 30):
         "top_paginas_7d_meta": _topo_meta,
         # 🔑 De onde veio quem aceitou o cookie (30 dias) — None se a RPC falhar.
         "origem_30d": _origem_das_visitas(30),
-        # 🔑 De onde chegou TODO mundo (7 dias) — referência do navegador, Cloudflare,
-        # sem depender de cookie. Outra régua: não soma com a de cima.
+        # 🔑 De onde chegou TODO mundo (7 dias) — Web Analytics do Cloudflare (visitas
+        # vindas de fora, com a referência), sem depender de cookie. Outra régua: não
+        # soma com a de cima.
         "origens_7d": _origens_7d(_dias7),
         "inflacao_7d": _infl,
         # 🚨 18/09/2026 — O FUNIL PASSOU A TER UMA RÉGUA SÓ. Ver `_funil_do_site`:

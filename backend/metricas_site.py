@@ -238,14 +238,28 @@ def site_ok_da_contagem(erros):
 # ── de onde chegou TODO mundo (27/09/2026) ──────────────────────────────────
 # 🎯 Pedro, marketing: saber de onde vem quem visita pra decidir onde pôr esforço.
 # A origem que já existia (`origem_30d`) só enxerga quem ACEITOU o cookie (~56% dos
-# cadastros da semana recorde). O Cloudflare vê todo mundo — e a REFERÊNCIA que o
-# navegador manda ao abrir a página (clientRefererHost) diz de onde a pessoa veio.
-# 🪤 O que ela NÃO diz: app (Instagram, LinkedIn, ChatGPT no celular, WhatsApp) muitas
-# vezes abre o link SEM referência — cai em "direto ou app". E a resposta de IA do
-# Google (Modo IA, Visão geral) chega como google.com: não dá pra separar da busca.
+# cadastros da semana recorde). Aqui a fonte é o Web Analytics do Cloudflare (o
+# "beacon" que o próprio Cloudflare põe na página): uma VISITA é a página aberta vindo
+# de FORA do site, com a referência (refererHost) que o navegador mandou. Sem cookie,
+# e robô que não roda JavaScript não entra.
+# 🩸 A 1ª versão (d8cc455) lia `clientRefererHost` do httpRequestsAdaptiveGroups e o
+# Cloudflare recusou: "zone … does not have access to the field 'clientrefererhost'" —
+# o campo não existe no plano da zona. Medido no ar em 27/09, com a coleta tratando a
+# recusa como "não medi", sem estragar o dia (a regra que o teste cobra).
+# 🪤 O que a referência NÃO diz: app (Instagram, LinkedIn, ChatGPT no celular, WhatsApp)
+# muitas vezes abre o link SEM referência — cai em "direto ou app". A resposta de IA do
+# Google (Modo IA, Visão geral) chega como google.com. E o beacon não tem IP: a nossa
+# própria visita "direta" entra na conta (a volta do login, não — tem rótulo próprio).
 
-# (sufixos do host, canal). A ORDEM importa: gemini.google.com antes de google.
+# O Web Analytics é da CONTA, não da zona: pede o id da conta e o do "site" do beacon.
+_CONTA = "bd0af5830511803fc9593c60053c9de9"
+_SITE_RUM = "fe8fc586cc944839adae8e65bde5b639"
+LIMITE_ORIGENS = 1000
+
+# (sufixos do host, canal). A ORDEM importa: gemini/accounts.google.com antes de google.
 _REFERENCIAS = (
+    (("accounts.google.com", "login.live.com", "login.microsoftonline.com"),
+     "volta do login (Google/Microsoft)"),
     (("gemini.google.com",), "Gemini"),
     (("mail.google.com", "com.google.android.gm", "outlook.live.com", "outlook.office.com",
       "outlook.office365.com", "mail.yahoo.com"), "E-mail"),
@@ -291,55 +305,49 @@ def canal_da_referencia(host) -> "str | None":
     return h
 
 
-def origens_do_dia(ini: str, fim: str, nossos: set, teto: int):
-    """(lista por canal, truncada?) do dia. (None, None) = NÃO CONSEGUI MEDIR.
+def origens_do_dia(ini: str, fim: str, limite: int = LIMITE_ORIGENS):
+    """(lista por canal, truncada?, erro) do dia. Lista None = NÃO CONSEGUI MEDIR, e `erro` diz por quê.
 
-    Consulta PRÓPRIA, separada da principal: juntar a referência às dimensões de lá
-    multiplicaria os grupos (IP × página × referência) e empurraria gente pra fora do
-    teto — o defeito de 17–19/09. Aqui só entram páginas HTML com 200.
     🪤 Falha aqui NÃO derruba o dia: a série principal continua sendo gravada e a
-    coluna fica nula, que o painel mostra como "sem medição".
+    coluna fica nula, que o painel mostra como "sem medição". Mas a falha tem que
+    CHEGAR a alguém: o `erro` sobe pro tick, que grava no error_log (a 1ª versão só
+    fazia print, e a recusa do Cloudflare só apareceu porque eu fui procurar).
     """
     try:
-        q = ("""query { viewer { zones(filter: {zoneTag: "%s"}) {
-          httpRequestsAdaptiveGroups(limit: %d,
-            filter: {datetime_geq: "%s", datetime_leq: "%s", clientRequestHTTPHost: "ai.arq.br",
-                     edgeResponseContentTypeName: "html", edgeResponseStatus: 200},
-            orderBy: [count_DESC]) {
-            count dimensions { clientRefererHost clientIP userAgentBrowser }
-          } } } }""" % (_ZONA, teto, ini, fim))
-        r = _graphql(q, timeout=90)
+        q = ("""query { viewer { accounts(filter: {accountTag: "%s"}) {
+          rumPageloadEventsAdaptiveGroups(limit: %d,
+            filter: {datetime_geq: "%s", datetime_leq: "%s", siteTag: "%s"},
+            orderBy: [sum_visits_DESC]) {
+            sum { visits } dimensions { refererHost }
+          } } } }""" % (_CONTA, limite, ini, fim, _SITE_RUM))
+        r = _graphql(q, timeout=60)
     except Exception as e:
-        print("[metricas] origens do dia: %s" % e)
-        return None, None
+        return None, None, "exceção: %s" % str(e)[:200]
     if not isinstance(r, dict) or r.get("errors"):
-        print("[metricas] origens do dia recusadas: %s" % (str(r.get("errors"))[:200] if isinstance(r, dict) else type(r)))
-        return None, None
-    zonas = (((r.get("data") or {}).get("viewer") or {}).get("zones"))
-    if not zonas or (zonas[0] or {}).get("httpRequestsAdaptiveGroups") is None:
-        return None, None
-    grupos = zonas[0]["httpRequestsAdaptiveGroups"]
+        return None, None, "Cloudflare recusou: %s" % (str(r.get("errors"))[:300] if isinstance(r, dict) else type(r))
+    contas = (((r.get("data") or {}).get("viewer") or {}).get("accounts"))
+    if not contas or (contas[0] or {}).get("rumPageloadEventsAdaptiveGroups") is None:
+        return None, None, "resposta sem os grupos do Web Analytics"
+    grupos = contas[0]["rumPageloadEventsAdaptiveGroups"]
     por_canal = {}
     for g in grupos:
-        dim = g.get("dimensions") or {}
-        ip = dim.get("clientIP") or ""
-        if ip in nossos or _e_robo(dim.get("userAgentBrowser") or ""):
-            continue
-        host = str(dim.get("clientRefererHost") or "").strip().lower()
+        visitas = int(((g.get("sum") or {}).get("visits")) or 0)
+        if visitas <= 0:
+            continue      # página aberta vindo de outra página nossa: não é chegada
+        host = str(((g.get("dimensions") or {}).get("refererHost")) or "").strip().lower()
         canal = canal_da_referencia(host)
         if canal is None:
-            continue      # clique de uma página nossa pra outra: não é chegada
-        c = por_canal.setdefault(canal, {"ips": set(), "hosts": {}})
-        c["ips"].add(ip)
+            continue
+        c = por_canal.setdefault(canal, {"visitas": 0, "hosts": {}})
+        c["visitas"] += visitas
         if host:
-            c["hosts"].setdefault(host, set()).add(ip)
+            c["hosts"][host] = c["hosts"].get(host, 0) + visitas
     lista = []
     for canal, c in por_canal.items():
-        hosts = sorted(c["hosts"].items(), key=lambda kv: -len(kv[1]))[:3]
-        lista.append({"origem": canal, "enderecos": len(c["ips"]),
-                      "hosts": [h for h, _ in hosts]})
-    lista.sort(key=lambda x: (-x["enderecos"], x["origem"]))
-    return lista[:15], len(grupos) >= teto
+        hosts = sorted(c["hosts"].items(), key=lambda kv: -kv[1])[:3]
+        lista.append({"origem": canal, "visitas": c["visitas"], "hosts": [h for h, _ in hosts]})
+    lista.sort(key=lambda x: (-x["visitas"], x["origem"]))
+    return lista[:15], len(grupos) >= limite, None
 
 
 def coletar(dia: date, ips_da_casa=None) -> dict:
@@ -423,7 +431,7 @@ def coletar(dia: date, ips_da_casa=None) -> dict:
     erros_5xx = erros_5xx_do_dia(ini, fim)
     site_ok = site_ok_da_contagem(erros_5xx)
     # 🔑 De onde chegou todo mundo — consulta à parte (ver origens_do_dia). None = não medi.
-    top_origens, origens_truncada = origens_do_dia(ini, fim, nossos, teto)
+    top_origens, origens_truncada, erro_origens = origens_do_dia(ini, fim)
 
     topo = sorted(({"pagina": k, "enderecos": len(v)} for k, v in por_pagina.items()),
                   key=lambda x: -x["enderecos"])[:12]
@@ -441,7 +449,9 @@ def coletar(dia: date, ips_da_casa=None) -> dict:
             "grupos_recebidos": len(grupos),
             "coleta_truncada": len(grupos) >= teto,
             "top_paginas": topo, "fonte": "tick",
-            "top_origens": top_origens, "origens_truncada": origens_truncada}
+            "top_origens": top_origens, "origens_truncada": origens_truncada,
+            # 🪤 NÃO é coluna: o tick TIRA daqui antes de gravar e manda pro error_log.
+            "_erro_origens": erro_origens}
 
 
 # ── a pergunta que o Pedro faz de verdade ───────────────────────────────────
