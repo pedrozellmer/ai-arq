@@ -68,9 +68,18 @@ def test_a_landing_diz_onde_mais_a_gente_existe():
         "corroboração externa volta a ser zero")
 
 
+def _todos_os_sameas():
+    """O do aplicativo (Capterra = ficha do PRODUTO) e o da empresa que publica
+    (LinkedIn = página da EMPRESA, 26/09/2026). Os dois passam pelas mesmas
+    regras — o do `publisher` nasceu depois deste guarda e ficava de fora."""
+    d = _schema_da_landing()
+    pub = d.get("publisher") or {}
+    return list(d.get("sameAs") or []) + list(pub.get("sameAs") or [])
+
+
 def test_todo_sameAs_e_url_absoluta_e_https():
     """URL relativa ou http aqui não amarra nada — e não dá erro visível."""
-    for u in (_schema_da_landing().get("sameAs") or []):
+    for u in _todos_os_sameas():
         assert u.startswith("https://"), (
             "sameAs com URL que não é https absoluta: %r" % u)
         assert " " not in u.strip(), "sameAs com espaço na URL: %r" % u
@@ -80,7 +89,7 @@ def test_nao_repete_o_proprio_dominio_no_sameAs():
     """🪤 `sameAs` existe pra apontar pra FORA. Listar ai.arq.br ali é dizer
     "este site é o mesmo que este site" — ruído que não corrobora nada, e foi
     justamente a falta de fonte externa que a medição de 31/08 apontou."""
-    for u in (_schema_da_landing().get("sameAs") or []):
+    for u in _todos_os_sameas():
         assert "ai.arq.br" not in u, (
             "sameAs aponta pro próprio domínio (%r) — corroboração externa é "
             "outra fonte, não nós mesmos" % u)
