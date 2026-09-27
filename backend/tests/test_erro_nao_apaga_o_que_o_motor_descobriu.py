@@ -31,6 +31,7 @@ _BACKEND = os.path.dirname(_AQUI)
 sys.path.insert(0, _BACKEND)
 sys.path.insert(0, _AQUI)
 
+import falhas                                       # noqa: E402
 import main as m                                    # noqa: E402
 from _corpo import corpo_de, fonte, sem_comentarios   # noqa: E402
 
@@ -197,13 +198,27 @@ def test_o_pacote_de_erro_ENDERECA_a_linha_certa():
         % (p["tabela"], p["campo"], p["valor"]))
 
 
-def test_a_mensagem_do_cliente_vai_INTEIRA_no_pacote():
+@pytest.mark.parametrize("ligado", [False, True], ids=["desligado", "ligado"])
+def test_a_mensagem_do_cliente_vai_INTEIRA_no_pacote(monkeypatch, ligado):
     """🚨 O corte era [:500] e decapitava a instrução ("1. Abra o arqui").
     Conteúdo, não presença: o guarda confere a ÚLTIMA frase, que é a que
-    diz ao cliente o que fazer."""
-    passos = ("Não consegui ler este arquivo. 1. Abra o arquivo no seu CAD. "
-              "2. Exporte como DXF. 3. Suba o arquivo novo aqui no site.")
-    pacotes, _ = _rodar_o_except(erro=RuntimeError(passos))
+    diz ao cliente o que fazer.
+    27/09 — catálogo LIGADO: a instrução pro cliente viaja numa `Falha` com o
+    tipo (erro sem tipo vira o texto honesto de "desconhecido"); o passo a
+    passo do tipo tem que chegar inteiro do mesmo jeito."""
+    monkeypatch.setattr(falhas, "LIGADO", ligado)
+    if ligado:
+        tipo = max((t for t in falhas.TIPOS if falhas.TIPOS[t]["quem"] == "cliente"),
+                   key=lambda t: len(falhas.texto_da_tela(t)))
+        erro = falhas.Falha(tipo)
+        passos = str(erro)
+        ultimo = falhas._sem_tags(falhas.TIPOS[tipo]["passos"][-1])
+        assert passos.endswith(ultimo), "o texto do tipo não termina no último passo"
+    else:
+        passos = ("Não consegui ler este arquivo. 1. Abra o arquivo no seu CAD. "
+                  "2. Exporte como DXF. 3. Suba o arquivo novo aqui no site.")
+        erro = RuntimeError(passos)
+    pacotes, _ = _rodar_o_except(erro=erro)
     assert pacotes[0]["dados"].get("error_message") == passos, (
         "a mensagem chegou ao banco como %r — o cliente fica sabendo que deu "
         "errado e não o que fazer" % (pacotes[0]["dados"].get("error_message"),))

@@ -1213,10 +1213,10 @@
             <p class="text-xs text-gray-500 mb-4">Voc&ecirc; envia pelos bot&otilde;es na aba <b>Usu&aacute;rios</b>.</p>
             <div id="emails-manual" class="grid gap-3 sm:grid-cols-2"></div>
           </section>
-          <!-- 25/09/2026: catálogo de falhas — um e-mail por tipo de problema, em revisão -->
+          <!-- 25/09/2026: catálogo de falhas — um e-mail por tipo de problema (ligado em 27/09) -->
           <section>
-            <h3 class="flex items-center gap-2 text-base font-bold text-gray-900 mb-1">&#129520; Falhas &mdash; cat&aacute;logo em revis&atilde;o</h3>
-            <p class="text-xs text-gray-500 mb-4">Um e-mail para cada tipo de problema. <b>Ainda n&atilde;o sai para ningu&eacute;m</b>: leia, mande um teste para voc&ecirc; e, quando aprovar, a gente liga. Problema <b>nosso</b> &rarr; &ldquo;o problema n&atilde;o &eacute; o seu arquivo, j&aacute; estamos resolvendo&rdquo;; problema <b>do cliente</b> &rarr; o passo a passo.</p>
+            <h3 class="flex items-center gap-2 text-base font-bold text-gray-900 mb-1">&#129520; Falhas &mdash; um e-mail por tipo</h3>
+            <p class="text-xs text-gray-500 mb-4">Um e-mail para cada tipo de problema &mdash; <b>ligado desde 27/09</b>: &eacute; este que sai quando um projeto falha. Problema <b>nosso</b> &rarr; &ldquo;o problema n&atilde;o &eacute; o seu arquivo, j&aacute; estamos resolvendo&rdquo;; problema <b>do cliente</b> &rarr; o passo a passo.</p>
             <div id="emails-falhas" class="grid gap-3 sm:grid-cols-2"></div>
           </section>
           <!-- 05/09/2026: lista de supressão (Pedro: "tirar de qq envio" quem devolve tudo) -->
@@ -4497,7 +4497,7 @@ async function loadEmailCatalog() {
     const items = data.items || [];
     const autos = items.filter(i => i.grupo !== 'manual' && i.grupo !== 'falha');
     const mans  = items.filter(i => i.grupo === 'manual');
-    // 25/09: catálogo de falhas em revisão — bloco próprio, não se mistura aos automáticos
+    // 25/09: catálogo de falhas (ligado em 27/09) — bloco próprio, não se mistura aos automáticos
     const falhas = items.filter(i => i.grupo === 'falha');
     // 🪤 arrow, nunca `.map(_emailCard)`: o map injetaria o índice no lugar de `lido`.
     const lido = (data.retorno_lido === true), dias = data.retorno_dias;

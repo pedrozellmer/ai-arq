@@ -6,7 +6,8 @@ e contradizia a tela em 8 de 17 situações reais (7× "PDF escaneado" pra quem
 teve problema de servidor, de conversor ou mandou DWG). Voz do Pedro: problema
 NOSSO → "o problema não é o seu arquivo, já estamos resolvendo, você recebe reprocessado";
 problema DO CLIENTE → o passo a passo. Nada interno aparece pro cliente.
-Enquanto `falhas.LIGADO` for False, os modelos só aparecem na Central (em revisão).
+De 25/09 a 27/09 `falhas.LIGADO` ficou False (modelos só na Central, em
+revisão); ligado pelo Pedro em 27/09.
 """
 import html as _h
 import os
@@ -35,10 +36,27 @@ def _texto(tipo, projeto="Obra Exemplo", arquivo="Planta - Térreo.dwg"):
     return s, " ".join(_h.unescape(t).split())
 
 
-def test_enquanto_o_pedro_nao_aprova_nada_liga():
-    """Decisão do Pedro (25/09): os e-mails vão pra Central pra ele revisar
-    ANTES de sair pra cliente. Ligar é mudar esta linha junto com o LIGADO."""
-    assert falhas.LIGADO is False
+def test_o_pedro_ligou_em_27_09():
+    """25/09: os e-mails ficaram na Central, desligados, esperando o Pedro.
+    27/09: "bora, libero o catálogo" — depois de a auditoria de telemetria medir
+    6 erros NOSSOS em 7 recebendo "precisamos de outro arquivo" (30/08–27/09).
+    Desligar de novo é decisão dele: muda esta linha junto com o LIGADO."""
+    assert falhas.LIGADO is True
+
+
+def test_o_que_espera_o_pedro_e_so_o_teto_de_paginas_e_a_Central_diz():
+    """🚧 27/09: `limite-paginas` fica com a mensagem de antes — a recusa roda
+    antes de os originais subirem pro Storage, e o texto do catálogo prometeria
+    reprocessar. Tipo novo na espera (ou sair dela) é decisão do Pedro."""
+    assert falhas.ESPERANDO_O_PEDRO == frozenset({"limite-paginas"})
+    assert falhas.ESPERANDO_O_PEDRO <= set(falhas.TIPOS)
+    assert not falhas.vale_para("limite-paginas")
+    assert falhas.vale_para("servidor-instavel"), "a espera engoliu tipo que não espera"
+    assert not falhas.vale_para(""), "tipo vazio não pode ir pelo catálogo"
+    ficha = next(c for c in main._EMAIL_CATALOG if c["key"] == "falha:limite-paginas")
+    assert "ESPERANDO O PEDRO" in ficha["gatilho"], ficha
+    outra = next(c for c in main._EMAIL_CATALOG if c["key"] == "falha:servidor-instavel")
+    assert "ESPERANDO O PEDRO" not in outra["gatilho"], outra
 
 
 @pytest.mark.parametrize("tipo", _TIPOS)

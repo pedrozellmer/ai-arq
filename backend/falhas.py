@@ -19,12 +19,27 @@ Regras do Pedro (25/09), que são a VOZ de todo texto daqui:
   · crédito de IA esgotado é interno: o cliente nunca lê isso.
 
 Dado puro (só stdlib): quem monta o e-mail é `main._build_email_de_falha`, com o
-layout padrão; a Central de E-mails mostra cada tipo em "Falhas — em revisão".
-🚧 ENQUANTO `LIGADO` for False nada aqui chega ao cliente: o motor segue com as
-mensagens antigas até o Pedro revisar os textos na Central.
+layout padrão; a Central de E-mails mostra cada tipo no bloco "Falhas".
+✅ LIGADO desde 27/09/2026 — Pedro: "bora, libero o catálogo". A auditoria de
+telemetria do mesmo dia mediu o custo de ficar desligado: de 30/08 a 27/09, 7
+erros de cliente, 6 deles NOSSOS, e os 7 receberam "precisamos de outro arquivo".
+Desligar de novo é mudar esta linha junto com `test_o_pedro_ligou_em_27_09`.
 """
 
-LIGADO = False
+LIGADO = True
+
+# 🚧 27/09/2026 — tipos que CONTINUAM com a mensagem de antes mesmo ligado, até o
+# Pedro decidir o texto. `limite-paginas`: a recusa roda em `_recusa_por_paginas`,
+# ANTES de o `process_job` subir os originais pro Storage (é o 1º passo dele), então
+# "você recebe o projeto reprocessado" seria promessa sem arquivo guardado pra
+# cumprir. A mensagem de antes diz o número, o limite e a saída (dois projetos).
+# Medido: 0 recusas desde que a régua nasceu (19/09).
+ESPERANDO_O_PEDRO = frozenset({"limite-paginas"})
+
+
+def vale_para(tipo: str) -> bool:
+    """O texto do catálogo vale pra este tipo agora? (ligado e não está esperando)."""
+    return bool(LIGADO and tipo and tipo not in ESPERANDO_O_PEDRO)
 
 # Frase comum a TODO problema nosso — a promessa que a casa cumpre (o aviso
 # interno leva a causa técnica; alguém estuda e reprocessa).

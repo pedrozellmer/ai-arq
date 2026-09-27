@@ -37,9 +37,10 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import falhas  # noqa: E402
 import main  # noqa: E402
 
-_FONTE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+_FONTE =os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                       "main.py")
 
 
@@ -339,8 +340,19 @@ def test_a_marca_da_vaga_extra_NAO_vaza_entre_threads():
 # ══════════════════════════════════════════════════════════════════════════
 #  4. A MENSAGEM QUE CHEGA NO CLIENTE
 # ══════════════════════════════════════════════════════════════════════════
-def _mensagem_gravada(monkeypatch, motivo):
+#  🔑 27/09/2026 — o catálogo de falhas LIGOU (Pedro: "bora, libero o catálogo").
+#  Ligado, a tela do freio sai do TIPO (`servidor-instavel` na concorrência,
+#  `limite-memoria` sozinho), na voz do catálogo: falta de memória é problema
+#  NOSSO — "o problema não é o seu arquivo, você recebe reprocessado", sem mandar
+#  o cliente dividir. Os guardas abaixo rodam os DOIS lados da chave: desligado
+#  continua valendo o texto de 18/09 (é pra onde se volta se desligar).
+_LIGADO_E_DESLIGADO = pytest.mark.parametrize("ligado", [False, True],
+                                              ids=["desligado", "ligado"])
+
+
+def _mensagem_gravada(monkeypatch, motivo, ligado=False):
     """Roda `_abort_job_mem` de verdade e devolve o texto que ele gravaria."""
+    monkeypatch.setattr(falhas, "LIGADO", ligado)
     guardado = {}
 
     def _finge_update(job_id, **campos):
@@ -354,12 +366,18 @@ def _mensagem_gravada(monkeypatch, motivo):
     return guardado.get("error_message", "")
 
 
-def test_com_dois_projetos_a_mensagem_NAO_culpa_o_arquivo_do_cliente(monkeypatch):
+@_LIGADO_E_DESLIGADO
+def test_com_dois_projetos_a_mensagem_NAO_culpa_o_arquivo_do_cliente(monkeypatch, ligado):
     """O cliente não pode ser mandado dividir um arquivo que não tem defeito."""
-    msg = _mensagem_gravada(monkeypatch, "concorrencia")
+    msg = _mensagem_gravada(monkeypatch, "concorrencia", ligado)
     assert msg, "não gravou mensagem nenhuma"
     baixo = msg.lower()
     assert "grande demais" not in baixo, "voltou a acusar o tamanho do arquivo"
+    if ligado:
+        assert msg == falhas.texto_da_tela("servidor-instavel"), msg
+        assert "o problema não é o seu arquivo" in baixo, "não assume de quem é a falha"
+        assert "divida" not in baixo, "problema nosso mandando o cliente mexer no arquivo"
+        return
     assert "nosso lado" in baixo, "não assume de quem é a falha"
     # 🪤 A orientação de dividir pode aparecer — mas como plano B ("se repetir"),
     # nunca como diagnóstico. O que este guarda proíbe é a AFIRMAÇÃO sobre o
@@ -367,11 +385,19 @@ def test_com_dois_projetos_a_mensagem_NAO_culpa_o_arquivo_do_cliente(monkeypatch
     assert "se repetir" in baixo or "divida" not in baixo
 
 
-def test_sozinho_a_mensagem_CONTINUA_mandando_dividir(monkeypatch):
+@_LIGADO_E_DESLIGADO
+def test_sozinho_a_mensagem_CONTINUA_mandando_dividir(monkeypatch, ligado):
     """Controle positivo do guarda acima: quando a acusação é verdadeira, a
     orientação útil tem que continuar saindo. Um guarda que só proíbe texto
-    passaria verde com a mensagem apagada."""
-    msg = _mensagem_gravada(monkeypatch, "projeto")
+    passaria verde com a mensagem apagada.
+    Ligado: a história de sozinho é OUTRA (o tamanho, não a concorrência) e é a
+    do tipo `limite-memoria` — sem mandar dividir, porque é problema nosso."""
+    msg = _mensagem_gravada(monkeypatch, "projeto", ligado)
+    if ligado:
+        assert msg == falhas.texto_da_tela("limite-memoria"), msg
+        assert "maior do que conseguimos processar" in msg.lower()
+        assert msg != _mensagem_gravada(monkeypatch, "concorrencia", ligado)
+        return
     assert "grande demais" in msg.lower()
     assert "divida" in msg.lower()
 
@@ -409,12 +435,13 @@ def test_o_EMAIL_de_projeto_grande_CONTINUA_orientando(monkeypatch):
     assert "purge" in html.lower() or "prancha necessária" in html.lower()
 
 
+@_LIGADO_E_DESLIGADO
 @pytest.mark.parametrize("motivo,espera_reprocessavel", [
     ("concorrencia", True),    # a culpa foi nossa: reprocessar É a saída
     ("projeto", False),        # o arquivo é grande mesmo: reprocessar não resolve
 ])
 def test_o_aborto_ENTREGA_ao_email_o_que_a_tela_disse(monkeypatch, motivo,
-                                                      espera_reprocessavel):
+                                                      espera_reprocessavel, ligado):
     """A ligação ponta a ponta, rodando `_abort_job_mem` DE VERDADE e capturando
     o que chegou no e-mail.
 
@@ -422,6 +449,7 @@ def test_o_aborto_ENTREGA_ao_email_o_que_a_tela_disse(monkeypatch, motivo,
     chamava o construtor direto — ou seja, provava que o RAMO existe, não que o
     aborto usa o ramo certo. Um `reprocessavel=False` fixo voltaria a fazer o
     e-mail desmentir a tela com este guarda VERDE."""
+    monkeypatch.setattr(falhas, "LIGADO", ligado)
     capturado = {}
     monkeypatch.setattr(main.jobs, "update_field",
                         lambda job_id, **c: capturado.update(c))
@@ -430,13 +458,20 @@ def test_o_aborto_ENTREGA_ao_email_o_que_a_tela_disse(monkeypatch, motivo,
     # guardas de uma vez). `culpa_nossa` entrou em 19/09.
     monkeypatch.setattr(main, "_email_falha_cliente",
                         lambda job_id, reprocessavel=True, **k: capturado.update(
-                            {"reprocessavel": reprocessavel}))
+                            {"reprocessavel": reprocessavel, "tipo": k.get("tipo")}))
     main._abort_job_mem("jobteste1", 2, 7, motivo=motivo)
     assert capturado.get("reprocessavel") is espera_reprocessavel, (
         f"motivo={motivo}: o e-mail recebeu "
         f"reprocessavel={capturado.get('reprocessavel')} e a tela disse outra coisa")
     # e a tela e o e-mail têm que contar a MESMA história
     na_tela = (capturado.get("error_message") or "").lower()
+    if ligado:
+        # ligado, a história comum é o TIPO: o e-mail recebe o mesmo tipo de
+        # onde a tela tirou o texto (o e-mail do tipo é montado do mesmo dado)
+        tipo = "servidor-instavel" if motivo == "concorrencia" else "limite-memoria"
+        assert capturado.get("tipo") == tipo, capturado
+        assert capturado.get("error_message") == falhas.texto_da_tela(tipo)
+        return
     if motivo == "concorrencia":
         assert "pode reenviar" in na_tela and "grande demais" not in na_tela
     else:
@@ -487,14 +522,19 @@ def test_o_aborto_LIGA_o_motivo_ao_email():
             "`reprocessavel` voltou a ser fixo — o e-mail desmente a tela de novo"
 
 
-def test_o_motivo_PADRAO_e_o_de_sempre(monkeypatch):
+@_LIGADO_E_DESLIGADO
+def test_o_motivo_PADRAO_e_o_de_sempre(monkeypatch, ligado):
     """Chamada sem `motivo` não pode virar a mensagem nova por acidente."""
+    monkeypatch.setattr(falhas, "LIGADO", ligado)
     guardado = {}
     monkeypatch.setattr(main.jobs, "update_field",
                         lambda job_id, **c: guardado.update(c))
     monkeypatch.setattr(main, "_supabase_update", lambda *a, **k: None)
     monkeypatch.setattr(main, "_log_error", lambda *a, **k: None)
     main._abort_job_mem("job-de-teste", 1, 2)
+    if ligado:
+        assert guardado.get("error_message") == falhas.texto_da_tela("limite-memoria")
+        return
     assert "grande demais" in guardado.get("error_message", "").lower()
 
 

@@ -186,7 +186,9 @@ def test_ligado_leitura_quebrada_NAO_re_tenta_mesmo_com_palavra_de_servidor(monk
     assert main._re_tenta_sozinho("excedeu o tempo limite na conversão", "leitor-conversao") is False
 
 
-def test_CONTROLE_desligado_a_mesma_frase_re_tenta_como_antes():
+# 🪤 27/09: este nome estava REPETIDO (a versão da varredura, lá embaixo, tem o
+# mesmo) — o Python ficava só com a 2ª e este guarda nunca rodava. Pyflakes pegou.
+def test_CONTROLE_desligado_a_mesma_frase_re_tenta_como_antes_na_regua():
     assert main._re_tenta_sozinho("excedeu o tempo limite na conversão", "leitor-conversao") is True
 
 
@@ -270,6 +272,25 @@ def test_ligado_o_email_sai_pelo_tipo(monkeypatch):
                              arquivo="Planta.dwg")
     assert ok and enviados[0][2] == "falha:leitor-conversao", enviados
     assert "problema do nosso lado" in enviados[0][0].lower()
+
+
+def test_ligado_o_teto_de_paginas_ESPERA_o_pedro_e_sai_pelo_email_de_antes(monkeypatch):
+    """🚧 27/09: a tela do teto de páginas ficou com a mensagem de antes (a recusa
+    roda antes de os originais serem guardados). O e-mail tem que contar a MESMA
+    história — pelo catálogo ele prometeria "você recebe reprocessado"."""
+    _liga(monkeypatch)
+    ok, enviados, _ = _email(monkeypatch, reprocessavel=False, tipo="limite-paginas")
+    assert ok and enviados, enviados
+    assert enviados[0][2] != "falha:limite-paginas", (
+        "o teto de páginas saiu pelo e-mail do catálogo, que promete reprocessar")
+    assert enviados[0][2] in ("erro_reprocessar", "erro_trocar", "erro_nosso"), enviados
+
+
+def test_CONTROLE_sem_a_espera_o_teto_de_paginas_sai_pelo_catalogo(monkeypatch):
+    _liga(monkeypatch)
+    monkeypatch.setattr(falhas, "ESPERANDO_O_PEDRO", frozenset())
+    ok, enviados, _ = _email(monkeypatch, reprocessavel=False, tipo="limite-paginas")
+    assert ok and enviados[0][2] == "falha:limite-paginas", enviados
 
 
 @pytest.mark.parametrize("tipo", _AUTOMATICOS)
@@ -465,8 +486,25 @@ def test_teto_de_paginas_desligado_tela_de_antes_e_tipo_no_log(monkeypatch):
     assert cena.emails[0].get("tipo") == "limite-paginas"
 
 
-def test_CONTROLE_teto_de_paginas_ligado_tela_do_catalogo(monkeypatch):
+def test_teto_de_paginas_ligado_ESPERA_o_pedro_e_fica_com_a_tela_de_antes(monkeypatch):
+    """🚧 27/09: a recusa por páginas roda ANTES de os originais subirem pro
+    Storage — o texto do catálogo ("você recebe o projeto reprocessado")
+    prometeria reprocessar sem arquivo guardado. Até o Pedro decidir, ligado
+    continua a mensagem de antes (número, limite, dois projetos)."""
     _liga(monkeypatch)
+    cena = _teto(monkeypatch)
+    assert cena.gravado["error_message"] == main._mensagem_de_teto_de_paginas(
+        main.TETO_PAGINAS_DO_ENVIO + 50,
+        [("envio.pdf", main.TETO_PAGINAS_DO_ENVIO + 50, main.TETO_PAGINAS_DO_ENVIO + 50)])
+    assert "reprocessado" not in cena.gravado["error_message"]
+    assert cena.emails[0].get("tipo") == "limite-paginas", "o tipo parou de ir pro e-mail"
+
+
+def test_CONTROLE_sem_a_espera_o_teto_de_paginas_usa_o_catalogo(monkeypatch):
+    """Prova que é a lista `ESPERANDO_O_PEDRO` que segura o tipo — tirando-o
+    dela, a tela vira a do catálogo."""
+    _liga(monkeypatch)
+    monkeypatch.setattr(falhas, "ESPERANDO_O_PEDRO", frozenset())
     cena = _teto(monkeypatch)
     assert cena.gravado["error_message"] == falhas.texto_da_tela("limite-paginas")
 

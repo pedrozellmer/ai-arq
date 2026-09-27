@@ -749,7 +749,11 @@ def test_CONTROLE_sem_ser_anexo_o_erro_e_gravado_como_antes(amb):
     esc = _roda_o_except(amb, is_complement=False, erro=RuntimeError("arquivo sem itens"))
     assert not esc.get("_base_mantida")
     p = amb.banco.projeto()
-    assert p["status"] == "error" and p["error_message"] == "arquivo sem itens", p
+    # 27/09: com o catálogo ligado, erro sem tipo vira o texto do catálogo — o
+    # "como antes" é o que a regra de produção da tela devolve, seja qual for
+    _tela = m._tipo_e_tela_da_falha(RuntimeError("arquivo sem itens"))[2]
+    assert _tela, "a regra da tela devolveu texto vazio"
+    assert p["status"] == "error" and p["error_message"] == _tela, p
     assert len(amb.falha_cliente) == 1
     assert amb.smtp.enviados == []
     assert not [q for q in amb.banco.pedidos if q["alvo"] == "project_items"], (

@@ -5605,7 +5605,8 @@ def _email_falha_cliente(job_id: str, reprocessavel: bool = True,
     servidor caído"). Desligado, `tipo` é ignorado e tudo segue como antes."""
     try:
         import falhas as _fa_em
-        _pelo_catalogo = bool(_fa_em.LIGADO and tipo)
+        # 27/09: tipo que espera o Pedro sai pelo e-mail de antes, igual à tela
+        _pelo_catalogo = _fa_em.vale_para(tipo)
         if (_pelo_catalogo and (_fa_em.TIPOS.get(tipo) or {}).get("automatico")
                 and not terminal and not anexo_ref):
             return False        # a varredura re-tenta; o cliente só sabe se não resolver
@@ -10491,7 +10492,9 @@ def _recusa_por_paginas(job_id, file_paths) -> bool:
     _msg = _mensagem_de_teto_de_paginas(soma, por_arquivo)
     import falhas as _fa_pg
     _registrar_tipo_da_falha(job_id, "limite-paginas")
-    if _fa_pg.LIGADO:
+    # 27/09: ligado, este tipo ESPERA o Pedro (`falhas.ESPERANDO_O_PEDRO`): aqui os
+    # originais ainda não subiram, e o texto do catálogo prometeria reprocessar.
+    if _fa_pg.vale_para("limite-paginas"):
         _msg = _fa_pg.texto_da_tela("limite-paginas")
     # 🪤 `_supabase_update` não levanta quando falha: devolve False (inclusive
     # em zero linhas afetadas). Engolir o retorno num try/except deixaria o
@@ -26232,7 +26235,8 @@ _EMAIL_CATALOG = [
 
 # 25/09/2026 — CATÁLOGO DE FALHAS: um modelo por tipo (`falhas.py`), na Central,
 # no grupo "falha" (bloco próprio "Falhas"). Com `falhas.LIGADO` False nenhum
-# sai pro cliente. Ligado em 25/09 (Pedro: "vou confiar em você, pode fazer").
+# sai pro cliente. Ligado em 27/09 (Pedro: "bora, libero o catálogo"); em 25/09
+# a chave tinha ficado de fora.
 try:
     import falhas as _falhas_cat
     for _tp_f, _t_f in _falhas_cat.TIPOS.items():
@@ -26240,7 +26244,10 @@ try:
             "key": f"falha:{_tp_f}",
             "nome": f"Falha — {_t_f['rotulo']}",
             "grupo": "falha",
-            "gatilho": (("EM REVISÃO — ainda não liga. " if not _falhas_cat.LIGADO else "")
+            "gatilho": (("EM REVISÃO — ainda não liga. " if not _falhas_cat.LIGADO else
+                         "⏸ ESPERANDO O PEDRO — ainda sai a mensagem de antes (a recusa "
+                         "roda antes de os arquivos serem guardados). "
+                         if _tp_f in _falhas_cat.ESPERANDO_O_PEDRO else "")
                         + ("Problema NOSSO" + (" (o sistema re-tenta sozinho antes)"
                                                if _t_f.get("automatico") else "")
                            if _t_f["quem"] == "nosso" else "Problema do CLIENTE")
@@ -26251,8 +26258,9 @@ try:
     if _falhas_cat.LIGADO:
         for _c_old in _EMAIL_CATALOG:
             if _c_old["key"] in ("erro_reprocessar", "erro_trocar", "erro_nosso"):
-                _c_old["gatilho"] = ("⏸ FORA DE USO desde 25/09: com o catálogo de falhas "
-                                     "ligado, sai o e-mail do TIPO (bloco Falhas). Era: "
+                _c_old["gatilho"] = ("⏸ FORA DE USO desde 27/09: com o catálogo de falhas "
+                                     "ligado, sai o e-mail do TIPO (bloco Falhas) — menos "
+                                     "no teto de páginas, que espera o Pedro. Era: "
                                      + _c_old["gatilho"])
 except Exception as _e_cat_f:
     print(f"[email-catalogo] catálogo de falhas fora da Central: {_e_cat_f}")
