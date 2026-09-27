@@ -165,6 +165,9 @@ def _laco_de_itens_de_producao(items, areas=None, compr=None):
         "extraction": _ExtracaoSemRessalva(),
         "_areas_ly": dict(AREAS if areas is None else areas),
         "_compr_ly": dict(COMPR if compr is None else compr),
+        # 26/09: o laço consulta os blocos com amostra de legenda (montados
+        # antes dele, ao lado de _blocos_n); aqui nenhum bloco tem amostra.
+        "_blocos_amostra": {},
         "_n_resgate_proc": 0,
         "_n_item_perdido": 0,
         "dxf_items": [],
