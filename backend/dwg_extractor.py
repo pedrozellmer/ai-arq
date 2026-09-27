@@ -17,6 +17,8 @@ import re
 import subprocess
 import sys
 import tempfile
+import unicodedata
+from bisect import bisect_left, bisect_right
 from pathlib import Path
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
@@ -91,6 +93,10 @@ class BlockCount:
     # Serve pra saber se dois nomes diferentes sao a MESMA peca renomeada.
     # Vazia = nao deu pra calcular; nesse caso NAO se agrupa nada (falha fechada).
     assinatura: str = ""
+    # 🩸 26/09/2026 (job 32a27efc): quantas das `count` inserções são o SÍMBOLO
+    # desenhado na legenda da prancha, não peça (ver `amostras_de_legenda`).
+    # Continuam contadas: o selo é que não pode sair "medido" (main.py).
+    amostras_legenda: int = 0
 
 
 @dataclass
@@ -375,6 +381,11 @@ class DXFExtraction:
                 # falha fechada, mantem o comportamento antigo.
                 _assin = {b.name: getattr(b, "assinatura", "") for b in self.blocks}
                 _grupos: dict = {}
+                # 26/09 (job 32a27efc): o símbolo da legenda vai na MESMA linha
+                _amo_nome = Counter()
+                for b in self.blocks:
+                    _amo_nome[b.name] += getattr(b, "amostras_legenda", 0) or 0
+                _amo_grupo = Counter()
                 for name, count in other.items():
                     a = _assin.get(name, "")
                     # 🚨 DOIS formatos de fragmentacao, medidos em arquivo real:
@@ -389,6 +400,7 @@ class DXFExtraction:
                     else:
                         raiz = re.sub(r"(_\d+)+$", "", name) or name
                     chave = (raiz, a) if a else (name, "")
+                    _amo_grupo[chave] += _amo_nome[name]
                     if chave in _grupos:
                         _grupos[chave][0] += count
                         _grupos[chave][1] += 1
@@ -410,6 +422,9 @@ class DXFExtraction:
                         _seq[_r] = _seq.get(_r, 0) + 1
                         rotulo = f"{rotulo} (tipo {_seq[_r]})"
                     _nota = f"  [{n_nomes} nomes do conversor, mesma peca]" if n_nomes > 1 else ""
+                    if _amo_grupo[(_r, _a)]:
+                        _nota += (f"  [{_amo_grupo[(_r, _a)]} delas = símbolo desenhado "
+                                  f"na LEGENDA, não peça]")
                     lines.append(f"  {rotulo}: {count} un{_nota}")
                 if _juntados:
                     lines.append(f"  ({_juntados} grupo(s) tinham nomes duplicados pelo "
@@ -3032,6 +3047,126 @@ def separar_amostras_de_legenda(hatches):
             [h for h in hatches if id(h) in fora])
 
 
+#: Amostra de BLOCO na legenda (ver `amostras_de_legenda`). 📏 As mínimas que
+#: resolvem nos 17 DXF medidos em 26/09: 6 alturas perdia a BUCHA de um
+#: elétrico (símbolo a 8,8h do rótulo); sem a coluna entravam 6 falsos.
+_LEG_JANELA_H = 10       # o rótulo começa até 10 alturas à direita do símbolo
+_LEG_LARGURA_H = 12      # símbolo mais largo que 12 alturas não é amostra
+_LEG_COLUNA_MIN = 2      # outros rótulos na mesma coluna (x ±0,5h, altura ±10%)
+_LEG_COLUNA_H = 15       # ... a até 15 alturas na vertical
+_LEG_PALAVRAS_FORA = frozenset({"de", "da", "do", "das", "dos", "com", "para", "em",
+                                "na", "no", "ind", "blk", "bloco", "the"})
+
+
+def _palavras_do_rotulo(s):
+    """Palavras de ≥3 caracteres, sem acento e minúsculas; fora número e ligação."""
+    s = unicodedata.normalize("NFD", str(s or ""))
+    s = "".join(c for c in s if unicodedata.category(c) != "Mn").lower()
+    return {t for t in re.split(r"[^a-z0-9]+", s)
+            if len(t) >= 3 and t not in _LEG_PALAVRAS_FORA and not t.isdigit()}
+
+
+def amostras_de_legenda(insercoes, textos):
+    """Quais inserções de bloco são o SÍMBOLO desenhado na LEGENDA da prancha.
+
+    `insercoes` = [(nome, (x0, y0, x1, y1) da inserção, pos)];
+    `textos` = [(texto, x, y, altura)]. Devolve {nome: [pos das amostras]},
+    só dos blocos que têm amostra.
+
+    🩸 26/09/2026, job 32a27efc (muro de arrimo, Eberick): "Pilar nasce = 1 un
+    ✓ MEDIDO" em 3 pranchas. O único INSERT 'IND PILAR NASCE' de cada folha era
+    o símbolo da coluna "LEGENDA PILARES:", com "PILAR NASCE" 1,2 mm abaixo e
+    "PILAR MORRE"/"PILAR CONTINUA" alinhados; na planta não havia nenhum. O
+    motor conta todo INSERT, e nada olhava onde ele estava.
+    📏 17 DXF de 6 clientes: 43 blocos com amostra contada como peça (34 só
+    amostra, 9 com a contagem inflada em +1/+2); 0 falso positivo em 1.440
+    inserções. No banco, piso de 21 linhas "confirmado" em 6 jobs.
+
+    🔑 A inserção é amostra quando um texto de altura h
+      (g) começa entre x0 − h e x1 + 10h, com folga vertical ≤ h, e o
+          símbolo tem ≤ 12h de largura;
+      (p) repete o nome do bloco: ≥2 palavras em comum, ou todas as do nome,
+          ou 1 com ≥5 letras; palavra do nome que é começo de palavra do texto
+          conta ('condu' → 'condulete');
+      (c) está numa COLUNA de rótulos: ≥2 outros textos com o mesmo x (±0,5h),
+          a mesma altura (±10%), a até 15h.
+    🪤 Sem (c), a etiqueta ao lado da peça na planta ("ARANDELA h=1,40m",
+    "Drenagem Superficial" junto do tê) virava amostra: 6 falsos medidos.
+    Limite: rótulo que não repete o nome (SOLDA × "CONEXÃO APARAFUSADA") ou
+    nome do conversor ('BLOCO1') não é pego.
+    """
+    tx = []           # (x, y, h, palavras) — texto sem palavra conta na COLUNA
+    for t in textos or []:
+        try:
+            s, x, y, h = t[0], float(t[1]), float(t[2]), float(t[3])
+        except (TypeError, ValueError, IndexError):
+            continue
+        if h > 0 and str(s or "").strip():
+            tx.append((x, y, h, _palavras_do_rotulo(s)))
+    if not tx:
+        return {}
+    por_palavra = defaultdict(list)
+    for i, (_x, _y, _h, ps) in enumerate(tx):
+        for p in ps:
+            por_palavra[p].append(i)
+    palavras = sorted(por_palavra)
+    ordem_x = sorted(range(len(tx)), key=lambda i: tx[i][0])
+    xs = [tx[i][0] for i in ordem_x]
+    coluna, rotulos = {}, {}
+
+    def _em_coluna(i):
+        if i not in coluna:
+            x, y, h, _p = tx[i]
+            n = 0
+            for k in ordem_x[bisect_left(xs, x - 0.5 * h):bisect_right(xs, x + 0.5 * h)]:
+                if k != i and abs(tx[k][2] - h) <= 0.1 * h \
+                        and abs(tx[k][1] - y) <= _LEG_COLUNA_H * h:
+                    n += 1
+            coluna[i] = n >= _LEG_COLUNA_MIN
+        return coluna[i]
+
+    def _rotulos_do(nome):
+        """Textos que repetem o nome (p) — uma vez por nome, em ordem de x."""
+        if nome not in rotulos:
+            tb = _palavras_do_rotulo(nome)
+            cands = set()
+            for a in tb:
+                j = bisect_left(palavras, a)
+                while j < len(palavras) and palavras[j].startswith(a):
+                    cands.update(por_palavra[palavras[j]])
+                    j += 1
+            ok = []
+            for i in cands:
+                tt = tx[i][3]
+                comum = (tb & tt) | {a for a in tb for b in tt if b.startswith(a) and a != b}
+                if comum and (len(comum) >= 2 or tb <= tt or max(len(c) for c in comum) >= 5):
+                    ok.append(i)
+            ok.sort(key=lambda i: tx[i][0])
+            rotulos[nome] = ([tx[i][0] for i in ok], ok, max((tx[i][2] for i in ok), default=0.0))
+        return rotulos[nome]
+
+    out = {}
+    for ins in insercoes or []:
+        try:
+            nome, caixa, pos = ins
+            x0, y0, x1, y1 = (float(v) for v in caixa)
+        except (TypeError, ValueError):
+            continue
+        rx, ri, hmax = _rotulos_do(nome)
+        # só os rótulos cujo x pode cair na janela (a de cada um usa o seu h)
+        for i in ri[bisect_left(rx, x0 - hmax):bisect_right(rx, x1 + _LEG_JANELA_H * hmax)]:
+            x, y, h, _p = tx[i]
+            if not (x0 - h <= x <= x1 + _LEG_JANELA_H * h):
+                continue
+            if max(0.0, y0 - (y + h), y - y1) > h or (x1 - x0) > _LEG_LARGURA_H * h:
+                continue
+            if not _em_coluna(i):
+                continue
+            out.setdefault(nome, []).append(pos)
+            break
+    return out
+
+
 #: Nome que o AutoCAD dá ao bloco criado por "Colar como bloco" (PASTEBLOCK):
 #: "A$C" + hexadecimal. Não é bloco de biblioteca (porta, louça): é um pedaço
 #: do DESENHO que alguém colou. O nome não diz nada — o conteúdo diz tudo.
@@ -4892,6 +5027,38 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         except Exception:
             return None
 
+    # 🩸 26/09/2026, job 32a27efc: a CAIXA de cada inserção contada, pra achar
+    # o símbolo desenhado na legenda (ver `amostras_de_legenda`). A caixa da
+    # DEFINIÇÃO sai uma vez por nome (mesmo cache de cima) e vai pro lugar
+    # pelos 4 cantos. ATTDEF é molde de atributo, não desenho: fica de fora.
+    _caixa_def: dict = {}
+    _insercoes_caixa: list = []           # [(nome, caixa, pos)]
+
+    def _caixa_da_insercao(ins):
+        n = ins.dxf.name
+        if n not in _caixa_def:
+            c = None
+            try:
+                b = doc.blocks.get(n)
+                if b is not None:
+                    eb = _ezbbox.extents((e for e in b if e.dxftype() != "ATTDEF"),
+                                         cache=_bbox_cache)
+                    if eb.has_data:
+                        c = (eb.extmin.x, eb.extmin.y, eb.extmax.x, eb.extmax.y)
+            except Exception:
+                c = None
+            _caixa_def[n] = c
+        c = _caixa_def[n]
+        if c is None:
+            return None
+        try:
+            m = ins.matrix44()
+            ps = [m.transform((px, py, 0)) for px in (c[0], c[2]) for py in (c[1], c[3])]
+            return (min(p[0] for p in ps), min(p[1] for p in ps),
+                    max(p[0] for p in ps), max(p[1] for p in ps))
+        except Exception:
+            return None
+
     for insert in msp.query("INSERT"):
         try:
             bname = insert.dxf.name
@@ -4931,6 +5098,9 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             x, y = _onde
             metadata["blocos_pelo_desenho"] = metadata.get("blocos_pelo_desenho", 0) + 1
         block_counter[bname]["positions"].append((round(x, 2), round(y, 2)))
+        _cx = _caixa_da_insercao(insert)
+        if _cx is not None:
+            _insercoes_caixa.append((bname, _cx, (round(x, 2), round(y, 2))))
 
         # Se parece ser esquadria (porta/janela), armazena dimensão em metros
         if _is_esquadria_block(bname):
@@ -5533,6 +5703,17 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         except Exception:
             continue
 
+    # 🩸 26/09/2026, job 32a27efc: o símbolo desenhado na LEGENDA (ver
+    # `amostras_de_legenda`). Calcula aqui, com as posições de ANTES da leitura
+    # por folha; o número vai pro bloco depois dela, pelas posições que ficaram.
+    try:
+        _amostra_pos = amostras_de_legenda(
+            _insercoes_caixa,
+            [(t.text, t.position[0], t.position[1], t.height) for t in texts])
+    except Exception as _eam:
+        logger.warning("[amostra-legenda] falhou (não-fatal): %s", _eam)
+        _amostra_pos = {}
+
     # ---- Dimensions -------------------------------------------------------
     dims: list[tuple] = []
 
@@ -5736,6 +5917,18 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         except Exception as _efl:
             logger.warning("[leitura-por-folha] falhou (não-fatal): %s", _efl)
             _folhas = {"aplicada": False, "motivo": "erro: %s" % str(_efl)[:120]}
+
+    # 26/09: quantas das posições que FICARAM são o símbolo da legenda
+    if _amostra_pos:
+        for b in blocks:
+            _livres = Counter(_amostra_pos.get(b.name, ()))
+            for p in b.positions:
+                if _livres[p] > 0:
+                    _livres[p] -= 1
+                    b.amostras_legenda += 1
+        _am_bl = {b.name: b.amostras_legenda for b in blocks if b.amostras_legenda}
+        if _am_bl:
+            metadata["amostras_de_legenda"] = _am_bl
 
     return DXFExtraction(
         filename=os.path.basename(filepath),

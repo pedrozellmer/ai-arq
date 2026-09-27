@@ -15238,6 +15238,8 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                                 f"{_blocos_colados_abertos(extraction)}"
                                 # 🔑 24/09: hachuras de AMOSTRA DA LEGENDA tiradas da medição
                                 f"{(' amostras_legenda=[' + str((getattr(extraction, 'metadata', None) or {}).get('amostras_legenda')) + ']') if (getattr(extraction, 'metadata', None) or {}).get('amostras_legenda') else ''}"
+                                # 🩸 26/09: BLOCOS cujo símbolo da legenda foi contado (job 32a27efc)
+                                f"{(' blocos_da_legenda=' + str((getattr(extraction, 'metadata', None) or {}).get('amostras_de_legenda'))[:300]) if (getattr(extraction, 'metadata', None) or {}).get('amostras_de_legenda') else ''}"
                                 # 🔬 27/08: POR QUE `pilares` deu esse número.
                                 # Prancha de FÔRMA com 2.545 linhas e 198 cotas
                                 # devolvia `pilares=0` sem dizer se o desenho
@@ -15965,6 +15967,15 @@ bloco — só cite os que estão no inventário deste arquivo."""
                             _blocos_n = extraction.get_block_summary() or {}
                         except Exception:
                             _blocos_n = {}
+                        # 🩸 26/09 (job 32a27efc): os blocos com inserção que é o
+                        # SÍMBOLO da legenda — {nome: (contagem, amostras)}.
+                        try:
+                            _blocos_amostra = {
+                                b.name: (b.count, b.amostras_legenda)
+                                for b in (extraction.blocks or [])
+                                if getattr(b, "amostras_legenda", 0)}
+                        except Exception:
+                            _blocos_amostra = {}
                         _n_resgate_proc = 0
                         # Extrair itens
                         _n_item_perdido = 0   # quantos morreram no except do laço
@@ -16111,6 +16122,20 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                                "hachura), não elemento construído — o comprimento "
                                                "foi medido, mas do desenho da anotação. Confirme o "
                                                "serviço e a quantidade. " + obs_raw)
+
+                                # 🩸 26/09/2026 (job 32a27efc) — O SÍMBOLO DA LEGENDA
+                                # NÃO É PEÇA. "Pilar nasce = 1 un ✓ MEDIDO" em 3
+                                # pranchas: o único INSERT era o desenhado na
+                                # "LEGENDA PILARES:". Contagem que bate com um bloco
+                                # que tem amostra de legenda sai laranja e diz
+                                # quantas são da planta. Decisão em engine_rules,
+                                # aqui é uma linha só (a lição da soma, logo abaixo).
+                                from engine_rules import (
+                                    selo_apos_amostra_de_legenda as _regra_amostra)
+                                conf, obs_raw, _era_legenda = _regra_amostra(
+                                    conf, obs_raw, qty, normalized_unit, _blocos_amostra)
+                                if _era_legenda:
+                                    _rebaixado_pela_fonte = True
 
                                 # 🚨 18/09/2026 — SOMA NÃO É LEITURA DIRETA (regra dura nº1).
                                 # O prompt (~11713) manda: "se você multiplicou, somou ou fez

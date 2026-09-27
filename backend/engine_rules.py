@@ -4865,6 +4865,47 @@ def contagem_de_bloco_citada(obs, quantity, unit, blocos):
     return ""
 
 
+def selo_apos_amostra_de_legenda(conf, obs, quantity, unit, amostras):
+    """A contagem de bloco que inclui o SÍMBOLO desenhado na legenda não sai
+    medida. Devolve `(conf, obs, rebaixou)`.
+
+    `amostras` = {nome do bloco: (contagem, quantas são amostra de legenda)} —
+    ver `dwg_extractor.amostras_de_legenda`.
+
+    🩸 26/09/2026, job 32a27efc: "Pilar nasce = 1 un ✓ MEDIDO" em 3 pranchas.
+    O único INSERT 'IND PILAR NASCE' de cada folha era o símbolo da coluna
+    "LEGENDA PILARES:" — na planta, nenhum. O prompt diz que contagem de bloco
+    é MEDIDO, e a trava de anotação olha só LAYER citado (a linha não citava).
+    📏 No banco, piso de 21 linhas confirmadas em 6 jobs (1,2% das 1.785
+    contagens de bloco confirmadas).
+
+    🔑 A prova é a mesma de `contagem_de_bloco_citada`: a linha cita o bloco E
+    a quantidade é IGUAL à contagem (a amostra está dentro do número). Se a IA
+    já descontou (quantidade ≠ contagem), a linha fica como está.
+    🚨 SÓ REBAIXA: não mexe na quantidade, não apaga. O aviso vai na FRENTE
+    (a tela mostra 110 caracteres).
+    """
+    if conf != "confirmado" or not amostras:
+        return conf, obs, False
+    pares = {}
+    for nome, par in amostras.items():
+        try:
+            m, n = int(par[0]), int(par[1])
+        except (TypeError, ValueError, IndexError):
+            continue
+        if n > 0:
+            pares[nome] = (m, n)
+    nome = contagem_de_bloco_citada(obs, quantity, unit,
+                                    {k: v[0] for k, v in pares.items()})
+    if not nome:
+        return conf, obs, False
+    m, n = pares[nome]
+    aviso = ("⚠ %d das %d inserções do bloco '%s' são o SÍMBOLO desenhado na "
+             "LEGENDA da prancha — na planta: %d. Confirme a quantidade. "
+             % (n, m, nome, max(m - n, 0)))
+    return "estimado", aviso + str(obs or ""), True
+
+
 def selo_com_prova_da_geometria(items, indice):
     """Promove a 'confirmado' as linhas que a geometria do arquivo prova.
 
