@@ -21,7 +21,7 @@ from _jsbancada import funcao_js, motor, rodar  # noqa: E402
 
 _ADMIN = "admin.html"
 _FUNCOES = ("igHasMedia", "podeAprovarJunto", "selIds", "caixaSelecao", "aprovarVarios",
-            "resumoAprovacao", "_mudarStatusPost", "aprovarSelecionados")
+            "resumoAprovacao", "_mudarStatusPost", "aprovarSelecionados", "_confirmaOuAvisa")
 
 _PRELUDIO = r"""
 var window = this;
@@ -29,7 +29,8 @@ var API_BASE = 'https://api.exemplo.local';
 var SEL_APROVAR = { ig: {}, li: {} };
 var _aprovandoVarios = false;
 var IG_POSTS = [], LI_POSTS = [];
-var __chamadas = [], __alertas = [], __recargas = [], __confirmar = true, __falhar = {};
+var __chamadas = [], __alertas = [], __recargas = [], __avisos = [], __confirmar = true, __falhar = {};
+function _adminToast(msg){ __avisos.push(String(msg)); }
 function igEsc(s){ return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 function confirm(){ return __confirmar; }
 function alert(t){ __alertas.push(String(t)); }
@@ -148,11 +149,13 @@ def test_linkedin_aprova_pela_rota_do_linkedin_com_approved():
     assert js.evaljs("__recargas") == ["li"]
 
 
-def test_cancelar_a_confirmacao_nao_aprova_nada():
+def test_cancelar_a_confirmacao_nao_aprova_nada_e_DIZ_que_nada_foi_feito():
+    """Pela regra do painel (test_recusa_no_admin_nao_some_calada): o "não" não some calado."""
     js = _js()
     js.evaljs("IG_POSTS = %s; SEL_APROVAR.ig = {'1': true}; __confirmar = false; true;" % json.dumps([_ig("1")]))
     rodar(js, "aprovarSelecionados('ig')")
     assert js.evaljs("__chamadas") == [] and js.evaljs("__alertas") == []
+    assert any("nada foi feito" in a.lower() for a in js.evaljs("__avisos")), js.evaljs("__avisos")
 
 
 def test_clique_duplo_nao_dispara_duas_levas():

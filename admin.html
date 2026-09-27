@@ -3821,9 +3821,12 @@ function resumoAprovacao(r, rotulo){
   }
   return t;
 }
+// 🪤 As duas rotas escritas por extenso (não `${API_BASE}${rota}`): o guarda que confere
+// botão × rota (test_botao_bate_com_a_rota) só enxerga URL literal.
 async function _mudarStatusPost(tipo, id, status){
-  const rota = tipo === 'ig' ? '/api/admin/instagram/posts/status' : '/api/admin/linkedin/posts/status';
-  const res = await authFetch(`${API_BASE}${rota}`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id, status }) });
+  const res = tipo === 'ig'
+    ? await authFetch(`${API_BASE}/api/admin/instagram/posts/status`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id, status }) })
+    : await authFetch(`${API_BASE}/api/admin/linkedin/posts/status`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id, status }) });
   let data = {};
   try { data = await res.json(); } catch (_) {}
   if (!res.ok) throw new Error(data.detail || ('erro ' + res.status));
@@ -3837,7 +3840,7 @@ async function aprovarSelecionados(tipo){
   const aviso = tipo === 'ig'
     ? `Aprovar ${ids.length} post(s) do Instagram? O robô publica cada um sozinho na data marcada.`
     : `Aprovar ${ids.length} post(s) do LinkedIn? Depois disso o Claude agenda cada um na página, na data marcada.`;
-  if (!confirm(aviso)) return;
+  if (!_confirmaOuAvisa(aviso)) return;   // "não" avisa "nada foi feito" (test_recusa_no_admin_nao_some_calada)
   _aprovandoVarios = true;
   const btn = document.getElementById(tipo + '-aprovar-sel');
   if (btn) { btn.disabled = true; btn.textContent = 'Aprovando…'; }
