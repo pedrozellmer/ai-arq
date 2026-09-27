@@ -735,7 +735,10 @@ def render_post_html(post):
 (function () {{
   const meta = document.querySelector('meta[name="publish-date"]');
   if (!meta) return;
-  const pubDate = new Date(meta.content + 'T10:00:00-03:00');
+  // 27/09/2026: meia-noite de Brasília, o MESMO relógio do hoje_editorial()
+  // do gerador. Às 10h, o post do dia já estava no ar (deploy das 06h) e
+  // quem abria entre 06h e 10h era mandado de volta pro /blog/.
+  const pubDate = new Date(meta.content + 'T00:00:00-03:00');
   if (pubDate > new Date()) {{
     document.documentElement.style.display = 'none';
     window.location.replace('/blog/');
@@ -912,8 +915,13 @@ def render_index_html():
     cards_html = ""
     for post in sorted(POSTS, key=lambda p: p["publish_date"], reverse=True):
         publish_date_br = datetime.fromisoformat(post["publish_date"]).strftime("%d/%m/%Y")
-        is_future = post["publish_date"] > today
-        future_class = ' data-future="true" style="display:none"' if is_future else ''
+        # 27/09/2026 (auditoria): post agendado NÃO entra no HTML. Antes ia
+        # escondido (display:none) — título, resumo e link pra página noindex
+        # de posts até dois meses à frente, lidos por qualquer robô que não
+        # aplica CSS. O deploy diário já revela cada um no dia certo.
+        if post["publish_date"] > today:
+            continue
+        future_class = ''
 
         # 🪤 28/07/2026: o card era um <article onclick="window.location=...">.
         # Sem <a href>, o Google não seguia pro post (a listagem não passava
@@ -961,8 +969,8 @@ def render_index_html():
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 
-<title>Blog AI.arq — Quantitativos, SINAPI e BDI pra arquitetos</title>
-<meta name="description" content="Artigos práticos sobre planilha de quantitativos, SINAPI, TCPO, BDI e memorial descritivo. Conteúdo gratuito pra arquitetos e engenheiros brasileiros.">
+<title>Blog AI.arq — Quantitativo de obra, SINAPI e BDI</title>
+<meta name="description" content="Artigos práticos sobre planilha de quantitativos, SINAPI, TCPO, BDI e memorial descritivo. Conteúdo gratuito pra engenharia, orçamento de obra e arquitetura.">
 <meta name="keywords" content="blog arquitetura, planilha quantitativos, sinapi, tcpo, bdi, memorial descritivo, ia arquitetura">
 
 <link rel="canonical" href="{SITE_URL}/blog/">
@@ -970,14 +978,14 @@ def render_index_html():
 
 <meta property="og:type" content="website">
 <meta property="og:url" content="{SITE_URL}/blog/">
-<meta property="og:title" content="Blog AI.arq — Quantitativos, SINAPI, IA na arquitetura">
-<meta property="og:description" content="Conteúdo prático sobre quantitativos de obra, SINAPI, TCPO, BDI e IA aplicada à arquitetura.">
+<meta property="og:title" content="Blog AI.arq — Quantitativo de obra, SINAPI e BDI">
+<meta property="og:description" content="Conteúdo prático sobre quantitativo de obra, SINAPI, TCPO e BDI, pra engenharia, orçamento e arquitetura.">
 <meta property="og:image" content="{SITE_URL}/blog/og/index.png">
 <meta property="og:locale" content="pt_BR">
 <meta property="og:site_name" content="AI.arq">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Blog AI.arq — Quantitativos, SINAPI, IA na arquitetura">
-<meta name="twitter:description" content="Conteúdo prático sobre quantitativos de obra, SINAPI, TCPO, BDI e IA aplicada à arquitetura.">
+<meta name="twitter:title" content="Blog AI.arq — Quantitativo de obra, SINAPI e BDI">
+<meta name="twitter:description" content="Conteúdo prático sobre quantitativo de obra, SINAPI, TCPO e BDI, pra engenharia, orçamento e arquitetura.">
 <meta name="twitter:image" content="{SITE_URL}/blog/og/index.png">
 <script type="application/ld+json">
 {json.dumps(schema_indice, ensure_ascii=False, indent=2)}
@@ -995,7 +1003,7 @@ def render_index_html():
 <header class="bg-white border-b">
   <div class="mx-auto max-w-6xl px-4 py-16 text-center">
     <span class="inline-block mb-4 bg-indigo-100 text-indigo-700 text-sm font-medium px-4 py-1.5 rounded-full">Blog AI.arq</span>
-    <h1 class="text-4xl md:text-5xl font-bold text-gray-900 mb-4">Conteúdo prático pra arquitetos brasileiros</h1>
+    <h1 class="text-4xl md:text-5xl font-bold text-gray-900 mb-4">Conteúdo prático pra engenharia, orçamento de obra e arquitetura</h1>
     <p class="text-lg text-gray-600 max-w-2xl mx-auto">Quantitativos, SINAPI, TCPO, BDI, memorial descritivo, IA aplicada à arquitetura. Tudo gratuito, escrito direto ao ponto.</p>
   </div>
 </header>
@@ -1021,7 +1029,7 @@ def render_index_html():
   const cards = document.querySelectorAll('.post-card');
   let visible = 0;
   cards.forEach(c => {{
-    const pubDate = new Date(c.dataset.publishDate + 'T10:00:00-03:00');
+    const pubDate = new Date(c.dataset.publishDate + 'T00:00:00-03:00');  // meia-noite BRT, como o gerador
     if (pubDate > today) {{
       c.style.display = 'none';
     }} else {{

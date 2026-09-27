@@ -162,7 +162,10 @@
 (function () {
   const meta = document.querySelector('meta[name="publish-date"]');
   if (!meta) return;
-  const pubDate = new Date(meta.content + 'T10:00:00-03:00');
+  // 27/09/2026: meia-noite de Brasília, o MESMO relógio do hoje_editorial()
+  // do gerador. Às 10h, o post do dia já estava no ar (deploy das 06h) e
+  // quem abria entre 06h e 10h era mandado de volta pro /blog/.
+  const pubDate = new Date(meta.content + 'T00:00:00-03:00');
   if (pubDate > new Date()) {
     document.documentElement.style.display = 'none';
     window.location.replace('/blog/');
