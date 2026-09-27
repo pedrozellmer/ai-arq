@@ -959,3 +959,346 @@ language sql stable security definer set search_path to '' as $$
 $$;
 revoke all on function public.escritorio_contatos(uuid) from public, anon;
 grant execute on function public.escritorio_contatos(uuid) to authenticated, service_role;
+
+-- ── 26. (26/09) PERFIS: cliente e fornecedor (maquete aprovada pelo Pedro, 26/09) ──
+-- Antes: quase toda leitura era `escritorio_papel(...) is not null` — quem entrasse no projeto via TUDO.
+-- Agora 'freela' continua sendo a EQUIPE e vê o mesmo de antes (o ensaio compara a equipe real antes/depois).
+--   fornecedor: só as tarefas marcadas pra ele (move entre A fazer / Em desenvolvimento / Aguardando revisão,
+--               marca item do checklist, comenta), as emissões mandadas pra ele e as fotos (sobe pelo servidor).
+--   cliente:    só as tarefas "do cliente" ou marcadas pra ele (sem comentários nem checklist), as emissões
+--               mandadas pra ele — e RESPONDE (aprova ou pede revisão; fica registrado, ninguém edita nem apaga)
+--               — e as fotos marcadas "pro cliente".
+--   atas, atividade, etiquetas e a lista da equipe com contato: só a equipe.
+--   Nenhum dos dois lê a linha do projeto direto (tem job_id e a pasta do Drive): o resumo vem por
+--   escritorio_resumo_externo(). Só o servidor cria cliente/fornecedor, manda emissão e sobe foto (Drive).
+-- 26.1 papéis novos e a subpasta do Drive que o fornecedor vê
+alter table public.escritorio_membros drop constraint escritorio_membros_papel_check;
+alter table public.escritorio_membros add constraint escritorio_membros_papel_check
+  check (papel in ('dono','freela','fornecedor','cliente'));
+alter table public.escritorio_membros
+  add column drive_pasta_id   text check (char_length(drive_pasta_id) <= 200),
+  add column drive_pasta_nome text check (char_length(drive_pasta_nome) <= 300);
+alter table public.escritorio_membros add constraint escritorio_membros_pasta_so_do_fornecedor
+  check ((drive_pasta_id is null and drive_pasta_nome is null) or papel = 'fornecedor');
+-- o NOME da pasta aparece na tela; o id fica com o servidor (é ele que dá o acesso no Drive)
+grant select (drive_pasta_nome) on public.escritorio_membros to authenticated;
+-- a pasta do fornecedor só muda pelo servidor (mudar a pasta = mudar o acesso no Drive)
+create or replace function public.escritorio_membro_guarda()
+returns trigger language plpgsql set search_path to '' as $$
+begin
+  if public.escritorio_eh_servidor() then
+    return case when tg_op = 'DELETE' then old else new end;
+  end if;
+  if tg_op = 'DELETE' then
+    if old.papel = 'dono'
+       and exists (select 1 from public.escritorio_projetos p where p.id = old.projeto_id)
+       and public.escritorio_conta_existe(old.user_id) then
+      raise exception 'o dono não sai do próprio projeto' using errcode = '42501';
+    end if;
+    return old;
+  end if;
+  if old.papel = 'dono' then
+    raise exception 'a linha do dono não se edita' using errcode = '42501';
+  end if;
+  if new.projeto_id <> old.projeto_id or new.papel <> old.papel
+     or new.user_id is distinct from old.user_id
+     or new.convite_hash is distinct from old.convite_hash
+     or new.visto_por is distinct from old.visto_por
+     or new.email_conta is distinct from old.email_conta
+     or new.drive_pasta_id is distinct from old.drive_pasta_id
+     or new.drive_pasta_nome is distinct from old.drive_pasta_nome
+     or (new.status = 'ativo' and old.status <> 'ativo')
+     or (old.status = 'removido' and new.status <> 'removido') then
+    raise exception 'só o aceite do convite (servidor) ativa ou liga uma pessoa' using errcode = '42501';
+  end if;
+  if new.email is distinct from old.email
+     or new.convite_expira is distinct from old.convite_expira
+     or new.convidado_em is distinct from old.convidado_em
+     or new.aceito_em is distinct from old.aceito_em then
+    raise exception 'e-mail e datas do convite só mudam por um convite novo' using errcode = '42501';
+  end if;
+  if new.status = 'removido' and old.status <> 'removido' then new.removido_em := coalesce(new.removido_em, now()); end if;
+  return new;
+end $$;
+-- 26.2 as perguntas das regras. A equipe = a admin (dono) ou quem ela chamou como equipe (freela)
+create or replace function public.escritorio_eh_equipe(p_projeto uuid)
+returns boolean language sql stable set search_path to '' as $$
+  select coalesce(public.escritorio_papel(p_projeto) in ('dono','freela'), false)
+$$;
+-- esta linha de membro é de quem está logado?
+create or replace function public.escritorio_sou_eu(p_membro uuid)
+returns boolean language sql stable security definer set search_path to '' as $$
+  select exists (select 1 from public.escritorio_membros m
+                  where m.id = p_membro and m.user_id = (select auth.uid()) and m.status = 'ativo')
+$$;
+-- a tarefa aparece pra quem está logado? (fornecedor: marcada pra ele; cliente: "do cliente" ou marcada pra ele)
+create or replace function public.escritorio_tarefa_visivel(p_tarefa uuid)
+returns boolean language sql stable security definer set search_path to '' as $$
+  select coalesce((
+    select case public.escritorio_papel(t.projeto_id)
+             when 'dono' then true
+             when 'freela' then true
+             when 'fornecedor' then exists (
+               select 1 from public.escritorio_tarefa_pessoas tp
+                 join public.escritorio_membros m on m.id = tp.membro_id and m.projeto_id = tp.projeto_id
+                where tp.tarefa_id = t.id and m.user_id = (select auth.uid()) and m.status = 'ativo')
+             when 'cliente' then t.do_cliente or exists (
+               select 1 from public.escritorio_tarefa_pessoas tp
+                 join public.escritorio_membros m on m.id = tp.membro_id and m.projeto_id = tp.projeto_id
+                where tp.tarefa_id = t.id and m.user_id = (select auth.uid()) and m.status = 'ativo')
+             else false end
+      from public.escritorio_tarefas t where t.id = p_tarefa), false)
+$$;
+-- 26.3 pra quem cada emissão foi (o servidor grava junto com o acesso ao ARQUIVO no Drive — nunca a pasta Emitidos)
+create table public.escritorio_emissao_destinos (
+  emissao_id     uuid not null,
+  projeto_id     uuid not null,
+  membro_id      uuid not null,
+  enviado_em     timestamptz not null default now(),
+  enviado_por    uuid references auth.users(id) on delete set null,
+  permission_id  text check (char_length(permission_id) <= 200),
+  primary key (emissao_id, membro_id),
+  foreign key (emissao_id, projeto_id) references public.escritorio_emissoes(id, projeto_id) on delete cascade,
+  foreign key (membro_id, projeto_id) references public.escritorio_membros(id, projeto_id) on delete cascade
+);
+create index escritorio_emissao_destinos_membro on public.escritorio_emissao_destinos (membro_id);
+-- a emissão foi mandada pra quem está logado?
+create or replace function public.escritorio_emissao_minha(p_emissao uuid)
+returns boolean language sql stable security definer set search_path to '' as $$
+  select exists (select 1 from public.escritorio_emissao_destinos d
+                   join public.escritorio_membros m on m.id = d.membro_id and m.projeto_id = d.projeto_id
+                  where d.emissao_id = p_emissao and m.user_id = (select auth.uid()) and m.status = 'ativo'
+                    and m.papel in ('cliente','fornecedor'))
+$$;
+alter table public.escritorio_emissao_destinos enable row level security;
+revoke all on public.escritorio_emissao_destinos from anon;
+revoke insert, update, delete, truncate on public.escritorio_emissao_destinos from authenticated;
+create policy escritorio_emissao_destinos_ver on public.escritorio_emissao_destinos for select to authenticated
+  using (public.escritorio_eh_equipe(projeto_id) or public.escritorio_sou_eu(membro_id));
+-- a resposta que o cliente deu pelo sistema ("pelo sistema" x "registrado por você")
+alter table public.escritorio_emissao_eventos add column pelo_cliente boolean not null default false;
+-- o cliente não escolhe a data nem o autor; a resposta dele ninguém edita nem apaga (só some com a emissão)
+create or replace function public.escritorio_emissao_evento_guarda()
+returns trigger language plpgsql set search_path to '' as $$
+begin
+  if public.escritorio_eh_servidor() then
+    return case when tg_op = 'DELETE' then old else new end;
+  end if;
+  if tg_op = 'DELETE' then
+    if old.pelo_cliente then
+      raise exception 'a resposta do cliente fica registrada: não se apaga' using errcode = '42501';
+    end if;
+    return old;
+  end if;
+  if tg_op = 'INSERT' then
+    new.criado_em := now();
+    new.pelo_cliente := coalesce(public.escritorio_papel(new.projeto_id) = 'cliente', false);
+    if new.pelo_cliente then
+      new.registrado_por := (select auth.uid());
+      new.em := (now() at time zone 'America/Sao_Paulo')::date;
+    end if;
+    return new;
+  end if;
+  if old.pelo_cliente or new.pelo_cliente then
+    raise exception 'a resposta do cliente fica registrada: não se edita' using errcode = '42501';
+  end if;
+  return new;
+end $$;
+revoke all on function public.escritorio_emissao_evento_guarda() from public, anon, authenticated;
+create trigger escritorio_emissao_eventos_guarda before insert or update or delete on public.escritorio_emissao_eventos
+  for each row execute function public.escritorio_emissao_evento_guarda();
+create policy escritorio_emissao_eventos_cliente_responde on public.escritorio_emissao_eventos for insert to authenticated
+  with check (public.escritorio_papel(projeto_id) = 'cliente' and public.escritorio_emissao_minha(emissao_id)
+              and tipo in ('aprovado','revisao') and registrado_por = (select auth.uid()));
+-- 26.4 fotos: o arquivo mora na pasta Fotos do Drive; aqui só legenda, etapa, data e "pro cliente"
+create table public.escritorio_fotos (
+  id             uuid primary key default gen_random_uuid(),
+  projeto_id     uuid not null references public.escritorio_projetos(id) on delete cascade,
+  drive_file_id  text not null check (char_length(drive_file_id) between 1 and 200),
+  legenda        text check (char_length(legenda) <= 200),
+  etapa          text check (char_length(etapa) <= 80),
+  pro_cliente    boolean not null default false,
+  enviada_por    uuid references auth.users(id) on delete set null,
+  enviada_em     timestamptz not null default now(),
+  unique (id, projeto_id),
+  unique (projeto_id, drive_file_id)
+);
+create index escritorio_fotos_projeto on public.escritorio_fotos (projeto_id, enviada_em desc);
+alter table public.escritorio_fotos enable row level security;
+revoke all on public.escritorio_fotos from anon;
+-- subir e apagar passa pelo servidor (o arquivo do Drive vai junto)
+revoke insert, delete, truncate on public.escritorio_fotos from authenticated;
+create policy escritorio_fotos_ver on public.escritorio_fotos for select to authenticated
+  using (public.escritorio_papel(projeto_id) in ('dono','freela','fornecedor')
+         or (public.escritorio_papel(projeto_id) = 'cliente' and pro_cliente));
+create policy escritorio_fotos_editar on public.escritorio_fotos for update to authenticated
+  using (public.escritorio_eh_equipe(projeto_id)
+         or (enviada_por = (select auth.uid()) and public.escritorio_papel(projeto_id) = 'fornecedor'))
+  with check (public.escritorio_papel(projeto_id) in ('dono','freela','fornecedor'));
+-- o fornecedor edita a legenda da foto dele, mas "pro cliente" é decisão da equipe
+create or replace function public.escritorio_foto_guarda()
+returns trigger language plpgsql set search_path to '' as $$
+begin
+  if public.escritorio_eh_servidor() then return new; end if;
+  if new.projeto_id <> old.projeto_id or new.drive_file_id <> old.drive_file_id
+     or new.enviada_por is distinct from old.enviada_por or new.enviada_em is distinct from old.enviada_em then
+    raise exception 'a foto não muda de projeto, arquivo, autor nem data' using errcode = '42501';
+  end if;
+  if new.pro_cliente is distinct from old.pro_cliente and not public.escritorio_eh_equipe(new.projeto_id) then
+    raise exception 'só a equipe decide o que o cliente vê' using errcode = '42501';
+  end if;
+  return new;
+end $$;
+revoke all on function public.escritorio_foto_guarda() from public, anon, authenticated;
+create trigger escritorio_fotos_guarda before update on public.escritorio_fotos
+  for each row execute function public.escritorio_foto_guarda();
+-- 26.5 cliente e fornecedor não leem escritorio_projetos (job_id, pasta): o resumo vem por aqui, só dos projetos dele
+create or replace function public.escritorio_resumo_externo(p_projeto uuid default null)
+returns table (projeto_id uuid, nome text, escritorio text, papel text, etapas text[], etapa_atual text,
+               inicio date, entrega date, proxima_entrega text, proxima_entrega_data date)
+language sql stable security definer set search_path to '' as $$
+  select p.id, p.nome,
+         (select d.nome from public.escritorio_membros d where d.projeto_id = p.id and d.papel = 'dono' limit 1),
+         m.papel, p.etapas, p.etapa_atual, p.inicio, p.entrega, p.proxima_entrega, p.proxima_entrega_data
+    from public.escritorio_membros m
+    join public.escritorio_projetos p on p.id = m.projeto_id
+   where m.user_id = (select auth.uid()) and m.status = 'ativo' and m.papel in ('cliente','fornecedor')
+     and (p_projeto is null or p.id = p_projeto)
+$$;
+revoke all on function public.escritorio_eh_equipe(uuid) from public, anon;
+grant execute on function public.escritorio_eh_equipe(uuid) to authenticated, service_role;
+revoke all on function public.escritorio_sou_eu(uuid) from public, anon;
+grant execute on function public.escritorio_sou_eu(uuid) to authenticated, service_role;
+revoke all on function public.escritorio_tarefa_visivel(uuid) from public, anon;
+grant execute on function public.escritorio_tarefa_visivel(uuid) to authenticated, service_role;
+revoke all on function public.escritorio_emissao_minha(uuid) from public, anon;
+grant execute on function public.escritorio_emissao_minha(uuid) to authenticated, service_role;
+revoke all on function public.escritorio_resumo_externo(uuid) from public, anon;
+grant execute on function public.escritorio_resumo_externo(uuid) to authenticated, service_role;
+-- 26.6 as regras que eram "is not null". Projeto: só o dono e a equipe leem a linha
+alter policy escritorio_projetos_ver on public.escritorio_projetos
+  using (dono = (select auth.uid()) or public.escritorio_eh_equipe(id));
+-- membros: a equipe vê quem está ativo (como antes); cliente/fornecedor veem a si e a equipe do escritório — não um ao outro
+alter policy escritorio_membros_ver on public.escritorio_membros
+  using (public.escritorio_papel(projeto_id) = 'dono'
+         or (public.escritorio_papel(projeto_id) = 'freela' and status = 'ativo')
+         or (public.escritorio_papel(projeto_id) in ('fornecedor','cliente')
+             and (user_id = (select auth.uid()) or (status = 'ativo' and papel in ('dono','freela')))));
+alter policy escritorio_membros_editar on public.escritorio_membros
+  with check (public.escritorio_papel(projeto_id) = 'dono' and papel <> 'dono');
+alter policy escritorio_membros_apagar on public.escritorio_membros
+  using (public.escritorio_papel(projeto_id) = 'dono' and papel <> 'dono' and status <> 'ativo');
+-- atas e atividade: só a equipe
+alter policy escritorio_atas_ver on public.escritorio_atas using (public.escritorio_eh_equipe(projeto_id));
+alter policy escritorio_atas_criar on public.escritorio_atas with check (public.escritorio_eh_equipe(projeto_id) and criado_por = (select auth.uid()));
+alter policy escritorio_atas_editar on public.escritorio_atas
+  using (public.escritorio_papel(projeto_id) = 'dono' or (criado_por = (select auth.uid()) and public.escritorio_eh_equipe(projeto_id))) with check (public.escritorio_eh_equipe(projeto_id));
+alter policy escritorio_atas_apagar on public.escritorio_atas
+  using (public.escritorio_papel(projeto_id) = 'dono' or (criado_por = (select auth.uid()) and public.escritorio_eh_equipe(projeto_id)));
+alter policy escritorio_atividade_ver on public.escritorio_atividade using (public.escritorio_eh_equipe(projeto_id));
+-- tarefas
+alter policy escritorio_tarefas_ver on public.escritorio_tarefas
+  using (public.escritorio_eh_equipe(projeto_id) or public.escritorio_tarefa_visivel(id));
+alter policy escritorio_tarefas_criar on public.escritorio_tarefas with check (public.escritorio_eh_equipe(projeto_id) and criado_por = (select auth.uid()));
+alter policy escritorio_tarefas_editar on public.escritorio_tarefas
+  using (public.escritorio_eh_equipe(projeto_id) or (public.escritorio_papel(projeto_id) = 'fornecedor' and public.escritorio_tarefa_visivel(id)))
+  with check (public.escritorio_eh_equipe(projeto_id) or (public.escritorio_papel(projeto_id) = 'fornecedor' and public.escritorio_tarefa_visivel(id)));
+alter policy escritorio_tarefas_apagar on public.escritorio_tarefas
+  using (public.escritorio_papel(projeto_id) = 'dono' or (criado_por = (select auth.uid()) and public.escritorio_eh_equipe(projeto_id)));
+-- quem está marcado: a equipe vê tudo; os de fora, só a própria marcação
+alter policy escritorio_tarefa_pessoas_ver on public.escritorio_tarefa_pessoas
+  using (public.escritorio_eh_equipe(projeto_id) or public.escritorio_sou_eu(membro_id));
+alter policy escritorio_tarefa_pessoas_marcar on public.escritorio_tarefa_pessoas with check (public.escritorio_eh_equipe(projeto_id));
+alter policy escritorio_tarefa_pessoas_desmarcar on public.escritorio_tarefa_pessoas using (public.escritorio_eh_equipe(projeto_id));
+-- comentários: a equipe; o fornecedor nas tarefas dele; o cliente não
+alter policy escritorio_comentarios_ver on public.escritorio_comentarios using (public.escritorio_eh_equipe(projeto_id) or (public.escritorio_papel(projeto_id) = 'fornecedor' and public.escritorio_tarefa_visivel(tarefa_id)));
+alter policy escritorio_comentarios_criar on public.escritorio_comentarios
+  with check ((public.escritorio_eh_equipe(projeto_id) or (public.escritorio_papel(projeto_id) = 'fornecedor' and public.escritorio_tarefa_visivel(tarefa_id))) and autor = (select auth.uid()));
+alter policy escritorio_comentarios_editar on public.escritorio_comentarios
+  using (autor = (select auth.uid()) and (public.escritorio_eh_equipe(projeto_id) or (public.escritorio_papel(projeto_id) = 'fornecedor' and public.escritorio_tarefa_visivel(tarefa_id)))) with check (autor = (select auth.uid()) and (public.escritorio_eh_equipe(projeto_id) or (public.escritorio_papel(projeto_id) = 'fornecedor' and public.escritorio_tarefa_visivel(tarefa_id))));
+alter policy escritorio_comentarios_apagar on public.escritorio_comentarios
+  using (public.escritorio_papel(projeto_id) = 'dono' or (autor = (select auth.uid()) and (public.escritorio_eh_equipe(projeto_id) or (public.escritorio_papel(projeto_id) = 'fornecedor' and public.escritorio_tarefa_visivel(tarefa_id)))));
+-- checklist: a equipe; o fornecedor vê e marca "feito" nas tarefas dele
+alter policy escritorio_checklist_ver on public.escritorio_checklist using (public.escritorio_eh_equipe(projeto_id) or (public.escritorio_papel(projeto_id) = 'fornecedor' and public.escritorio_tarefa_visivel(tarefa_id)));
+alter policy escritorio_checklist_criar on public.escritorio_checklist with check (public.escritorio_eh_equipe(projeto_id));
+alter policy escritorio_checklist_editar on public.escritorio_checklist using (public.escritorio_eh_equipe(projeto_id) or (public.escritorio_papel(projeto_id) = 'fornecedor' and public.escritorio_tarefa_visivel(tarefa_id))) with check (public.escritorio_eh_equipe(projeto_id) or (public.escritorio_papel(projeto_id) = 'fornecedor' and public.escritorio_tarefa_visivel(tarefa_id)));
+alter policy escritorio_checklist_apagar on public.escritorio_checklist using (public.escritorio_eh_equipe(projeto_id));
+-- etiquetas: só a equipe
+alter policy escritorio_etiquetas_ver on public.escritorio_etiquetas using (public.escritorio_eh_equipe(projeto_id));
+alter policy escritorio_tarefa_etiquetas_ver on public.escritorio_tarefa_etiquetas using (public.escritorio_eh_equipe(projeto_id));
+alter policy escritorio_tarefa_etiquetas_marcar on public.escritorio_tarefa_etiquetas with check (public.escritorio_eh_equipe(projeto_id));
+alter policy escritorio_tarefa_etiquetas_desmarcar on public.escritorio_tarefa_etiquetas using (public.escritorio_eh_equipe(projeto_id));
+-- emissões: a equipe todas; os de fora só as mandadas pra eles
+alter policy escritorio_emissoes_ver on public.escritorio_emissoes
+  using (public.escritorio_eh_equipe(projeto_id) or public.escritorio_emissao_minha(id));
+-- o histórico de respostas: a equipe e o cliente a quem a emissão foi (o fornecedor não vê a conversa com o cliente)
+alter policy escritorio_emissao_eventos_ver on public.escritorio_emissao_eventos
+  using (public.escritorio_eh_equipe(projeto_id) or (public.escritorio_papel(projeto_id) = 'cliente' and public.escritorio_emissao_minha(emissao_id)));
+-- 26.7 o fornecedor só MOVE a tarefa dele (mesma esteira da equipe); o cliente não mexe em tarefa
+create or replace function public.escritorio_tarefa_guarda()
+returns trigger language plpgsql set search_path to '' as $$
+declare v_papel text;
+begin
+  if tg_op = 'UPDATE' then
+    if new.projeto_id <> old.projeto_id then
+      raise exception 'tarefa não muda de projeto' using errcode = '42501';
+    end if;
+    new.atualizado_em := now();
+    if new.status is distinct from old.status then new.status_mudou_em := now();
+    else new.status_mudou_em := old.status_mudou_em; end if;
+  end if;
+  if new.status in ('revsol','cliente','aprov','ok') then new.passou_pela_admin := true;
+  elsif tg_op = 'UPDATE' then new.passou_pela_admin := new.passou_pela_admin or old.passou_pela_admin; end if;
+  if public.escritorio_eh_servidor() then return new; end if;
+  if tg_op = 'INSERT' then
+    new.criado_em := now(); new.atualizado_em := now(); new.status_mudou_em := now();
+    new.passou_pela_admin := new.status in ('revsol','cliente','aprov','ok');
+  else
+    if new.criado_por is distinct from old.criado_por or new.criado_em is distinct from old.criado_em then
+      raise exception 'autoria e data de criação da tarefa não mudam' using errcode = '42501';
+    end if;
+    new.passou_pela_admin := old.passou_pela_admin or new.status in ('revsol','cliente','aprov','ok');
+  end if;
+  v_papel := public.escritorio_papel(new.projeto_id);
+  if v_papel = 'dono' then return new; end if;
+  if v_papel = 'fornecedor' then
+    if tg_op = 'INSERT' then
+      raise exception 'o fornecedor não cria tarefa' using errcode = '42501';
+    end if;
+    if (new.titulo, new.descricao, new.etapa, new.prazo, new.do_cliente, new.ata_id)
+       is distinct from (old.titulo, old.descricao, old.etapa, old.prazo, old.do_cliente, old.ata_id) then
+      raise exception 'o fornecedor só move a tarefa' using errcode = '42501';
+    end if;
+  elsif v_papel is distinct from 'freela' then
+    raise exception 'só a equipe mexe nas tarefas' using errcode = '42501';
+  end if;
+  if tg_op = 'INSERT' then
+    if not (new.status in ('afazer','dev','revdtz') or (new.do_cliente and new.status = 'cliente')) then
+      raise exception 'freela cria tarefa em A fazer, Em desenvolvimento ou Aguardando revisão DTZ' using errcode = '42501';
+    end if;
+  elsif new.status is distinct from old.status then
+    if old.status not in ('afazer','dev','revdtz','revsol') or new.status not in ('afazer','dev','revdtz') then
+      raise exception 'daqui pra frente quem move é a dona do projeto' using errcode = '42501';
+    end if;
+  end if;
+  return new;
+end $$;
+-- o fornecedor só marca o item como feito
+create or replace function public.escritorio_checklist_guarda()
+returns trigger language plpgsql set search_path to '' as $$
+begin
+  if public.escritorio_eh_servidor() then return new; end if;
+  if tg_op = 'INSERT' then
+    new.criado_em := now(); new.criado_por := (select auth.uid());
+    return new;
+  end if;
+  if new.tarefa_id <> old.tarefa_id or new.projeto_id <> old.projeto_id
+     or new.criado_por is distinct from old.criado_por or new.criado_em is distinct from old.criado_em then
+    raise exception 'tarefa, autor e data do item não mudam' using errcode = '42501';
+  end if;
+  if public.escritorio_papel(new.projeto_id) = 'fornecedor'
+     and (new.texto is distinct from old.texto or new.posicao is distinct from old.posicao) then
+    raise exception 'o fornecedor só marca o item como feito' using errcode = '42501';
+  end if;
+  return new;
+end $$;
