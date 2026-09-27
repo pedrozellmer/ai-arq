@@ -781,12 +781,12 @@ _RE_TERMO_MULTIPLICADO = _re.compile(r"(?:\d\s*[×x*]|[×x*]\s*[\d(])")
 _RE_PRODUTO_P_MAIS_T = (_re.compile(r"\dP\s*$", _re.IGNORECASE),
                         _re.compile(r"\s*T\b", _re.IGNORECASE))
 #: "(CA-50 + CA-60)": nome das CLASSES de aço, não adição — mesma família do
-#: "2P+T". 🩸 27/09 (job 32a27efc): "Total geral declarado: 371,11 kg (CA-50 +
+#: "2P+T". 🩸 26/09 (job 32a27efc): "Total geral declarado: 371,11 kg (CA-50 +
 #: CA-60)" rebaixava a linha de CA-60 lida do resumo do aço.
 _RE_CLASSE_DE_ACO = (_re.compile(r"CA-?\s*\d{2}\s*$", _re.IGNORECASE),
                      _re.compile(r"\s*CA-?\s*\d{2}\b", _re.IGNORECASE))
 
-#: 🩸 27/09/2026 — A CONFERÊNCIA DO TOTAL NÃO É A FONTE. Job 32a27efc: cada
+#: 🩸 26/09/2026 — A CONFERÊNCIA DO TOTAL NÃO É A FONTE. Job 32a27efc: cada
 #: bitola lida do RESUMO DO AÇO saía laranja porque a IA conferia o total na
 #: observação — "Total declarado: 255,93 kg (42,65 + 213,28 = 255,93 ✓)" —, e
 #: a linha era a de 42,65. O número da linha é PARCELA de uma conta que fecha;
@@ -823,8 +823,14 @@ def _conferencias_do_total(texto, quantidade):
         total = num_br_para_float(m.group("tot") or m.group("tot2"))
         if total is None or any(t is None for t in termos):
             continue
+        # 🪤 NÃO é redundante com a de baixo: com a tolerância de _bate, a linha
+        # que É o total também "bate" com uma parcela que passe de 99,5% dele
+        # ("1190 + 3 + 2 = 1195" na linha de 1195). A revisão pegou quando eu a
+        # tirei — e a soma de verdade saía com selo.
+        if _bate(q, total):
+            continue                 # a linha É o total: somou, e cai
         if not any(_bate(q, t) for t in termos):
-            continue                 # a linha não é parcela (é o total, ou outra conta)
+            continue                 # a linha nem é parcela desta conta
         if not _bate(sum(termos), total):
             continue                 # a conta não fecha: não é conferência
         trechos.append(m.span())
@@ -857,8 +863,10 @@ def _tem_aritmetica_de_parcelas(texto: str) -> bool:
             continue                      # sem número à direita
         if _RE_PRODUTO_P_MAIS_T[0].search(esq) and _RE_PRODUTO_P_MAIS_T[1].match(dir_):
             continue                      # "2P+T"
-        if _RE_CLASSE_DE_ACO[0].search(esq) and _RE_CLASSE_DE_ACO[1].match(dir_):
-            continue                      # "CA-50 + CA-60"
+        _cls = _RE_CLASSE_DE_ACO[1].match(dir_)
+        if (_cls and _RE_CLASSE_DE_ACO[0].search(esq)
+                and not _re.match(r"\s*\)?\s*=", dir_[_cls.end():])):
+            continue                      # "CA-50 + CA-60" (sem "= total" depois)
         if (_RE_TERMO_MULTIPLICADO.search(esq)
                 or _RE_TERMO_MULTIPLICADO.search(dir_)):
             continue                      # fórmula de dimensão, não parcelas
@@ -914,7 +922,7 @@ def a_fonte_declarada_e_uma_soma(obs, quantidade=None) -> bool:
             if _RE_NEGACAO.search(_o[:m.start()]):
                 continue
             return True
-    # 🩸 27/09: a conta que só CONFERE um total do qual a linha é parcela sai
+    # 🩸 26/09: a conta que só CONFERE um total do qual a linha é parcela sai
     # da varredura (em branco, pra não mexer nas posições do resto).
     for ini, fim in reversed(_conferencias_do_total(texto, quantidade)):
         texto = texto[:ini] + " " * (fim - ini) + texto[fim:]
@@ -1818,24 +1826,31 @@ _QUADRO_DE_ACO = (
     "quadro de ferragens", "quadro de ferro",
 )
 
-#: 🩸 27/09/2026 (job 32a27efc) — o MESMO quadro, escrito de dois jeitos que a
+#: 🩸 26/09/2026 (job 32a27efc) — o MESMO quadro, escrito de dois jeitos que a
 #: lista não via: com "DO" ("quadro 'RESUMO DO AÇO'", como o Eberick intitula)
 #: e com o título espaçado letra a letra ("R E S U M O D O A Ç O +10%"). As
 #: duas linhas de aço lidas dele saíam "LIDO de um texto" enquanto a vizinha,
 #: do mesmo quadro, ficava com selo. 📏 3 linhas no acervo, todas deste job.
-#: 🔑 Compara SEM espaço nenhum, dos dois lados — só isso e o "do"; a exceção
-#: continua sendo só o quadro de aço nomeado.
-_QUADRO_DE_ACO_SEM_ESPACO = tuple(sorted(
-    {p.replace(" ", "") for p in _QUADRO_DE_ACO}
-    | {"resumodoaço", "resumodoaco", "quadrodoaço", "quadrodoaco"}))
+#: 🔑 Os dois jeitos novos valem só em linha de KG, sem negação antes ("não há
+#: resumo do aço nesta prancha"), e como EXPRESSÃO: "do aço" com borda de
+#: palavra (não "resumo do acompanhamento"), e o título espaçado só dentro de
+#: um trecho de letras soltas (a 1ª versão juntava a observação inteira sem
+#: espaço, e "quadro de a conferir" virava "quadrodeaco" — a revisão pegou).
+_RE_QUADRO_DO_ACO = _re.compile(r"\b(?:quadro|resumo)\s+do\s+a[çc]o\b", _re.IGNORECASE)
+_RE_LETRAS_SOLTAS = _re.compile(r"(?<!\w)(?:\w ){2,}\w(?!\w)")
+_RE_QUADRO_JUNTO = _re.compile(r"(?:quadro|resumo)d[eo]a[çc]o", _re.IGNORECASE)
 
 
-def _cita_o_quadro_de_aco(obs_minusculo):
+def _cita_o_quadro_de_aco(obs_minusculo, unidade=""):
     """A observação (já em minúsculas) nomeia o quadro/resumo de aço?"""
     if any(p in obs_minusculo for p in _QUADRO_DE_ACO):
-        return True
-    compacto = _re.sub(r"\s+", "", obs_minusculo)
-    return any(p in compacto for p in _QUADRO_DE_ACO_SEM_ESPACO)
+        return True                      # a lista de sempre, como era
+    if str(unidade or "").strip().lower() != "kg":
+        return False
+    onde = [m.start() for m in _RE_QUADRO_DO_ACO.finditer(obs_minusculo)]
+    onde += [m.start() for m in _RE_LETRAS_SOLTAS.finditer(obs_minusculo)
+             if _RE_QUADRO_JUNTO.search(m.group(0).replace(" ", ""))]
+    return any(not _RX_NEGA_O_RESUMO.search(obs_minusculo[:i]) for i in onde)
 
 
 def quantidades_da_geometria(items):
@@ -1932,7 +1947,7 @@ def selos_sem_geometria(items):
             continue                     # "layer 'X' = 9,92 m" é medição
         # ⚖️ Quadro de aço: tabela com colunas rotuladas, conferida contra a NBR
         # e contra o total da prancha. Ver o comentário longo em _QUADRO_DE_ACO.
-        if _cita_o_quadro_de_aco(obs):
+        if _cita_o_quadro_de_aco(obs, _campo_do_item(it, "unit", "")):
             continue
         if not any(p in obs for p in _PROCEDENCIA_TEXTO):
             continue                     # não sabemos o que é: não acusa

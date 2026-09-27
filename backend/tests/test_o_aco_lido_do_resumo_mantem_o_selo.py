@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """O aço lido do RESUMO DO AÇO não perde o selo por dois falsos alarmes.
 
-🩸 27/09/2026 — job 32a27efc (estrutura Eberick, 7 DXF). Com o resumo do aço
+🩸 26/09/2026 — job 32a27efc (estrutura Eberick, 7 DXF). Com o resumo do aço
 enfim lido certo, 9 das 12 linhas de aço — todas com o número exato do quadro —
 saíram laranja:
 
@@ -97,6 +97,24 @@ def test_CONTROLE_palavra_de_soma_na_fonte_continua_valendo():
     assert a_fonte_declarada_e_uma_soma(obs, 42.65)
 
 
+def test_CONTROLE_linha_total_com_parcela_quase_do_tamanho_do_total():
+    """A borda que a revisão achou: com a tolerância de 0,5%, a linha que É o
+    total também 'bate' com uma parcela de mais de 99,5% dele. Continua soma."""
+    casos = [
+        ("Fonte: contagem de blocos 'Montante' — tipo1=1190, tipo2=3, tipo3=2 → 1190+3+2 = 1195 un.", 1195),
+        ("Fonte: polígonos do layer PISO. Área: 245,30 + 1,20 = 246,50 m².", 246.50),
+        ("Peso CA-50: 1.068,47 kg = 1.065,12 + 3,35.", 1068.47),
+        ("Total: 512,40 + 1,10 + 0,90 = 514,40 m.", 514.40),
+    ]
+    for obs, q in casos:
+        assert a_fonte_declarada_e_uma_soma(obs, q), (obs, q)
+
+
+def test_CONTROLE_classes_de_aco_com_o_total_depois_continuam_soma():
+    obs = "Fonte: quadro/resumo de aço da prancha. Peso total de aço (CA-50 + CA-60) = 838,99 kg."
+    assert a_fonte_declarada_e_uma_soma(obs, 838.99)
+
+
 def test_o_main_passa_a_quantidade_para_a_trava():
     """Sem a quantidade, a trava cai na regra de antes em silêncio (rebaixa a
     conferência de novo): o 3º argumento é o que liga o conserto."""
@@ -137,3 +155,15 @@ def test_CONTROLE_numero_de_texto_sem_o_quadro_continua_acusado():
 def test_CONTROLE_resumo_de_outra_coisa_continua_acusado():
     obs = "Fonte: tabela 'RESUMO DO PROJETO' no layer TABELAS: '671.00 kg'."
     assert [a["indice"] for a in selos_sem_geometria([_linha_de_aco(obs)])] == [0]
+
+
+def test_CONTROLE_os_falsos_da_revisao_continuam_acusados():
+    """A 1ª versão juntava a observação inteira sem espaço: 'quadro de a
+    conferir' virava 'quadrodeaco'. E não olhava negação nem a unidade."""
+    for obs in ("Não há resumo do aço nesta prancha; peso lido do texto no layer TEXTOS: '671.00 kg'.",
+                "Fonte: tabela 'RESUMO DO ACOMPANHAMENTO' no layer TABELAS: '671.00 kg'.",
+                "Fonte: texto 'quadro de a conferir' no layer TABELAS: '671.00 kg'."):
+        assert [a["indice"] for a in selos_sem_geometria([_linha_de_aco(obs)])] == [0], obs
+    concreto = dict(_linha_de_aco("Fonte: tabela de consumo de concreto ao lado do RESUMO DO AÇO: 12,5 m³."),
+                    unit="m³", quantity=12.5)
+    assert [a["indice"] for a in selos_sem_geometria([concreto])] == [0]
