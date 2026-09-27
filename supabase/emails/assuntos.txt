@@ -1,0 +1,3 @@
+link-de-acesso (Magic link): Seu link de acesso ao AI.arq
+confirmar-cadastro (Confirm sign up): Confirme seu e-mail no AI.arq
+redefinir-senha (Reset password): Redefinir sua senha do AI.arq
