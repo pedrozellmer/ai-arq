@@ -33,8 +33,8 @@
    "un": "m²",
    "qtd": 118.5,
    "disc": "Serviços Preliminares",
-   "medido": true,
-   "obs": "Fonte: área da polilinha do perímetro externo, layer 'ARQ-AREA' = 118,50 m²",
+   "medido": false,
+   "obs": "Fonte: área construída do quadro de áreas = 118,50 m². Item de praxe em reforma: ajuste se a limpeza for só na área reformada.",
    "sinapi": [
     {
      "codigo": "99815",
@@ -47,10 +47,10 @@
   {
    "desc": "Demolição de alvenaria de vedação (e=15cm)",
    "un": "m²",
-   "qtd": 22.4,
+   "qtd": 0.0,
    "disc": "Demolição e Remoção",
    "medido": false,
-   "obs": "Paredes marcadas 'a demolir' na planta, sem layer próprio: a IA estimou o comprimento pelo desenho — confira no CAD.",
+   "obs": "Paredes marcadas 'a demolir' na planta, sem layer próprio: sem layer, não há comprimento pra medir. Preencha pela planta de demolição.",
    "sinapi": [
     {
      "codigo": "97622",
@@ -73,8 +73,8 @@
    "un": "m²",
    "qtd": 18.0,
    "disc": "Demolição e Remoção",
-   "medido": true,
-   "obs": "Fonte: comprimento do layer 'ARQ-DEMOLIR-DIV' = 7,20 m × altura 2,50 m (cota do corte AA) = 18,00 m²",
+   "medido": false,
+   "obs": "Fonte: comprimento do layer 'ARQ-DEMOLIR-DIV' = 7,20 m × altura 2,50 m (cota do corte AA) = 18,00 m². A altura vem de um corte só: confira se ela vale pra divisória inteira.",
    "sinapi": [
     {
      "codigo": "97638",
@@ -98,8 +98,8 @@
    "un": "m²",
    "qtd": 41.2,
    "disc": "Fechamentos Verticais",
-   "medido": true,
-   "obs": "Fonte: comprimento do layer 'ARQ-ALV-CONSTRUIR' = 16,48 m × altura 2,50 m (cota do corte AA) = 41,20 m²",
+   "medido": false,
+   "obs": "Fonte: comprimento do layer 'ARQ-ALV-CONSTRUIR' = 16,48 m × altura 2,50 m (cota do corte AA) = 41,20 m². A altura vem de um corte só: confira se ela vale pra parede inteira.",
    "nota": "27/09/2026 (Pedro liberou): o escolhido da rodada de 17/07 era o 89290 — ALVENARIA ESTRUTURAL — pra uma parede de vedação de reforma de escritório. Trocado pelo 103346 (vedação, bloco cerâmico 14x19x29, mesma espessura). O 89290 fica como alternativa com a nota de texto que o sinapi_rescore dá hoje (0,63 — MAIOR que a do certo, 0,59: é o caso em que a semelhança de texto engana).",
    "sinapi": [
     {
@@ -122,8 +122,8 @@
    "un": "m²",
    "qtd": 33.8,
    "disc": "Fechamentos Verticais",
-   "medido": true,
-   "obs": "Fonte: comprimento do layer 'ARQ-DRYWALL' = 13,52 m × altura 2,50 m (cota do corte AA) = 33,80 m²",
+   "medido": false,
+   "obs": "Fonte: comprimento do layer 'ARQ-DRYWALL' = 13,52 m × altura 2,50 m (cota do corte AA) = 33,80 m². A altura vem de um corte só: confira se o drywall vai até a laje ou para no forro.",
    "sinapi": [
     {
      "codigo": "96361",
@@ -183,12 +183,29 @@
    ]
   },
   {
+   "desc": "Revestimento cerâmico 33x45 em parede (sanitários e copa)",
+   "un": "m²",
+   "qtd": 0.0,
+   "disc": "Revestimentos",
+   "medido": false,
+   "obs": "A legenda pede revestimento até o forro nos sanitários e na copa, mas o desenho não tem hachura nem vista dessas paredes: sem medida, a linha vem em branco. Preencha pela altura e pelo perímetro de cada ambiente.",
+   "nota": "27/09/2026 (Pedro liberou a correção do exemplo): linha nova, em branco — na base real, 31,6% das linhas em CAD voltam sem quantidade. Código escolhido à mão em sinapi_composicao.",
+   "sinapi": [
+    {
+     "codigo": "87273",
+     "unidade": "M2",
+     "descricao": "REVESTIMENTO CERÂMICO PARA PAREDES INTERNAS COM PLACAS TIPO ESMALTADA DE DIMENSÕES 33X45 CM APLICADAS NA ALTURA INTEIRA DAS PAREDES. AF_02/2023_PE",
+     "papel": "escolhido"
+    }
+   ]
+  },
+  {
    "desc": "Contrapiso desempenado e=4cm",
    "un": "m²",
    "qtd": 108.3,
    "disc": "Pisos e Rodapés",
-   "medido": true,
-   "obs": "Fonte: área hachurada dos layers 'PISO-PORCELANATO' + 'PISO-VINILICO' = 108,30 m²",
+   "medido": false,
+   "obs": "Fonte: soma das hachuras dos layers 'PISO-PORCELANATO' + 'PISO-VINILICO' = 108,30 m². O contrapiso não tem hachura própria: confira se ele vai sob todo o piso novo.",
    "sinapi": [
     {
      "codigo": "88478",
@@ -212,8 +229,8 @@
    "un": "m²",
    "qtd": 86.1,
    "disc": "Pisos e Rodapés",
-   "medido": true,
-   "obs": "Fonte: área hachurada do layer 'PISO-PORCELANATO' = 86,10 m²",
+   "medido": false,
+   "obs": "Fonte: hachura do layer 'PISO-PORCELANATO' = 86,10 m², somando vários ambientes. Confira ambiente por ambiente se o acabamento é o mesmo.",
    "nota": "27/09/2026 (Pedro liberou): o escolhido da rodada de 17/07 era o 87261 — porcelanato 60x60 em ambiente de área MENOR QUE 5 M² — pro piso de um escritório de 86,1 m². Trocado pelo 87263 (ambientes MAIORES QUE 10 M²). O 87261 fica como alternativa com a nota de texto que o sinapi_rescore dá hoje (0,40 — a mesma do certo: o texto não separa as faixas de área).",
    "sinapi": [
     {
@@ -261,8 +278,8 @@
    "un": "m²",
    "qtd": 22.2,
    "disc": "Pisos e Rodapés",
-   "medido": true,
-   "obs": "Fonte: área hachurada do layer 'PISO-VINILICO' = 22,20 m²",
+   "medido": false,
+   "obs": "Fonte: hachura do layer 'PISO-VINILICO' = 22,20 m². Confira na planta se a manta cobre a sala de reunião inteira.",
    "sinapi": [
     {
      "codigo": "101728",
@@ -281,12 +298,29 @@
    ]
   },
   {
+   "desc": "Soleira de granito nas portas (largura 15 cm)",
+   "un": "m",
+   "qtd": 4.8,
+   "disc": "Pisos e Rodapés",
+   "medido": false,
+   "obs": "",
+   "nota": "27/09/2026 (Pedro liberou a correção do exemplo): linha nova, SEM ORIGEM escrita, de propósito — é o que acontece em parte das linhas de verdade, e a planilha diz 'não medido'. Código escolhido à mão em sinapi_composicao.",
+   "sinapi": [
+    {
+     "codigo": "98689",
+     "unidade": "M",
+     "descricao": "SOLEIRA EM GRANITO, LARGURA 15 CM, ESPESSURA 2,0 CM. AF_02/2026",
+     "papel": "escolhido"
+    }
+   ]
+  },
+  {
    "desc": "Forro de gesso acartonado liso",
    "un": "m²",
    "qtd": 101.7,
    "disc": "Forros",
-   "medido": true,
-   "obs": "Fonte: área hachurada do layer 'FORRO-GESSO' = 101,70 m²",
+   "medido": false,
+   "obs": "Fonte: hachura do layer 'FORRO-GESSO' = 101,70 m², somando vários ambientes. Confira se todos levam o mesmo forro.",
    "sinapi": [
     {
      "codigo": "96114",
@@ -335,7 +369,7 @@
    "qtd": 6.0,
    "disc": "Divisórias e Vidros",
    "medido": true,
-   "obs": "Fonte: 6 INSERTs do bloco 'PORTA-MAD-80X210'",
+   "obs": "Fonte: 6 blocos 'PORTA-MAD-80X210' contados no desenho",
    "nota": "27/09/2026 (achado ESTR-05): o escolhido da rodada de 17/07 era o 91297 — folha e dobradiças, SEM batente e SEM fechadura; quem orçasse por ele contava os dois zero vez. Trocado pelo kit 91314, que traz os três. O 91297 fica como alternativa, com a nota de texto que o sinapi_rescore dá hoje (0,375). A busca de hoje (candidates_for) não traz nenhum dos dois pra esta descrição — produto, ver com o Pedro.",
    "sinapi": [
     {
@@ -359,7 +393,7 @@
    "qtd": 2.0,
    "disc": "Divisórias e Vidros",
    "medido": true,
-   "obs": "Fonte: 2 INSERTs do bloco 'PORTA-VIDRO-90X210'",
+   "obs": "Fonte: 2 blocos 'PORTA-VIDRO-90X210' contados no desenho",
    "sinapi": [
     {
      "codigo": "102184",
@@ -383,7 +417,7 @@
    "qtd": 24.0,
    "disc": "Iluminação",
    "medido": true,
-   "obs": "Fonte: 24 INSERTs do bloco 'LUM-EMB-60X60'",
+   "obs": "Fonte: 24 blocos 'LUM-EMB-60X60' contados no desenho",
    "sinapi": [
     {
      "codigo": "105542",
@@ -407,7 +441,7 @@
    "qtd": 18.0,
    "disc": "Iluminação",
    "medido": true,
-   "obs": "Fonte: 18 INSERTs do bloco 'SPOT-EMB-RED'",
+   "obs": "Fonte: 18 blocos 'SPOT-EMB-RED' contados no desenho",
    "sinapi": [
     {
      "codigo": "105546",
@@ -432,7 +466,7 @@
    "qtd": 3.0,
    "disc": "Iluminação",
    "medido": true,
-   "obs": "Fonte: 3 INSERTs do bloco 'PENDENTE-BANCADA'",
+   "obs": "Fonte: 3 blocos 'PENDENTE-BANCADA' contados no desenho",
    "sinapi": [
     {
      "codigo": "95696",
@@ -448,7 +482,7 @@
    "qtd": 32.0,
    "disc": "Instalações Elétricas e Dados",
    "medido": true,
-   "obs": "Fonte: 32 INSERTs do bloco 'TOM-2P+T-10A'",
+   "obs": "Fonte: 32 blocos 'TOM-2P+T-10A' contados no desenho",
    "sinapi": [
     {
      "codigo": "91996",
@@ -472,7 +506,7 @@
    "qtd": 14.0,
    "disc": "Instalações Elétricas e Dados",
    "medido": true,
-   "obs": "Fonte: 14 INSERTs do bloco 'INTERRUPTOR'",
+   "obs": "Fonte: 14 blocos 'INTERRUPTOR' contados no desenho",
    "sinapi": [
     {
      "codigo": "91952",
@@ -497,7 +531,7 @@
    "qtd": 20.0,
    "disc": "Instalações Elétricas e Dados",
    "medido": true,
-   "obs": "Fonte: 20 INSERTs do bloco 'PT-REDE-RJ45'",
+   "obs": "Fonte: 20 blocos 'PT-REDE-RJ45' contados no desenho",
    "sinapi": [
     {
      "codigo": "106077",
@@ -511,6 +545,23 @@
      "descricao": "TOMADA DE REDE RJ45 - FORNECIMENTO E INSTALAÇÃO. AF_08/2025",
      "papel": "alternativa",
      "semelhanca_texto": 0.4
+    }
+   ]
+  },
+  {
+   "desc": "Eletroduto flexível corrugado DN 25 no forro (pontos novos)",
+   "un": "m",
+   "qtd": 0.0,
+   "disc": "Instalações Elétricas e Dados",
+   "medido": false,
+   "obs": "Os pontos foram contados (tomadas, interruptores e rede), mas o caminho dos eletrodutos não está desenhado: sem traçado, não há comprimento. Preencha pelo projeto de elétrica.",
+   "nota": "27/09/2026 (Pedro liberou a correção do exemplo): linha nova, em branco. Código escolhido à mão em sinapi_composicao.",
+   "sinapi": [
+    {
+     "codigo": "91834",
+     "unidade": "M",
+     "descricao": "ELETRODUTO FLEXÍVEL CORRUGADO, PVC, DN 25 MM (3/4\"), PARA CIRCUITOS TERMINAIS, INSTALADO EM FORRO - FORNECIMENTO E INSTALAÇÃO. AF_03/2023",
+     "papel": "escolhido"
     }
    ]
   },
@@ -560,7 +611,7 @@
    "qtd": 2.0,
    "disc": "Ar-Condicionado",
    "medido": true,
-   "obs": "Fonte: 2 INSERTs do bloco 'AC-CASSETE-36K'",
+   "obs": "Fonte: 2 blocos 'AC-CASSETE-36K' contados no desenho",
    "sinapi": [
     {
      "codigo": "103271",

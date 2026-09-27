@@ -75,6 +75,8 @@ def test_pagina_e_planilha_contam_a_mesma_historia():
     for it in ex["itens"]:
         assert it["num"] in linhas, "a página mostra o item %s, que a planilha não tem" % it["num"]
         desc, un, qtd, obs, _origem, ref = linhas[it["num"]]
+        # 27/09: a linha em branco (estimado com quantidade 0) sai com a célula VAZIA na planilha
+        qtd = 0.0 if qtd is None else qtd
         assert (desc, un, float(qtd)) == (it["desc"], it["un"], float(it["qtd"])), (it["num"], desc, it["desc"])
         selo = "✓ MEDIDO" if it["medido"] else "⚠ ESTIMADO"
         assert str(obs).startswith(selo), "%s: a página diz %s e a planilha diz %r" % (it["num"], selo, obs[:30])

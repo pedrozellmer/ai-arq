@@ -17,6 +17,7 @@ Nada aqui chama IA nem busca no SINAPI: os candidatos da rodada de 17/07 estão 
 import argparse
 import io
 import json
+import math
 import os
 import re
 import sys
@@ -125,22 +126,37 @@ def _chave_num(num):
 
 def ex_da_pagina(dados, numeros):
     """O objeto EX da página, na ordem da planilha. A composição vai cortada em 70 caracteres —
-    a página emenda "…" e o código do lado; o texto inteiro está na aba SINAPI."""
+    a página emenda "…" e o código do lado; o texto inteiro está na aba SINAPI.
+
+    27/09/2026 (Pedro liberou): o exemplo mostrava 72% medido, 8 de 11 áreas seladas e nenhuma
+    linha em branco — na base real, área sai medida em 1,8% das linhas e 31,6% das linhas em CAD
+    voltam sem quantidade. Agora há três estados, como na planilha: medido, estimado com número e
+    em branco (estimado com quantidade zero, que a planilha deixa vazia pra você preencher). E a
+    observação vai junto: é nela que está a conta de cada estimativa — ou a falta de origem."""
     linhas = []
     for it in sorted(dados["itens"], key=lambda i: _chave_num(numeros[i["desc"]])):
         esc = next((c for c in it["sinapi"] if c["papel"] == "escolhido"), None)
         linhas.append({"num": numeros[it["desc"]], "desc": it["desc"], "un": it["un"], "qtd": it["qtd"],
-                       "disc": it["disc"], "medido": it["medido"],
+                       "disc": it["disc"], "medido": it["medido"], "obs": it["obs"],
                        "sinapi": ({"cod": esc["codigo"], "comp": esc["descricao"][:70], "un": esc["unidade"]}
                                   if esc else None)})
     medidos = sum(1 for i in dados["itens"] if i["medido"])
-    return {"total": len(linhas), "medidos": medidos, "estimados": len(linhas) - medidos,
-            "area": dados["projeto"]["total_area"], "itens": linhas}
+    brancos = sum(1 for i in dados["itens"] if not i["medido"] and not i["qtd"])
+    return {"total": len(linhas), "medidos": medidos, "estimados": len(linhas) - medidos - brancos,
+            "brancos": brancos, "area": dados["projeto"]["total_area"], "itens": linhas}
+
+
+def percentuais(ex):
+    """(% medido, % estimado, % em branco), somando 100 — as MESMAS contas do JS da página.
+    Arredonda como o Math.round do JS (meio pra cima), não como o round do Python (meio pro par)."""
+    pm = int(math.floor(100.0 * ex["medidos"] / ex["total"] + 0.5))
+    pb = int(math.floor(100.0 * ex["brancos"] / ex["total"] + 0.5))
+    return pm, 100 - pm - pb, pb
 
 
 def bloco_ex(ex, eol="\n"):
     """O texto do `const EX = {...};` no formato que a página já usava (1 item por linha)."""
-    cab = json.dumps({k: ex[k] for k in ("total", "medidos", "estimados", "area")},
+    cab = json.dumps({k: ex[k] for k in ("total", "medidos", "estimados", "brancos", "area")},
                      ensure_ascii=False, separators=(",", ":"))[:-1]
     corpo = ("," + eol).join("  " + json.dumps(i, ensure_ascii=False) for i in ex["itens"])
     return "const EX = " + cab + ',"itens":[' + eol + corpo + eol + "  ]};"
@@ -167,8 +183,8 @@ def tabela_estatica(ex, eol="\n"):
     import html as _h
     e = lambda s: _h.escape(str(s), quote=False)  # noqa: E731
     linhas = ['<table class="w-full text-sm">',
-              "<caption>Os %d itens do exemplo: %d medidos da geometria e %d estimados</caption>"
-              % (ex["total"], ex["medidos"], ex["estimados"]),
+              "<caption>Os %d itens do exemplo: %d medidos da geometria, %d estimados e %d em branco</caption>"
+              % (ex["total"], ex["medidos"], ex["estimados"], ex["brancos"]),
               "<thead><tr><th>Item</th><th>Descrição</th><th>Un.</th><th>Quantidade</th>"
               "<th>Confiança</th><th>SINAPI</th></tr></thead>", "<tbody>"]
     ordem, grupos = [], {}
@@ -182,8 +198,11 @@ def tabela_estatica(ex, eol="\n"):
         for it in grupos[disc]:
             sin = ("%s — %s… [%s]" % (e(it["sinapi"]["cod"]), e(it["sinapi"]["comp"]), e(it["sinapi"]["un"]))
                    if it["sinapi"] else "sem equivalente no SINAPI")
-            linhas.append("<tr><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>"
-                          % (e(it["num"]), e(it["desc"]), e(it["un"]), _fmt_qtd(it["qtd"]),
+            # a observação vai na célula da descrição: é ela que diz de onde veio o número
+            obs = e(it["obs"]) if it["obs"] else "sem origem escrita: confira de onde veio o número"
+            linhas.append("<tr><td>%s</td><td>%s<br><small>%s</small></td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>"
+                          % (e(it["num"]), e(it["desc"]), obs, e(it["un"]),
+                             _fmt_qtd(it["qtd"]) if it["qtd"] else "em branco",
                              "Medido" if it["medido"] else "Estimado", sin))
     linhas += ["</tbody>", "</table>"]
     return eol.join(linhas)
@@ -191,21 +210,26 @@ def tabela_estatica(ex, eol="\n"):
 
 def frases_que_a_pagina_tem_que_ter(ex, indiretos):
     """A prosa da página cita as contagens. Se o dado mudar, a prosa muda junto — ou o script para."""
-    pct = round(100 * ex["medidos"] / ex["total"])
+    pm, pe, pb = percentuais(ex)
     n_disc = len({i["disc"] for i in ex["itens"]})
     n_sinapi = sum(1 for i in ex["itens"] if i["sinapi"])
     area = ("%.1f" % ex["area"]).replace(".", ",")
     return [
-        "%d itens quantificados em %d disciplinas" % (ex["total"], n_disc),
         "%d itens em %d disciplinas" % (ex["total"], n_disc),
+        "%d medidos do desenho" % ex["medidos"],
+        "%d estimados com a conta escrita" % ex["estimados"],
+        "%d em branco" % ex["brancos"],
         "%d deles com refer" % n_sinapi,
         "os outros %d n" % (ex["total"] - n_sinapi),
         "%d linhas de custo indireto" % indiretos,
+        "do que os %d itens abaixo" % ex["total"],
         'id="rx-med">%d<' % ex["medidos"],
         'id="rx-est">%d<' % ex["estimados"],
-        "width:%d%%" % pct,
-        "%d%% medido · %d%% a confirmar" % (pct, 100 - pct),
-        "Neste exemplo, %d%%" % pct,
+        'id="rx-bra">%d<' % ex["brancos"],
+        'id="rx-bar-med" class="h-3 bg-emerald-500" style="width:%d%%"' % pm,
+        'id="rx-bar-est" class="h-3 bg-amber-400" style="width:%d%%"' % pe,
+        "%d%% medido · %d%% estimado · %d%% em branco" % (pm, pe, pb),
+        "Neste exemplo, %d%%" % pm,
         "%s m" % area,
     ]
 
