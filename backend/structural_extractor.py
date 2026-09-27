@@ -1113,6 +1113,13 @@ def extract_structural_measurements(extraction) -> dict:
     try:
         pil = count_pillars(extraction)
         if pil:
+            # 🩸 27/09/2026 — job 32a27efc: folha desenhada no modelo em escala de
+            # papel (vistas em 1:125, 1:25…). A seção sai da geometria × o fator
+            # único da prancha: o pilar 19×30 (vista 1:125, fator 0,1) virou
+            # "15x24 cm", e o prompt jurava "a seção veio da geometria (medida)".
+            _papel = (getattr(extraction, "metadata", None) or {}).get("escala_por_vista")
+            if _papel:
+                pil["escala_de_papel"] = str(_papel)
             result["pilares"] = pil
     except Exception:
         pass
@@ -1224,23 +1231,34 @@ def structural_prompt_section(struct: dict) -> str:
             lyr = ", ".join(pil.get("layers", []))
             L.append(f"PILARES (contagem geométrica — retângulos/círculos fechados no layer {lyr}):")
             _rep = any(s.get("repetidos") for s in pil.get("por_secao", []))
+            # 🔑 Em folha de papel a CONTAGEM vale (contar não depende da escala);
+            # a SEÇÃO não: é o tamanho do desenho, não o do pilar.
+            _papel = pil.get("escala_de_papel")
             L.append(f"  {'[REFERÊNCIA]' if _rep else '[MEDIDO]'} {pil['rects_qtd']} pilares contados")
             for s in pil.get("por_secao", []):
                 nomes = f" ({', '.join(s['nomes'])})" if s.get("nomes") else ""
+                _sec = (f"desenho ≈ {s['secao_cm']} (seção NÃO medida)" if _papel
+                        else f"seção {s['secao_cm']}")
                 if s.get("repetidos"):
-                    L.append(f"  [REFERÊNCIA] seção {s['secao_cm']}: {s['qtd']} desenhos de pilar{nomes}"
+                    L.append(f"  [REFERÊNCIA] {_sec}: {s['qtd']} desenhos de pilar{nomes}"
                              f" — mas {', '.join(s['repetidos'])} aparece(m) em mais de um desenho:"
                              f" {s['distintos']} pilares distintos pelo nome. Pode ser o MESMO pilar"
                              f" em 2 plantas/níveis da folha (não soma) ou pilares diferentes com o"
                              f" mesmo nome (soma). Gere o item com {s['qtd']}, confidence=\"estimado\","
                              f" e escreva na observação os dois números e os nomes repetidos.")
                 else:
-                    L.append(f"  [MEDIDO] seção {s['secao_cm']}: {s['qtd']} un{nomes}")
+                    L.append(f"  [MEDIDO] {_sec}: {s['qtd']} un{nomes}")
+            if _papel:
+                L.append(f"  ⚠ Folha desenhada em ESCALA DE PAPEL ({_papel}): a geometria não tem")
+                L.append("    as medidas reais — o '≈' acima é só o tamanho do DESENHO. A seção do")
+                L.append("    item é a ESCRITA na prancha (ex.: '(30x19)' junto do pilar ou na tabela),")
+                L.append("    dita na observação; sem ela, escreva 'seção a confirmar'. NUNCA a do '≈'.")
             L.append("  → Gere um item por seção: \"Pilar de concreto — seção <s>\", unidade un,")
             # 🔑 A regra geral não pode desdizer a linha [REFERÊNCIA] logo acima.
             L.append("    quantidade literal, " + ("[MEDIDO] = confirmado e [REFERÊNCIA] = estimado."
                                                   if _rep else "confirmado.")
-                     + " A seção veio da geometria (medida).")
+                     + (" A CONTAGEM veio da geometria; a seção, do texto da prancha." if _papel
+                        else " A seção veio da geometria (medida)."))
             L.append("  → O comprimento do layer de pilar em 'COMPRIMENTOS POR LAYER' é o PERÍMETRO")
             L.append("    desses retângulos — NÃO vire item.")
             L.append("  → Volume desses pilares NÃO está medido (sem altura) — se listar concreto/fôrma,")
