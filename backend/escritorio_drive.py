@@ -685,7 +685,9 @@ def projeto_emitir(projeto_id: str, request: Request, corpo: dict):
     if (corpo or {}).get("para"):
         # a emissão já existe: falha ao mandar NÃO desfaz a emissão (a tela manda de novo pelo /mandar)
         try:
-            envio = _mandar(projeto_id, {"id": emissao_id, "copia_id": copia["id"]}, corpo.get("para"), eu["id"], tok)
+            envio = _mandar(projeto_id, {"id": emissao_id, "copia_id": copia["id"], "arquivo_nome": original,
+                                         "copia_nome": str(copia.get("name") or nome), "nota": nota},
+                            corpo.get("para"), eu["id"], tok)
         except HTTPException as x:
             envio = {"mandados": 0, "falhas": ["banco"], "erro": x.detail}
     return {"ok": True, "emissao_id": emissao_id, "revisao": rev, "nome": str(copia.get("name") or nome),
@@ -723,7 +725,7 @@ def _mandar(projeto_id: str, emissao: dict, para, quem: str, tok: str) -> dict:
     validos = {str(m["id"]): m for m in membros}
     linha_de = {str(d["membro_id"]): d for d in ja}
     falhas = [i for i in ids if i not in validos]      # não é cliente nem fornecedor ativo DESTE projeto
-    mandados, pro_cliente = 0, False
+    mandados, pro_cliente, avisar = 0, False, []
     for mid in ids:
         m = validos.get(mid)
         if not m:
@@ -755,7 +757,9 @@ def _mandar(projeto_id: str, emissao: dict, para, quem: str, tok: str) -> dict:
             falhas.append(mid)
             continue
         mandados += 1
-        pro_cliente = pro_cliente or m.get("papel") == "cliente"
+        if m.get("papel") == "cliente":
+            pro_cliente = True
+            avisar.append(email)
     if pro_cliente:
         st_e, ev = esc._SERVICO("GET", "escritorio_emissao_eventos", params={
             "emissao_id": f"eq.{emissao['id']}", "tipo": "eq.enviado", "select": "id"})
@@ -763,7 +767,31 @@ def _mandar(projeto_id: str, emissao: dict, para, quem: str, tok: str) -> dict:
             esc._SERVICO("POST", "escritorio_emissao_eventos", body={
                 "emissao_id": emissao["id"], "projeto_id": projeto_id, "tipo": "enviado",
                 "em": _hoje_no_brasil(), "registrado_por": quem})
-    return {"mandados": mandados, "falhas": falhas}
+    return {"mandados": mandados, "falhas": falhas, "avisados": _avisar_clientes(projeto_id, emissao, avisar)}
+
+
+def _avisar_clientes(projeto_id: str, emissao: dict, emails: list) -> int:
+    """27/09 (Pedro: "e-mail do AI.arq também"): o cliente que acabou de receber a emissão leva um e-mail nosso, com
+    o botão pro projeto (o do Google só diz que um arquivo foi compartilhado). O aviso nunca desfaz o envio."""
+    if not emails or not esc._ENVIAR:
+        return 0
+    try:
+        p = _dono_do_projeto(projeto_id)
+        dona = esc._um(esc._SERVICO("GET", "escritorio_membros", params={
+            "projeto_id": f"eq.{projeto_id}", "papel": "eq.dono", "select": "nome"})) or {}
+    except HTTPException:
+        return 0
+    arquivo = emissao.get("copia_nome") or emissao.get("arquivo_nome") or "um arquivo"
+    link = f"{SITE}/escritorio.html#/p/{projeto_id}/emissoes"
+    assunto, html, texto = esc.email_da_emissao(dona.get("nome") or "", arquivo, p.get("nome") or "",
+                                               emissao.get("nota"), link)
+    feitos = 0
+    for email in emails:
+        try:
+            feitos += bool(esc._ENVIAR(email, assunto, html, texto, log_kind="escritorio_emissao_cliente"))
+        except Exception as x:
+            esc._registrar("escritorio:aviso-emissao", f"aviso ao cliente falhou: {type(x).__name__}")
+    return feitos
 
 
 @router.post("/projetos/{projeto_id}/emissoes/{emissao_id}/mandar")
@@ -775,7 +803,7 @@ def projeto_mandar_emissao(projeto_id: str, emissao_id: str, request: Request, c
     if not esc._UUID.match(str(emissao_id or "")):
         raise HTTPException(404, "Emissão não encontrada.")
     e = esc._um(esc._SERVICO("GET", "escritorio_emissoes", params={
-        "id": f"eq.{emissao_id}", "projeto_id": f"eq.{projeto_id}", "select": "id,copia_id"}))
+        "id": f"eq.{emissao_id}", "projeto_id": f"eq.{projeto_id}", "select": "id,copia_id,copia_nome,arquivo_nome,nota"}))
     if not e:
         raise HTTPException(404, "Emissão não encontrada.")
     p = _dono_do_projeto(projeto_id)
@@ -1092,6 +1120,59 @@ def faxina(limite: int = 20) -> dict:
             esc._registrar("escritorio:drive-faxina",
                            f"projeto {pid}: acesso ao Drive não tirado ({'sem conexão' if r.get('sem_conexao') else str(len(r['falhas'])) + ' falha(s)'})")
     return feito
+
+
+@router.delete("/projetos/{projeto_id}")
+def projeto_apagar(projeto_id: str, request: Request):
+    """27/09 (auditoria DRV-8: "apagar projeto precisa de uma rota que revogue ANTES"): a admin apaga o projeto do
+    Escritório. Antes de apagar o registro — a cascata leva do banco tarefas, atas, equipe, emissões e fotos — tira no
+    Google os acessos que o AI.arq deu: à pasta (equipe e fornecedor) e a cada arquivo emitido (clientes). Se algum não
+    sair, NÃO apaga: sem o registro, ninguém mais tiraria aquele acesso. A pasta e os arquivos do Drive ficam (são dela)."""
+    eu = esc._exige_login(request)
+    if esc._papel(request, projeto_id) != "dono":
+        raise HTTPException(403, "Só a admin do projeto apaga o projeto.")
+    p = _dono_do_projeto(projeto_id)
+    st_r, feitos = esc._SERVICO("GET", "escritorio_drive_permissoes", params={
+        "projeto_id": f"eq.{projeto_id}", "select": "id,pasta_id,permission_id,email,ja_existia"})
+    st_d, dest = esc._SERVICO("GET", "escritorio_emissao_destinos", params={
+        "projeto_id": f"eq.{projeto_id}", "permission_id": "not.is.null", "select": "membro_id"})
+    if st_r >= 300 or st_r == 0 or feitos is None or st_d >= 300 or st_d == 0 or dest is None:
+        raise HTTPException(502, "O banco não respondeu agora. O projeto não foi apagado; tente de novo em instantes.")
+    nossos = [f for f in feitos if not f.get("ja_existia")]
+    if nossos or dest:
+        if not _conexao(p["dono"]):
+            raise HTTPException(409, "Pra apagar, conecte o Google Drive de novo: antes, o AI.arq tira no Drive os "
+                                     "acessos que deu (à pasta e aos arquivos emitidos).")
+        tok = _acesso(p["dono"])
+        pendentes, enxerga = 0, {}
+        for f in nossos:
+            # quem segue noutro projeto com a MESMA pasta mantém o acesso — a mesma regra do sincronizar
+            st_o, outros = esc._SERVICO("GET", "escritorio_drive_permissoes", params={
+                "pasta_id": f"eq.{f['pasta_id']}", "email": f"eq.{f.get('email') or ''}",
+                "projeto_id": f"neq.{projeto_id}", "select": "id"})
+            if st_o >= 300 or st_o == 0 or outros is None:
+                pendentes += 1
+                continue
+            if outros:
+                continue
+            st_x, _ = _drive("DELETE", f"files/{f['pasta_id']}/permissions/{f['permission_id']}", tok,
+                             params={"supportsAllDrives": "true"})
+            if st_x == 404 and f["pasta_id"] not in enxerga:
+                st_v, _ = _drive("GET", f"files/{f['pasta_id']}", tok, params={"fields": "id", "supportsAllDrives": "true"})
+                enxerga[f["pasta_id"]] = st_v == 200
+            # 404 só vale como "já saiu" se a conta enxerga a pasta (senão é "não consigo ver")
+            if not (st_x in (200, 204) or (st_x == 404 and enxerga.get(f["pasta_id"]))):
+                pendentes += 1
+        _, falhas = _tirar_emissoes_de_quem_saiu(projeto_id, tok, set())
+        pendentes += len(falhas)
+        if pendentes:
+            raise HTTPException(502, f"O Google não tirou {pendentes} acesso(s) agora. O projeto NÃO foi apagado: "
+                                     "tente de novo em instantes.")
+    st, apagados = esc._SERVICO("DELETE", "escritorio_projetos", params={
+        "id": f"eq.{projeto_id}", "dono": f"eq.{eu['id']}"}, prefer="return=representation")
+    if st >= 300 or st == 0:
+        raise HTTPException(502, "Os acessos do Drive saíram, mas o projeto não foi apagado agora. Tente de novo.")
+    return {"ok": True, "apagado": bool(apagados)}
 
 
 @router.post("/projetos/{projeto_id}/drive/sincronizar")

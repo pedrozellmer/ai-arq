@@ -327,6 +327,14 @@
   .ft-grande{background:#0F172A;border-radius:12px;overflow:hidden;min-height:200px;display:flex;align-items:center;justify-content:center}
   .ft-grande img{max-width:100%;max-height:70vh;display:block}
   .ft-grande img:not([src]){visibility:hidden}
+  /* 27/09: o cronograma da obra pro cliente (Gantt simples, só leitura) */
+  .gantt{display:grid;grid-template-columns:minmax(140px,240px) minmax(0,1fr);gap:10px 14px;align-items:center}
+  .gt-l{min-width:0} .gt-l b{display:block;font-size:13.5px;color:#0F172A;overflow:hidden;text-overflow:ellipsis;white-space:nowrap} .gt-l small{font-size:11.5px;color:#64748B}
+  .gt-t{position:relative;height:18px;background:#F1F5F9;border-radius:99px}
+  .gt-b{position:absolute;top:0;bottom:0;border-radius:99px;background:color-mix(in srgb,var(--cor) 30%,#fff);box-shadow:inset 0 0 0 1px var(--cor);overflow:hidden}
+  .gt-b i{display:block;height:100%;background:var(--cor)}
+  .gt-hoje{position:absolute;top:-4px;bottom:-4px;width:2px;background:#DC2626;border-radius:2px}
+  @media (max-width:640px){ .gantt{grid-template-columns:minmax(0,1fr)} .gt-t{margin-bottom:6px} }
   .perfil-op{border:1px solid #E2E8F0;border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:#475569;line-height:1.4;cursor:pointer}
   .perfil-op:has(input:checked){border:2px solid #4F46E5;background:#EEF2FF;padding:9px 11px}
   .perfil-op b{font-size:14px;color:#0F172A}
@@ -586,12 +594,13 @@ function renderMoldura() {
       <div class="s-grp">
         ${it('capa', 'capa', cli ? 'Visão do projeto' : 'Visão geral')}
         ${it('tarefas', cli ? 'cli' : 'tar', cli ? 'Suas pendências' : 'Suas tarefas', abertasFora ? `<span class="s-est">${abertasFora}</span>` : '')}
+        ${cli ? it('cronograma', 'crono', 'Cronograma da obra') : ''}
         ${cli ? '' : it('arquivos', 'arq', eu.drive_pasta_nome ? 'Pasta ' + esc(eu.drive_pasta_nome) : 'Arquivos')}
         ${it('emissoes', 'emi', cli ? 'Emissões' : 'Emissões pra você', pra ? `<span class="s-est pend">${pra} pra você</span>` : '')}
         ${it('fotos', 'foto', cli ? 'Fotos da obra' : 'Fotos', FOTOS.length ? `<span class="s-est">${FOTOS.length}</span>` : '')}
       </div>
       <div class="s-grp"><button type="button" class="s-it" onclick="sairDaConta()">Sair</button></div>`;
-    const nomesF = { capa: cli ? 'Visão do projeto' : 'Visão geral', tarefas: cli ? 'Suas pendências' : 'Suas tarefas', arquivos: 'Arquivos', emissoes: 'Emissões', fotos: 'Fotos' };
+    const nomesF = { capa: cli ? 'Visão do projeto' : 'Visão geral', tarefas: cli ? 'Suas pendências' : 'Suas tarefas', arquivos: 'Arquivos', emissoes: 'Emissões', fotos: 'Fotos', cronograma: 'Cronograma da obra' };
     $('trilha').innerHTML = `<a href="#/">Escritório</a><span>›</span><a href="#/p/${PROJ.id}/capa">${esc(PROJ.nome)}</a>`;
     $('titulo').textContent = nomesF[VIEW] || PROJ.nome;
     return;
@@ -641,7 +650,7 @@ async function navegar() {
       if (!PROJ || PROJ.id !== r.id || !MEMBROS.length) { if (!(await carregarProjeto(r.id))) { location.hash = '#/'; return; } }
       // 26/09 (perfis): cada um abre só as telas dele (o banco não mostraria nada nas outras, mas a tela nem oferece)
       const telas = souEquipe() ? ['capa', 'tarefas', 'arquivos', 'emissoes', 'atas', 'equipe', 'fotos']
-        : souFornecedor() ? ['capa', 'tarefas', 'arquivos', 'emissoes', 'fotos'] : ['capa', 'tarefas', 'emissoes', 'fotos'];
+        : souFornecedor() ? ['capa', 'tarefas', 'arquivos', 'emissoes', 'fotos'] : ['capa', 'tarefas', 'emissoes', 'fotos', 'cronograma'];
       VIEW = telas.includes(r.view) ? r.view : 'capa';
     }
   } catch (e) {
@@ -674,7 +683,7 @@ function render() {
   marcarContexto();
   const T = { lista: telaLista, capa: telaCapa, tarefas: telaTarefas, arquivos: telaArquivos, emissoes: telaEmissoes, atas: telaAtas, equipe: telaEquipe, fotos: telaFotos };
   // 26/09 (perfis): as telas próprias do cliente e do fornecedor (maquete aprovada)
-  if (PROJ && souCliente()) Object.assign(T, { capa: telaVisaoCliente, tarefas: telaPendencias, emissoes: telaEmissoesDeFora });
+  if (PROJ && souCliente()) Object.assign(T, { capa: telaVisaoCliente, tarefas: telaPendencias, emissoes: telaEmissoesDeFora, cronograma: telaCronogramaCliente });
   if (PROJ && souFornecedor()) Object.assign(T, { capa: telaVisaoFornecedor, emissoes: telaEmissoesDeFora });
   const volta = VIEW !== 'lista' && VIEW !== 'capa' ? `<button class="voltar" onclick="ir('capa')">← ${souEquipe() ? 'Página do projeto' : souCliente() ? 'Visão do projeto' : 'Visão geral'}</button>` : '';
   $('main').innerHTML = volta + T[VIEW]();
@@ -930,7 +939,27 @@ function editarProjeto() {
     <div><label class="lbl" for="ep-c">Cliente</label><input id="ep-c" class="in" maxlength="160" value="${esc(p.cliente_nome || '')}"></div>
     <div><label class="lbl" for="ep-pe">Próxima entrega</label><input id="ep-pe" class="in" maxlength="200" value="${esc(p.proxima_entrega || '')}" placeholder="ex.: Executivo — cozinha"></div>
     <div><label class="lbl" for="ep-pd">Data da próxima entrega</label><input id="ep-pd" type="date" class="in" value="${esc(p.proxima_entrega_data || '')}"></div></div>
-    <div class="rodape"><button class="btn" onclick="fecharModal()">Cancelar</button><button class="btn btn-d" onclick="salvarProjeto()">Salvar</button></div>`);
+    <div class="rodape"><button class="btn btn-r" onclick="apagarProjeto()">Apagar projeto</button><span style="flex:1"></span><button class="btn" onclick="fecharModal()">Cancelar</button><button class="btn btn-d" onclick="salvarProjeto()">Salvar</button></div>`);
+}
+// 27/09 (auditoria DRV-8): apagar o projeto — o SERVIDOR tira antes os acessos do Drive que o AI.arq deu (e não apaga
+// se algum não sair). Pede o nome digitado: some tudo do Escritório (tarefas, atas, equipe, emissões, fotos).
+function apagarProjeto() {
+  if (!souAdmin()) return;
+  abrirModal('Apagar o projeto?', `<p style="margin:0;font-size:14px;line-height:1.5">Somem do AI.arq as tarefas, as atas, a equipe, as emissões e as fotos de <b>${esc(PROJ.nome)}</b>, e quem você convidou perde o acesso (inclusive o que o AI.arq compartilhou no Drive). <b>Não dá pra desfazer.</b></p>
+    <p class="sub" style="margin:0">A pasta e os arquivos no seu Google Drive continuam lá: são seus.${PROJ.job_id ? ' O projeto medido (quantitativo) também continua no seu painel.' : ''}</p>
+    <div><label class="lbl" for="ap-nome">Pra confirmar, digite o nome do projeto</label><input id="ap-nome" class="in" autocomplete="off" placeholder="${esc(PROJ.nome)}"></div>
+    <div class="rodape"><button class="btn" onclick="editarProjeto()">Voltar</button><button class="btn btn-r" id="ap-ok">Apagar de vez</button></div>`);
+  $('ap-ok').onclick = async () => {
+    if ($('ap-nome').value.trim() !== String(PROJ.nome).trim()) return toast('O nome não confere.', true);
+    $('ap-ok').disabled = true; $('ap-ok').textContent = 'Apagando…';
+    EMITINDO = true;   // enquanto apaga, o modal não fecha
+    let r;
+    try { r = await apiEsc(`projetos/${PROJ.id}`, 'DELETE'); } finally { EMITINDO = false; }
+    if (!r.ok) { $('ap-ok').disabled = false; $('ap-ok').textContent = 'Apagar de vez'; return toast(typeof r.dados.detail === 'string' ? r.dados.detail : 'Não consegui apagar agora.', true); }
+    const id = PROJ.id;
+    fecharModal(); PROJETOS = PROJETOS.filter((x) => x.id !== id); PROJ = null; MEMBROS = [];
+    location.hash = '#/'; toast('Projeto apagado');
+  };
 }
 async function salvarProjeto() {
   const nome = $('ep-n').value.trim(); if (!nome) return toast('O projeto precisa de um nome.', true);
@@ -1747,6 +1776,37 @@ function telaVisaoFornecedor() {
         <section class="card"><h2 class="h2" style="font-size:16px">Emissões pra você</h2>
           ${EMI.length ? `<ul class="lista" style="margin-top:8px">${EMI.slice(0, 5).map((e) => `<li><span class="rev-tag" style="margin:0">${revTxt(e.revisao)}</span><span style="flex:1;min-width:0;font-size:14px;overflow-wrap:anywhere">${linkCopia(e) ? `<a href="${esc(linkCopia(e))}" target="_blank" rel="noopener">${esc(e.copia_nome || e.arquivo_nome)}</a>` : esc(e.copia_nome || e.arquivo_nome)}</span><span class="sub" style="margin:0">${esc(dBR(e.emitido_em))}</span></li>`).join('')}</ul>` : '<p class="vazio" style="margin-top:8px">Nada mandado pra você ainda.</p>'}</section>
       </div></div>`;
+}
+
+// o CRONOGRAMA da obra pro cliente, só leitura (27/09 — Pedro: "faz o cronograma só leitura pro cliente"). O servidor
+// lê o cronograma do projeto medido e devolve só as fases (início, fim, quanto já foi feito) — sem dinheiro.
+let CR_PEDIDO = 0;
+function telaCronogramaCliente() {
+  setTimeout(carregarCronogramaCliente, 0);
+  return `${faixa('crono', 'Cronograma da obra', 'As etapas da obra com as datas previstas pelo escritório. Só leitura: quem atualiza é o escritório.')}
+    <section class="card rise"><div id="cr-corpo"><p class="sub" style="margin:0">Abrindo o cronograma…</p></div></section>`;
+}
+async function carregarCronogramaCliente() {
+  const corpo = $('cr-corpo'); if (!corpo || !PROJ) return;
+  const pedido = ++CR_PEDIDO, projAqui = PROJ.id;
+  const r = await apiEsc(`projetos/${PROJ.id}/cronograma`);
+  if (!$('cr-corpo') || pedido !== CR_PEDIDO || !PROJ || PROJ.id !== projAqui) return;   // trocou de tela/projeto no meio
+  if (!r.ok) { corpo.innerHTML = `<p class="vazio">${esc(typeof r.dados.detail === 'string' ? r.dados.detail : 'Não consegui abrir o cronograma agora.')}</p>`; return; }
+  const c = r.dados.cronograma, fases = (c && c.fases) || [];
+  if (r.dados.status !== 'ok' || !fases.length || !c.resumo || !c.resumo.data_inicio || !c.resumo.data_fim) {
+    corpo.innerHTML = `<div class="passo"><span class="passo-ic">${svg('crono', 28)}</span><b>O cronograma ainda não foi montado</b><p>Quando o escritório montar o cronograma da obra, as etapas e as datas aparecem aqui.</p></div>`;
+    return;
+  }
+  const ini = dISO(c.resumo.data_inicio), total = Math.max(1, (dISO(c.resumo.data_fim) - ini) / 864e5);
+  const pos = (s) => Math.min(100, Math.max(0, ((dISO(s) - ini) / 864e5) / total * 100));
+  const hojeP = pos(hojeISO());
+  corpo.innerHTML = `<p class="sub" style="margin:0 0 14px">De <b>${esc(dBR(c.resumo.data_inicio))}</b> a <b>${esc(dBR(c.resumo.data_fim))}</b>${c.resumo.duracao_meses ? ` · cerca de ${Number(c.resumo.duracao_meses) || ''} meses` : ''}.</p>
+    <div class="gantt">${fases.map((f) => {
+      const a = pos(f.inicio), w = Math.max(1.5, pos(f.fim) - a), pe = Math.max(0, Math.min(100, Number(f.pct_executado) || 0));
+      return `<div class="gt-l"><b>${esc(f.label)}</b><small>${esc(dBR(f.inicio))} – ${esc(dBR(f.fim))}${pe ? ` · ${Math.round(pe)}% feito` : ''}</small></div>
+        <div class="gt-t"><span class="gt-b" style="left:${a}%;width:${w}%;--cor:${corOk(f.cor)}"><i style="width:${pe}%"></i></span>${hojeP > 0 && hojeP < 100 ? `<span class="gt-hoje" style="left:${hojeP}%" title="hoje"></span>` : ''}</div>`;
+    }).join('')}</div>
+    <p class="sub" style="margin:14px 0 0">A linha vermelha marca hoje. A parte cheia de cada barra é o que já foi feito.</p>`;
 }
 
 // ══════════════ FOTOS (26/09 — "pasta Fotos no Drive"; sobem equipe e fornecedor) ══════════════

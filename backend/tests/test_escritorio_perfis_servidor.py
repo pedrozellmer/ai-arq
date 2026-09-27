@@ -104,8 +104,9 @@ class BancoFiel:
                 x.update(body or {})
             return 200, [dict(x) for x in alvo]
         if method == "DELETE":
+            fora = [dict(x) for x in linhas if self.casa(x, params)]
             self.t[path] = [x for x in linhas if not self.casa(x, params)]
-            return 204, None
+            return (200, fora) if "return=representation" in (prefer or "") else (204, None)
         raise AssertionError(method)
 
     def como_usuario(self, method, path, body, params=None):
@@ -129,6 +130,7 @@ class GoogleFiel:
     def __init__(self, pastas=None, pais=None):
         self.pastas, self.pais, self.chamadas = (pastas or {}), (pais or {}), []
         self.falha_permissao = False
+        self.tirar = {}                  # id do arquivo/pasta → status que o Google devolve ao TIRAR um acesso
         ed._HTTP = self
 
     def __call__(self, method, url, token=None, form=None, corpo=None, timeout=20):
@@ -136,7 +138,7 @@ class GoogleFiel:
         if "oauth2.googleapis.com/token" in url:
             return 200, {"access_token": "acesso", "expires_in": 3600}
         if method == "DELETE":
-            return 204, {}
+            return self.tirar.get(url.split("/files/", 1)[1].split("/", 1)[0], 204), {}
         if method == "PATCH" and "/files/" in url:
             return 200, {}                                           # ex.: foto pra lixeira
         if method == "POST" and "/files?" in url:
@@ -643,3 +645,217 @@ def test_apagar_foto_so_quem_subiu_ou_a_admin_e_vai_pra_lixeira():
     g2 = _pastas()
     _fotos(b2, g2)
     assert ed.projeto_foto_apagar(PROJ, F2, REQ)["ok"]            # a admin apaga a de qualquer um
+
+
+# ── cronograma só leitura pro cliente (27/09 — Pedro: "faz o cronograma só leitura pro cliente") ──
+CRON = {"fases": [{"label": "Fundação", "inicio": "2026-10-01", "fim": "2026-10-20", "dur_dias": 19, "pct_executado": 40,
+                   "cor": "#EA580C", "valor_previsto": 12345.0, "esforco_hh": 80, "obs": "margem interna"}],
+        "resumo": {"data_inicio": "2026-10-01", "data_fim": "2027-03-01", "duracao_meses": 5, "valor_total": 98765.0},
+        "curva_s": [{"mes": 1, "valor": 1}], "financeiro": {"total": 98765.0}}
+
+
+def _crono(monkeypatch, usuario, papel, job="job-exemplo", salvo=(200, {"job_id": "job-exemplo"}), cron=CRON):
+    import main
+    b, _, _ = montar(usuario, papel)
+    b.t["escritorio_projetos"][0]["job_id"] = job
+    leu = []
+    monkeypatch.setattr(main, "_get_user_from_request", lambda r: usuario)
+    monkeypatch.setattr(main, "_supa_rest_service", b)
+    monkeypatch.setattr(main, "_log_error", lambda *a, **k: None)
+    monkeypatch.setattr(main, "_fin_cronograma_salvo", lambda req, j: leu.append((req, j)) or salvo)
+
+    def _monta(j, s):
+        if isinstance(cron, Exception):
+            raise cron
+        return cron
+    monkeypatch.setattr(main, "_cronograma_do_salvo", _monta)
+    return main, leu
+
+
+def test_o_cliente_ve_o_cronograma_so_com_datas_e_andamento_sem_dinheiro(monkeypatch):
+    main, leu = _crono(monkeypatch, CLI, "cliente")
+    r = main.escritorio_cronograma_pro_cliente(PROJ, REQ)
+    assert r["status"] == "ok"
+    assert r["cronograma"]["fases"] == [{"label": "Fundação", "inicio": "2026-10-01", "fim": "2026-10-20",
+                                          "dur_dias": 19, "pct_executado": 40, "cor": "#EA580C"}]
+    assert r["cronograma"]["resumo"] == {"data_inicio": "2026-10-01", "data_fim": "2027-03-01", "duracao_meses": 5}
+    tudo = json.dumps(r, ensure_ascii=False)
+    assert "12345" not in tudo and "98765" not in tudo and "margem" not in tudo and "curva" not in tudo
+    # o cliente não tem acesso ao projeto medido: quem lê é o SERVIDOR (sem o login dele, a RLS esconderia o salvo)
+    assert leu == [(None, "job-exemplo")]
+
+
+def test_controle_a_equipe_tambem_ve_o_cronograma_do_cliente(monkeypatch):
+    main, _ = _crono(monkeypatch, EQUIPE, "freela")
+    assert main.escritorio_cronograma_pro_cliente(PROJ, REQ)["status"] == "ok"
+
+
+@pytest.mark.parametrize("quem, papel", [(FORN, "fornecedor"), ({"id": "uid-x", "email": "x@exemplo.com"}, None)])
+def test_fornecedor_e_quem_nao_e_do_projeto_nao_veem_o_cronograma(monkeypatch, quem, papel):
+    main, leu = _crono(monkeypatch, quem, papel)
+    with pytest.raises(HTTPException) as e:
+        main.escritorio_cronograma_pro_cliente(PROJ, REQ)
+    assert e.value.status_code == 403 and leu == []
+
+
+def test_sem_projeto_medido_sem_cronograma_salvo_ou_sem_itens_o_cliente_ve_o_aviso(monkeypatch):
+    main, leu = _crono(monkeypatch, CLI, "cliente", job=None)
+    assert main.escritorio_cronograma_pro_cliente(PROJ, REQ) == {"status": "sem_cronograma"} and leu == []
+    main, _ = _crono(monkeypatch, CLI, "cliente", salvo=(200, None))
+    assert main.escritorio_cronograma_pro_cliente(PROJ, REQ) == {"status": "sem_cronograma"}
+    main, _ = _crono(monkeypatch, CLI, "cliente", cron=HTTPException(404, "Projeto sem itens"))
+    assert main.escritorio_cronograma_pro_cliente(PROJ, REQ) == {"status": "sem_cronograma"}
+
+
+def test_leitura_que_falha_e_502_e_nao_vira_sem_cronograma(monkeypatch):
+    main, _ = _crono(monkeypatch, CLI, "cliente", salvo=(500, None))
+    with pytest.raises(HTTPException) as e:
+        main.escritorio_cronograma_pro_cliente(PROJ, REQ)
+    assert e.value.status_code == 502
+    main, _ = _crono(monkeypatch, CLI, "cliente")
+    main._supa_rest_service.falhar.add(("GET", "escritorio_projetos"))
+    with pytest.raises(HTTPException) as e:
+        main.escritorio_cronograma_pro_cliente(PROJ, REQ)
+    assert e.value.status_code == 502
+
+
+# ── e-mail do AI.arq quando a emissão chega pro cliente (27/09 — Pedro: "e-mail do AI.arq também") ──
+def test_o_cliente_que_recebe_a_emissao_leva_o_email_do_aiarq_e_o_fornecedor_nao():
+    b, enviados, _ = montar(DONA, "dono")
+    esc._MOLDURA = lambda titulo, corpo, **k: "<h1>%s</h1>%s<a href='%s'>" % (titulo, corpo, k.get("cta_url"))
+    membro(b, M_FORN, "fornecedor", FORN)
+    membro(b, M_CLI, "cliente", CLI)
+    _emissao(b)
+    b.t["escritorio_emissoes"][0]["nota"] = "Cozinha <b>ampliada</b>"
+    _pastas()
+    r = ed.projeto_mandar_emissao(PROJ, E1, REQ, {"para": [M_CLI, M_FORN]})
+    assert r["mandados"] == 2 and r["avisados"] == 1
+    assert [e["para"] for e in enviados] == [CLI["email"]]
+    e = enviados[0]
+    assert e["kind"] == "escritorio_emissao_cliente" and e["assunto"] == "Pra você aprovar: Planta_R02.pdf"
+    assert "Admin Exemplo" in e["html"] and "Casa Exemplo" in e["html"]
+    assert "https://ai.arq.br/escritorio.html#/p/%s/emissoes" % PROJ in e["html"]
+    assert "<b>ampliada</b>" not in e["html"] and "&lt;b&gt;ampliada" in e["html"]
+    # mandar de novo pra quem já tem: nem acesso novo, nem e-mail novo
+    assert ed.projeto_mandar_emissao(PROJ, E1, REQ, {"para": [M_CLI]})["avisados"] == 0 and len(enviados) == 1
+
+
+def test_o_aviso_que_falha_nao_desfaz_o_envio():
+    b, _, _ = montar(DONA, "dono")
+    membro(b, M_CLI, "cliente", CLI)
+    _emissao(b)
+    g = _pastas()
+
+    def _cai(*a, **k):
+        raise RuntimeError("smtp fora")
+    esc._ENVIAR = _cai
+    r = ed.projeto_mandar_emissao(PROJ, E1, REQ, {"para": [M_CLI]})
+    assert r["mandados"] == 1 and r["avisados"] == 0
+    assert b.t["escritorio_emissao_destinos"][0]["permission_id"] and not g.permissoes_tiradas()
+
+
+def test_assunto_do_aviso_ao_cliente_cabe_no_teto_e_nao_quebra_linha():
+    nome = "Planta" + chr(13) + chr(10) + "Bcc: x@exemplo.com " + "longo " * 20 + ".pdf"
+    assunto, _, _ = esc.email_da_emissao("Admin", nome, "Casa", None, "https://ai.arq.br/escritorio.html",
+                                         moldura=lambda t, c, **k: c)
+    assert len(assunto) <= esc.TETO_ASSUNTO and chr(10) not in assunto and chr(13) not in assunto
+
+
+# ── apagar o projeto (27/09 — auditoria DRV-8: tirar no Drive ANTES de apagar o registro) ──
+def _acessos_dados(b):
+    b.t["escritorio_drive_permissoes"] += [
+        {"id": "dp-1", "projeto_id": PROJ, "membro_id": M_EQ, "email": EQUIPE["email"], "pasta_id": "PASTA_PROJ",
+         "permission_id": "perm-eq", "ja_existia": False},
+        {"id": "dp-2", "projeto_id": PROJ, "membro_id": M_EQ, "email": "antigo@exemplo.com", "pasta_id": "PASTA_PROJ",
+         "permission_id": "perm-antiga", "ja_existia": True},              # já tinha à mão: não fomos nós que demos
+        {"id": "dp-3", "projeto_id": PROJ, "membro_id": M_FORN, "email": FORN["email"], "pasta_id": "PASTA_MARC",
+         "permission_id": "perm-forn", "ja_existia": False},
+        {"id": "dp-4", "projeto_id": OUTRO_PROJ, "membro_id": None, "email": FORN["email"], "pasta_id": "PASTA_MARC",
+         "permission_id": "perm-forn", "ja_existia": False}]                 # segue noutro projeto com a MESMA pasta
+    _emissao(b)
+    b.t["escritorio_emissao_destinos"].append({"emissao_id": E1, "projeto_id": PROJ, "membro_id": M_CLI,
+                                               "permission_id": "perm-cli"})
+
+
+def test_apagar_o_projeto_tira_antes_os_acessos_que_demos_e_so_depois_apaga():
+    b, _, _ = montar(DONA, "dono")
+    _acessos_dados(b)
+    g = _pastas()
+    na_hora = []
+
+    def espiao(method, path, *a, **k):
+        if method == "DELETE" and path.lstrip("/") == "escritorio_projetos":
+            na_hora.append(sorted(g.permissoes_tiradas()))
+        return b(method, path, *a, **k)
+    esc._SERVICO = espiao
+    assert ed.projeto_apagar(PROJ, REQ) == {"ok": True, "apagado": True}
+    tirados = ["COPIA1/permissions/perm-cli", "PASTA_PROJ/permissions/perm-eq"]
+    assert sorted(g.permissoes_tiradas()) == tirados and na_hora == [tirados]
+    assert [p["id"] for p in b.t["escritorio_projetos"]] == []
+
+
+@pytest.mark.parametrize("onde", ["COPIA1", "PASTA_PROJ"])
+def test_se_o_google_nao_tira_um_acesso_o_projeto_nao_e_apagado(onde):
+    b, _, _ = montar(DONA, "dono")
+    _acessos_dados(b)
+    g = _pastas()
+    g.tirar[onde] = 500
+    with pytest.raises(HTTPException) as e:
+        ed.projeto_apagar(PROJ, REQ)
+    assert e.value.status_code == 502 and "NÃO foi apagado" in e.value.detail
+    assert [p["id"] for p in b.t["escritorio_projetos"]] == [PROJ]
+
+
+@pytest.mark.parametrize("enxerga", [True, False])
+def test_404_so_vale_como_ja_saiu_se_a_conta_enxerga_a_pasta(enxerga):
+    b, _, _ = montar(DONA, "dono")
+    b.t["escritorio_drive_permissoes"].append({"id": "dp-1", "projeto_id": PROJ, "membro_id": M_EQ,
+                                               "email": EQUIPE["email"], "pasta_id": "PASTA_PROJ",
+                                               "permission_id": "perm-eq", "ja_existia": False})
+    g = _pastas()
+    g.tirar["PASTA_PROJ"] = 404
+    if not enxerga:
+        del g.pastas["PASTA_PROJ"]
+        with pytest.raises(HTTPException) as e:
+            ed.projeto_apagar(PROJ, REQ)
+        assert e.value.status_code == 502 and b.t["escritorio_projetos"]
+    else:
+        assert ed.projeto_apagar(PROJ, REQ)["apagado"] is True and not b.t["escritorio_projetos"]
+
+
+def test_sem_conexao_com_o_drive_e_acesso_a_tirar_pede_pra_reconectar_e_nao_apaga():
+    b, _, _ = montar(DONA, "dono")
+    _acessos_dados(b)
+    b.t["escritorio_drive_conexoes"].clear()
+    g = _pastas()
+    with pytest.raises(HTTPException) as e:
+        ed.projeto_apagar(PROJ, REQ)
+    assert e.value.status_code == 409 and b.t["escritorio_projetos"] and not g.permissoes_tiradas()
+    # a admin precisa saber POR QUE não apagou (o 409 genérico do Drive diria só "não está conectado")
+    assert "Pra apagar" in e.value.detail
+
+
+def test_controle_projeto_que_nunca_compartilhou_nada_apaga_mesmo_sem_o_drive():
+    b, _, _ = montar(DONA, "dono")
+    b.t["escritorio_drive_permissoes"].append({"id": "dp-2", "projeto_id": PROJ, "email": "antigo@exemplo.com",
+                                               "pasta_id": "PASTA_PROJ", "permission_id": "p", "ja_existia": True})
+    b.t["escritorio_drive_conexoes"].clear()
+    assert ed.projeto_apagar(PROJ, REQ)["apagado"] is True and not b.t["escritorio_projetos"]
+
+
+@pytest.mark.parametrize("tabela", ["escritorio_drive_permissoes", "escritorio_emissao_destinos"])
+def test_banco_que_nao_responde_nao_apaga(tabela):
+    b, _, _ = montar(DONA, "dono")
+    b.falhar.add(("GET", tabela))
+    with pytest.raises(HTTPException) as e:
+        ed.projeto_apagar(PROJ, REQ)
+    assert e.value.status_code == 502 and b.t["escritorio_projetos"]
+
+
+@pytest.mark.parametrize("quem, papel", [(EQUIPE, "freela"), (CLI, "cliente"), (FORN, "fornecedor")])
+def test_so_a_admin_apaga_o_projeto(quem, papel):
+    b, _, _ = montar(quem, papel)
+    g = _pastas()
+    with pytest.raises(HTTPException) as e:
+        ed.projeto_apagar(PROJ, REQ)
+    assert e.value.status_code == 403 and b.t["escritorio_projetos"] and not g.chamadas

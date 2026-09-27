@@ -620,6 +620,28 @@ def email_da_resposta(cliente: str, arquivo: str, projeto: str, tipo: str, nota,
     return assunto_da_resposta(tipo, arquivo), html, texto
 
 
+def email_da_emissao(escritorio: str, arquivo: str, projeto: str, nota, link: str, moldura=None):
+    """(assunto, html, texto) do aviso AO CLIENTE: chegou uma emissão pra ele aprovar. 27/09 (Pedro: "e-mail do AI.arq
+    também", além do aviso que o Google Drive manda ao compartilhar). Tudo que veio de fora vai escapado."""
+    e, a, p = _escapar(escritorio or "O escritório"), _escapar(arquivo), _escapar(projeto)
+    corpo = f'<p style="margin:0 0 12px;"><b>{e}</b> mandou <b>{a}</b> pra você, no projeto <b>{p}</b>.</p>'
+    if nota:
+        corpo += ('<p style="margin:0 0 12px;padding:10px 12px;background:#f8fafc;border-radius:8px;">'
+                  f'“{_escapar(nota)}”</p>')
+    corpo += ('<p style="margin:0 0 12px;">Abra no AI.arq pra ver o arquivo e responder: <b>aprovar</b> ou '
+              '<b>pedir revisão</b>. A sua resposta fica registrada com a data.</p>'
+              '<p style="margin:0;color:#64748b;font-size:13px;">O Google Drive também pode avisar que o arquivo '
+              'foi compartilhado com você: é o mesmo arquivo.</p>')
+    html = (moldura or _MOLDURA)(f"Nova emissão: {p}", corpo, cta_text="Ver e responder", cta_url=link,
+                                 reason=f"Você recebeu este e-mail porque é cliente do projeto {p} no AI.arq.",
+                                 preheader=f"{e} mandou {a} pra você aprovar.")
+    assunto = " ".join(f"Pra você aprovar: {arquivo}".split())
+    assunto = assunto if len(assunto) <= TETO_ASSUNTO else assunto[:TETO_ASSUNTO - 1].rstrip() + "…"
+    texto = (f"{escritorio or 'O escritório'} mandou {arquivo} pra você, no projeto {projeto}."
+             + (f"{_DUAS_LINHAS}“{nota}”" if nota else "") + f"{_DUAS_LINHAS}{link}")
+    return assunto, html, texto
+
+
 def _avisar_admin(e: dict, tipo: str, nota, eu: dict, evento_id) -> bool:
     desde = (datetime.now(timezone.utc) - timedelta(seconds=_PAUSA_DO_AVISO)).isoformat()
     st, recentes = _SERVICO("GET", "escritorio_emissao_eventos", params={

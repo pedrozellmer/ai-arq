@@ -23064,6 +23064,46 @@ def _email_auto_registrar(email: str, kind: str, ref: str = "") -> None:
         print(f"[emails-auto] registrar falhou ({kind}/{email}): {e}")
 
 
+# 🔒 27/09/2026 (Pedro escolheu "Anonimizar após 12 meses"): a `email_sent_log` guarda pra quem saiu cada e-mail.
+# Passados 12 meses, a linha perde o que aponta pra pessoa — o endereço, o assunto (pode levar nome de gente e de
+# projeto) e o job (o projeto leva ao dono) — e fica só o TIPO e a DATA: o volume por tipo da Central segue contando.
+# 🔑 E-mail VAZIO, não um texto fixo: `admin_email_retorno` já pula `email = ''`, e nenhum cruzamento por e-mail
+# (filhotes, cadastros, "já recebeu este tipo") casa com vazio. Um texto fixo viraria "uma pessoa" com milhares de envios.
+_EMAIL_LOG_DIAS = 365
+_EMAIL_LOG_ANONIMIZADO = {"dia": None}
+
+
+def _anonimizar_emails_antigos() -> dict:
+    """Uma vez por dia (o tick é de hora em hora). Idempotente: só pega linha que ainda tem e-mail."""
+    hoje = _hoje_br().isoformat()
+    if _EMAIL_LOG_ANONIMIZADO["dia"] == hoje:
+        return {"status": "ja_rodou_hoje"}
+    corte = (datetime.utcnow() - timedelta(days=_EMAIL_LOG_DIAS)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    st, linhas = _supa_rest_service(
+        "PATCH", "/email_sent_log", body={"email": "", "subject": None, "job_id": None},
+        params={"sent_at": f"lt.{corte}", "email": "neq.", "select": "id"},
+        prefer="return=representation", timeout=30)
+    if st not in (200, 204):
+        _log_error("email-log:anonimizar", f"HTTP {st} — as linhas de mais de 12 meses ficam como estão até o "
+                                           f"próximo tick", severity="warning")
+        return {"status": "erro"}
+    _EMAIL_LOG_ANONIMIZADO["dia"] = hoje
+    return {"status": "ok", "anonimizadas": len(linhas or [])}
+
+
+def _marcar_resumo_de_mencoes(ref: str):
+    """27/09: a marca do resumo diário das @menções (uma por pessoa por dia), gravada ANTES do envio. Vai no e-mail
+    INTERNO, como as marcas do aviso de cadastro: no e-mail da PESSOA ela entraria no teto semanal dos e-mails de
+    marketing dela (`_email_auto_recente`). True = gravou agora; False = já existia; None = não gravou."""
+    st, linhas = _supa_rest_service(
+        "POST", "/email_auto_log?on_conflict=email,kind,ref",
+        body={"email": NOTIFY_EMAIL, "kind": "escritorio_mencoes", "ref": ref},
+        prefer="resolution=ignore-duplicates,return=representation", timeout=10)
+    if st in (200, 201):
+        return bool(linhas)
+    return None
+
+
 def _auth_admin_list_users(max_pages: int = 5) -> list[dict]:
     """Lista usuários via Auth Admin API (service_role). Paginado, best-effort."""
     import urllib.request as _u, json as _j
@@ -23665,6 +23705,13 @@ def emails_auto_tick(request: Request, dry: int = 0):
             _ed_faxina.faxina()
         except Exception as _ef:
             _log_error("escritorio:drive-faxina", f"{type(_ef).__name__}: {str(_ef)[:200]}")
+    # 🔒 27/09: o registro de e-mails perde o endereço depois de 12 meses. Também ANTES da chave: reter menos não
+    # pode depender de e-mail ligado.
+    if not dry:
+        try:
+            _anonimizar_emails_antigos()
+        except Exception as _ea:
+            _log_error("email-log:anonimizar", f"{type(_ea).__name__}: {str(_ea)[:200]}", severity="warning")
     if os.environ.get("EMAILS_AUTO", "1") == "0":
         return {"status": "off"}
     from datetime import datetime as _dt, timezone as _tz
@@ -24079,6 +24126,14 @@ def emails_auto_tick(request: Request, dry: int = 0):
     except Exception as _enl:
         print(f"[newsletter] lembrete do último dia útil falhou: {_enl}")
 
+    # ── 27/09: resumo diário das @menções do Escritório (a partir das 18 h; um por pessoa por dia) ──
+    try:
+        import escritorio_mencoes as _menc
+        _mencoes = _menc.rodada(now, _marcar_resumo_de_mencoes, dry=bool(dry))
+    except Exception as _emc:
+        _mencoes = {"status": "erro"}
+        _log_error("escritorio:mencoes", f"{type(_emc).__name__}: {str(_emc)[:200]}", severity="warning")
+
     if dry:
         # Endpoint é aberto (mesma mecânica dos outros ticks de cron). O modo dry
         # NÃO pode devolver email/nome — vazava PII de usuários beta pra qualquer
@@ -24090,6 +24145,7 @@ def emails_auto_tick(request: Request, dry: int = 0):
             "por_tipo": dict(_Counter(a["kind"] for a in acoes)),
             "lembrete_newsletter": lembrete_news,
             "alertas_cadastro": _cad,
+            "mencoes": _mencoes,
         }
 
     enviados = []
@@ -24153,7 +24209,7 @@ def emails_auto_tick(request: Request, dry: int = 0):
     if enviados:
         print(f"[emails-auto] tick enviou {len(enviados)}: {por_tipo_env}")
     return {"status": "ok", "enviados": len(enviados), "por_tipo": por_tipo_env,
-            "alertas_cadastro": _cad}
+            "alertas_cadastro": _cad, "mencoes": _mencoes}
 
 
 # ── NEWSLETTER MENSAL ──
@@ -25786,6 +25842,14 @@ _EMAIL_CATALOG = [
     {"key": "escritorio_resposta_cliente", "nome": "Escritório: resposta do cliente", "grupo": "auto",
      "gatilho": "auto: o cliente aprova ou pede revisão de uma emissão — vai pra admin do projeto "
                 "(1 aviso a cada 10 min por emissão)"},
+    # 27/09/2026 — perfis do Escritório: o cliente recebe a emissão (sai de escritorio_drive.py; o Google também avisa)
+    {"key": "escritorio_emissao_cliente", "nome": "Escritório: emissão pro cliente", "grupo": "auto",
+     "gatilho": "auto: a admin manda uma emissão pro cliente (Emitir → Mandar pra, ou Mandar depois) — "
+                "1 por cliente por envio"},
+    # 27/09/2026 — resumo diário das @menções do Escritório (sai do tick horário; escritorio_mencoes.py)
+    {"key": "escritorio_mencoes", "nome": "Escritório: resumo das @menções", "grupo": "auto",
+     "gatilho": "auto (tick, das 18 h às 20 h): mencionaram a pessoa com @ num comentário desde ontem 18 h — "
+                "1 por pessoa por dia, só o que ela vê no quadro"},
     {"key": "convidado_area_propria", "nome": "Convidado: sua área também", "grupo": "auto",
      "gatilho": "auto (tick horário): entrou por convite do Escritório, 3 dias depois do "
                 "aceite, sem projeto próprio (1x na vida) — no lugar do boas-vindas e da 1ª prancha"},
@@ -25932,6 +25996,20 @@ def _render_email_by_type_raw(key: str):
         _as, _html, _txt = _escritorio.email_da_resposta(
             "Cliente Exemplo", "Planta baixa_R02.pdf", projeto, "revisao",
             "A porta da despensa ficou atrás da geladeira.", "https://ai.arq.br/escritorio.html", moldura=_email_wrap)
+        return _as, _html
+    if key == "escritorio_emissao_cliente":
+        _as, _html, _txt = _escritorio.email_da_emissao(
+            "Admin Exemplo", "Planta baixa_R02.pdf", projeto, "Cozinha ampliada como você pediu na reunião.",
+            "https://ai.arq.br/escritorio.html", moldura=_email_wrap)
+        return _as, _html
+    if key == "escritorio_mencoes":
+        import escritorio_mencoes as _menc
+        _pid = "00000000-0000-4000-8000-000000000000"
+        _itens = [{"projeto_id": _pid, "projeto": projeto, "tarefa": "Marcenaria da cozinha", "autor": "Admin Exemplo",
+                   "texto": "@Bia confere a medida do nicho da geladeira antes de liberar pra marcenaria?"},
+                  {"projeto_id": _pid, "projeto": projeto, "tarefa": "Luminotécnico", "autor": "Admin Exemplo",
+                   "texto": "@Bia o cliente pediu pendente sobre a ilha. Consegue revisar o ponto hoje?"}]
+        _as, _html, _txt = _menc.email_do_resumo("Bia Exemplo", _itens, moldura=_email_wrap)
         return _as, _html
     if key in ("leitura_nova", "leitura_combinada"):
         # Exemplo com ganho E com uma prancha que piorou, pra o preview mostrar
@@ -30874,6 +30952,50 @@ def get_cronograma_full(job_id: str, request: Request):
         raise HTTPException(500, f"Erro ao montar cronograma: {e}")
 
 
+# ── 27/09 (perfis — Pedro: "faz o cronograma só leitura pro cliente"): o cronograma do projeto medido ligado ao
+# projeto do Escritório, SÓ LEITURA, pro CLIENTE (o dono da obra). Ele não tem acesso ao projeto medido (quantitativo,
+# memorial, pranchas são da equipe): esta rota lê pelo servidor e devolve uma LISTA BRANCA — as fases com início, fim
+# e quanto já foi feito. Nada de dinheiro, de curva S (ponderada pelo esforço) nem de observação interna.
+_CRONOGRAMA_DO_CLIENTE_FASE = ("label", "inicio", "fim", "dur_dias", "pct_executado", "cor")
+
+
+def _cronograma_pro_cliente(cron) -> dict:
+    fases = [{k: f.get(k) for k in _CRONOGRAMA_DO_CLIENTE_FASE}
+             for f in ((cron or {}).get("fases") or []) if isinstance(f, dict)]
+    r = (cron or {}).get("resumo") or {}
+    return {"fases": fases, "resumo": {k: r.get(k) for k in ("data_inicio", "data_fim", "duracao_meses")}}
+
+
+@app.get("/api/escritorio/projetos/{projeto_id}/cronograma")
+def escritorio_cronograma_pro_cliente(projeto_id: str, request: Request):
+    if not _get_user_from_request(request):
+        raise HTTPException(401, "Entre na sua conta pra continuar.")
+    if not _escritorio._UUID.match(str(projeto_id or "")):
+        raise HTTPException(404, "Projeto não encontrado.")
+    # quem é a pessoa NESTE projeto, perguntado ao banco com o login dela (o fornecedor não vê o cronograma)
+    if _escritorio._papel(request, projeto_id) not in ("cliente", "dono", "freela"):
+        raise HTTPException(403, "O cronograma deste projeto não está aberto pra você.")
+    st, eps = _supa_rest_service("GET", "/escritorio_projetos", params={"id": f"eq.{projeto_id}", "select": "job_id"})
+    if st != 200 or eps is None:
+        raise HTTPException(502, "Não consegui ler o projeto agora. Tente de novo em instantes.")
+    job = (eps[0] or {}).get("job_id") if eps else None
+    if not job:
+        return {"status": "sem_cronograma"}
+    st, saved = _fin_cronograma_salvo(None, job)
+    if st != 200:
+        _log_error("cronograma:ler", f"cronogramas HTTP {st} (cliente do Escritório)", job, severity="warning")
+        raise HTTPException(502, "Não consegui ler o cronograma agora. Tente de novo em instantes.")
+    if not saved:
+        return {"status": "sem_cronograma"}
+    try:
+        cron = _cronograma_do_salvo(job, saved)
+    except HTTPException as e:
+        if e.status_code == 404:          # "Projeto sem itens": pro cliente, é não ter cronograma ainda
+            return {"status": "sem_cronograma"}
+        raise
+    return {"status": "ok", "cronograma": _cronograma_pro_cliente(cron)}
+
+
 def _build_cronograma_for_export(job_id: str, request=None) -> tuple:
     """Monta o JSON do cronograma usando fases_custom se houver, senão gera
     automaticamente. Retorna (cronograma_dict, branding_context).
@@ -30891,7 +31013,12 @@ def _build_cronograma_for_export(job_id: str, request=None) -> tuple:
 
     # Branding co-branded (nome projeto + cliente + logo + cor + arquiteto)
     branding = _get_branding_context(job_id, request=request)
+    return _cronograma_do_salvo(job_id, saved), branding
 
+
+def _cronograma_do_salvo(job_id: str, saved) -> dict:
+    """O cronograma a partir da linha salva: as fases editadas (fases_custom) se houver, senão gerado dos itens.
+    27/09: separado do export — o cronograma do cliente usa só isto (sem baixar o logo do branding)."""
     from cronograma import gerar_cronograma, gerar_cronograma_de_fases_custom
 
     if saved and saved.get('fases_custom'):
@@ -30926,7 +31053,7 @@ def _build_cronograma_for_export(job_id: str, request=None) -> tuple:
             duracao = 6
         cron = gerar_cronograma(items, data_inicio, duracao)
 
-    return cron, branding
+    return cron
 
 
 def _slug_filename(name: str) -> str:

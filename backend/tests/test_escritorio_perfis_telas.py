@@ -49,8 +49,34 @@ def test_todo_onclick_da_tela_chama_uma_funcao_que_existe():
 def test_cada_perfil_abre_so_as_telas_dele():
     n = _fn("navegar")
     assert "souEquipe() ? ['capa', 'tarefas', 'arquivos', 'emissoes', 'atas', 'equipe', 'fotos']" in n
-    assert "souFornecedor() ? ['capa', 'tarefas', 'arquivos', 'emissoes', 'fotos'] : ['capa', 'tarefas', 'emissoes', 'fotos']" in n
+    # 27/09: o cronograma (só leitura, sem dinheiro) é tela SÓ do cliente — a equipe usa o cronograma do projeto medido
+    assert ("souFornecedor() ? ['capa', 'tarefas', 'arquivos', 'emissoes', 'fotos'] "
+            ": ['capa', 'tarefas', 'emissoes', 'fotos', 'cronograma']") in n
     assert "VIEW = telas.includes(r.view) ? r.view : 'capa';" in n
+
+
+def test_o_cronograma_do_cliente_vem_do_servidor_e_nao_mostra_dinheiro():
+    c = _fn("carregarCronogramaCliente")
+    assert "apiEsc(`projetos/${PROJ.id}/cronograma`)" in c
+    assert "pedido !== CR_PEDIDO || !PROJ || PROJ.id !== projAqui) return;" in c                   # resposta velha (trocou de projeto) não pinta a tela
+    for proibido in ("valor", "R$", "curva", "sb.from(", "cronogramas"):
+        assert proibido not in c, proibido
+    assert "cronograma: telaCronogramaCliente" in H
+    assert "${cli ? it('cronograma', 'crono', 'Cronograma da obra') : ''}" in _fn("renderMoldura")
+
+
+def test_apagar_projeto_so_a_admin_e_so_com_o_nome_digitado():
+    e = _fn("editarProjeto")
+    assert 'onclick="apagarProjeto()">Apagar projeto</button>' in e
+    a = _fn("apagarProjeto")
+    assert a.strip().split(NL)[1].strip() == "if (!souAdmin()) return;"
+    ok = a[a.index("$('ap-ok').onclick"):]
+    assert ok.index("if ($('ap-nome').value.trim() !== String(PROJ.nome).trim()) return toast(") < ok.index("apiEsc(")
+    assert "apiEsc(`projetos/${PROJ.id}`, 'DELETE')" in ok
+    # quem apaga é o SERVIDOR (tira os acessos do Drive antes); a tela nunca apaga direto no banco
+    assert "sb.from('escritorio_projetos').delete(" not in H
+    # só some da lista depois que o servidor disse ok
+    assert ok.index("if (!r.ok)") < ok.index("PROJETOS = PROJETOS.filter(")
 
 
 def test_o_menu_de_fora_nao_tem_atas_equipe_nem_quantitativo():
