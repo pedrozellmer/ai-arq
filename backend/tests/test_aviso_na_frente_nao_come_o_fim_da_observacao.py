@@ -120,7 +120,8 @@ def test_o_aviso_de_numero_PARCIAL_nao_come_a_ressalva_do_fim():
 
 def test_o_rebaixamento_por_procedencia_de_TEXTO_nao_come_o_fim():
     it = _item("Piso cerâmico", "m²", 264.54, _obs_longa(), selo="confirmado")
-    _roda_laco('"não medido da geometria. " + _o', all_items=[it],
+    # 27/09: a marca vem da constante (MARCA_LIDO_DE_TEXTO), que a chave respeita.
+    _roda_laco('", não medido da geometria. " + _o', all_items=[it],
                _sem_geo=[{"indice": 0}], _CfG=Confidence, _falhou_rebaixar=0)
     _confere(it.observations, "⚠ ESTIMADO — este número foi LIDO")
 
