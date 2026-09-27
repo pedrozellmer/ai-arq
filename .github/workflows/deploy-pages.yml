@@ -113,7 +113,9 @@ jobs:
           # 🪤 31/08/2026: o `find` acima NÃO pega *.txt, então arquivo de texto
           # na raiz só vai pro ar se estiver NESTA lista. O llms.txt foi criado
           # e daria 404 pra sempre, calado — mesma armadilha da pasta nova.
-          for f in sitemap.xml robots.txt llms.txt; do
+          # 27/09/2026: + a chave do IndexNow (scripts/indexnow.py). É pública
+          # de propósito: o protocolo lê o arquivo pra provar que o domínio é nosso.
+          for f in sitemap.xml robots.txt llms.txt e80464316e21cbae44578ac25816c460.txt; do
             if [ -f "$f" ]; then cp "$f" _site/; fi
           done
           # 🔒 30/08/2026 (auditoria): remove comentários HTML do site SERVIDO —
@@ -168,3 +170,13 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: Avisar o IndexNow dos posts que publicam hoje
+        # 27/09/2026 (auditoria de aquisição): Bing & cia. ficam sabendo do post
+        # no dia, em vez de esperar o robô voltar. DEPOIS do deploy (a URL já
+        # existe), só na rotina diária e no disparo manual — push não repete a
+        # mesma URL no dia. Nunca derruba o deploy: o script sai 0 em qualquer
+        # falha e este passo ainda tem continue-on-error. Ver scripts/indexnow.py.
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        continue-on-error: true
+        run: python scripts/indexnow.py
