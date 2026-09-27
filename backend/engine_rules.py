@@ -5210,6 +5210,136 @@ def selo_com_prova_da_geometria(items, indice):
 
 
 # ══════════════════════════════════════════════════════════════════════════
+#  A MESMA PEÇA COM SELO EM VÁRIAS PRANCHAS (27/09/2026)
+# ══════════════════════════════════════════════════════════════════════════
+#: 🩸 Triagem de 20–27/09: 287 linhas com selo e o aviso "aparece em N
+#: pranchas", em 8 projetos. Restaurante de UM andar em 11 DWG do Revit: a
+#: porta veneziana (4 reais) com selo na planta de layout, na civil, na de
+#: pisos, na de revestimentos e na ampliação — 21 se o cliente somar. O portão
+#: PPT03, o MESMO elemento do Revit (bloco "…-4728387"), com selo em 4 pranchas.
+#: 🔑 06/09 (Pedro): a passada 6 não apaga nem rebaixa, porque andar diferente
+#: é quantidade de verdade. Continua valendo: a linha e o número ficam; sai só
+#: o selo, e só com PROVA de que é a mesma peça:
+#:   (1) o mesmo número de elemento do Revit — o Revit põe o id da instância no
+#:       nome do bloco ("HTB - PORTA VENEZIANA - 0_70x2_10-2314776-PLANTA DE
+#:       PISO"), e a IA o copia ("IDs 454096, 2314776"). Id é da peça: vale em
+#:       qualquer prancha;
+#:   (2) o mesmo bloco/layer citado, com a MESMA quantidade, em pranchas do
+#:       MESMO pavimento (o título diz o mesmo andar, ou nenhum, e uma delas é
+#:       temática — layout, forro, pontos, piso…). Andar diferente nunca junta.
+#: 📏 30 dias: (1) 44 linhas em 2 projetos; (2) 30 grupos em 5 projetos.
+MARCA_MESMA_PECA = "⚠ MESMA PEÇA"
+_RE_ID_REVIT_NO_BLOCO = _re.compile(r"-\s?(\d{6,8})(?=[-'’\"\s)]|$)")
+_RE_IDS_EM_PROSA = _re.compile(
+    r"\bIDs?\s*:?\s*((?:[A-Z]{0,2}\d{2,8}\s*(?:,|\be\b)\s*)*[A-Z]{0,2}\d{2,8})")
+#: 🪤 Biblioteca de bloco com DATA no nome ("…-esteiras-04112022"): a data é a
+#: mesma em peças diferentes — não é id de instância.
+_RE_PARECE_DATA = _re.compile(
+    r"^(?:(?:0[1-9]|[12]\d|3[01])(?:0[1-9]|1[0-2])(?:(?:19|20)\d\d|\d\d)"
+    r"|(?:19|20)\d\d(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01]))$")
+_RE_CITADO_ENTRE_ASPAS = _re.compile(r"['‘]([^'’\n]{3,120})['’]")
+#: O andar/unidade que o TÍTULO da prancha diz (com o que o identifica:
+#: "bloco A" ≠ "bloco B"). Irmã de `dwg_extractor._RE_PAVIMENTO_OU_UNIDADE`,
+#: que só pergunta SE diz; aqui é preciso saber QUAL.
+_RE_PAVIMENTO_DO_TITULO = _re.compile(
+    r"t[eé]rreo|superior|subsolo|cobertura|mezanino|\d+\s*[ºª°o]?\s*(?:pav\w*|andar)"
+    r"|pavimento\s+\d+|\bbloco\s+\w+|\btorre\s+\w+|\bcasa\s+\d+|\bunidade\s*\w*"
+    r"|\bapto?\.?\s*\d+", _re.IGNORECASE)
+
+
+def ids_de_elemento_citados(obs) -> set:
+    """Os números de elemento do Revit que a observação cita."""
+    t = str(obs or "")
+    ids = set(_RE_ID_REVIT_NO_BLOCO.findall(t))
+    for m in _RE_IDS_EM_PROSA.finditer(t):
+        ids.update(x for x in _re.findall(r"\d+", m.group(1)) if 6 <= len(x) <= 8)
+    return {x for x in ids if not _RE_PARECE_DATA.match(x)}
+
+
+def _pavimentos_do_titulo(titulo) -> frozenset:
+    return frozenset(" ".join(_minusculo_sem_acento(m.group(0)).split())
+                     for m in _RE_PAVIMENTO_DO_TITULO.finditer(str(titulo or "")))
+
+
+def mesmo_pavimento_entre_pranchas(t1, t2) -> bool:
+    """Duas pranchas (arquivos) desenham o MESMO pavimento?
+
+    Só quando os títulos dizem o MESMO andar/unidade (ou nenhum dos dois diz) e
+    um deles é planta temática. Na dúvida, não: andar diferente é quantidade."""
+    from dwg_extractor import _RE_PLANTA_TEMATICA
+    if not str(t1 or "").strip() or not str(t2 or "").strip():
+        return False
+    if _pavimentos_do_titulo(t1) != _pavimentos_do_titulo(t2):
+        return False
+    return bool(_RE_PLANTA_TEMATICA.search(str(t1)) or _RE_PLANTA_TEMATICA.search(str(t2)))
+
+
+def selos_da_mesma_peca(linhas) -> list:
+    """As linhas com selo que contam a MESMA peça de outra linha com selo, de
+    outra prancha. Devolve [{indice, prancha_da_outra, motivo}].
+
+    `linhas`: [{prancha, servico, unidade, quantidade, texto, selo, origem}] —
+    `servico` é o substantivo da descrição (porta, janela…): id igual em
+    serviço diferente (a tela da porta, a ferragem) não é a mesma linha.
+
+    Fica o selo na linha de MAIOR quantidade (a planta mais completa); empate,
+    a que vem primeiro. 🚨 Só rebaixa, e só o selo — não mexe no número.
+    """
+    ordem = sorted(range(len(linhas or [])),
+                   key=lambda i: (-_num_ou_zero(linhas[i].get("quantidade")), i))
+    donos_id = {}        # (servico, unidade, id) -> prancha da linha que ficou
+    donos_nome = {}      # (servico, unidade, nome) -> [(prancha, quantidade)]
+    saem = []
+    for i in ordem:
+        ln = linhas[i]
+        if str(ln.get("selo") or "").strip().lower() != "confirmado":
+            continue
+        if str(ln.get("origem") or "").strip().lower() == "revisao_cliente":
+            continue
+        q = _num_ou_zero(ln.get("quantidade"))
+        pr = str(ln.get("prancha") or "").strip()
+        sv = str(ln.get("servico") or "").strip().lower()
+        un = str(ln.get("unidade") or "").strip().lower()
+        if q <= 0 or not pr or not sv:
+            continue
+        txt = str(ln.get("texto") or "")
+        ids = ids_de_elemento_citados(txt)
+        nomes = {" ".join(_minusculo_sem_acento(n).split())
+                 for n in _RE_CITADO_ENTRE_ASPAS.findall(txt)}
+        motivo, outra = "", ""
+        for x in sorted(ids):
+            p = donos_id.get((sv, un, x))
+            if p and p.lower() != pr.lower():
+                motivo, outra = "o elemento %s do Revit está nas duas" % x, p
+                break
+        if not motivo:
+            for n in sorted(nomes):
+                for p, q2 in donos_nome.get((sv, un, n), []):
+                    if (p.lower() != pr.lower() and _bate(q, q2)
+                            and mesmo_pavimento_entre_pranchas(p, pr)):
+                        motivo, outra = ("mesmo '%s' com a mesma quantidade, no mesmo "
+                                         "pavimento" % n[:40]), p
+                        break
+                if motivo:
+                    break
+        if motivo:
+            saem.append({"indice": i, "prancha_da_outra": outra, "motivo": motivo})
+            continue
+        for x in ids:
+            donos_id.setdefault((sv, un, x), pr)
+        for n in nomes:
+            donos_nome.setdefault((sv, un, n), []).append((pr, q))
+    return saem
+
+
+def _num_ou_zero(v) -> float:
+    try:
+        return float(v or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+# ══════════════════════════════════════════════════════════════════════════
 #  A TABELA IMPRESSA — nível 1 para CONTAGEM (22/09/2026)
 # ══════════════════════════════════════════════════════════════════════════
 #: ⏭️ Decisão do Pedro em 21/09: *"se você conseguiu ver numa tabela… tem que

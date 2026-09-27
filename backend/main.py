@@ -13120,6 +13120,42 @@ def _zera_contagem_por_densidade(items) -> int:
     return n
 
 
+def _tira_selo_da_mesma_peca(items) -> int:
+    """A mesma peça com selo em várias pranchas: o selo fica numa linha só.
+
+    🩸 27/09/2026 — a régua mora em `engine_rules.selos_da_mesma_peca` (prova
+    de que é a mesma peça: id do Revit, ou mesmo bloco + mesma quantidade no
+    mesmo pavimento). Aqui só se aplica: a linha fica, o número fica, sai o selo
+    e o aviso vai na FRENTE (a tela mostra 110 caracteres). Se a linha tinha
+    ganhado o selo por uma porta, o prefixo "✓ MEDIDO" sai junto — senão o
+    texto diria medido numa linha estimada. Devolve quantas perderam o selo."""
+    from engine_rules import (selos_da_mesma_peca, MARCA_MESMA_PECA,
+                              PREFIXO_SELO_DA_CHAVE, PREFIXO_SELO_DA_TABELA)
+    from models import Confidence
+    linhas = [{"prancha": _prancha_de_verdade(getattr(it, "ref_sheet", "")),
+               "servico": _primary_noun(getattr(it, "description", "") or ""),
+               "unidade": getattr(it, "unit", ""),
+               "quantidade": getattr(it, "quantity", 0),
+               "texto": getattr(it, "observations", ""),
+               "selo": str(getattr(getattr(it, "confidence", ""), "value",
+                                   getattr(it, "confidence", "")) or ""),
+               "origem": getattr(it, "origem", "")} for it in items]
+    saem = selos_da_mesma_peca(linhas)
+    for s in saem:
+        it = items[s["indice"]]
+        obs = str(getattr(it, "observations", "") or "")
+        for _pref in (PREFIXO_SELO_DA_CHAVE, PREFIXO_SELO_DA_TABELA):
+            if obs.startswith(_pref):
+                obs = obs[len(_pref):]
+        _outra = s["prancha_da_outra"]
+        _outra = _outra if len(_outra) <= 48 else _outra[:47] + "…"
+        it.confidence = Confidence("estimado")
+        it.observations = (
+            "%s da linha com selo da prancha %s (%s): o selo fica numa linha só "
+            "— não some as duas. " % (MARCA_MESMA_PECA, _outra, s["motivo"])) + obs
+    return len(saem)
+
+
 def _confere_peso_de_aco(items) -> tuple:
     """Confere cada linha de aço contra comprimento total × massa nominal.
 
@@ -19871,6 +19907,21 @@ bloco — só cite os que estão no inventário deste arquivo."""
         except Exception as _etab:
             print(f"[selo-da-tabela] job={job_id}: nao rodou (segue): {_etab}")
             _log_error("motor:selo-da-tabela", f"FALHOU: {_etab}", job_id)
+
+        # ─────────────────────────────────────────────────────────────────
+        # 🩸 A MESMA PEÇA COM SELO EM VÁRIAS PRANCHAS (27/09/2026) — depois das
+        # duas portas que promovem (senão uma delas devolvia o selo) e antes de
+        # tudo que descreve o selo. Ver `engine_rules.selos_da_mesma_peca`.
+        # ─────────────────────────────────────────────────────────────────
+        try:
+            _n_mesma = _tira_selo_da_mesma_peca(all_items)
+            if _n_mesma:
+                _log_error("motor:selo-da-mesma-peca",
+                           f"linhas={len(all_items)} sem_selo={_n_mesma}",
+                           job_id, severity="info")
+        except Exception as _emp:
+            print(f"[selo-da-mesma-peca] job={job_id}: nao rodou (segue): {_emp}")
+            _log_error("motor:selo-da-mesma-peca", f"FALHOU: {_emp}", job_id)
 
         # 🚨 AQUI é o fim da fila de quem rebaixa selo. A recontagem do aviso
         # do plano B roda de novo agora, com o número que o cliente vai ler.
