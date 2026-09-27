@@ -130,6 +130,9 @@ LINHAS = {
     'financiamento-caixa-construcao-documentos-pci': ('Aprovação, normas e financiamento',
         'Financiamento Caixa para construção: documentos e PCI',
         'o que a Caixa pede para financiar construção — PCI, projeto aprovado, ART/RRT, memorial e cronograma —, a partir da cartilha oficial de dezembro de 2025, com checklist.'),
+    'exportar-revit-autocad-para-dwg-dxf': ('Quantitativo a partir de CAD (DWG, DXF e PDF)',
+        'Como exportar do Revit e do AutoCAD pra DWG ou DXF',
+        'o caminho oficial de exportação no Revit, o comando que desfaz os objetos inteligentes do AutoCAD Architecture/MEP e o que deixar de fora (vista 3D, isométrico, vínculos soltos).'),
 }
 
 

@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+<title>Como exportar do Revit e do AutoCAD pra DWG ou DXF (sem perder o quantitativo)</title>
+<meta name="description" content="Passo a passo pra exportar do Revit e do AutoCAD Architecture/MEP pra DWG ou DXF: que vistas levar, o comando que desfaz os objetos inteligentes e o que deixar de fora.">
+<meta name="keywords" content="exportar revit para dwg, exportar revit para dxf, revit exportar formatos cad, exporttoautocad, autocad architecture objetos aec, dwg não abre, salvar como dxf, dwg para quantitativo">
+<meta name="author" content="AI.arq">
+
+<link rel="canonical" href="https://ai.arq.br/blog/posts/exportar-revit-autocad-para-dwg-dxf.html">
+<meta name="robots" content="noindex, follow">
+<link rel="icon" type="image/x-icon" href="/favicon-v2.ico">
+
+<!-- Open Graph -->
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://ai.arq.br/blog/posts/exportar-revit-autocad-para-dwg-dxf.html">
+<meta property="og:title" content="Como exportar do Revit e do AutoCAD pra DWG ou DXF (sem perder o quantitativo)">
+<meta property="og:description" content="Passo a passo pra exportar do Revit e do AutoCAD Architecture/MEP pra DWG ou DXF: que vistas levar, o comando que desfaz os objetos inteligentes e o que deixar de fora.">
+<meta property="og:image" content="https://ai.arq.br/blog/og/exportar-revit-autocad-para-dwg-dxf.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale" content="pt_BR">
+<meta property="og:site_name" content="AI.arq">
+<meta property="article:published_time" content="2026-11-22T10:00:00-03:00">
+<meta property="article:author" content="AI.arq">
+<meta property="article:section" content="Como Ler Projetos">
+
+<!-- Twitter -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Como exportar do Revit e do AutoCAD pra DWG ou DXF (sem perder o quantitativo)">
+<meta name="twitter:description" content="Passo a passo pra exportar do Revit e do AutoCAD Architecture/MEP pra DWG ou DXF: que vistas levar, o comando que desfaz os objetos inteligentes e o que deixar de fora.">
+<meta name="twitter:image" content="https://ai.arq.br/blog/og/exportar-revit-autocad-para-dwg-dxf.png">
+
+<!-- Data agendada (lida por JS pra esconder antes da hora) -->
+<meta name="publish-date" content="2026-11-22">
+
+<link rel="stylesheet" href="/tailwind.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+
+<style>
+  body { font-family: 'Inter', sans-serif; }
+  .gradient-main { background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); }
+  .gradient-text { background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .prose-aiarq h2 { font-size: 1.75rem; font-weight: 700; color: #0f172a; margin-top: 2.5rem; margin-bottom: 1rem; line-height: 1.3; }
+  .prose-aiarq h3 { font-size: 1.25rem; font-weight: 600; color: #1e293b; margin-top: 2rem; margin-bottom: .75rem; }
+  .prose-aiarq p { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: 1.25rem; }
+  .prose-aiarq ul, .prose-aiarq ol { margin-bottom: 1.5rem; padding-left: 1.75rem; }
+  .prose-aiarq ul li { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: .5rem; list-style: disc; }
+  .prose-aiarq ol li { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: .5rem; list-style: decimal; }
+  .prose-aiarq strong { color: #0f172a; font-weight: 600; }
+  .prose-aiarq a { color: #4f46e5; text-decoration: underline; }
+  .prose-aiarq a:hover { color: #4338ca; }
+  /* Cards de download: tira sublinhado e força cor do gray-900 */
+  .prose-aiarq .aiarq-dl-btn { text-decoration: none !important; color: #111827 !important; }
+  .prose-aiarq .aiarq-dl-btn:hover { text-decoration: none !important; }
+  /* Bloco de fontes: lista mais densa, sem disc */
+  .aiarq-sources ul li { list-style: none; line-height: 1.5; padding: 0; margin: 0; }
+  .aiarq-sources ul { margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+</style>
+
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Como exportar do Revit e do AutoCAD pra DWG ou DXF (sem perder o quantitativo)",
+  "description": "Passo a passo pra exportar do Revit e do AutoCAD Architecture/MEP pra DWG ou DXF: que vistas levar, o comando que desfaz os objetos inteligentes e o que deixar de fora.",
+  "datePublished": "2026-11-22T10:00:00-03:00",
+  "dateModified": "2026-11-22T10:00:00-03:00",
+  "author": {
+    "@type": "Organization",
+    "@id": "https://ai.arq.br/#org",
+    "name": "AI.arq",
+    "url": "https://ai.arq.br/",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://ai.arq.br/email-logo.png",
+      "width": 512,
+      "height": 512
+    }
+  },
+  "publisher": {
+    "@type": "Organization",
+    "@id": "https://ai.arq.br/#org",
+    "name": "AI.arq",
+    "url": "https://ai.arq.br/",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://ai.arq.br/email-logo.png",
+      "width": 512,
+      "height": 512
+    }
+  },
+  "image": "https://ai.arq.br/blog/og/exportar-revit-autocad-para-dwg-dxf.png",
+  "url": "https://ai.arq.br/blog/posts/exportar-revit-autocad-para-dwg-dxf.html",
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": "https://ai.arq.br/blog/posts/exportar-revit-autocad-para-dwg-dxf.html"
+  },
+  "keywords": "exportar revit para dwg, exportar revit para dxf, revit exportar formatos cad, exporttoautocad, autocad architecture objetos aec, dwg não abre, salvar como dxf, dwg para quantitativo",
+  "articleSection": "Como Ler Projetos"
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "AI.arq",
+      "item": "https://ai.arq.br/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "Blog",
+      "item": "https://ai.arq.br/blog/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 3,
+      "name": "Como exportar do Revit e do AutoCAD pra DWG ou DXF (sem perder o quantitativo)",
+      "item": "https://ai.arq.br/blog/posts/exportar-revit-autocad-para-dwg-dxf.html"
+    }
+  ]
+}
+</script>
+</head>
+<body class="bg-white text-gray-900 antialiased">
+
+
+<nav class="sticky top-0 z-50 border-b bg-white/90 backdrop-blur-md">
+  <div class="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
+    <a href="/" class="flex items-center gap-2 no-underline">
+      <div class="flex h-9 w-9 items-center justify-center rounded-lg gradient-main text-white font-bold text-sm">AI</div>
+      <span class="text-xl font-bold text-gray-900">AI<span class="gradient-text">.arq</span></span>
+    </a>
+    <div class="hidden md:flex items-center gap-8 text-sm text-gray-600">
+      <a href="/#como-funciona" class="hover:text-indigo-600 transition">Como Funciona</a>
+      <a href="/precos.html" class="hover:text-indigo-600 transition">Planos</a>
+      <a href="/blog/" class="text-indigo-600 font-medium transition">Blog</a>
+      <a href="/faq.html" class="hover:text-indigo-600 transition">FAQ</a>
+    </div>
+    <div class="flex items-center gap-3">
+      <a href="/login.html" class="text-sm text-gray-600 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 transition">Entrar</a>
+      <a href="/login.html?novo=1" class="text-sm gradient-main text-white px-4 py-2 rounded-lg font-medium transition shadow-sm">Comece Grátis</a>
+    </div>
+  </div>
+</nav>
+
+
+<!-- Guard JS: se publish_date > hoje, redireciona pra /blog -->
+<script>
+(function () {
+  const meta = document.querySelector('meta[name="publish-date"]');
+  if (!meta) return;
+  // 27/09/2026: meia-noite de Brasília, o MESMO relógio do hoje_editorial()
+  // do gerador. Às 10h, o post do dia já estava no ar (deploy das 06h) e
+  // quem abria entre 06h e 10h era mandado de volta pro /blog/.
+  const pubDate = new Date(meta.content + 'T00:00:00-03:00');
+  if (pubDate > new Date()) {
+    document.documentElement.style.display = 'none';
+    window.location.replace('/blog/');
+  }
+})();
+</script>
+
+<article class="mx-auto max-w-3xl px-4 py-12">
+  <!-- Breadcrumb -->
+  <nav class="text-sm text-gray-500 mb-6">
+    <a href="/" class="hover:text-indigo-600">Início</a>
+    <span class="mx-2">›</span>
+    <a href="/blog/" class="hover:text-indigo-600">Blog</a>
+    <span class="mx-2">›</span>
+    <span class="text-gray-700">Como Ler Projetos</span>
+  </nav>
+
+  <!-- Categoria -->
+  <span class="inline-block bg-indigo-100 text-indigo-700 text-xs font-semibold uppercase tracking-wide px-3 py-1 rounded-full mb-4">Como Ler Projetos</span>
+
+  <!-- Título -->
+  <h1 class="text-3xl md:text-4xl font-bold text-gray-900 leading-tight mb-4">Como exportar do Revit e do AutoCAD pra DWG ou DXF (sem perder o quantitativo)</h1>
+
+  <!-- Meta -->
+  <div class="flex items-center gap-4 text-sm text-gray-500 mb-10 pb-6 border-b">
+    <span>📅 22/11/2026</span>
+    <span>·</span>
+    <span>⏱️ 3 min de leitura</span>
+  </div>
+
+  
+  <!-- Intro destacada -->
+  <p class="text-xl text-gray-700 leading-relaxed mb-8 italic">Boa parte dos arquivos de CAD que não chegam inteiros a uma leitura automática tem o mesmo problema: foram exportados do jeito que o programa sugere, não do jeito que quem vai ler precisa. Este guia mostra, com a documentação oficial da Autodesk, como exportar do Revit e do AutoCAD Architecture/MEP pra DWG ou DXF de um jeito que qualquer leitor — o AI.arq incluído — consiga abrir e medir.</p>
+
+  <!-- Corpo -->
+  <div class="prose-aiarq">
+    <h2>Por que o jeito de exportar muda o quantitativo</h2><p>Na nossa base, o motivo mais comum de DWG que não converte são os "objetos inteligentes" do AutoCAD Architecture e do MEP, que nenhum conversor abre direto — os números por formato estão em <a href="/blog/posts/dwg-ou-pdf-quantitativo-o-que-os-dados-mostram.html">DWG, DXF ou PDF: o que os nossos dados mostram</a>.</p><p>E um arquivo que abre pode trazer junto o que não é planta: vista 3D, isométrico, vínculos em arquivos separados. Daí a regra geral deste guia: exporte só o que você quer quantificar, em 2D, num arquivo só — e, se puder, em DXF.</p><h2>Revit: exportar a vista certa</h2><p>O caminho, segundo a ajuda oficial do Revit, é Arquivo → Exportar → Formatos CAD → DWG (ou DXF).</p><ol><li>Na lista de exportação, escolha a vista atual ou monte um conjunto só com as vistas 2D que interessam: planta de arquitetura, de elétrica, de hidráulica.</li><li>Em Modificar configuração de exportação, confira as camadas (layers): é pelo nome da camada que um leitor automático sabe o que é cada linha.</li><li>Desmarque a opção de exportar vistas em folhas e vínculos como referências externas. Assim os vínculos do projeto saem num arquivo só, e não em vários arquivos que se referenciam — que é como a ajuda do Revit descreve a opção.</li><li>Escolha a versão do AutoCAD do arquivo. Uma versão mais antiga, como 2013 ou 2018, é lida por mais programas.</li></ol><p>Arquivo .rvt não entra direto em leitura de CAD: exporte antes.</p><h2>Revit: o que deixar de fora</h2><p>Vista 3D e isométrico não entram no arquivo de quantitativo. Exportados, viram linhas no mesmo desenho da planta, e o mesmo elemento pode aparecer de novo, visto de outro ângulo. Se o isométrico precisa ir pro cliente, mande em outro arquivo.</p><p>O mesmo vale pra folha com carimbo e legenda de outra disciplina: exporte a vista que tem o desenho que você quer medir.</p><h2>AutoCAD Architecture e MEP: desfazer os objetos inteligentes</h2><p>Paredes, portas e equipamentos do AutoCAD Architecture e do MEP são objetos AEC — os "objetos inteligentes". Fora desses programas, eles dependem de um complemento (object enabler) pra aparecer direito. O comando que resolve é o EXPORTTOAUTOCAD, que, nas palavras da Autodesk, "cria uma versão de um arquivo AEC que pode ser aberta em produtos como o AutoCAD": os objetos AEC viram objetos básicos, e o arquivo original não muda.</p><ol><li>No AutoCAD Architecture ou MEP, abra o desenho e digite EXPORTTOAUTOCAD.</li><li>Escolha o formato do arquivo e, se houver referências externas, a opção de vincular (Bind) — assim elas entram no arquivo novo.</li><li>Dê um nome ao arquivo novo (ou um prefixo) e confirme.</li><li>Abra o arquivo novo e salve como DXF: Salvar como → escolha um formato DXF em "Arquivos do tipo", como descreve a ajuda do AutoCAD.</li></ol><p>O arquivo que sai daí é o que vale mandar pra leitura automática.</p><h2>Checklist antes de enviar</h2><ul><li>Só as vistas 2D que você quer quantificar, sem 3D nem isométrico.</li><li>Um arquivo só, com os vínculos dentro.</li><li>Objetos inteligentes desfeitos (EXPORTTOAUTOCAD), se o desenho veio do AutoCAD Architecture ou MEP.</li><li>Esquadrias, peças e equipamentos desenhados como blocos, não como linhas soltas — é assim que dá pra contar quantos são.</li><li>DXF quando der; DWG também serve.</li></ul><h2>E se só tiver o PDF?</h2><p>PDF vetorial também é lido — o motor mede a geometria quando dá e a IA lê textos e legendas —, mas tudo que vem de PDF sai como estimativa: é regra nossa não selar número de PDF como medido, porque a escala dele vem de uma declaração (o carimbo). Planta escaneada não mede. Se der, peça o DWG ou o DXF a quem fez o projeto; pra ler o PDF enquanto isso, veja <a href="/blog/posts/como-ler-pdf-planta-arquitetonica.html">como ler um PDF de planta arquitetônica</a>.</p>
+  </div>
+
+  <!-- Compartilhar (28/08/2026) -->
+  <!-- Por que WhatsApp e copiar link, e NAO comentario nem curtida: o Pedro
+       perguntou os tres. Comentario num blog com poucos leitores por dia deixa
+       secao vazia, que grita "site morto" - mesma razao pela qual a comunidade
+       ficou pra depois. Curtida com contador em 0 ou 1 e pior que contador
+       nenhum. Ja compartilhar nao tem estado: nao precisa de backend, nao tem
+       o que moderar, nao guarda dado de ninguem - e no Brasil e por WhatsApp
+       que conteudo profissional circula.
+       Os dois botoes tem data-track, entao o clique vira evento sozinho pelo
+       ouvinte delegado do aiarq-utils.js (que passou a carregar no blog hoje).
+       Sem isso a gente poria o botao no escuro, como quase aconteceu. -->
+  <div class="mt-12 flex flex-wrap items-center gap-3 border-t border-gray-200 pt-6">
+    <span class="text-sm text-gray-500 font-medium">Achou útil? Compartilhe:</span>
+    <a id="btn-zap" data-track="compartilhar-whatsapp" target="_blank" rel="noopener"
+       href="#"
+       class="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 no-underline hover:bg-gray-50 transition">
+      <svg class="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M17.5 14.4c-.3-.2-1.7-.9-2-1-.3-.1-.5-.1-.7.1-.2.3-.7 1-.9 1.2-.2.2-.3.2-.6.1-.3-.2-1.2-.5-2.3-1.4-.9-.8-1.4-1.7-1.6-2-.2-.3 0-.5.1-.6l.5-.5c.1-.2.2-.3.3-.5 0-.2 0-.4-.1-.5l-.9-2.2c-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.4s1.1 2.8 1.2 3c.2.2 2.1 3.2 5.1 4.4.7.3 1.3.5 1.7.6.7.2 1.4.2 1.9.1.6-.1 1.7-.7 2-1.4.2-.7.2-1.2.2-1.4-.1-.1-.3-.2-.5-.3z"/><path d="M12 2a10 10 0 00-8.6 15.1L2 22l5-1.3A10 10 0 1012 2zm0 18.2c-1.6 0-3.1-.4-4.4-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1112 20.2z"/></svg>
+      WhatsApp
+    </a>
+    <button type="button" id="btn-copiar" data-track="copiar-link-do-post"
+       class="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition cursor-pointer">
+      <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+      <span id="txt-copiar">Copiar link</span>
+    </button>
+  </div>
+
+  <!-- CTA -->
+  <div class="mt-12 p-8 rounded-2xl bg-gradient-to-br from-indigo-50 to-cyan-50 border-2 border-indigo-100">
+    <h3 class="text-xl font-bold text-gray-900 mb-3">⚡ Pronto pra acelerar seu trabalho?</h3>
+    <p class="text-gray-700 mb-5">Exportou? Sobe o DXF no AI.arq e receba a planilha de quantitativos por disciplina, com o que veio MEDIDO da geometria separado do que é estimativa. Grátis durante o beta, quantos projetos quiser, sem cartão.</p>
+    <div class="flex flex-wrap items-center gap-3">
+      <a href="/login.html?novo=1" data-track="blog-cta-cadastro" class="inline-flex items-center gap-2 gradient-main text-white font-semibold px-6 py-3 rounded-xl no-underline shadow-btn">
+        Começar grátis
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg>
+      </a>
+      <!-- Caminho de baixo atrito: leitor orgânico que não quer se cadastrar
+           ainda vê a prova (25 itens reais, sem login) em vez de bater no muro -->
+      <a href="/exemplo.html" data-track="blog-cta-exemplo" class="inline-flex items-center gap-2 px-6 py-3 rounded-xl border-2 border-indigo-200 text-indigo-700 font-semibold no-underline hover:bg-indigo-50">
+        Ver um quantitativo real →
+      </a>
+    </div>
+    <p class="mt-3 text-xs text-gray-500">Grátis no beta, quantos projetos quiser. Sem cartão. O exemplo abre sem cadastro.</p>
+  </div>
+
+  
+    <aside class="aiarq-sources mt-12 p-6 rounded-2xl bg-gray-50 border border-gray-200">
+      <h3 class="flex items-center gap-2 text-sm font-bold text-gray-900 uppercase tracking-wide mb-5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+        Fontes &amp; Referências
+      </h3>
+      <div><div class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Web</div><ul class="space-y-1.5 text-sm text-gray-700"><li><a href="https://help.autodesk.com/cloudhelp/2025/ENU/Revit-DocumentPresent/files/GUID-42C75024-4D71-4831-8910-2747168624A3.htm" target="_blank" rel="noopener nofollow" class="text-indigo-600 hover:text-indigo-800">Export to CAD Formats — Revit 2025</a> <span class="text-gray-500">&middot; Autodesk</span> &mdash; <span class="text-gray-600">Caminho Arquivo → Exportar → Formatos CAD, escolha de vistas/conjuntos, configuração de exportação e a opção de vínculos em arquivo único.</span></li><li><a href="https://help.autodesk.com/cloudhelp/2025/ENU/AutoCAD-Architecture/files/GUID-A174C49B-2FB3-47F4-9ECA-35C700650263.htm" target="_blank" rel="noopener nofollow" class="text-indigo-600 hover:text-indigo-800">EXPORTTOAUTOCAD (Command) — AutoCAD Architecture 2025</a> <span class="text-gray-500">&middot; Autodesk</span> &mdash; <span class="text-gray-600">Cria uma versão do arquivo AEC que abre no AutoCAD; opções de formato, Bind e nome; o original não muda.</span></li><li><a href="https://help.autodesk.com/cloudhelp/2022/ENU/AutoCAD-Core/files/GUID-5EA0F1DC-EA92-4ADB-9BDF-C352DF3AFC5F.htm" target="_blank" rel="noopener nofollow" class="text-indigo-600 hover:text-indigo-800">To Export a Drawing to a DXF File — AutoCAD 2022</a> <span class="text-gray-500">&middot; Autodesk</span> &mdash; <span class="text-gray-600">Salvar como → formato DXF em "Arquivos do tipo".</span></li></ul></div>
+      <p class="mt-4 text-xs text-gray-400 italic">
+        Última atualização: 22/11/2026. Normas e documentos citados podem ter sido revisados após esta data — sempre consulte a versão vigente.
+      </p>
+    </aside>
+    
+
+  <!-- Leia também (posts relacionados) -->
+  
+    <section class="aiarq-related mt-16 pt-8 border-t border-gray-200">
+      <h2 class="flex items-center gap-2 text-lg font-bold text-gray-900 mb-5">
+        <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+        Leia também
+      </h2>
+      <div class="grid gap-4 sm:grid-cols-3">
+        
+        <a href="/blog/posts/como-ler-pdf-planta-arquitetonica.html" class="aiarq-related-card block p-5 rounded-xl bg-white border border-gray-200 hover:border-indigo-400 hover:shadow-md transition no-underline">
+          <span class="inline-block bg-indigo-100 text-indigo-700 text-xs font-semibold uppercase tracking-wide px-2.5 py-1 rounded-full mb-3">Como Ler Projetos</span>
+          <div class="font-semibold text-gray-900 leading-snug">Como Ler um PDF de Planta Arquitetônica (Guia Visual Completo)</div>
+        </a>
+        <a href="/blog/posts/como-ler-quadro-de-esquadrias-p1-p2.html" class="aiarq-related-card block p-5 rounded-xl bg-white border border-gray-200 hover:border-indigo-400 hover:shadow-md transition no-underline">
+          <span class="inline-block bg-indigo-100 text-indigo-700 text-xs font-semibold uppercase tracking-wide px-2.5 py-1 rounded-full mb-3">Como Ler Projetos</span>
+          <div class="font-semibold text-gray-900 leading-snug">Como Ler o Quadro de Esquadrias num Projeto (P1, J1 + NBR 10821 explicada)</div>
+        </a>
+        <a href="/blog/posts/como-pedir-cotacao-fornecedor-obra.html" class="aiarq-related-card block p-5 rounded-xl bg-white border border-gray-200 hover:border-indigo-400 hover:shadow-md transition no-underline">
+          <span class="inline-block bg-indigo-100 text-indigo-700 text-xs font-semibold uppercase tracking-wide px-2.5 py-1 rounded-full mb-3">Comercial</span>
+          <div class="font-semibold text-gray-900 leading-snug">Como Pedir Cotação pro Fornecedor de Obra: Template + 7 Dicas Práticas</div>
+        </a>
+      </div>
+    </section>
+    
+
+  <!-- Voltar ao blog -->
+  <div class="mt-12 text-center">
+    <a href="/blog/" class="text-indigo-600 hover:text-indigo-800 font-medium no-underline">← Ver mais artigos</a>
+  </div>
+</article>
+
+
+<footer class="border-t bg-gray-50 mt-20">
+  <div class="mx-auto max-w-6xl px-4 py-12 grid gap-8 md:grid-cols-4">
+    <div>
+      <div class="flex items-center gap-2 mb-3">
+        <div class="flex h-8 w-8 items-center justify-center rounded-lg gradient-main text-white font-bold text-xs">AI</div>
+        <span class="text-lg font-bold text-gray-900">AI<span class="gradient-text">.arq</span></span>
+      </div>
+      <p class="text-sm text-gray-500">Quantitativo de obra com IA, direto do seu CAD.</p>
+    </div>
+    <div>
+      <h2 class="text-sm font-semibold text-gray-900 mb-3">Produto</h2>
+      <ul class="space-y-2 text-sm text-gray-600">
+        <li><a href="/" class="hover:text-indigo-600">Início</a></li>
+        <li><a href="/#como-funciona" class="hover:text-indigo-600">Como funciona</a></li>
+        <li><a href="/precos.html" class="hover:text-indigo-600">Preços</a></li>
+        <li><a href="/login.html" class="hover:text-indigo-600">Entrar</a></li>
+      </ul>
+    </div>
+    <div>
+      <h2 class="text-sm font-semibold text-gray-900 mb-3">Conteúdo</h2>
+      <ul class="space-y-2 text-sm text-gray-600">
+        <li><a href="/blog/" class="hover:text-indigo-600">Blog</a></li>
+        <li><a href="/faq.html" class="hover:text-indigo-600">FAQ</a></li>
+        <li><a href="/sobre.html" class="hover:text-indigo-600">Sobre</a></li>
+        <li><a href="javascript:void(0)" onclick="aiArqContactOpen()" class="hover:text-indigo-600">Contato</a></li>
+      </ul>
+    </div>
+    <div>
+      <h2 class="text-sm font-semibold text-gray-900 mb-3">Legal</h2>
+      <ul class="space-y-2 text-sm text-gray-600">
+        <li><a href="/termos.html" class="hover:text-indigo-600">Termos</a></li>
+        <li><a href="/privacidade.html" class="hover:text-indigo-600">Privacidade</a></li>
+        <li><a href="/licencas.html" class="hover:text-indigo-600">Licenças</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="border-t bg-gray-100">
+    <div class="mx-auto max-w-6xl px-4 py-4 text-center text-xs text-gray-500">
+      &copy; 2026 ai.arq.br · Todos os direitos reservados<br>
+        Serviço prestado por <strong>Pedro Zellmer</strong> · Rio de Janeiro/RJ · <a href="mailto:contato@ai.arq.br" class="hover:text-gray-600">contato@ai.arq.br</a>
+    </div>
+  </div>
+</footer>
+
+
+<!-- WhatsApp + Modal de contato (os mesmos do resto do site). O chat público saiu do site em
+     21/07 (0 lead) e só tinha sobrado aqui, por herança do modelo do blog — trocado em 27/09. -->
+<script src="/whatsapp-button.js" defer></script>
+<script src="/contact-modal.js"></script>
+<script src="/cookie-consent.js" defer></script>
+<!-- 28/08/2026 - TELEMETRIA NO BLOG. O blog e a MAIOR porta de entrada do
+     produto: no dia 28/08, TODAS as paginas que gente de verdade abriu eram
+     post de blog (zero na home, zero no cadastro). E os 26 posts nao mediam
+     nada - todo numero de funil ignorava a principal fonte de visita.
+     Nao bastou incluir o arquivo: o guarda do supabase-js dentro dele fazia
+     `return` em pagina estatica, antes de definir o `trackEvent`. A telemetria
+     foi movida pra ANTES desse guarda no mesmo commit.
+     O `cookie-consent.js` acima ja roda aqui; o `trackEvent` so grava com o
+     "sim" do visitante. -->
+<script src="/aiarq-utils.js"></script>
+<script>
+  (function () {
+    try {
+      var p = location.pathname;
+      var slug = (p.split('/').pop() || 'index').replace(/[.]html$/, '').slice(0, 40);
+      if (window.trackEvent) window.trackEvent('view_blog_post', { campo: slug });
+    } catch (e) { }
+  })();
+
+  // Compartilhar (28/08/2026). Sem backend, sem estado, sem dado guardado.
+  (function () {
+    try {
+      // 'url' e montada AQUI e nao no HTML: o link precisa ser o CANONICO, sem
+      // o ?semcache=... ou ?utm=... que a pessoa tenha na barra - senao o
+      // compartilhamento propaga parametro de teste.
+      var url = (document.querySelector('link[rel=canonical]') || {}).href
+                || (location.origin + location.pathname);
+      var titulo = (document.title || '').split('|')[0].trim();
+      var zap = document.getElementById('btn-zap');
+      if (zap) zap.href = 'https://wa.me/?text=' + encodeURIComponent(titulo + ' ' + url);
+
+      var btn = document.getElementById('btn-copiar');
+      var txt = document.getElementById('txt-copiar');
+      if (btn && txt) {
+        btn.addEventListener('click', function () {
+          function ok() {
+            var antes = txt.textContent;
+            txt.textContent = 'Link copiado!';
+            setTimeout(function () { txt.textContent = antes; }, 2000);
+          }
+          // navigator.clipboard so existe em HTTPS e pode ser negado; o
+          // fallback cobre navegador velho e permissao recusada.
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(url).then(ok).catch(function () { copiaAntiga(); });
+          } else { copiaAntiga(); }
+          function copiaAntiga() {
+            try {
+              var c = document.createElement('textarea');
+              c.value = url; c.setAttribute('readonly', '');
+              c.style.position = 'fixed'; c.style.opacity = '0';
+              document.body.appendChild(c); c.select();
+              document.execCommand('copy'); document.body.removeChild(c); ok();
+            } catch (e) { txt.textContent = 'Copie da barra do navegador'; }
+          }
+        });
+      }
+    } catch (e) { }
+  })();
+</script>
+</body>
+</html>

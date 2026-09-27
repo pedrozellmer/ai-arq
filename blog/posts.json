@@ -2802,6 +2802,65 @@
         }
       ],
       "publish_date": "2026-10-18"
+    },
+    {
+      "slug": "exportar-revit-autocad-para-dwg-dxf",
+      "title": "Como exportar do Revit e do AutoCAD pra DWG ou DXF (sem perder o quantitativo)",
+      "description": "Passo a passo pra exportar do Revit e do AutoCAD Architecture/MEP pra DWG ou DXF: que vistas levar, o comando que desfaz os objetos inteligentes e o que deixar de fora.",
+      "keywords": "exportar revit para dwg, exportar revit para dxf, revit exportar formatos cad, exporttoautocad, autocad architecture objetos aec, dwg não abre, salvar como dxf, dwg para quantitativo",
+      "category": "Como Ler Projetos",
+      "publish_date": "2026-11-22",
+      "intro": "Boa parte dos arquivos de CAD que não chegam inteiros a uma leitura automática tem o mesmo problema: foram exportados do jeito que o programa sugere, não do jeito que quem vai ler precisa. Este guia mostra, com a documentação oficial da Autodesk, como exportar do Revit e do AutoCAD Architecture/MEP pra DWG ou DXF de um jeito que qualquer leitor — o AI.arq incluído — consiga abrir e medir.",
+      "sections": [
+        {
+          "h2": "Por que o jeito de exportar muda o quantitativo",
+          "body": "Na nossa base, o motivo mais comum de DWG que não converte são os \"objetos inteligentes\" do AutoCAD Architecture e do MEP, que nenhum conversor abre direto — os números por formato estão em <a href=\"/blog/posts/dwg-ou-pdf-quantitativo-o-que-os-dados-mostram.html\">DWG, DXF ou PDF: o que os nossos dados mostram</a>.\n\nE um arquivo que abre pode trazer junto o que não é planta: vista 3D, isométrico, vínculos em arquivos separados. Daí a regra geral deste guia: exporte só o que você quer quantificar, em 2D, num arquivo só — e, se puder, em DXF."
+        },
+        {
+          "h2": "Revit: exportar a vista certa",
+          "body": "O caminho, segundo a ajuda oficial do Revit, é Arquivo → Exportar → Formatos CAD → DWG (ou DXF).\n\n1. Na lista de exportação, escolha a vista atual ou monte um conjunto só com as vistas 2D que interessam: planta de arquitetura, de elétrica, de hidráulica.\n2. Em Modificar configuração de exportação, confira as camadas (layers): é pelo nome da camada que um leitor automático sabe o que é cada linha.\n3. Desmarque a opção de exportar vistas em folhas e vínculos como referências externas. Assim os vínculos do projeto saem num arquivo só, e não em vários arquivos que se referenciam — que é como a ajuda do Revit descreve a opção.\n4. Escolha a versão do AutoCAD do arquivo. Uma versão mais antiga, como 2013 ou 2018, é lida por mais programas.\n\nArquivo .rvt não entra direto em leitura de CAD: exporte antes."
+        },
+        {
+          "h2": "Revit: o que deixar de fora",
+          "body": "Vista 3D e isométrico não entram no arquivo de quantitativo. Exportados, viram linhas no mesmo desenho da planta, e o mesmo elemento pode aparecer de novo, visto de outro ângulo. Se o isométrico precisa ir pro cliente, mande em outro arquivo.\n\nO mesmo vale pra folha com carimbo e legenda de outra disciplina: exporte a vista que tem o desenho que você quer medir."
+        },
+        {
+          "h2": "AutoCAD Architecture e MEP: desfazer os objetos inteligentes",
+          "body": "Paredes, portas e equipamentos do AutoCAD Architecture e do MEP são objetos AEC — os \"objetos inteligentes\". Fora desses programas, eles dependem de um complemento (object enabler) pra aparecer direito. O comando que resolve é o EXPORTTOAUTOCAD, que, nas palavras da Autodesk, \"cria uma versão de um arquivo AEC que pode ser aberta em produtos como o AutoCAD\": os objetos AEC viram objetos básicos, e o arquivo original não muda.\n\n1. No AutoCAD Architecture ou MEP, abra o desenho e digite EXPORTTOAUTOCAD.\n2. Escolha o formato do arquivo e, se houver referências externas, a opção de vincular (Bind) — assim elas entram no arquivo novo.\n3. Dê um nome ao arquivo novo (ou um prefixo) e confirme.\n4. Abra o arquivo novo e salve como DXF: Salvar como → escolha um formato DXF em \"Arquivos do tipo\", como descreve a ajuda do AutoCAD.\n\nO arquivo que sai daí é o que vale mandar pra leitura automática."
+        },
+        {
+          "h2": "Checklist antes de enviar",
+          "body": "- Só as vistas 2D que você quer quantificar, sem 3D nem isométrico.\n- Um arquivo só, com os vínculos dentro.\n- Objetos inteligentes desfeitos (EXPORTTOAUTOCAD), se o desenho veio do AutoCAD Architecture ou MEP.\n- Esquadrias, peças e equipamentos desenhados como blocos, não como linhas soltas — é assim que dá pra contar quantos são.\n- DXF quando der; DWG também serve."
+        },
+        {
+          "h2": "E se só tiver o PDF?",
+          "body": "PDF vetorial também é lido — o motor mede a geometria quando dá e a IA lê textos e legendas —, mas tudo que vem de PDF sai como estimativa: é regra nossa não selar número de PDF como medido, porque a escala dele vem de uma declaração (o carimbo). Planta escaneada não mede. Se der, peça o DWG ou o DXF a quem fez o projeto; pra ler o PDF enquanto isso, veja <a href=\"/blog/posts/como-ler-pdf-planta-arquitetonica.html\">como ler um PDF de planta arquitetônica</a>."
+        }
+      ],
+      "cta": "Exportou? Sobe o DXF no AI.arq e receba a planilha de quantitativos por disciplina, com o que veio MEDIDO da geometria separado do que é estimativa. Grátis durante o beta, quantos projetos quiser, sem cartão.",
+      "sources": [
+        {
+          "type": "official",
+          "title": "Export to CAD Formats — Revit 2025",
+          "url": "https://help.autodesk.com/cloudhelp/2025/ENU/Revit-DocumentPresent/files/GUID-42C75024-4D71-4831-8910-2747168624A3.htm",
+          "publisher": "Autodesk",
+          "description": "Caminho Arquivo → Exportar → Formatos CAD, escolha de vistas/conjuntos, configuração de exportação e a opção de vínculos em arquivo único."
+        },
+        {
+          "type": "official",
+          "title": "EXPORTTOAUTOCAD (Command) — AutoCAD Architecture 2025",
+          "url": "https://help.autodesk.com/cloudhelp/2025/ENU/AutoCAD-Architecture/files/GUID-A174C49B-2FB3-47F4-9ECA-35C700650263.htm",
+          "publisher": "Autodesk",
+          "description": "Cria uma versão do arquivo AEC que abre no AutoCAD; opções de formato, Bind e nome; o original não muda."
+        },
+        {
+          "type": "official",
+          "title": "To Export a Drawing to a DXF File — AutoCAD 2022",
+          "url": "https://help.autodesk.com/cloudhelp/2022/ENU/AutoCAD-Core/files/GUID-5EA0F1DC-EA92-4ADB-9BDF-C352DF3AFC5F.htm",
+          "publisher": "Autodesk",
+          "description": "Salvar como → formato DXF em \"Arquivos do tipo\"."
+        }
+      ]
     }
   ]
 }
