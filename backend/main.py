@@ -4583,7 +4583,7 @@ def _alerta_email_que_nao_saiu(to_email: str, subject: str, log_kind: str,
 
 
 def _send_email_smtp(to_email: str, subject: str, html_body: str, text_body: str = "",
-                     log_kind: str = "email", job_id: str = "") -> bool:
+                     log_kind: str = "email", job_id: str = "", nome_remetente: str = "") -> bool:
     """Porta única de saída de e-mail. `job_id` é opcional e vai pro registro.
 
     🩸 18/09/2026 — `email_sent_log` não guardava a qual JOB o e-mail
@@ -4632,6 +4632,11 @@ def _send_email_smtp(to_email: str, subject: str, html_body: str, text_body: str
     except ValueError:
         port = 587
     from_name = os.getenv("SMTP_FROM_NAME", "AI.arq")
+    # 27/09 (Pedro aprovou a marca do escritório nos e-mails aos convidados): "Estúdio X via AI.arq". Só o NOME de
+    # exibição muda — o endereço continua o nosso (é quem entrega). Sem caractere de controle e curto: vai num cabeçalho.
+    _nr = "".join(c for c in str(nome_remetente or "") if c.isprintable()).strip()[:60]
+    if _nr:
+        from_name = f"{_nr} via AI.arq"
     from_email = os.getenv("SMTP_FROM", user)
     _erro = None
     _tentativa = 0
@@ -5007,14 +5012,22 @@ _EMAIL_HEAD = (
 def _email_wrap(title: str, body_html: str, cta_text: str = "", cta_url: str = "", badge: str = "",
                 badge_color: str = "green",
                 reason: str = "Você está recebendo este e-mail porque tem uma conta no AI.arq.",
-                signoff: bool = True, preheader: str = "") -> str:
+                signoff: bool = True, preheader: str = "", marca: dict = None) -> str:
     """Layout moderno e acessível dos emails (table-based + estilo inline, do
     jeito que Gmail/Outlook exigem). Logo = ícone hospedado em ai.arq.br.
 
     Assinatura e rodapé ficam DENTRO do card (contíguos ao conteúdo) de
     propósito: quando o rodapé é um bloco solto no fim, o Gmail o reconhece
     como boilerplate repetido e colapsa atrás do "•••". Integrado, não colapsa.
-    """
+
+    27/09 (Pedro aprovou a maquete "andamento e marca"): `marca` = o escritório que manda (e-mails do Escritório a
+    convidados) — {nome, logo_url, cor, contato_nome, contato_email}, já conferidos por escritorio.marca_do_projeto.
+    Topo com o logo e o nome DO ESCRITÓRIO, a cor dele, e no lugar do "Um abraço, Pedro" + WhatsApp do AI.arq, o
+    contato de quem administra o projeto. Sem marca, o e-mail de sempre."""
+    import html as _hm
+    import re as _re_mk
+    mk = marca if isinstance(marca, dict) and marca.get("nome") else None
+    cor_mk = mk.get("cor") if mk and _re_mk.fullmatch(r"#[0-9A-Fa-f]{6}", str(mk.get("cor") or "")) else "#4F46E5"
     cta = ""
     if cta_text and cta_url:
         # 🩸 27/09 — botão SIMPLES de propósito. O "truque do Gmail" (degradê +
@@ -5025,7 +5038,7 @@ def _email_wrap(title: str, body_html: str, cta_text: str = "", cta_url: str = "
         # 🪤 NÃO testar e-mail pelo conector do Gmail: ele apaga background,
         # <img> e <style> antes de mandar (2 testes inválidos em 27/09).
         cta = ('<tr><td style="padding:22px 30px 8px;">'
-               f'<a href="{cta_url}" style="background:#4F46E5;color:#ffffff;text-decoration:none;'
+               f'<a href="{cta_url}" style="background:{cor_mk};color:#ffffff;text-decoration:none;'
                'padding:14px 26px;border-radius:10px;font-size:15px;font-weight:600;'
                'font-family:Arial,sans-serif;display:inline-block;">'
                f'{cta_text} &rarr;</a></td></tr>')
@@ -5038,7 +5051,17 @@ def _email_wrap(title: str, body_html: str, cta_text: str = "", cta_url: str = "
                       f'{badge}</span></td></tr>')
     # Assinatura pessoal (dentro do card)
     sig_html = ""
-    if signoff:
+    if mk:
+        # o contato de quem administra o projeto — a resposta ao e-mail cairia na caixa do AI.arq, não na dela
+        _cn, _ce = _hm.escape(str(mk.get("contato_nome") or "")), _hm.escape(str(mk.get("contato_email") or ""))
+        sig_html = ('<tr><td style="padding:22px 30px 0;">'
+                    '<div style="border-top:1px solid #eef2f7;padding-top:18px;font-size:14px;'
+                    'line-height:1.55;color:#475569;font-family:Arial,sans-serif;">'
+                    + (f'Dúvida sobre o projeto? Fale com <b style="color:#0F172A;">{_cn}</b>, do '
+                       f'{_hm.escape(mk["nome"])}' + (f': {_ce}' if _ce else '') + '.<br>' if _cn else '')
+                    + '<span style="color:#94a3b8;font-size:13px;">Não responda este e-mail: use o botão acima.</span>'
+                    '</div></td></tr>')
+    elif signoff:
         sig_html = ('<tr><td style="padding:22px 30px 0;">'
                     '<div style="border-top:1px solid #eef2f7;padding-top:18px;font-size:15px;'
                     'line-height:1.55;color:#475569;font-family:Arial,sans-serif;">'
@@ -5058,6 +5081,34 @@ def _email_wrap(title: str, body_html: str, cta_text: str = "", cta_url: str = "
     if preheader:
         pre_html = ('<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">'
                     f'{preheader}' + ('&zwnj;&nbsp;' * 30) + '</div>')
+    # 27/09: com a marca do escritório, o topo e o rodapé são dele (o AI.arq fica como "enviado pelo")
+    if mk:
+        _nm = _hm.escape(str(mk["nome"]))
+        _logo = str(mk.get("logo_url") or "")
+        _ini = "".join(p[0] for p in str(mk["nome"]).split()[:2]).upper() or "·"
+        faixa_html = (f'<tr><td style="height:5px;background:{cor_mk};font-size:0;line-height:0;">&nbsp;</td></tr>')
+        cab_html = ('<tr><td style="padding:26px 30px 4px;"><table role="presentation" cellpadding="0" cellspacing="0"><tr>'
+                    + (f'<td><img src="{_hm.escape(_logo)}" width="48" height="48" alt="{_nm}" '
+                       'style="width:48px;height:48px;border-radius:12px;display:block;object-fit:contain;background:#ffffff;"></td>'
+                       if _logo else
+                       f'<td style="width:48px;height:48px;border-radius:12px;background:{cor_mk};color:#ffffff;'
+                       f'text-align:center;font-size:16px;font-weight:700;font-family:Arial,sans-serif;">{_hm.escape(_ini)}</td>')
+                    + '<td style="padding-left:12px;font-size:21px;font-weight:700;color:#0F172A;'
+                    f'letter-spacing:-.3px;font-family:Arial,sans-serif;">{_nm}</td></tr></table></td></tr>')
+        rodape_fim = (f'<br>Enviado pelo AI.arq, a plataforma que {_nm} usa.'
+                      '<br><a href="https://ai.arq.br/privacidade.html" style="color:#8b93f6;text-decoration:none;">Política de Privacidade</a>'
+                      ' &middot; Para remover seus dados, escreva para contato@ai.arq.br.')
+    else:
+        faixa_html = ('<tr><td style="height:5px;background:#4F46E5;background:linear-gradient(90deg,#4F46E5,#22D3EE);'
+                      'font-size:0;line-height:0;">&nbsp;</td></tr>')
+        cab_html = ('<tr><td style="padding:26px 30px 4px;"><table role="presentation" cellpadding="0" cellspacing="0"><tr>'
+                    '<td><img src="https://ai.arq.br/email-logo.png" width="48" height="48" alt="AI.arq" '
+                    'style="width:48px;height:48px;border-radius:12px;display:block;"></td>'
+                    '<td style="padding-left:12px;font-size:21px;font-weight:700;color:#0F172A;'
+                    'letter-spacing:-.3px;font-family:Arial,sans-serif;">AI.arq</td></tr></table></td></tr>')
+        rodape_fim = ('<br><a href="https://ai.arq.br/privacidade.html" style="color:#8b93f6;text-decoration:none;">Política de Privacidade</a>'
+                      ' &middot; <a href="https://ai.arq.br" style="color:#8b93f6;text-decoration:none;">ai.arq.br</a>'
+                      ' &middot; Para remover seus dados, é só responder este e-mail.')
     # 🌙 Documento COMPLETO (antes era só o <div>): o tema escuro mora num
     # <style> do <head>. Ninguém concatena nada depois do retorno (conferido
     # nos 22 chamadores em 27/09) — então fechar o </html> aqui é seguro.
@@ -5070,13 +5121,8 @@ def _email_wrap(title: str, body_html: str, cta_text: str = "", cta_url: str = "
         'style="max-width:520px;margin:0 auto;"><tr><td>'
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
         'style="background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e2e8f0;">'
-        '<tr><td style="height:5px;background:#4F46E5;background:linear-gradient(90deg,#4F46E5,#22D3EE);'
-        'font-size:0;line-height:0;">&nbsp;</td></tr>'
-        '<tr><td style="padding:26px 30px 4px;"><table role="presentation" cellpadding="0" cellspacing="0"><tr>'
-        '<td><img src="https://ai.arq.br/email-logo.png" width="48" height="48" alt="AI.arq" '
-        'style="width:48px;height:48px;border-radius:12px;display:block;"></td>'
-        '<td style="padding-left:12px;font-size:21px;font-weight:700;color:#0F172A;'
-        'letter-spacing:-.3px;font-family:Arial,sans-serif;">AI.arq</td></tr></table></td></tr>'
+        f'{faixa_html}'
+        f'{cab_html}'
         f'{badge_html}'
         f'<tr><td style="padding:16px 30px 0;font-size:22px;font-weight:700;color:#0F172A;'
         f'line-height:1.3;font-family:Arial,sans-serif;">{title}</td></tr>'
@@ -5088,10 +5134,7 @@ def _email_wrap(title: str, body_html: str, cta_text: str = "", cta_url: str = "
         '<tr><td style="padding:18px 30px 24px;">'
         '<div style="border-top:1px solid #eef2f7;padding-top:14px;font-size:11px;color:#aab4c0;'
         'line-height:1.6;font-family:Arial,sans-serif;">'
-        f'{reason}<br>'
-        '<a href="https://ai.arq.br/privacidade.html" style="color:#8b93f6;text-decoration:none;">Política de Privacidade</a>'
-        ' &middot; <a href="https://ai.arq.br" style="color:#8b93f6;text-decoration:none;">ai.arq.br</a>'
-        ' &middot; Para remover seus dados, é só responder este e-mail.'
+        f'{reason}{rodape_fim}'
         '</div></td></tr>'
         '</table>'
         '</td></tr></table></div>'
@@ -26185,11 +26228,14 @@ def _render_email_by_type_raw(key: str):
         return _build_welcome_email(nome, True, fake_link)
     if key == "convidado_area_propria":
         return _build_convidado_area_propria_email(nome, projeto, "Admin Exemplo")
+    # 27/09: os e-mails do Escritório a convidados saem em nome do escritório — a prévia mostra assim
+    _marca_ex = {"nome": "Estúdio Exemplo", "logo_url": "", "cor": "#0F766E",
+                 "contato_nome": "Admin Exemplo", "contato_email": "contato@exemplo.com"}
     if key == "escritorio_convite":
         # o MESMO builder do envio (escritorio.py), com link de exemplo
         _as, _html, _txt = _escritorio.email_do_convite(
             "Admin Exemplo", "admin@exemplo.com", projeto, "https://ai.arq.br/convite.html#t=EXEMPLO",
-            moldura=_email_wrap)
+            moldura=_email_wrap, marca=_marca_ex)
         return _as, _html
     if key == "escritorio_resposta_cliente":
         # 26/09 (perfis): o MESMO builder do envio (escritorio.py), com um pedido de revisão de exemplo
@@ -26199,8 +26245,8 @@ def _render_email_by_type_raw(key: str):
         return _as, _html
     if key == "escritorio_emissao_cliente":
         _as, _html, _txt = _escritorio.email_da_emissao(
-            "Admin Exemplo", "Planta baixa_R02.pdf", projeto, "Cozinha ampliada como você pediu na reunião.",
-            "https://ai.arq.br/escritorio.html", moldura=_email_wrap)
+            "Estúdio Exemplo", "Planta baixa_R02.pdf", projeto, "Cozinha ampliada como você pediu na reunião.",
+            "https://ai.arq.br/escritorio.html", moldura=_email_wrap, marca=_marca_ex)
         return _as, _html
     if key == "escritorio_mencoes":
         import escritorio_mencoes as _menc
@@ -26209,7 +26255,7 @@ def _render_email_by_type_raw(key: str):
                    "texto": "@Bia confere a medida do nicho da geladeira antes de liberar pra marcenaria?"},
                   {"projeto_id": _pid, "projeto": projeto, "tarefa": "Luminotécnico", "autor": "Admin Exemplo",
                    "texto": "@Bia o cliente pediu pendente sobre a ilha. Consegue revisar o ponto hoje?"}]
-        _as, _html, _txt = _menc.email_do_resumo("Bia Exemplo", _itens, moldura=_email_wrap)
+        _as, _html, _txt = _menc.email_do_resumo("Bia Exemplo", _itens, moldura=_email_wrap, marca=_marca_ex)
         return _as, _html
     if key in ("leitura_nova", "leitura_combinada"):
         # Exemplo com ganho E com uma prancha que piorou, pra o preview mostrar
@@ -30920,7 +30966,15 @@ def _cronograma_pro_cliente(cron) -> dict:
     fases = [{k: f.get(k) for k in _CRONOGRAMA_DO_CLIENTE_FASE}
              for f in ((cron or {}).get("fases") or []) if isinstance(f, dict)]
     r = (cron or {}).get("resumo") or {}
-    return {"fases": fases, "resumo": {k: r.get(k) for k in ("data_inicio", "data_fim", "duracao_meses")}}
+    resumo = {k: r.get(k) for k in ("data_inicio", "data_fim", "duracao_meses")}
+    # 27/09 (andamento aprovado pelo Pedro): na etapa de obra, o andamento do projeto usa o % executado da obra — a
+    # MESMA conta da tela do cronograma (calcular_ppc: % de cada fase ponderado pela duração), feita aqui, uma vez só
+    try:
+        from cronograma import calcular_ppc
+        resumo["avanco_pct"] = calcular_ppc([f for f in ((cron or {}).get("fases") or []) if isinstance(f, dict)])["avanco_real_pct"]
+    except Exception:
+        resumo["avanco_pct"] = None
+    return {"fases": fases, "resumo": resumo}
 
 
 @app.get("/api/escritorio/projetos/{projeto_id}/cronograma")

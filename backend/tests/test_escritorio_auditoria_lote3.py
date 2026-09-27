@@ -291,7 +291,9 @@ def test_tela_lote3():
     # TELA-8 / TELA-10 / TELA-9 / TELA-11
     assert "filter((m) => m && m.status !== 'removido');" in h
     assert "const convidados = MEMBROS.filter(conviteVivo).length;" in h
-    assert "Math.round((iA / et.length) * 100)" in h and "Math.round(((iA + 1) / et.length)" not in h
+    # 27/09 (andamento aprovado pelo Pedro): as concluídas são as ANTES da atual; a atual entra só pela parte feita dela
+    assert "et.slice(0, iA).reduce((a, e) => a + pesoDa(pesos, e), 0)" in h and "et.slice(0, iA + 1)" not in h
+    assert "Math.round(((iA + 1) / et.length)" not in h
     assert "if (ja) return toast('Essa etapa já está na lista.', true);" in h
     # TELA-5
     assert "const antes = viz[i - 1], depois = antes ? todos[todos.indexOf(antes) + 1] : todos[0];" in _corpo(h, "async function mover(id, st, i, mostrarAoCliente) {")

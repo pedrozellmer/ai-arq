@@ -867,12 +867,14 @@ def _avisar_clientes(projeto_id: str, emissao: dict, emails: list) -> int:
         return 0
     arquivo = emissao.get("copia_nome") or emissao.get("arquivo_nome") or "um arquivo"
     link = f"{SITE}/escritorio.html#/p/{projeto_id}/emissoes"
-    assunto, html, texto = esc.email_da_emissao(dona.get("nome") or "", arquivo, p.get("nome") or "",
-                                               emissao.get("nota"), link)
+    marca = esc.marca_do_projeto(projeto_id)          # 27/09: em nome do escritório (nome, logo, cor, contato)
+    assunto, html, texto = esc.email_da_emissao((marca or {}).get("nome") or dona.get("nome") or "", arquivo,
+                                               p.get("nome") or "", emissao.get("nota"), link, marca=marca)
     feitos = 0
     for email in emails:
         try:
-            feitos += bool(esc._ENVIAR(email, assunto, html, texto, log_kind="escritorio_emissao_cliente"))
+            feitos += bool(esc._ENVIAR(email, assunto, html, texto, log_kind="escritorio_emissao_cliente",
+                                       **esc._remetente(marca)))
         except Exception as x:
             esc._registrar("escritorio:aviso-emissao", f"aviso ao cliente falhou: {type(x).__name__}")
     return feitos

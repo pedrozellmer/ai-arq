@@ -692,7 +692,8 @@ def test_o_cliente_ve_o_cronograma_so_com_datas_e_andamento_sem_dinheiro(monkeyp
     assert r["status"] == "ok"
     assert r["cronograma"]["fases"] == [{"label": "Fundação", "inicio": "2026-10-01", "fim": "2026-10-20",
                                           "dur_dias": 19, "pct_executado": 40, "cor": "#EA580C"}]
-    assert r["cronograma"]["resumo"] == {"data_inicio": "2026-10-01", "data_fim": "2027-03-01", "duracao_meses": 5}
+    assert r["cronograma"]["resumo"] == {"data_inicio": "2026-10-01", "data_fim": "2027-03-01", "duracao_meses": 5,
+                                         "avanco_pct": 40}       # 27/09: a obra no andamento do projeto
     tudo = json.dumps(r, ensure_ascii=False)
     assert "12345" not in tudo and "98765" not in tudo and "margem" not in tudo and "curva" not in tudo
     # o cliente não tem acesso ao projeto medido: quem lê é o SERVIDOR (sem o login dele, a RLS esconderia o salvo)
@@ -752,6 +753,40 @@ def test_o_cliente_que_recebe_a_emissao_leva_o_email_do_aiarq_e_o_fornecedor_nao
     assert "<b>ampliada</b>" not in e["html"] and "&lt;b&gt;ampliada" in e["html"]
     # mandar de novo pra quem já tem: nem acesso novo, nem e-mail novo
     assert ed.projeto_mandar_emissao(PROJ, E1, REQ, {"para": [M_CLI]})["avisados"] == 0 and len(enviados) == 1
+
+
+def _com_marca(monkeypatch, enviados):
+    """27/09: a marca do escritório pronta (quem monta é esc.marca_do_projeto, testado à parte) e o envio anotando
+    o nome de quem manda e a marca que chegou na moldura."""
+    marca = {"nome": "Estúdio Exemplo", "logo_url": "", "cor": "#0F766E",
+             "contato_nome": "Admin Exemplo", "contato_email": "dona@exemplo.com"}
+    pedidas = []
+    monkeypatch.setattr(esc, "marca_do_projeto", lambda pid: pedidas.append(pid) or marca)
+    esc._MOLDURA = lambda titulo, corpo, **k: "%s|marca=%s|%s" % (corpo, (k.get("marca") or {}).get("nome"),
+                                                                  k.get("reason"))
+    esc._ENVIAR = lambda para, assunto, html, texto="", **k: enviados.append(
+        {"para": para, "assunto": assunto, "html": html, "remetente": k.get("nome_remetente")}) or True
+    return pedidas
+
+
+def test_convite_sai_em_nome_do_escritorio(monkeypatch):
+    b, enviados, _ = montar(DONA, "dono")
+    pedidas = _com_marca(monkeypatch, enviados)
+    esc.convidar(PROJ, REQ, {"email": "cliente@exemplo.com", "perfil": "cliente"})
+    (e,) = enviados
+    assert e["remetente"] == "Estúdio Exemplo" and "|marca=Estúdio Exemplo|" in e["html"] and pedidas == [PROJ]
+
+
+def test_aviso_da_emissao_sai_em_nome_do_escritorio(monkeypatch):
+    b, enviados, _ = montar(DONA, "dono")
+    pedidas = _com_marca(monkeypatch, enviados)
+    membro(b, M_CLI, "cliente", CLI)
+    _emissao(b)
+    _pastas()
+    ed.projeto_mandar_emissao(PROJ, E1, REQ, {"para": [M_CLI]})
+    (e,) = enviados
+    assert e["remetente"] == "Estúdio Exemplo" and "|marca=Estúdio Exemplo|" in e["html"] and pedidas == [PROJ]
+    assert "do Estúdio Exemplo" in e["html"]
 
 
 def test_o_aviso_que_falha_nao_desfaz_o_envio():

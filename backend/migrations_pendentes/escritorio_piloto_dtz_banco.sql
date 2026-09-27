@@ -1363,3 +1363,49 @@ create trigger escritorio_membros_acesso_pendente before delete on public.escrit
 drop trigger if exists escritorio_emissoes_acesso_pendente on public.escritorio_emissoes;
 create trigger escritorio_emissoes_acesso_pendente before delete on public.escritorio_emissoes
   for each row execute function public.escritorio_acesso_pendente_guarda();
+
+-- ── 28. (27/09, maquete "andamento e marca" aprovada) peso das etapas + a marca do escritório pros membros ──
+-- APLICADA em 27/09/2026 como `escritorio_andamento_pesos_e_marca` (ok do Pedro: "pode aplicar").
+-- 1) Andamento: o peso de cada etapa no projeto ({"Executivo": 3}); etapa que não aparece pesa 1.
+alter table public.escritorio_projetos add column if not exists etapa_pesos jsonb not null default '{}'::jsonb;
+alter table public.escritorio_projetos drop constraint if exists escritorio_projetos_etapa_pesos_chk;
+alter table public.escritorio_projetos add constraint escritorio_projetos_etapa_pesos_chk
+  check (jsonb_typeof(etapa_pesos) = 'object');
+
+-- 2) A MARCA do escritório (nome, logo e cor do Meu cadastro de quem administra o projeto) pra quem é do projeto.
+--    O perfil da admin só ela lê; aqui vão só estes três campos, e só pra membro do projeto (qualquer perfil).
+create or replace function public.escritorio_marca(p_projeto uuid)
+ returns table(nome text, logo_url text, cor text)
+ language sql
+ stable security definer
+ set search_path to ''
+as $function$
+  select coalesce(nullif(btrim(pf.company), ''),
+                  (select d.nome from public.escritorio_membros d where d.projeto_id = p.id and d.papel = 'dono' limit 1)),
+         nullif(btrim(pf.logo_url), ''),
+         nullif(btrim(pf.company_brand_color), '')
+    from public.escritorio_projetos p
+    left join public.profiles pf on pf.user_id = p.dono::text
+   where p.id = p_projeto and public.escritorio_papel(p_projeto) is not null
+$function$;
+revoke all on function public.escritorio_marca(uuid) from public, anon;
+grant execute on function public.escritorio_marca(uuid) to authenticated, service_role;
+
+-- 3) O andamento pro CLIENTE (que não lê a linha do projeto nem todas as tarefas): só números — os pesos e
+--    quantas tarefas a etapa atual tem e quantas estão feitas (Aprovado ou Concluído). O fornecedor não vê andamento.
+create or replace function public.escritorio_andamento(p_projeto uuid)
+ returns table(etapa_pesos jsonb, tarefas_etapa integer, feitas_etapa integer)
+ language sql
+ stable security definer
+ set search_path to ''
+as $function$
+  select p.etapa_pesos,
+         (select count(*)::integer from public.escritorio_tarefas t
+           where t.projeto_id = p.id and t.etapa = p.etapa_atual),
+         (select count(*)::integer from public.escritorio_tarefas t
+           where t.projeto_id = p.id and t.etapa = p.etapa_atual and t.status in ('aprov', 'ok'))
+    from public.escritorio_projetos p
+   where p.id = p_projeto and public.escritorio_papel(p_projeto) in ('dono', 'freela', 'cliente')
+$function$;
+revoke all on function public.escritorio_andamento(uuid) from public, anon;
+grant execute on function public.escritorio_andamento(uuid) to authenticated, service_role;

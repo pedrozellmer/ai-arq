@@ -71,7 +71,7 @@ def quem_leva(inicio: datetime, fim: datetime) -> dict:
     membro = {str(m["id"]): m for m in _ler("escritorio_membros", {
         "id": _em(mids), "select": "id,projeto_id,papel,status,user_id,email,email_conta,nome"})}
     tarefa = {str(t["id"]): t for t in _ler("escritorio_tarefas", {"id": _em(tids), "select": "id,projeto_id,titulo"})}
-    projeto = {str(p["id"]): p for p in _ler("escritorio_projetos", {"id": _em(pids), "select": "id,nome"})}
+    projeto = {str(p["id"]): p for p in _ler("escritorio_projetos", {"id": _em(pids), "select": "id,nome,dono"})}
     autores = {str(c["autor"]) for c in coms if c.get("autor")}
     nome_do_autor = {}
     if autores:
@@ -106,14 +106,16 @@ def quem_leva(inicio: datetime, fim: datetime) -> dict:
             p = pessoas.setdefault(str(m["user_id"]), {"email": email, "nome": m.get("nome") or "", "itens": []})
             p["itens"].append({
                 "projeto_id": pid, "projeto": (projeto.get(pid) or {}).get("nome") or "Projeto",
+                "dono": str((projeto.get(pid) or {}).get("dono") or ""),
                 "tarefa": t.get("titulo") or "Tarefa",
                 "autor": nome_do_autor.get((pid, str(c.get("autor") or ""))) or "Alguém da equipe",
                 "texto": _curto(c.get("texto"))})
     return pessoas
 
 
-def email_do_resumo(nome: str, itens: list, moldura=None):
-    """(assunto, html, texto) do resumo. Tudo que veio de fora vai escapado."""
+def email_do_resumo(nome: str, itens: list, moldura=None, marca=None):
+    """(assunto, html, texto) do resumo. Tudo que veio de fora vai escapado. 27/09: `marca` = o escritório de todos
+    os itens (e-mail em nome dele); itens de escritórios diferentes saem sem marca."""
     n = len(itens)
     mostrar = itens[:TETO_ITENS]
     por_projeto = {}
@@ -139,11 +141,12 @@ def email_do_resumo(nome: str, itens: list, moldura=None):
     abre = f'<p style="margin:0 0 4px;">{ola} Mencionaram você com @ no Escritório desde ontem:</p>'
     unico = list(por_projeto)
     cta = f"{esc.SITE}/escritorio.html" + (f"#/p/{unico[0]}/tarefas" if len(unico) == 1 else "")
+    onde = f"de um projeto do {esc._escapar(marca['nome'])}" if marca else "do Escritório do AI.arq"
     html = (moldura or esc._MOLDURA)(
         "Menções pra você", abre + corpo, cta_text="Abrir o Escritório", cta_url=cta,
-        reason="Você recebeu este e-mail porque mencionaram você com @ num comentário do Escritório do AI.arq. "
+        reason=f"Você recebeu este e-mail porque mencionaram você com @ num comentário {onde}. "
                "Sai no máximo um resumo por dia, e só quando há menção.",
-        preheader=f"{n} {'menção' if n == 1 else 'menções'} desde ontem.")
+        preheader=f"{n} {'menção' if n == 1 else 'menções'} desde ontem.", **esc._com_marca(marca))
     assunto = f"{n} {'menção' if n == 1 else 'menções'} pra você no Escritório do AI.arq"
     return assunto, html, "Mencionaram você com @ no Escritório desde ontem:" + esc._DUAS_LINHAS + chr(10).join(texto)
 
@@ -164,6 +167,7 @@ def rodada(agora_utc: datetime, marcar, dry: bool = False) -> dict:
     if dry:
         return {"status": "dry", "pessoas": len(pessoas)}
     feito = {"status": "ok", "enviados": 0, "ja_tinham": 0, "falhas": 0}
+    marcas = {}
     for uid, p in pessoas.items():
         try:
             vez = marcar(f"{dia}:{uid}")
@@ -172,9 +176,17 @@ def rodada(agora_utc: datetime, marcar, dry: bool = False) -> dict:
         if vez is not True:
             feito["ja_tinham" if vez is False else "falhas"] += 1
             continue
-        assunto, html, texto = email_do_resumo(p["nome"], p["itens"])
+        # 27/09: todos os itens do mesmo escritório → o e-mail sai em nome dele; misturado, sai do AI.arq
+        marca = None
+        donos = {it.get("dono") for it in p["itens"]}
+        if len(donos) == 1 and all(donos):
+            pid = p["itens"][0]["projeto_id"]
+            if pid not in marcas:
+                marcas[pid] = esc.marca_do_projeto(pid)
+            marca = marcas[pid]
+        assunto, html, texto = email_do_resumo(p["nome"], p["itens"], marca=marca)
         try:
-            ok = bool(esc._ENVIAR(p["email"], assunto, html, texto, log_kind=KIND))
+            ok = bool(esc._ENVIAR(p["email"], assunto, html, texto, log_kind=KIND, **esc._remetente(marca)))
         except Exception:
             ok = False
         if ok:

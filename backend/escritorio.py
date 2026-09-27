@@ -141,11 +141,70 @@ def _o_que_o_convite_abre(q: str, p: str, perfil: str) -> str:
             f'<b>{p}</b> no AI.arq: tarefas, atas de reunião e os arquivos do projeto num lugar só.')
 
 
+_LOGO_OK = re.compile(r"^https://[a-z0-9]+[.]supabase[.]co/storage/v1/object/public/logos/[A-Za-z0-9._-]{1,200}$")
+_COR_OK = re.compile(r"^#[0-9A-Fa-f]{6}$")
+
+
+def _cor_legivel(cor):
+    """A cor do escritório com texto BRANCO por cima legível (contraste 4,5:1): escurece até chegar lá."""
+    if not cor or not _COR_OK.match(cor):
+        return None
+    c = [int(cor[i:i + 2], 16) for i in (1, 3, 5)]
+
+    def luz(rgb):
+        def canal(v):
+            v = v / 255
+            return v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4
+        r, g, b = (canal(v) for v in rgb)
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b
+    for _ in range(12):
+        if 1.05 / (luz(c) + 0.05) >= 4.5:
+            break
+        c = [v * 0.85 for v in c]
+    return "#" + "".join("%02x" % max(0, min(255, round(v))) for v in c)
+
+
+def marca_do_projeto(projeto_id: str):
+    """27/09 (Pedro aprovou a maquete "andamento e marca"): a marca de quem administra o projeto — o nome, o logo e a
+    cor do Meu cadastro (profiles: company, logo_url, company_brand_color; sem nome de empresa, o nome da admin) — e o
+    contato dela, pros e-mails aos convidados saírem em nome do escritório. O logo só vale do bucket público onde o
+    Meu cadastro sobe ("logos"); a cor é escurecida se o texto branco não ficar legível. None = sem marca (o e-mail
+    sai do AI.arq, como sempre). Nunca levanta: leitura que falha vira None."""
+    try:
+        p = _um(_SERVICO("GET", "escritorio_projetos", params={"id": f"eq.{projeto_id}", "select": "dono"}))
+        if not p:
+            return None
+        pf = _um(_SERVICO("GET", "profiles", params={
+            "user_id": f"eq.{p['dono']}", "select": "company,logo_url,company_brand_color"})) or {}
+        dono = _um(_SERVICO("GET", "escritorio_membros", params={
+            "projeto_id": f"eq.{projeto_id}", "papel": "eq.dono", "select": "nome,email"})) or {}
+    except Exception:           # a marca é acessório: sem ela, o e-mail sai do AI.arq
+        return None
+    nome = str(pf.get("company") or "").strip() or str(dono.get("nome") or "").strip()
+    if not nome:
+        return None
+    logo = str(pf.get("logo_url") or "").strip()
+    return {"nome": _texto_sem_controle(nome, 80), "logo_url": logo if _LOGO_OK.match(logo) else "",
+            "cor": _cor_legivel(str(pf.get("company_brand_color") or "").strip()),
+            "contato_nome": _texto_sem_controle(dono.get("nome"), 80) or "",
+            "contato_email": str(dono.get("email") or "").strip().lower()}
+
+
+def _com_marca(marca) -> dict:
+    """kwargs da moldura/envio: só passa a marca quando existe (sem marca, o e-mail de sempre)."""
+    return {"marca": marca} if marca else {}
+
+
+def _remetente(marca) -> dict:
+    """kwargs do envio: "Estúdio X via AI.arq" no nome de quem manda (o endereço continua o nosso)."""
+    return {"nome_remetente": marca["nome"]} if marca else {}
+
+
 def email_do_convite(quem_convida: str, email_de_quem_convida: str, projeto: str, link: str,
-                     moldura=None, perfil: str = "equipe"):
+                     moldura=None, perfil: str = "equipe", marca=None):
     """(assunto, html, texto). Sem Reply-To trocado: a porta única de e-mail não
     tem esse parâmetro e não vale mexer nela por isso — o e-mail de quem convida
-    vai escrito no corpo."""
+    vai escrito no corpo (com a marca, vai na assinatura do escritório)."""
     q, p = _escapar(quem_convida), _escapar(projeto)
     assunto = assunto_do_convite(quem_convida, projeto)
     corpo = (
@@ -153,15 +212,15 @@ def email_do_convite(quem_convida: str, email_de_quem_convida: str, projeto: str
         '<p style="margin:0 0 12px;">Pra entrar, clique no botão. Dá pra usar a conta Google '
         'ou criar uma senha com este mesmo e-mail. Antes de entrar, você preenche um cadastro rápido '
         'e aceita os Termos de Uso e a Política de Privacidade do AI.arq.</p>'
-        f'<p style="margin:0;color:#64748b;font-size:13px;">O convite vale {VALIDADE_DIAS} dias. '
-        f'Dúvida sobre o projeto? Fale com {q}'
-        + (f' em {_escapar(email_de_quem_convida)}' if email_de_quem_convida else '') + '.</p>')
+        f'<p style="margin:0;color:#64748b;font-size:13px;">O convite vale {VALIDADE_DIAS} dias.'
+        + ('' if marca else f' Dúvida sobre o projeto? Fale com {q}'
+           + (f' em {_escapar(email_de_quem_convida)}' if email_de_quem_convida else '') + '.') + '</p>')
     # a prévia do painel passa a moldura de verdade: não depende de quem configurou o módulo por último
     # 🔒 A2 (24/09): título, prévia e rodapé também são HTML — nome de projeto como
     # "<a href=...>" virava botão falso saindo do nosso domínio. Tudo vai escapado.
     html = (moldura or _MOLDURA)(f"Convite para {p}", corpo, cta_text="Aceitar convite", cta_url=link,
                     reason=f"Você recebeu este e-mail porque {q} digitou seu endereço num convite.",
-                    preheader=f"{q} te chamou para o projeto {p}.")
+                    preheader=f"{q} te chamou para o projeto {p}.", **_com_marca(marca))
     texto = (f"{quem_convida} te convidou para o projeto {projeto} no AI.arq.\n\n"
              f"Aceitar convite: {link}\n\nO convite vale {VALIDADE_DIAS} dias.")
     return assunto, html, texto
@@ -369,8 +428,9 @@ def convidar(projeto_id: str, request: Request, corpo: dict):
 
     quem = admin.get("nome") or eu.get("email") or "Alguém"
     link = link_do_convite(token)
+    marca = marca_do_projeto(projeto_id)      # 27/09: o convite sai em nome do escritório
     assunto, html, texto = email_do_convite(quem, admin.get("email") or eu.get("email"), projeto["nome"], link,
-                                            perfil=PERFIL_DO_PAPEL[papel])
+                                            perfil=PERFIL_DO_PAPEL[papel], marca=marca)
     # 🔒 O teto segura o NOSSO E-MAIL, nunca o convite: passou do teto, o convite nasce igual e
     # o link volta pra admin mandar pela conversa que já usa (a tela mostra "mande o link abaixo").
     enviado, motivo = False, None
@@ -392,7 +452,7 @@ def convidar(projeto_id: str, request: Request, corpo: dict):
             _cancelar_reserva(reserva)
         else:
             try:
-                enviado = bool(_ENVIAR(email, assunto, html, texto, log_kind="escritorio_convite"))
+                enviado = bool(_ENVIAR(email, assunto, html, texto, log_kind="escritorio_convite", **_remetente(marca)))
             except Exception as e:                       # a reserva fica: tentativa conta pro teto
                 _registrar("escritorio:convite-email", f"SMTP falhou no convite: {type(e).__name__}")
                 enviado = False
@@ -638,7 +698,7 @@ def email_da_resposta(cliente: str, arquivo: str, projeto: str, tipo: str, nota,
     return assunto_da_resposta(tipo, arquivo), html, texto
 
 
-def email_da_emissao(escritorio: str, arquivo: str, projeto: str, nota, link: str, moldura=None):
+def email_da_emissao(escritorio: str, arquivo: str, projeto: str, nota, link: str, moldura=None, marca=None):
     """(assunto, html, texto) do aviso AO CLIENTE: chegou uma emissão pra ele aprovar. 27/09 (Pedro: "e-mail do AI.arq
     também", além do aviso que o Google Drive manda ao compartilhar). Tudo que veio de fora vai escapado."""
     e, a, p = _escapar(escritorio or "O escritório"), _escapar(arquivo), _escapar(projeto)
@@ -651,8 +711,10 @@ def email_da_emissao(escritorio: str, arquivo: str, projeto: str, nota, link: st
               '<p style="margin:0;color:#64748b;font-size:13px;">O Google Drive também pode avisar que o arquivo '
               'foi compartilhado com você: é o mesmo arquivo.</p>')
     html = (moldura or _MOLDURA)(f"Nova emissão: {p}", corpo, cta_text="Ver e responder", cta_url=link,
-                                 reason=f"Você recebeu este e-mail porque é cliente do projeto {p} no AI.arq.",
-                                 preheader=f"{e} mandou {a} pra você aprovar.")
+                                 reason=(f"Você recebeu este e-mail porque é cliente do projeto {p} do "
+                                         f"{_escapar(marca['nome'])}." if marca else
+                                         f"Você recebeu este e-mail porque é cliente do projeto {p} no AI.arq."),
+                                 preheader=f"{e} mandou {a} pra você aprovar.", **_com_marca(marca))
     assunto = " ".join(f"Pra você aprovar: {arquivo}".split())
     assunto = assunto if len(assunto) <= TETO_ASSUNTO else assunto[:TETO_ASSUNTO - 1].rstrip() + "…"
     texto = (f"{escritorio or 'O escritório'} mandou {arquivo} pra você, no projeto {projeto}."

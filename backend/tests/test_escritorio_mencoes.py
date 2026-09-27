@@ -236,6 +236,44 @@ def test_a_mesma_pessoa_em_dois_projetos_leva_um_email_so():
     assert "href='https://ai.arq.br/escritorio.html'" in e["html"]            # o botão abre a lista, não um projeto
 
 
+def _com_donos(c, dono_proj, dono_outro, monkeypatch):
+    for p in c.b.t["escritorio_projetos"]:
+        p["dono"] = dono_proj if p["id"] == PROJ else dono_outro
+    pedidas = []
+    monkeypatch.setattr(esc, "marca_do_projeto", lambda pid: pedidas.append(pid) or {
+        "nome": "Estúdio Exemplo", "logo_url": None, "cor": "#0F766E",
+        "contato_nome": "Admin Exemplo", "contato_email": "dona@exemplo.com"})
+    esc._ENVIAR = lambda para, assunto, html, texto="", **k: c.enviados.append(
+        {"para": para, "html": html, "remetente": k.get("nome_remetente")}) or True
+    esc._MOLDURA = lambda titulo, corpo, **k: "%s|marca=%s|%s" % (corpo, (k.get("marca") or {}).get("nome"),
+                                                                  k.get("reason"))
+    return pedidas
+
+
+def test_mencoes_de_um_escritorio_so_saem_em_nome_dele(monkeypatch):
+    c = Cena()
+    pedidas = _com_donos(c, "uid-dona", "uid-dona", monkeypatch)
+    c.comentario(T2, [M_EQ], texto="da-casa")
+    c.comentario(T3, [M_EQ_OUTRO], texto="da-loja", projeto=OUTRO, autor="uid-fora")
+    c.rodar()
+    (e,) = c.enviados
+    assert e["remetente"] == "Estúdio Exemplo" and "|marca=Estúdio Exemplo|" in e["html"]
+    assert "de um projeto do Estúdio Exemplo" in e["html"]
+    assert len(pedidas) == 1 and pedidas[0] in (PROJ, OUTRO)
+
+
+@pytest.mark.parametrize("donos", [("uid-dona", "uid-outra"), ("", "")])
+def test_escritorios_misturados_ou_dono_desconhecido_saem_do_ai_arq(donos, monkeypatch):
+    c = Cena()
+    pedidas = _com_donos(c, donos[0], donos[1], monkeypatch)
+    c.comentario(T2, [M_EQ], texto="da-casa")
+    c.comentario(T3, [M_EQ_OUTRO], texto="da-loja", projeto=OUTRO, autor="uid-fora")
+    c.rodar()
+    (e,) = c.enviados
+    assert e["remetente"] is None and "|marca=None|" in e["html"] and "Estúdio Exemplo" not in e["html"]
+    assert "do Escritório do AI.arq" in e["html"] and pedidas == []
+
+
 def test_muitas_mencoes_param_no_teto_e_dizem_quantas_faltam():
     c = Cena()
     for i in range(em.TETO_ITENS + 5):

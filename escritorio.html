@@ -173,6 +173,11 @@
   .pj-corpo{padding:28px 20px 20px;display:flex;flex-direction:column;gap:8px}
   .pj-corpo b{font-size:16px;color:#0F172A}
   .barra{height:6px;border-radius:99px;background:#F1F5F9;overflow:hidden} .barra i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--c1),var(--c2))}
+  /* 27/09 (andamento): a parte concluída + a parte feita da etapa atual, mais clara, logo depois */
+  .barra2{display:flex;height:6px;border-radius:99px;background:#F1F5F9;overflow:hidden} .barra2 i{display:block;height:100%;background:linear-gradient(90deg,#4f46e5,#06b6d4)} .barra2 b{display:block;height:100%;background:#A5F3FC}
+  .pesos{display:grid;grid-template-columns:1fr 84px 48px;gap:8px 12px;align-items:center} .pesos label{font-size:14px;color:#1E293B} .pesos span{font-size:13px;color:#64748B;text-align:right}
+  .s-logo-img{width:32px;height:32px;border-radius:9px;object-fit:contain;background:#fff;border:1px solid #E2E8F0;flex:none}
+  .s-marca{min-width:0} .s-marca .s-nome{overflow:hidden;text-overflow:ellipsis;white-space:nowrap} .s-marca .s-logo{flex:none}
   @media (prefers-reduced-motion:reduce){ .pj,.pj:hover{transition:none;transform:none} }
   .lista > li > .av{width:38px;height:38px;font-size:13px}
   /* resumo do andamento (página do projeto) */
@@ -395,6 +400,9 @@ let CHK = [], ETQ = [], TETQ = [], TEM_CHK = false;
 let EMI = [], EMI_EV = [], TEM_EMI = false;
 // 26/09 (perfis): pra quem cada emissão foi (DEST) e as fotos do projeto (FOTOS). Acessórios: falhou, o resto segue.
 let DEST = [], FOTOS = [], TEM_FOTOS = false;
+// 27/09 (Pedro aprovou a maquete "andamento e marca"): a marca do escritório do projeto aberto; o andamento de quem é
+// de fora (o banco só manda os números); o % executado da obra (do cronograma de obra, pedido ao servidor)
+let MARCA = null, AND_EXT = null, OBRA = { projeto: null, pct: null };
 let VIEW = 'lista', FILTRO = 'todas', FILTRO_E = '', ETAPA_SEL = null;
 
 // ── utilidades ──
@@ -450,6 +458,110 @@ const avs = (t) => `<span class="avs">${pessoasDa(t).map(av).join('')}</span>`;
 const aberta = (t) => !['aprov', 'ok'].includes(t.status);
 const atrasada = (t) => aberta(t) && t.prazo && dias(t.prazo) < 0;
 const eMinha = (t) => { const eu = meuMembro(); return !!eu && pessoasDa(t).some((m) => m.id === eu.id); };
+
+// ── 27/09: a MARCA do escritório (Meu cadastro de quem administra o projeto) ──
+// O logo só vale de onde o Meu cadastro sobe (o bucket público "logos" do nosso Supabase); a cor só #RRGGBB, e
+// escurecida até o texto branco ficar legível (contraste 4,5:1) — a faixa do cliente usa branco por cima.
+const LOGO_OK = /^https:[/][/][a-z0-9]+[.]supabase[.]co[/]storage[/]v1[/]object[/]public[/]logos[/][A-Za-z0-9._-]{1,200}$/;
+const hexRgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+const rgbHex = (c) => '#' + c.map((v) => Math.max(0, Math.min(255, Math.round(v))).toString(16).padStart(2, '0')).join('');
+function luzRel(c) { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; const [r, g, b] = c.map(f); return 0.2126 * r + 0.7152 * g + 0.0722 * b; }
+function corLegivel(h) {
+  if (!/^#[0-9A-Fa-f]{6}$/.test(String(h || ''))) return null;
+  let c = hexRgb(h);
+  for (let i = 0; i < 12 && 1.05 / (luzRel(c) + 0.05) < 4.5; i++) c = c.map((v) => v * 0.85);
+  return rgbHex(c);
+}
+function marcaLimpa(x) {
+  if (!x || !String(x.nome || '').trim()) return null;
+  const cor = corLegivel(x.cor);
+  return { nome: String(x.nome).trim().slice(0, 80), logo: LOGO_OK.test(String(x.logo_url || '')) ? x.logo_url : '', cor,
+    clara: cor ? rgbHex(hexRgb(cor).map((v) => v + (255 - v) * 0.2)) : null };
+}
+const iniciaisDe = (s) => String(s || '').split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0].toUpperCase()).join('') || '·';
+const nomeEscritorio = () => (MARCA ? MARCA.nome : 'Escritório');
+// a faixa colorida do topo pra quem é de fora: a cor do escritório (se houver), senão a de sempre
+const faixaDeFora = (padrao) => (MARCA && MARCA.cor ? `linear-gradient(135deg,${MARCA.cor},${MARCA.clara})` : padrao);
+
+// ── 27/09: o ANDAMENTO do projeto = etapas concluídas + a parte FEITA da etapa atual ──
+// A parte feita vem das tarefas da etapa (Aprovado ou Concluído) — ou, numa etapa de obra, do % executado do cronograma
+// de obra (a MESMA conta da tela do cronograma, feita no servidor). Cada etapa tem um peso (padrão 1, a admin muda).
+// Nada estimado: etapa atual sem tarefa conta zero até ser concluída.
+const ehEtapaDeObra = (e) => /(^|[^A-Za-zÀ-ÿ])obra([^A-Za-zÀ-ÿ]|$)/i.test(String(e || ''));
+function pesoDa(pesos, e) { const v = Number((pesos || {})[e]); return Number.isFinite(v) && v >= 0 ? Math.min(v, 20) : 1; }
+function calcAndamento(et, iA, pesos, feitas, total, obraPct) {
+  if (!et.length || iA < 0) return null;
+  const W = et.reduce((a, e) => a + pesoDa(pesos, e), 0);
+  const obra = ehEtapaDeObra(et[iA]) && obraPct != null;
+  const frac = obra ? obraPct / 100 : (total ? feitas / total : 0);
+  const pAntes = W ? et.slice(0, iA).reduce((a, e) => a + pesoDa(pesos, e), 0) / W * 100 : 0;
+  const pAtual = W ? pesoDa(pesos, et[iA]) * Math.max(0, Math.min(1, frac)) / W * 100 : 0;
+  return { pct: Math.round(pAntes + pAtual), pAntes, pAtual, obra, obraPct, feitas, total, iA, n: et.length, etapa: et[iA] };
+}
+function andamentoAtual() {
+  const p = PROJ, et = (p && p.etapas) || [], iA = et.indexOf(p && p.etapa_atual);
+  if (!p) return null;
+  let feitas = 0, total = 0, pesos = {};
+  if (souEquipe()) {
+    const ts = TAR.filter((t) => t.etapa === et[iA]);
+    total = ts.length; feitas = ts.filter((t) => !aberta(t)).length; pesos = p.etapa_pesos || {};
+  } else if (AND_EXT) {
+    total = AND_EXT.tarefas_etapa || 0; feitas = AND_EXT.feitas_etapa || 0; pesos = AND_EXT.etapa_pesos || {};
+  }
+  return calcAndamento(et, iA, pesos, feitas, total, OBRA.projeto === p.id ? OBRA.pct : null);
+}
+// na etapa de obra, pede ao servidor o % executado do cronograma de obra (uma vez por projeto); chegou, redesenha
+function pedirObra() {
+  const p = PROJ; if (!p || OBRA.projeto === p.id) return;
+  const et = p.etapas || []; if (!ehEtapaDeObra(p.etapa_atual) || !et.length) return;
+  if (souEquipe() && !p.job_id) return;          // sem projeto medido ligado, não há cronograma de obra
+  OBRA = { projeto: p.id, pct: null };
+  apiEsc(`projetos/${p.id}/cronograma`).then((r) => {
+    const v = r.ok && r.dados && r.dados.status === 'ok' && r.dados.cronograma && r.dados.cronograma.resumo ? Number(r.dados.cronograma.resumo.avanco_pct) : NaN;
+    if (!PROJ || PROJ.id !== p.id || OBRA.projeto !== p.id || !Number.isFinite(v)) return;
+    OBRA.pct = Math.max(0, Math.min(100, v)); render();
+  });
+}
+const fmt1 = (v) => (Math.round(v * 10) / 10).toLocaleString('pt-BR');
+function linhaAndamento(a) {
+  if (!a) return 'etapa atual não marcada';
+  const concl = `${a.iA} de ${a.n} etapa${a.n === 1 ? '' : 's'} concluída${a.iA === 1 ? '' : 's'}`;
+  const atual = a.obra ? `${fmt1(a.obraPct)}% executado no cronograma de obra`
+    : a.total ? `${a.feitas} de ${a.total} tarefa${a.total === 1 ? '' : 's'} feita${a.feitas === 1 ? '' : 's'}` : 'nenhuma tarefa feita ainda';
+  return `${concl} · <b>${esc(a.etapa)}</b>: ${atual}`;
+}
+const barraAndamento = (a) => `<div class="barra2" role="img" aria-label="${a ? a.pct : 0}% do projeto"><i style="width:${a ? a.pAntes.toFixed(2) : 0}%"></i><b style="width:${a ? a.pAtual.toFixed(2) : 0}%"></b></div>`;
+function comoAndamento() {
+  const a = andamentoAtual(), temPesos = Object.keys((souEquipe() ? PROJ.etapa_pesos : AND_EXT && AND_EXT.etapa_pesos) || {}).length;
+  abrirModal('Como o andamento é calculado', `<ol style="margin:0;padding-left:20px;display:grid;gap:8px;font-size:14px;line-height:1.5">
+      <li><b>Cada etapa conta uma parte do projeto</b>${temPesos ? ', pelo peso que o escritório deu a ela.' : ' (todas iguais).'}</li>
+      <li><b>Etapa concluída conta inteira.</b></li>
+      <li><b>A etapa atual conta pela parte feita das tarefas dela</b> (Aprovado ou Concluído).</li>
+      <li><b>Numa etapa de obra, a parte feita vem do cronograma de obra</b>: o % executado de cada fase, pesado pela duração.</li>
+      <li><b>Etapa atual sem tarefa conta zero</b> até ser concluída.</li></ol>
+    ${a ? `<p class="sub" style="margin:0">Agora: ${fmt1(a.pAntes)}% das etapas concluídas + ${fmt1(a.pAtual)}% da etapa atual = <b>${a.pct}%</b>.</p>` : ''}
+    <div class="rodape"><button class="btn btn-d" onclick="fecharModal()">Entendi</button></div>`);
+}
+// o peso de cada etapa (só a admin): padrão 1; só grava o que for diferente de 1
+function editarPesos() {
+  if (!souAdmin()) return;
+  const et = PROJ.etapas || [], pesos = PROJ.etapa_pesos || {};
+  abrirModal('Peso das etapas', `<p class="sub" style="margin:0">Quanto cada etapa pesa no andamento. Comece com todas iguais; mude só se uma etapa for bem maior que as outras (o Executivo, por exemplo).</p>
+    <div class="pesos">${et.map((e, i) => `<label for="pz-${i}">${esc(e)}</label><input id="pz-${i}" class="in" type="number" min="0" max="20" step="0.5" value="${pesoDa(pesos, e)}"><span class="tab" id="pz-p${i}"></span>`).join('')}</div>
+    <div class="rodape"><button class="btn" id="pz-igual">Voltar a pesos iguais</button><button class="btn btn-d" id="pz-ok">Salvar</button></div>`);
+  const ler = () => et.map((e, i) => Math.max(0, Math.min(20, Number($('pz-' + i).value) || 0)));
+  const mostra = () => { const v = ler(), W = v.reduce((a, b) => a + b, 0); v.forEach((x, i) => { $('pz-p' + i).textContent = W ? Math.round(x / W * 100) + '%' : '—'; }); };
+  et.forEach((e, i) => { $('pz-' + i).oninput = mostra; }); mostra();
+  $('pz-igual').onclick = () => { et.forEach((e, i) => { $('pz-' + i).value = 1; }); mostra(); };
+  $('pz-ok').onclick = async () => {
+    const v = ler(); if (!v.some((x) => x > 0)) return toast('Pelo menos uma etapa precisa pesar mais que zero.', true);
+    const obj = {}; et.forEach((e, i) => { if (v[i] !== 1) obj[e] = v[i]; });
+    $('pz-ok').disabled = true;
+    const { error } = await sb.from('escritorio_projetos').update({ etapa_pesos: obj }).eq('id', PROJ.id);
+    if (error) { $('pz-ok').disabled = false; return falhou(error, 'Não salvei os pesos'); }
+    PROJ.etapa_pesos = obj; fecharModal(); render(); toast('Pesos salvos');
+  };
+}
 function pillPrazo(t) {
   if (!t.prazo) return '';
   const d = dias(t.prazo);
@@ -483,7 +595,9 @@ const COR = { tar: ['#4F46E5', '#818CF8', '#EEF2FF'], arq: ['#D97706', '#F59E0B'
   cot: ['#0D9488', '#2DD4BF', '#F0FDFA'], fin: ['#16A34A', '#4ADE80', '#F0FDF4'], emi: ['#0284C7', '#38BDF8', '#F0F9FF'],
   foto: ['#BE185D', '#F472B6', '#FDF2F8'], cli: ['#0369A1', '#38BDF8', '#F0F9FF'], forn: ['#C2410C', '#FB923C', '#FFF7ED'] };
 // faixa colorida no topo de cada tela (ícone, título, uma linha e os botões da tela)
-const faixa = (ic, titulo, sub, acoes = '') => `<section class="faixa rise" style="--c1:${COR[ic][0]};--c2:${COR[ic][1]}">
+// 27/09 (maquete aprovada): pra quem é DE FORA (cliente, fornecedor), a faixa de toda tela usa a cor do escritório
+const corDaFaixa = (ic) => (PROJ && PAPEL && !souEquipe() && MARCA && MARCA.cor ? [MARCA.cor, MARCA.clara] : [COR[ic][0], COR[ic][1]]);
+const faixa = (ic, titulo, sub, acoes = '') => `<section class="faixa rise" style="--c1:${corDaFaixa(ic)[0]};--c2:${corDaFaixa(ic)[1]}">
   <span class="fx-ico">${svg(ic, 24)}</span><div style="flex:1 1 260px;min-width:0"><h2>${titulo}</h2>${sub ? `<p>${sub}</p>` : ''}</div>${acoes ? `<div class="linha fx-acoes">${acoes}</div>` : ''}</section>`;
 // cor estável por texto (projeto, pessoa): o mesmo nome sai sempre com a mesma cor
 const PALETA = ['tar', 'arq', 'atas', 'eq', 'plan', 'crono', 'memo', 'rev', 'cot', 'fin'];
@@ -540,13 +654,17 @@ async function carregarProjeto(id) {
   ]);
   const temChk = !ck.error && !et.error && !te.error;
   // emissões: também acessório — falhou, a tela de Emissões diz que não leu (e o resto segue)
-  const [em, ev, de, fo] = await Promise.all([
+  const [em, ev, de, fo, mk] = await Promise.all([
     sb.from('escritorio_emissoes').select('id,arquivo_id,arquivo_nome,revisao,copia_id,copia_nome,nota,emitido_por,emitido_em').eq('projeto_id', id).order('emitido_em', { ascending: false }),
     sb.from('escritorio_emissao_eventos').select('id,emissao_id,tipo,em,nota,criado_em,pelo_cliente,registrado_por').eq('projeto_id', id).order('em').order('criado_em'),
     // 26/09 (perfis): pra quem cada emissão foi, e as fotos (o banco já filtra: o cliente só vê as "pro cliente")
     sb.from('escritorio_emissao_destinos').select('emissao_id,membro_id,enviado_em,permission_id').eq('projeto_id', id),
     sb.from('escritorio_fotos').select('id,legenda,etapa,pro_cliente,enviada_por,enviada_em').eq('projeto_id', id).order('enviada_em', { ascending: false }),
+    // 27/09: a marca do escritório (nome, logo, cor do Meu cadastro de quem administra) — acessório: sem ela, o AI.arq
+    sb.rpc('escritorio_marca', { p_projeto: id }),
   ]);
+  // 27/09: o andamento do CLIENTE vem do banco só em números (ele não lê a linha do projeto nem todas as tarefas)
+  const ae = papel.data === 'cliente' ? await sb.rpc('escritorio_andamento', { p_projeto: id }) : null;
   const temEmi = !em.error && !ev.error;
   const membros = m.data, notas = {};
   if (papel.data === 'dono') {   // contatos da equipe: só o admin (LGPD — a equipe não precisa do telefone do colega)
@@ -567,6 +685,9 @@ async function carregarProjeto(id) {
   TEM_CHK = temChk; CHK = temChk ? ck.data : []; ETQ = temChk ? et.data : []; TETQ = temChk ? te.data : [];
   TEM_EMI = temEmi; EMI = temEmi ? em.data : []; EMI_EV = temEmi ? ev.data : [];
   DEST = de.error ? [] : de.data; TEM_FOTOS = !fo.error; FOTOS = fo.error ? [] : fo.data;
+  MARCA = mk.error ? null : marcaLimpa((mk.data || [])[0]);
+  AND_EXT = ae && !ae.error ? (ae.data || [])[0] || null : null;
+  OBRA = { projeto: null, pct: null };            // o % da obra é pedido de novo a cada leitura
   return true;
 }
 
@@ -575,6 +696,16 @@ function renderMoldura() {
   const eu = PROJ && meuMembro();
   $('eu-nome').textContent = (eu && nomeDe(eu)) || EU.email;
   $('eu-ini').textContent = eu ? iniciais(eu) : (EU.email || '·')[0].toUpperCase();
+  // 27/09 (maquete aprovada): dentro de um projeto, o alto do menu é do ESCRITÓRIO (logo, nome, cor do Meu cadastro de
+  // quem administra); quem é de fora vê "via AI.arq" no lugar do selo do piloto. Fora de um projeto, o AI.arq.
+  const mk = PROJ && VIEW !== 'lista' ? MARCA : null, sm = document.querySelector('.s-marca');
+  if (sm) {
+    sm.setAttribute('href', mk && !souEquipe() ? '#/' : 'dashboard.html');
+    sm.innerHTML = mk ? `${mk.logo ? `<img class="s-logo-img" src="${esc(mk.logo)}" alt="">` : `<span class="s-logo"${mk.cor ? ` style="background:${mk.cor}"` : ''}>${esc(iniciaisDe(mk.nome))}</span>`}<span class="s-nome">${esc(mk.nome)}</span>`
+      : '<span class="s-logo">AI</span><span class="s-nome">AI.arq</span>';
+  }
+  const selo = document.querySelector('.cab .beta');
+  if (selo) selo.textContent = mk && !souEquipe() ? 'via AI.arq' : 'Piloto';
   if (VIEW === 'lista' || !PROJ) {
     $('side-c').innerHTML = `<a class="s-it" href="dashboard.html">← Painel do AI.arq</a>
       <div class="s-grp" style="margin-top:12px"><div class="s-grp-t">Projetos do escritório</div>
@@ -601,7 +732,7 @@ function renderMoldura() {
       </div>
       <div class="s-grp"><button type="button" class="s-it" onclick="sairDaConta()">Sair</button></div>`;
     const nomesF = { capa: cli ? 'Visão do projeto' : 'Visão geral', tarefas: cli ? 'Suas pendências' : 'Suas tarefas', arquivos: 'Arquivos', emissoes: 'Emissões', fotos: 'Fotos', cronograma: 'Cronograma da obra' };
-    $('trilha').innerHTML = `<a href="#/">Escritório</a><span>›</span><a href="#/p/${PROJ.id}/capa">${esc(PROJ.nome)}</a>`;
+    $('trilha').innerHTML = `<a href="#/">${esc(nomeEscritorio())}</a><span>›</span><a href="#/p/${PROJ.id}/capa">${esc(PROJ.nome)}</a>`;
     $('titulo').textContent = nomesF[VIEW] || PROJ.nome;
     return;
   }
@@ -620,9 +751,9 @@ function renderMoldura() {
       ${fora(`memorial.html?job_id=${J}`, 'memo', 'Memorial')}
       ${souAdmin() ? fora(`projeto.html?job_id=${J}#cotacoes`, 'cot', 'Comparativo') : ''}
     </div>` : '';
-  $('side-c').innerHTML = `<a class="s-it" href="#/" style="font-size:12px;color:#64748B">← Projetos do Escritório</a>
-    <div class="s-fix"><span class="tag">Escritório · projeto aberto</span><b>${esc(PROJ.nome)}</b><span>${esc(PROJ.etapa_atual || '')} · ${nAtivos} pessoa${nAtivos === 1 ? '' : 's'}</span></div>
-    <div class="s-grp"><div class="s-grp-t">Escritório</div>
+  $('side-c').innerHTML = `<a class="s-it" href="#/" style="font-size:12px;color:#64748B">← ${souAdmin() && MARCA ? 'Projetos do ' + esc(MARCA.nome) : 'Projetos do Escritório'}</a>
+    <div class="s-fix"><span class="tag">${esc(nomeEscritorio())} · projeto aberto</span><b>${esc(PROJ.nome)}</b><span>${esc(PROJ.etapa_atual || '')} · ${nAtivos} pessoa${nAtivos === 1 ? '' : 's'}</span></div>
+    <div class="s-grp"><div class="s-grp-t">${esc(nomeEscritorio())}</div>
       ${it('capa', 'capa', 'Página do projeto')}
       ${it('tarefas', 'tar', 'Tarefas', souAdmin() ? (revisar ? `<span class="s-est pend">${revisar} pra revisar</span>` : '') : (minhasAt ? `<span class="s-est pend">${minhasAt} atrasada</span>` : ''))}
       ${it('arquivos', 'arq', 'Arquivos', PROJ && PROJ.pasta_id ? '' : '<span class="s-est">Drive</span>')}
@@ -632,7 +763,7 @@ function renderMoldura() {
       ${it('equipe', 'eq', 'Equipe', `<span class="s-est">${nAtivos}</span>`)}
     </div>${obra}`;
   const nomes = { capa: 'Página do projeto', tarefas: 'Tarefas', arquivos: 'Arquivos', emissoes: 'Emissões', atas: 'Atas', equipe: 'Equipe', fotos: 'Fotos' };
-  $('trilha').innerHTML = `<a href="dashboard.html">Início</a><span>›</span><a href="#/">Escritório</a><span>›</span><a href="#/p/${PROJ.id}/capa">${esc(PROJ.nome)}</a>`;
+  $('trilha').innerHTML = `<a href="dashboard.html">Início</a><span>›</span><a href="#/">${esc(nomeEscritorio())}</a><span>›</span><a href="#/p/${PROJ.id}/capa">${esc(PROJ.nome)}</a>`;
   $('titulo').textContent = nomes[VIEW] || PROJ.nome;
 }
 
@@ -834,8 +965,8 @@ function telaCapa() {
         ${EMI[0] ? `<div><p class="lbl" style="margin:0 0 4px">Última emissão</p><p class="t" style="overflow-wrap:anywhere">${esc(EMI[0].copia_nome || EMI[0].arquivo_nome)}</p><p class="d" style="margin:0;display:flex;gap:6px;align-items:center;flex-wrap:wrap">${esc(dBR(EMI[0].emitido_em))} ${pillEmissao(EMI[0])}</p></div>` : ''}
       </div>
     </div>
-    ${et.length ? `<div style="margin-top:22px"><p class="lbl">Etapas</p><div class="etapas" role="tablist">
-      ${et.map((e, i) => { const n = TAR.filter((t) => t.etapa === e).length; return `<button role="tab" class="etp ${i < iA ? 'feita' : i === iA ? 'atual' : ''}" aria-pressed="${ETAPA_SEL === e}" onclick="verEtapa(${i})"><span class="num">${i < iA ? '✓' : i + 1}</span><b>${esc(e)}</b><small>${n} tarefa${n === 1 ? '' : 's'}</small></button>`; }).join('')}</div>
+    ${et.length ? `<div style="margin-top:22px"><div class="linha" style="justify-content:space-between"><p class="lbl" style="margin:0">Etapas</p>${souAdmin() ? '<button type="button" class="lnk" onclick="editarPesos()">Peso das etapas</button>' : ''}</div><div class="etapas" role="tablist">
+      ${et.map((e, i) => { const ts = TAR.filter((t) => t.etapa === e), n = ts.length, f = ts.filter((t) => !aberta(t)).length; return `<button role="tab" class="etp ${i < iA ? 'feita' : i === iA ? 'atual' : ''}" aria-pressed="${ETAPA_SEL === e}" onclick="verEtapa(${i})"><span class="num">${i < iA ? '✓' : i + 1}</span><b>${esc(e)}</b><small>${ehEtapaDeObra(e) && p.job_id ? 'pelo cronograma de obra' : `${n} tarefa${n === 1 ? '' : 's'}${f ? ` · ${f} feita${f === 1 ? '' : 's'}` : ''}`}</small></button>`; }).join('')}</div>
       ${avancoEtapa(et, iA)}
       ${ETAPA_SEL ? painelEtapa() : `<p class="sub">Clique numa etapa pra ver as tarefas dela${souAdmin() ? ' ou pra voltar a ela' : ''}.</p>`}</div>` : ''}
   </section>
@@ -874,17 +1005,19 @@ function telaCapa() {
 // 25/09 (Pedro: "essa parte branca fica muito vazia"): o resumo do andamento, ao lado da próxima entrega.
 // Tudo contado das tarefas e etapas que a tela já tem; nada estimado.
 function resumoAndamento(et, iA, abertas) {
-  // 26/09 (auditoria TELA-9): andamento = etapas CONCLUÍDAS (as antes da atual). Contar a atual dava 11% no
-  // primeiro dia e 100% com a última ainda aberta.
-  const pct = et.length && iA >= 0 ? Math.round((iA / et.length) * 100) : 0;
+  // 26/09 (auditoria TELA-9): as etapas CONCLUÍDAS são as antes da atual (contar a atual dava 11% no 1º dia).
+  // 27/09 (Pedro aprovou a maquete): + a parte FEITA da etapa atual — tarefas, ou o cronograma de obra (andamentoAtual)
+  pedirObra();
+  const a = andamentoAtual();
   const porSt = ST.map((s) => ({ s, n: TAR.filter((t) => t.status === s.k).length })).filter((x) => x.n);
   const total = porSt.reduce((a, x) => a + x.n, 0);
   const prox = abertas.filter((t) => t.prazo).sort((a, b) => String(a.prazo).localeCompare(String(b.prazo))).slice(0, 3);
   return `<div class="resumo">
     <div class="rs"><p class="lbl">Andamento do projeto</p>
-      ${et.length ? `<p class="rs-n tab">${pct}%</p><div class="barra" style="--c1:#4f46e5;--c2:#06b6d4"><i style="width:${pct}%"></i></div>
-        <p class="sub" style="margin:6px 0 0">${iA >= 0 ? `etapa ${iA + 1} de ${et.length} · ${esc(et[iA])}` : 'etapa atual não marcada'}</p>` : '<p class="sub" style="margin:0">Sem etapas neste projeto.</p>'}</div>
-    <div class="rs"><p class="lbl">Tarefas por coluna</p>
+      ${et.length ? `<p class="rs-n tab">${a ? a.pct : 0}%</p>${barraAndamento(a)}
+        <p class="sub" style="margin:6px 0 0">${linhaAndamento(a)}</p>
+        <button type="button" class="lnk" style="margin-top:4px" onclick="comoAndamento()">Como é calculado?</button>` : '<p class="sub" style="margin:0">Sem etapas neste projeto.</p>'}</div>
+    <div class="rs"><p class="lbl">Tarefas no quadro</p>
       ${total ? `<p class="rs-n tab">${total}</p><div class="pilha">${porSt.map((x) => `<i style="flex:${x.n};background:${x.s.cor}" title="${esc(x.s.t)}: ${x.n}"></i>`).join('')}</div>
         <div class="leg">${porSt.map((x) => `<span><i style="background:${x.s.cor}"></i>${esc(x.s.t)} <b class="tab">${x.n}</b></span>`).join('')}</div>` : '<p class="sub" style="margin:0">Nenhuma tarefa ainda.</p>'}</div>
     <div class="rs"><p class="lbl">Próximos prazos</p>
@@ -1817,9 +1950,15 @@ function telaVisaoCliente() {
   const p = PROJ, et = p.etapas || [], iA = et.indexOf(p.etapa_atual);
   const esperando = EMI.filter(esperaResposta), pend = TAR.filter(aberta).sort(porPrazo);
   setTimeout(carregarMiniaturas, 0);
-  return `<section class="card rise"><div class="banda" style="background:linear-gradient(135deg,#0369A1,#38BDF8)">
+  // 27/09 (maquete aprovada): a faixa na cor do escritório e o andamento (a mesma conta da admin, com os números do banco)
+  pedirObra();
+  const a = andamentoAtual();
+  return `<section class="card rise"><div class="banda" style="background:${faixaDeFora('linear-gradient(135deg,#0369A1,#38BDF8)')}">
       <p class="lbl" style="margin:0">${esc(p.etapa_atual || 'Seu projeto')}</p><h2>${esc(p.nome)}</h2>
-      <div class="chips">${p.escritorio ? `<span>com ${esc(p.escritorio)}</span>` : ''}${p.proxima_entrega || p.proxima_entrega_data ? `<span>Próxima entrega: ${esc(p.proxima_entrega || 'entrega')}${p.proxima_entrega_data ? ' · ' + dBR(p.proxima_entrega_data) : ''}</span>` : ''}</div></div>
+      <div class="chips">${MARCA || p.escritorio ? `<span>com ${esc(MARCA ? MARCA.nome : p.escritorio)}</span>` : ''}${p.proxima_entrega || p.proxima_entrega_data ? `<span>Próxima entrega: ${esc(p.proxima_entrega || 'entrega')}${p.proxima_entrega_data ? ' · ' + dBR(p.proxima_entrega_data) : ''}</span>` : ''}</div></div>
+    ${a ? `<div class="rs" style="margin-bottom:14px"><p class="lbl">Andamento do projeto</p><p class="rs-n tab">${a.pct}%</p>${barraAndamento(a)}
+      <p class="sub" style="margin:6px 0 0">${a.iA} de ${a.n} etapa${a.n === 1 ? '' : 's'} concluída${a.iA === 1 ? '' : 's'} · agora em <b>${esc(a.etapa)}</b></p>
+      <button type="button" class="lnk" style="margin-top:4px" onclick="comoAndamento()">Como é calculado?</button></div>` : ''}
     ${et.length ? `<p class="lbl">Em que etapa está</p><div class="etapas">${et.map((e, i) => `<div class="etp ${i < iA ? 'feita' : i === iA ? 'atual' : ''}" style="cursor:default"><span class="num">${i < iA ? '✓' : i + 1}</span><b>${esc(e)}</b></div>`).join('')}</div>` : ''}
   </section>
   ${esperando.map((e) => `<section class="card rise" style="border:2px solid #F59E0B"><div class="linha" style="gap:16px">
