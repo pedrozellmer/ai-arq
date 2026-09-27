@@ -100,20 +100,20 @@
    "disc": "Fechamentos Verticais",
    "medido": true,
    "obs": "Fonte: comprimento do layer 'ARQ-ALV-CONSTRUIR' = 16,48 m × altura 2,50 m (cota do corte AA) = 41,20 m²",
+   "nota": "27/09/2026 (Pedro liberou): o escolhido da rodada de 17/07 era o 89290 — ALVENARIA ESTRUTURAL — pra uma parede de vedação de reforma de escritório. Trocado pelo 103346 (vedação, bloco cerâmico 14x19x29, mesma espessura). O 89290 fica como alternativa com a nota de texto que o sinapi_rescore dá hoje (0,63 — MAIOR que a do certo, 0,59: é o caso em que a semelhança de texto engana).",
    "sinapi": [
+    {
+     "codigo": "103346",
+     "unidade": "M2",
+     "descricao": "ALVENARIA DE VEDAÇÃO DE BLOCOS CERÂMICOS FURADOS NA VERTICAL DE 14X19X29 CM (ESPESSURA 14 CM) E ARGAMASSA DE ASSENTAMENTO COM PREPARO EM BETONEIRA. AF_12/2021",
+     "papel": "escolhido"
+    },
     {
      "codigo": "89290",
      "unidade": "M2",
      "descricao": "ALVENARIA ESTRUTURAL DE BLOCOS CERÂMICOS 14X19X29, (ESPESSURA DE 14 CM), UTILIZANDO PALHETA E ARGAMASSA DE ASSENTAMENTO COM PREPARO EM BETONEIRA. AF_03/2023",
-     "papel": "escolhido"
-    },
-    {
-     "codigo": "104441",
-     "unidade": "M2",
-     "descricao": "ALVENARIA DE BLOCOS DE CONCRETO ESTRUTURAL 14X19X39 CM (ESPESSURA 14 CM), FBK = 8 MPA, UTILIZANDO PALHETA. AF_10/2022",
      "papel": "alternativa",
-     "busca_simplificada": true,
-     "semelhanca_texto": 0.52
+     "semelhanca_texto": 0.630435
     }
    ]
   },
@@ -214,20 +214,20 @@
    "disc": "Pisos e Rodapés",
    "medido": true,
    "obs": "Fonte: área hachurada do layer 'PISO-PORCELANATO' = 86,10 m²",
+   "nota": "27/09/2026 (Pedro liberou): o escolhido da rodada de 17/07 era o 87261 — porcelanato 60x60 em ambiente de área MENOR QUE 5 M² — pro piso de um escritório de 86,1 m². Trocado pelo 87263 (ambientes MAIORES QUE 10 M²). O 87261 fica como alternativa com a nota de texto que o sinapi_rescore dá hoje (0,40 — a mesma do certo: o texto não separa as faixas de área).",
    "sinapi": [
+    {
+     "codigo": "87263",
+     "unidade": "M2",
+     "descricao": "REVESTIMENTO CERÂMICO PARA PISO COM PLACAS TIPO PORCELANATO DE DIMENSÕES 60X60 CM APLICADA EM AMBIENTES DE ÁREA MAIOR QUE 10 M². AF_02/2023_PE",
+     "papel": "escolhido"
+    },
     {
      "codigo": "87261",
      "unidade": "M2",
      "descricao": "REVESTIMENTO CERÂMICO PARA PISO COM PLACAS TIPO PORCELANATO DE DIMENSÕES 60X60 CM APLICADA EM AMBIENTES DE ÁREA MENOR QUE 5 M². AF_02/2023_PE",
-     "papel": "escolhido"
-    },
-    {
-     "codigo": "101735",
-     "unidade": "M2",
-     "descricao": "PISO DE BORRACHA ESPORTIVO, ESPESSURA 15MM, ASSENTADO COM ARGAMASSA. AF_02/2026",
      "papel": "alternativa",
-     "busca_simplificada": true,
-     "semelhanca_texto": 0.15
+     "semelhanca_texto": 0.4
     }
    ]
   },
