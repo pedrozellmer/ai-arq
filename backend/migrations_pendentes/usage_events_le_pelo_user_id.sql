@@ -1,4 +1,7 @@
--- ⏳ PENDENTE — NÃO aplicar sem o ok do Pedro. Ensaiada em 27/09/2026 num DO-block que se desfaz (ver o fim).
+-- ✅ APLICADA em 27/09/2026 (migração `usage_events_le_pelo_user_id`, versão 20260927234109), com ok do Pedro.
+-- Aplicada com 2 travas na mesma transação: (1) as 4 funções ainda eram as do ensaio (md5); (2) os números depois
+-- = os de antes nas 12 leituras. Depois de aplicada, o md5 de cada corpo no banco = o deste arquivo.
+-- Ensaiada antes num DO-block que se desfez: antes = depois = depois com o e-mail zerado numa cópia temporária.
 --
 -- LGPD (auditoria SI de 27/09/2026, minimização): `usage_events` guardava o e-mail junto com o `user_id` em todo
 -- evento de conta logada. Medido em 27/09: 5.427 eventos; 4.879 com e-mail, TODOS com `user_id`; 0 com conta
