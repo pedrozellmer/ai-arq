@@ -170,10 +170,79 @@ def test_dois_quadros_na_mesma_folha_nao_se_misturam():
     assert "indice" not in qs[1]["provas"], "sem Índice/Superfície total a prova não existe"
 
 
+def test_a_linha_de_unidades_e_a_logo_abaixo_do_cabecalho_nao_a_do_quadro_de_baixo():
+    """Dois quadros empilhados com o cabeçalho fora do alinhamento da coluna:
+    as unidades do quadro de BAIXO não podem entrar na conta das colunas do de
+    cima (6 unidades → cairia no X do cabeçalho e o "-" iria pra Volume)."""
+    x_cab = (0.0, 11.0, 28.0)
+    base = _um(_quadro(x_cab=x_cab))
+    qs = parse_quadro_consumo(_quadro(x_cab=x_cab, pav="NIVEL A")
+                              + _quadro(x_cab=x_cab, y0=-300.0, pav="NIVEL B"))
+    assert [q["elementos"] for q in qs] == [base["elementos"]] * 2
+    assert all(q["confiavel"] for q in qs)
+
+
+# ──────────────── VIZINHOS na folha não entram no quadro ─────────────────
+def _legenda_a_direita():
+    """Coluna de legenda à direita do quadro, na geometria da folha do Eberick
+    (job 32a27efc, prancha 0005, em unidades do quadro): o título fica MAIS
+    PERTO do cabeçalho que o pavimento, e os itens caem ENTRE as linhas do
+    quadro. Textos genéricos."""
+    t = [_T("LEGENDA NÍVEIS :", 61.3, 2.8, 3.6)]
+    for k, y in enumerate((-6.2, -14.8, -23.5, -32.2)):
+        t.append(_T(f"EL. -{k + 1},00 (COR: {k + 1})", 86.2, y, 2.6))
+    return t
+
+
+def test_coluna_de_legenda_a_direita_nao_entra_no_quadro():
+    """🩸 26/09/2026 (revisão) — sem o limite à direita da faixa, o título da
+    legenda virava o pavimento e um item da legenda entre Vigas e Pilares
+    fechava o quadro antes de Pilares: nas 4 pranchas do caso, verde nos
+    testes (o positivo não tinha vizinho)."""
+    assert _um(_quadro() + _legenda_a_direita()) == _um(_quadro())
+
+
+def test_a_faixa_vai_so_UM_passo_de_coluna_o_menor_alem_do_Volume():
+    """O limite à direita é o Volume + o MENOR passo entre colunas (14.5 aqui,
+    não 19.5): uma nota a 17 do cabeçalho Volume já é outra coisa."""
+    assert _um(_quadro() + [_T("NOTA 1", 51.0, -13.1, 3.0)]) == _um(_quadro())
+
+
+def test_tabela_a_esquerda_nao_entra_no_quadro():
+    """Outra tabela à esquerda, com números na altura das linhas do quadro e
+    título na altura do pavimento."""
+    viz = [_T("RESUMO", -120.0, 5.3, 3.0)]
+    for k, y in enumerate((-10.2, -16.1, -22.0)):
+        viz += [_T(f"N{k + 1}", -120.0, y, 3.0), _T(f"{k + 1}2.50", -95.0, y, 3.0)]
+    assert _um(_quadro() + viz) == _um(_quadro())
+
+
+def test_o_pavimento_e_o_texto_NAO_numerico_mais_perto_acima_do_cabecalho():
+    """Um título mais acima e um número mais perto: nenhum dos dois é o
+    pavimento."""
+    tx = _quadro() + [_T("CONSUMO DE MATERIAIS", -2.8, 7.2, 3.0), _T("1.50", 20.0, 2.5, 3.0)]
+    assert _um(tx)["pavimento"] == "PAV. TIPO"
+
+
+def test_linha_que_nao_e_do_quadro_fecha_o_quadro():
+    """Uma nota logo abaixo do Total encerra o quadro: a linha de dados que
+    vem depois dela não é elemento (senão Σ Superfície ≠ Total)."""
+    q = _um(_quadro(linhas=(VIGAS, PILARES, TOTAL, ("Obs.: ver detalhe", X_ROT, (None, None, None)),
+                            ("Lajes", X_ROT, ("5.00", "2.00", "1.000"))), sup_total=None))
+    assert list(q["elementos"]) == ["Vigas", "Pilares"] and q["confiavel"] is True
+
+
 # ───────────────────── NEGATIVOS: leitura errada reprova ──────────────────
 def test_A_formas_e_superficie_trocadas_reprovam_na_soma_da_superficie():
     q = _um(_quadro(linhas=(("Vigas", X_ROT, ("8.00", "20.00", "2.500")), PILARES, TOTAL, INDICE)))
     assert q["provas"]["soma_superficie"]["ok"] is False and q["confiavel"] is False
+
+
+def test_A2_Total_com_forma_tambem_confere_a_forma():
+    ok = _um(_quadro(linhas=(VIGAS, PILARES, ("Total", X_TOTAL, ("30.00", "8.00", "3.200")), INDICE)))
+    assert ok["provas"]["soma_formas"]["ok"] is True and ok["confiavel"] is True
+    q = _um(_quadro(linhas=(VIGAS, PILARES, ("Total", X_TOTAL, ("31.00", "8.00", "3.200")), INDICE)))
+    assert q["provas"]["soma_formas"]["ok"] is False and q["confiavel"] is False
 
 
 def test_B_indice_no_lugar_do_volume_de_pilar_reprova():
@@ -205,6 +274,11 @@ def test_E_ponto_lido_como_milhar_reprova_no_indice():
                             ("Total", X_TOTAL, ("-", "8.00", "3200")), INDICE)))
     assert q["provas"]["soma_volume"]["ok"] is True, "a soma não vê a escala"
     assert q["provas"]["indice"]["ok"] is False and q["confiavel"] is False
+
+
+def test_E2_indice_com_traco_nao_e_numero_e_nao_ha_prova_de_indice():
+    q = _um(_quadro(linhas=(VIGAS, PILARES, TOTAL, ("Índices (por m2)", X_IND, ("-", "-", "-")))))
+    assert q["indice"] is None and "indice" not in q["provas"] and q["confiavel"] is True
 
 
 def test_F_sem_os_tracos_continua_confiavel():
@@ -247,6 +321,13 @@ def test_negativos_sem_quadro_nada_e_lido():
     # cabeçalho fora de ordem (Volume antes de Superfície) é outra tabela: não lê
     for x_cab in (X_CAB, (0.0, 22.0, 34.0)):
         assert parse_quadro_consumo(_quadro(cab=("Formas", "Volume", "Superfície"), x_cab=x_cab)) == []
+    # Superfície à ESQUERDA de Formas também não é o quadro
+    assert parse_quadro_consumo(_quadro(cab=("Superfície", "Formas", "Volume"),
+                                        x_cab=(-20.0, 0.0, 34.0))) == []
+    # cabeçalho e unidades sem nenhuma linha de elemento não é quadro
+    assert parse_quadro_consumo(_quadro(linhas=(), sup_total=None)) == []
+    # texto sem altura: não há tolerância relativa, não lê
+    assert parse_quadro_consumo([_T(t.text, *t.position, 0.0) for t in _quadro()]) == []
     # quadro de aço não é quadro de consumo
     aco = [_T("BITOLA (mm)", 0, 100, 5), _T("PESO (kg)", 100, 100, 5),
            _T("Ø 8.0", 0, 90, 5), _T("97,00", 100, 90, 5)]
@@ -275,7 +356,7 @@ def test_prompt_uma_linha_por_elemento_com_a_coluna_certa_e_sempre_estimado():
     assert "'Índices (por m2)'" in bloco and "'Superfície total'" in bloco
     assert "Total (soma das linhas: dupla contagem)" in bloco
     assert "NUNCA some entre pranchas" in bloco
-    assert "layer TABELAS" in bloco
+    assert "(layer TABELAS): não os releia lá" in bloco
 
 
 def test_prompt_leitura_reprovada_vira_REFERENCIA():

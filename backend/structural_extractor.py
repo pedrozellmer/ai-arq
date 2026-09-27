@@ -1208,7 +1208,11 @@ def structural_prompt_section(struct: dict) -> str:
         L.append("  → NÃO use como quantidade: a coluna Superfície (não é fôrma), 'Índices (por m2)'")
         L.append("    (m³ por m², não é volume), 'Superfície total' (área do pavimento) nem a linha")
         L.append("    Total (soma das linhas: dupla contagem).")
-        L.append(f"  → Os números do layer {_lyr} em TEXTOS/LEGENDAS são ESTAS células: não releia lá.")
+        # 🔑 Só o que é certo por construção: as células DESTE quadro também saem
+        # na lista TEXTOS. Não dizer que TODO número do layer é do quadro — o
+        # código não confere (outra tabela pode dividir o layer).
+        L.append("  → Os números DESTE quadro podem aparecer soltos, sem posição, em TEXTOS/LEGENDAS")
+        L.append(f"    (layer {_lyr}): não os releia lá — use as linhas acima.")
         L.append("  → O MESMO pavimento com os MESMOS valores em outra prancha (ou repetido nesta) é")
         L.append("    o mesmo quadro desenhado de novo: gere UMA vez, NUNCA some entre pranchas.")
         L.append("  → [REFERÊNCIA] = as provas do próprio quadro não fecharam: use só como base.")
@@ -1233,7 +1237,10 @@ def structural_prompt_section(struct: dict) -> str:
                 else:
                     L.append(f"  [MEDIDO] seção {s['secao_cm']}: {s['qtd']} un{nomes}")
             L.append("  → Gere um item por seção: \"Pilar de concreto — seção <s>\", unidade un,")
-            L.append("    quantidade literal, confirmado. A seção veio da geometria (medida).")
+            # 🔑 A regra geral não pode desdizer a linha [REFERÊNCIA] logo acima.
+            L.append("    quantidade literal, " + ("[MEDIDO] = confirmado e [REFERÊNCIA] = estimado."
+                                                  if _rep else "confirmado.")
+                     + " A seção veio da geometria (medida).")
             L.append("  → O comprimento do layer de pilar em 'COMPRIMENTOS POR LAYER' é o PERÍMETRO")
             L.append("    desses retângulos — NÃO vire item.")
             L.append("  → Volume desses pilares NÃO está medido (sem altura) — se listar concreto/fôrma,")

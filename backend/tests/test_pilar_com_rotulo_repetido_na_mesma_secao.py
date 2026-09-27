@@ -52,6 +52,21 @@ def test_POSITIVO_mesmo_rotulo_em_dois_desenhos_da_mesma_secao_vira_REFERENCIA()
     assert "P3 aparece(m) em mais de um desenho: 2 pilares distintos pelo nome" in txt
     assert 'Gere o item com 3, confidence="estimado"' in txt
     assert "[MEDIDO] seção" not in txt and "[MEDIDO] 3 pilares" not in txt
+    # a regra geral logo abaixo não pode desdizer a linha [REFERÊNCIA]
+    assert "quantidade literal, [MEDIDO] = confirmado e [REFERÊNCIA] = estimado." in txt
+    assert "quantidade literal, confirmado." not in txt
+
+
+def test_POSITIVO_uma_secao_repetida_e_outra_nao_o_cabecalho_ja_e_REFERENCIA():
+    """Basta UMA seção com rótulo repetido para o total não ser [MEDIDO]; a
+    outra seção, sem repetição, segue [MEDIDO]."""
+    p = count_pillars(_NS(struct_rects=[_r(0), _r(40000), _r(20000, w=0.40, h=0.40)],
+                          texts=[_T("P3", 0, 250), _T("P3", 40000, 250), _T("P9", 20000, 350)],
+                          blocks=[]))
+    txt = structural_prompt_section({"pilares": p})
+    assert "[REFERÊNCIA] 3 pilares contados" in txt and "[MEDIDO] 3 pilares" not in txt
+    assert "[REFERÊNCIA] seção 19x30 cm: 2 desenhos de pilar (P3)" in txt
+    assert "[MEDIDO] seção 40x40 cm: 1 un (P9)" in txt
 
 
 def test_NEGATIVO_rotulos_distintos_seguem_MEDIDO():
@@ -62,6 +77,7 @@ def test_NEGATIVO_rotulos_distintos_seguem_MEDIDO():
     assert "[MEDIDO] 2 pilares contados" in txt
     assert "[MEDIDO] seção 19x40 cm: 2 un (P1, P7)" in txt
     assert "[REFERÊNCIA]" not in txt.split("PILARES", 1)[1]
+    assert "quantidade literal, confirmado. A seção veio da geometria (medida)." in txt
 
 
 def test_NEGATIVO_retangulo_sem_rotulo_nao_e_repeticao():
