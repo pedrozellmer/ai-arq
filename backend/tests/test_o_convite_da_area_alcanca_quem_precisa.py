@@ -632,15 +632,19 @@ def test_o_aviso_de_confirmacao_nao_afirma_falta_de_cota(
     """🚨 "a planta não trazia cota pra medir" é uma AFIRMAÇÃO, e ela é falsa
     para quem só confirmou o número que a capa já trazia.
 
-    🪤 'Preenchemos os itens de piso/forro/laje' é a única marca que prova que
-    a mini-revisão rodou (foi assim que se mediu 0 usos em 293 projetos) — ela
-    tem que sobreviver nos DOIS ramos, e é por isso que os dois rodam aqui.
+    🪤 A rota precisa de uma ASSINATURA nos DOIS ramos — foi por ela que se
+    mediu 0 usos em 293 projetos. Até 28/09 era a frase "Preenchemos os itens
+    de piso/forro/laje", que saía mesmo sem preencher nada (7 de 8 usos);
+    agora é a marca `_MARCA_AVISO_AREA_INFORMADA`, e a frase diz o número que
+    a rota preencheu de verdade (aqui, a 1 linha em branco do ensaio).
     """
+    import main as _m
     _pd, avisos, _reg = _informar_area(monkeypatch, tmp_path, capa, digitado)
     texto = " ".join(avisos)
-    assert texto.count("Preenchemos os itens de piso/forro/laje") == 1, (
+    assert sum(a.startswith(_m._MARCA_AVISO_AREA_INFORMADA) for a in avisos) == 1, (
         "o ramo (%s → %s) perdeu a assinatura da rota — o uso da mini-revisão "
         "vira invisível pra metade dos casos: %r" % (capa, digitado, avisos))
+    assert "Preenchemos 1 item de piso/forro/laje" in texto, avisos
     if confirma:
         assert "CONFIRMADA POR VOCÊ" in texto, (
             "capa %s, digitado %s: era confirmação e o aviso não diz isso: %r"
@@ -672,3 +676,49 @@ def test_o_selo_da_planilha_vem_da_procedencia_e_nao_do_gesto(
         "a MESMA capa de 290,37 m² produziu %r ao ser confirmada e %r ao ser "
         "trocada — a rota parou de olhar a diferença"
         % (confirma.total_area_source, informa.total_area_source))
+
+
+# ── 28/09/2026 (estudo de leitura, achado 26): o aviso diz o que a rota FEZ ──
+def _rodar_rota(monkeypatch, tmp_path, rows, capa=0.0, digitado=200.0, avisos_antes=None):
+    proj = _projeto(capa, "medido")
+    if avisos_antes is not None:
+        proj["warnings"] = list(avisos_antes)
+    reg = _bancada(monkeypatch, tmp_path, proj=proj, rows=rows)
+    main.inform_project_area(_JOB, main.InformAreaPayload(area=digitado, pe_direito=0), request=None)
+    return [str(a) for u in reg["update"] for a in (u.get("warnings") or [])]
+
+
+def _linha(desc, qtd, origem=""):
+    return {"item_num": "1.1", "description": desc, "unit": "m2", "quantity": qtd,
+            "confidence": "estimado", "observations": "", "ref_sheet": "", "origem": origem,
+            "discipline": "Arquitetura"}
+
+
+def test_sem_linha_em_branco_o_aviso_nao_diz_que_preencheu(monkeypatch, tmp_path):
+    # 7 dos 8 projetos que usaram a rota: preenchidos=0 e o aviso dizia "Preenchemos"
+    avisos = " ".join(_rodar_rota(monkeypatch, tmp_path, [_linha("Piso em porcelanato", 50.0)]))
+    assert "Preenchemos" not in avisos, avisos
+    assert "Nenhuma linha de piso/forro/laje estava em branco" in avisos, avisos
+
+
+def test_quem_mediu_pelo_cad_nao_le_que_a_planta_nao_tinha_cota(monkeypatch, tmp_path):
+    rows = [_linha("Piso em porcelanato", 0.0), _linha("Parede de alvenaria", 80.0, origem="dxf_geom")]
+    avisos = " ".join(_rodar_rota(monkeypatch, tmp_path, rows))
+    assert "INFORMADA POR VOCÊ" in avisos, avisos
+    assert "não trazia cota" not in avisos and "envie o DXF" not in avisos, avisos
+
+
+def test_CONTROLE_sem_cad_medido_o_conselho_do_dxf_fica(monkeypatch, tmp_path):
+    avisos = " ".join(_rodar_rota(monkeypatch, tmp_path, [_linha("Piso em porcelanato", 0.0)]))
+    assert "(a planta não trazia cota pra medir)" in avisos and "envie o DXF" in avisos, avisos
+
+
+def test_o_aviso_da_vez_anterior_sai_e_os_outros_ficam(monkeypatch, tmp_path):
+    antes = [main._MARCA_AVISO_AREA_INFORMADA + "Área total de 180 m² CONFIRMADA POR VOCÊ "
+             "(é a que a planta já trazia). Preenchemos 1 item de piso/forro/laje que estavam "
+             "em branco com essa base — confira antes de orçar.",
+             "✅ Escala conferida pelo próprio desenho — x: 12 cotas batem com a geometria."]
+    avisos = _rodar_rota(monkeypatch, tmp_path, [_linha("Piso em porcelanato", 0.0)],
+                         capa=180.0, digitado=180.0, avisos_antes=antes)
+    assert sum(a.startswith(main._MARCA_AVISO_AREA_INFORMADA) for a in avisos) == 1, avisos
+    assert antes[1] in avisos, "aviso de outra rota não pode sumir"

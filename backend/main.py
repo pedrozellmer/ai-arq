@@ -32348,6 +32348,11 @@ class InformAreaPayload(BaseModel):
     pe_direito: float = 0
 
 
+#: 28/09/2026 — a marca dos avisos que o /inform-area grava. É por ela que a
+#: rota apaga o aviso da vez anterior (a frase do texto pode mudar; a marca não).
+_MARCA_AVISO_AREA_INFORMADA = "📐 "
+
+
 @app.post("/api/project/{job_id}/inform-area")
 def inform_project_area(job_id: str, payload: InformAreaPayload, request: Request):
     """Cliente informa a metragem DEPOIS do processamento, pra completar itens de
@@ -32571,21 +32576,37 @@ def inform_project_area(job_id: str, payload: InformAreaPayload, request: Reques
     # 7) Atualizar projeto: área informada + warning honesto (troca avisos antigos
     #    de "informe a área" pra não duplicar)
     _novos_avisos = []
+    # 🩸 28/09/2026 (estudo de leitura, achado 26) — dois FATOS FALSOS saíam
+    # daqui. (1) "Preenchemos os itens de piso/forro/laje" sem olhar `filled`:
+    # 7 dos 8 projetos que usaram esta rota terminaram com preenchidos=0 (log
+    # `motor:informou-depois`). (2) "(a planta não trazia cota)… envie o DXF"
+    # pra quem mandou CAD que ENTROU na medição. A condição é o CAD ter medido
+    # (linha `dxf_geom`), não o tipo do arquivo: DWG que falhou na conversão
+    # continua recebendo o conselho, que ali é o certo.
+    # 🔑 O aviso desta rota é reconhecido pela MARCA (antes, pela frase "não
+    # trazia", que não podia sair do texto sem o aviso velho ficar na tela).
+    # O aviso "CONFIRMADA" nem tinha a frase — acumulava a cada confirmação.
+    # A assinatura da rota é a marca; quem conta o uso é `motor:informou-depois`.
+    _cad_mediu = any(str(getattr(_it, "origem", "") or "") == "dxf_geom" for _it in items)
+    if filled > 0:
+        _o_que_fez = (f" Preenchemos {filled} {'item' if filled == 1 else 'itens'} de "
+                      f"piso/forro/laje que estavam em branco com essa base — confira "
+                      f"antes de orçar.")
+    else:
+        _o_que_fez = (" Nenhuma linha de piso/forro/laje estava em branco pra receber "
+                      "essa base — a área ficou registrada na capa do projeto.")
     if area > 0 and _confirma_o_que_ja_tinha:
         # 🪤 "a planta não trazia cota pra medir" é uma AFIRMAÇÃO, e ela é falsa
         # quando a planta trazia e o cliente só confirmou o número da capa.
-        # A frase "Preenchemos os itens de piso/forro/laje" continua nos dois
-        # caminhos de propósito: é a assinatura única desta rota no `warnings`,
-        # e é por ela que dá pra saber se a mini-revisão foi usada.
         _novos_avisos.append(
-            f"Área total de {area:.0f} m² CONFIRMADA POR VOCÊ (é a que a planta "
-            f"já trazia). Preenchemos os itens de piso/forro/laje que estavam em "
-            f"branco com essa base — confira antes de orçar.")
+            f"{_MARCA_AVISO_AREA_INFORMADA}Área total de {area:.0f} m² CONFIRMADA POR "
+            f"VOCÊ (é a que a planta já trazia).{_o_que_fez}")
     elif area > 0:
         _novos_avisos.append(
-            f"Área total de {area:.0f} m² INFORMADA POR VOCÊ (a planta não trazia cota "
-            f"pra medir). Preenchemos os itens de piso/forro/laje com essa base — "
-            f"confira antes de orçar. Pra medir de verdade, envie o DXF.")
+            f"{_MARCA_AVISO_AREA_INFORMADA}Área total de {area:.0f} m² INFORMADA POR VOCÊ"
+            + ("" if _cad_mediu else " (a planta não trazia cota pra medir)") + "."
+            + _o_que_fez
+            + ("" if _cad_mediu else " Pra medir de verdade, envie o DXF."))
     if pe_dir > 0:
         _novos_avisos.append(
             f"Pé-direito de {pe_dir:.2f} m INFORMADO POR VOCÊ. Com ele fechamos a "
@@ -32596,7 +32617,8 @@ def inform_project_area(job_id: str, payload: InformAreaPayload, request: Reques
     if not isinstance(_existing, list):
         _existing = []
     _existing = [w for w in _existing
-                 if "não trazia" not in str(w) and "informe a área" not in str(w).lower()
+                 if not str(w).startswith(_MARCA_AVISO_AREA_INFORMADA)
+                 and "não trazia" not in str(w) and "informe a área" not in str(w).lower()
                  and "informe a metragem" not in str(w).lower()
                  and "pé-direito de" not in str(w).lower()]
     _patch_proj = {"warnings": _existing + _novos_avisos}
