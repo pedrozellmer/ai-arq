@@ -213,9 +213,15 @@ def _elements_from_walls(walls: Optional[Sequence[dict]]) -> list[dict]:
 def _elements_from_rooms(rooms: Optional[Sequence[dict]],
                          m_per_pt: float) -> list[dict]:
     """Salas de detect_rooms -> 4 arestas do bbox como elementos casáveis.
-    Cota de ambiente costuma medir exatamente o vão interno (largura/fundo)."""
+    Cota de ambiente costuma medir exatamente o vão interno (largura/fundo).
+
+    📏 28/09/2026 (estudo de leitura, D7a): as duas arestas paralelas da sala
+    têm o MESMO comprimento — é uma medida só. A mesma cota escrita dos dois
+    lados ("2.15" em cima e embaixo da sala de 2,178) contava como 2 provas
+    independentes da escala. `grupo` = (sala, eixo): `match_cotas` aceita um
+    casamento por grupo."""
     out: list[dict] = []
-    for room in rooms or []:
+    for ri, room in enumerate(rooms or []):
         try:
             x0, y0, x1, y1 = room["bbox"]
         except (KeyError, TypeError, ValueError):
@@ -232,7 +238,7 @@ def _elements_from_rooms(rooms: Optional[Sequence[dict]],
             out.append({"kind": "sala", "length_m": ln_pt * m_per_pt,
                         "axis": axis,
                         "span_pt": (float(span[0]), float(span[1])),
-                        "p_pt": float(p)})
+                        "p_pt": float(p), "grupo": ("sala", ri, axis)})
     return out
 
 
@@ -247,7 +253,9 @@ def match_cotas(tokens: Sequence[dict], elements: Sequence[dict],
     elemento (folga AXIAL_MARGIN_FRAC) e a distância perpendicular <=
     clamp(PROX_FRAC * comprimento_pt, PROX_MIN_PT, PROX_MAX_PT).
     Pareamento guloso 1-pra-1 por menor erro relativo: cada token valida no
-    máximo UM elemento (e vice-versa) — independência de verdade.
+    máximo UM elemento (e vice-versa) — independência de verdade. Elementos
+    com o mesmo `grupo` (as duas arestas paralelas de uma sala) são UMA
+    medida: casam uma vez só.
     """
     cands: list[tuple[float, int, int]] = []
     for ei, el in enumerate(elements):
@@ -282,12 +290,18 @@ def match_cotas(tokens: Sequence[dict], elements: Sequence[dict],
     cands.sort()
     used_t: set[int] = set()
     used_e: set[int] = set()
+    used_g: set = set()
     matches: list[dict] = []
     for rel_err, ti, ei in cands:
         if ti in used_t or ei in used_e:
             continue
+        g = elements[ei].get("grupo")
+        if g is not None and g in used_g:
+            continue                    # a outra aresta da mesma medida
         used_t.add(ti)
         used_e.add(ei)
+        if g is not None:
+            used_g.add(g)
         el = elements[ei]
         matches.append({
             "cota": tokens[ti].get("text"),
