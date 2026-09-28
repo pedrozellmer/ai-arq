@@ -93,6 +93,15 @@ RUN wget -q -O /tmp/oda.deb "https://www.opendesign.com/guestfiles/get?filename=
 # Fontes dos templates via Google Fonts (Inter, Space Grotesk, Instrument Serif,
 # IBM Plex Sans/Mono). Tudo por wget (não depende de pacote apt) e tolerante a
 # falha: se uma fonte não baixar, o build segue e o WeasyPrint cai pra fallback.
+# 🩸 27/09/2026 — "tolerante a falha" deixava LIXO: `wget -O arquivo` cria o
+# arquivo ANTES de baixar, e as 4 URLs estáticas da IBM Plex Sans passaram a dar
+# 404 (a família virou fonte variável no repositório) — 4 .ttf de 0 byte na pasta
+# de fontes do sistema desde 14/07. É a data em que o ODA passou a recusar DWG
+# (0 falhas em 167 antes; 101 de 105 desde 14/09, sempre "AcDbTextStyleTableRecord"
+# — o registro de ESTILO DE TEXTO, que é onde o leitor mexe com fonte). Hipótese
+# forte, provada só depois do deploy (o log `libredwg:usado-no-fluxo` tem que cair).
+# Agora: a variável no lugar das 4 estáticas, só entra fonte que baixou inteira,
+# e nenhum .ttf vazio sobra.
 RUN mkdir -p /usr/share/fonts/truetype/aiarq && cd /usr/share/fonts/truetype/aiarq \
     && GH="https://github.com/google/fonts/raw/main/ofl" \
     && for u in \
@@ -100,14 +109,14 @@ RUN mkdir -p /usr/share/fonts/truetype/aiarq && cd /usr/share/fonts/truetype/aia
         "spacegrotesk/SpaceGrotesk%5Bwght%5D.ttf|SpaceGrotesk.ttf" \
         "instrumentserif/InstrumentSerif-Regular.ttf|InstrumentSerif-Regular.ttf" \
         "instrumentserif/InstrumentSerif-Italic.ttf|InstrumentSerif-Italic.ttf" \
-        "ibmplexsans/IBMPlexSans-Regular.ttf|IBMPlexSans-Regular.ttf" \
-        "ibmplexsans/IBMPlexSans-Medium.ttf|IBMPlexSans-Medium.ttf" \
-        "ibmplexsans/IBMPlexSans-SemiBold.ttf|IBMPlexSans-SemiBold.ttf" \
-        "ibmplexsans/IBMPlexSans-Bold.ttf|IBMPlexSans-Bold.ttf" \
+        "ibmplexsans/IBMPlexSans%5Bwdth,wght%5D.ttf|IBMPlexSans.ttf" \
         "ibmplexmono/IBMPlexMono-Regular.ttf|IBMPlexMono-Regular.ttf" \
         "ibmplexmono/IBMPlexMono-Medium.ttf|IBMPlexMono-Medium.ttf" \
         "ibmplexmono/IBMPlexMono-SemiBold.ttf|IBMPlexMono-SemiBold.ttf" \
-        ; do src="${u%%|*}"; dst="${u##*|}"; wget -q --tries=2 --timeout=25 "$GH/$src" -O "$dst" || echo "font fail: $src"; done \
+        ; do src="${u%%|*}"; dst="${u##*|}"; \
+             if wget -q --tries=2 --timeout=25 "$GH/$src" -O "/tmp/$dst" && [ -s "/tmp/$dst" ]; \
+             then mv "/tmp/$dst" "$dst"; else echo "font fail: $src"; fi; rm -f "/tmp/$dst"; done \
+    && find /usr/share/fonts -type f -size 0 -print -delete \
     && fc-cache -f || true
 
 COPY requirements.txt .
