@@ -84,7 +84,9 @@ def test_CONTROLE_do_jeito_de_antes_o_email_ia_pro_arquivo(log):
 
 
 def test_a_mascara_pega_apelido_e_dominio_composto(log):
-    main._supa_log("x zarela+smoke@gmail.com y a.b@c-d.com.br z")
+    # 🪤 exemplo FICTÍCIO: e-mail de provedor pessoal (gmail…) aqui reprova o
+    # guarda do repositório público (test_repo_publico_nao_expoe_cliente)
+    main._supa_log("x fulano+teste@exemplo.com y a.b@c-d.com.br z")
     txt = _ler(log)
     assert "@" not in txt and txt.count("<e-mail>") == 2, txt
 
