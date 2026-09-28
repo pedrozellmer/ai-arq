@@ -3633,7 +3633,15 @@ def _desenhos_no_modelo(msp, caixa=None) -> list:
                 for passo in range(0, 21):
                     for cx in colunas:
                         v = (cx, iy + passo)
-                        if v in comp_de:
+                        # 🩸 27/09/2026 (estudo, item 7): o SUBLINHADO do título
+                        # é o 1º traço acima do meio da letra — e virava "o
+                        # desenho" (no banho, 4 elevações e 1 corte eram só o
+                        # sublinhado: 181 m seguiam na soma). Componente que
+                        # não passa da LINHA DE CÉLULAS do título não é o
+                        # desenho. Em células, não em altura de letra: a caixa
+                        # do componente é arredondada pra célula, e com célula
+                        # grande o traço "subia" além de qualquer folga em h.
+                        if v in comp_de and comps[comp_de[v]][3] > y0 + (iy + 1.5) * cel:
                             achado = comp_de[v]
                             break
                     if achado is not None:

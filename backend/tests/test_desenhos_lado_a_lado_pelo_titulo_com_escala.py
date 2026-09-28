@@ -164,6 +164,30 @@ def test_CONTROLE_sem_ponto_longe_o_miolo_nao_corta_desenho_da_ponta(tmp_path):
     assert ts.get("CORTE A-A") == "vista", ts
 
 
+@pytest.mark.parametrize("y_tit,y_sub,h,y_esc,h_esc", [
+    (34.1, 33.9, 0.7, 33.3, 0.5),   # letra perto da célula
+    (33.9, 33.85, 0.4, 33.3, 0.3),  # célula BEM maior que a letra (o real: 16 × 7)
+])
+def test_o_sublinhado_do_titulo_nao_vira_o_desenho(tmp_path, y_tit, y_sub, h, y_esc, h_esc):
+    """🩸 27/09 (estudo, item 7): o SUBLINHADO do título era o 1º traço acima
+    do meio da letra e virava "o desenho" — no banho, 4 elevações e 1 corte
+    eram só o sublinhado e 181 m seguiam na soma. A caixa tem que ser a
+    elevação inteira, não o traço sob o título."""
+    p = _folha(tmp_path)
+    doc = ezdxf.readfile(p)
+    msp = doc.modelspace()
+    # Folha de 130 → célula de ~0,87. O título fica onde o meio da letra e o
+    # traço embaixo dele caem na MESMA linha de células (como no arquivo real,
+    # célula ~16 e letra 7), e a elevação começa 4 células acima: não emenda.
+    for a, b in [((40, 38), (55, 38)), ((55, 38), (55, 44)), ((55, 44), (40, 44)), ((40, 44), (40, 38))]:
+        msp.add_line(a, b, dxfattribs={"layer": "ALV"})
+    msp.add_text("ELEVAÇÃO 02", dxfattribs={"height": h, "insert": (40, y_tit)})
+    msp.add_text("escala 1:25", dxfattribs={"height": h_esc, "insert": (40, y_esc)})
+    msp.add_line((40, y_sub), (48, y_sub), dxfattribs={"layer": "ANOTA"})   # sublinhado
+    cx = next(f["caixa"] for f in dx._desenhos_no_modelo(msp) if f["titulo"] == "ELEVAÇÃO 02")
+    assert cx[1] <= 38.5 and cx[3] >= 43.5, cx
+
+
 def _duas_etiquetas(tmp_path, cod_a, cod_b, rot_b=0.0, pos_b=(5, 5)):
     doc = ezdxf.new("R2018")
     msp = doc.modelspace()
