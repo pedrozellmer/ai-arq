@@ -13477,6 +13477,7 @@ def _a_escala_sustenta_a_medicao(vm) -> tuple:
 
 import re as _re_escala   # 🪤 `re` NÃO está importado no topo deste módulo (só aliases); sem isto o deploy 8d597a6 morreu na partida
 _RX_N_COTAS_ESCALA = _re_escala.compile(r"(\d+)\s+(?:de\s+\d+\s+)?cotas", _re_escala.I)
+_RX_N_COTAS_DIGITADAS = _re_escala.compile(r"(\d+)\s+delas com n[úu]mero digitado", _re_escala.I)
 
 
 def _nome_prancha_bonito(caminho: str) -> str:
@@ -13512,7 +13513,10 @@ def _resumo_escala_arquivo(caminho: str, md: dict) -> dict:
         msg = md.get("unidade_corrigida_por_cotas")
         if msg:
             m = _RX_N_COTAS_ESCALA.search(str(msg))
+            # 28/09: quantas batem com número DIGITADO (a prova independente)
+            md_ = _RX_N_COTAS_DIGITADAS.search(str(msg))
             return {"nome": nome, "status": "cotas", "n": int(m.group(1)) if m else 0,
+                    "digitadas": int(md_.group(1)) if md_ else None,
                     "unidade": uni, "corrigida": True}
         if md.get("unidade_provada_por_rotulo"):
             return {"nome": nome, "status": "rotulo", "n": 0, "unidade": uni}
@@ -13616,6 +13620,11 @@ def _linhas_escala_projeto(arqs: list, n_medidos: int = -1,
             if a["status"] == "cotas":
                 n = a.get("n") or 0
                 q = f"{n} cotas batem" if n else "as cotas batem"
+                # 🩸 28/09 (job dd52081b): "934 cotas batem" — e 931 eram texto
+                # que o CAD escreve da própria medida (circular). A prova
+                # independente é a cota com número digitado; o cliente lê as duas.
+                if a.get("corrigida") and a.get("digitadas") is not None and n:
+                    q += f" ({a['digitadas']} com número digitado pelo projetista)"
                 partes.append(f"{a['nome']}: {q} com a geometria{u}"
                               + (" — unidade do arquivo corrigida por elas" if a.get("corrigida") else ""))
             elif a["status"] == "rotulo":

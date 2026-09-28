@@ -282,7 +282,8 @@ class DXFExtraction:
                                  (d.get("titulo") or d.get("folha"))[:50] for d in _fora[:8])
                              + ("…" if len(_fora) > 8 else ""))
             _vis = [d for d in _ds if d.get("tipo") == "vista"]
-            if _vis and not _planta1 and not _mult:
+            # 28/09: e o grosso do desenho está nas vistas — ver `_o_conteudo_e_das_vistas`
+            if _vis and not _planta1 and not _mult and _o_conteudo_e_das_vistas(_fl):
                 # 25/09: a prancha de CORTES do conjunto — a planta está em
                 # outro arquivo e o motor lê um arquivo por vez
                 lines.append("  • ⚠ esta prancha tem CORTE/ELEVAÇÃO e NENHUMA planta: as peças e "
@@ -1995,6 +1996,9 @@ def _validate_unit_by_dimensions(doc, unit_factor: float) -> dict:
 
         # Suporte por fator canônico: {fator: [comprimentos reais das cotas]}
         support: dict[float, list[float]] = {f: [] for f in _CANONICAL_METRIC_FACTORS}
+        # 28/09: quantas das que apoiam cada fator têm número DIGITADO — o aviso
+        # ao cliente dizia "934 cotas batem" e 931 eram texto automático
+        apoio_digitado: dict[float, int] = {f: 0 for f in _CANONICAL_METRIC_FACTORS}
         usable = 0
         n_digitadas = 0   # cotas com número DIGITADO — a única prova independente
         for meas, value, explicit_scale, auto_text in evidence:
@@ -2015,6 +2019,8 @@ def _validate_unit_by_dimensions(doc, unit_factor: float) -> dict:
                 n_digitadas += 1
             for f, real_len in cand.items():
                 support[f].append(real_len)
+                if not auto_text:
+                    apoio_digitado[f] += 1
 
         out["cotas_utilizaveis"] = usable
         out["cotas_digitadas"] = n_digitadas
@@ -2157,11 +2163,13 @@ def _validate_unit_by_dimensions(doc, unit_factor: float) -> dict:
                 "fator_original": unit_factor,
                 "fator_corrigido": novo,
                 "n_cotas": n,
+                "n_cotas_digitadas": apoio_digitado[novo],
                 "unidade_nome": _UNIT_FACTOR_NAMES[novo],
                 "mensagem": (
                     f"unidade corrigida pelas cotas da prancha: fator {unit_factor:g} → {novo:g} "
                     f"({_UNIT_FACTOR_NAMES[novo]}) — provado por {n} cotas "
-                    f"(texto exibido × medida geométrica, ±2%)"
+                    f"(texto exibido × medida geométrica, ±2%), {apoio_digitado[novo]} "
+                    f"delas com número digitado"
                 ),
             })
         # 🔍 27/08/2026 — A SEXTA SAÍDA, QUE O CONSERTO DE ONTEM DEIXOU PASSAR.
@@ -4222,6 +4230,24 @@ def _chave_de_texto(x) -> str:
     return " ".join(str(x or "").split()).lower()
 
 
+def _o_conteudo_e_das_vistas(folhas) -> bool:
+    """Os cortes/elevações têm pelo menos tanto conteúdo quanto os desenhos SEM
+    tipo (em comprimento E em blocos). Sem a medida por folha, True (como era).
+
+    🩸 28/09/2026 (job dd52081b): 1 corte reconhecido e 15 desenhos sem tipo —
+    as 4 plantas baixas do prédio, com 22.450 m e 560 blocos contra 73 m e 4
+    blocos do corte. "Nenhuma planta TIPADA" virava "NENHUMA planta" no texto
+    da IA, que repetiu isso ao cliente e deixou a parede em branco. O mesmo na
+    planta de forro da HWB 700 (573 m × 294 m). A folha de cortes de verdade
+    (p0003/p0004, 25/09) tem 0 fora das vistas."""
+    med = (folhas or {}).get("medida") or {}
+    vis, neu = med.get("vista"), med.get("neutro")
+    if not vis or not neu:
+        return True
+    return (float(neu.get("m") or 0) <= float(vis.get("m") or 0)
+            and float(neu.get("blocos") or 0) <= float(vis.get("blocos") or 0))
+
+
 def prancha_so_de_vista(extraction) -> bool:
     """A prancha tem corte/elevação e NENHUMA planta — a "prancha de cortes" do
     conjunto, cuja planta está em outro arquivo."""
@@ -4231,7 +4257,8 @@ def prancha_so_de_vista(extraction) -> bool:
             return False
         ds = fl.get("desenhos_lista") or []
         return (any(d.get("tipo") == "vista" for d in ds)
-                and not any(d.get("tipo") == "planta" for d in ds))
+                and not any(d.get("tipo") == "planta" for d in ds)
+                and _o_conteudo_e_das_vistas(fl))
     except Exception:
         return False
 
