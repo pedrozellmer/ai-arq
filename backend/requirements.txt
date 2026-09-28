@@ -91,4 +91,6 @@ pydyf==0.10.0
 # mais o url_fetcher de pdf_seguro.py, nao a versao do Jinja.
 Jinja2==3.1.6
 # 24/09/2026: cifra do acesso ao Google Drive do Escritório (antes vinha só de carona no pdfminer.six)
-cryptography==47.0.0
+# 27/09/2026 (auditoria SI): 47.0.0 → 50.0.1 (avisos OSV: OpenSSL embutido e verificação X.509, que não usamos).
+# Ensaiado: token cifrado na 47 abre na 50 e vice-versa (Fernet + HKDF) — as conexões do Drive seguem valendo.
+cryptography==50.0.1

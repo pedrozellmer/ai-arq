@@ -1482,6 +1482,23 @@ def _supabase_update(table, match_field, match_value, data):
         return False
 
 
+def _erro_interno(status: int, publico: str, e: BaseException, job_id: str = "") -> HTTPException:
+    """🔒 27/09/2026 (auditoria SI): o texto técnico da exceção NÃO vai mais pra tela.
+
+    37 rotas devolviam `f"Erro ao X: {e}"` — o navegador recebia URL interna, caminho de arquivo e resposta crua
+    do banco. Agora a tela recebe a frase em português; o detalhe vai pro log do Render na hora e pro error_log
+    numa thread (as rotas `async` não podem esperar o urllib do _log_error no laço de eventos)."""
+    detalhe = "%s: %s" % (type(e).__name__, str(e)[:500])
+    print("[erro-interno] %s | %s" % (publico, detalhe))
+    try:
+        import threading as _th
+        _th.Thread(target=_log_error, args=("erro-interno", "%s — %s" % (publico, detalhe), job_id or None),
+                   daemon=True).start()
+    except Exception:
+        pass
+    return HTTPException(status, publico.rstrip(". ") + ". Tente de novo em instantes.")
+
+
 # ═══════════════════════════════════════════════════════════════
 #  AUTH HELPERS — JWT do Supabase para admin e ownership
 # ═══════════════════════════════════════════════════════════════
@@ -22881,7 +22898,7 @@ async def admin_send_welcome(request: Request):
                 name = name or (_rows[0].get("full_name") or "")
                 email = _rows[0].get("email") or ""
         except Exception as _e:
-            raise HTTPException(500, f"Erro lendo perfil: {_e}")
+            raise _erro_interno(500, "Erro lendo perfil", _e)
     if not email:
         raise HTTPException(400, "Sem email pra enviar (mande 'email' no corpo ou configure a service_role)")
     if not name.strip() and uid:
@@ -25311,7 +25328,7 @@ async def admin_newsletter_cancel(request: Request):
         r.add_header("Content-Type", "application/json")
         _ur.urlopen(r, timeout=15)
     except Exception as _e:
-        raise HTTPException(502, f"Não consegui cancelar: {str(_e)[:120]}")
+        raise _erro_interno(502, "Não consegui cancelar", _e)
     return {"status": "ok"}
 
 
@@ -25390,7 +25407,7 @@ async def admin_instagram_post_status(request: Request):
         r.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         found = _json.loads(_ur.urlopen(r, timeout=15).read().decode("utf-8"))
     except Exception as _e:
-        raise HTTPException(502, f"Não consegui ler o post: {str(_e)[:120]}")
+        raise _erro_interno(502, "Não consegui ler o post", _e)
     if not found:
         raise HTTPException(404, "post não encontrado")
     post = found[0]
@@ -25411,7 +25428,7 @@ async def admin_instagram_post_status(request: Request):
         r.add_header("Prefer", "return=minimal")
         _ur.urlopen(r, timeout=15)
     except Exception as _e:
-        raise HTTPException(502, f"Não consegui atualizar: {str(_e)[:120]}")
+        raise _erro_interno(502, "Não consegui atualizar", _e)
     return {"status": "ok", "new_status": new_status}
 
 
@@ -25449,7 +25466,7 @@ async def admin_instagram_post_update(request: Request):
         rq.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         cur = _json.loads(_ur.urlopen(rq, timeout=15).read().decode("utf-8"))
     except Exception as _e:
-        raise HTTPException(502, f"Não consegui ler o post: {str(_e)[:120]}")
+        raise _erro_interno(502, "Não consegui ler o post", _e)
     if not cur:
         raise HTTPException(404, "post não encontrado")
     cur = cur[0]
@@ -25475,7 +25492,7 @@ async def admin_instagram_post_update(request: Request):
         r.add_header("Prefer", "return=minimal")
         _ur.urlopen(r, timeout=15)
     except Exception as _e:
-        raise HTTPException(502, f"Não consegui salvar: {str(_e)[:120]}")
+        raise _erro_interno(502, "Não consegui salvar", _e)
     return {"status": "ok", "demoted": demoted}
 
 
@@ -25503,7 +25520,7 @@ def _li_ler_post(pid: str) -> dict:
         r.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         found = _json.loads(_ur.urlopen(r, timeout=15).read().decode("utf-8"))
     except Exception as _e:
-        raise HTTPException(502, f"Não consegui ler o post: {str(_e)[:120]}")
+        raise _erro_interno(502, "Não consegui ler o post", _e)
     if not found:
         raise HTTPException(404, "post não encontrado")
     return found[0]
@@ -25520,7 +25537,7 @@ def _li_gravar(pid: str, patch: dict) -> None:
         r.add_header("Prefer", "return=minimal")
         _ur.urlopen(r, timeout=15)
     except Exception as _e:
-        raise HTTPException(502, f"Não consegui salvar: {str(_e)[:120]}")
+        raise _erro_interno(502, "Não consegui salvar", _e)
 
 
 @app.get("/api/admin/linkedin/posts")
@@ -27195,6 +27212,25 @@ def _url_is_safe_public(url: str) -> bool:
     return True
 
 
+class _RedirecionamentoConferido(urllib.request.HTTPRedirectHandler):
+    """🔒 27/09/2026 (auditoria SI): o `urlopen` seguia redirecionamento SEM reconferir o destino — a logo num host
+    público podia mandar o servidor pra um endereço interno. Agora cada salto passa pela mesma guarda."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if not _url_is_safe_public(newurl):
+            raise urllib.error.HTTPError(newurl, code, "redirecionamento para endereço não público", headers, fp)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def _baixar_de_host_publico(url: str, teto: int = 20 * 1024 * 1024, timeout: int = 10, cabecalhos=None) -> bytes:
+    """Baixa `url` (logo do perfil) só de host público — no pedido E em cada redirecionamento. Levanta se não puder."""
+    if not _url_is_safe_public(url):
+        raise ValueError("endereço não público")
+    abridor = urllib.request.build_opener(_RedirecionamentoConferido)
+    with abridor.open(urllib.request.Request(url, method="GET", headers=cabecalhos or {}), timeout=timeout) as resp:
+        return resp.read(teto)
+
+
 @app.post("/api/public/chat/lead")
 async def save_chat_lead(request: Request):
     """DESLIGADO em 27/09/2026 (Pedro: "pode apagar o chat velho").
@@ -27949,10 +27985,9 @@ def compare_supplier_quotes(job_id: str, request: Request, include_reference: in
             work_dir_lg = os.path.join(WORK_DIR, job_id)
             os.makedirs(work_dir_lg, exist_ok=True)
             logo_path = os.path.join(work_dir_lg, "logo_escritorio.png")
-            lg_req = urllib.request.Request(logo_url, method="GET")
-            with urllib.request.urlopen(lg_req, timeout=10) as resp:
-                with open(logo_path, "wb") as f:
-                    f.write(resp.read(20 * 1024 * 1024))  # cap 20MB
+            _logo_bytes = _baixar_de_host_publico(logo_url)  # cap 20MB; reconfere cada redirecionamento
+            with open(logo_path, "wb") as f:
+                f.write(_logo_bytes)
         except Exception:
             logo_path = None
 
@@ -28949,7 +28984,7 @@ def upsert_project_client(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(500, f"Erro ao salvar cliente: {e}")
+        raise _erro_interno(500, "Erro ao salvar cliente", e)
 
 
 # ── STRIPE CHECKOUT ──
@@ -29360,9 +29395,9 @@ async def create_checkout(request: Request, num_pranchas: int = 1, num_files: in
             except Exception as e2:
                 raise HTTPException(500, f"Erro Stripe (card-only fallback): {str(e2)}")
         else:
-            raise HTTPException(500, f"Erro ao criar checkout: {str(e)}")
+            raise _erro_interno(500, "Erro ao criar checkout", e)
     except Exception as e:
-        raise HTTPException(500, f"Erro ao criar checkout: {str(e)}")
+        raise _erro_interno(500, "Erro ao criar checkout", e)
 
     if not session:
         raise HTTPException(500, "Erro ao criar checkout: session não foi criada")
@@ -29512,7 +29547,7 @@ async def cashback_upload(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(500, f"Erro na ingestão da revisão: {str(e)}")
+        raise _erro_interno(500, "Erro na ingestão da revisão", e)
     finally:
         if os.path.exists(revised_path):
             try:
@@ -29587,7 +29622,7 @@ async def calibration_ingest_density(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(500, f"Erro na ingestão: {str(e)}")
+        raise _erro_interno(500, "Erro na ingestão", e)
     finally:
         if os.path.exists(xlsx_path):
             try:
@@ -29692,7 +29727,7 @@ async def agent_ask(request: Request, job_id: str, question: str = ""):
             tipos_de_arquivo=_tipos)
         return {"status": "ok", **result}
     except Exception as e:
-        raise HTTPException(500, f"Erro do agente: {type(e).__name__}: {e}")
+        raise _erro_interno(500, "Erro do agente", e)
 
 
 @app.get("/api/agent/conversations")
@@ -29740,7 +29775,7 @@ def agent_conversations(request: Request, job_id: Optional[str] = None, limit: i
             _r["project_name"] = _p.get("project_name") or ""
         return {"status": "ok", "count": len(rows), "conversations": rows}
     except Exception as e:
-        raise HTTPException(500, f"Erro ao listar conversas: {str(e)}")
+        raise _erro_interno(500, "Erro ao listar conversas", e)
 
 
 @app.get("/api/agent/stats")
@@ -29776,7 +29811,7 @@ def agent_stats(request: Request):
             "avg_iterations": round(avg_iter, 2),
         }
     except Exception as e:
-        raise HTTPException(500, f"Erro stats: {str(e)}")
+        raise _erro_interno(500, "Erro stats", e)
 
 
 @app.post("/api/calibration/reclassify-raws")
@@ -29806,7 +29841,7 @@ async def calibration_reclassify_raws(
         )
         return {"status": "ok", **result}
     except Exception as e:
-        raise HTTPException(500, f"Erro na reclassificação: {str(e)}")
+        raise _erro_interno(500, "Erro na reclassificação", e)
 
 
 @app.get("/api/calibration/benchmarks")
@@ -29834,7 +29869,7 @@ async def calibration_benchmarks(request: Request, typology: Optional[str] = Non
         rows.sort(key=lambda r: (-(r["n_projects"] or 0), r["item_type"]))
         return {"status": "ok", "count": len(rows), "benchmarks": rows}
     except Exception as e:
-        raise HTTPException(500, f"Erro ao buscar benchmarks: {str(e)}")
+        raise _erro_interno(500, "Erro ao buscar benchmarks", e)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -29896,7 +29931,7 @@ def get_project_items(job_id: str, request: Request):
         return {"status": "ok", "job_id": job_id, "items": items,
                 "count": len(items), "project": _meta}
     except Exception as e:
-        raise HTTPException(500, f"Erro ao buscar itens: {str(e)}")
+        raise _erro_interno(500, "Erro ao buscar itens", e)
 
 
 @app.get("/api/memorial/{job_id}")
@@ -29937,7 +29972,7 @@ async def memorial_docx(job_id: str, request: Request):
         print(f"[memorial] erro: {e}")
         print(traceback.format_exc())
         _log_error("memorial:gerar", str(e), job_id=job_id)
-        raise HTTPException(500, f"Erro ao gerar memorial: {e}")
+        raise _erro_interno(500, "Erro ao gerar memorial", e)
 
 
 def _assinatura_quantitativo(items) -> str:
@@ -30213,7 +30248,7 @@ async def memorial_pdf(job_id: str, request: Request):
         print(f"[memorial pdf] erro: {e}")
         print(traceback.format_exc())
         _log_error("memorial:pdf", str(e), job_id=job_id)
-        raise HTTPException(500, f"Erro ao gerar PDF: {e}")
+        raise _erro_interno(500, "Erro ao gerar PDF", e)
 
 
 @app.get("/api/memorial/{job_id}/estrutura")
@@ -30239,7 +30274,7 @@ async def memorial_estrutura(job_id: str, request: Request):
         raise
     except Exception as e:
         _log_error("memorial:estrutura", str(e), job_id=job_id)
-        raise HTTPException(500, f"Erro ao montar memorial: {e}")
+        raise _erro_interno(500, "Erro ao montar memorial", e)
 
 
 @app.post("/api/memorial/{job_id}/redigir")
@@ -30299,7 +30334,7 @@ def memorial_redigir_ia(job_id: str, request: Request):
         print(f"[memorial ia] erro: {e}")
         print(traceback.format_exc())
         _log_error("memorial:redigir", str(e), job_id=job_id)
-        raise HTTPException(500, f"Erro ao redigir: {e}")
+        raise _erro_interno(500, "Erro ao redigir", e)
 
 
 @app.post("/api/memorial/{job_id}/estrutura")
@@ -30667,7 +30702,7 @@ def cronograma_sugestao(job_id: str, request: Request):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(500, f"Erro ao buscar projeto: {e}")
+        raise _erro_interno(500, "Erro ao buscar projeto", e)
 
     # Busca disciplinas ativas via items
     try:
@@ -30774,7 +30809,7 @@ def generate_cronograma(job_id: str, payload: CronogramaPayload, request: Reques
         if not _completo:
             raise RuntimeError('itens do projeto vieram pela metade')
     except Exception as e:
-        raise HTTPException(500, f"Erro ao buscar itens do projeto: {e}")
+        raise _erro_interno(500, "Erro ao buscar itens do projeto", e)
 
     if not items:
         raise HTTPException(404, "Projeto sem itens — gere a planilha primeiro.")
@@ -30802,7 +30837,7 @@ def generate_cronograma(job_id: str, payload: CronogramaPayload, request: Reques
         import traceback
         print(f"[cronograma] erro: {e}")
         print(traceback.format_exc())
-        raise HTTPException(500, f"Erro ao gerar cronograma: {e}")
+        raise _erro_interno(500, "Erro ao gerar cronograma", e)
 
 
 def _get_branding_context(job_id: str, request=None) -> dict:
@@ -30906,10 +30941,7 @@ def _get_branding_context(job_id: str, request=None) -> dict:
     # poderia apontar pra arquivo local/rede interna. Só baixa de host público.
     if ctx['logo_url'] and _url_is_safe_public(ctx['logo_url']):
         try:
-            req = urllib.request.Request(ctx['logo_url'], method="GET",
-                                          headers={'User-Agent': 'AI.arq/1.0'})
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                data = resp.read(20 * 1024 * 1024)  # cap 20MB
+            data = _baixar_de_host_publico(ctx['logo_url'], cabecalhos={'User-Agent': 'AI.arq/1.0'})  # cap 20MB
             ext = '.png'
             if '.jpg' in ctx['logo_url'].lower() or '.jpeg' in ctx['logo_url'].lower():
                 ext = '.jpg'
@@ -31061,7 +31093,7 @@ async def preview_cronograma(job_id: str, payload: CronogramaSavePayload, reques
             duracao_meses=payload.duracao_meses,
         )
     except Exception as e:
-        raise HTTPException(500, f"Erro ao recalcular cronograma: {e}")
+        raise _erro_interno(500, "Erro ao recalcular cronograma", e)
     return {"status": "ok", "job_id": job_id, **cron}
 
 
@@ -31095,7 +31127,7 @@ def get_cronograma_full(job_id: str, request: Request):
         import traceback
         print(f"[cronograma full] erro: {e}")
         print(traceback.format_exc())
-        raise HTTPException(500, f"Erro ao montar cronograma: {e}")
+        raise _erro_interno(500, "Erro ao montar cronograma", e)
 
 
 # ── 27/09 (perfis — Pedro: "faz o cronograma só leitura pro cliente"): o cronograma do projeto medido ligado ao
@@ -31192,7 +31224,7 @@ def _cronograma_do_salvo(job_id: str, saved) -> dict:
             if not _completo:
                 raise RuntimeError('itens do projeto vieram pela metade')
         except Exception as e:
-            raise HTTPException(500, f"Erro ao buscar items: {e}")
+            raise _erro_interno(500, "Erro ao buscar items", e)
 
         if not items:
             raise HTTPException(404, "Projeto sem itens")
@@ -31266,7 +31298,7 @@ async def _cronograma_preview_png_impl(job_id: str, request: Request,
         import traceback
         print(f"[crono preview png] {tmpl}: {e}")
         print(traceback.format_exc())
-        raise HTTPException(500, f"Erro ao gerar prévia: {e}")
+        raise _erro_interno(500, "Erro ao gerar prévia", e)
 
 
 @app.get("/api/cronograma/{job_id}/preview.png")
@@ -31318,7 +31350,7 @@ async def export_cronograma_pdf(job_id: str, request: Request,
         import traceback
         print(f"[export pdf] erro: {e}")
         print(traceback.format_exc())
-        raise HTTPException(500, f"Erro ao gerar PDF: {e}")
+        raise _erro_interno(500, "Erro ao gerar PDF", e)
 
 
 @app.get("/api/cronograma/{job_id}/export/xlsx")
@@ -31352,7 +31384,7 @@ async def export_cronograma_xlsx(job_id: str, request: Request):
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
     except Exception as e:
         _log_error("cronograma:xlsx", str(e), job_id=job_id)
-        raise HTTPException(500, f"Erro ao gerar a planilha do cronograma: {e}")
+        raise _erro_interno(500, "Erro ao gerar a planilha do cronograma", e)
 
 
 @app.get("/api/cronograma/{job_id}/export/pptx")
@@ -31416,7 +31448,7 @@ async def export_cronograma_pptx(job_id: str, request: Request,
         import traceback
         print(f"[export pptx] erro: {e}")
         print(traceback.format_exc())
-        raise HTTPException(500, f"Erro ao gerar PPTX: {e}")
+        raise _erro_interno(500, "Erro ao gerar PPTX", e)
 
 
 # (endpoint temporário /api/debug/cronograma-sample removido após validar o
@@ -31881,7 +31913,7 @@ async def admin_revision_learn(job_id: str, request: Request):
         return {"status": "ok", "job_id": job_id, "gerou_linha": bool(gerou)}
     except Exception as e:
         _log_error("motor:revisao-aprendizado", f"MANUAL FALHOU: {e}", job_id)
-        raise HTTPException(500, f"Falhou: {e}")
+        raise _erro_interno(500, "A operação falhou", e)
 
 
 @app.post("/api/items/{job_id}/finalize")
@@ -31920,7 +31952,7 @@ async def rebuild_planilha_from_review(job_id: str, request: Request):
         except HTTPException:
             raise
         except urllib.error.HTTPError as e:
-            raise HTTPException(500, f"Erro Supabase: {e}")
+            raise _erro_interno(500, "O banco não respondeu", e)
 
         # 2) Buscar items atuais (já revisados) — RPC SECURITY DEFINER, anon ok
         try:
@@ -31931,7 +31963,7 @@ async def rebuild_planilha_from_review(job_id: str, request: Request):
             if not _completo:
                 raise RuntimeError('itens do projeto vieram pela metade')
         except Exception as e:
-            raise HTTPException(500, f"Erro ao buscar itens: {e}")
+            raise _erro_interno(500, "Erro ao buscar itens", e)
 
         # 3) Reconstituir ProjectData + BudgetItems
         pd = _project_data_do_banco(proj)
@@ -32167,7 +32199,7 @@ def inform_project_area(job_id: str, payload: InformAreaPayload, request: Reques
     except HTTPException:
         raise
     except urllib.error.HTTPError as e:
-        raise HTTPException(500, f"Erro Supabase: {e}")
+        raise _erro_interno(500, "O banco não respondeu", e)
 
     try:
         # 🩸 08/09/2026 — sem paginar, o PostgREST corta em 1000 e devolve
@@ -32177,7 +32209,7 @@ def inform_project_area(job_id: str, payload: InformAreaPayload, request: Reques
         if not _completo:
             raise RuntimeError('itens do projeto vieram pela metade')
     except Exception as e:
-        raise HTTPException(500, f"Erro ao buscar itens: {e}")
+        raise _erro_interno(500, "Erro ao buscar itens", e)
 
     # 3) Reconstituir ProjectData (área = informada) + BudgetItems na MESMA ordem
     #    (list_project_items vem ordenado por sort_order → re-persistir preserva ordem)
@@ -32409,7 +32441,7 @@ def update_project_user_status(job_id: str, payload: StatusPayload, request: Req
         resp = urllib.request.urlopen(req, timeout=15)
         return {"status": "ok", "user_status": payload.user_status}
     except Exception as e:
-        raise HTTPException(500, f"Erro: {e}")
+        raise _erro_interno(500, "Erro inesperado no servidor", e)
 
 
 class FaltouPayload(BaseModel):
@@ -32512,7 +32544,7 @@ def save_item_note(job_id: str, item_id: str, payload: NotePayload, request: Req
             })
         return {"status": "ok", "saved": True}
     except Exception as e:
-        raise HTTPException(500, f"Erro: {e}")
+        raise _erro_interno(500, "Erro inesperado no servidor", e)
 
 
 @app.get("/api/items/{job_id}/notes")
@@ -32537,7 +32569,7 @@ def list_job_notes(job_id: str, request: Request):
         } for n in notes}
         return {"status": "ok", "notes": state}
     except Exception as e:
-        raise HTTPException(500, f"Erro: {e}")
+        raise _erro_interno(500, "Erro inesperado no servidor", e)
 
 
 @app.get("/api/projects/by-user/{user_id}")
@@ -32592,7 +32624,7 @@ def list_my_projects(user_id: str, request: Request):
             print(f"[email] ficha de supressão do dono falhou (nao-fatal): {_es}")
         return saida
     except Exception as e:
-        raise HTTPException(500, f"Erro ao buscar projetos: {str(e)}")
+        raise _erro_interno(500, "Erro ao buscar projetos", e)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -32935,7 +32967,7 @@ def admin_nps_summary(request: Request, days: int = 30):
         rows = json.loads(resp.read().decode('utf-8'))
         return rows[0] if rows else {}
     except Exception as e:
-        raise HTTPException(500, f"Erro: {e}")
+        raise _erro_interno(500, "Erro inesperado no servidor", e)
 
 
 def _nps_janela_dias(days) -> int:
@@ -32990,7 +33022,7 @@ def admin_nps_responses(request: Request, limit: int = 50, days: int = 30):
         resp = urllib.request.urlopen(req, timeout=10)
         rows = json.loads(resp.read().decode('utf-8'))
     except Exception as e:
-        raise HTTPException(500, f"Erro: {e}")
+        raise _erro_interno(500, "Erro inesperado no servidor", e)
     dentro, sem_data = _nps_dentro_da_janela(rows, days)
     return {"responses": dentro, "window_days": days, "limit": limit, "sem_data": sem_data}
 
@@ -33013,7 +33045,7 @@ def admin_nps_stages(request: Request, days: int = 30):
         req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         rows = _json.loads(_urs.urlopen(req, timeout=15).read().decode("utf-8"))
     except Exception as e:
-        raise HTTPException(500, f"Erro: {e}")
+        raise _erro_interno(500, "Erro inesperado no servidor", e)
     rows, _sem_data = _nps_dentro_da_janela(rows, days)
     stages = ("upload", "tempo", "precisao", "planilha")
     sums = {k: 0.0 for k in stages}
@@ -34087,7 +34119,7 @@ async def admin_baixar_arquivo(job_id: str, request: Request, nome: str = ""):
     try:
         nomes = [_unq(n) for n in _supabase_storage_list(PRANCHAS_BUCKET, f"{job_id}/")]
     except Exception as _e:
-        raise HTTPException(502, f"Storage não respondeu: {_e}")
+        raise _erro_interno(502, "Storage não respondeu", _e)
     if not nome:
         return {"job_id": job_id, "arquivos": nomes}
     alvo = next((n for n in nomes if n == nome or _unq(n) == nome), None)
@@ -34377,7 +34409,7 @@ async def reprocess_project(job_id: str, request: Request):
         resp = urllib.request.urlopen(req, timeout=20)
         storage_files = json.loads(resp.read().decode("utf-8"))
     except Exception as e:
-        raise HTTPException(500, f"Erro ao listar Storage: {e}")
+        raise _erro_interno(500, "Erro ao listar Storage", e)
 
     valid_ext = ('.pdf', '.dwg', '.dxf')
     original_filenames = []
@@ -34549,7 +34581,7 @@ def admin_eval_reprocess(job_id: str, request: Request,
         req.add_header("Content-Type", "application/json")
         storage_files = json.loads(urllib.request.urlopen(req, timeout=20).read().decode("utf-8"))
     except Exception as e:
-        raise HTTPException(500, f"Erro ao listar Storage: {e}")
+        raise _erro_interno(500, "Erro ao listar Storage", e)
 
     valid_ext = ('.pdf', '.dwg', '.dxf')
     original_filenames = [unquote(f.get("name", "")) for f in storage_files
@@ -36557,7 +36589,7 @@ def admin_combine_preview(job_id: str, request: Request):
         preq.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
         projs = json.loads(urllib.request.urlopen(preq, timeout=15).read().decode('utf-8'))
     except Exception as e:
-        raise HTTPException(500, f"Erro ao listar projetos: {e}")
+        raise _erro_interno(500, "Erro ao listar projetos", e)
     valid_ext = ('.pdf', '.dwg', '.dxf')
     files_meta, seen_names = [], set()
     for p in projs or []:
@@ -37035,7 +37067,7 @@ async def add_file_and_reprocess(job_id: str, request: Request, files: list[Uplo
         lreq.add_header("Content-Type", "application/json")
         objs = json.loads(urllib.request.urlopen(lreq, timeout=20).read().decode("utf-8"))
     except Exception as e:
-        raise HTTPException(500, f"Erro ao listar Storage: {e}")
+        raise _erro_interno(500, "Erro ao listar Storage", e)
 
     names = [unquote(o.get("name", "")) for o in objs if o.get("name")]
     names = [n for n in names if n.lower().endswith((".pdf", ".dwg", ".dxf"))]
@@ -38343,7 +38375,7 @@ def get_review_state(job_id: str, request: Request, marcar: int = 0):
             _marcar_revisao_aberta(job_id)
         return {"status": "ok", "job_id": job_id, "state": state, "count": len(state)}
     except Exception as e:
-        raise HTTPException(500, f"Erro ao buscar state: {e}")
+        raise _erro_interno(500, "Erro ao buscar state", e)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -38738,7 +38770,7 @@ def admin_review_insights(request: Request, days: int = 30, limit: int = 30):
         _rev_req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         reviews = json.loads(urllib.request.urlopen(_rev_req, timeout=20).read().decode("utf-8")) or []
     except Exception as e:
-        raise HTTPException(500, f"Erro ao buscar reviews: {e}")
+        raise _erro_interno(500, "Erro ao buscar reviews", e)
 
     # 2) Enrich com descrição original do item (se ainda existe).
     # FIX 2026-05-14: N+1 eliminado — antes fazia 1 GET por review (até 1000
@@ -39017,7 +39049,7 @@ def cleanup_old_projects(request: Request):
         resp = urllib.request.urlopen(req, timeout=15)
         expired = _j.loads(resp.read().decode("utf-8"))
     except Exception as e:
-        raise HTTPException(500, f"Erro ao buscar projetos expirados: {e}")
+        raise _erro_interno(500, "Erro ao buscar projetos expirados", e)
 
     stats = {
         "days_threshold": days,
@@ -39196,7 +39228,7 @@ def admin_cleanup_log(request: Request, limit: int = 30):
         resp = urllib.request.urlopen(req, timeout=10)
         return {"runs": _j.loads(resp.read().decode("utf-8"))}
     except Exception as e:
-        raise HTTPException(500, f"Erro: {e}")
+        raise _erro_interno(500, "Erro inesperado no servidor", e)
 
 
 # ESCRITÓRIO: entrega as peças ao módulo do convite. Aqui no fim porque as funções
