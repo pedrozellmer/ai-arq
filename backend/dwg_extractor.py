@@ -4681,6 +4681,41 @@ def folha_de_papel_no_modelo(doc):
         return None
 
 
+def _classe_do_anonimo(nome: str) -> str:
+    """Classe do bloco que o filtro de nome joga fora — SÓ pro log.
+
+    📏 27/09/2026 (estudo de leitura, item 5): `anonimo=N` juntava lixo do
+    AutoCAD (*X de hachura), bloco dinâmico (*U, que pode ser porta), desenho
+    colado (A$C) e peça de xref ligado ($0$). O conserto de cada um depende de
+    quanto pesa; sem a classe, a decisão seria no escuro."""
+    n = (nome or "").upper()
+    if n.startswith("*U"):
+        return "*U"
+    if n.startswith("*X"):
+        return "*X"
+    if n.startswith("*"):
+        return "*outro"
+    for marca in ("$0$", "A$C", "G$C"):
+        if marca in n:
+            return marca
+    if n.startswith("ZW$"):
+        return "zw$"
+    return "$outro"
+
+
+def _nome_do_bloco_dinamico(doc, nome: str):
+    """Nome do bloco dinâmico por trás de um '*U' (XDATA AcDbBlockRepBTag do
+    registro do bloco), ou None quando o conversor não guardou o vínculo."""
+    try:
+        for t in doc.block_records.get(nome).get_xdata("AcDbBlockRepBTag"):
+            if t.code == 1005:
+                e = doc.entitydb.get(t.value)
+                return e.dxf.name if e is not None else None
+    except Exception:
+        return None
+    return None
+
+
 def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> DXFExtraction:
     """Main extraction function — reads a .dxf file and returns structured data.
 
@@ -4811,6 +4846,7 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
     #               único — upgrade honesto, correção registrada;
     #   (nada)    → cotas insuficientes/ambíguas/conflitantes: tudo como antes.
     dim_check = _validate_unit_by_dimensions(doc, unit_factor)
+    _regua_1a = dim_check      # 📏 27/09 (item 5): o log guarda o que as cotas disseram
     if dim_check.get("status") == "corrigida":
         unit_factor = dim_check["fator_corrigido"]
         logger.warning("[unit-cotas] %s", dim_check["mensagem"])
@@ -4969,6 +5005,13 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             metadata["escala_ambigua"] = _amb
         if dim_check.get("motivo"):
             metadata["regua_cotas_motivo"] = str(dim_check["motivo"])[:200]
+        # 📏 27/09 (estudo, item 5): quando o DIMLFAC ou a plausibilidade
+        # decidem, `dim_check` vira o deles e o que as COTAS disseram sumia
+        # do log (30 de 30 pranchas com `porque=-`).
+        if _regua_1a is not dim_check:
+            metadata["regua_cotas_antes"] = "%s|%s|%s" % (
+                _regua_1a.get("status") or "-", _regua_1a.get("cotas_utilizaveis", "-"),
+                str(_regua_1a.get("motivo") or "-")[:200])
         if dim_check.get("cotas_utilizaveis") is not None:
             metadata["regua_cotas_utilizaveis"] = dim_check["cotas_utilizaveis"]
         if dim_check.get("desempatada_por_fisica"):
@@ -5164,6 +5207,21 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
     # atributos são a mesma peça: conta uma.
     _ja_inserido = set()
     _amostra_anonimo = []
+    # 📏 27/09 (estudo, item 5): SÓ registro — nada aqui muda contagem.
+    _anon_classe: dict = {}               # classe → inserções descartadas
+    _dinamico_de: dict = {}               # '*U12' → nome do dinâmico (cache)
+    _dinamicos: dict = {}                 # nome do dinâmico → inserções
+    _espelhados: dict = {}                # nome → inserções com extrusão z<0
+    _def_vazia: dict = {}                 # nome → inserções de bloco sem desenho
+    _vazia_cache: dict = {}
+    _blocos_desligados = 0
+    _layers_desligados = set()
+    try:
+        for _lt in doc.layers:
+            if _lt.is_frozen() or _lt.is_off():
+                _layers_desligados.add(_lt.dxf.name.upper())
+    except Exception:
+        pass
 
     # 🩸 25/09/2026, job 73c6f0ed (projeto elétrico exportado do Revit): a
     # tomada, o ponto de ar e as luminárias eram INSERIDOS a até 2 km da casa
@@ -5260,6 +5318,13 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             # de verdade renomeado na conversão (o caso que a gente suspeita)
             if len(_amostra_anonimo) < 5 and bname not in _amostra_anonimo:
                 _amostra_anonimo.append(bname)
+            _cl = _classe_do_anonimo(bname)
+            _anon_classe[_cl] = _anon_classe.get(_cl, 0) + 1
+            if _cl == "*U":
+                if bname not in _dinamico_de:
+                    _dinamico_de[bname] = _nome_do_bloco_dinamico(doc, bname)
+                if _dinamico_de[bname]:
+                    _dinamicos[_dinamico_de[bname]] = _dinamicos.get(_dinamico_de[bname], 0) + 1
             continue
         # Skip utility / system layers that don't represent real items
         if layer and layer.upper() in _UTILITY_LAYERS_UPPER:
@@ -5290,6 +5355,19 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
                 "widths": [], "heights": [],
             }
         block_counter[bname]["count"] += 1
+        try:
+            if float(insert.dxf.get("extrusion", (0, 0, 1))[2]) < 0:
+                _espelhados[bname] = _espelhados.get(bname, 0) + 1
+            if bname not in _vazia_cache:
+                _b = doc.blocks.get(bname)
+                _vazia_cache[bname] = _b is not None and not any(
+                    e.dxftype() != "ATTDEF" for e in _b)
+            if _vazia_cache[bname]:
+                _def_vazia[bname] = _def_vazia.get(bname, 0) + 1
+            if layer and layer.upper() in _layers_desligados:
+                _blocos_desligados += 1
+        except Exception:
+            pass
         _onde = _centro_do_desenho(insert)
         if _onde is not None:
             x, y = _onde
@@ -5340,6 +5418,21 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             "Nenhum bloco (INSERT) usado no DXF: %s — descartados: %s%s",
             filepath, _desc,
             (" amostra=" + ", ".join(_amostra_anonimo)) if _amostra_anonimo else "")
+
+    # 📏 27/09 (estudo, item 5): procedência dos blocos, só pro log do motor
+    def _mais(d, n=5):
+        return dict(sorted(d.items(), key=lambda kv: -kv[1])[:n])
+    _proc_blocos = {}
+    if _anon_classe:
+        _proc_blocos["anonimos"] = _anon_classe
+    if _dinamicos:
+        _proc_blocos["dinamicos"] = _mais(_dinamicos)
+    if _espelhados:
+        _proc_blocos["espelhados"] = _mais(_espelhados)
+    if _def_vazia:
+        _proc_blocos["def_vazia"] = _mais(_def_vazia)
+    if _proc_blocos:
+        metadata["procedencia_blocos"] = _proc_blocos
 
     # ---- Lines / polylines (wall segments) --------------------------------
     walls: list[WallSegment] = []
@@ -6084,6 +6177,23 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         }
     except Exception as _e5:
         logger.warning("[unit-rotulo] falhou (não-fatal): %s", _e5)
+
+    # 📏 27/09 (estudo, item 5): o que está em layer CONGELADO ou DESLIGADO e
+    # mesmo assim entra na medição (no R17, ~270 peças em bases congeladas).
+    # Só registro: se vale tirar, decide-se com este número na mão.
+    if _layers_desligados:
+        try:
+            _em_desl = {
+                "m": round(float(sum(w.length for w in walls
+                                     if (w.layer or "").upper() in _layers_desligados)), 1),
+                "m2": round(float(sum(h.area for h in list(hatches) + list(polygon_areas)
+                                      if (h.layer or "").upper() in _layers_desligados)), 1),
+                "blocos": _blocos_desligados,
+            }
+            if any(_em_desl.values()):
+                metadata["em_layer_desligado"] = _em_desl
+        except Exception:
+            pass
 
     # 📄 LEITURA POR FOLHA (24/09/2026, Pedro: "vamos ensinar ele a fazer
     # isso"). O esquema/detalhe sai da medição; a planta-tipo vale por N

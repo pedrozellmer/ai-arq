@@ -980,6 +980,33 @@ def _descarte_de_blocos(extraction) -> str:
     return txt
 
 
+def _procedencia_dos_blocos(extraction) -> str:
+    """Sufixo do log de geometria: de onde vieram (e pra onde foram) os blocos.
+
+    📏 27/09/2026 (estudo de leitura, item 5). Seis consertos aprovados
+    dependem de medir antes: o descarte por CLASSE (*U, *X, $0$, A$C...), o
+    nome do bloco dinâmico por trás do *U, o INSERT espelhado (extrusão z<0),
+    o bloco de definição vazia e o que está em layer congelado ou desligado.
+    Vazio quando não há nada a dizer."""
+    try:
+        md = getattr(extraction, "metadata", None) or {}
+        pb = md.get("procedencia_blocos") or {}
+        desl = md.get("em_layer_desligado") or {}
+    except Exception:
+        return ""
+
+    def _lista(d):
+        return "|".join(f"{str(k)[:40]}={v}" for k, v in d.items())
+
+    txt = ""
+    for chave in ("anonimos", "dinamicos", "espelhados", "def_vazia"):
+        if pb.get(chave):
+            txt += f" {chave}=[{_lista(pb[chave])}]"
+    if desl:
+        txt += f" layer_desligado=[{_lista(desl)}]"
+    return txt
+
+
 def _blocos_colados_abertos(extraction) -> str:
     """Quanto desenho colado como bloco (A$C) foi aberto nesta prancha.
 
@@ -15395,7 +15422,9 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                             # 26/08: `cotas=-` juntava 5 desfechos num traço só.
                             f"regua={_md_u.get('regua_cotas_status', '-')} "
                             f"utilizaveis={_md_u.get('regua_cotas_utilizaveis', '-')} "
-                            f"porque={(_md_u.get('regua_cotas_motivo') or '-')[:90]} "
+                            f"porque={(_md_u.get('regua_cotas_motivo') or '-')[:200]} "
+                            # 📏 27/09: o que as cotas disseram antes do DIMLFAC/plausibilidade
+                            f"antes={_md_u.get('regua_cotas_antes') or '-'} "
                             f"corrigida={_md_u.get('unidade_corrigida_por_cotas', '-')} "
                             f"alerta={(_md_u.get('alerta_unidade') or '-')[:120]} "
                             f"ressalva={_dxf_sem_procedencia} "
@@ -15457,6 +15486,8 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                                 f"({(getattr(extraction, 'poly_recusa', None) or {})}) "
                                 f"paredes={len(extraction.walls or [])} "
                                 f"blocos={len(extraction.blocks or [])} "
+                                # 📏 27/09: `blocos` conta NOMES; inserções são estas
+                                f"insercoes={sum(b.count for b in (extraction.blocks or []))} "
                                 f"textos={len(extraction.texts or [])} "
                                 f"cotas={len(extraction.dimensions or [])} "
                                 f"layers={len(extraction.layers or [])} "
@@ -15471,6 +15502,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                                 # mais caro do motor.
                                 f"{_descarte_de_blocos(extraction)}"
                                 f"{_blocos_colados_abertos(extraction)}"
+                                f"{_procedencia_dos_blocos(extraction)}"
                                 # 🔑 24/09: hachuras de AMOSTRA DA LEGENDA tiradas da medição
                                 f"{(' amostras_legenda=[' + str((getattr(extraction, 'metadata', None) or {}).get('amostras_legenda')) + ']') if (getattr(extraction, 'metadata', None) or {}).get('amostras_legenda') else ''}"
                                 # 🔬 27/08: POR QUE `pilares` deu esse número.

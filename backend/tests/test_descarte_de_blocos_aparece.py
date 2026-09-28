@@ -46,7 +46,9 @@ def test_o_contador_conta_CADA_filtro_separado():
     ext = _fonte("dwg_extractor.py")
     i = ext.find('for insert in msp.query("INSERT"):')
     assert i > 0
-    trecho = ext[i:i + 1800]
+    # 27/09: até a CONTAGEM, não 1.800 caracteres — todo filtro vem antes
+    # dela, e um comentário novo no laço empurrava o `anotacao` pra fora
+    trecho = ext[i:ext.index('block_counter[bname]["count"] += 1', i)]
     for chave in ("anonimo", "utilitario", "anotacao", "ilegivel"):
         assert '_desc["%s"] += 1' % chave in trecho, (
             "o filtro %r descarta INSERT sem contar — continua invisível" % chave)
