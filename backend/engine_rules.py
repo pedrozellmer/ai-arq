@@ -4931,10 +4931,37 @@ MARCA_UNIDADE_DE_CONTAGEM = "⚠ REBAIXADO: item contável"
 MARCA_EXTRACAO_COM_RESSALVA = "Procedência: extração com ressalva"
 #: 🩸 28/09/2026 (job dd52081b) — ver `cozinhas_acima_das_unidades`.
 MARCA_ACIMA_DO_QUADRO = "⚠ CONTAGEM ACIMA DO QUADRO DE ÁREAS"
+#: 📏 28/09/2026 (estudo de leitura, P1a) — ver `e_mobiliario_ou_equipamento`.
+MARCA_ESCOPO_MOBILIARIO = "⚠ MÓVEL/EQUIPAMENTO — confirme o escopo"
 MARCAS_DE_REBAIXAMENTO = (MARCA_LIDO_DE_TEXTO, MARCA_SOMA, MARCA_CARIMBO,
                           MARCA_MENOS_PAREDE, MARCA_UNIDADE_DE_CONTAGEM,
                           MARCA_EXTRACAO_COM_RESSALVA, MARCA_QUANTIDADE_RECUPERADA,
-                          MARCA_ESCALA_DIVERGENTE, MARCA_ACIMA_DO_QUADRO)
+                          MARCA_ESCALA_DIVERGENTE, MARCA_ACIMA_DO_QUADRO,
+                          MARCA_ESCOPO_MOBILIARIO)
+
+
+_RE_ELETRODOMESTICO = _re.compile(
+    r"\b(?:fog[ãa]o|cooktop|geladeira|refrigerador|micro-?ondas|lava-?lou[çc]as|"
+    r"m[áa]quina de lavar|lavadora|secadora|televisor|frigobar)\b", _re.IGNORECASE)
+_RE_E_OBRA_DO_EQUIPAMENTO = _re.compile(
+    r"^\s*(?:ponto|tomada|instala[çc][ãa]o|circuito|alimenta[çc][ãa]o|infra|previs[ãa]o|espera)\b",
+    _re.IGNORECASE)
+
+
+def e_mobiliario_ou_equipamento(disciplina, descricao) -> bool:
+    """Móvel ou eletrodoméstico — o que costuma ser comprado à parte e ficar
+    fora do orçamento de obra.
+
+    📏 28/09/2026 (estudo de leitura, P1a): em 120 dias, linhas de
+    "Mobiliário" COM selo revisadas por clientes: 71 rejeitadas × 4 aprovadas
+    (69 numa loja: araras e expositores). O número está certo — é contagem do
+    desenho —, o que está em dúvida é o escopo. Disciplina "Mobiliário" ou
+    eletrodoméstico em qualquer disciplina (o cooktop rejeitado estava em
+    "Complementares"); o PONTO/tomada/instalação do equipamento é obra e fica."""
+    if "mobili" in str(disciplina or "").lower():
+        return True
+    d = str(descricao or "")
+    return bool(_RE_ELETRODOMESTICO.search(d)) and not _RE_E_OBRA_DO_EQUIPAMENTO.search(d)
 
 
 _RE_TOTAL_DE_UNIDADES = _re.compile(r"\bTOTAL\b.{0,15}\bUNIDADES\b|\bUNIDADES\b.{0,6}\bTOTAL\b",

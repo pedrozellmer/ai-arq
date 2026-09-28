@@ -20064,6 +20064,36 @@ bloco — só cite os que estão no inventário deste arquivo."""
             _log_error("motor:selo-da-mesma-peca", f"FALHOU: {_emp}", job_id)
 
         # ─────────────────────────────────────────────────────────────────
+        # 📏 MÓVEL E ELETRODOMÉSTICO SEM SELO (28/09/2026, estudo de leitura,
+        # P1a). Em 120 dias, linhas de "Mobiliário" COM selo que clientes
+        # revisaram: 71 rejeitadas × 4 aprovadas. A contagem está certa; o que
+        # o cliente recusa é o ESCOPO — cadeira, mesa, fogão, geladeira, TV
+        # costumam ser compra à parte, fora do orçamento de obra. O número
+        # fica; o selo sai (a marca entra nas de rebaixamento) e o aviso diz
+        # por quê.
+        # ─────────────────────────────────────────────────────────────────
+        try:
+            from engine_rules import (e_mobiliario_ou_equipamento as _mob,
+                                      MARCA_ESCOPO_MOBILIARIO as _MARCA_MOB)
+            _n_mob = 0
+            for _it in all_items:
+                _o = str(getattr(_it, "observations", "") or "")
+                if _MARCA_MOB in _o or not _mob(getattr(_it, "discipline", ""),
+                                                 getattr(_it, "description", "")):
+                    continue
+                _it.observations = (
+                    f"{_MARCA_MOB}: móveis e equipamentos (cadeira, mesa, fogão, "
+                    f"geladeira, TV…) costumam ser comprados à parte e ficar fora do "
+                    f"orçamento de obra. A quantidade foi contada no desenho — confirme "
+                    f"se este item entra no seu escopo. " + _o)
+                _n_mob += 1
+            if _n_mob:
+                _log_error("motor:mobiliario-escopo", f"linhas={_n_mob}", job_id,
+                           severity="info")
+        except Exception as _emob:
+            _log_error("motor:mobiliario-escopo", f"FALHOU: {_emob}", job_id)
+
+        # ─────────────────────────────────────────────────────────────────
         # 🩸 COZINHAS ALÉM DAS UNIDADES DO QUADRO (28/09/2026, job dd52081b).
         # O quadro de áreas do projeto dizia 22 unidades; a planilha saiu com
         # 41 cozinhas, 101 vasos e 160 portas COM SELO — a mesma unidade
