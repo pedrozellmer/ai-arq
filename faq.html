@@ -42,7 +42,7 @@
       "name": "Qual IA faz levantamento de quantitativo a partir da planta?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "O AI.arq faz isso: você envia o DWG, DXF ou PDF que já tem e recebe a quantidade de cada item, organizada por disciplina, numa planilha com a coluna de preço em branco pro seu orçamentista. Em DWG e DXF o motor mede a geometria do próprio desenho — comprimentos por camada, áreas de hachura (quando a camada tem uma hachura só) e contagem de blocos. PDF vetorial também é lido, mas sai como estimativa: é regra nossa não selar número de PDF como medido, porque a escala dele vem de uma declaração (o carimbo). Cada linha volta marcada como medida ou estimada, com código SINAPI de referência nos itens em que há correspondência. Não precisa de BIM, de plugin nem de AutoCAD: roda no navegador. No beta é grátis e ilimitado, sem cartão."
+        "text": "O AI.arq faz isso: você envia o DWG, DXF ou PDF que já tem e recebe a quantidade de cada item, organizada por disciplina, numa planilha com a coluna de preço em branco pro seu orçamentista. Em DWG e DXF a gente mede a geometria do próprio desenho — comprimentos por camada, áreas de hachura (quando a camada tem uma hachura só) e contagem de blocos. PDF vetorial também é lido, mas sai como estimativa: é regra nossa não selar número de PDF como medido, porque a escala dele vem de uma declaração (o carimbo). Cada linha volta marcada como medida ou estimada, com código SINAPI de referência nos itens em que há correspondência. Não precisa de BIM, de plugin nem de AutoCAD: roda no navegador. No beta é grátis e ilimitado, sem cartão."
       }
     },
     {
@@ -90,7 +90,7 @@
       "name": "Como exporto meu projeto pra ter o melhor resultado?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "A regra de ouro: 🥇 DXF é o melhor — mede de verdade e não passa pela conversão de DWG, que é onde mais arquivo trava. DWG também mede, mas os de AutoCAD Architecture/MEP (objetos AEC) às vezes não abrem — se der erro, exporte DXF. PDF vetorial também é lido, mas sai como estimativa. No CAD a gente extrai a geometria (áreas, comprimentos, contagem de blocos), então as quantidades saem medidas; no PDF o motor mede a geometria quando dá e a IA lê textos e legendas, mas tudo sai como estimativa pra você conferir, porque é regra nossa não selar número de PDF como medido: a escala dele vem de uma declaração (o carimbo). Planta escaneada não mede. Os números por formato estão em DWG, DXF ou PDF: o que os nossos dados mostram. Passo a passo por programa: AutoCAD Botão do Aplicativo (o \"A\" no topo à esquerda) → Salvar Como → Outros Formatos. Em \"Arquivos do tipo\", escolha um DXF (ex.: AutoCAD 2018 DXF). Dê um nome, escolha a pasta e Salvar. (o .dwg nativo já serve) Fonte: Autodesk Revit Aba Arquivo → Exportar → Formatos CAD → DWG (ou DXF). Ajuste a configuração (camadas) e escolha a vista/folha, ou um conjunto → Avançar. Escolha a pasta; em \"Arquivos do tipo\", a versão do AutoCAD (DWG) ou DXF → OK. Arquivos .rvt e .ifc não entram direto — exporte antes. Fonte: Autodesk ArchiCAD Abra a planta ou prancha (não funciona em tabela, índice ou lista). Arquivo → Salvar como → escolha DWG ou DXF. No campo Tradutor, deixe um padrão (ex.: \"For as-is output\") e Salvar. Várias pranchas de uma vez: Documento → Publicar. Fonte: Graphisoft SketchUp (Pro) Pra planta, ajuste a vista: Câmera → Vistas Padrão + projeção paralela. Arquivo → Exportar → Gráfico 2D (planta) ou Modelo 3D. Escolha .dwg ou .dxf → Opções → OK → Exportar. Exportar CAD só existe no SketchUp Pro. Fonte: Trimble Só tenho PDF Exporte um PDF vetorial: no AutoCAD, botão do Aplicativo → Exportar → PDF. No Revit/ArchiCAD, use Imprimir/Plotar → PDF. Nunca \"plotar como imagem\" nem escanear/fotografar a planta — o desenho vira pixel, as cotas somem e a IA não consegue medir. Se der, mande o DWG/DXF junto — a gente mede e completa o que o PDF deixou como estimativa. Dicas que ajudam ainda mais: Salve numa versão compatível (DXF 2018, 2013 ou 2010) — objetos muito recentes ou especiais (comuns em projetos MEP) às vezes não convertem. Desenhe esquadrias, peças e equipamentos como blocos, não como linhas soltas — é assim que a IA conta quantos são. Só tem PDF mesmo? Sem problema, a gente processa — só lembre que sai como estimativa pra conferir, e os números você ajusta."
+        "text": "A regra de ouro: 🥇 DXF é o melhor — mede de verdade e não passa pela conversão de DWG, que é onde mais arquivo trava. DWG também mede, mas os de AutoCAD Architecture/MEP (objetos AEC) às vezes não abrem — se der erro, exporte DXF. PDF vetorial também é lido, mas sai como estimativa. No CAD a gente extrai a geometria (áreas, comprimentos, contagem de blocos), então as quantidades saem medidas; no PDF a gente mede a geometria quando dá e a IA lê textos e legendas, mas tudo sai como estimativa pra você conferir, porque é regra nossa não selar número de PDF como medido: a escala dele vem de uma declaração (o carimbo). Planta escaneada não mede. Os números por formato estão em DWG, DXF ou PDF: o que os nossos dados mostram. Passo a passo por programa: AutoCAD Botão do Aplicativo (o \"A\" no topo à esquerda) → Salvar Como → Outros Formatos. Em \"Arquivos do tipo\", escolha um DXF (ex.: AutoCAD 2018 DXF). Dê um nome, escolha a pasta e Salvar. (o .dwg nativo já serve) Fonte: Autodesk Revit Aba Arquivo → Exportar → Formatos CAD → DWG (ou DXF). Ajuste a configuração (camadas) e escolha a vista/folha, ou um conjunto → Avançar. Escolha a pasta; em \"Arquivos do tipo\", a versão do AutoCAD (DWG) ou DXF → OK. Arquivos .rvt e .ifc não entram direto — exporte antes. Fonte: Autodesk ArchiCAD Abra a planta ou prancha (não funciona em tabela, índice ou lista). Arquivo → Salvar como → escolha DWG ou DXF. No campo Tradutor, deixe um padrão (ex.: \"For as-is output\") e Salvar. Várias pranchas de uma vez: Documento → Publicar. Fonte: Graphisoft SketchUp (Pro) Pra planta, ajuste a vista: Câmera → Vistas Padrão + projeção paralela. Arquivo → Exportar → Gráfico 2D (planta) ou Modelo 3D. Escolha .dwg ou .dxf → Opções → OK → Exportar. Exportar CAD só existe no SketchUp Pro. Fonte: Trimble Só tenho PDF Exporte um PDF vetorial: no AutoCAD, botão do Aplicativo → Exportar → PDF. No Revit/ArchiCAD, use Imprimir/Plotar → PDF. Nunca \"plotar como imagem\" nem escanear/fotografar a planta — o desenho vira pixel, as cotas somem e a IA não consegue medir. Se der, mande o DWG/DXF junto — a gente mede e completa o que o PDF deixou como estimativa. Dicas que ajudam ainda mais: Salve numa versão compatível (DXF 2018, 2013 ou 2010) — objetos muito recentes ou especiais (comuns em projetos MEP) às vezes não convertem. Desenhe esquadrias, peças e equipamentos como blocos, não como linhas soltas — é assim que a IA conta quantos são. Só tem PDF mesmo? Sem problema, a gente processa — só lembre que sai como estimativa pra conferir, e os números você ajusta."
       }
     },
     {
@@ -130,7 +130,7 @@
       "name": "Qual a precisão do AI.arq?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "A precisão depende da qualidade do arquivo: DWG/DXF permitem medição geométrica direta; PDF vetorial é lido, mas sai como estimativa — é regra nossa não selar número de PDF como medido, porque a escala dele vem de uma declaração (o carimbo); planta escaneada não mede. Por isso cada item volta marcado como medido (do CAD) ou estimativa (pra revisar) — você sempre sabe no que confiar. Por que medir e não só \"olhar\" a planta? Mesmo os modelos de IA mais avançados do mundo, quando contam itens só pela imagem de uma planta, erram muito: um benchmark acadêmico de 2026 (AECV-Bench) mediu entre 40% e 55% de acerto na contagem de portas e janelas (AECV-Bench, 2026). Por isso o AI.arq lê a geometria do arquivo CAD em vez de adivinhar pela imagem — e te mostra, item a item, o que foi medido e o que é estimativa. Fonte: AECV-Bench (2026), benchmark acadêmico de leitura de plantas — arxiv.org/abs/2601.04819. Toda planilha deve ser revisada por profissional."
+        "text": "A precisão depende da qualidade do arquivo: DWG/DXF permitem medição geométrica direta; PDF vetorial é lido, mas sai como estimativa — é regra nossa não selar número de PDF como medido, porque a escala dele vem de uma declaração (o carimbo); planta escaneada não mede. Por isso cada item volta marcado como medido (do CAD) ou estimativa (pra revisar) — você sempre sabe no que confiar. Por que medir e não só \"olhar\" a planta? Modelos de IA que contam itens só pela imagem de uma planta erram muito: num benchmark acadêmico de 2026 (AECV-Bench), os modelos testados acertaram entre 40% e 55% na contagem de portas e janelas (AECV-Bench, 2026). Por isso o AI.arq lê a geometria do arquivo CAD em vez de adivinhar pela imagem — e te mostra, item a item, o que foi medido e o que é estimativa. Fonte: AECV-Bench (2026), benchmark acadêmico de leitura de plantas — arxiv.org/abs/2601.04819. Toda planilha deve ser revisada por profissional."
       }
     },
     {
@@ -146,7 +146,7 @@
       "name": "Como a IA calcula as quantidades?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Quando a legenda ou o quadro da prancha informa a quantidade, ela é usada diretamente. Quando não, o motor mede a geometria do CAD: • Comprimentos de paredes, dutos e tubulações, por camada do desenho • Áreas de ambientes e de hachuras — quando a camada tem uma hachura só. Camada com várias (o “ARQ-PISO” que mistura porcelanato e cerâmica) sai como estimado, porque a soma não mede um acabamento sozinho • Contagens de blocos: portas, janelas, luminárias, pilares, louças Cada linha sai com um selo: medido (veio da geometria) ou estimado (veio de índice ou de um dado informado por você, como o pé-direito — nesse caso a conta aparece na observação do item, ex.: “perímetro das paredes × pé-direito informado”). A escala da prancha é conferida pelas próprias cotas do desenho, e o projeto mostra quantas bateram. O que a gente não faz: aplicar dimensionamento normativo por conta própria (lux de iluminação, sprinklers por área, tomadas por posto, BTU por m²) nem acrescentar percentual de perda ou desperdício. Isso é decisão de projeto e do orçamentista — o quantitativo entrega a medida do desenho, com a origem de cada número rastreável. Na prática isso pesa mais em piso, forro e revestimento, que quase sempre chegam como camada com várias hachuras: nesses três a maior parte das linhas sai como estimada, pra revisar. Comprimento e contagem de blocos são os que mais viram medido. Base técnica: catálogo oficial SINAPI (Caixa), com ~10 mil composições carregadas no sistema como vocabulário de referência."
+        "text": "Quando a legenda ou o quadro da prancha informa a quantidade, ela é usada diretamente. Quando não, a gente mede a geometria do CAD: • Comprimentos de paredes, dutos e tubulações, por camada do desenho • Áreas de ambientes e de hachuras — quando a camada tem uma hachura só. Camada com várias (o “ARQ-PISO” que mistura porcelanato e cerâmica) sai como estimado, porque a soma não mede um acabamento sozinho • Contagens de blocos: portas, janelas, luminárias, pilares, louças Cada linha sai com um selo: medido (veio da geometria) ou estimado (veio de índice ou de um dado informado por você, como o pé-direito — nesse caso a conta aparece na observação do item, ex.: “perímetro das paredes × pé-direito informado”). A escala da prancha é conferida pelas próprias cotas do desenho, e o projeto mostra quantas bateram. O que a gente não faz: aplicar dimensionamento normativo por conta própria (lux de iluminação, sprinklers por área, tomadas por posto, BTU por m²) nem acrescentar percentual de perda ou desperdício. Isso é decisão de projeto e do orçamentista — o quantitativo entrega a medida do desenho, com a origem de cada número rastreável. Na prática isso pesa mais em piso, forro e revestimento, que quase sempre chegam como camada com várias hachuras: nesses três a maior parte das linhas sai como estimada, pra revisar. Comprimento e contagem de blocos são os que mais viram medido. Base técnica: catálogo oficial SINAPI (Caixa), com ~10 mil composições carregadas no sistema como vocabulário de referência."
       }
     },
     {
@@ -186,7 +186,7 @@
       "name": "O que muda quando envio planilha revisada e cotações?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Cada planilha revisada e cotação de fornecedor que você envia afina a calibração — nos seus próximos projetos, o motor avisa quando um número sai fora do esperado pro tipo de obra (ele não copia a sua quantidade pra outro projeto). As cotações alimentam o comparativo do projeto. Histórico na aba \"Contribuições\" do seu dashboard."
+        "text": "Cada planilha revisada mostra pra gente onde a leitura errou ou deixou em branco — é com ela que a gente acha e corrige os erros da IA (a sua quantidade não é copiada pra outro projeto). As cotações de fornecedor alimentam o comparativo do projeto. Histórico na aba \"Contribuições\" do seu dashboard."
       }
     },
     {
@@ -258,7 +258,7 @@
       "name": "O que cada contribuição faz pela IA?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Cada contribuição tem um efeito direto nos seus próximos projetos: • Planilha revisada (.xlsx corrigido offline): suas correções viram referência de proporção (quanto de cada item por m², no seu tipo de obra). Nos próximos projetos, o motor usa isso pra avisar quando um número sai fora do esperado — ele não copia a sua quantidade pra outro projeto • Cotação de fornecedor: monta o comparativo do seu projeto e calibra proporções (nunca valores absolutos) • Revisão inline dentro do site: ajuda a calibrar o motor pros próximos projetos O histórico de tudo que você contribuiu fica na aba \"Contribuições\" do seu dashboard."
+        "text": "Cada contribuição tem um efeito direto nos seus próximos projetos: • Planilha revisada (.xlsx corrigido offline): suas correções viram referência de proporção (quanto de cada item por m², no seu tipo de obra). Nos próximos projetos, o sistema usa isso pra avisar quando um número sai fora do esperado — ele não copia a sua quantidade pra outro projeto • Cotação de fornecedor: monta o comparativo do seu projeto e calibra proporções (nunca valores absolutos) • Revisão inline dentro do site: mostra pra gente onde corrigir a IA O histórico de tudo que você contribuiu fica na aba \"Contribuições\" do seu dashboard."
       }
     },
     {
@@ -274,7 +274,7 @@
       "name": "Meus fornecedores e clientes aparecem pros outros usuários do AI.arq?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Não. Regra dura do sistema: ✗ Valores absolutos em R$ nunca são compartilhados entre projetos ✗ Nome do cliente final, fornecedor, endereço da obra — ficam isolados por projeto ✓ Apenas métricas adimensionais anonimizadas (CV de preço por categoria, share MAT/MO) vão pro motor de alertas ✓ Fornecedores entram no motor só como \"fornecedor_1/2/3\" em ordem aleatória, sem qualquer vínculo rastreável Antes de qualquer inserção na base anônima, uma auditoria verifica que nenhum valor em R$, nome ou identificador vazou. Detalhes: Política de Privacidade seção 1-A."
+        "text": "Não. Regra dura do sistema: ✗ Valores absolutos em R$ nunca são compartilhados entre projetos ✗ Nome do cliente final, fornecedor, endereço da obra — ficam isolados por projeto ✓ Apenas métricas adimensionais anonimizadas (CV de preço por categoria, share MAT/MO) vão pro sistema de alertas ✓ Fornecedores entram nos alertas só como \"fornecedor_1/2/3\" em ordem aleatória, sem qualquer vínculo rastreável Antes de qualquer inserção na base anônima, uma auditoria verifica que nenhum valor em R$, nome ou identificador vazou. Detalhes: Política de Privacidade seção 1-A."
       }
     },
     {
@@ -282,7 +282,7 @@
       "name": "Meus projetos estão seguros?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Sim. Seus arquivos (PDF, DWG, DXF) são armazenados em storage criptografado no Supabase por até 90 dias após o processamento, para permitir duas funcionalidades: • Abrir a prancha em nova aba durante a revisão inline (botão \"Ver prancha\"). • Reprocessar o projeto com a última versão do motor (sem precisar reenviar). Após 90 dias, são excluídos automaticamente. Toda comunicação é criptografada via HTTPS. Não usamos seus arquivos para treinar modelos de IA genéricos nem compartilhamos com terceiros. Você pode solicitar exclusão antecipada a qualquer momento em contato@ai.arq.br."
+        "text": "Sim. Seus arquivos (PDF, DWG, DXF) são armazenados em storage criptografado no Supabase por até 90 dias após o processamento, para permitir duas funcionalidades: • Abrir a prancha em nova aba durante a revisão inline (botão \"Ver prancha\"). • Reprocessar o projeto com a versão mais nova do AI.arq (sem precisar reenviar). Após 90 dias, são excluídos automaticamente. Toda comunicação é criptografada via HTTPS. Não usamos seus arquivos para treinar modelos de IA genéricos nem compartilhamos com terceiros. Você pode solicitar exclusão antecipada a qualquer momento em contato@ai.arq.br."
       }
     },
     {
@@ -362,7 +362,7 @@
       "name": "Qual a diferença entre o AI.arq e os programas em que eu importo a planta e vou clicando pra medir?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Nesses programas o cálculo é automático depois que você marcou: você importa o DWG ou o PDF, calibra a escala e traça em cima de cada parede, cada ambiente, cada ponto. No AI.arq você não traça nada — o motor lê a geometria do próprio arquivo e devolve a planilha por disciplina. A contrapartida honesta é esta: onde o desenho não informa, quem marca a linha como estimativa é o sistema, e a conferência dessas linhas continua sendo sua."
+        "text": "Nesses programas o cálculo é automático depois que você marcou: você importa o DWG ou o PDF, calibra a escala e traça em cima de cada parede, cada ambiente, cada ponto. No AI.arq você não traça nada — a gente lê a geometria do próprio arquivo e devolve a planilha por disciplina. A contrapartida honesta é esta: onde o desenho não informa, quem marca a linha como estimativa é o sistema, e a conferência dessas linhas continua sendo sua."
       }
     },
     {
@@ -402,7 +402,7 @@
       "name": "Quanto do meu projeto volta como MEDIDO e quanto volta como ESTIMADO?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Depende do formato, e vale separar duas coisas. Quanto da planilha volta PREENCHIDA: medido em setembro/2026 sobre todos os projetos concluídos, 68,4% das linhas em DWG/DXF (101 projetos, 5.682 itens) e 52,3% só com PDF (53 projetos, 5.222 itens). A diferença maior está no que você pode usar SEM CONFERIR: em CAD, 25,0% das linhas saem carimbadas como medidas da geometria do desenho; em PDF, 3 em 5.222 — e as três são de maio, anteriores à regra atual. Isso não é falha de leitura — o motor lê o PDF e mede a geometria quando dá. É que a escala do PDF vem do carimbo da prancha, e carimbo é declaração, não prova; então tudo que vem de PDF sai como estimativa com a procedência escrita na linha, nunca como medida. Por isso a gente pede DXF sempre que der. O resto sai como estimativa, em laranja, pra você revisar — a planilha diz linha a linha o que é cada coisa, e nunca apresenta estimativa como medição. Método e amostra em Dados do AI.arq."
+        "text": "Depende do formato, e vale separar duas coisas. Quanto da planilha volta PREENCHIDA: medido em setembro/2026 sobre todos os projetos concluídos, 68,4% das linhas em DWG/DXF (101 projetos, 5.682 itens) e 52,3% só com PDF (53 projetos, 5.222 itens). A diferença maior está no que sai MEDIDO: em CAD, 25,0% das linhas saem com o selo de medida da geometria do desenho — o selo diz de onde veio o número, e a conferência final continua sendo sua; em PDF, 3 em 5.222 — e as três são de maio, anteriores à regra atual. Isso não é falha de leitura — a gente lê o PDF e mede a geometria quando dá. É que a escala do PDF vem do carimbo da prancha, e carimbo é declaração, não prova; então tudo que vem de PDF sai como estimativa com a procedência escrita na linha, nunca como medida. Por isso a gente pede DXF sempre que der. O resto sai como estimativa, em laranja, pra você revisar — a planilha diz linha a linha o que é cada coisa, e nunca apresenta estimativa como medição. Método e amostra em Dados do AI.arq."
       }
     },
     {
@@ -458,7 +458,7 @@
       "name": "O AI.arq funciona com projeto de fora do Brasil?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "O motor lê o CAD de qualquer lugar — DWG, DXF e PDF não têm nacionalidade. A referência é que é brasileira: os códigos vêm da SINAPI e as convenções de prancha que a IA aplica são as daqui. Num projeto de fora você teria o quantitativo, mas a coluna de referência não faria sentido local. Hoje a gente é feito pra projeto brasileiro."
+        "text": "O AI.arq lê o CAD de qualquer lugar — DWG, DXF e PDF não têm nacionalidade. A referência é que é brasileira: os códigos vêm da SINAPI e as convenções de prancha que a IA aplica são as daqui. Num projeto de fora você teria o quantitativo, mas a coluna de referência não faria sentido local. Hoje a gente é feito pra projeto brasileiro."
       }
     }
   ]
@@ -600,7 +600,7 @@
           <div class="faq-answer px-5">
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
               <p class="mb-3">O AI.arq faz isso: você envia o DWG, DXF ou PDF que já tem e recebe a <strong>quantidade de cada item</strong>, organizada por disciplina, numa planilha com a coluna de preço em branco pro seu orçamentista.</p>
-              <p class="mb-3">Em DWG e DXF o motor mede a geometria do próprio desenho — comprimentos por camada, áreas de hachura (quando a camada tem uma hachura só) e contagem de blocos. PDF vetorial também é lido, mas sai como estimativa: é regra nossa não selar número de PDF como medido, porque a escala dele vem de uma declaração (o carimbo).</p>
+              <p class="mb-3">Em DWG e DXF a gente mede a geometria do próprio desenho — comprimentos por camada, áreas de hachura (quando a camada tem uma hachura só) e contagem de blocos. PDF vetorial também é lido, mas sai como estimativa: é regra nossa não selar número de PDF como medido, porque a escala dele vem de uma declaração (o carimbo).</p>
               <p>Cada linha volta marcada como medida ou estimada, com código SINAPI de referência nos itens em que há correspondência. Não precisa de BIM, de plugin nem de AutoCAD: roda no navegador. No beta é grátis e ilimitado, sem cartão.</p>
             </div>
           </div>
@@ -706,7 +706,7 @@
           </button>
           <div class="faq-answer px-5">
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
-              <p class="mb-3">A regra de ouro: <strong>🥇 DXF &eacute; o melhor</strong> &mdash; mede de verdade e n&atilde;o passa pela convers&atilde;o de DWG, que &eacute; onde mais arquivo trava. <strong>DWG</strong> tamb&eacute;m mede, mas os de AutoCAD Architecture/MEP (objetos AEC) &agrave;s vezes n&atilde;o abrem &mdash; se der erro, exporte DXF. <strong>PDF</strong> vetorial tamb&eacute;m &eacute; lido, mas sai como <strong>estimativa</strong>. No CAD a gente extrai a geometria (&aacute;reas, comprimentos, contagem de blocos), ent&atilde;o as quantidades saem <strong>medidas</strong>; no PDF o motor mede a geometria quando d&aacute; e a IA l&ecirc; textos e legendas, mas tudo sai como estimativa pra voc&ecirc; conferir, porque &eacute; regra nossa n&atilde;o selar n&uacute;mero de PDF como medido: a escala dele vem de uma declara&ccedil;&atilde;o (o carimbo). Planta escaneada n&atilde;o mede. Os n&uacute;meros por formato est&atilde;o em <a href="/blog/posts/dwg-ou-pdf-quantitativo-o-que-os-dados-mostram.html" class="text-indigo-600 underline">DWG, DXF ou PDF: o que os nossos dados mostram</a>.</p>
+              <p class="mb-3">A regra de ouro: <strong>🥇 DXF &eacute; o melhor</strong> &mdash; mede de verdade e n&atilde;o passa pela convers&atilde;o de DWG, que &eacute; onde mais arquivo trava. <strong>DWG</strong> tamb&eacute;m mede, mas os de AutoCAD Architecture/MEP (objetos AEC) &agrave;s vezes n&atilde;o abrem &mdash; se der erro, exporte DXF. <strong>PDF</strong> vetorial tamb&eacute;m &eacute; lido, mas sai como <strong>estimativa</strong>. No CAD a gente extrai a geometria (&aacute;reas, comprimentos, contagem de blocos), ent&atilde;o as quantidades saem <strong>medidas</strong>; no PDF a gente mede a geometria quando d&aacute; e a IA l&ecirc; textos e legendas, mas tudo sai como estimativa pra voc&ecirc; conferir, porque &eacute; regra nossa n&atilde;o selar n&uacute;mero de PDF como medido: a escala dele vem de uma declara&ccedil;&atilde;o (o carimbo). Planta escaneada n&atilde;o mede. Os n&uacute;meros por formato est&atilde;o em <a href="/blog/posts/dwg-ou-pdf-quantitativo-o-que-os-dados-mostram.html" class="text-indigo-600 underline">DWG, DXF ou PDF: o que os nossos dados mostram</a>.</p>
               <p class="mb-2 font-medium text-gray-700">Passo a passo por programa:</p>
               <div class="space-y-3 mb-4">
                 <div>
@@ -867,7 +867,7 @@
           <div class="faq-answer px-5">
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
               <p>A precis&atilde;o depende da qualidade do arquivo: <strong>DWG/DXF</strong> permitem medi&ccedil;&atilde;o geom&eacute;trica direta; <strong>PDF</strong> vetorial &eacute; lido, mas sai como estimativa &mdash; &eacute; regra nossa n&atilde;o selar n&uacute;mero de PDF como medido, porque a escala dele vem de uma declara&ccedil;&atilde;o (o carimbo); planta escaneada n&atilde;o mede. Por isso cada item volta marcado como <strong>medido</strong> (do CAD) ou <strong>estimativa</strong> (pra revisar) &mdash; voc&ecirc; sempre sabe no que confiar.</p>
-              <p class="mt-3"><strong>Por que medir e n&atilde;o s&oacute; "olhar" a planta?</strong> Mesmo os modelos de IA mais avan&ccedil;ados do mundo, quando contam itens s&oacute; pela imagem de uma planta, erram muito: um benchmark acad&ecirc;mico de 2026 (AECV-Bench) mediu <strong>entre 40% e 55% de acerto</strong> na contagem de portas e janelas (<a href="https://arxiv.org/abs/2601.04819" target="_blank" rel="noopener" class="underline">AECV-Bench, 2026</a>). Por isso o AI.arq l&ecirc; a <strong>geometria do arquivo CAD</strong> em vez de adivinhar pela imagem &mdash; e te mostra, item a item, o que foi medido e o que &eacute; estimativa.</p>
+              <p class="mt-3"><strong>Por que medir e n&atilde;o s&oacute; "olhar" a planta?</strong> Modelos de IA que contam itens s&oacute; pela imagem de uma planta erram muito: num benchmark acad&ecirc;mico de 2026 (AECV-Bench), os modelos testados acertaram <strong>entre 40% e 55%</strong> na contagem de portas e janelas (<a href="https://arxiv.org/abs/2601.04819" target="_blank" rel="noopener" class="underline">AECV-Bench, 2026</a>). Por isso o AI.arq l&ecirc; a <strong>geometria do arquivo CAD</strong> em vez de adivinhar pela imagem &mdash; e te mostra, item a item, o que foi medido e o que &eacute; estimativa.</p>
               <p class="mt-2 text-xs text-gray-400">Fonte: AECV-Bench (2026), benchmark acad&ecirc;mico de leitura de plantas &mdash; <a href="https://arxiv.org/abs/2601.04819" target="_blank" rel="noopener" class="underline hover:text-indigo-600">arxiv.org/abs/2601.04819</a>.</p>
               <p class="mt-3 text-xs text-gray-500">Toda planilha deve ser revisada por profissional.</p>
             </div>
@@ -902,7 +902,7 @@
           </button>
           <div class="faq-answer px-5">
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
-              <p class="mb-3">Quando a legenda ou o quadro da prancha informa a quantidade, ela &eacute; usada diretamente. Quando n&atilde;o, o motor <strong>mede a geometria do CAD</strong>:</p>
+              <p class="mb-3">Quando a legenda ou o quadro da prancha informa a quantidade, ela &eacute; usada diretamente. Quando n&atilde;o, a gente <strong>mede a geometria do CAD</strong>:</p>
               <ul class="space-y-2 ml-1">
                 <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>Comprimentos</strong> de paredes, dutos e tubula&ccedil;&otilde;es, por camada do desenho</li>
                 <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>&Aacute;reas</strong> de ambientes e de hachuras &mdash; quando a camada tem <strong>uma hachura s&oacute;</strong>. Camada com v&aacute;rias (o &ldquo;ARQ-PISO&rdquo; que mistura porcelanato e cer&acirc;mica) sai como <strong>estimado</strong>, porque a soma n&atilde;o mede um acabamento sozinho</li>
@@ -1028,7 +1028,7 @@
           </button>
           <div class="faq-answer px-5">
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
-              Cada <strong>planilha revisada</strong> e <strong>cota&ccedil;&atilde;o de fornecedor</strong> que voc&ecirc; envia afina a calibra&ccedil;&atilde;o &mdash; nos seus pr&oacute;ximos projetos, o motor avisa quando um n&uacute;mero sai fora do esperado pro tipo de obra (ele n&atilde;o copia a sua quantidade pra outro projeto). As cota&ccedil;&otilde;es alimentam o comparativo do projeto. Hist&oacute;rico na aba "Contribui&ccedil;&otilde;es" do seu dashboard.
+              Cada <strong>planilha revisada</strong> mostra pra gente onde a leitura errou ou deixou em branco &mdash; &eacute; com ela que a gente acha e corrige os erros da IA (a sua quantidade n&atilde;o &eacute; copiada pra outro projeto). As <strong>cota&ccedil;&otilde;es de fornecedor</strong> alimentam o comparativo do projeto. Hist&oacute;rico na aba "Contribui&ccedil;&otilde;es" do seu dashboard.
             </div>
           </div>
         </div>
@@ -1191,9 +1191,9 @@
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
               <p class="mb-2">Cada contribuição tem um efeito direto nos seus próximos projetos:</p>
               <ul class="space-y-1 ml-4">
-                <li class="flex items-start gap-2"><span class="text-indigo-500 mt-1 shrink-0">•</span> <strong>Planilha revisada</strong> (.xlsx corrigido offline): suas correções viram referência de proporção (quanto de cada item por m², no seu tipo de obra). Nos próximos projetos, o motor usa isso pra <strong>avisar quando um número sai fora do esperado</strong> &mdash; ele não copia a sua quantidade pra outro projeto</li>
+                <li class="flex items-start gap-2"><span class="text-indigo-500 mt-1 shrink-0">•</span> <strong>Planilha revisada</strong> (.xlsx corrigido offline): suas correções viram referência de proporção (quanto de cada item por m², no seu tipo de obra). Nos próximos projetos, o sistema usa isso pra <strong>avisar quando um número sai fora do esperado</strong> &mdash; ele não copia a sua quantidade pra outro projeto</li>
                 <li class="flex items-start gap-2"><span class="text-indigo-500 mt-1 shrink-0">•</span> <strong>Cotação de fornecedor</strong>: monta o comparativo do seu projeto e calibra proporções (nunca valores absolutos)</li>
-                <li class="flex items-start gap-2"><span class="text-indigo-500 mt-1 shrink-0">•</span> <strong>Revisão inline</strong> dentro do site: ajuda a calibrar o motor pros próximos projetos</li>
+                <li class="flex items-start gap-2"><span class="text-indigo-500 mt-1 shrink-0">•</span> <strong>Revisão inline</strong> dentro do site: mostra pra gente onde corrigir a IA</li>
               </ul>
               <p class="mt-2">O histórico de tudo que você contribuiu fica na aba "Contribuições" do seu dashboard.</p>
             </div>
@@ -1230,8 +1230,8 @@
               <ul class="space-y-1 ml-4 mb-2">
                 <li class="flex items-start gap-2"><span class="text-red-500 mt-1 shrink-0">✗</span> Valores absolutos em R$ <strong>nunca</strong> são compartilhados entre projetos</li>
                 <li class="flex items-start gap-2"><span class="text-red-500 mt-1 shrink-0">✗</span> Nome do cliente final, fornecedor, endereço da obra — <strong>ficam isolados</strong> por projeto</li>
-                <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1 shrink-0">✓</span> Apenas <strong>métricas adimensionais anonimizadas</strong> (CV de preço por categoria, share MAT/MO) vão pro motor de alertas</li>
-                <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1 shrink-0">✓</span> Fornecedores entram no motor só como "fornecedor_1/2/3" em ordem aleatória, sem qualquer vínculo rastreável</li>
+                <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1 shrink-0">✓</span> Apenas <strong>métricas adimensionais anonimizadas</strong> (CV de preço por categoria, share MAT/MO) vão pro sistema de alertas</li>
+                <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1 shrink-0">✓</span> Fornecedores entram nos alertas só como "fornecedor_1/2/3" em ordem aleatória, sem qualquer vínculo rastreável</li>
               </ul>
               <p>Antes de qualquer inserção na base anônima, uma auditoria verifica que nenhum valor em R$, nome ou identificador vazou. Detalhes: <a href="privacidade.html" class="underline">Política de Privacidade</a> seção 1-A.</p>
             </div>
@@ -1263,7 +1263,7 @@
               <p class="mb-2">Sim. Seus arquivos (PDF, DWG, DXF) s&atilde;o armazenados em storage criptografado no Supabase por at&eacute; <strong>90 dias</strong> ap&oacute;s o processamento, para permitir duas funcionalidades:</p>
               <ul class="space-y-1 ml-1 mb-2">
                 <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> Abrir a prancha em nova aba durante a revis&atilde;o inline (bot&atilde;o &quot;Ver prancha&quot;).</li>
-                <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> Reprocessar o projeto com a &uacute;ltima vers&atilde;o do motor (sem precisar reenviar).</li>
+                <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> Reprocessar o projeto com a vers&atilde;o mais nova do AI.arq (sem precisar reenviar).</li>
               </ul>
               <p class="mb-2">Ap&oacute;s 90 dias, s&atilde;o <strong>exclu&iacute;dos automaticamente</strong>. Toda comunica&ccedil;&atilde;o &eacute; criptografada via HTTPS. N&atilde;o usamos seus arquivos para treinar modelos de IA gen&eacute;ricos nem compartilhamos com terceiros.</p>
               <p>Voc&ecirc; pode solicitar exclus&atilde;o antecipada a qualquer momento em <a href="mailto:contato@ai.arq.br" class="text-indigo-500 underline">contato@ai.arq.br</a>.</p>
@@ -1440,7 +1440,7 @@
           </button>
           <div class="faq-answer px-5">
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
-              Nesses programas o cálculo é automático depois que você marcou: você importa o DWG ou o PDF, calibra a escala e traça em cima de cada parede, cada ambiente, cada ponto. No AI.arq você não traça nada — o motor lê a geometria do próprio arquivo e devolve a planilha por disciplina. A contrapartida honesta é esta: onde o desenho não informa, quem marca a linha como estimativa é o sistema, e a conferência dessas linhas continua sendo sua.
+              Nesses programas o cálculo é automático depois que você marcou: você importa o DWG ou o PDF, calibra a escala e traça em cima de cada parede, cada ambiente, cada ponto. No AI.arq você não traça nada — a gente lê a geometria do próprio arquivo e devolve a planilha por disciplina. A contrapartida honesta é esta: onde o desenho não informa, quem marca a linha como estimativa é o sistema, e a conferência dessas linhas continua sendo sua.
             </div>
           </div>
         </div>
@@ -1505,7 +1505,7 @@
           </button>
           <div class="faq-answer px-5">
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
-              Depende do formato, e vale separar duas coisas. Quanto da planilha volta PREENCHIDA: medido em setembro/2026 sobre todos os projetos concluídos, 68,4% das linhas em DWG/DXF (101 projetos, 5.682 itens) e 52,3% só com PDF (53 projetos, 5.222 itens). A diferença maior está no que você pode usar SEM CONFERIR: em CAD, 25,0% das linhas saem carimbadas como medidas da geometria do desenho; em PDF, 3 em 5.222 — e as três são de maio, anteriores à regra atual. Isso não é falha de leitura — o motor lê o PDF e mede a geometria quando dá. É que a escala do PDF vem do carimbo da prancha, e carimbo é declaração, não prova; então tudo que vem de PDF sai como estimativa com a procedência escrita na linha, nunca como medida. Por isso a gente pede DXF sempre que der. O resto sai como estimativa, em laranja, pra você revisar — a planilha diz linha a linha o que é cada coisa, e nunca apresenta estimativa como medição. Método e amostra em <a href="/dados.html" class="text-indigo-600 underline">Dados do AI.arq</a>.
+              Depende do formato, e vale separar duas coisas. Quanto da planilha volta PREENCHIDA: medido em setembro/2026 sobre todos os projetos concluídos, 68,4% das linhas em DWG/DXF (101 projetos, 5.682 itens) e 52,3% só com PDF (53 projetos, 5.222 itens). A diferença maior está no que sai MEDIDO: em CAD, 25,0% das linhas saem com o selo de medida da geometria do desenho — o selo diz de onde veio o número, e a conferência final continua sendo sua; em PDF, 3 em 5.222 — e as três são de maio, anteriores à regra atual. Isso não é falha de leitura — a gente lê o PDF e mede a geometria quando dá. É que a escala do PDF vem do carimbo da prancha, e carimbo é declaração, não prova; então tudo que vem de PDF sai como estimativa com a procedência escrita na linha, nunca como medida. Por isso a gente pede DXF sempre que der. O resto sai como estimativa, em laranja, pra você revisar — a planilha diz linha a linha o que é cada coisa, e nunca apresenta estimativa como medição. Método e amostra em <a href="/dados.html" class="text-indigo-600 underline">Dados do AI.arq</a>.
             </div>
           </div>
         </div>
@@ -1596,7 +1596,7 @@
           </button>
           <div class="faq-answer px-5">
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
-              O motor lê o CAD de qualquer lugar — DWG, DXF e PDF não têm nacionalidade. A referência é que é brasileira: os códigos vêm da SINAPI e as convenções de prancha que a IA aplica são as daqui. Num projeto de fora você teria o quantitativo, mas a coluna de referência não faria sentido local. Hoje a gente é feito pra projeto brasileiro.
+              O AI.arq lê o CAD de qualquer lugar — DWG, DXF e PDF não têm nacionalidade. A referência é que é brasileira: os códigos vêm da SINAPI e as convenções de prancha que a IA aplica são as daqui. Num projeto de fora você teria o quantitativo, mas a coluna de referência não faria sentido local. Hoje a gente é feito pra projeto brasileiro.
             </div>
           </div>
         </div>
