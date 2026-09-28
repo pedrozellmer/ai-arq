@@ -142,6 +142,9 @@ class HatchArea:
     preenchimento: float = 0.0
     # Leitura por folha: andares que esta região representa (ver WallSegment).
     peso: float = 1.0
+    # 🩸 27/09/2026 — faixa fina em layer de parede: a ESPESSURA da parede
+    # cortada na planta, não uma superfície (ver `_hachura_e_secao_de_parede`).
+    secao_de_parede: bool = False
 
 
 @dataclass
@@ -214,6 +217,20 @@ class DXFExtraction:
         for h in self.hatches:
             result[h.layer] += h.area * getattr(h, "peso", 1.0)
         return dict(result)
+
+    def get_layers_secao_de_parede(self) -> set:
+        """Layers cuja área hachurada é, em ≥ 80%, SEÇÃO de parede cortada.
+
+        🩸 27/09/2026 — a soma desses layers é a espessura da parede na planta,
+        não superfície: não prova m² nenhum (a chave do selo não usa) e a IA
+        é avisada no rótulo. Ver `_hachura_e_secao_de_parede`."""
+        tot: dict[str, float] = defaultdict(float)
+        sec: dict[str, float] = defaultdict(float)
+        for h in self.hatches:
+            tot[h.layer] += h.area
+            if getattr(h, "secao_de_parede", False):
+                sec[h.layer] += h.area
+        return {ly for ly, a in tot.items() if a > 0 and sec[ly] >= 0.8 * a}
 
     def get_polygon_areas_by_layer(self) -> dict:
         """Returns {layer_name: total_area_m2} de polilinhas FECHADAS (ambientes)."""
@@ -533,6 +550,7 @@ class DXFExtraction:
             _hatch_pat: dict[str, dict] = defaultdict(lambda: defaultdict(int))
             for _h in self.hatches:
                 _hatch_pat[_h.layer][(getattr(_h, "pattern", "") or "SOLID")] += 1
+            _secoes = self.get_layers_secao_de_parede()
             lines.append("ÁREAS HACHURADAS POR LAYER:")
             lines.append("  (o PADRÃO da hachura é o que separa acabamento no CAD: porcelanato e"
                          " cerâmica desenhados no MESMO layer têm padrões diferentes. Layer com UM"
@@ -567,6 +585,13 @@ class DXFExtraction:
                                  f"(texto/cota/legenda) — área de preenchimento de "
                                  f"desenho, NÃO é superfície de obra: não use como "
                                  f"quantidade")
+                    continue
+                if layer in _secoes:
+                    lines.append(f"  {layer}: {area:.2f} m²   ⚠ SEÇÃO DE PAREDE CORTADA — "
+                                 f"é a ESPESSURA da parede preenchida na planta, NÃO é "
+                                 f"superfície: não use como m² de parede, drywall ou "
+                                 f"revestimento (o comprimento da parede está em "
+                                 f"COMPRIMENTOS POR LAYER)")
                     continue
                 if len(_pats) > 1:
                     _top = ", ".join(f"{k} x{v}" for k, v in
@@ -2878,6 +2903,45 @@ def _hatch_bbox(entity):
     except Exception:
         pass
     return ()
+
+
+def _hachura_e_secao_de_parede(entity, unit_factor) -> bool:
+    """A hachura é a SEÇÃO de uma parede cortada (faixa fina), não superfície?
+
+    🩸 27/09/2026 (estudo de leitura, item 1): em layer de parede, a hachura
+    que preenche a espessura da parede na planta virava "m² de drywall" com
+    ✓ MEDIDO — shaft 0,18 m² ✓ (real ~2,5), drywall 1,44 m² ✓ (~23 m de
+    parede). Faixa fina = SOME numa erosão de 12 cm (largura ≤ ~0,25 m) e tem
+    ≥ 0,6 m de comprimento. 🪤 A régua 2·A/P ≤ 0,45 pegava o vão do shaft
+    (selo corta-fogo) e pilares; a erosão não (o vão resiste a 6 cm).
+    Na dúvida (geometria que não lê) → False: fica como era.
+    """
+    try:
+        if not unit_factor or unit_factor <= 0:
+            return False
+        from ezdxf import path as ezdxf_path
+        from shapely.geometry import Polygon
+        from shapely.ops import unary_union
+        pr = ezdxf_path.make_path(entity)
+        subs = list(pr.sub_paths()) if getattr(pr, "has_sub_paths", False) else [pr]
+        polys = []
+        for p in subs:
+            pts = [(v.x, v.y) for v in p.flattening(0.5)]
+            if len(pts) >= 3:
+                g = Polygon(pts)
+                if not g.is_valid:
+                    g = g.buffer(0)
+                if not g.is_empty:
+                    polys.append(g)
+        if not polys:
+            return False
+        u = unary_union(polys)
+        x0, y0, x1, y1 = u.bounds
+        if max(x1 - x0, y1 - y0) * unit_factor < 0.6:
+            return False                      # pedaço curto: não é faixa de parede
+        return u.buffer(-0.12 / unit_factor).is_empty
+    except Exception:
+        return False
 
 
 def _hatch_area(entity) -> float:
@@ -5752,12 +5816,15 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
                     if _w > 0 and _h > 0:
                         # CRUA / CRUA — as duas na unidade do desenho.
                         _fill = min(1.0, _area_crua / (_w * _h))
+                from engine_rules import layer_de_hachura_de_parede as _lhp
                 hatches.append(HatchArea(
                     layer=hatch.dxf.layer,
                     area=area,
                     pattern=pattern,
                     bbox=_bb,
                     preenchimento=round(_fill, 4),
+                    secao_de_parede=bool(_lhp(hatch.dxf.layer)
+                                         and _hachura_e_secao_de_parede(hatch, unit_factor)),
                 ))
         except Exception:
             continue

@@ -5930,6 +5930,27 @@ _RE_LAYER_NAO_PAREDE = _re.compile(
     r"eletric\w*|lumin\w*|tomadas?|dutos?|cabos?|leitos?|calhas?)(?:[^a-z]|$)")
 
 
+_TOKENS_HACHURA_DE_PAREDE = {"alv", "tijolo", "wall", "dw", "drywall", "parede", "paredes"}
+_TOKENS_NAO_E_SECAO = {"selo", "corta", "fogo", "cortafogo", "vao", "pilar", "pilares"}
+
+
+def layer_de_hachura_de_parede(nome) -> bool:
+    """O layer é o PREENCHIMENTO da parede na planta (alvenaria, tijolo, drywall)?
+
+    🩸 27/09/2026 (estudo de leitura, item 1): a hachura que preenche a
+    ESPESSURA da parede cortada virava "m² de drywall" com ✓ — shaft 0,18 m² ✓
+    (real ~2,5), drywall 1,44 m² ✓ (uma parede de ~23 m). Por TOKEN, com
+    'alv'/'tijolo' também no começo do token ('ALV1', 'TIJOLO 9'). Selo
+    corta-fogo, vão e pilar ficam fora: são peça ou buraco, não seção.
+    """
+    n = _minusculo_sem_acento(str(nome or ""))
+    toks = [t for t in _re.split(r"[\s_\-.]+", n) if t]
+    if any(t in _TOKENS_NAO_E_SECAO for t in toks):
+        return False
+    return layer_e_parede(nome) or any(
+        t in _TOKENS_HACHURA_DE_PAREDE or t.startswith(("alv", "tijolo")) for t in toks)
+
+
 def layer_e_parede(nome) -> bool:
     """O LAYER é o traço da parede? (ver `_RE_LAYER_PAREDE`)"""
     n = _minusculo_sem_acento(str(nome or ""))

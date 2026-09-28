@@ -15644,7 +15644,12 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                         if not _caveat_atinge_unidade(extraction.metadata, "m"):
                             for _lyr, _c in (extraction.get_walls_by_layer() or {}).items():
                                 _indice_geom["comprimento"].append((str(_lyr), round(float(_c), 2)))
+                            # 🩸 27/09: seção de parede cortada não prova m² (shaft
+                            # 0,18 m² ✓ era a espessura da parede na planta)
+                            _secoes_ig = extraction.get_layers_secao_de_parede()
                             for _lyr, _a in (extraction.get_areas_by_layer() or {}).items():
+                                if _lyr in _secoes_ig:
+                                    continue
                                 _indice_geom["area"].append((str(_lyr), round(float(_a), 2)))
                             for _lyr, _a in (extraction.get_polygon_areas_by_layer() or {}).items():
                                 _indice_geom["area"].append((str(_lyr), round(float(_a), 2)))
