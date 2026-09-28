@@ -4929,10 +4929,67 @@ MARCA_CARIMBO = "⚠ FONTE = CARIMBO DA PRANCHA"
 MARCA_MENOS_PAREDE = "⚠ A leitura encontrou MENOS parede"
 MARCA_UNIDADE_DE_CONTAGEM = "⚠ REBAIXADO: item contável"
 MARCA_EXTRACAO_COM_RESSALVA = "Procedência: extração com ressalva"
+#: 🩸 28/09/2026 (job dd52081b) — ver `cozinhas_acima_das_unidades`.
+MARCA_ACIMA_DO_QUADRO = "⚠ CONTAGEM ACIMA DO QUADRO DE ÁREAS"
 MARCAS_DE_REBAIXAMENTO = (MARCA_LIDO_DE_TEXTO, MARCA_SOMA, MARCA_CARIMBO,
                           MARCA_MENOS_PAREDE, MARCA_UNIDADE_DE_CONTAGEM,
                           MARCA_EXTRACAO_COM_RESSALVA, MARCA_QUANTIDADE_RECUPERADA,
-                          MARCA_ESCALA_DIVERGENTE)
+                          MARCA_ESCALA_DIVERGENTE, MARCA_ACIMA_DO_QUADRO)
+
+
+_RE_TOTAL_DE_UNIDADES = _re.compile(r"\bTOTAL\b.{0,15}\bUNIDADES\b|\bUNIDADES\b.{0,6}\bTOTAL\b",
+                                    _re.IGNORECASE)
+_RE_SO_INTEIRO = _re.compile(r"^\s*(\d{1,4})\s*$")
+
+
+def unidades_do_quadro(textos):
+    """Nº TOTAL de unidades escrito no quadro de áreas, ou None.
+
+    🩸 28/09/2026 (job dd52081b, prédio de apartamentos): o quadro do próprio
+    projeto dizia "NÚMERO TOTAL DE UNIDADES 22", e a planilha saiu com 41
+    cozinhas, 101 vasos e 160 portas, com selo — a mesma unidade estava
+    desenhada na planta do pavimento, na tipologia ampliada e em bloco colado.
+    `textos` = [(texto, x, y, altura)]. O número vale se estiver na MESMA
+    linha do rótulo (|Δy| ≤ 0,8 × a altura) e à direita dele — o mais perto.
+    Rótulos com valores diferentes: ambíguo, None."""
+    achados = set()
+    for rot, rx, ry, rh in textos:
+        if not _RE_TOTAL_DE_UNIDADES.search(str(rot or "")):
+            continue
+        tol = 0.8 * max(float(rh or 0), 1e-9)
+        melhor = None
+        for txt, x, y, _h in textos:
+            m = _RE_SO_INTEIRO.match(str(txt or ""))
+            if not m or x <= rx or abs(y - ry) > tol:
+                continue
+            if melhor is None or x - rx < melhor[0]:
+                melhor = (x - rx, int(m.group(1)))
+        if melhor and melhor[1] >= 2:
+            achados.add(melhor[1])
+    return achados.pop() if len(achados) == 1 else None
+
+
+_RE_ITEM_DE_COZINHA = _re.compile(
+    r"\b(?:cuba|pia)\b[^|;]{0,40}\bcozinha\b|\bfog[ãa]o\b|\bcooktop\b|\bgeladeira\b|\brefrigerador\b",
+    _re.IGNORECASE)
+
+
+def e_item_de_cozinha(descricao) -> bool:
+    """Peça que existe UMA por cozinha: cuba/pia de cozinha, fogão, cooktop,
+    geladeira."""
+    return bool(_RE_ITEM_DE_COZINHA.search(str(descricao or "")))
+
+
+def cozinhas_acima_das_unidades(n_cozinhas, unidades) -> bool:
+    """Cozinhas contadas além do que o quadro de áreas declara: a mesma unidade
+    foi desenhada mais de uma vez. Folga de max(2, 25%) pra cozinha de área
+    comum (salão de festas, apoio). É RAZÃO: só alerta e tira o selo — o
+    número fica (regra nº3)."""
+    try:
+        n, u = float(n_cozinhas or 0), int(unidades or 0)
+    except (TypeError, ValueError):
+        return False
+    return u >= 2 and n > u + max(2, (u + 3) // 4)
 
 
 #: 🩸 27/09/2026 (estudo de leitura, item 4) — VÍNCULO DE MODELO: outro

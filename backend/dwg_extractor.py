@@ -6309,6 +6309,16 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
                         len(_cand), _cand[:6])
     except Exception as _ea:
         logger.warning("[area-regra] falhou (não-fatal): %s", _ea)
+    # 🩸 28/09/2026 (job dd52081b): quantas unidades o quadro declara — é contra
+    # isso que o main confere as cozinhas contadas (`cozinhas_acima_das_unidades`)
+    try:
+        from engine_rules import unidades_do_quadro as _unid_quadro
+        _uq = _unid_quadro([(getattr(t, "text", ""), float(t.position[0]), float(t.position[1]),
+                             float(getattr(t, "height", 0) or 0)) for t in texts])
+        if _uq:
+            metadata["unidades_do_quadro"] = _uq
+    except Exception as _euq:
+        logger.warning("[unidades-quadro] falhou (não-fatal): %s", _euq)
 
     # ── 5ª RÉGUA: o RÓTULO DE ÁREA confere com a geometria? ────────────────
     # 🚨 Roda no FIM, porque precisa das hachuras e dos textos já medidos com o

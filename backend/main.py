@@ -15078,6 +15078,9 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                 # 25/09: o que as pranchas com planta já contaram (ver
                 # `_etiquetas_entre_pranchas`)
                 _etiquetas_da_planta: dict = {}
+                # 28/09: unidades que o quadro de áreas de cada prancha declara
+                # (ver `cozinhas_acima_das_unidades`)
+                _unidades_do_quadro: dict = {}
                 for idx, dxf_path in enumerate(dxf_paths):
                     # 🛡️ Freio de MEMÓRIA: se o container está chegando perto do limite
                     # de RAM, aborta ANTES do OOM matar o servidor inteiro. Um projeto
@@ -15406,6 +15409,8 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                     # best-effort não pode ser mudo.
                     try:
                         _md_u = extraction.metadata or {}
+                        if _md_u.get("unidades_do_quadro"):
+                            _unidades_do_quadro[os.path.basename(dxf_path)] = _md_u["unidades_do_quadro"]
                         # 🎯 ÁREA lida do quadro por REGRA entra no consenso.
                         # A área é o número que mais varia entre rodadas do MESMO
                         # arquivo (medido 08/08: 458,54 m² vs 177 m²), porque sai
@@ -20048,6 +20053,52 @@ bloco — só cite os que estão no inventário deste arquivo."""
         except Exception as _emp:
             print(f"[selo-da-mesma-peca] job={job_id}: nao rodou (segue): {_emp}")
             _log_error("motor:selo-da-mesma-peca", f"FALHOU: {_emp}", job_id)
+
+        # ─────────────────────────────────────────────────────────────────
+        # 🩸 COZINHAS ALÉM DAS UNIDADES DO QUADRO (28/09/2026, job dd52081b).
+        # O quadro de áreas do projeto dizia 22 unidades; a planilha saiu com
+        # 41 cozinhas, 101 vasos e 160 portas COM SELO — a mesma unidade
+        # desenhada na planta do pavimento, na tipologia ampliada e em bloco
+        # colado. Repetição legítima existe (o "Tipo 2" aparece 6× na planta),
+        # então o motor não tem como saber QUAL cópia descartar: o número fica
+        # e as contagens de bloco da prancha perdem o selo, com o aviso. A
+        # trava logo abaixo tira o selo de quem carrega a marca.
+        # ─────────────────────────────────────────────────────────────────
+        try:
+            from engine_rules import (e_item_de_cozinha as _coz,
+                                      cozinhas_acima_das_unidades as _acima_do_quadro,
+                                      MARCA_ACIMA_DO_QUADRO as _MARCA_AQ)
+            try:
+                _uq_pr = dict(_unidades_do_quadro)
+            except NameError:
+                _uq_pr = {}
+            import re as _re_aq       # `_re` é local mais abaixo neste escopo
+            _re_contagem = _re_aq.compile(r"insert|contagem de blocos|\bbloco\s+'", _re_aq.IGNORECASE)
+            for _pr, _unid in _uq_pr.items():
+                _linhas_pr = [it for it in all_items
+                              if os.path.basename(str(getattr(it, "ref_sheet", "") or "")) == _pr
+                              and str(getattr(it, "unit", "") or "").strip().lower() == "un"]
+                _n_coz = max((float(getattr(it, "quantity", 0) or 0) for it in _linhas_pr
+                              if _coz(getattr(it, "description", ""))), default=0)
+                if not _acima_do_quadro(_n_coz, _unid):
+                    continue
+                _marcadas = 0
+                for _it in _linhas_pr:
+                    _o = str(getattr(_it, "observations", "") or "")
+                    if _MARCA_AQ in _o or not _re_contagem.search(_o):
+                        continue
+                    _it.observations = (
+                        f"{_MARCA_AQ}: o quadro de áreas do projeto declara {_unid} "
+                        f"unidades e contamos {int(_n_coz)} cozinhas — a mesma unidade "
+                        f"aparece mais de uma vez no desenho (planta do pavimento, "
+                        f"tipologia ampliada ou bloco colado), e esta contagem pode "
+                        f"estar somando as repetições. Confira antes de orçar. " + _o)
+                    _marcadas += 1
+                _log_error("motor:cozinhas-acima-do-quadro",
+                           f"prancha={_pr} unidades={_unid} cozinhas={int(_n_coz)} "
+                           f"linhas_marcadas={_marcadas}", job_id, severity="info")
+        except Exception as _eaq:
+            _log_error("motor:cozinhas-acima-do-quadro", f"FALHOU: {_eaq}", job_id)
 
         # ─────────────────────────────────────────────────────────────────
         # 🩸 SELO × AVISO DE REBAIXAMENTO NA MESMA LINHA (27/09/2026, estudo de
