@@ -1053,6 +1053,11 @@ def _procedencia_dos_blocos(extraction) -> str:
             txt += f" {chave}=[{_lista(pb[chave])}]"
     if desl:
         txt += f" layer_desligado=[{_lista(desl)}]"
+    # 📏 28/09 (estudo, D1): a planta repetida no modelo, em sombra
+    cop = md.get("copias_sombra") or {}
+    if cop.get("vetores"):
+        vs = "|".join(f"{v[0]},{v[1]}:{v[2]}/{v[3]}" for v in cop["vetores"])
+        txt += f" copias=[pecas={cop.get('pecas')} v={vs} nomes={_lista(cop.get('nomes') or {})}]"
     return txt
 
 

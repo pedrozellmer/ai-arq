@@ -4480,6 +4480,191 @@ def aplicar_leitura_por_folha(walls, hatches, polygon_areas, blocks, mapa) -> di
     return res
 
 
+def copias_em_sombra(blocks, unit_factor) -> dict:
+    """A mesma planta desenhada 2 ou 3 vezes no modelo — SÓ MEDE, nada muda.
+
+    📏 28/09/2026 (estudo de leitura, D1, 1º passo: sombra por 2 semanas). No
+    elétrico do 73c6f0ed a prancha aparece em 3 faixas do modelo: o fundo de
+    arquitetura ×3 e os pontos elétricos ×2 (hh 70 ≈ 36 + 34, TOMBIMEDIA110
+    13 + 13) — e saem com selo. O título não resolve (letra de 12–18% da maior
+    da folha). Antes de tirar selo ou peça, o log conta onde isso acontece.
+
+    Travas do verificador (sem elas, 16 de 44 arquivos "tinham cópia"):
+    - o vetor é votado por ≥5 NOMES de bloco (legenda empilhada e eixo de
+      pilar dão 1–4); no vetor, o nome vota com 2+ pares ou metade das peças
+      livres, e no fim só conta se os vetores, JUNTOS, casam ao menos metade
+      das peças dele (hh casa 64 de 70, em dois vetores — um por andar);
+    - o vetor tem ≥2 m em METROS (em cm/mm um piso no desenho não protege);
+    - casamento 1 a 1, e por vetor cada peça é original OU cópia, nunca as
+      duas: a grade de cadeiras encadeava 63 → 1; assim, coluna 1→2, 3→4…
+      põe originais e cópias na mesma caixa, e o vetor cai no teste abaixo;
+    - a caixa dos originais e a das cópias NÃO se cruzam (desenhos
+      separados — duas bacias a 0,85 m não são duas plantas), o vão entre
+      elas é a maior faixa na direção do vetor (1,5× o maior vão de dentro)
+      e o corredor que o original varre até a cópia está vazio (≤10% dos
+      pares): as metades de uma grade regular passavam no teste da caixa;
+    - um vetor de cada vez: os dois andares da prancha usam vetores
+      diferentes, e o ×3 é A→B (v) e depois A→C (2v).
+
+    Devolve {} quando não achou; senão {'pecas': cópias casadas, 'vetores':
+    [[dx_m, dy_m, pares, nomes, [até 3 nomes]]], 'nomes': {nome: cópias}}.
+    Nome com mais de 150 posições fica de fora (custo n²).
+    """
+    try:
+        uf = float(unit_factor or 0)
+    except (TypeError, ValueError):
+        return {}
+    if uf <= 0:
+        return {}
+    tol = 0.05 / uf                      # 5 cm, no desenho
+    minimo = 2.0 / uf                    # vetor ≥ 2 m
+    pos = {}
+    for b in blocks:
+        p = [tuple(map(float, q)) for q in (getattr(b, "positions", None) or [])]
+        if 2 <= len(p) <= 150 and len(p) == b.count:
+            pos[b.name] = p
+    if len(pos) < 5:
+        return {}
+    copia = {n: set() for n in pos}      # índices já casados como CÓPIA
+    aceitos, vetores, por_nome = [], [], {}
+
+    def _casar(v):
+        """{nome: [(i, j)]} com j ≈ i + v; por vetor, cada índice num papel só."""
+        pares = {}
+        vx, vy = v
+        for n, p in pos.items():
+            celula = {}
+            for j, q in enumerate(p):
+                if j not in copia[n]:
+                    celula.setdefault((round(q[0] / tol), round(q[1] / tol)), []).append(j)
+            orig, cop, achados = set(), set(), []
+            for i in sorted(range(len(p)), key=lambda k: p[k][0] * vx + p[k][1] * vy):
+                if i in copia[n] or i in cop:
+                    continue
+                ax, ay = p[i][0] + vx, p[i][1] + vy
+                ci, cj = round(ax / tol), round(ay / tol)
+                melhor = None
+                for dx in (-1, 0, 1):
+                    for dy in (-1, 0, 1):
+                        for j in celula.get((ci + dx, cj + dy), ()):
+                            if j == i or j in orig or j in cop:
+                                continue
+                            d = math.hypot(p[j][0] - ax, p[j][1] - ay)
+                            if d <= 1.5 * tol and (melhor is None or d < melhor[0]):
+                                melhor = (d, j)
+                if melhor is not None:
+                    orig.add(i)
+                    cop.add(melhor[1])
+                    achados.append((i, melhor[1]))
+            if achados:
+                pares[n] = achados
+        return pares
+
+    def _caixa(pts):
+        xs, ys = [q[0] for q in pts], [q[1] for q in pts]
+        return min(xs), min(ys), max(xs), max(ys)
+
+    for _rodada in range(6):
+        votos: dict = {}
+        for n, p in pos.items():
+            livres = [i for i in range(len(p)) if i not in copia[n]]
+            vistos = set()
+            for i in livres:
+                for j in livres:
+                    dx, dy = p[j][0] - p[i][0], p[j][1] - p[i][1]
+                    k = (round(dx / tol), round(dy / tol))
+                    if k <= (0, 0) or math.hypot(dx, dy) < minimo:
+                        continue            # um sentido só; curto não é cópia de planta
+                    vistos.add(k)
+            for k in vistos:
+                votos.setdefault(k, set()).add(n)
+        # o arredondamento pode partir um vetor em dois baldes vizinhos
+        cand = []
+        for k, ns in votos.items():
+            if len(ns) < 3:
+                continue
+            junto = set()
+            for dx in (-1, 0, 1):
+                for dy in (-1, 0, 1):
+                    junto |= votos.get((k[0] + dx, k[1] + dy), set())
+            if len(junto) >= 5:
+                cand.append((len(junto), len(ns), k))
+        aceito = None
+        for _nv, _nb, k in sorted(cand, reverse=True)[:10]:
+            v = (k[0] * tol, k[1] * tol)
+            # no vetor, o nome vota com 2+ pares ou metade das peças livres:
+            # 1 par solto de um nome de 8 é coincidência (a 1ª e a última
+            # mesa da fileira); o de 2 peças com 1 par é a peça copiada
+            pares = {n: ps for n, ps in _casar(v).items()
+                     if len(ps) >= 2 or 2 * len(ps) >= 0.5 * (len(pos[n]) - len(copia[n]))}
+            if len(pares) < 5:
+                continue
+            origs = [pos[n][i] for n, ps in pares.items() for i, _ in ps]
+            cops = [pos[n][j] for n, ps in pares.items() for _, j in ps]
+            a, b = _caixa(origs), _caixa(cops)
+            if a[0] <= b[2] and b[0] <= a[2] and a[1] <= b[3] and b[1] <= a[3]:
+                continue                    # originais e cópias no mesmo lugar
+            # Uma fileira de 8 mesas também é "duas metades de 4", e as caixas
+            # das metades não se cruzam. Entre duas cópias de planta, o vão na
+            # direção do vetor é a MAIOR faixa vazia; entre as metades de uma
+            # grade, é igual ao passo dela.
+            ux, uy = v[0] / math.hypot(*v), v[1] / math.hypot(*v)
+            po = sorted(q[0] * ux + q[1] * uy for q in origs)
+            pc = sorted(q[0] * ux + q[1] * uy for q in cops)
+            internos = [y - x for x, y in zip(po, po[1:])] + [y - x for x, y in zip(pc, pc[1:])]
+            if pc[0] - po[-1] <= 1.5 * max(internos + [0.0]):
+                continue
+            # ...e VAZIA: nenhuma peça desses nomes no corredor que o original
+            # varre até a cópia — entre os dois na direção do vetor, e na
+            # largura deles MAIS o espaçamento típico entre as peças do
+            # original na outra direção. Sem a largura, a planta do andar AO
+            # LADO vetava a cópia de verdade; sem a folga, a coincidência numa
+            # constelação fina escapava pela vizinha de fileira.
+            viz = []
+            for q in origs[:300]:
+                d = min((math.hypot(q[0] - r[0], q[1] - r[1]) for r in origs if r is not q), default=0.0)
+                viz.append(d)
+            folga = max(sorted(viz)[len(viz) // 2] if viz else 0.0, tol)
+            tr = [-q[0] * uy + q[1] * ux for q in origs + cops]
+            t0, t1 = min(tr) - folga, max(tr) + folga
+            no_corredor = sum(1 for n in pares for i, q in enumerate(pos[n]) if i not in copia[n]
+                              and po[-1] < q[0] * ux + q[1] * uy < pc[0]
+                              and t0 <= -q[0] * uy + q[1] * ux <= t1)
+            if no_corredor > 0.1 * len(origs):
+                continue                    # uma peça perdida no meio não veta 16 pares
+            aceito = (v, pares)
+            break
+        if aceito is None:
+            break
+        v, pares = aceito
+        for n, ps in pares.items():
+            copia[n].update(j for _, j in ps)
+        aceitos.append(aceito)
+    # O nome só conta se os vetores, JUNTOS, casam ao menos metade das peças
+    # dele (pares de coincidência — o núcleo do prédio em andares diferentes
+    # desenhados lado a lado — não passam). Junto e não por vetor: no
+    # elétrico, hh tem 22 pares no térreo e 10 no superior; por vetor, o
+    # superior casava 10 de 48 e o hh caía de lá.
+    envolvidas: dict = {}
+    for _v, pares in aceitos:
+        for n, ps in pares.items():
+            envolvidas.setdefault(n, set()).update(i for par in ps for i in par)
+    fica = {n for n, s in envolvidas.items() if len(s) >= 0.5 * len(pos[n])}
+    for v, pares in aceitos:
+        pares = {n: ps for n, ps in pares.items() if n in fica}
+        if len(pares) < 5:
+            continue                        # sem os caronas, o vetor não se sustenta
+        for n, ps in pares.items():
+            por_nome[n] = por_nome.get(n, 0) + len(ps)
+        top = sorted(pares, key=lambda n: -len(pares[n]))[:3]
+        vetores.append([round(v[0] * uf, 2), round(v[1] * uf, 2),
+                        sum(len(ps) for ps in pares.values()), len(pares), top])
+    if not vetores:
+        return {}
+    return {"pecas": sum(por_nome.values()), "vetores": vetores,
+            "nomes": dict(sorted(por_nome.items(), key=lambda kv: -kv[1])[:8])}
+
+
 def medir_por_folha(walls, hatches, polygon_areas, blocks, mapa) -> dict:
     """Quanto pesa o que a leitura por folha deixa como estava — SÓ MEDE.
 
@@ -6235,6 +6420,15 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         except Exception as _efl:
             logger.warning("[leitura-por-folha] falhou (não-fatal): %s", _efl)
             _folhas = {"aplicada": False, "motivo": "erro: %s" % str(_efl)[:120]}
+
+    # 📏 28/09 (estudo, D1): a planta repetida no modelo — SÓ registro, sobre
+    # o que a leitura por folha deixou (é o que vai pro cliente)
+    try:
+        _cop = copias_em_sombra(blocks, unit_factor)
+        if _cop:
+            metadata["copias_sombra"] = _cop
+    except Exception as _ecs:
+        logger.warning("[copias-sombra] falhou (não-fatal): %s", _ecs)
 
     # 26/09: quantas das posições que FICARAM são o símbolo da legenda
     if _amostra_pos:
