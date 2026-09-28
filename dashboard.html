@@ -2469,6 +2469,7 @@
       try { window.aiarqConvite && window.aiarqConvite.limpar(); } catch (_) {}
       // 26/09 (auditoria LGPD-9): a lembrança do Escritório (nomes de projeto) sai junto com a conta
       try { localStorage.removeItem('aiarq_esc_mapa'); sessionStorage.removeItem('aiarq_esc_ctx'); } catch (_) {}
+      try { sessionStorage.removeItem('aiarq_fila_pre_sim'); } catch (_) {}   // 28/09: fila do "sim"
       await sbClient.auth.signOut();
       window.location.href = 'login.html';
     });

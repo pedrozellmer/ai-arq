@@ -106,8 +106,10 @@
           '<div>',
             '<p id="aiarq-cc-title" style="margin:0 0 4px;font-size:14px;font-weight:600;color:#0f172a;">Cookies e telemetria</p>',
             '<p id="aiarq-cc-desc" style="margin:0;font-size:13px;line-height:1.5;color:#475569;">',
-              'Usamos cookies <strong>essenciais</strong> pra manter sua sessão (login Supabase). ',
-              'Com seu sim, coletamos <strong>telemetria de uso</strong> pra melhorar a plataforma — anônima nas páginas públicas e vinculada à sua conta quando você está logado. ',
+              // 28/09 (parecer jurídico): dizer o que roda sem o sim (segurança e contagem sem cookie) e que o sim
+              // cobre também as páginas abertas antes da resposta (a fila do sessionStorage, aiarq-utils.js)
+              'Usamos cookies <strong>essenciais</strong> (sessão e proteção contra robôs) e uma contagem de visitas sem cookie, que não identifica você. ',
+              'Com seu sim, coletamos <strong>telemetria de uso</strong> pra melhorar a plataforma: sem seu nome nas páginas públicas e vinculada à sua conta quando você está logado, incluindo as páginas que você abriu antes de responder. ',
               '<a href="', POLICY_URL, '" style="color:#4f46e5;text-decoration:underline;font-weight:500;">Política de Privacidade</a>.',
             '</p>',
           '</div>',
@@ -146,7 +148,7 @@
                 ICON_LOCK, ' Sempre ativo',
               '</span>',
             '</div>',
-            '<p style="margin:4px 0 0;font-size:12px;line-height:1.5;color:#64748b;">Cookies de autenticação Supabase e preferências locais (idioma, tour de onboarding). Sem esses, o login não funciona.</p>',
+            '<p style="margin:4px 0 0;font-size:12px;line-height:1.5;color:#64748b;">Sessão de login (Supabase), preferências locais e o cookie de segurança do Cloudflare contra robôs. Sem esses, o login e a proteção do site não funcionam. A contagem de visitas sem cookie também não depende desta escolha.</p>',
           '</div>',
         '</div>',
 
@@ -158,7 +160,7 @@
               '<p style="margin:0;font-size:13px;font-weight:600;color:#0f172a;">Analytics / Telemetria</p>',
               '<input id="aiarq-cc-analytics" type="checkbox" style="width:18px;height:18px;accent-color:#4f46e5;cursor:pointer;" aria-describedby="aiarq-cc-analytics-desc">',
             '</div>',
-            '<p id="aiarq-cc-analytics-desc" style="margin:4px 0 0;font-size:12px;line-height:1.5;color:#64748b;">Métricas de uso (páginas visitadas, cliques). Anônimas nas páginas públicas; quando você está logado, ficam vinculadas à sua conta pra melhorar o produto.</p>',
+            '<p id="aiarq-cc-analytics-desc" style="margin:4px 0 0;font-size:12px;line-height:1.5;color:#64748b;">Métricas de uso (páginas visitadas, cliques). Sem nome nem e-mail nas páginas públicas; quando você está logado, ficam vinculadas à sua conta pra melhorar o produto. Inclui as páginas abertas antes da sua resposta.</p>',
           '</div>',
         '</label>',
 

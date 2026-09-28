@@ -274,6 +274,7 @@
     // pessoa. "Não sou eu" apaga ele; quem é o dono do convite abre o link do e-mail de novo.
     if (!destaAba) window.aiarqConvite.limparSe(token);
     try { sessionStorage.removeItem('aiarq_convite_sem_codigo'); } catch (_) {}
+    try { sessionStorage.removeItem('aiarq_fila_pre_sim'); } catch (_) {}   // 28/09: a fila de antes do "sim" não passa pra próxima conta
     try { await sb.auth.signOut(); } catch (_) {}
     location.reload();
   }

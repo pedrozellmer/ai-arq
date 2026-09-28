@@ -419,6 +419,7 @@ function menu(abre) { $('side').classList.toggle('aberto', abre); $('scrim').cla
 // (auditoria LGPD-9): o nome dos projetos não fica no navegador depois de sair.
 function sairDaConta() {
   try { localStorage.removeItem('aiarq_esc_mapa'); sessionStorage.removeItem('aiarq_esc_ctx'); sessionStorage.removeItem('aiarq_escritorio_levou'); } catch (_) {}
+  try { sessionStorage.removeItem('aiarq_fila_pre_sim'); } catch (_) {}   // 28/09: a fila de antes do "sim" não passa pra próxima conta
   sb.auth.signOut().finally(() => { location.href = 'login.html'; });
 }
 function abrirModal(t, html, largo) { $('modal-t').textContent = t; $('modal-b').innerHTML = html; const mc = document.querySelector('#modal .modal-c'); if (mc) mc.classList.toggle('largo', !!largo); $('modal').hidden = false; const f = $('modal-b').querySelector('input,textarea,select'); if (f) f.focus(); }

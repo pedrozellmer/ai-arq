@@ -935,6 +935,7 @@
       // 26/09 (auditoria LGPD-9): o nome dos projetos do Escritório (quase sempre o nome do cliente) ficava no
       // navegador depois do Sair — no computador compartilhado, o próximo lia
       try { localStorage.removeItem('aiarq_esc_mapa'); sessionStorage.removeItem('aiarq_esc_ctx'); } catch (_) {}
+      try { sessionStorage.removeItem('aiarq_fila_pre_sim'); } catch (_) {}   // 28/09: fila do "sim"
       if (window.sbClient && window.sbClient.auth) {
         window.sbClient.auth.signOut().finally(function () {
           window.location.href = 'login.html';

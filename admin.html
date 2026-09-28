@@ -7615,6 +7615,7 @@ async function loadAgentData() {
 // LOGOUT
 // ══════════════════════════════════════════════
 document.getElementById('btn-logout').addEventListener('click', async () => {
+  try { sessionStorage.removeItem('aiarq_fila_pre_sim'); } catch (_) {}   // 28/09: como todo Sair (política, seção 1.5)
   await sbClient.auth.signOut();
   window.location.href = 'login.html';
 });

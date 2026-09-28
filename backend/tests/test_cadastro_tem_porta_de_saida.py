@@ -54,7 +54,9 @@ def test_a_saida_DESLOGA_antes_de_navegar():
     continua igual — só que agora com um botão que parece funcionar."""
     corpo = _sem_comentario_html(_CAD)
     i = corpo.index("async function sairDoCadastro")
-    fn = corpo[i:i + 500]
+    # 28/09: a função INTEIRA (até o `}` dela), não 500 caracteres — a limpeza da fila do cookie
+    # empurrou o `location.href` pra fora da janela fixa sem mudar a ordem de nada
+    fn = corpo[i:corpo.index("\n  }", i)]
     i_out = fn.index("signOut")
     i_nav = fn.index("location.href")
     assert i_out < i_nav, (
