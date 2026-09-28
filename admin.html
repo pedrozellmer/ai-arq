@@ -6836,6 +6836,52 @@ function ogBars(rows, total){
   }).join('');
 }
 
+// 🩸 27/09/2026 (item 5 da telemetria) — "declarou × chegou por". O `src` (1º toque
+// técnico: referência/UTM) estava em 84 de 84 fichas, e nenhuma tela mostrava. Medido
+// de 30/08 a 27/09: das 28 contas que DECLARARAM IA, só 6 chegaram com marca de IA no
+// link (chatgpt.com, gemini, copilot.com) e 17 chegaram pelo www.google.com — a IA do
+// Google e o app de IA que abre o navegador não deixam rastro. O declarado é a fonte do
+// canal de IA; o técnico, a do caminho. Os dois lado a lado respondem os dois.
+// Função PURA (a bancada roda no dukpy): `pares` = [{declarou, chegou}], `rotulos` = OG_SRC_LABEL.
+function _grupoChegou(src){
+  const s = String(src || '').trim().toLowerCase();
+  if (!s) return 'sem origem';
+  if (s === 'google') return 'Google';
+  if (/^(chatgpt|gemini|copilot|perplexity|claude)/.test(s)) return 'IA (marca no link)';
+  if (s === 'direto') return 'direto';
+  if (s === 'busca') return 'outra busca';
+  if (/^(instagram|ig|linkedin|facebook|youtube)\b/.test(s)) return 'redes';
+  return 'outro site';
+}
+const _COLUNAS_CHEGOU = ['Google', 'IA (marca no link)', 'direto', 'outra busca', 'redes', 'outro site', 'sem origem'];
+function htmlDeclarouXChegou(pares, rotulos){
+  const lista = Array.isArray(pares) ? pares : [];
+  if (!lista.length) return '<p class="text-gray-400 text-sm">Nenhuma conta nova nesta janela.</p>';
+  const R = rotulos || {};
+  const linhas = {};
+  lista.forEach(p => {
+    const k = String(p.declarou || '__none');
+    const d = k.startsWith('ia') ? 'ia' : k;
+    const c = _grupoChegou(p.chegou);
+    linhas[d] = linhas[d] || { n: 0 };
+    linhas[d][c] = (linhas[d][c] || 0) + 1;
+    linhas[d].n += 1;
+  });
+  const usadas = _COLUNAS_CHEGOU.filter(c => Object.values(linhas).some(l => l[c]));
+  const ordem = Object.keys(linhas).sort((a, b) => linhas[b].n - linhas[a].n);
+  const rot = k => k === '__none' ? 'não informado' : (k === 'ia' ? '🤖 Uma IA indicou (qualquer)' : (R[k] || k));
+  const semTecnica = lista.every(p => !p.chegou);
+  return (semTecnica ? '<p class="text-xs text-amber-700 mb-2">A lista veio sem a origem técnica — só o declarado.</p>' : '') +
+    `<div class="overflow-x-auto"><table class="w-full text-sm">
+      <thead><tr class="text-xs text-gray-400"><th class="text-left font-normal pb-1">declarou ↓ · chegou por →</th>${
+        usadas.map(c => `<th class="text-right font-normal pb-1 px-2">${esc(c)}</th>`).join('')}<th class="text-right font-normal pb-1">total</th></tr></thead>
+      <tbody>${ordem.map(k => `<tr class="border-t border-gray-100">
+        <td class="py-1 text-gray-700">${esc(rot(k))}</td>${
+          usadas.map(c => `<td class="py-1 px-2 text-right tabular-nums ${linhas[k][c] ? 'text-gray-800' : 'text-gray-300'}">${linhas[k][c] || 0}</td>`).join('')}
+        <td class="py-1 text-right tabular-nums font-semibold">${linhas[k].n}</td></tr>`).join('')}</tbody>
+    </table></div>`;
+}
+
 async function loadOrigem(){
   const box = document.getElementById('origem-box');
   if (box) box.innerHTML = '<p class="text-gray-500 text-sm">Carregando...</p>';
@@ -6879,6 +6925,10 @@ async function loadOrigem(){
     label: k==='__none' ? '<span class="text-gray-400">&mdash; não informado</span>' : (OG_SRC_LABEL[k] || ('✏️ '+esc(k)))
   })).sort((a,b)=>b.n-a.n);
   const srcNo1 = srcRows.filter(r=>r.key!=='__none')[0];
+  // 27/09 (item 5): declarou × chegou por — contas dos últimos 30 dias, sem as da casa
+  const _desde30 = Date.now() - 30 * 86400000;
+  const _paresDxC = users.filter(u => !u.conta_da_casa && Date.parse(u.auth_created_at || '') >= _desde30)
+    .map(u => ({ declarou: _fonteNormalizada(u), chegou: u.src || '' }));
 
   // Região por DDD do WhatsApp (aproximado)
   const byUf = {}; let semTel = 0;
@@ -7021,6 +7071,11 @@ async function loadOrigem(){
         <p class="text-xs text-gray-400 mb-3">${comTel} de ${total} têm WhatsApp com DDD reconhecível</p>
         ${ufRows.length?ogBars(ufRows, comTel):'<p class="text-gray-400 text-sm">Sem telefones pra estimar região.</p>'}
       </div>
+    </div>
+    <div class="rounded-2xl border bg-white p-5 mt-5">
+      <h3 class="font-semibold text-gray-900 mb-0.5">Declarou &times; chegou por <span class="text-xs font-normal text-gray-400">(contas dos últimos 30 dias)</span></h3>
+      <p class="text-xs text-gray-400 mb-3">Linha = o que a pessoa disse em &ldquo;Como nos conheceu?&rdquo;; coluna = por onde o navegador dela chegou da 1ª vez (referência ou UTM). A IA do Google e o app de IA costumam chegar como Google ou direto: o declarado é a fonte do canal de IA.</p>
+      ${htmlDeclarouXChegou(_paresDxC, OG_SRC_LABEL)}
     </div>
     <div class="rounded-2xl border bg-white p-5 mt-5">
       <div class="flex items-baseline justify-between mb-1 flex-wrap gap-2">

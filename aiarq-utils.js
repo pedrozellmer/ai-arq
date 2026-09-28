@@ -334,6 +334,23 @@
   window.aiArqSource = function () {
     try { return JSON.parse(localStorage.getItem('aiarq_src') || 'null'); } catch (e) { return null; }
   };
+  // ─── A origem que vai pra CONTA (27/09/2026, item 5 da telemetria) ───────
+  // 🔑 Régua ÚNICA: o cadastro.html (assim que vê a sessão, e no submit) e o
+  // login.html (no signUp por e-mail) mandam ESTE objeto pro user_metadata.
+  // Morava só no cadastro.html; o login passou a precisar da mesma, e duas
+  // cópias da mesma régua é o defeito que a casa já pagou duas vezes.
+  // `src_landing` = caminho (location.pathname), nunca a query; o corte em 80
+  // se repete porque o localStorage é do visitante.
+  function origemParaConta(s) {
+    if (!s || !s.label) return null;
+    return {
+      src: s.label,
+      src_ref: s.ref || '',
+      src_campaign: s.utm_campaign || '',
+      src_landing: String(s.landing || '').slice(0, 80)
+    };
+  }
+  window.aiArqOrigemParaConta = origemParaConta;
 
   // ─── Cliente Supabase ─────────────────────────────────────────
   // Defensivo: se o <script> do supabase-js não carregou (rede ruim,

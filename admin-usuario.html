@@ -176,6 +176,18 @@ function statusBadge(u){
   return '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 text-green-800 text-xs font-medium">Cadastro completo</span>';
 }
 
+// 🩸 27/09/2026 (item 5 da telemetria): por onde o navegador chegou da 1ª vez
+// (referência/UTM, gravado na conta). Estava em 84 de 84 fichas e nenhuma tela
+// mostrava. Vem de fora (qualquer um manda a referência que quiser): esc().
+function chegouPor(u){
+  if (!u || !u.src) return '<span class="text-gray-400">sem origem gravada</span>';
+  const partes = [esc(u.src)];
+  if (u.src_ref) partes.push('<span class="text-gray-400">via ' + esc(u.src_ref) + '</span>');
+  if (u.src_campaign) partes.push('<span class="text-gray-400">campanha ' + esc(u.src_campaign) + '</span>');
+  if (u.src_landing) partes.push('<span class="text-gray-400">entrou por ' + esc(u.src_landing) + '</span>');
+  return partes.join(' · ');
+}
+
 function renderHeader(u){
   const box = document.getElementById('user-header');
   const uf = _dddToUf(u.whatsapp);
@@ -194,6 +206,8 @@ function renderHeader(u){
     ['Cargo / área', esc([u.user_role,u.area].filter(Boolean).join(' · ') || '--')],
     ['WhatsApp', u.whatsapp ? (esc(u.whatsapp) + (uf?` <span class="text-gray-400">(${uf} — aprox. DDD)</span>`:'')) : '--'],
     ['Como conheceu', u.referral_source ? (OG_SRC_LABEL[u.referral_source] || esc(u.referral_source)) + (u.referral_detail?` <span class="text-gray-400 italic">&ldquo;${esc(u.referral_detail)}&rdquo;</span>`:'') : '--'],
+    // 27/09 (item 5 da telemetria): o 1º toque técnico, lado a lado com o declarado
+    ['Chegou por', chegouPor(u)],
     ['Cadastro', _fmtDateTime(u.auth_created_at || u.profile_created_at)],
     ['Último acesso', u.last_sign_in_at ? _fmtDateTime(u.last_sign_in_at) : 'nunca entrou'],
     ['Projetos', `${u.num_projects!=null?u.num_projects:'--'}${Number(u.done_count)?` · ${u.done_count} ok`:''}${Number(u.error_count)?` · ${u.error_count} erro`:''}`],

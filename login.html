@@ -468,7 +468,14 @@
 
     try {
       if (isSignupMode) {
-        const { data, error } = await sbClient.auth.signUp({ email, password });
+        // 🩸 27/09/2026 (item 5 da telemetria): a origem vai pra conta JÁ na
+        // criação (vira user_metadata). Antes só ia depois da ficha, e quem
+        // confirmava o e-mail em OUTRO aparelho (o celular) chegava ao cadastro
+        // sem o 1º toque, que mora no localStorage DESTE navegador.
+        const _origem = window.aiArqOrigemParaConta
+          ? window.aiArqOrigemParaConta(window.aiArqSource && window.aiArqSource()) : null;
+        const { data, error } = await sbClient.auth.signUp(
+          _origem ? { email, password, options: { data: _origem } } : { email, password });
         if (error) throw error;
         // 06/09: criar conta por e-mail/senha nao tinha evento — so o caminho do Google era medido,
         // entao o funil de entrada estava contando so metade das portas. 🔒 nunca o e-mail.

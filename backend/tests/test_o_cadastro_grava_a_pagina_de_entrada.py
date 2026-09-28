@@ -51,7 +51,11 @@ def _ler(js, expr):
 
 
 def _motor():
+    # 27/09: a régua mora em aiarq-utils.js (`origemParaConta`, exposta como
+    # window.aiArqOrigemParaConta) — o `_origemParaConta` do cadastro só a chama.
     js = motor()
+    js.evaljs(funcao_js("origemParaConta", "aiarq-utils.js"))
+    js.evaljs("var window = { aiArqOrigemParaConta: origemParaConta };")
     js.evaljs(funcao_js("_origemParaConta", _ARQ))
     return js
 
@@ -116,7 +120,7 @@ def _chamadas_do_updateUser(toque, trecho=None):
     js = _motor()
     js.evaljs(
         "var __chamadas = [];"
-        "var window = { aiArqSource: function () { return %s; } };"
+        "window.aiArqSource = function () { return %s; };"
         "var sbClient = { auth: { updateUser: function (o) {"
         " __chamadas.push(o); return Promise.resolve({ data: {}, error: null }); } } };"
         "async function __atribuir() { %s catch (e) { throw e; } }"

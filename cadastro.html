@@ -578,6 +578,8 @@
     }
 
     // Chegou aqui = precisa preencher (ou não deu pra confirmar).
+    // 27/09 (item 5 da telemetria): a origem vai pra conta JÁ, antes da ficha.
+    _gravarOrigemCedo(meta);
     // 27/09 (board TELA-10/MKT-3): o convite não está guardado NESTE navegador — o dono da obra abriu o link no
     // WhatsApp ou no app do Gmail e entrou por outro, ou veio pelo caminho "sem código". Caía no cadastro LONGO de
     // profissional ("área de atuação", "como nos conheceu") e virava "cliente novo por indicação" nos números.
@@ -824,14 +826,27 @@
   // se cadastrou" só existia na telemetria, que vê só quem aceita cookie. É
   // `location.pathname` — caminho, nunca a query — e o corte em 80 é repetido
   // aqui porque o localStorage é do visitante.
+  // 27/09/2026: a régua mora em aiarq-utils.js (`aiArqOrigemParaConta`) — o
+  // login.html manda a MESMA no cadastro por e-mail.
   function _origemParaConta(s) {
-    if (!s || !s.label) return null;
-    return {
-      src: s.label,
-      src_ref: s.ref || '',
-      src_campaign: s.utm_campaign || '',
-      src_landing: String(s.landing || '').slice(0, 80)
-    };
+    return window.aiArqOrigemParaConta ? window.aiArqOrigemParaConta(s) : null;
+  }
+
+  // 🩸 27/09/2026 (item 5 da telemetria) — a origem só ia pra conta DEPOIS da
+  // ficha (o submit, abaixo). De 96 contas de 30/08 a 27/09, 12 pararam antes da
+  // ficha — e as 12 ficaram sem origem nenhuma na conta. Agora ela vai assim que
+  // a página vê a sessão e sabe que falta a ficha.
+  // 🪤 Só se a conta ainda NÃO tem origem: o 1º toque não se sobrescreve (quem
+  // voltou por outro caminho depois continua com a origem de quando chegou).
+  function _origemQueFalta(meta, toque) {
+    if (meta && meta.src) return null;
+    return _origemParaConta(toque);
+  }
+  function _gravarOrigemCedo(meta) {
+    try {
+      var o = _origemQueFalta(meta, window.aiArqSource && window.aiArqSource());
+      if (o) sbClient.auth.updateUser({ data: o }).catch(function () {});
+    } catch (e) { /* atribuição nunca bloqueia o cadastro */ }
   }
 
   // ══════════════════════════════════════════════
