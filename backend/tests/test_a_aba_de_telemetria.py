@@ -20,7 +20,9 @@ from _jsbancada import fonte_html, funcao_js, motor  # noqa: E402
 
 _ADMIN = "admin.html"
 
-_RESUMO = ("mov-farol", "mov-frase", "mov-saude", "mov-cadastros", "mov-projetos", "mov-alerta")
+# 28/09 (Pedro): "deixa o gráfico de clientes por semana também no dash" → dash-cadastros-semana
+_RESUMO = ("mov-farol", "mov-frase", "mov-saude", "mov-cadastros", "mov-projetos", "mov-alerta",
+           "dash-cadastros-semana")
 _MUDARAM = ("mov-barras", "mov-inflacao", "mov-funil", "mov-paginas", "mov-origem", "mov-origem-nota",
             "mov-referencia", "mov-referencia-nota", "origem-box")
 _ATIVIDADE = ("act-auto-refresh", "act-live-dot", "act-days", "act-cards", "act-funnel-body", "act-by-event",
@@ -92,7 +94,7 @@ def _painel(hash_inicial="", switch_src=None):
         "  querySelector: function () { return null; } };"
         "function closeSidebar() {}"
         % json.dumps(hash_inicial))
-    for f in ("loadDashboardStats", "loadOrigem", "loadFilhotes", "carregarBadgeMensagens", "loadActivity",
+    for f in ("loadDashboardStats", "loadCadastrosPorSemana", "loadOrigem", "loadFilhotes", "carregarBadgeMensagens", "loadActivity",
               "carregarMovimentoDoSite", "loadUsers", "_filtroPadraoAoEntrar", "loadProjects",
               "loadCalibrationFactors", "loadAgentData", "loadNPSData", "loadEmailCatalog", "loadInsights",
               "loadMessages", "loadNewsletterPreview", "loadNewsletterScheduled", "loadInstagramPosts",
@@ -120,6 +122,7 @@ def test_o_dashboard_nao_carrega_mais_a_origem():
     js.evaljs("switchTab('dashboard', true); null;")
     chamou = _ler(js, "__chamou")
     assert "loadDashboardStats" in chamou and "loadOrigem" not in chamou, chamou
+    assert "loadCadastrosPorSemana" in chamou, "o gráfico de cadastros por semana saiu do dash"
 
 
 def test_link_e_favorito_velhos_da_atividade_abrem_a_telemetria():
@@ -155,6 +158,37 @@ def test_o_boot_do_dashboard_nao_chama_a_origem():
     boot = html[i:html.index("})();", i)]
     ramo = boot[boot.index("if (aba === 'dashboard')"):boot.index("} else {")]
     assert "loadDashboardStats()" in ramo and not re.search(r"loadOrigem\(\)", ramo), ramo
+    assert "loadCadastrosPorSemana()" in ramo, ramo
+
+
+# ─── o gráfico de cadastros por semana (no dash) desenha de verdade ────────────────────────────
+def _grafico(users, agora):
+    js = motor()
+    js.evaljs(funcao_js("htmlCadastrosPorSemana", _ADMIN) + "; null;")
+    return js.evaljs("htmlCadastrosPorSemana(%s, Date.parse(%s))" % (json.dumps(users), json.dumps(agora)))
+
+
+def test_o_grafico_de_cadastros_por_semana_conta_semana_fixa_e_tira_a_em_curso_da_media():
+    # datas sem fuso = hora local (vale igual no Windows e no CI); meio-dia, longe da virada
+    users = [{"auth_created_at": d} for d in ("2026-09-15T12:00:00", "2026-09-16T12:00:00",
+                                               "2026-09-22T12:00:00", "2026-09-29T12:00:00")]
+    h = _grafico(users, "2026-09-30T12:00:00")                 # quarta-feira
+    assert "Cadastros por semana" in h
+    assert "4 cadastros em 3 semanas, desde 14/09" in h, h[:600]
+    assert "m&eacute;dia <b>1.5</b>/semana nas 2 semanas fechadas" in h     # (2 + 1) / 2, sem a em curso
+    assert "(1 em 3 de 7 dias)" in h and "em curso" in h
+
+
+def test_CONTROLE_o_grafico_mudaria_com_outra_contagem():
+    users = [{"auth_created_at": "2026-09-15T12:00:00"}, {"auth_created_at": "2026-09-29T12:00:00"}]
+    h = _grafico(users, "2026-09-30T12:00:00")
+    assert "4 cadastros" not in h and "2 cadastros em 3 semanas" in h
+
+
+def test_o_grafico_saiu_da_origem_e_nao_aparece_duas_vezes():
+    html = fonte_html(_ADMIN)
+    assert "Cadastros por semana" not in funcao_js("loadOrigem", _ADMIN)
+    assert html.count('<h3 class="font-semibold text-gray-900">Cadastros por semana</h3>') == 1
 
 
 def test_o_ao_vivo_da_atividade_olha_a_aba_nova():
