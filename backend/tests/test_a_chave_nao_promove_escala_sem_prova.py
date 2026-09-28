@@ -52,7 +52,7 @@ _SEM_RESSALVA = {"regua_cotas_status": "validada", "unidade_validada_por_cotas":
 
 
 class _Extracao:
-    """O que o cofre lê da extração — os quatro resumos e o metadata."""
+    """O que o cofre lê da extração — os resumos, as seções de parede e o metadata."""
 
     def __init__(self, metadata):
         self.metadata = metadata
@@ -62,6 +62,9 @@ class _Extracao:
 
     def get_areas_by_layer(self):
         return {"HACHURA-LAJE": 55.2}
+
+    def get_layers_secao_de_parede(self):
+        return set()
 
     def get_polygon_areas_by_layer(self):
         return {"CONTORNO-MURO": 120.4}
