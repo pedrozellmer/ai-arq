@@ -562,7 +562,7 @@
       'Em Reprocessar, escolha <b>Ler como Arquitetura</b>',
       'Clique em <b>Reprocessar</b> — usa os mesmos arquivos, não precisa enviar de novo',
     ],
-    acao: 'Com o tipo Estrutura o motor procura só concreto, fôrma e aço. Se o Reprocessar deste projeto já tiver sido usado, crie um projeto novo marcando Arquitetura.',
+    acao: 'Com o tipo Estrutura a leitura procura só concreto, fôrma e aço. Se o Reprocessar deste projeto já tiver sido usado, crie um projeto novo marcando Arquitetura.',
   },
   {
     // 🩸 11/09/2026 — PDF lido como VETOR e mesmo assim sem item. A receita de

@@ -5169,7 +5169,7 @@ _falha_emailed = set()
 _MSG_SEM_ITENS_GENERICA = (
     "Nenhum item quantificável foi identificado neste "
     "arquivo. Causas mais comuns: (1) o PDF é uma imagem "
-    "escaneada ou fotografada — o motor lê PDF vetorial "
+    "escaneada ou fotografada — a gente lê PDF vetorial "
     "exportado direto do CAD (AutoCAD/Revit); (2) a prancha "
     "tem só o desenho de layout, sem quadros de áreas, "
     "legendas ou especificações. Reenvie a planta "
@@ -5196,7 +5196,7 @@ def _mensagem_sem_itens(is_structural: bool, paginas_vetoriais: int = 0) -> str:
         # do caso. O caminho que não repete o erro é o Reprocessar com "Ler como
         # Arquitetura", na vista Processamento: mesmos arquivos, outra pergunta.
         return ("Nenhum item de ESTRUTURA foi identificado neste arquivo. Com o tipo "
-                "'Estrutura', o motor procura só concreto, fôrma e aço — planta de "
+                "'Estrutura', a leitura procura só concreto, fôrma e aço — planta de "
                 "fôrma, detalhamento de armação ou quadro de ferros. Se o seu arquivo "
                 "é de ARQUITETURA, não precisa enviar de novo: no menu do projeto, "
                 "abra 'Processamento', escolha 'Ler como Arquitetura' e clique em "

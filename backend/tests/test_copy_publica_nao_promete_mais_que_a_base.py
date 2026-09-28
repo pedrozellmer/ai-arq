@@ -11,7 +11,12 @@ FAQ, /dados, /sobre, preços, llms.txt e posts do blog:
     comparação por tipo de obra tem 2 projetos, de um tipo só.
 Pedro liberou a limpeza em todos esses lugares. O guarda cobra o texto de cada página pública e das fontes
 que geram texto público (blog/posts.json → blog/posts/*.html; blog/gerar_llms.py → llms.txt).
-Fora do escopo, de propósito: a área logada (dashboard, projeto, revisão), que não é copy de aquisição.
+
+27/09, mais tarde: Pedro liberou também a ÁREA LOGADA (painel, projeto, revisão, agradecimento e a ajuda de
+erro do aiarq-utils.js) — "Avisos do motor", "Reprocessar com motor atualizado", "ajude a calibrar o motor",
+"sua revisão afina o motor — os próximos projetos saem melhores". Ali o guarda lê o arquivo SEM comentário
+de código (comentário não aparece pro cliente) e com os escapes \\uXXXX do JS já decodificados.
+Fora, de propósito: o recado que só o admin vê ("Pra testar o motor…") e os e-mails do servidor.
 """
 import glob
 import html
@@ -84,6 +89,60 @@ def test_CONTROLE_o_guarda_nao_morde_uso_legitimo():
           "cert": "PDF assinado com certificado digital ICP-Brasil",
           "motor": "persiana motorizada"}
     assert problemas(ok) == []
+
+
+AREA_LOGADA = ["dashboard.html", "projeto.html", "revisao.html", "obrigado.html", "aiarq-utils.js"]
+
+PROIBIDAS_LOGADA = PROIBIDAS + [
+    (r"afinar?\s+o\s+motor|calibrar\s+o\s+motor|ensina\s+o\s+motor|calibra[çc][ãa]o\s+do\s+motor",
+     "promessa que a base não sustenta"),
+    (r"sa[ie]m\s+(medindo\s+)?melhor|mais\s+afiados", "promessa que a base não sustenta"),
+    (r"avisos\s+do\s+motor|motor\s+atualizado|vers[ãa]o(\s+mais\s+nova|\s+[úu]ltima)?\s+do\s+motor"
+     r"|[úu]ltima\s+vers[ãa]o\s+do\s+motor|conserto\s+de\s+motor|o\s+motor\s+procura|corrigir\s+o\s+motor",
+     "jargão da casa"),
+]
+
+
+def _sem_comentario_de_codigo(t):
+    """O que o cliente pode ver: sem <!-- -->, sem /* */ e sem linha de // (url com // fica)."""
+    t = re.sub(r"<!--.*?-->", " ", t, flags=re.S)
+    t = re.sub(r"/\*.*?\*/", " ", t, flags=re.S)
+    t = re.sub(r"(?m)^\s*//.*$", " ", t)
+    t = re.sub(r"(?<![:\"'`])//[^\n\"'`]*$", " ", t, flags=re.M)
+    t = re.sub(r"\\u([0-9a-fA-F]{4})", lambda m: chr(int(m.group(1), 16)), t)
+    return html.unescape(t)
+
+
+def problemas_logada(textos):
+    achados = []
+    for nome, t in textos.items():
+        for pad, porque in PROIBIDAS_LOGADA:
+            for m in re.finditer(pad, t, re.I):
+                achados.append("%s: %r (%s)" % (nome, t[max(0, m.start() - 30):m.end() + 20], porque))
+    return achados
+
+
+def test_a_area_logada_nao_promete_mais_que_a_base():
+    textos = {n: _sem_comentario_de_codigo(io.open(os.path.join(RAIZ, n), encoding="utf-8").read())
+              for n in AREA_LOGADA}
+    achados = problemas_logada(textos)
+    assert not achados, "a área logada voltou a prometer demais:\n  " + "\n  ".join(achados[:15])
+
+
+def test_CONTROLE_o_guarda_da_area_logada_REPROVA_o_que_estava_no_ar_e_poupa_comentario():
+    velhas = {
+        "dash": "msg += '\\u2705 Sua revis\\u00e3o afina o motor \\u2014 os pr\\u00f3ximos projetos saem melhores';",
+        "proj": '<h3 class="font-semibold">Avisos do motor</h3><p>Reprocessar com motor atualizado</p>',
+        "proj2": "⭐ Ajude a calibrar o motor — e faz seus próximos projetos saírem mais afiados",
+        "rev": "é recado pra gente conferir e corrigir o motor.",
+        "obr": "'O que faltou nessa planilha? Isso vira conserto de motor'",
+    }
+    achados = problemas_logada({n: _sem_comentario_de_codigo(t) for n, t in velhas.items()})
+    for nome in velhas:
+        assert any(a.startswith(nome + ":") for a in achados), (nome, achados)
+    comentario = "  // a planilha revisada é o que CALIBRA o motor — afina o motor\n<!-- Avisos do motor -->"
+    assert problemas_logada({"c": _sem_comentario_de_codigo(comentario)}) == []
+    assert "https://ai.arq.br" in _sem_comentario_de_codigo("x = 'https://ai.arq.br';")
 
 
 def test_CONTROLE_o_guarda_le_as_paginas_de_verdade():

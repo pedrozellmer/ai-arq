@@ -282,7 +282,7 @@
     <p class="text-xs text-gray-500 mt-1 mb-3">
       Se o levantamento esqueceu um serviço ou material, escreve aqui. Isso não entra
       na planilha nem muda quantidade nenhuma — é recado pra gente conferir e corrigir
-      o motor.
+      a IA.
     </p>
     <textarea id="faltou-texto" rows="3" maxlength="2000"
               class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -1517,7 +1517,7 @@ document.getElementById('btn-finish')?.addEventListener('click', async () => {
     `✓ ${counts.approved} confirmados · ✕ ${counts.rejected} excluídos · ✎ ${counts.edited} editados. ` +
     pendingNote +
     `Suas correções treinam a IA pro próximo projeto. ` +
-    `Quer contribuir mais? Baixe a planilha, corrija no Excel e suba a versão revisada na tela do projeto — afina o motor pros seus próximos quantitativos.`;
+    `Quer contribuir mais? Baixe a planilha, corrija no Excel e suba a versão revisada na tela do projeto — é com ela que a gente corrige a IA.`;
   const ok = window.toast
     ? await window.toast.confirm(finishMsg, { ok: 'Concluir revisão', cancel: 'Continuar revisando' })
     : confirm(finishMsg);
