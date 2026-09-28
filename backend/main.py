@@ -125,12 +125,58 @@ ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "zarelalopes@gmail.com").lower()
 _SUPA_LOG_PATH = os.path.join(tempfile.gettempdir(), "aiarq_supa_log.txt")
 
 
+# 🔒 27/09/2026 (item 7 da telemetria): este arquivo guardava 200 caracteres de CADA
+# insert que deu certo — o e-mail de usage_events, email_auto_log e email_sent_log
+# entre eles — e é servido por /api/debug/supa-log. Agora: gravação que deu certo
+# registra só os CAMPOS, e qualquer e-mail que sobrar numa linha sai mascarado
+# (vale pras 41 chamadas, inclusive o corpo de erro do PostgREST, que ecoa valor).
+import re as _re_supalog
+_EMAIL_NO_LOG = _re_supalog.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
+
+
+def _sem_email(texto) -> str:
+    return _EMAIL_NO_LOG.sub("<e-mail>", str(texto))
+
+
 def _supa_log(line: str):
     try:
         with open(_SUPA_LOG_PATH, "a", encoding="utf-8") as f:
-            f.write(f"{datetime.utcnow().isoformat()}Z {line}\n")
+            f.write(f"{datetime.utcnow().isoformat()}Z {_sem_email(line)}\n")
     except Exception:
         pass
+
+
+# 🩸 27/09/2026 (item 7 da telemetria): `_supabase_insert` nunca levanta — devolve
+# False — e seis chamadores ignoram o retorno (/api/track, llm_uso, email_sent_log,
+# email_auto_log, o próprio error_log…). A falha morria no print e no arquivo
+# acima, que zera a cada boot (22 a 44 por dia). Agora cada falha CONTA por tabela
+# e a 1ª de cada hora vira linha no error_log (as seguintes só somam — um banco
+# fora do ar não pode virar mil linhas). 🪤 Falha no PRÓPRIO error_log só conta:
+# gravar a falha dele nele mesmo seria recursão.
+_FALHAS_DE_GRAVACAO = {}   # tabela -> {"hora": "AAAA-MM-DDTHH", "n": int, "total": int}
+
+
+def _conta_falha_de_gravacao(tabela: str, motivo: str) -> bool:
+    """Conta a falha; True quando é a 1ª da hora pra esta tabela (e foi pro error_log)."""
+    hora = datetime.utcnow().strftime("%Y-%m-%dT%H")
+    c = _FALHAS_DE_GRAVACAO.get(tabela)
+    primeira = (c is None) or (c.get("hora") != hora)
+    if primeira:
+        c = _FALHAS_DE_GRAVACAO[tabela] = {"hora": hora, "n": 0, "total": (c or {}).get("total", 0)}
+    c["n"] += 1
+    c["total"] += 1
+    if primeira and tabela != "error_log":
+        # 🪤 direto no error_log (mesmo formato do `_log_error`), não via `_log_error`:
+        # quem dubla o `_log_error` num teste não ganha uma linha que não pediu
+        try:
+            _supabase_insert("error_log", {
+                "stage": "supabase:gravacao-falhou",
+                "message": ("insert em %s falhou: %s (1ª falha desta hora; as seguintes só somam)"
+                            % (tabela, _sem_email(motivo)[:300])),
+                "job_id": None, "severity": "error"})
+        except Exception:
+            pass
+    return primeira
 
 
 def _supabase_insert(table, data):
@@ -145,7 +191,8 @@ def _supabase_insert(table, data):
         req.add_header('Content-Type', 'application/json')
         req.add_header('Prefer', 'return=minimal')
         urllib.request.urlopen(req, timeout=20)
-        _supa_log(f"INSERT {table} OK  data={json.dumps(data)[:200]}")
+        # 27/09: deu certo = só os CAMPOS (o conteúdo levava e-mail pro arquivo)
+        _supa_log(f"INSERT {table} OK  campos={sorted(data) if isinstance(data, dict) else '?'}")
         return True
     except urllib.error.HTTPError as e:
         try:
@@ -153,13 +200,15 @@ def _supabase_insert(table, data):
         except Exception:
             resp_body = '(unreadable)'
         msg = f"INSERT {table} HTTP {e.code}: {resp_body}  data={json.dumps(data)[:200]}"
-        print(f"Supabase insert HTTP {e.code} ({table}): {resp_body}")
+        print(f"Supabase insert HTTP {e.code} ({table}): {_sem_email(resp_body)}")
         _supa_log(msg)
+        _conta_falha_de_gravacao(table, f"HTTP {e.code}: {resp_body[:200]}")
         return False
     except Exception as e:
         msg = f"INSERT {table} ERR {type(e).__name__}: {e}  data={json.dumps(data)[:200]}"
-        print(f"Supabase insert error ({table}): {type(e).__name__}: {e}")
+        print(f"Supabase insert error ({table}): {type(e).__name__}: {_sem_email(e)}")
         _supa_log(msg)
+        _conta_falha_de_gravacao(table, f"{type(e).__name__}: {e}")
         return False
 
 
@@ -1495,7 +1544,7 @@ def _supabase_update(table, match_field, match_value, data):
         req.add_header('Content-Type', 'application/json')
         req.add_header('Prefer', 'return=minimal')
         urllib.request.urlopen(req, timeout=20)
-        _supa_log(f"UPDATE {table} {match_field}={match_value} OK  data={json.dumps(data)[:200]}")
+        _supa_log(f"UPDATE {table} {match_field}={match_value} OK  campos={sorted(data) if isinstance(data, dict) else '?'}")
         return True
     except urllib.error.HTTPError as e:
         try:
@@ -22236,12 +22285,15 @@ async def debug_supa_log(request: Request, tail: int = 50):
     _require_admin(request)
     try:
         if not os.path.exists(_SUPA_LOG_PATH):
-            return {"status": "ok", "lines": [], "note": "log vazio ou ainda não criado"}
+            return {"status": "ok", "lines": [], "note": "log vazio ou ainda não criado",
+                    "falhas_de_gravacao": dict(_FALHAS_DE_GRAVACAO)}
         with open(_SUPA_LOG_PATH, "r", encoding="utf-8") as f:
             all_lines = f.readlines()
         last = all_lines[-tail:] if tail > 0 else all_lines
         return {"status": "ok", "total_lines": len(all_lines),
-                "returned": len(last), "lines": [ln.rstrip("\n") for ln in last]}
+                "returned": len(last), "lines": [ln.rstrip("\n") for ln in last],
+                # 27/09 (item 7): falhas de insert por tabela desde o boot
+                "falhas_de_gravacao": dict(_FALHAS_DE_GRAVACAO)}
     except Exception as e:
         return {"status": "error", "error": f"{type(e).__name__}: {e}"}
 
@@ -39632,6 +39684,8 @@ def metricas_tick(request: Request, dias: int = 3, so_origens: int = 0):
     if _erros_origens:
         _log_error("metricas:origens", "de onde chegou (Web Analytics) sem medida: %s"
                    % _erros_origens[:3], severity="warning")
+    # 27/09 (item 7): a telemetria parou? (ontem teve cliente e zero evento)
+    _parou = _telemetria_parou(_hoje_br() - _td(days=1))
     # 🪤 22/09/2026: a resposta dizia só QUANTAS falhas, nunca QUAIS. Quem
     # dispara à mão (recoleta) precisa saber que o dia não foi atualizado e por
     # quê — contador sozinho é recusa silenciosa dentro de uma rodada que
@@ -39639,7 +39693,47 @@ def metricas_tick(request: Request, dias: int = 3, so_origens: int = 0):
     return {"status": "ok", "gravados": gravados, "falhas": len(falhas),
             "motivos": falhas[:8],
             # quem dispara à mão vê na hora se a parte "de onde chegou" mediu
-            "origens_sem_medida": _erros_origens[:3]}
+            "origens_sem_medida": _erros_origens[:3],
+            "telemetria_parou": _parou}
+
+
+def _telemetria_parou(dia):
+    """True = naquele dia teve projeto de CLIENTE e ZERO evento de uso. None = não deu pra saber.
+
+    🩸 27/09/2026 (item 7 da telemetria): não existia alarme de "a telemetria
+    parou". A lista de silêncio da aba Atividade só aparece pra quem abre a aba, e
+    `_supabase_insert` falha calado. Cliente subindo projeto sem NENHUM evento no
+    dia é o sinal de que o /api/track (ou o banner) parou — avisa o Pedro.
+    🪤 Falha de leitura é None, nunca "tudo bem": não sei ≠ não parou.
+    """
+    from datetime import timedelta as _tdp
+    proj = _contar_do_dia("projects", dia)
+    if proj is None:
+        return None
+    if proj == 0:
+        return False
+    try:
+        st, linhas = _supa_rest_service(
+            "GET", "usage_events",
+            params={"select": "id", "limit": "1",
+                    "and": "(created_at.gte.%sT03:00:00Z,created_at.lt.%sT03:00:00Z)"
+                           % (dia, dia + _tdp(days=1))})
+    except Exception:
+        return None
+    if st != 200:
+        return None
+    if linhas:
+        return False
+    _msg = ("%s: %d projeto(s) de cliente e ZERO evento de uso no dia — o registro de "
+            "eventos (/api/track) ou o banner de cookie parou?" % (dia, proj))
+    _log_error("telemetria:parou", _msg, severity="error")
+    try:
+        _notify_admin("🚨 Telemetria parada? %s teve %d projeto(s) de cliente e 0 evento" % (dia, proj),
+                      _msg + "<br><br>Conferir: /api/track respondendo, banner de cookie na página, "
+                             "e o error_log de `supabase:gravacao-falhou`.")
+    except Exception:
+        pass
+    return True
 
 
 # 🔑 Páginas da ÁREA LOGADA: quem chega nelas JÁ é cliente. Na lista "páginas
