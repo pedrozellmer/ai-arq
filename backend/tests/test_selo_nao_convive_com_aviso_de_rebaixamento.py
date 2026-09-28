@@ -56,7 +56,7 @@ def test_a_chave_nao_promove_linha_com_aviso():
 
 def _fatia_da_trava():
     src = open(os.path.join(os.path.dirname(_AQUI), "main.py"), encoding="utf-8").read()
-    a = src.index("            from engine_rules import marca_de_rebaixamento as _marca_reb")
+    a = src.index("            from engine_rules import (marca_de_rebaixamento as _marca_reb,")
     ini = src.rindex("        try:\n", 0, a)
     fim = src.index("        # 🚨 AQUI é o fim da fila de quem rebaixa selo", a)
     return textwrap.dedent(src[ini:fim])

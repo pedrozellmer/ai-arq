@@ -4935,6 +4935,22 @@ MARCAS_DE_REBAIXAMENTO = (MARCA_LIDO_DE_TEXTO, MARCA_SOMA, MARCA_CARIMBO,
                           MARCA_ESCALA_DIVERGENTE)
 
 
+#: 🩸 27/09/2026 (estudo de leitura, item 4) — VÍNCULO DE MODELO: outro
+#: arquivo do Revit/IFC colado como bloco ("LUC-ARQ-001-MOD-TIP_rvt",
+#: "CENTRAL_rvt-1-PLANTA", "_vinculo__rvt-5-TORRE") virava peça com ✓ — "módulo
+#: de fachada 51 un ✓", "cozinha padrão 1 un ✓". É o contêiner do modelo de
+#: outra disciplina, não uma peça. Pelo SUFIXO: "IFC-Corrimão" (prefixo) é
+#: elemento de verdade importado de IFC e fica fora.
+MARCA_VINCULO_DE_MODELO = "⚠ VÍNCULO DE MODELO"
+_RE_VINCULO_DE_MODELO = _re.compile(
+    r"(?:_rvt|_ifc)(?=$|[-\s'’\"),;.\]])|_vinculo_", _re.IGNORECASE)
+
+
+def e_vinculo_de_modelo(texto) -> bool:
+    """O nome (ou a observação) traz um bloco que é vínculo de modelo?"""
+    return bool(_RE_VINCULO_DE_MODELO.search(str(texto or "")))
+
+
 def marca_de_rebaixamento(obs) -> str:
     """A marca de rebaixamento que a observação carrega ('' se nenhuma)."""
     t = str(obs or "")

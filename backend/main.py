@@ -19973,14 +19973,21 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # promovem, a linha com marca de rebaixamento fica estimada.
         # ─────────────────────────────────────────────────────────────────
         try:
-            from engine_rules import marca_de_rebaixamento as _marca_reb
+            from engine_rules import (marca_de_rebaixamento as _marca_reb,
+                                      e_vinculo_de_modelo as _vinculo,
+                                      MARCA_VINCULO_DE_MODELO as _MARCA_VINC)
             from models import Confidence as _ConfTr
             _n_trava = 0
             for _it in all_items:
                 _cf = getattr(_it, "confidence", "")
+                _obt = str(getattr(_it, "observations", "") or "")
                 if (str(getattr(_cf, "value", _cf) or "") != "confirmado"
-                        or not _marca_reb(getattr(_it, "observations", ""))):
+                        or not (_marca_reb(_obt) or _vinculo(_obt))):
                     continue
+                # 🩸 item 4: bloco que é vínculo de outro modelo não é peça
+                if _vinculo(_obt) and _MARCA_VINC not in _obt:
+                    _it.observations = (_MARCA_VINC + " (outro arquivo do Revit/IFC "
+                                        "colado como bloco) — não é peça; confira. " + _obt)
                 _it.confidence = _ConfTr.ESTIMADO
                 _n_trava += 1
             if _n_trava:

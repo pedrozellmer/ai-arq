@@ -434,6 +434,7 @@ class DXFExtraction:
                 _seq: dict = {}
                 _juntados = sum(1 for v in _grupos.values() if v[1] > 1)
                 lines.append(f"CONTAGEM DE BLOCOS ({len(_grupos)} tipos):")
+                from engine_rules import e_vinculo_de_modelo as _vinc
                 for (_r, _a), (count, n_nomes, rotulo) in sorted(
                         _grupos.items(), key=lambda x: -x[1][0]):
                     if _quantos_por_raiz.get(_r, 1) > 1 and _a:
@@ -441,6 +442,9 @@ class DXFExtraction:
                         rotulo = f"{rotulo} (tipo {_seq[_r]})"
                     _nota = f"  [{n_nomes} nomes do conversor, mesma peca]" if n_nomes > 1 else ""
                     _nota += _nota_da_legenda(_amo_grupo[(_r, _a)])
+                    if _vinc(rotulo):
+                        _nota += ("  ⚠ VÍNCULO DE MODELO (outro arquivo do Revit/IFC colado "
+                                  "como bloco) — NÃO é peça: não conte como quantidade")
                     lines.append(f"  {rotulo}: {count} un{_nota}")
                 if _juntados:
                     lines.append(f"  ({_juntados} grupo(s) tinham nomes duplicados pelo "
