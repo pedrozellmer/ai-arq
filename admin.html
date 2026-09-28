@@ -136,9 +136,9 @@
       <span>Filhotes</span>
       <span id="menu-filhotes-badge" class="ml-auto text-[11px] px-1.5 py-0.5 rounded-full bg-white/15"></span>
     </button>
-    <button onclick="switchTab('atividade')" data-tab="atividade" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
+    <button onclick="switchTab('telemetria')" data-tab="telemetria" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-      <span>Atividade</span>
+      <span>Telemetria</span>
     </button>
     <p class="px-4 pt-4 pb-1 text-[10px] font-semibold uppercase tracking-wider text-white/40">Motor &amp; Qualidade</p>
     <button onclick="switchTab('calibracao')" data-tab="calibracao" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
@@ -365,66 +365,11 @@
                🚨 Sem isto, série parada e site sem movimento têm a mesma cara. -->
           <div id="mov-alerta" class="hidden mt-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"></div>
 
-          <!-- barras: uma por dia. Altura = endereços distintos que NÃO são
-               nós nem robô óbvio. 🪤 É TETO, não contagem de pessoas.
-               Embaixo de cada barra, uma faixa fina separa as REQUISIÇÕES do
-               dia em gente / robô / nós. Medido 02/09: 27/08 foi 67% robô,
-               30/08 foi 79% NÓS, 01/09 61% gente — e nada disso aparecia.
-               Dia sem essa separação gravada fica cinza, não zero.
-               🪤 Cores e tamanhos da faixa em style= de propósito: o Tailwind
-               daqui é build ESTÁTICO e classe nova pode ser inerte. -->
-          <div id="mov-barras" class="mt-5 flex items-end gap-1" style="height:112px"></div>
-          <p class="text-[11px] text-gray-400 mt-1">um dia = de meia-noite a meia-noite em Bras&#237;lia &middot; barras apagadas: dias antigos, contados no rel&#243;gio de Greenwich (o dia virava &#224;s 21h)</p>
-          <div class="mt-1 flex flex-wrap items-center text-[11px] text-gray-500" style="gap:4px 16px">
-            <span><span style="display:inline-block;vertical-align:middle;width:10px;height:10px;border-radius:2px;background:#6366f1"></span> altura: endere&#231;os de gente</span>
-            <span><span style="display:inline-block;vertical-align:middle;width:10px;height:10px;border-radius:2px;background:#34d399"></span> gente</span>
-            <span><span style="display:inline-block;vertical-align:middle;width:10px;height:10px;border-radius:2px;background:#f59e0b"></span> rob&#244;</span>
-            <span><span style="display:inline-block;vertical-align:middle;width:10px;height:10px;border-radius:2px;background:#94a3b8"></span> n&#243;s</span>
-            <span id="mov-inflacao" class="text-gray-600" style="margin-left:auto">&mdash;</span>
+          <!-- 28/09/2026: barras, funil, páginas e as três origens moram na aba Telemetria.
+               Aqui fica só o que responde "está tudo normal?". -->
+          <div class="mt-4 text-right">
+            <button type="button" onclick="switchTab('telemetria')" class="text-sm font-medium text-indigo-600 hover:underline">ver telemetria &rsaquo;</button>
           </div>
-          <!-- funil da semana + páginas que trouxeram gente.
-               🔑 A FAQ é a 2ª página do site em 5 dos 6 dias medidos (29/08) e
-               ninguém sabia — o número existia e nunca era calculado. -->
-          <div class="mt-5 grid gap-5 sm:grid-cols-2">
-            <div>
-              <p class="text-xs font-semibold text-gray-500 mb-2">Caminho at&#233; o projeto (7 dias)</p>
-              <div id="mov-funil" class="text-sm text-gray-700 space-y-1">&mdash;</div>
-            </div>
-            <div>
-              <p class="text-xs font-semibold text-gray-500 mb-2">P&#225;ginas que trouxeram gente (7 dias)</p>
-              <div id="mov-paginas" class="text-sm text-gray-700 space-y-1">&mdash;</div>
-            </div>
-            <!-- 🔑 A origem (google, direto, chatgpt...) já era gravada em todo
-                 evento e não aparecia em lugar nenhum. Medido 02/09, 30 dias:
-                 google 62, direto 12, sem origem 6, busca 4, chatgpt.com 2.
-                 🪤 Só quem ACEITOU o cookie — recorte, não o site inteiro.
-                 🪤 É diferente da caixa "Origem dos clientes" (declarado no
-                 cadastro). -->
-            <div>
-              <p class="text-xs font-semibold text-gray-500 mb-2">De onde veio quem aceitou o cookie (30 dias)</p>
-              <div id="mov-origem" class="text-sm text-gray-700 space-y-1">&mdash;</div>
-              <p id="mov-origem-nota" class="mt-1 text-[11px] text-gray-400 leading-snug"></p>
-            </div>
-            <!-- 🔑 27/09/2026: de onde chegou TODO mundo — Web Analytics do Cloudflare
-                 (visita = página aberta vindo de fora, com a referência). Não depende de cookie.
-                 🪤 App (Instagram, LinkedIn, ChatGPT no celular) muitas vezes chega sem
-                 referência, e a resposta de IA do Google chega como Google. -->
-            <div>
-              <p class="text-xs font-semibold text-gray-500 mb-2">De onde chegou todo mundo (7 dias)</p>
-              <div id="mov-referencia" class="text-sm text-gray-700 space-y-1">&mdash;</div>
-              <p id="mov-referencia-nota" class="mt-1 text-[11px] text-gray-400 leading-snug"></p>
-            </div>
-          </div>
-
-          <p class="mt-2 text-[11px] text-gray-400 leading-snug">
-            Cada barra &#233; um dia: endere&#231;os distintos que <b>n&#227;o</b> s&#227;o rob&#244; conhecido
-            nem a nossa m&#225;quina. &#201; um <b>teto</b>, n&#227;o uma contagem de pessoas &mdash; rob&#244;
-            que se disfar&#231;a de navegador entra aqui. O contador de &#8220;&#250;nicos&#8221; do
-            Cloudflare conta rob&#244; e chegou a inflar um dia em 76%.
-            A lista &#8220;de onde veio&#8221; conta s&#243; quem <b>aceitou o cookie</b> (30 dias) &mdash;
-            &#233; outra r&#233;gua, n&#227;o some com os endere&#231;os. E &#233; diferente da caixa
-            &#8220;Origem dos clientes&#8221; l&#225; embaixo, que mostra o que a pessoa <b>declarou</b> no cadastro.
-          </p>
         </section>
 
         <!-- ═══ Operação agora ═══ -->
@@ -475,14 +420,6 @@
           </div>
         </div>
 
-        <!-- ═══ Origem dos clientes ═══ -->
-        <div class="mt-8">
-          <div class="flex items-center justify-between mb-3">
-            <h2 class="text-sm font-bold text-gray-700 flex items-center gap-2">&#128205; Origem dos clientes</h2>
-            <span class="text-xs text-gray-400">de onde v&#234;m &middot; regi&#227;o aprox. DDD &middot; cadastros/semana</span>
-          </div>
-          <div id="origem-box"><p class="text-gray-400 text-sm">Carregando&#8230;</p></div>
-        </div>
       </div>
 
       <!-- ════════════════════════════════════════ -->
@@ -1085,10 +1022,106 @@
         </div>
       </div>
 
-      <!-- ATIVIDADE (uso do produto) -->
-      <div id="tab-atividade" class="tab-content hidden">
+      <!-- ═══ TELEMETRIA (28/09/2026) ═════════════════════════════════════════════════
+           Pedro: "vale uma aba pra telemetria no admin, deixa só um resumo no dash" e "tudo numa
+           aba só". O dashboard respondia duas perguntas na mesma tela — "está tudo normal?" e "de
+           onde vem e o que faz a visita?" — e as TRÊS réguas de origem (cookie, Cloudflare, declarado)
+           ficavam espalhadas. Aqui ficam juntas, cada uma dizendo o que conta. O dashboard guarda o
+           farol, os três números e o alarme de coleta desligada.
+           🪤 Os atalhos do topo são BOTÕES, não <a href="#...">: a aba mora no hash da URL, e um
+           href="#tele-origem" mandaria o painel pro dashboard (_abaDoHash não acha a aba). -->
+      <div id="tab-telemetria" class="tab-content hidden">
+        <div class="mb-4">
+          <h2 class="text-xl font-bold text-gray-900">Telemetria</h2>
+          <p class="text-sm text-gray-500 mt-1">De onde vem a visita, por onde ela passa e o que cada conta faz no produto. Cada caixa diz qual régua usa &mdash; elas não se somam.</p>
+        </div>
+        <div class="flex flex-wrap gap-2 mb-6 text-xs">
+          <button type="button" onclick="irParaSecaoDaTelemetria('tele-trafego')" class="px-3 py-1.5 rounded-full border border-gray-300 bg-white text-gray-700 hover:bg-gray-50">Tráfego do site</button>
+          <button type="button" onclick="irParaSecaoDaTelemetria('tele-origem')" class="px-3 py-1.5 rounded-full border border-gray-300 bg-white text-gray-700 hover:bg-gray-50">Origem</button>
+          <button type="button" onclick="irParaSecaoDaTelemetria('tele-produto')" class="px-3 py-1.5 rounded-full border border-gray-300 bg-white text-gray-700 hover:bg-gray-50">Uso do produto</button>
+        </div>
+
+        <section id="tele-trafego" class="rounded-2xl border bg-white p-6 shadow-sm">
+          <h3 class="font-semibold text-gray-900">Tráfego do site <span class="font-normal text-gray-500 text-sm">&mdash; as barras vêm do registro da rede do Cloudflare, sem cookie</span></h3>
+          <!-- barras: uma por dia. Altura = endereços distintos que NÃO são
+               nós nem robô óbvio. 🪤 É TETO, não contagem de pessoas.
+               Embaixo de cada barra, uma faixa fina separa as REQUISIÇÕES do
+               dia em gente / robô / nós. Medido 02/09: 27/08 foi 67% robô,
+               30/08 foi 79% NÓS, 01/09 61% gente — e nada disso aparecia.
+               Dia sem essa separação gravada fica cinza, não zero.
+               🪤 Cores e tamanhos da faixa em style= de propósito: o Tailwind
+               daqui é build ESTÁTICO e classe nova pode ser inerte. -->
+          <div id="mov-barras" class="mt-5 flex items-end gap-1" style="height:112px"></div>
+          <p class="text-[11px] text-gray-400 mt-1">um dia = de meia-noite a meia-noite em Bras&#237;lia &middot; barras apagadas: dias antigos, contados no rel&#243;gio de Greenwich (o dia virava &#224;s 21h)</p>
+          <div class="mt-1 flex flex-wrap items-center text-[11px] text-gray-500" style="gap:4px 16px">
+            <span><span style="display:inline-block;vertical-align:middle;width:10px;height:10px;border-radius:2px;background:#6366f1"></span> altura: endere&#231;os de gente</span>
+            <span><span style="display:inline-block;vertical-align:middle;width:10px;height:10px;border-radius:2px;background:#34d399"></span> gente</span>
+            <span><span style="display:inline-block;vertical-align:middle;width:10px;height:10px;border-radius:2px;background:#f59e0b"></span> rob&#244;</span>
+            <span><span style="display:inline-block;vertical-align:middle;width:10px;height:10px;border-radius:2px;background:#94a3b8"></span> n&#243;s</span>
+            <span id="mov-inflacao" class="text-gray-600" style="margin-left:auto">&mdash;</span>
+          </div>
+          <!-- funil da semana + páginas que trouxeram gente.
+               🔑 A FAQ é a 2ª página do site em 5 dos 6 dias medidos (29/08) e
+               ninguém sabia — o número existia e nunca era calculado. -->
+          <div class="mt-5 grid gap-5 sm:grid-cols-2">
+            <div>
+              <p class="text-xs font-semibold text-gray-500 mb-2">Caminho at&#233; o projeto (7 dias)</p>
+              <div id="mov-funil" class="text-sm text-gray-700 space-y-1">&mdash;</div>
+            </div>
+            <div>
+              <p class="text-xs font-semibold text-gray-500 mb-2">P&#225;ginas que trouxeram gente (7 dias)</p>
+              <div id="mov-paginas" class="text-sm text-gray-700 space-y-1">&mdash;</div>
+            </div>
+          </div>
+          <p class="mt-3 text-[11px] text-gray-400 leading-snug">
+            Cada barra &#233; um dia: endere&#231;os distintos que <b>n&#227;o</b> s&#227;o rob&#244; conhecido
+            nem a nossa m&#225;quina. &#201; um <b>teto</b>, n&#227;o uma contagem de pessoas &mdash; rob&#244;
+            que se disfar&#231;a de navegador entra aqui. O contador de &#8220;&#250;nicos&#8221; do
+            Cloudflare conta rob&#244; e chegou a inflar um dia em 76%.
+          </p>
+        </section>
+
+        <section id="tele-origem" class="mt-6 rounded-2xl border bg-white p-6 shadow-sm">
+          <h3 class="font-semibold text-gray-900">Origem <span class="font-normal text-gray-500 text-sm">&mdash; tr&#234;s r&#233;guas, que n&#227;o se somam</span></h3>
+          <div class="mt-4 grid gap-5 sm:grid-cols-2">
+            <!-- 🔑 27/09/2026: de onde chegou TODO mundo — Web Analytics do Cloudflare
+                 (visita = página aberta vindo de fora, com a referência). Não depende de cookie.
+                 🪤 App (Instagram, LinkedIn, ChatGPT no celular) muitas vezes chega sem
+                 referência, e a resposta de IA do Google chega como Google. -->
+            <div>
+              <p class="text-xs font-semibold text-gray-500 mb-2">De onde chegou todo mundo (7 dias)</p>
+              <div id="mov-referencia" class="text-sm text-gray-700 space-y-1">&mdash;</div>
+              <p id="mov-referencia-nota" class="mt-1 text-[11px] text-gray-400 leading-snug"></p>
+            </div>
+            <!-- 🔑 A origem (google, direto, chatgpt...) já era gravada em todo
+                 evento e não aparecia em lugar nenhum. Medido 02/09, 30 dias:
+                 google 62, direto 12, sem origem 6, busca 4, chatgpt.com 2.
+                 🪤 Só quem ACEITOU o cookie — recorte, não o site inteiro.
+                 🪤 É diferente da caixa "Origem dos clientes" (declarado no
+                 cadastro). -->
+            <div>
+              <p class="text-xs font-semibold text-gray-500 mb-2">De onde veio quem aceitou o cookie (30 dias)</p>
+              <div id="mov-origem" class="text-sm text-gray-700 space-y-1">&mdash;</div>
+              <p id="mov-origem-nota" class="mt-1 text-[11px] text-gray-400 leading-snug"></p>
+            </div>
+          </div>
+          <div class="mt-6 pt-5 border-t">
+            <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+              <p class="text-xs font-semibold text-gray-500">O que declararam no cadastro (&#8220;Como nos conheceu?&#8221;)</p>
+              <span class="text-xs text-gray-400">de onde v&#234;m &middot; regi&#227;o aprox. DDD &middot; cadastros/semana</span>
+            </div>
+            <div id="origem-box"><p class="text-gray-400 text-sm">Carregando&#8230;</p></div>
+          </div>
+          <p class="mt-3 text-[11px] text-gray-400 leading-snug">
+            &#8220;De onde chegou todo mundo&#8221; &#233; o Cloudflare: visita vinda de fora, sem cookie, 7 dias.
+            &#8220;Quem aceitou o cookie&#8221; s&#227;o os nossos eventos, 30 dias &mdash; um recorte, n&#227;o o site.
+            &#8220;O que declararam&#8221; &#233; a resposta do cadastro. S&#227;o tr&#234;s perguntas diferentes: n&#227;o some uma com a outra.
+          </p>
+        </section>
+
+        <section id="tele-produto" class="mt-6">
         <div class="flex items-center justify-between mb-1">
-          <h2 class="text-xl font-bold text-gray-900">Atividade</h2>
+          <h3 class="text-lg font-semibold text-gray-900">Uso do produto <span class="font-normal text-gray-500 text-sm">&mdash; eventos de quem aceitou o cookie</span></h3>
           <div class="flex items-center gap-3">
             <label class="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer select-none">
               <input type="checkbox" id="act-auto-refresh" checked class="rounded">
@@ -1145,6 +1178,7 @@
           <h3 class="font-semibold text-gray-900 mb-3">Atividade recente</h3>
           <div id="act-recent" class="space-y-1 text-sm max-h-96 overflow-y-auto"><p class="text-gray-400">Carregando&hellip;</p></div>
         </div>
+        </section>
       </div>
 
       <!-- NEWSLETTER -->
@@ -1492,6 +1526,8 @@ function closeSidebar() {
 // 🪤 `interno` existe pra não empilhar histórico quando a própria navegação
 // veio DO histórico — sem isso, um Voltar dispararia outro Voltar.
 function switchTab(tabName, interno) {
+  // 28/09/2026: a Atividade virou a seção "Uso do produto" da aba Telemetria — link velho continua abrindo
+  if (tabName === 'atividade') tabName = 'telemetria';
   if (!interno && ('#' + tabName) !== location.hash) {
     location.hash = tabName;      // dispara hashchange, que chama de volta
     return;
@@ -1511,11 +1547,12 @@ function switchTab(tabName, interno) {
   if (tabName === 'usuarios') loadUsers();
   if (tabName === 'projetos') { _filtroPadraoAoEntrar(); loadProjects(); }
   if (tabName === 'filhotes') loadFilhotes();
-  if (tabName === 'dashboard') { loadDashboardStats(); loadOrigem(); loadFilhotes(); carregarBadgeMensagens(); }
+  // 28/09/2026: a "Origem dos clientes" saiu do dashboard pra aba Telemetria — carrega lá, só quando abre
+  if (tabName === 'dashboard') { loadDashboardStats(); loadFilhotes(); carregarBadgeMensagens(); }
   if (tabName === 'calibracao') loadCalibrationFactors();
   if (tabName === 'agente') loadAgentData();
   if (tabName === 'nps') loadNPSData();
-  if (tabName === 'atividade') loadActivity();
+  if (tabName === 'telemetria') { carregarMovimentoDoSite(); loadOrigem(); loadActivity(); }
   if (tabName === 'emails') loadEmailCatalog();
   if (tabName === 'insights') loadInsights();
   if (tabName === 'mensagens') loadMessages();
@@ -1525,6 +1562,15 @@ function switchTab(tabName, interno) {
   if (tabName === 'calendario') loadCalendario();
   if (tabName === 'motor') { loadOndeErra(); loadQualidadeSemanal(); loadMotorHealth(); loadOps(); loadFunilRevisao(); loadVozCliente(); loadRevisionFeedback(); }
   if (tabName === 'financeiro') loadCosts();
+}
+
+// 28/09/2026 — atalhos do topo da Telemetria. 🪤 Rola a página; NÃO mexe no hash (o hash é a aba —
+// "#tele-origem" faria o _abaDoHash não achar a aba e cair no dashboard).
+// 🪤 Sem `behavior: 'smooth'`: a rolagem suave anda por quadro desenhado e, com a janela em segundo plano,
+// fica parada (medido 28/09 na inspeção). A instantânea chega sempre.
+function irParaSecaoDaTelemetria(id) {
+  const el = document.getElementById(id);
+  if (el) el.scrollIntoView({ block: 'start' });
 }
 
 // ══════════════════════════════════════════════
@@ -4162,14 +4208,14 @@ async function loadActivity() {
   }
 }
 
-// Auto-refresh a cada 12s quando a aba Atividade está visível e "ao vivo" marcado.
+// Auto-refresh a cada 12s quando a aba Telemetria (seção "Uso do produto") está visível e "ao vivo" marcado.
 // Só recarrega se: aba aberta + toggle ligado + guia do navegador em foco (não
 // gasta request com o admin em segundo plano). Pisca o pontinho a cada ciclo.
 let _activityRefreshTimer = null;
 function startActivityAutoRefresh() {
   if (_activityRefreshTimer) clearInterval(_activityRefreshTimer);
   _activityRefreshTimer = setInterval(() => {
-    const tab = document.getElementById('tab-atividade');
+    const tab = document.getElementById('tab-telemetria');
     const cb = document.getElementById('act-auto-refresh');
     const dot = document.getElementById('act-live-dot');
     const ativo = tab && !tab.classList.contains('hidden') && cb && cb.checked
@@ -7638,7 +7684,8 @@ function esc(str) {
 // corresponde a uma aba REAL — hash inventado na barra de endereço cairia num
 // painel em branco, que se lê como painel quebrado.
 function _abaDoHash() {
-  const h = (location.hash || '').replace('#', '').trim();
+  let h = (location.hash || '').replace('#', '').trim();
+  if (h === 'atividade') h = 'telemetria';   // 28/09/2026: favorito antigo da Atividade
   return (h && document.getElementById('tab-' + h)) ? h : 'dashboard';
 }
 
@@ -7652,8 +7699,7 @@ window.addEventListener('hashchange', () => switchTab(_abaDoHash(), true));
   // o menu é o mesmo. Uma contagem só, sem trazer as linhas.
   carregarBadgeMensagens();
   if (aba === 'dashboard') {
-    loadDashboardStats();
-    loadOrigem();   // Origem vive dentro do Dashboard — precisa carregar no boot
+    loadDashboardStats();   // 28/09/2026: a Origem mudou pra aba Telemetria e carrega quando ela abre
   } else {
     // 🪤 `true`: já viemos de uma URL com hash. Sem isso, o boot reescreveria
     // o hash e criaria uma entrada de histórico logo na abertura — o primeiro
