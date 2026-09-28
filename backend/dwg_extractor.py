@@ -489,6 +489,7 @@ class DXFExtraction:
         if walls_by_layer:
             lines.append("COMPRIMENTOS POR LAYER:")
             _n_anot = 0
+            _cinza = (self.metadata or {}).get("parede_zona_cinza") or {}
             for layer, length in sorted(walls_by_layer.items()):
                 if _anot(layer):
                     _n_anot += 1
@@ -502,6 +503,11 @@ class DXFExtraction:
                                  f"   ⚠ ANOTAÇÃO DO DESENHO (texto/cota/legenda/"
                                  f"hachura) — o comprimento é de letras e setas, "
                                  f"NÃO é elemento de obra: não use como quantidade")
+                elif layer in _cinza:
+                    lines.append(f"  {layer}: {length:.2f} m   ⚠ PAREDE EM PARTE EM DUAS "
+                                 f"LINHAS ({_cinza[layer]:.0%} do traçado em pares de face): "
+                                 f"esta soma pode contar as duas faces — trate como "
+                                 f"ESTIMADO, confira o comprimento no projeto")
                 else:
                     lines.append(f"  {layer}: {length:.2f} m")
             if _n_anot:
@@ -993,7 +999,7 @@ def _legenda_de_linha_dupla(msp) -> dict:
 
 def _corrigir_duto_linha_dupla(walls, unit_factor: float = 1.0, layers_extra=None,
                                escolhe=None, sep_max_m=None, min_seg_m=None,
-                               min_fracao_par=None):
+                               min_fracao_par=None, zona_cinza=None):
     """Troca a soma das duas faces pelo comprimento do EIXO, em layer de duto.
 
     `layers_extra`: layers que a LEGENDA da prancha diz serem leito/duto
@@ -1149,6 +1155,12 @@ def _corrigir_duto_linha_dupla(walls, unit_factor: float = 1.0, layers_extra=Non
                 _em_par = sum(min(p, math.hypot(seg_b[k][0] - seg_a[k][0], seg_b[k][1] - seg_a[k][1]))
                               for k, p in pareado.items()) * uf
                 if bruto <= 0 or _em_par / bruto < min_fracao_par:
+                    # 🩸 27/09 (estudo, item 2): entre 15% e o piso, o layer
+                    # TEM parede em duas linhas, só não o bastante pro eixo —
+                    # a soma pode contar as duas faces (131 m ✓ × 74 pelo
+                    # eixo). Fica anotado: sem selo de comprimento.
+                    if zona_cinza is not None and bruto > 0 and _em_par / bruto >= 0.15:
+                        zona_cinza[layer] = round(float(_em_par / bruto), 2)
                     continue                    # layer de linha ÚNICA: par é coincidência
             # TAMPA: lado curto sem par (até a largura de uma seção) com as
             # DUAS pontas em cima de bordas pareadas — é o fecho do retângulo
@@ -1265,7 +1277,7 @@ _PAREDE_MIN_SEG = 0.03
 _PAREDE_MIN_FRACAO_PAR = 0.50
 
 
-def _corrigir_parede_linha_dupla(walls, unit_factor: float = 1.0):
+def _corrigir_parede_linha_dupla(walls, unit_factor: float = 1.0, zona_cinza=None):
     """Parede desenhada pelas DUAS FACES mede pelo EIXO. Devolve (walls, relato).
 
     🩸 26/09/2026 — job befab5aa (interiores): a planilha trouxe "pintura
@@ -1285,7 +1297,8 @@ def _corrigir_parede_linha_dupla(walls, unit_factor: float = 1.0):
     from engine_rules import layer_e_parede
     novos, relato, _ressalva = _corrigir_duto_linha_dupla(
         walls, unit_factor, escolhe=layer_e_parede, sep_max_m=_PAREDE_SEP_MAX,
-        min_seg_m=_PAREDE_MIN_SEG, min_fracao_par=_PAREDE_MIN_FRACAO_PAR)
+        min_seg_m=_PAREDE_MIN_SEG, min_fracao_par=_PAREDE_MIN_FRACAO_PAR,
+        zona_cinza=zona_cinza)
     return novos, relato
 
 
@@ -5949,9 +5962,14 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
     if _rel_duto:
         metadata["duto_linha_dupla"] = _rel_duto
     # 26/09: parede em duas faces também mede pelo EIXO (ver a função)
-    walls, _rel_parede = _corrigir_parede_linha_dupla(walls, unit_factor)
+    _zona_cinza_parede: dict = {}
+    walls, _rel_parede = _corrigir_parede_linha_dupla(walls, unit_factor, _zona_cinza_parede)
     if _rel_parede:
         metadata["parede_linha_dupla"] = _rel_parede
+    if _zona_cinza_parede:
+        # layer de parede com 15–50% em duas linhas: o eixo não rodou e a
+        # soma pode contar as duas faces (a chave do selo não usa)
+        metadata["parede_zona_cinza"] = _zona_cinza_parede
     if _legenda_dupla:
         # a IA precisa saber o que o layer É — antes era palpite ("o layer de
         # maior extensão") — e que o comprimento dele JÁ é o eixo

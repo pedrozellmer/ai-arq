@@ -931,6 +931,11 @@ def a_fonte_declarada_e_uma_soma(obs, quantidade=None) -> bool:
     return _tem_aritmetica_de_parcelas(texto)
 
 
+#: 🩸 27/09 (estudo, item 3): o começo do aviso de SOMA — constante, porque a
+#: chave do selo e a trava final reconhecem a linha rebaixada por ele.
+MARCA_SOMA = "⚠ SOMA, não leitura direta"
+
+
 def selo_apos_regra_da_soma(conf, obs, quantidade=None):
     """Aplica a regra ao par (selo, observação). Devolve `(conf, obs, rebaixou)`.
 
@@ -947,7 +952,7 @@ def selo_apos_regra_da_soma(conf, obs, quantidade=None):
     `main.py` é uma linha só — cuja POSIÇÃO ainda importa e é cobrada à parte.
     """
     if conf == "confirmado" and a_fonte_declarada_e_uma_soma(obs, quantidade):
-        aviso = ("⚠ SOMA, não leitura direta — a quantidade veio de somar "
+        aviso = (MARCA_SOMA + " — a quantidade veio de somar "
                  "parcelas, então não sai como medida. Confira o total antes "
                  "de orçar. ")
         return "estimado", aviso + str(obs or ""), True
@@ -4915,6 +4920,26 @@ _RE_ADOCAO = _re.compile(
 #: main.py) escreve na linha que ela rebaixou. A chave do selo respeita.
 MARCA_LIDO_DE_TEXTO = "⚠ ESTIMADO — este número foi LIDO de um texto da prancha"
 
+#: 🩸 27/09/2026 (estudo de leitura, item 3) — o COMEÇO de cada aviso que uma
+#: régua do motor escreve quando REBAIXA a linha. Linha com uma destas e selo
+#: de medido se contradiz por construção: 12 linhas ✓ desde 23/09 — a chave
+#: promovia de novo por cima (só respeitava a do texto lido) e o selo que a
+#: própria IA dá passava por todas. Quem escreve usa a constante.
+MARCA_CARIMBO = "⚠ FONTE = CARIMBO DA PRANCHA"
+MARCA_MENOS_PAREDE = "⚠ A leitura encontrou MENOS parede"
+MARCA_UNIDADE_DE_CONTAGEM = "⚠ REBAIXADO: item contável"
+MARCA_EXTRACAO_COM_RESSALVA = "Procedência: extração com ressalva"
+MARCAS_DE_REBAIXAMENTO = (MARCA_LIDO_DE_TEXTO, MARCA_SOMA, MARCA_CARIMBO,
+                          MARCA_MENOS_PAREDE, MARCA_UNIDADE_DE_CONTAGEM,
+                          MARCA_EXTRACAO_COM_RESSALVA, MARCA_QUANTIDADE_RECUPERADA,
+                          MARCA_ESCALA_DIVERGENTE)
+
+
+def marca_de_rebaixamento(obs) -> str:
+    """A marca de rebaixamento que a observação carrega ('' se nenhuma)."""
+    t = str(obs or "")
+    return next((m for m in MARCAS_DE_REBAIXAMENTO if m in t), "")
+
 #: 🩸 27/09/2026 — a dúvida SOBRE O NÚMERO (ou sobre o que ele é) que a IA
 #: escreveu na observação. Colhida das 28 promoções da chave ainda no ar na
 #: semana de 20–27/09 (20 delas traziam uma destas) e das que os clientes
@@ -5211,7 +5236,7 @@ def selo_com_prova_da_geometria(items, indice):
         # marcar estimado"; e a rede de procedência tinha acabado de rebaixar
         # uma delas ("LIDO de um texto") quando a chave a devolveu. Bater com o
         # layer prova que o número é do layer — não que o layer é o serviço.
-        if MARCA_LIDO_DE_TEXTO in _obs or ressalva_do_numero(_obs):
+        if marca_de_rebaixamento(_obs) or ressalva_do_numero(_obs):
             continue
         # 🩸 26/09 (job 32a27efc): a recuperação COPIA o número do layer numa
         # linha que a IA deixou zerada — e diz por que ela fica estimada ("a

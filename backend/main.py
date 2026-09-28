@@ -61,6 +61,10 @@ from engine_rules import (
     is_unit_mismatch_countable as _is_unit_mismatch_countable,
     corrigir_comprimento_medido as _corrigir_comprimento_medido,
     layer_is_carimbo as _layer_is_carimbo,
+    MARCA_CARIMBO as _MARCA_CARIMBO,
+    MARCA_MENOS_PAREDE as _MARCA_MENOS_PAREDE,
+    MARCA_UNIDADE_DE_CONTAGEM as _MARCA_UNIDADE_DE_CONTAGEM,
+    MARCA_EXTRACAO_COM_RESSALVA as _MARCA_EXTRACAO_COM_RESSALVA,
     layer_is_anotacao as _layer_is_anotacao,
     contagem_de_bloco_citada as _contagem_de_bloco_citada,
     medida_de_comprimento_na_observacao as _medida_comprimento_obs,
@@ -15642,7 +15646,13 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                         # MESMA régua decide. Contagem continua entrando —
                         # contar bloco não depende de escala.
                         if not _caveat_atinge_unidade(extraction.metadata, "m"):
+                            # 🩸 27/09 (estudo, item 2): parede com 15–50% em duas
+                            # linhas — o eixo não rodou e a soma pode contar as
+                            # duas faces (131 m ✓ × 74 pelo eixo): não prova.
+                            _cinza_ig = (extraction.metadata or {}).get("parede_zona_cinza") or {}
                             for _lyr, _c in (extraction.get_walls_by_layer() or {}).items():
+                                if _lyr in _cinza_ig:
+                                    continue
                                 _indice_geom["comprimento"].append((str(_lyr), round(float(_c), 2)))
                             # 🩸 27/09: seção de parede cortada não prova m² (shaft
                             # 0,18 m² ✓ era a espessura da parede na planta)
@@ -16305,7 +16315,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                     if _nota_un:
                                         obs_raw = f"{_nota_un} {obs_raw}"
                                 if item_data.get("_procedencia_rebaixada"):
-                                    obs_raw = (f"{obs_raw} | Procedência: extração com ressalva "
+                                    obs_raw = (f"{obs_raw} | {_MARCA_EXTRACAO_COM_RESSALVA} "
                                                f"(estéril/unidade/xref) — quantidade não confirmada, revisar").strip(" |")
 
                                 # 🪤 CARIMBO DA PRANCHA ≠ DESENHO DA OBRA (HOTEL BRISAS, 05/08).
@@ -16330,7 +16340,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                 if _lys and all(_layer_is_carimbo(_l) for _l in _lys):
                                     conf = "estimado"
                                     _rebaixado_pela_fonte = True
-                                    obs_raw = ("⚠ FONTE = CARIMBO DA PRANCHA, não o desenho — "
+                                    obs_raw = (_MARCA_CARIMBO + ", não o desenho — "
                                                "confirme se este serviço existe na obra. " + obs_raw)
                                 # 🩸 09/09/2026 — LAYER DE ANOTAÇÃO NÃO É OBRA.
                                 # O prompt autoriza selo BRANCO pra "comprimento
@@ -18738,7 +18748,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     _obp = str(getattr(_it, "observations", "") or "")
                     if "menos parede do que o mínimo" not in _obp:
                         _it.observations = _observacao_que_cabe(
-                            "⚠ A leitura encontrou MENOS parede do que o mínimo "
+                            _MARCA_MENOS_PAREDE + " do que o mínimo "
                             "possível pra área deste projeto (%.1f m contra %.1f m, "
                             "que é o perímetro de um quadrado de %.0f m² — e ainda "
                             "sem as paredes internas). Faltou parede na leitura: "
@@ -19449,7 +19459,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         and _is_unit_mismatch_countable(_it.description, _it.unit)):
                     _it.confidence = _Conf.ESTIMADO
                     _it.observations = ((_it.observations + " | ") if _it.observations else "") + (
-                        "⚠ REBAIXADO: item contável (un) veio com unidade "
+                        _MARCA_UNIDADE_DE_CONTAGEM + " (un) veio com unidade "
                         f"{_it.unit} — a quantidade pode pertencer a outra linha "
                         "(ex.: metros de eletroduto). Confira antes de orçar.")
                     _n_rebaixados += 1
@@ -19952,6 +19962,33 @@ bloco — só cite os que estão no inventário deste arquivo."""
         except Exception as _emp:
             print(f"[selo-da-mesma-peca] job={job_id}: nao rodou (segue): {_emp}")
             _log_error("motor:selo-da-mesma-peca", f"FALHOU: {_emp}", job_id)
+
+        # ─────────────────────────────────────────────────────────────────
+        # 🩸 SELO × AVISO DE REBAIXAMENTO NA MESMA LINHA (27/09/2026, estudo de
+        # leitura, item 3) — a trava final. 12 linhas ✓ desde 23/09 traziam na
+        # observação o aviso de uma régua que as REBAIXOU ("⚠ SOMA, não
+        # leitura direta", "⚠ FONTE = CARIMBO", "⚠ REBAIXADO", "extração com
+        # ressalva"…): a chave promovia de novo por cima, e o selo que a própria
+        # IA dá não passava por régua nenhuma. Depois de todas as portas que
+        # promovem, a linha com marca de rebaixamento fica estimada.
+        # ─────────────────────────────────────────────────────────────────
+        try:
+            from engine_rules import marca_de_rebaixamento as _marca_reb
+            from models import Confidence as _ConfTr
+            _n_trava = 0
+            for _it in all_items:
+                _cf = getattr(_it, "confidence", "")
+                if (str(getattr(_cf, "value", _cf) or "") != "confirmado"
+                        or not _marca_reb(getattr(_it, "observations", ""))):
+                    continue
+                _it.confidence = _ConfTr.ESTIMADO
+                _n_trava += 1
+            if _n_trava:
+                _log_error("motor:selo-com-marca-de-rebaixamento",
+                           f"linhas={len(all_items)} rebaixadas={_n_trava}",
+                           job_id, severity="info")
+        except Exception as _etr:
+            _log_error("motor:selo-com-marca-de-rebaixamento", f"FALHOU: {_etr}", job_id)
 
         # 🚨 AQUI é o fim da fila de quem rebaixa selo. A recontagem do aviso
         # do plano B roda de novo agora, com o número que o cliente vai ler.
