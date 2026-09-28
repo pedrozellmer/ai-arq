@@ -5643,6 +5643,39 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         _proc_blocos["espelhados"] = _mais(_espelhados)
     if _def_vazia:
         _proc_blocos["def_vazia"] = _mais(_def_vazia)
+    # 📏 28/09 (estudo, item 5 — ANINHADOS): peça dentro de bloco com nome não
+    # entra na contagem — o bloco "banheiro tipo 1" conta 3 e os 12 vasos de
+    # dentro dele somem (job dd52081b). Pro log: os 5 pais com mais peças
+    # dentro, os 3 filhos principais (× inserções do pai); filho em layer
+    # desligado e pai que é vínculo de modelo vêm marcados. Não conta nada.
+    try:
+        from engine_rules import e_vinculo_de_modelo as _e_vinc
+        _filhos_por_pai = {}
+        for _pai, _info in block_counter.items():
+            _bdef = doc.blocks.get(_pai)
+            if _bdef is None:
+                continue
+            _cont = {}
+            for _e in _bdef:
+                if _e.dxftype() != "INSERT":
+                    continue
+                _fn = str(_e.dxf.name or "")
+                if _fn.startswith("*") or _is_annotation_block(_fn):
+                    continue
+                _rot = _fn[:30] + (" (desl)" if str(_e.dxf.get("layer", "") or "").upper()
+                                   in _layers_desligados else "")
+                _cont[_rot] = _cont.get(_rot, 0) + 1
+            if _cont:
+                _n_pai = int(_info.get("count") or 1)
+                _top = sorted(_cont.items(), key=lambda kv: -kv[1])[:3]
+                _chave = _pai[:30] + (" (vínculo)" if _e_vinc(_pai) else "")
+                _filhos_por_pai[_chave] = (sum(_cont.values()) * _n_pai,
+                                           {k: v * _n_pai for k, v in _top})
+        if _filhos_por_pai:
+            _proc_blocos["aninhados"] = {
+                p: f for p, (_t, f) in sorted(_filhos_por_pai.items(), key=lambda kv: -kv[1][0])[:5]}
+    except Exception as _ean:
+        logger.warning("[aninhados] falhou (não-fatal): %s", _ean)
     if _proc_blocos:
         metadata["procedencia_blocos"] = _proc_blocos
 

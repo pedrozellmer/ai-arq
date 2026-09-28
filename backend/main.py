@@ -1051,6 +1051,11 @@ def _procedencia_dos_blocos(extraction) -> str:
     for chave in ("anonimos", "dinamicos", "espelhados", "def_vazia"):
         if pb.get(chave):
             txt += f" {chave}=[{_lista(pb[chave])}]"
+    # 28/09: peça dentro de bloco com nome — "pai>filho=n,filho=n|pai>…"
+    if pb.get("aninhados"):
+        txt += " aninhados=[" + "|".join(
+            f"{str(p)[:40]}>" + ",".join(f"{str(f)[:30]}={n}" for f, n in (fs or {}).items())
+            for p, fs in pb["aninhados"].items()) + "]"
     if desl:
         txt += f" layer_desligado=[{_lista(desl)}]"
     # 📏 28/09 (estudo, D1): a planta repetida no modelo, em sombra
