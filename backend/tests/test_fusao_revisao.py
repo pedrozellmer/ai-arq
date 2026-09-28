@@ -380,7 +380,10 @@ def _executa_o_fim(fusao=None, frase_versao="", acrescenta_linha=False,
         "_comparar_com_versao_anterior": _cmp,
         "_carimbar_planilha": lambda j: diario["eventos"].append("carimbou"),
         "_supabase_update": _update,
-        "_avisos_com": lambda j, avisos: list(avisos),
+        "_avisos_com": lambda j, avisos, **k: list(avisos),
+        # 28/09 (achado 25): lista vazia = projeto de antes do conserto
+        "_avisos_do_motor_da_passada_anterior": lambda j: [],
+        "_lembrar_avisos_do_motor": lambda *a, **k: True,
         "_supabase_storage_upload": _upload,
         "_log_error": lambda *a, **k: diario["logs"].append(
             " ".join(str(x) for x in a)),

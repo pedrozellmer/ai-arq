@@ -400,10 +400,23 @@ def _guarda_dxf_pro_preview(dxf_path, work_dir, job_id, descartadas=None):
 
 
 
-def _avisos_com(job_id, novo_aviso):
+def _avisos_com(job_id, novo_aviso, saem=None):
     """Os avisos que o projeto JÁ tem, mais este(s). Nunca troca o array inteiro.
 
     Aceita um aviso ou uma LISTA de avisos.
+
+    `saem`: avisos que o MOTOR gravou na passada anterior (`avisos_do_motor`).
+    Só o fim de uma passada que deu CERTO passa isto — ver
+    `_avisos_do_motor_da_passada_anterior`. Saem pelo texto exato da lista
+    gravada, nunca por prefixo: aviso de outra rota não está nela e fica.
+
+    🩸 28/09/2026 (estudo de leitura, achado 25) — só acrescentar fazia o aviso
+    da passada anterior ficar pra sempre: 9 dos 10 projetos de cliente com mais
+    de uma passada mostravam aviso velho, inclusive "Nenhuma linha deste
+    projeto foi MEDIDA" ao lado de centenas de itens medidos pelo CAD anexado.
+    🪤 Com `saem` e a leitura falhando, sem aviso novo devolve None (a RPC faz
+    COALESCE e deixa o que está lá). Devolver [] apagaria às cegas o que outras
+    rotas gravaram.
 
     🩸 04/09/2026 — a versão de ontem só aceitava UM aviso, e por isso os dois
     pontos que gravam a lista inteira do motor (`project_data.warnings`, no fim
@@ -430,21 +443,78 @@ def _avisos_com(job_id, novo_aviso):
     _novos = ([str(a) for a in novo_aviso if str(a).strip()]
               if isinstance(novo_aviso, (list, tuple))
               else [str(novo_aviso)])
+    _sem_leitura = _novos if (_novos or saem is None) else None
     try:
         _st, _r = _supa_rest_service(
             "GET", "projects",
             params={"job_id": f"eq.{job_id}", "select": "warnings"})
         if _st != 200 or not _r:
-            return _novos
+            return _sem_leitura
         _atuais = [str(a) for a in (_r[0].get("warnings") or []) if str(a).strip()]
     except Exception as _e:
         print(f"[avisos] não consegui ler os atuais de {job_id} ({_e}) — só o novo")
-        return _novos
-    _saida = list(_atuais)
+        return _sem_leitura
+    _tirar = {str(a) for a in (saem or [])}
+    _saida = [a for a in _atuais if a not in _tirar]
+    if len(_saida) < len(_atuais):
+        _log_error("motor:avisos-velhos",
+                   f"sairam={len(_atuais) - len(_saida)} aviso(s) da passada anterior; "
+                   f"ficaram={len(_saida)}; entram={len(_novos)}", job_id, severity="info")
     for _a in _novos:
         if _a not in _saida:
             _saida.append(_a)
     return _saida
+
+
+def _avisos_do_motor_da_passada_anterior(job_id):
+    """Os avisos que o motor gravou na última passada (`projects.avisos_do_motor`).
+
+    Nula (projeto de antes de 28/09) ou leitura que falha = [] — nada a tirar,
+    o comportamento de antes. A falha vai pro error_log: calada, ela deixaria o
+    aviso velho na tela sem ninguém saber por quê.
+    """
+    try:
+        _st, _r = _supa_rest_service(
+            "GET", "projects",
+            params={"job_id": f"eq.{job_id}", "select": "avisos_do_motor"})
+        if _st != 200:
+            _log_error("motor:avisos-velhos-sem-lista",
+                       f"não li avisos_do_motor (HTTP {_st}) — o aviso da passada "
+                       f"anterior fica", job_id, severity="warning")
+            return []
+        _lista = (_r[0].get("avisos_do_motor") if _r else None) or []
+        return [str(a) for a in _lista if str(a).strip()]
+    except Exception as _e:
+        _log_error("motor:avisos-velhos-sem-lista",
+                   f"não li avisos_do_motor ({type(_e).__name__}: {_e}) — o aviso "
+                   f"da passada anterior fica", job_id, severity="warning")
+        return []
+
+
+def _lembrar_avisos_do_motor(job_id, avisos, somar=False):
+    """Guarda quais avisos o motor gravou, pra próxima passada que der certo tirá-los.
+
+    `somar=False` (passada que deu certo): a lista passa a ser SÓ a desta.
+    `somar=True` (erro, ou anexo que falhou com a planilha anterior mantida): o
+    que esta passada gravou entra na lista SEM tirar a de antes — os avisos
+    antigos continuam valendo (descrevem a planilha que ficou), e os desta
+    passada também saem quando uma próxima der certo.
+
+    🪤 Chamar só DEPOIS de gravar `warnings`: se a lista dissesse o que o banco
+    ainda não tem, a próxima passada tiraria aviso que ninguém mostrou.
+    🪤 Vai por `_projeto_patch`: a RPC de status descarta campo que não conhece.
+    Best-effort — falhar aqui não derruba o job (e `_projeto_patch` já registra
+    a falha no error_log).
+    """
+    try:
+        _lista = [str(a) for a in (avisos or []) if str(a).strip()]
+        if somar:
+            _antes = _avisos_do_motor_da_passada_anterior(job_id)
+            _lista = _antes + [a for a in _lista if a not in _antes]
+        return _projeto_patch(job_id, {"avisos_do_motor": _lista})
+    except Exception as _e:
+        print(f"[avisos] não guardei a lista do motor de {job_id} ({_e})")
+        return False
 
 
 # 🩸 03/09/2026 — A BANDA DE ÁREA EXISTIA EM UM LUGAR E O TETO VELHO EM DOIS.
@@ -658,6 +728,8 @@ _STAGES_DIAGNOSTICO = frozenset({
     "motor:respostas-releitura", "motor:informou-depois",
     "motor:consolida-tipo",
     "motor:avisos-no-erro",
+    # 28/09: avisos da passada anterior que saíram quando a nova deu certo
+    "motor:avisos-velhos",
     "motor:refaz-planilha-admin",
     "libredwg:usado-no-fluxo", "libredwg:qualidade", "libredwg:batch",
     "pdfvec:shadow", "pdfvec:promo", "pdfvec:memoria", "dxfrooms:shadow",
@@ -20470,13 +20542,23 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # Persistir warnings do motor (prancha órfã, legenda ausente) no
         # campo `warnings` da tabela projects — exibido em Meus Projetos
         # como alerta "precisa de complemento".
-        if getattr(project_data, 'warnings', None):
-            # 🩸 04/09 — escrevia o array de MEMORIA por cima do banco,
-            # apagando o que outro caminho tivesse gravado antes (o aviso de
-            # prancha perdida da retomada, por exemplo). Merge, nao troca.
-            _supabase_update("projects", "job_id", job_id, {
-                "warnings": _avisos_com(job_id, project_data.warnings),
-            })
+        # 🩸 04/09 — escrevia o array de MEMORIA por cima do banco,
+        # apagando o que outro caminho tivesse gravado antes (o aviso de
+        # prancha perdida da retomada, por exemplo). Merge, nao troca.
+        # 🩸 28/09 (achado 25) — e o merge só ACRESCENTAVA: o aviso da passada
+        # anterior ficava ao lado do desta ("nada foi medido" junto de centenas
+        # de itens medidos pelo CAD anexado). Aqui, e SÓ aqui — os itens acabaram
+        # de ser trocados —, sai o que o motor disse da última vez e entra o de
+        # agora. Erro e anexo que falhou mantêm a planilha, e os avisos dela.
+        # 🔑 Roda mesmo sem aviso novo: é o caso em que o velho mais mente.
+        _avisos_agora = [str(_a) for _a in (getattr(project_data, 'warnings', None) or [])
+                         if str(_a).strip()]
+        _avisos_antes = _avisos_do_motor_da_passada_anterior(job_id)
+        if _avisos_agora or _avisos_antes:
+            if _supabase_update("projects", "job_id", job_id, {
+                "warnings": _avisos_com(job_id, _avisos_agora, saem=_avisos_antes),
+            }):
+                _lembrar_avisos_do_motor(job_id, _avisos_agora)
 
         # Persistir no Supabase Storage pra sobreviver redeploy do Render
         # (o /tmp do dyno é volátil — sem isso, agente e download quebram).
@@ -21141,7 +21223,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 pass
         # Atualizar erro no Supabase
         if not _base_mantida:
-            _supabase_update("projects", "job_id", job_id, {
+            _gravou_o_erro = _supabase_update("projects", "job_id", job_id, {
                 "status": "error",
                 # 🩸 04/09 — mesmo clobber do fim do job, no ramo de ERRO.
                 **({"warnings": _avisos_com(job_id, _avisos_ate_aqui)}
@@ -21155,6 +21237,15 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 # pra um traceback gigante nao virar mensagem de cliente.
                 "error_message": _msg_tela[:2000],
             })
+            # 28/09 (achado 25): os avisos desta passada que morreu entram na
+            # lista do motor SEM tirar os de antes — quando uma próxima der certo,
+            # saem os dois. 🪤 protegido pelo mesmo motivo do `is_complement`:
+            # há teste que roda este except num escopo montado à mão.
+            if _gravou_o_erro and _avisos_ate_aqui:
+                try:
+                    _lembrar_avisos_do_motor(job_id, _avisos_ate_aqui, somar=True)
+                except Exception:
+                    pass
 
         # Email pro cliente (best-effort; sem jargão técnico). Distingue falha
         # passageira (reprocessar resolve) de arquivo não-quantificável (trocar
@@ -23476,6 +23567,10 @@ def _anexo_falhou_mantem_a_base(job_id: str, motivo: str, aviso: str,
                        f"não consegui gravar 'done' pra manter a planilha ({motivo}) "
                        f"— sigo o caminho de erro", job_id, severity="warning")
             return False
+        # 28/09 (achado 25): "a planilha anterior foi mantida" deixa de ser
+        # verdade quando um próximo anexo der certo — entra na lista do motor
+        # (sem tirar a de antes, que continua descrevendo a planilha mantida).
+        _lembrar_avisos_do_motor(job_id, [aviso], somar=True)
         try:
             if job_id in jobs:
                 jobs.update_field(job_id, status="done", progress=100, error_message=None,

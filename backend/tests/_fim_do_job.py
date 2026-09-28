@@ -218,7 +218,11 @@ def roda_ate_o_email(itens, cab_planob=None, medidos_antes=None, avisos=None,
         # `done_grava=False` simula a RPC do `done` falhando (ela devolve
         # False, não levanta): é o que decide se a marca do anexo pode sair
         "_supabase_update": lambda *a, **k: done_grava,
-        "_avisos_com": lambda j, avisos_: list(avisos_),
+        "_avisos_com": lambda j, avisos_, **k: list(avisos_),
+        # 28/09 (achado 25): a lista dos avisos da passada anterior. Vazia =
+        # projeto de antes do conserto; o guarda do achado roda a de produção.
+        "_avisos_do_motor_da_passada_anterior": lambda j: [],
+        "_lembrar_avisos_do_motor": lambda *a, **k: True,
         "_supabase_storage_upload": lambda p, n: diario.__setitem__("subiu", p) or True,
         "_ckpt_limpar": lambda *a, **k: None,
         "_resolve_client_name": lambda mail, hint="": (hint or "cliente-nn"),
