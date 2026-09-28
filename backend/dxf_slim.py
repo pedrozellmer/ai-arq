@@ -220,6 +220,283 @@ def emagrecer_por_texto(path: str, out: str) -> tuple:
     return mantidas, descartadas
 
 
+# ── RESGATE PELOS BLOCOS (28/09/2026) ──────────────────────────────────────────
+# 🩸 Caso 18c57c3c: DWG de 59,7 MB (o ODA recusou, "XData size exceeded") virou
+# pelo libredwg um DXF de 511 MB — e 493 MB estavam em BLOCKS, que os dois
+# filtros acima copiam INTACTOS. O filtro textual previu 511 -> 502 MB e a
+# prancha, única do projeto, deu erro com a mensagem "já estamos resolvendo".
+# Medido no arquivo:
+#   · 186 MB eram definições de bloco que o desenho NÃO insere (um PURGE tira);
+#   · 103 MB de conteúdo BINÁRIO de OLE2FRAME (imagem/planilha colada — o
+#     motor não lê o conteúdo; a ENTIDADE fica, ver abaixo);
+#   · 38 MB de XDATA de aplicação que o motor não lê (REVIT, GUID de alteração,
+#     etiqueta de representação de bloco dinâmico).
+# Esvaziando só isso: 511 -> 228 MB, pico de ~1,9 GB na extração, e a extração
+# saiu IDÊNTICA à do arquivo inteiro (campo a campo e o texto que vai pra IA).
+# 🪤 SPLINE parece lastro (o motor não mede) mas NÃO sai daqui: a `assinatura`
+# do bloco conta os tipos de dentro dele, e sem a SPLINE a assinatura muda —
+# medido no mesmo arquivo (a comparação reprovou).
+# 🪤 Pelo mesmo motivo o OLE2FRAME de dentro de bloco FICA, sem o binário
+# (códigos 310): a assinatura conta o tipo, e o teste de laboratório pegou
+# `OLE2FRAME:1` sumindo. No caso real não apareceu porque nenhum bloco com
+# OLE era contado — no próximo arquivo pode ser.
+# 🔑 Só age acima da trava dura: é o arquivo que HOJE dá zero. O caminho que
+# funciona não muda em nada.
+_XDATA_QUE_O_MOTOR_NAO_LE = {b"revit", b"acad_object_change_guid", b"acdbblockrepetag"}
+# O motor LÊ: AcDbBlockRepBTag no BLOCK_RECORD (nome do dinâmico, em TABLES — que
+# fica intacto) e o XDATA "ACAD" da cota (DSTYLE) — os dois ficam.
+
+
+def _e_citacao(cod: bytes) -> bool:
+    """Código que pode citar um bloco: nome (2) ou ponteiro (330–369)."""
+    return cod == b"2" or (len(cod) == 3 and cod[:2] in (b"33", b"34", b"35", b"36"))
+
+
+def _pares(fi):
+    while True:
+        l_cod = fi.readline()
+        if not l_cod:
+            return
+        l_val = fi.readline()
+        yield l_cod, l_val, l_cod.strip(), l_val.strip()
+
+
+def alcance_dos_blocos(path: str) -> tuple:
+    """Quais blocos o desenho alcança, e o tamanho que o resgate deixaria.
+
+    Raiz: tudo em ENTITIES (modelo e folha ativa) + `*Model_Space` e todo
+    `*Paper_Space*` (folhas inativas moram em BLOCKS). Um bloco alcançado
+    alcança o que qualquer entidade dele CITA: por nome (código 2 — INSERT,
+    cota, e até padrão de hachura que coincida com nome de bloco) ou por
+    ponteiro ao BLOCK_RECORD (330–369). Na dúvida, fica — citação a mais só
+    mantém bloco a mais.
+
+    Devolve (nomes, alcançados, bytes_previstos). Lê em fluxo; a memória é a
+    lista de nomes e citações, nunca a geometria.
+    """
+    keep = {t.encode("ascii") for t in _KEEP_TEXTO}
+    nomes = set()
+    handle_do_bloco = {}
+    cita = {}
+    raiz = set()
+    conteudo = {}                 # bloco -> bytes das entidades de dentro
+    tira = {}                     # bloco -> bytes que saem mesmo alcançado
+    total = 0
+    tira_ent = 0
+    secao = None
+    esperando = False
+    tipo = None
+    bloco = None
+    em_registro = False
+    reg_handle = reg_nome = None
+    ent_bytes = ent_xd = ent_bin = 0
+    xd_fora = False
+
+    def _fecha():
+        nonlocal tira_ent
+        if tipo is None:
+            return
+        if secao == b"ENTITIES":
+            tira_ent += ent_bytes if tipo not in keep else ent_xd
+        elif tipo in (b"BLOCK", b"ENDBLK"):
+            tira_ent += ent_xd                 # a definição fica; o XDATA sem uso, não
+        elif secao == b"BLOCKS" and bloco is not None:
+            conteudo[bloco] = conteudo.get(bloco, 0) + ent_bytes
+            tira[bloco] = tira.get(bloco, 0) + ent_xd + ent_bin
+
+    with open(path, "rb") as fi:
+        for l_cod, l_val, cod, val in _pares(fi):
+            par = len(l_cod) + len(l_val)
+            total += par
+            if cod == b"0":
+                _fecha()
+                if em_registro and reg_handle and reg_nome:
+                    handle_do_bloco[reg_handle] = reg_nome
+                em_registro = secao == b"TABLES" and val == b"BLOCK_RECORD"
+                reg_handle = reg_nome = None
+                tipo = None
+                ent_bytes = ent_xd = ent_bin = 0
+                xd_fora = False
+                if val == b"SECTION":
+                    esperando = True
+                elif val in (b"ENDSEC", b"EOF"):
+                    secao = None
+                elif secao in (b"ENTITIES", b"BLOCKS"):
+                    tipo = val
+                    ent_bytes = par
+                    if secao == b"BLOCKS" and val == b"BLOCK":
+                        bloco = None
+                continue
+            if esperando and cod == b"2":
+                secao, esperando = val, False
+                continue
+            if em_registro:
+                if cod == b"5":
+                    reg_handle = val.lower()
+                elif cod == b"2":
+                    reg_nome = val.lower()
+                continue
+            if tipo is None:
+                continue
+            ent_bytes += par
+            if cod == b"1001":
+                xd_fora = val.lower() in _XDATA_QUE_O_MOTOR_NAO_LE
+            if xd_fora:
+                ent_xd += par
+            elif tipo == b"OLE2FRAME" and cod == b"310":
+                ent_bin += par
+            if tipo == b"BLOCK":
+                if cod == b"2" and bloco is None:
+                    bloco = val.lower()
+                    nomes.add(bloco)
+            elif tipo != b"ENDBLK" and _e_citacao(cod):
+                if secao == b"ENTITIES":
+                    raiz.add(val.lower())
+                elif bloco is not None:
+                    cita.setdefault(bloco, set()).add(val.lower())
+        _fecha()
+
+    def _bloco(x):
+        return x if x in nomes else handle_do_bloco.get(x)
+
+    alc = set()
+    pilha = [n for n in nomes if n == b"*model_space" or n.startswith(b"*paper_space")]
+    pilha += [b for b in map(_bloco, raiz) if b]
+    while pilha:
+        n = pilha.pop()
+        if n in alc:
+            continue
+        alc.add(n)
+        pilha.extend(b for b in map(_bloco, cita.get(n, ())) if b and b not in alc)
+    previsto = (total - tira_ent
+                - sum(v for b, v in conteudo.items() if b not in alc)
+                - sum(v for b, v in tira.items() if b in alc))
+    return nomes, alc, previsto
+
+
+def emagrecer_blocos_por_texto(path: str, out: str, alcancados: set) -> dict:
+    """Escreve o DXF resgatado: o filtro de ENTITIES de sempre + os blocos.
+
+    Bloco não alcançado fica VAZIO — BLOCK/ENDBLK e o BLOCK_RECORD ficam, então
+    nenhuma referência quebra; só a geometria de dentro sai. OLE2FRAME de bloco
+    fica sem o conteúdo binário (310). XDATA das aplicações que o motor não lê
+    sai de ENTITIES e BLOCKS. HEADER, CLASSES, TABLES e OBJECTS vão intactos.
+    Bytes, nunca decode.
+    """
+    keep = {t.encode("ascii") for t in _KEEP_TEXTO}
+    n = {"vazios": 0, "ole": 0, "xdata": 0, "entidades": 0}
+    secao = None
+    esperando = False
+    bloco = None
+    buf = None
+    tipo = None
+
+    def _despeja(fo):
+        nonlocal buf, tipo
+        if buf is None:
+            return
+        if secao == b"ENTITIES" and tipo not in keep:
+            n["ole" if tipo == b"OLE2FRAME" else "entidades"] += 1
+        elif (secao == b"BLOCKS" and tipo not in (b"BLOCK", b"ENDBLK")
+              and bloco not in alcancados):
+            n["vazios"] += 1
+        else:
+            fora = False
+            n["ole"] += tipo == b"OLE2FRAME"
+            for i in range(0, len(buf), 2):
+                cod = buf[i].strip()
+                if cod == b"1001":
+                    fora = buf[i + 1].strip().lower() in _XDATA_QUE_O_MOTOR_NAO_LE
+                    n["xdata"] += fora
+                if not fora and not (tipo == b"OLE2FRAME" and cod == b"310"):
+                    fo.write(buf[i]); fo.write(buf[i + 1])
+        buf = None
+        tipo = None
+
+    with open(path, "rb") as fi, open(out, "wb") as fo:
+        for l_cod, l_val, cod, val in _pares(fi):
+            if cod == b"0":
+                _despeja(fo)
+                if val == b"SECTION":
+                    esperando = True
+                elif val in (b"ENDSEC", b"EOF"):
+                    secao = None
+                elif secao in (b"ENTITIES", b"BLOCKS"):
+                    buf = [l_cod, l_val]
+                    tipo = val
+                    if secao == b"BLOCKS" and val == b"BLOCK":
+                        bloco = None
+                    continue
+                fo.write(l_cod); fo.write(l_val)
+                continue
+            if esperando and cod == b"2":
+                secao, esperando = val, False
+                fo.write(l_cod); fo.write(l_val)
+                continue
+            if buf is not None:
+                if tipo == b"BLOCK" and cod == b"2" and bloco is None:
+                    bloco = val.lower()
+                buf.append(l_cod); buf.append(l_val)
+            else:
+                fo.write(l_cod); fo.write(l_val)
+        _despeja(fo)
+    return n
+
+
+def _resgate_pelos_blocos(path: str, size: int, log=None) -> Optional[str]:
+    """Acima da trava dura, depois que o filtro de ENTITIES não bastou.
+
+    Mede antes de escrever (a lição de 18/08: o servidor caiu por uma cópia de
+    369 MB escrita pra ganhar 0,17%). Só escreve se a previsão cabe; só aceita
+    se o escrito cabe; o original sai assim que o enxuto provou que serve.
+    """
+    # 🪤 O MESMO nome do enxuto de sempre: quem mostra o nome da prancha ao
+    # cliente (`main._nome_prancha_bonito`) já sabe tirar `.slim.dxf`; um sufixo
+    # novo apareceria na planilha. Quem chama já apagou o enxuto anterior.
+    out = os.path.splitext(path)[0] + ".slim.dxf"
+    try:
+        nomes, alc, prev = alcance_dos_blocos(path)
+        if prev > _LIMITE_DURO:
+            if log is not None:
+                try:
+                    log("motor:dxf-slim",
+                        f"arq={os.path.basename(path)} resgate pelos blocos NÃO "
+                        f"cabe: {size // 1048576} MB -> {prev // 1048576} MB previstos "
+                        f"({len(nomes & alc)} de {len(nomes)} blocos no desenho) — "
+                        f"NADA escrito em disco")
+                except Exception:
+                    pass
+            return None
+        n = emagrecer_blocos_por_texto(path, out, alc)
+        novo = os.path.getsize(out)
+        if novo > _LIMITE_DURO:
+            os.remove(out)
+            return None
+        if log is not None:
+            try:
+                log("motor:dxf-slim",
+                    f"arq={os.path.basename(path)} RESGATE PELOS BLOCOS: "
+                    f"{size // 1048576} MB -> {novo // 1048576} MB ({n['vazios']} "
+                    f"entidades de {len(nomes) - len(nomes & alc)} blocos fora do "
+                    f"desenho, {n['ole']} OLE, {n['xdata']} XDATA sem uso)")
+            except Exception:
+                pass
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+        return out
+    except Exception as e:
+        print(f"[dxf-slim] {os.path.basename(path)}: resgate pelos blocos falhou "
+              f"({type(e).__name__}: {e})")
+        try:
+            if os.path.exists(out):
+                os.remove(out)
+        except OSError:
+            pass
+        return None
+
+
 def emagrecer_dxf_se_preciso(path: str, limiar_mb: int = LIMIAR_SLIM_MB,
                              log=None) -> Optional[str]:
     """Se o DXF passa do limiar, gera `<nome>.slim.dxf` só com o que o motor
@@ -296,6 +573,17 @@ def emagrecer_dxf_se_preciso(path: str, limiar_mb: int = LIMIAR_SLIM_MB,
             # encolhe 0,17% gera uma cópia de 369 MB em disco pra ser apagada
             # em seguida — foi assim que o servidor caiu em 18/08 12:45:26.
             _prev, _pm, _pd = prever_ganho_textual(path)
+            # 28/09 — o filtro de ENTITIES não põe abaixo da trava dura: o peso
+            # pode estar nos BLOCOS, que ele copia intactos (caso 18c57c3c).
+            if size > _LIMITE_DURO and _prev > _LIMITE_DURO:
+                try:
+                    if os.path.exists(out):
+                        os.remove(out)
+                except OSError:
+                    pass
+                _pelos_blocos = _resgate_pelos_blocos(path, size, log)
+                if _pelos_blocos:
+                    return _pelos_blocos
             _vale_resgate = size > _LIMITE_DURO and _prev <= _LIMITE_DURO
             _vale_economia = size <= _LIMITE_DURO and _pd > 0 and _prev < size * 0.95
             if not (_vale_resgate or _vale_economia):
@@ -397,6 +685,15 @@ def emagrecer_dxf_se_preciso(path: str, limiar_mb: int = LIMIAR_SLIM_MB,
         novo = os.path.getsize(out)
     except OSError:
         return None
+    # 28/09 — o caminho do ezdxf também só peneira o modelo: acima da trava
+    # dura, o enxuto dele não serve pro extrator (que recusa) e o peso pode
+    # estar nos blocos. Some com ele ANTES de escrever outro (disco, 18/08).
+    if size > _LIMITE_DURO and novo > _LIMITE_DURO:
+        try:
+            os.remove(out)
+        except OSError:
+            pass
+        return _resgate_pelos_blocos(path, size, log)
     # 🚨 O PRINT DE SUCESSO NÃO PODE MATAR O SUCESSO. A seta unicode aqui
     # estourava UnicodeEncodeError em stdout cp1252 — e como o print vem DEPOIS
     # do emagrecimento dar certo, a exceção subia e o arquivo emagrecido era
