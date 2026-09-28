@@ -5915,7 +5915,7 @@
         <textarea id="nps-comment" rows="2" class="w-full px-3 py-2 border rounded text-sm"
           placeholder="Opcional: o que te levou a essa nota?"></textarea>
         <div class="flex gap-2 justify-end mt-2">
-          <button onclick="document.getElementById('nps-widget').remove()" class="text-xs text-gray-500 hover:text-gray-700 px-2">Pular</button>
+          <button id="nps-pular" class="text-xs text-gray-500 hover:text-gray-700 px-2">Pular</button>
           <button id="nps-submit" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded text-xs font-medium">Enviar</button>
         </div>
       </div>
@@ -5940,6 +5940,16 @@
     });
 
     document.getElementById('nps-submit').addEventListener('click', submitNPS);
+    // 🩸 27/09/2026 (item 6 da telemetria): o "Pular" só aparece DEPOIS de a pessoa
+    // escolher a nota (é o pular do COMENTÁRIO) e fechava o widget sem gravar nada —
+    // a nota escolhida morria ali. Agora grava a nota, sem comentário.
+    document.getElementById('nps-pular').addEventListener('click', pularComentarioNPS);
+  }
+
+  function pularComentarioNPS() {
+    const c = document.getElementById('nps-comment');
+    if (c) c.value = '';
+    return submitNPS();
   }
 
   async function submitNPS() {

@@ -32765,6 +32765,61 @@ async def submit_nps(payload: NPSPayload, request: Request):
     return {"status": "ok" if ok else "error", "category": category}
 
 
+class NPSComentarioPayload(BaseModel):
+    job_id: Optional[str] = ""
+    context: Optional[str] = "after_project"
+    comment: Optional[str] = ""
+
+
+@app.post("/api/nps/comentario")
+def nps_comentario(payload: NPSComentarioPayload, request: Request):
+    """O comentário que chega DEPOIS da nota entra na MESMA linha (UPDATE).
+
+    🩸 27/09/2026 — item 6 da auditoria de telemetria. O cartão do projeto manda
+    a nota 6 s depois do clique; quem começava a escrever depois disso tinha o
+    comentário jogado fora e a tela dizia "Não consegui salvar sua avaliação" —
+    com a nota JÁ gravada. De 30/08 a 27/09: 9 notas de fora, 0 comentário.
+    `/api/nps` é INSERT puro (2º POST = linha duplicada), então o comentário
+    atrasado vem por aqui e atualiza a ÚLTIMA nota DESTA conta (do token) para
+    este projeto e contexto, das últimas 24 h.
+    """
+    from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+    _u = _get_user_from_request(request)
+    if not _u:
+        raise HTTPException(401, "sessão inválida — entre de novo pra enviar seu comentário")
+    txt = (payload.comment or "").strip()[:2000]
+    if not txt:
+        return {"status": "ok", "vazio": True}
+    desde = (_dt.now(_tz.utc) - _td(hours=24)).isoformat().replace("+00:00", "Z")
+    try:
+        st, linhas = _supa_rest_service(
+            "GET", "nps_responses",
+            params={"select": "id,user_email,user_name,score,context,job_id",
+                    "user_id": "eq.%s" % _u["id"],
+                    "job_id": "eq.%s" % (payload.job_id or ""),
+                    "context": "eq.%s" % (payload.context or "after_project")[:50],
+                    "created_at": "gte.%s" % desde,
+                    "order": "created_at.desc", "limit": "1"})
+    except Exception:
+        st, linhas = 0, None
+    if st != 200 or not linhas:
+        return {"status": "error", "motivo": "nota não encontrada"}
+    alvo = linhas[0]
+    try:
+        st2, feito = _supa_rest_service(
+            "PATCH", "nps_responses", body={"comment": txt},
+            params={"id": "eq.%s" % alvo["id"]}, prefer="return=representation")
+    except Exception:
+        st2, feito = 0, None
+    ok = st2 in (200, 204) and bool(feito)
+    if ok:
+        _n = int(alvo.get("score") or 0)
+        _alerta_nps({**alvo, "comment": txt},
+                    "promoter" if _n >= 9 else "passive" if _n >= 7 else "detractor",
+                    comentario_depois=True)
+    return {"status": "ok" if ok else "error"}
+
+
 #: O que a página do PROJETO realmente pergunta. Ela NÃO mostra uma régua de
 #: 0 a 10: mostra três botões, e o número é tradução NOSSA (projeto.html:441-443).
 _NPS_BOTOES_DO_PROJETO = {9: "👍 Ajudou bastante", 7: "😐 Mais ou menos",
@@ -32802,7 +32857,7 @@ def _nps_rotulo(score, context: str) -> str:
     return "%d de 10" % n
 
 
-def _alerta_nps(row: dict, category: str = "detractor"):
+def _alerta_nps(row: dict, category: str = "detractor", comentario_depois: bool = False):
     """TODA nota vira e-mail interno na hora — em thread, best-effort.
 
     Por que o detrator (16/08/2026): a cliente-20 deu nota 2 às 19:18 e o Pedro só
@@ -32858,6 +32913,10 @@ def _alerta_nps(row: dict, category: str = "detractor"):
                 _assunto = f"🟡 {_rotulo} — neutro: {row.get('user_email') or 'sem e-mail'}"
                 _fecho = ("Neutro é quem quase gostou: o que faltou costuma ser a próxima "
                           "melhoria óbvia do produto.")
+            # 27/09 (item 6): o comentário que chegou depois da nota vem pela
+            # /api/nps/comentario — o 1º e-mail já saiu sem ele
+            if comentario_depois:
+                _assunto = "💬 Comentário que chegou depois da nota · " + _assunto
             _avisou_nps = _notify_admin(
                 _assunto,
                 f"<b>Resposta:</b> {_rotulo}<br>"

@@ -3049,6 +3049,39 @@ function maybeShowFeedback() {
 }
 
 let _fbScore = null, _fbTimer = null, _fbPosted = false, _fbToken = null;
+// 🩸 27/09/2026 (item 6 da telemetria): quem começava o comentário DEPOIS dos 6 s
+// perdia o texto — a nota já tinha ido, `_fbFlush` devolvia false e a tela dizia
+// "Não consegui salvar sua avaliação" com a nota GRAVADA. De 30/08 a 27/09: 9 notas
+// de fora, 0 comentário. Agora o comentário atrasado entra na MESMA linha
+// (`/api/nps/comentario`, UPDATE). `_fbMandado` = o texto que já está no banco;
+// `_fbEnvio` = a nota em voo (o comentário espera ela, senão não acha a linha).
+let _fbMandado = '', _fbEnvio = null;
+function _fbTexto() {
+  try { return (document.getElementById('fb-comment').value || '').trim(); } catch (e) { return ''; }
+}
+async function _fbComentarioDepois() {
+  if (_fbEnvio) { try { await _fbEnvio; } catch (e) {} }
+  const txt = _fbTexto();
+  if (!txt || txt === _fbMandado) return true;      // nada novo pra mandar
+  try {
+    const res = await authFetch(`${API_BASE}/api/nps/comentario`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ comment: txt, context: 'after_project', job_id: jobId }),
+    });
+    let corpo = {};
+    try { corpo = await res.json(); } catch (e) { /* ilegível = não gravou */ }
+    const gravou = !!(res && res.ok && corpo && corpo.status === 'ok');
+    if (gravou) _fbMandado = txt;
+    else console.warn('[nps] comentário não gravou:', res && res.status, corpo);
+    return gravou;
+  } catch (e) {
+    console.warn('[nps] comentário falhou:', e);
+    return false;
+  }
+}
+// o timer: antes da nota, manda a nota (com o texto do momento); depois, o comentário
+function _fbTick() { return _fbPosted ? _fbComentarioDepois() : _fbFlush(); }
 // O timer SEMPRE manda o que já está escrito na caixa (não só a nota) e se re-arma
 // a cada tecla. Antes ele disparava 6s cravados e marcava _fbPosted=true — quem
 // levava mais de 6s escrevendo tinha o comentário jogado fora em silêncio (a tela
@@ -3057,13 +3090,16 @@ let _fbScore = null, _fbTimer = null, _fbPosted = false, _fbToken = null;
 async function _fbFlush() {
   if (_fbPosted || _fbScore === null) return false;
   _fbPosted = true;
-  const ok = await postNps(_fbScore, (document.getElementById('fb-comment').value || '').trim());
+  const txt = _fbTexto();
+  _fbEnvio = postNps(_fbScore, txt);
+  const ok = await _fbEnvio;
   // 🩸 31/08/2026: falhou = NAO gravou. Destravar pra poder tentar de novo —
   // antes, `_fbPosted = true` era definitivo e a nota morria ali.
   if (!ok) _fbPosted = false;
+  else _fbMandado = txt;
   return ok;
 }
-function _fbArm(ms) { clearTimeout(_fbTimer); _fbTimer = setTimeout(_fbFlush, ms); }
+function _fbArm(ms) { clearTimeout(_fbTimer); _fbTimer = setTimeout(_fbTick, ms); }
 function sendFeedback(score) {
   _fbScore = score;
   document.getElementById('fb-buttons').classList.add('hidden');
@@ -3101,12 +3137,26 @@ function sendFeedback(score) {
 // 🔑 So marca como enviado quem CONFIRMOU a gravacao. Falhou, `_fbPosted` volta
 // a false pra proxima tentativa valer.
 function _fbSalvaAntesDeSair() {
-  if (_fbPosted || _fbScore === null) return;
-  _fbPosted = true;
-  var txt = '';
-  try { txt = (document.getElementById('fb-comment').value || '').trim(); } catch (e) {}
+  if (_fbScore === null) return;
+  var txt = _fbTexto();
   var h = { 'Content-Type': 'application/json' };
   if (_fbToken) h['Authorization'] = 'Bearer ' + _fbToken;
+  // 27/09 (item 6): a nota já foi — o que sobra é o comentário escrito depois
+  if (_fbPosted) {
+    if (!txt || txt === _fbMandado) return;
+    try {
+      fetch(API_BASE + '/api/nps/comentario', {
+        method: 'POST', headers: h, keepalive: true,
+        body: JSON.stringify({ comment: txt, context: 'after_project', job_id: jobId }),
+      }).then(function (r) {
+        return r && r.ok ? r.json().catch(function () { return null; }) : null;
+      }).then(function (d) {
+        if (d && d.status === 'ok') _fbMandado = txt;
+      }).catch(function () {});
+    } catch (e) {}
+    return;
+  }
+  _fbPosted = true;
   try {
     fetch(API_BASE + '/api/nps', {
       method: 'POST', headers: h, keepalive: true,
@@ -3119,6 +3169,7 @@ function _fbSalvaAntesDeSair() {
     }).then(function (d) {
       if (d && d.status === 'ok') {
         // gravou mesmo: nao pergunta de novo e nao acusa falha depois
+        _fbMandado = txt;
         try { localStorage.setItem('aiarq_fb_' + jobId, '1'); } catch (e) {}
       } else {
         _fbPosted = false;   // deixa a proxima tentativa acontecer
@@ -3135,7 +3186,10 @@ async function sendFeedbackComment() {
   // 🩸 A tela agradecia ANTES de saber se gravou. Agora so agradece se gravou —
   // agradecer por nota perdida e a pior combinacao: a gente perde o dado E a
   // pessoa acha que colaborou.
-  const ok = await _fbFlush();
+  // 27/09 (item 6): a nota já foi (o timer de 6 s disparou)? então o comentário
+  // entra na MESMA linha — antes aqui `_fbFlush` devolvia false e a tela acusava
+  // falha com a nota gravada, jogando o comentário fora.
+  const ok = _fbPosted ? await _fbComentarioDepois() : await _fbFlush();
   document.getElementById('fb-comment-wrap').classList.add('hidden');
   if (ok) {
     document.getElementById('fb-thanks').classList.remove('hidden');
