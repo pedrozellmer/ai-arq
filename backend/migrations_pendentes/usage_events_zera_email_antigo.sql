@@ -1,5 +1,11 @@
--- ⚠️ DO PEDRO RODAR — ninguém mais. Zera o e-mail dos eventos antigos de `usage_events` (LGPD, minimização).
--- Preparado em 27/09/2026; NÃO executado. Zerar dado é decisão e mão do Pedro.
+-- ✅ EXECUTADO em 27/09/2026 ~21:06 (horário de Brasília), a pedido do Pedro ("faz aí pra mim"). As 3 travas passaram.
+-- Depois: 5.468 eventos, 0 com e-mail, e todo user_id acha a conta. Os painéis deram os mesmos números
+-- ("sem rastro no site" em 90 dias = 187; seria 504 se algo ainda lesse o e-mail).
+-- 21:10: os dois opcionais do fim também rodaram, com ok do Pedro: o índice por e-mail foi apagado (migração
+-- `usage_events_sem_indice_de_email`) e o vacuum rodou (0 linhas mortas).
+-- NÃO rodar de novo: não sobrou nada para zerar. A trava 3 só serviu para a primeira vez.
+--
+-- Zera o e-mail dos eventos antigos de `usage_events` (LGPD, minimização). Zerar dado é decisão do Pedro.
 --
 -- ORDEM (cada passo depende do anterior):
 --   1. `usage_events_le_pelo_user_id.sql` APLICADA — as 4 RPCs do admin acham a pessoa pela conta (user_id).
@@ -61,7 +67,7 @@ begin
 end
 $zera$;
 
--- Opcionais, DEPOIS do bloco acima, também do Pedro:
+-- Opcionais, DEPOIS do bloco acima, também do Pedro (✅ os dois rodaram em 27/09 às 21:10):
 -- O índice por e-mail passa a indexar só texto vazio.
 --   drop index if exists public.idx_usage_events_email;
 -- Tira da tabela, já, as versões antigas das linhas (fora de transação; o autovacuum faria sozinho mais tarde).
