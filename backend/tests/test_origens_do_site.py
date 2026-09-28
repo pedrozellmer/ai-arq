@@ -36,8 +36,14 @@ _GOOGLE = "Google (busca e IA do Google)"
 _LOGIN = "volta do login (Google/Microsoft)"
 
 
-def _grupo(host, visitas):
-    return {"sum": {"visits": visitas}, "dimensions": {"refererHost": host}}
+def _grupo(host, visitas, pagina="/", pais="BR", amostra=None):
+    # 27/09 (item 4): a visita sem referência vai pro balde da PÁGINA e do PAÍS —
+    # o padrão aqui é página pública do Brasil, que é o "direto ou app" de verdade
+    g = {"sum": {"visits": visitas},
+         "dimensions": {"refererHost": host, "requestPath": pagina, "countryName": pais}}
+    if amostra is not None:
+        g["avg"] = {"sampleInterval": amostra}
+    return g
 
 
 def _resposta(grupos):
@@ -89,7 +95,7 @@ def test_soma_as_visitas_por_canal_e_ignora_a_navegacao_interna(monkeypatch):
         _grupo("www.ai.arq.br", 2),           # outro endereço NOSSO conta "visita" no beacon: não é chegada
     ]
     monkeypatch.setattr(ms, "_graphql", lambda q, timeout=25: _resposta(grupos))
-    lista, truncada, erro = ms.origens_do_dia("a", "b", limite=1000)
+    lista, truncada, erro, _amostra = ms.origens_do_dia("a", "b", limite=1000)
     assert erro is None and truncada is False
     por = {x["origem"]: x for x in lista}
     assert por[_GOOGLE]["visitas"] == 12, lista
@@ -128,7 +134,7 @@ def test_bateu_no_limite_diz_que_truncou(monkeypatch):
 ])
 def test_consulta_que_falha_vira_NAO_MEDI_com_o_MOTIVO(monkeypatch, resposta, trecho):
     monkeypatch.setattr(ms, "_graphql", lambda q, timeout=25: resposta)
-    lista, truncada, erro = ms.origens_do_dia("a", "b")
+    lista, truncada, erro, _amostra = ms.origens_do_dia("a", "b")
     assert lista is None and truncada is None, "falha virou lista (vazia = 'ninguém veio', é mentira)"
     assert erro and trecho in erro, erro
 
@@ -137,7 +143,7 @@ def test_excecao_tambem_vira_NAO_MEDI_com_o_motivo(monkeypatch):
     def _explode(q, timeout=25):
         raise TimeoutError("cloudflare lento")
     monkeypatch.setattr(ms, "_graphql", _explode)
-    lista, _, erro = ms.origens_do_dia("a", "b")
+    lista, _, erro, _amostra = ms.origens_do_dia("a", "b")
     assert lista is None and "cloudflare lento" in erro
 
 

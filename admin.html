@@ -6102,11 +6102,18 @@ function htmlOrigensDoSite(o) {
       '<span class="text-gray-600 truncate" title="' + esc(dica) + '">' + esc(x.origem) + '</span>' +
       '<span class="font-semibold tabular-nums">' + (Number(x.visitas) || 0) + '</span></div>';
   }).join('');
+  // 🩸 27/09 (item 4): "direto ou app" era 60% a nossa área logada. Visita sem
+  // referência agora vai pro balde da página e do país — e a nota diz o que sobra.
+  const amostra = Number(o.amostra_max);
   const nota = 'Visitas vindas de fora do site, somadas em ' + o.dias_somados + ' dia(s)' +
     (o.dias_fora ? ' (' + o.dias_fora + ' fora: sem medida ou truncado)' : '') +
-    '. Vem do Web Analytics do Cloudflare: sem cookie e sem robô, mas conta a gente quando entra direto. ' +
+    '. Vem do Web Analytics do Cloudflare: sem cookie e sem robô. Sem referência, a área logada, ' +
+    'o login/cadastro e o que vem de fora do Brasil ficam em linhas próprias; "direto ou app" é só ' +
+    'página pública do Brasil — e ainda conta a gente quando entra direto. ' +
     'App (Instagram, LinkedIn, ChatGPT no celular) costuma chegar sem referência, em "direto ou app"; ' +
-    'a IA do Google chega como Google.';
+    'a IA do Google chega como Google.' +
+    (amostra > 1 ? ' Os números são amostra do Cloudflare (até 1 em ' + (Math.round(amostra * 10) / 10) +
+      ') — estimativa, não contagem.' : '');
   return { html, nota };
 }
 

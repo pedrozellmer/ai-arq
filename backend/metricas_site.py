@@ -282,6 +282,55 @@ _REFERENCIAS = (
 )
 SEM_REFERENCIA = "direto ou app (sem referência)"
 
+# 🩸 27/09/2026 (item 4 da telemetria) — "direto ou app" era 60% a NOSSA área logada.
+# De 20 a 26/09, das 220 visitas sem referência: 132 em página logada (114 só no
+# /admin.html), 9 em login/cadastro, 35 de fora do Brasil em página pública (um post
+# levou 19 num dia, de 5 países — cara de robô que roda JavaScript) e só 44 em página
+# pública do Brasil — com a equipe dentro, porque o beacon não tem IP. A leitura de
+# 27/09 ("a IA autodeclarada some em direto ou app") foi feita em cima dos 220.
+# Agora a visita SEM referência vai pro balde da página e do país; com referência, o
+# canal manda (Google em página logada é quem clicou num resultado — é aquisição).
+AREA_LOGADA = "área logada (sem referência)"
+ENTRADA = "login ou cadastro (sem referência)"
+FORA_DO_BRASIL = "de fora do Brasil (sem referência)"
+# 🔑 Toda página .html da raiz do site está em UMA destas três listas — o guarda
+# reprova página nova sem classe (senão uma tela logada nova cairia calada em
+# "direto ou app", que é o defeito que esta separação desfaz).
+PAGINAS_DA_AREA_LOGADA = frozenset({
+    "/admin.html", "/admin-usuario.html", "/dashboard.html", "/meus-projetos.html",
+    "/projeto.html", "/revisao.html", "/escritorio.html", "/cronograma.html",
+    "/memorial.html", "/financeiro.html", "/visualizar-prancha.html",
+    # chega pelo link do e-mail de avaliação e depois do cadastro — produto, não vitrine
+    "/feedback.html", "/obrigado.html",
+})
+PAGINAS_DE_ENTRADA = frozenset({
+    "/login.html", "/cadastro.html", "/redefinir-senha.html", "/convite.html",
+})
+PAGINAS_PUBLICAS = frozenset({
+    "/", "/index.html", "/faq.html", "/precos.html", "/sobre.html", "/dados.html",
+    "/exemplo.html", "/termos.html", "/privacidade.html", "/licencas.html", "/404.html",
+})  # + tudo em /blog/ e /indique/
+
+
+def _pagina(caminho) -> str:
+    """O caminho como a lista guarda: minúsculo, sem query, e "/dashboard" = "/dashboard.html"."""
+    p = str(caminho or "/").split("?")[0].split("#")[0].strip().lower() or "/"
+    if p != "/" and not p.endswith("/") and "." not in p.rsplit("/", 1)[-1]:
+        p += ".html"
+    return p
+
+
+def balde_sem_referencia(caminho, pais) -> str:
+    """Pra onde vai a visita que chegou SEM referência."""
+    p = _pagina(caminho)
+    if p in PAGINAS_DA_AREA_LOGADA:
+        return AREA_LOGADA
+    if p in PAGINAS_DE_ENTRADA:
+        return ENTRADA
+    if str(pais or "").strip().upper() != "BR":
+        return FORA_DO_BRASIL
+    return SEM_REFERENCIA
+
 
 def canal_da_referencia(host) -> "str | None":
     """O canal de chegada a partir do host da referência. None = navegação DENTRO do site.
@@ -306,38 +355,52 @@ def canal_da_referencia(host) -> "str | None":
 
 
 def origens_do_dia(ini: str, fim: str, limite: int = LIMITE_ORIGENS):
-    """(lista por canal, truncada?, erro) do dia. Lista None = NÃO CONSEGUI MEDIR, e `erro` diz por quê.
+    """(lista por canal, truncada?, erro, amostra) do dia. Lista None = NÃO CONSEGUI MEDIR, e `erro` diz por quê.
 
     🪤 Falha aqui NÃO derruba o dia: a série principal continua sendo gravada e a
     coluna fica nula, que o painel mostra como "sem medição". Mas a falha tem que
     CHEGAR a alguém: o `erro` sobe pro tick, que grava no error_log (a 1ª versão só
     fazia print, e a recusa do Cloudflare só apareceu porque eu fui procurar).
+
+    🔑 27/09 — `amostra` é o MAIOR `sampleInterval` dos grupos do dia (1 = contou tudo).
+    O Cloudflare AMOSTRA o Web Analytics: pedindo a semana de uma vez, 20–26/09 veio com
+    1 em 10 (números em múltiplos de 10); dia a dia, entre 1,2 e 2. Sem guardar isso,
+    estimativa e contagem ficam com a mesma cara.
     """
     try:
         q = ("""query { viewer { accounts(filter: {accountTag: "%s"}) {
           rumPageloadEventsAdaptiveGroups(limit: %d,
             filter: {datetime_geq: "%s", datetime_leq: "%s", siteTag: "%s"},
             orderBy: [sum_visits_DESC]) {
-            sum { visits } dimensions { refererHost }
+            sum { visits } avg { sampleInterval }
+            dimensions { refererHost requestPath countryName }
           } } } }""" % (_CONTA, limite, ini, fim, _SITE_RUM))
         r = _graphql(q, timeout=60)
     except Exception as e:
-        return None, None, "exceção: %s" % str(e)[:200]
+        return None, None, "exceção: %s" % str(e)[:200], None
     if not isinstance(r, dict) or r.get("errors"):
-        return None, None, "Cloudflare recusou: %s" % (str(r.get("errors"))[:300] if isinstance(r, dict) else type(r))
+        return None, None, "Cloudflare recusou: %s" % (str(r.get("errors"))[:300] if isinstance(r, dict) else type(r)), None
     contas = (((r.get("data") or {}).get("viewer") or {}).get("accounts"))
     if not contas or (contas[0] or {}).get("rumPageloadEventsAdaptiveGroups") is None:
-        return None, None, "resposta sem os grupos do Web Analytics"
+        return None, None, "resposta sem os grupos do Web Analytics", None
     grupos = contas[0]["rumPageloadEventsAdaptiveGroups"]
-    por_canal = {}
+    por_canal, amostra = {}, None
     for g in grupos:
+        try:
+            _si = float(((g.get("avg") or {}).get("sampleInterval")))
+            amostra = _si if amostra is None else max(amostra, _si)
+        except (TypeError, ValueError):
+            pass
         visitas = int(((g.get("sum") or {}).get("visits")) or 0)
         if visitas <= 0:
             continue      # página aberta vindo de outra página nossa: não é chegada
-        host = str(((g.get("dimensions") or {}).get("refererHost")) or "").strip().lower()
+        dim = g.get("dimensions") or {}
+        host = str(dim.get("refererHost") or "").strip().lower()
         canal = canal_da_referencia(host)
         if canal is None:
             continue
+        if canal == SEM_REFERENCIA:
+            canal = balde_sem_referencia(dim.get("requestPath"), dim.get("countryName"))
         c = por_canal.setdefault(canal, {"visitas": 0, "hosts": {}})
         c["visitas"] += visitas
         if host:
@@ -347,7 +410,7 @@ def origens_do_dia(ini: str, fim: str, limite: int = LIMITE_ORIGENS):
         hosts = sorted(c["hosts"].items(), key=lambda kv: -kv[1])[:3]
         lista.append({"origem": canal, "visitas": c["visitas"], "hosts": [h for h, _ in hosts]})
     lista.sort(key=lambda x: (-x["visitas"], x["origem"]))
-    return lista[:15], len(grupos) >= limite, None
+    return lista[:15], len(grupos) >= limite, None, (round(amostra, 3) if amostra is not None else None)
 
 
 def coletar(dia: date, ips_da_casa=None) -> dict:
@@ -431,7 +494,7 @@ def coletar(dia: date, ips_da_casa=None) -> dict:
     erros_5xx = erros_5xx_do_dia(ini, fim)
     site_ok = site_ok_da_contagem(erros_5xx)
     # 🔑 De onde chegou todo mundo — consulta à parte (ver origens_do_dia). None = não medi.
-    top_origens, origens_truncada, erro_origens = origens_do_dia(ini, fim)
+    top_origens, origens_truncada, erro_origens, origens_amostra = origens_do_dia(ini, fim)
 
     topo = sorted(({"pagina": k, "enderecos": len(v)} for k, v in por_pagina.items()),
                   key=lambda x: -x["enderecos"])[:12]
@@ -450,6 +513,7 @@ def coletar(dia: date, ips_da_casa=None) -> dict:
             "coleta_truncada": len(grupos) >= teto,
             "top_paginas": topo, "fonte": "tick",
             "top_origens": top_origens, "origens_truncada": origens_truncada,
+            "origens_amostra": origens_amostra,
             # 🪤 NÃO é coluna: o tick TIRA daqui antes de gravar e manda pro error_log.
             "_erro_origens": erro_origens}
 

@@ -39353,8 +39353,51 @@ def token_tick(request: Request, force: int = 0, dry: int = 0):
                                if api.ultimo_expires_in else None)}
 
 
+def _recoleta_so_das_origens(dias: int) -> dict:
+    """Recolhe SÓ as colunas de origem dos últimos `dias` dias (PATCH, nunca linha nova).
+
+    🔑 27/09/2026 (item 4 da telemetria): a régua das origens mudou (visita sem
+    referência vai pro balde da página e do país) e a semana tinha que ser recolhida.
+    O tick normal reescreve a LINHA INTEIRA — e perto do fim dos ~7 dias do Cloudflare
+    o detalhe de requisições já vem pela metade: recolher assim trocaria número bom por
+    número menor. Aqui só `top_origens`, `origens_truncada` e `origens_amostra` mudam.
+    🪤 PATCH e não upsert: dia sem linha ficaria com o `fuso` padrão ('UTC') — errado.
+    🪤 Lista vazia NÃO sobrescreve: todo dia tem gente de fora; vazio é o instrumento.
+    """
+    import metricas_site as _ms
+    from datetime import timedelta as _td
+    gravados, falhas = [], []
+    for atras in range(1, max(1, min(int(dias or 3), 8)) + 1):
+        dia = _hoje_br() - _td(days=atras)
+        ini, fim = _ms.bordas_do_dia_br(dia)
+        top, trunc, erro, amostra = _ms.origens_do_dia(ini, fim)
+        if top is None:
+            falhas.append("%s: %s" % (dia, erro))
+            continue
+        if not top:
+            falhas.append("%s: veio sem visita nenhuma — dia NÃO foi sobrescrito" % dia)
+            continue
+        try:
+            st, linhas = _supa_rest_service(
+                "PATCH", "metricas_diarias",
+                body={"top_origens": top, "origens_truncada": trunc, "origens_amostra": amostra},
+                params={"dia": "eq.%s" % dia}, prefer="return=representation")
+        except Exception as e:
+            st, linhas = 0, None
+            falhas.append("%s gravação: %s" % (dia, e))
+            continue
+        if st in (200, 204) and linhas:
+            gravados.append(str(dia))
+        else:
+            falhas.append("%s: não gravei (HTTP %s, %s linha(s))" % (dia, st, len(linhas or [])))
+    if falhas:
+        _log_error("metricas:origens", "recoleta só das origens: " + " | ".join(falhas)[:900],
+                   severity="warning")
+    return {"status": "ok", "modo": "so_origens", "gravados": gravados, "falhas": falhas}
+
+
 @app.post("/api/metricas/tick")
-def metricas_tick(request: Request, dias: int = 3):
+def metricas_tick(request: Request, dias: int = 3, so_origens: int = 0):
     """Grava a foto de ONTEM (o dia fechado). Chamado pelo pg_cron.
 
     🪤 Ontem, não hoje: dia pela metade compara mal com dia inteiro, e foi assim
@@ -39382,6 +39425,10 @@ def metricas_tick(request: Request, dias: int = 3):
                    "movimento do site não é coletada. O painel vai mostrar só o "
                    "que já foi gravado à mão.", severity="error")
         return {"status": "sem_token", "gravados": 0}
+
+    # 27/09: `?so_origens=1` recolhe só as colunas de origem (ver a função)
+    if so_origens:
+        return _recoleta_so_das_origens(dias)
 
     _casa = _ips_da_casa()
     gravados, falhas, _erros_origens = [], [], []
@@ -39931,8 +39978,13 @@ def _origens_7d(dias7: list) -> dict:
                     hosts[nome].append(h)
     lista = sorted(({"origem": k, "visitas": v, "hosts": hosts.get(k, [])[:3]} for k, v in soma.items()),
                    key=lambda x: (-x["visitas"], x["origem"]))[:10]
+    # 🔑 27/09 (item 4): o maior `sampleInterval` dos dias somados — acima de 1 o número é
+    # ESTIMATIVA do Cloudflare, e a tela diz. None = nenhum dia gravou a amostra (antigos).
+    _am = [float(l["origens_amostra"]) for l in medidos
+           if isinstance(l.get("origens_amostra"), (int, float))]
     return {"origens": lista, "dias_somados": len(medidos),
-            "dias_fora": len(dias7 or []) - len(medidos)}
+            "dias_fora": len(dias7 or []) - len(medidos),
+            "amostra_max": (max(_am) if _am else None)}
 
 
 @app.get("/api/admin/metricas")
