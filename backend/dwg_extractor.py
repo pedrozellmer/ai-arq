@@ -5241,8 +5241,13 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         try:
             bname = insert.dxf.name
             layer = insert.dxf.layer
-            x = insert.dxf.insert.x
-            y = insert.dxf.insert.y
+            # 🩸 27/09/2026 (estudo, item 8): o ponto de inserção está no OCS
+            # da peça. Com a extrusão virada (0,0,-1 — bloco espelhado no
+            # eixo Z) o x sai com o SINAL TROCADO: no R17, IC e CG caíam em
+            # −76 m em vez de +76 m, fora de qualquer folha. A posição vai
+            # pro WCS; a contagem não muda.
+            _p = insert.ocs().to_wcs(insert.dxf.insert)
+            x, y = float(_p[0]), float(_p[1])
         except Exception:
             _desc["ilegivel"] += 1
             continue
@@ -5269,6 +5274,7 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             _chave_ins = (bname, round(x, 4), round(y, 4), round(float(_d.get("rotation", 0) or 0), 3),
                           round(float(_d.get("xscale", 1) or 1), 4),
                           round(float(_d.get("yscale", 1) or 1), 4),
+                          tuple(round(float(c), 3) for c in _d.get("extrusion", (0, 0, 1))),
                           tuple(sorted((a.dxf.tag, a.dxf.text) for a in insert.attribs)))
         except Exception:
             _chave_ins = None
