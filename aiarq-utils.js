@@ -109,15 +109,35 @@
   // view_landing/view_login/view_cadastro eram descartados — e depois do "aceitar"
   // ninguém reenviava. Agora: sem resposta → fila (máx. 20); aceitou → a fila
   // sai; recusou → a fila morre. Nada grava sem o "sim" (LGPD intacta).
-  var _trackFila = [];
+  // 🔑 28/09/2026 (Pedro: "guardar no sessionStorage") — a fila morria na troca de
+  // página: quem aceitava o cookie já no cadastro ou no painel perdia a home e o
+  // cadastro aberto (o signup_done faltava em 1 de cada 3 fichas, 30/08–27/09).
+  // Agora ela vive no sessionStorage DA ABA: some quando a aba fecha, NADA é
+  // enviado sem o "sim", e recusou = a fila é apagada. Cada item leva a PÁGINA
+  // onde aconteceu — mandar depois com a página atual trocaria a home pelo cadastro.
+  var _FILA_KEY = 'aiarq_fila_pre_sim';
+  function _filaLer() {
+    try { var f = JSON.parse(sessionStorage.getItem(_FILA_KEY) || '[]'); return Array.isArray(f) ? f.slice(0, 20) : []; }
+    catch (e) { return []; }
+  }
+  function _filaGravar(f) {
+    try { if (f.length) sessionStorage.setItem(_FILA_KEY, JSON.stringify(f)); else sessionStorage.removeItem(_FILA_KEY); }
+    catch (e) { /* sessionStorage indisponível: a fila vive só nesta página, como antes */ }
+  }
+  var _trackFila = _filaLer();
+  function _filaDescarrega(analytics) {
+    var fila = _trackFila; _trackFila = []; _filaGravar([]);
+    if (analytics === true) fila.forEach(function (q) { window.trackEvent(q.event, q.meta, q.path); });
+  }
   window.addEventListener('aiarq:consent-changed', function (ev) {
-    try {
-      var d = ev && ev.detail;
-      var fila = _trackFila; _trackFila = [];
-      if (d && d.analytics === true) fila.forEach(function (q) { window.trackEvent(q.event, q.meta); });
-    } catch (e) {}
+    try { var d = ev && ev.detail; _filaDescarrega(d && d.analytics); } catch (e) {}
   });
-  window.trackEvent = function (event, meta) {
+  // a resposta pode ter sido dada em OUTRA aba enquanto esta guardava a fila
+  try {
+    var _c0 = JSON.parse(localStorage.getItem('aiarq_cookie_consent') || 'null');
+    if (_c0 && _trackFila.length) setTimeout(function () { _filaDescarrega(_c0.analytics); }, 0);
+  } catch (e) {}
+  window.trackEvent = function (event, meta, _paginaDaFila) {
     try {
       if (!event) return;
       // LGPD (opt-in do banner de cookies): SÓ rastreia se o usuário consentiu
@@ -125,7 +145,13 @@
       // não grava nada. Honra a promessa "telemetria só com seu sim".
       try {
         var _consent = JSON.parse(localStorage.getItem('aiarq_cookie_consent') || 'null');
-        if (!_consent) { if (_trackFila.length < 20) _trackFila.push({ event: event, meta: meta }); return; }
+        if (!_consent) {
+          if (_trackFila.length < 20) {
+            _trackFila.push({ event: event, meta: meta, path: (location.pathname || '').slice(0, 200) });
+            _filaGravar(_trackFila);
+          }
+          return;
+        }
         if (_consent.analytics !== true) return;
       } catch (e) { return; }
       // cid = id anônimo do navegador (localStorage) → dá pra contar VISITANTE
@@ -181,7 +207,8 @@
           user_id: u ? u.id : '',
           user_email: u ? (u.email || '') : '',
           job_id: (meta && meta.job_id) ? String(meta.job_id) : '',
-          path: (location.pathname || '').slice(0, 200),
+          // a página de ONDE o evento aconteceu (o da fila chega depois, de outra)
+          path: (_paginaDaFila || location.pathname || '').slice(0, 200),
           meta: Object.assign({ cid: _cid, src: _src },
                               _ult ? { ult: _ult } : {}, meta || {}),
         });
