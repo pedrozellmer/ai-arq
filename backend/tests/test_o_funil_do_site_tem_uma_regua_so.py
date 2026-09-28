@@ -84,7 +84,10 @@ def test_o_funil_NUNCA_mostra_mais_de_100_por_cento():
     Guarda que não monta o cenário do defeito não prende o defeito. Agora ele
     entrega os números EXATOS da foto do Pedro, com o total do banco MAIOR que a
     etapa anterior — que é a condição que produz o 180%."""
-    html = _render({"home": 55, "cadastro": 10, "conta": 8, "projeto": 16},
+    # 27/09: o % agora é o do NAVEGADOR (campos *_nav); o total do banco segue
+    # MAIOR que a etapa anterior, que é a condição que produzia o 180%.
+    html = _render({"home": 55, "cadastro": 10, "conta": 8, "projeto": 16,
+                    "home_nav": 55, "cadastro_nav": 10, "cadastro_pela_home_nav": 8},
                    {"contas": 18, "projetos": 26})
     assert _percentagens(html), "a tela parou de mostrar conversão nenhuma"
     for p in _percentagens(html):
@@ -104,7 +107,9 @@ def test_a_etapa_de_PROJETO_nao_ganha_porcentagem():
     """"Subiu projeto" não é subconjunto de "criou conta": cliente antigo sobe
     sem se cadastrar de novo. Nos dados reais de 7 dias são 16 projetos contra
     12 contas — pôr porcentagem aqui recriaria o mesmo >100% com outro nome."""
-    html = _render({"home": 18, "cadastro": 16, "conta": 12, "projeto": 16})
+    html = _render({"home": 18, "cadastro": 16, "conta": 12, "projeto": 16,
+                    "home_nav": 18, "cadastro_nav": 16, "cadastro_pela_home_nav": 12},
+                   {"contas": 12, "projetos": 16})
     depois = html[html.index("subiram projeto"):]
     assert "%" not in depois.split("</div>")[0] + depois.split("</div>")[1], \
         "a linha de projeto ganhou porcentagem de uma etapa que não a contém"
@@ -126,11 +131,12 @@ def test_etapa_sem_numero_vira_travessao_e_nao_zero():
     completamente diferente. Asserção satisfeita por um pedaço que não tem nada
     a ver com o que ela mede — a sabotagem F04 sobreviveu por causa disso.
     Agora olha a LINHA da etapa."""
+    # 27/09: "fizeram o cadastro" vem do banco (totais) — sem ele, travessão
     html = _render({"home": 18, "cadastro": 16},
-                   {"contas": 18, "projetos": 26})
-    assert _valor_da_etapa(html, "criaram conta") == "--", (
+                   {"projetos": 26})
+    assert _valor_da_etapa(html, "fizeram o cadastro") == "--", (
         "etapa sem medição não virou travessão — mostrar 0 é AFIRMAR que ninguém "
-        "criou conta, e a gente só sabe que não mediu")
+        "fez cadastro, e a gente só sabe que não mediu")
     # controle: onde HÁ número, ele aparece
     assert _valor_da_etapa(html, "abriram a home") == "18"
 
@@ -139,10 +145,13 @@ def test_a_tela_DIZ_de_onde_vem_o_numero():
     """O número do funil é menor que o do banco (só conta quem aceitou cookie).
     Sem essa frase, o Pedro compara "12 contas" com as 18 que ele sabe que
     existem e conclui que o painel está quebrado — de novo."""
+    # 27/09: os números do banco passaram a ser as PRÓPRIAS linhas de cadastro
+    # feito e projeto — e a tela diz de onde vem cada parte.
     html = _render({"home": 18, "cadastro": 16, "conta": 12, "projeto": 16},
                    {"contas": 18, "projetos": 26})
-    assert "18 conta(s)" in html and "26 projeto(s)" in html
-    assert "cookie" in html
+    assert _valor_da_etapa(html, "fizeram o cadastro") == "18"
+    assert _valor_da_etapa(html, "subiram projeto") == "26"
+    assert "cookie" in html and "banco" in html
 
 
 # ══════════════════════════════════════════════════════════════════════════

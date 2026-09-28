@@ -3169,7 +3169,11 @@ async function loadFunilRevisao(){
     // A barra é relativa à PRIMEIRA etapa (projetos concluídos), então a queda
     // aparece pelo tamanho, sem precisar fazer conta na cabeça.
     const topo = Math.max(1, funil[0].projetos || 0);
-    el.innerHTML = funil.map((f, i) => {
+    // 🩸 27/09 (item 3 da telemetria): a etapa 5 contava LINHA (57) em vez de
+    // projeto (26) e saía maior que as anteriores. A RPC agora conta projeto
+    // distinto, só raiz, desde 03/08 — e a tela diz a janela.
+    el.innerHTML = '<p class="text-xs text-gray-400 mb-2">Projetos de cliente concluídos desde 03/08 (quando a abertura da revisão passou a ser medida), sem reprocesso. Cada etapa conta projeto, não planilha.</p>' +
+      funil.map((f, i) => {
       const n = f.projetos || 0;
       const pct = Math.round((n / topo) * 100);
       const cli = f.clientes || 0;
@@ -4050,6 +4054,35 @@ function htmlAvisoSemConta(n) {
   if (k <= 0) return '';
   return `<p class="text-xs text-amber-700 sm:col-span-3">⚠️ ${escapeHtml(String(k))} evento${k === 1 ? '' : 's'} de conta logada sem dono na lista de contas — pra ${k === 1 ? 'ele' : 'eles'} o filtro das contas da casa não vale e os números acima podem estar inflados. Recarregue; se continuar, a leitura das contas (auth) está falhando.</p>`;
 }
+// 🩸 27/09/2026 (item 3 da telemetria) — o funil do topo dizia "68 abriram o
+// cadastro · 96% da landing" e "53 completaram · 75% da landing", mas só 41 e 33
+// deles tinham passado pela landing: gente que chega pelo blog, pelo login ou por
+// link direto. O % agora é só de quem passou pelas DUAS páginas (interseção por
+// navegador, `funnel_cruzado`), e a conta vem do BANCO (todas as contas criadas
+// na janela, sem depender de cookie) — sem %, porque é outra régua.
+// Função PURA (devolve string): a bancada roda ela no dukpy.
+function htmlFunilDaAtividade(d) {
+  const fn = (d && d.funnel) || {};
+  const cz = (d && d.funnel_cruzado) || {};
+  const ev = (d && d.by_event) || {};
+  const vL = fn.view_landing || 0, vC = fn.view_cadastro || 0;
+  const vCL = cz.cadastro_pela_landing;
+  const contas = ev.signup_created || 0;
+  const obsCad = (vCL == null)
+    ? ''
+    : `<p class="text-[11px] text-gray-400">${vCL} vieram da landing · ${vL > 0 ? Math.round((vCL / vL) * 100) : 0}% da landing</p>`;
+  return `
+      <div class="flex items-stretch gap-2 text-center">
+        <div class="flex-1 rounded-lg bg-indigo-50 p-3"><p class="text-2xl font-bold text-indigo-900">${vL}</p><p class="text-xs text-indigo-700 mt-1">🌐 visitaram a landing</p></div>
+        <div class="self-center text-gray-300 text-lg">→</div>
+        <div class="flex-1 rounded-lg bg-indigo-50 p-3"><p class="text-2xl font-bold text-indigo-900">${vC}</p><p class="text-xs text-indigo-700 mt-1">📝 abriram cadastro</p>${obsCad}</div>
+        <div class="self-center text-gray-300 text-lg">·</div>
+        <div class="flex-1 rounded-lg bg-emerald-50 p-3"><p class="text-2xl font-bold text-emerald-800">${contas}</p><p class="text-xs text-emerald-700 mt-1">🆕 criaram conta</p><p class="text-[11px] text-gray-400">no banco, todas</p></div>
+      </div>
+      <p class="text-xs text-gray-400 mt-3">Landing e cadastro contam navegador nos eventos (só quem aceitou cookie); a porcentagem é de quem passou pelas duas páginas. A conta vem do banco e conta todo mundo — outra régua, por isso sem porcentagem.</p>
+      ${vL === 0 ? '<p class="text-xs text-gray-400 mt-3">Sem visitas anônimas registradas ainda — começa a encher agora que o rastreio subiu.</p>' : ''}`;
+}
+
 function actFmtTime(iso) {
   try {
     return window.fmtBR(iso, { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' });
@@ -4084,20 +4117,10 @@ async function loadActivity() {
         <p class="text-[11px] text-gray-500">pessoas com pelo menos 1 evento na janela do seletor (${d.window_days} dias)</p>
       </div>` + htmlAvisoSemConta(d.eventos_sem_conta_achada);
 
-    // Funil do topo (visitantes únicos): landing → cadastro → completou
-    const fn = d.funnel || {};
-    const vL = fn.view_landing || 0, vC = fn.view_cadastro || 0, vS = fn.signup_done || 0;
-    const _pctf = (a, b) => (b > 0 ? Math.round((a / b) * 100) : 0);
-    const fb = document.getElementById('act-funnel-body');
-    if (fb) fb.innerHTML = `
-      <div class="flex items-stretch gap-2 text-center">
-        <div class="flex-1 rounded-lg bg-indigo-50 p-3"><p class="text-2xl font-bold text-indigo-900">${vL}</p><p class="text-xs text-indigo-700 mt-1">🌐 visitaram a landing</p></div>
-        <div class="self-center text-gray-300 text-lg">→</div>
-        <div class="flex-1 rounded-lg bg-indigo-50 p-3"><p class="text-2xl font-bold text-indigo-900">${vC}</p><p class="text-xs text-indigo-700 mt-1">📝 abriram cadastro</p><p class="text-[11px] text-gray-400">${_pctf(vC, vL)}% da landing</p></div>
-        <div class="self-center text-gray-300 text-lg">→</div>
-        <div class="flex-1 rounded-lg bg-emerald-50 p-3"><p class="text-2xl font-bold text-emerald-800">${vS}</p><p class="text-xs text-emerald-700 mt-1">✅ completaram</p><p class="text-[11px] text-gray-400">${_pctf(vS, vL)}% da landing</p></div>
-      </div>
-      ${vL === 0 ? '<p class="text-xs text-gray-400 mt-3">Sem visitas anônimas registradas ainda — começa a encher agora que o rastreio subiu.</p>' : ''}`;
+    // Funil do topo (visitantes únicos): landing → cadastro → conta
+    if (document.getElementById('act-funnel-body')) {
+      document.getElementById('act-funnel-body').innerHTML = htmlFunilDaAtividade(d);
+    }
 
     const evs = Object.entries(d.by_event || {}).sort((a, b) => b[1] - a[1]);
     const metaPor = d.meta_por_evento || {};
@@ -5829,18 +5852,31 @@ function linhasDoFunil(f, tot) {
   // 🪤 Sem medição NÃO é funil zerado: mostrar "0" aqui seria a mesma doença do
   // farol que acendia verde sem ter medido nada.
   if (!f) return '<div class="text-gray-400">não consegui medir o funil agora</div>';
-  return linha('abriram a home', f.home) +
-    linha('abriram o cadastro', f.cadastro, pct(f.cadastro, f.home) + ' da home') +
-    linha('criaram conta', f.conta, pct(f.conta, f.cadastro) + ' de quem abriu') +
-    // 🪤 SEM porcentagem: "subiu projeto" não é subconjunto de "criou conta" —
-    // cliente antigo sobe sem se cadastrar de novo. Pôr % aqui seria repetir o
-    // mesmo erro com outro número.
-    linha('subiram projeto', f.projeto) +
+  // 🩸 27/09/2026 (item 3 da telemetria) — o "~86% da home" dividia conjuntos que
+  // não se contêm: a pessoa era o user_id logada e o navegador deslogada, e quem
+  // abre a home deslogado e volta do login pro cadastro virava DUAS pessoas (24
+  // no cadastro, só 4 tinham passado pela home). Agora home e cadastro contam
+  // NAVEGADOR, e o % é só de quem passou pelas DUAS páginas — subconjunto da home
+  // por construção. Sem os campos novos (RPC antiga), nenhum %: melhor nada que
+  // um número que mente.
+  const temNav = f.home_nav != null && f.cadastro_nav != null &&
+                 f.cadastro_pela_home_nav != null;
+  const obsCad = temNav
+    ? f.cadastro_pela_home_nav + ' vieram da home · ' +
+      pct(f.cadastro_pela_home_nav, f.home_nav) + ' da home'
+    : '';
+  // 🔑 Conta e projeto saem do BANCO (todos, sem depender de cookie): o evento
+  // `signup_done` faltava em 1 de cada 3 fichas (27/09). É outra régua — por isso
+  // essas duas linhas NUNCA ganham porcentagem sobre as de cima.
+  return linha('abriram a home', temNav ? f.home_nav : f.home) +
+    linha('abriram o cadastro', temNav ? f.cadastro_nav : f.cadastro, obsCad) +
+    linha('fizeram o cadastro', t.contas, 'no banco, todos') +
+    linha('subiram projeto', t.projetos, 'no banco, de cliente') +
     '<div class="mt-2 pt-2 border-t text-xs text-gray-400 leading-snug">' +
-    'as quatro linhas contam PESSOA distinta nos nossos eventos (só quem aceitou ' +
-    'cookie), por isso são menores que o total do banco: ' +
-    (t.contas == null ? '--' : t.contas) + ' conta(s) e ' +
-    (t.projetos == null ? '--' : t.projetos) + ' projeto(s) em 7 dias.' +
+    'home e cadastro contam NAVEGADOR nos nossos eventos (só quem aceitou ' +
+    'cookie); a porcentagem é de quem passou pelas duas páginas. Cadastro feito ' +
+    'e projeto vêm do banco, que conta todo mundo — outra régua, por isso sem ' +
+    'porcentagem entre as duas partes (7 dias).' +
     '</div>';
 }
 

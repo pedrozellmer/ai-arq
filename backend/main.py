@@ -33858,6 +33858,13 @@ def admin_activity(request: Request, days: int = 30, limit: int = 200):
         "silencio_base_dias": 365,
         "sem_registro_na_janela": _nomes_em_silencio(_usage_events_por_nome(365), by_event),
         "funnel": {k: len(funnel_cids[k]) for k in _FUNNEL},
+        # 🩸 27/09 (item 3 da telemetria): "% da landing" dividia conjuntos que não
+        # se contêm (68 no cadastro, só 41 tinham passado pela landing). A
+        # interseção por navegador é a única base honesta pro %.
+        "funnel_cruzado": {
+            "cadastro_pela_landing": len(funnel_cids["view_cadastro"]
+                                         & funnel_cids["view_landing"]),
+        },
         "users": users,
         "recent": rows[:limit],
     }
