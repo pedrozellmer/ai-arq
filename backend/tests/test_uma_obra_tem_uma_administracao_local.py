@@ -111,16 +111,19 @@ def test_a_soma_de_replicas_da_consolidacao_REAL_volta_a_1_verba():
               for k in range(4)]
     consolidados = _m._consolidate_items(brutos)
     adm = _adm(consolidados)
-    # 🧪 controle do cenário: se a consolidação parar de somar, este teste não mede mais nada
-    assert len(adm) == 1 and adm[0].quantity > 1.0 and "consolidado de" in adm[0].observations.lower(), (
-        "a consolidação não produziu mais a soma de réplicas — o cenário mudou: %r"
+    # 🧪 controle do cenário. 🩸 28/09/2026 (estudo, achado 30): a consolidação
+    # PAROU de somar verba — junta as 4 réplicas numa linha de 1 vb já na
+    # passada 1. A régua da administração local abaixo segue valendo por cima.
+    assert len(adm) == 1 and adm[0].quantity == 1.0 and "consolidado de" in adm[0].observations.lower(), (
+        "a consolidação voltou a somar verba (ou deixou de juntar as réplicas): %r"
         % [(i.description, i.quantity) for i in adm])
     _m._aplicar_admin_local(consolidados)
     _m._juntar_admin_local(consolidados)
     adm = _adm(consolidados)
     assert len(adm) == 1 and adm[0].quantity == 1.0, (
         "a soma de réplicas continuou: %r" % [(i.quantity, i.unit) for i in adm])
-    assert _MARCA in adm[0].observations
+    # a linha já chega com 1 vb: a régua da administração não tem o que juntar
+    # (a marca dela sai quando junta redações diferentes — testes abaixo)
 
 
 # ══════════════════════════════════════════════════════════════════════════

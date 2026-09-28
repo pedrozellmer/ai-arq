@@ -8574,6 +8574,24 @@ def _resumo_de_fusoes(registro) -> str:
             f"medidas_no_grupo={medidas} | {cabeca} | {detalhe}")
 
 
+def _quantidade_de_grupo(unidade, quantidades) -> tuple:
+    """(quantidade, como) do grupo que a consolidação transforma em UMA linha.
+
+    🩸 28/09/2026 (estudo de leitura, achado 30): as passadas 1 (réplica) e 3
+    (família) somavam sem olhar a unidade — "LIMPEZA FINAL (várias variantes)
+    26 vb", "Circuito de iluminação 30 vb". Em 60 dias, 185 linhas assim em 51
+    projetos de cliente (fora a práxis). Verba é UM valor global: juntar N
+    verbas iguais dá uma verba, não N. Prazo (mês) de linhas repetidas por
+    prancha é o mesmo prazo: vale o maior. O resto soma, como antes."""
+    u = str(unidade or "").strip().lower().rstrip(".")
+    qs = [float(q or 0) for q in quantidades]
+    if u in ("vb", "verba", "verbas"):
+        return (1.0 if any(q > 0 for q in qs) else 0.0), "verba única — não soma"
+    if u in ("mês", "mes", "meses"):
+        return round(max(qs, default=0.0), 2), "prazo — vale o maior, não soma"
+    return round(sum(qs), 2), "soma"
+
+
 def _consolidate_items(items: list, registro: list | None = None) -> list:
     """Consolida itens redundantes em múltiplas passadas:
 
@@ -8699,7 +8717,7 @@ def _consolidate_items(items: list, registro: list | None = None) -> list:
             clean_desc = best.description
             for sep in (' - ', ' — ', ' departamento ', ' deptos ', ' da sala '):
                 clean_desc = clean_desc.split(sep)[0]
-            total_qty = round(sum(quantities), 2)
+            total_qty, _como = _quantidade_de_grupo(best.unit, quantities)
             consolidated = BudgetItem(
                 item_num=best.item_num,
                 description=f"{clean_desc.strip()} (várias variantes)",
@@ -8707,7 +8725,10 @@ def _consolidate_items(items: list, registro: list | None = None) -> list:
                 quantity=total_qty,
                 observations=(
                     f"Consolidado de {len(group)} entradas replicadas por "
-                    f"departamento/variante — soma de qtys: {total_qty} {best.unit}. "
+                    f"departamento/variante — "
+                    + (f"soma de qtys: {total_qty} {best.unit}. " if _como == "soma"
+                       else f"{_como}: {total_qty:g} {best.unit}. ")
+                    +
                     # 🩸 03/09: a mensagem dizia só o TOTAL. Quando o cliente-23
                     # perdeu um número entre duas rodadas, não deu pra saber se
                     # a consolidação tinha comido ou se a IA não produziu — a
@@ -9007,7 +9028,7 @@ def _consolidate_items(items: list, registro: list | None = None) -> list:
 
         # Consolida
         best = max(group, key=lambda x: (len(x.description or ""), _desempate_estavel(x)))
-        total_qty = round(sum(float(it.quantity or 0) for it in group), 2)
+        total_qty, _como3 = _quantidade_de_grupo(unit, [it.quantity for it in group])
         # Remove sufixo numérico da legenda pra descrição limpa
         clean = _re.sub(r"\s*(conforme\s+)?(especifica[çc][aã]o\s+\d+|especifica[çc][aã]o\b).*$",
                         "", best.description, flags=_re.IGNORECASE).strip()
@@ -9023,7 +9044,10 @@ def _consolidate_items(items: list, registro: list | None = None) -> list:
             quantity=total_qty,
             observations=(
                 f"Consolidado de {len(group)} entradas com mesma família "
-                f"({noun}) — soma: {total_qty} {unit}. "
+                f"({noun}) — "
+                + (f"soma: {total_qty} {unit}. " if _como3 == "soma"
+                   else f"{_como3}: {total_qty:g} {unit}. ")
+                +
                 # 🩸 10/09/2026: o que foi somado fica escrito na linha, como na
                 # passada 1 — a janela que sumiu na AL004 não deixou rastro.
                 f"Veio de: {_resumo_do_grupo(group)}. "
