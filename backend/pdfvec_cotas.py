@@ -155,8 +155,19 @@ def extract_cota_tokens(pdf_path: str, page_index: int = 0,
 
     Retorna [{"text", "value_m", "center": (x, y), "bbox"}]. PDF sem texto
     extraível (cota plotada como curva) devolve [] — honesto, sem chute.
+
+    📏 28/09/2026 (estudo de leitura, D7c): o pypdfium2 dá a posição no
+    espaço BRUTO da página; paredes e salas vêm no espaço do pdfminer, que
+    desconta a origem da MediaBox e aplica a rotação (`_initial_ctm`). Em PDF
+    de CAD com a folha centrada na origem (a62f7ae3: MediaBox em −1417, −650)
+    nenhuma cota caía perto de parede nenhuma: 0 casamentos em qualquer
+    escala. O recorte da vista (`region_bbox`, que vem do /BBox da viewport,
+    também bruto) continua no espaço bruto; depois dele, a cota vai pro
+    espaço da geometria pela MESMA transformação. Página com origem em (0, 0)
+    e sem rotação — quase todas — não muda.
     """
     import pypdfium2 as pdfium
+    from pdfvec_walls import _initial_ctm
 
     tokens: list[dict] = []
     doc = pdfium.PdfDocument(pdf_path)
@@ -164,6 +175,14 @@ def extract_cota_tokens(pdf_path: str, page_index: int = 0,
         if page_index >= len(doc):
             return []
         page = doc[page_index]
+        try:
+            ca, cb, cc, cd, ce, cf = _initial_ctm(page.get_mediabox(), page.get_rotation())
+        except Exception:
+            ca, cb, cc, cd, ce, cf = 1.0, 0.0, 0.0, 1.0, 0.0, 0.0
+
+        def _geo(x, y):
+            return (ca * x + cc * y + ce, cb * x + cd * y + cf)
+
         tp = page.get_textpage()
         try:
             n_rects = tp.count_rects(0, -1)
@@ -182,6 +201,9 @@ def extract_cota_tokens(pdf_path: str, page_index: int = 0,
                         x0, y0, x1, y1 = region_bbox
                         if not (x0 <= cx <= x1 and y0 <= cy <= y1):
                             continue
+                    tok["center"] = _geo(cx, cy)
+                    (qx0, qy0), (qx1, qy1) = _geo(l, b), _geo(r, t)
+                    tok["bbox"] = (min(qx0, qx1), min(qy0, qy1), max(qx0, qx1), max(qy0, qy1))
                     tok["value_m"] = val
                     tokens.append(tok)
                     if len(tokens) >= MAX_TOKENS:
@@ -324,20 +346,50 @@ def validate_scale(pdf_path: str, page_index: int, scale_denominator: float,
     Retorna:
       n_cotas   : tokens com cara de cota DENTRO da view principal
       n_matches : pares independentes cota×elemento batendo em ±2%
-      validada  : n_matches >= 2 ("escala_validada_por_cota")
+      segunda   : [escala, casamentos] da melhor OUTRA escala padrão, ou None
+      dominante : n_matches >= 2 E >= DOMINANCIA × a segunda — SÓ SOMBRA
+      validada  : n_matches >= 2 (a régua de sempre)
       exemplos  : até 5 pares (transparência no log)
+
+    📏 28/09/2026 (estudo de leitura, D7b): ">= 2 casamentos" sozinho não
+    separa a escala certa da errada. Na a3366fbb_11 (certa 1:100, 15
+    casamentos) as erradas juntavam 2 a 4 por coincidência. A declarada é
+    comparada com as escalas padrão, contando nos MESMOS elementos medidos
+    (comprimentos reescalados, sem detectar de novo) — ~0,4 s na prancha mais
+    pesada do acervo, e só quando já há >= 2 casamentos.
+    🪤 EM SOMBRA, não decide: nas 38 páginas locais, pela leitura da produção,
+    a dominância não pegou escala errada nenhuma e DERRUBOU uma certa — a
+    a3366fbb_10 (1:100 com três fontes concordando) casa 2 a 1:100 e 5 a
+    1:150 nos elementos reescalados. Com poucos casamentos a comparação nos
+    mesmos elementos é frágil. O log grava a segunda pra calibrar com
+    produção antes de ligar.
 
     NÃO promove nada — evidência pra outra etapa decidir.
     """
     tokens = extract_cota_tokens(pdf_path, page_index, region_bbox)
-    m_per_pt = PT_TO_M * float(scale_denominator)
-    elements = _elements_from_walls(walls) + _elements_from_rooms(rooms, m_per_pt)
-    elements = elements[:MAX_ELEMS]
+    den = float(scale_denominator)
+    m_per_pt = PT_TO_M * den
+    paredes = _elements_from_walls(walls)
+    elements = (paredes + _elements_from_rooms(rooms, m_per_pt))[:MAX_ELEMS]
     matches = match_cotas(tokens, elements) if tokens and elements else []
+    segunda = None
+    if len(matches) >= 2:
+        for esc in ESCALAS_PADRAO:
+            if abs(esc - den) <= TOL_ESCALA_REL * den:
+                continue                    # é a própria declarada
+            f = esc / den
+            alt = ([dict(e, length_m=e["length_m"] * f) for e in paredes]
+                   + _elements_from_rooms(rooms, PT_TO_M * esc))[:MAX_ELEMS]
+            n_alt = len(match_cotas(tokens, alt))
+            if n_alt and (segunda is None or n_alt > segunda[1]):
+                segunda = [esc, n_alt]
+    n = len(matches)
     return {
         "n_cotas": len(tokens),
-        "n_matches": len(matches),
-        "validada": len(matches) >= 2,
+        "n_matches": n,
+        "segunda": segunda,
+        "dominante": n >= 2 and n >= DOMINANCIA * (segunda[1] if segunda else 0),
+        "validada": n >= 2,
         "exemplos": matches[:5],
     }
 

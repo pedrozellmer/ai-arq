@@ -574,6 +574,10 @@ def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
         out["cotas_encontradas"] = cot["n_cotas"]
         out["cotas_batem"] = cot["n_matches"]
         out["escala_validada"] = bool(cot["validada"])
+        # 28/09 (D7b, SOMBRA): a melhor OUTRA escala nos mesmos elementos. Não
+        # decide nada — é o dado pra calibrar a dominância antes de ligá-la
+        if cot.get("segunda"):
+            out["cotas_segunda"] = cot["segunda"]
         if cot["n_matches"]:
             out["cotas_exemplos"] = cot["exemplos"]
         distinct = {room_den, den} | {v.get("scale") for v in alt_viewports}
@@ -799,6 +803,7 @@ def _run(page_units: list, job_id: str, api_key: str, log_fn, pular=None) -> Non
                     # 🚫 NÃO entram os de memória/tempo: eles já têm log próprio
                     # (`pdfvec:memoria`) e aqui só gastariam orçamento.
                     "escala_validada", "cotas_batem", "cotas_encontradas",
+                    "cotas_segunda",
                     "n_viewports", "n_views", "scale_snapped", "indicadas",
                     "err_rooms", "err_viewport", "err_carimbo", "err_views",
                     "err_escala_vista",
