@@ -55,6 +55,18 @@ def _corpo(caminho):
 
 
 _MAIN = _corpo(os.path.join(_BACKEND, "main.py"))
+
+
+def _rota_informar_area():
+    """A rota INTEIRA, do `def` até a próxima definição de topo.
+    🪤 29/09: era uma janela de 9.000 caracteres — três linhas a mais na rota
+    (a referência SINAPI) empurraram `_projeto_patch` pra fora e o guarda
+    reprovou código certo."""
+    i = _MAIN.find("def inform_project_area")
+    fins = [j for j in (_MAIN.find("\n@app.", i), _MAIN.find("\ndef ", i + 1),
+                        _MAIN.find("\nasync def ", i + 1), _MAIN.find("\nclass ", i + 1))
+            if j != -1]
+    return _MAIN[i:min(fins)] if fins else _MAIN[i:]
 _PROJ = io.open(os.path.join(_RAIZ, "projeto.html"), encoding="utf-8").read()
 
 
@@ -284,8 +296,7 @@ def test_o_pe_direito_e_PERSISTIDO_no_projeto():
     """🪤 Mesma armadilha do `user_total_area`: campo que não existe na RPC
     `update_project_status` é descartado em SILÊNCIO. Sem gravar, um reprocesso
     futuro perde o pé-direito e a pintura some de novo."""
-    i = _MAIN.find("def inform_project_area")
-    t = _MAIN[i:i + 9000]
+    t = _rota_informar_area()
     assert '"user_pe_direito"' in t and "_projeto_patch" in t, (
         "o pé-direito informado não é gravado por `_projeto_patch` — some no "
         "próximo reprocesso")
@@ -336,8 +347,7 @@ def test_o_backend_escreve_o_aviso_que_a_tela_le():
     """As duas pontas: se o backend parar de escrever a frase, a trava da tela
     deixa de funcionar em silêncio."""
     assert "INFORMADO POR VOCÊ" in _MAIN
-    i = _MAIN.find("def inform_project_area")
-    t = _MAIN[i:i + 9000]
+    t = _rota_informar_area()
     assert "Pé-direito de" in t, (
         "o backend parou de escrever o aviso do pé-direito nos warnings — a "
         "trava da tela lê essa frase e vai passar a mostrar o convite sempre")
@@ -345,8 +355,7 @@ def test_o_backend_escreve_o_aviso_que_a_tela_le():
 
 def test_o_caminho_da_AREA_continua_igual():
     """Regressão: o caso cliente-21 não pode quebrar."""
-    i = _MAIN.find("def inform_project_area")
-    t = _MAIN[i:i + 9000]
+    t = _rota_informar_area()
     assert "_apply_area_honesty(" in t and "apenas_preencher=True" in t, (
         "o preenchimento por área informada mudou de forma")
     assert '"user_total_area"' in t, "parou de gravar a área informada"

@@ -16953,6 +16953,29 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 traceback.print_exc()
                 raise  # Deixar o erro aparecer
 
+        # 🩸 29/09/2026 — o DWG e o PDF da MESMA prancha (mesmo nome) no mesmo
+        # envio: a leitura fazia os dois e a planilha trazia a prancha duas
+        # vezes (job 1b96bd42: 10 linhas do DWG e 30 do PDF na mesma folha).
+        # Sai o PDF cujo CAD rendeu linha; o de CAD que falhou fica (plano B).
+        # Decisão em engine_rules — ver `pdfs_da_prancha_ja_lida_no_cad`.
+        from engine_rules import pdfs_da_prancha_ja_lida_no_cad as _pdfs_irmaos
+        _pdf_irmao = _pdfs_irmaos(pdf_paths,
+                                  [getattr(_it, "ref_sheet", "") for _it in dxf_items])
+        if _pdf_irmao:
+            _fora_pdf = set(_pdf_irmao)
+            pdf_paths = [_p for _p in pdf_paths if _p not in _fora_pdf]
+            _nomes_irmaos = [os.path.basename(_p) for _p in _pdf_irmao]
+            _log_error("motor:pdf-da-prancha-do-cad",
+                       f"lidos só pelo CAD: {len(_nomes_irmaos)} PDF(s) | "
+                       + "; ".join(_nomes_irmaos[:8]), job_id, severity="info")
+            project_data.warnings = (project_data.warnings or []) + [
+                f"{len(_nomes_irmaos)} PDF(s) são as mesmas pranchas de CADs que você "
+                f"mandou, com o mesmo nome de arquivo ("
+                + ", ".join(_nomes_irmaos[:3])
+                + (f" e mais {len(_nomes_irmaos) - 3}" if len(_nomes_irmaos) > 3 else "")
+                + "). Lemos essas pranchas só pelo CAD — é dele que sai a medição — "
+                  "pra não contar a mesma folha duas vezes."]
+
         total = len(pdf_paths)
         client = anthropic.Anthropic(api_key=api_key, timeout=300.0)
         all_items = list(dxf_items)  # Começar com itens DXF
@@ -32394,6 +32417,50 @@ async def admin_revision_learn(job_id: str, request: Request):
         raise _erro_interno(500, "A operação falhou", e)
 
 
+def _referencia_sinapi_na_remontagem(job_id: str, items: list, qual: str) -> None:
+    """Refaz a referência SINAPI (`sinapi_matches`) dos itens de uma planilha
+    remontada do banco. Best-effort: se falhar, a planilha sai sem ela e o
+    motivo fica no error_log — nunca bloqueia.
+
+    🚨 01/09/2026 — `project_items` não guarda `sinapi_matches`: quem remonta a
+    planilha do banco perde a coluna REF e a aba "Referências SINAPI". O
+    conserto daquele dia entrou só no /finalize.
+    🩸 29/09/2026 — o informar-área também remonta e ficou de fora: quem
+    informava a área baixava a planilha SEM a referência (e9b9a8a0: 54,6 KB
+    antes, 35,8 KB depois da área; b55d9c0a igual). Uma função, as duas rotas.
+    """
+    try:
+        from sinapi_matcher import candidates_for, apply_llm_pick
+        from concurrent.futures import ThreadPoolExecutor as _TPE
+
+        def _cands_rb(it):
+            try:
+                return {"description": it.description,
+                        "unit": getattr(it, "unit", "") or "",
+                        "candidates": candidates_for(it.description, limit=60),
+                        "_item": it}
+            except Exception:
+                return None
+
+        with _TPE(max_workers=5) as _exr:   # mesmo teto do fluxo principal
+            _lote_rb = [r for r in _exr.map(_cands_rb, items) if r]
+        _nc_rb = apply_llm_pick(_lote_rb, job_id=job_id)
+        for _e in _lote_rb:
+            if _e["candidates"]:
+                _e["_item"].sinapi_matches = _e["candidates"][:3]
+        print(f"[sinapi-rebuild] job={job_id} {_nc_rb}/{len(_lote_rb)} "
+              f"itens com código conferido pela IA ({qual})")
+    except Exception as _esr:
+        print(f"[sinapi-rebuild] nao-fatal job={job_id}: {_esr}")
+        try:
+            _log_error("motor:sinapi-rebuild-falhou",
+                       f"{type(_esr).__name__}: {str(_esr)[:200]} — a planilha "
+                       f"{qual} sai SEM referência SINAPI", job_id,
+                       severity="warning")
+        except Exception:
+            pass
+
+
 @app.post("/api/items/{job_id}/finalize")
 async def rebuild_planilha_from_review(job_id: str, request: Request):
     _require_project_owner(request, job_id)
@@ -32484,37 +32551,10 @@ async def rebuild_planilha_from_review(job_id: str, request: Request):
         # receberam a planilha remontada. Revisão é justo o momento em que o
         # cliente mais precisa confiar no arquivo.
         # Best-effort, igual ao fluxo principal (main.py ~10267): se falhar, a
-        # planilha sai mesmo assim — nunca bloqueia.
-        try:
-            from sinapi_matcher import candidates_for, apply_llm_pick
-            from concurrent.futures import ThreadPoolExecutor as _TPE
-
-            def _cands_rb(it):
-                try:
-                    return {"description": it.description,
-                            "unit": getattr(it, "unit", "") or "",
-                            "candidates": candidates_for(it.description, limit=60),
-                            "_item": it}
-                except Exception:
-                    return None
-
-            with _TPE(max_workers=5) as _exr:   # mesmo teto do fluxo principal
-                _lote_rb = [r for r in _exr.map(_cands_rb, items) if r]
-            _nc_rb = apply_llm_pick(_lote_rb, job_id=job_id)
-            for _e in _lote_rb:
-                if _e["candidates"]:
-                    _e["_item"].sinapi_matches = _e["candidates"][:3]
-            print(f"[sinapi-rebuild] job={job_id} {_nc_rb}/{len(_lote_rb)} "
-                  f"itens com código conferido pela IA")
-        except Exception as _esr:
-            print(f"[sinapi-rebuild] nao-fatal job={job_id}: {_esr}")
-            try:
-                _log_error("motor:sinapi-rebuild-falhou",
-                           f"{type(_esr).__name__}: {str(_esr)[:200]} — a planilha "
-                           f"revisada sai SEM referência SINAPI", job_id,
-                           severity="warning")
-            except Exception:
-                pass
+        # planilha sai mesmo assim — nunca bloqueia. Mora em
+        # `_referencia_sinapi_na_remontagem` desde 29/09: o informar-área também
+        # remonta a planilha e tinha ficado sem ela.
+        _referencia_sinapi_na_remontagem(job_id, items, "revisada")
 
         try:
             from tcpo_matcher import match_item, get_insumos
@@ -32782,7 +32822,10 @@ def inform_project_area(job_id: str, payload: InformAreaPayload, request: Reques
     except Exception as _edp:
         print(f"[inform-area] derivação por pé-direito não-fatal: {_edp}")
 
-    # 5) Enriquecimento (TCPO + heurísticas) igual ao finalize + gerar xlsx in-place
+    # 5) Enriquecimento (SINAPI + TCPO + heurísticas) igual ao finalize + gerar xlsx in-place
+    # 🩸 29/09: o SINAPI faltava aqui — quem informava a área baixava a planilha
+    # sem a coluna REF e sem a aba "Referências SINAPI".
+    _referencia_sinapi_na_remontagem(job_id, items, "com a área informada")
     typology = proj.get("typology") or "office"
     try:
         from tcpo_matcher import match_item, get_insumos

@@ -154,7 +154,7 @@ def _linhas_que_o_persist_manda(monkeypatch, itens, job_id="job-teste"):
     return postados[0]
 
 
-def _itens_que_a_planilha_recebe(monkeypatch, tmp_path, linhas, rota):
+def _itens_que_a_planilha_recebe(monkeypatch, tmp_path, linhas, rota, candidatos=None):
     """Executa UM dos DOIS caminhos que remontam a planilha a partir do banco e
     devolve os `BudgetItem` que chegaram ao `generate_spreadsheet`.
 
@@ -197,8 +197,9 @@ def _itens_que_a_planilha_recebe(monkeypatch, tmp_path, linhas, rota):
     monkeypatch.setattr(m, "_supabase_storage_upload", lambda *a, **k: True)
     monkeypatch.setattr(m, "_carimbar_planilha", lambda *a, **k: None)
     monkeypatch.setattr(m, "WORK_DIR", str(tmp_path))
-    monkeypatch.setattr(_sm, "candidates_for", lambda *a, **k: [])
-    monkeypatch.setattr(_sm, "apply_llm_pick", lambda *a, **k: 0)
+    # 29/09: `candidatos` liga o SINAPI (o guarda de que as DUAS rotas o refazem)
+    monkeypatch.setattr(_sm, "candidates_for", lambda *a, **k: list(candidatos or []))
+    monkeypatch.setattr(_sm, "apply_llm_pick", lambda lote, **k: len(lote) if candidatos else 0)
     monkeypatch.setattr(_tm, "match_item", lambda *a, **k: [])
     if rota == "finalize":
         import asyncio
@@ -250,6 +251,26 @@ def test_a_origem_e_gravada_e_relida(monkeypatch, tmp_path, rota):
         "a reidratação de %s perdeu a origem — a honestidade de área volta a "
         "decidir com menos informação do que o motor tinha: %r"
         % (rota, [i.origem for i in relidos]))
+
+
+@pytest.mark.parametrize("rota", ["finalize", "inform-area"])
+def test_as_duas_rotas_refazem_a_referencia_sinapi(monkeypatch, tmp_path, rota):
+    """🩸 29/09/2026: o conserto de 01/09 (a referência SINAPI sumia na
+    remontagem) entrou só no /finalize. Quem informava a área baixava a
+    planilha sem a coluna REF e sem a aba "Referências SINAPI" (e9b9a8a0:
+    54,6 KB antes da área, 35,8 KB depois)."""
+    from models import BudgetItem, Confidence
+    itens = [BudgetItem(item_num="1.1", description="Piso porcelanato", unit="m²",
+                        quantity=118.5, confidence=Confidence.ESTIMADO,
+                        origem="dxf_geom", discipline="Acabamentos")]
+    linhas = _linhas_que_o_persist_manda(monkeypatch, itens)
+    cand = [{"codigo": "87263", "descricao": "PISO PORCELANATO", "unidade": "M2",
+             "score": 0.9}]
+    relidos = _itens_que_a_planilha_recebe(monkeypatch, tmp_path, linhas, rota,
+                                          candidatos=cand)
+    assert relidos and all(getattr(i, "sinapi_matches", None) for i in relidos), (
+        "a planilha de %s saiu SEM referência SINAPI" % rota)
+    assert relidos[0].sinapi_matches[0]["codigo"] == "87263"
 
 
 def test_CONTROLE_o_persist_manda_mesmo_as_linhas(monkeypatch):

@@ -6525,3 +6525,51 @@ def pdfs_de_outra_disciplina(pdfs, cads) -> list:
         if d and all(not (d & dc) for dc in d_cads):
             fica.append(p)
     return fica
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  O PDF que é a MESMA prancha de um CAD que a leitura já leu
+# ─────────────────────────────────────────────────────────────────────────────
+_RE_NOME_COM_DICA = _re.compile(r"^(.*?\.(?:pdf|dwg|dxf))(?:\s*\(.*)?$", _re.IGNORECASE)
+_RE_EXTENSAO_DE_PRANCHA = _re.compile(r"\.(?:pdf|dwg|dxf)$", _re.IGNORECASE)
+#: o que os NOSSOS conversores colam no nome do DXF que eles geram
+_SUFIXOS_DO_CONVERSOR_NO_RADICAL = ("_libredwg_min", "_libredwg", ".slim")
+
+
+def radical_da_prancha(nome) -> str:
+    """O nome da prancha sem pasta, sem extensão, sem o sufixo do conversor e
+    sem a dica que a leitura cola depois do nome ("X.dxf (Planta baixa)") —
+    em minúsculas e sem acento, pra comparar o PDF com o CAD."""
+    n = str(nome or "").replace("\\", "/").rsplit("/", 1)[-1].strip()
+    m = _RE_NOME_COM_DICA.match(n)
+    if m:
+        n = m.group(1)
+    n = _RE_EXTENSAO_DE_PRANCHA.sub("", n)
+    for suf in _SUFIXOS_DO_CONVERSOR_NO_RADICAL:
+        if n.lower().endswith(suf):
+            n = n[: -len(suf)]
+            break
+    n = _ud.normalize("NFKD", n.strip().casefold())
+    return "".join(c for c in n if not _ud.combining(c))
+
+
+def pdfs_da_prancha_ja_lida_no_cad(pdfs, refs_do_cad) -> list:
+    """Os PDFs do envio que são a MESMA prancha de um CAD que rendeu linhas.
+
+    `refs_do_cad` = o `ref_sheet` das linhas que a leitura do CAD produziu.
+
+    🩸 29/09/2026 (job 1b96bd42): 8 DWG + o PDF de cada um, com o MESMO nome
+    ("…HT.006.3PAV…-R01.dwg" e "…-R01.pdf"). O envio inicial lia os dois e a
+    planilha trazia a prancha 006 duas vezes: 10 linhas do DWG e 30 do PDF. Em
+    60 dias, 204 linhas de PDF em 3 projetos repetiam prancha que o CAD já
+    tinha lido — nenhuma medida (a leitura do PDF só estima). O /add-file já
+    descarta os PDFs; o envio inicial não. Pedro, 29/09: ler só o DWG.
+    🔑 Só sai o PDF cujo CAD RENDEU linha. Se o DWG não converteu ou não deu
+    nada, o PDF de mesmo nome é o plano B e fica — 8b7a2b71: o DWG falhou 3
+    vezes e as 14 linhas vieram do PDF.
+    🔑 Nome igual, e só nome igual: "prancha 01.pdf" com um DWG "geral.dwg"
+    continua como hoje (lá a consolidação é quem junta).
+    """
+    lidos = {radical_da_prancha(r) for r in (refs_do_cad or ()) if r}
+    lidos.discard("")
+    return [p for p in (pdfs or ()) if radical_da_prancha(p) in lidos]
