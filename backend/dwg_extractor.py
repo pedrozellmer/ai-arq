@@ -454,13 +454,43 @@ class DXFExtraction:
                 lines.append(f"CONTAGEM DE BLOCOS ({len(_grupos)} tipos):")
                 from engine_rules import e_vinculo_de_modelo as _vinc
                 from engine_rules import nota_de_bloco_de_anotacao as _anotacao
+                # 🩸 29/09/2026 (caso 18c57c3c): o mesmo bloco com ATRIBUTO diferente
+                # por inserção — 'DISJ-3F' 4 un, 2 com 63A=63A e 2 com 63A=D-32A. A
+                # lista de atributos (mais abaixo) junta as linhas iguais sem dizer
+                # quantas, e a planilha saiu "63A" nos 4 (noutra rodada, "×1" cada).
+                # A quebra vai AQUI, na linha da contagem da PEÇA — não na lista de
+                # atributos, onde a mesma etiqueta de área escrita 2× viraria área
+                # dobrada. Só quando o bloco tem 2+ valores e a quebra soma a
+                # contagem (depois das vistas, 11 inserções viram 7 peças: não bate).
+                # 🪤 E só quando o atributo é TIPO de peça: no acervo, a etiqueta de
+                # área ('area' 5 un, uma sala e seus m² em cada), a marca de nível
+                # (COTAV 94 un, 19 cotas) e o ponto topográfico ganhavam a quebra — e
+                # "separe por valor" viraria uma linha por sala. Tipo se REPETE (no
+                # máximo metade de valores distintos) e não é MEDIDA (decimal).
+                _attr_por_bloco: dict = {}
+                _attr_medida: set = set()
+                for _ba in (getattr(self, "block_attributes", None) or []):
+                    _cps = _ba.get("campos") or {}
+                    _l_ba = "; ".join(f"{k}={v}" for k, v in _cps.items())
+                    _attr_por_bloco.setdefault(_ba.get("bloco", ""), Counter())[_l_ba] += 1
+                    if any(re.match(r"^[+-]?\d+[.,]\d+$", str(v).strip()) for v in _cps.values()):
+                        _attr_medida.add(_ba.get("bloco", ""))
                 for (_r, _a), (count, n_nomes, rotulo) in sorted(
                         _grupos.items(), key=lambda x: -x[1][0]):
+                    _qa = _attr_por_bloco.get(rotulo)
+                    _nota_attr = ""
+                    if _qa and len(_qa) >= 2 and sum(_qa.values()) == count \
+                            and 2 * len(_qa) <= count and rotulo not in _attr_medida:
+                        _nota_attr = ("  [atributo por inserção: "
+                                      + " · ".join(f"{_l[:40]} ×{_n}" for _l, _n in _qa.most_common(4))
+                                      + (f" · +{len(_qa) - 4} valor(es)" if len(_qa) > 4 else "")
+                                      + " — separe por valor; não descreva todas com um valor só]")
                     _nota_anot = _anotacao(rotulo, _a)
                     if _quantos_por_raiz.get(_r, 1) > 1 and _a:
                         _seq[_r] = _seq.get(_r, 0) + 1
                         rotulo = f"{rotulo} (tipo {_seq[_r]})"
                     _nota = f"  [{n_nomes} nomes do conversor, mesma peca]" if n_nomes > 1 else ""
+                    _nota += _nota_attr
                     _nota += _nota_da_legenda(_amo_grupo[(_r, _a)])
                     # 🩸 29/09 (caso 18c57c3c): marca de fiação e nuvem de revisão
                     _nota += _nota_anot
