@@ -7139,12 +7139,83 @@ def _nucleo_denso(doc, limite_pontos: int = 20000):
     return (_p(xs, 0.75) - _p(xs, 0.25), _p(ys, 0.75) - _p(ys, 0.25))
 
 
+_PLAUS_TEXTO_MIN = 30              # textos no modelo pra julgar pela altura
+_PLAUS_TEXTO_IMPOSSIVEL_M = 0.001  # texto mediano < 1 mm de verdade = impossível
+_PLAUS_TEXTO_OK = (0.05, 1.0)      # texto do modelo em 1:25–1:200: 5 cm a 1 m
+
+
+def _unidade_pela_altura_do_texto(doc, unit_factor: float) -> dict:
+    """Reforço da plausibilidade: a altura MEDIANA do texto do modelo é possível?
+
+    🩸 29/09/2026 (caso 18c57c3c): prancha elétrica de um centro de distribuição
+    desenhada em METRO declarando milímetro, sem cota. O núcleo em mm dava
+    0,99 × 0,11 m — a régua do núcleo exige os DOIS lados < 0,5 m e deixou
+    passar; e em metro o núcleo (4 vistas lado a lado) tem 991 m, acima dos
+    200 m da faixa. Todo comprimento saiu 1000× menor ("eletroduto 15 m").
+    O texto não mente: 0,135 unidade — em mm, letra de 0,14 mm.
+    📏 Acervo local (57 DXF): só 3 disparam, os três declarando mm com texto de
+    0,1–0,25 — este, o dd52081b (934 cotas PROVARAM metro) e o elétrico do
+    73c6f0ed (a plausibilidade do núcleo corrigiu pra metro). Os murais do
+    32a2 (mm com texto de 2 mm, escala de papel) não disparam.
+    🔑 Corrige só com as três: ≥ `_PLAUS_TEXTO_MIN` textos, texto mediano abaixo
+    de 1 mm na unidade declarada E exatamente UMA unidade que põe o texto entre
+    5 cm e 1 m. Como a do núcleo, NÃO é prova: entra como ressalva.
+    """
+    hs = []
+    for e in doc.modelspace().query("TEXT MTEXT"):
+        try:
+            h = float(e.dxf.get("height", 0) if e.dxftype() == "TEXT"
+                      else e.dxf.get("char_height", 0))
+        except (TypeError, ValueError):
+            continue
+        if h > 0:
+            hs.append(h)
+    if len(hs) < _PLAUS_TEXTO_MIN:
+        return {"status": None, "motivo": f"só {len(hs)} textos no modelo"}
+    hs.sort()
+    med = hs[len(hs) // 2]
+    if med * unit_factor >= _PLAUS_TEXTO_IMPOSSIVEL_M:
+        return {"status": None, "motivo": f"texto mediano {med * unit_factor * 1000:.1f} mm é possível"}
+    lo, hi = _PLAUS_TEXTO_OK
+    cands = [f for f in _CANONICAL_METRIC_FACTORS if f > unit_factor and lo <= med * f <= hi]
+    if len(cands) != 1:
+        return {"status": None, "motivo": f"texto mediano {med:g} un sem unidade única ({len(cands)})"}
+    fator = cands[0]
+    return {
+        "status": "corrigida_plausibilidade",
+        "fator_corrigido": fator,
+        "mensagem": (
+            f"unidade corrigida por PLAUSIBILIDADE (altura do texto): com "
+            f"{_UNIT_FACTOR_NAMES.get(unit_factor, unit_factor)} o texto do desenho "
+            f"teria {med * unit_factor * 1000:.2f} mm (impossível); em "
+            f"{_UNIT_FACTOR_NAMES.get(fator, fator)}, {med * fator * 100:.1f} cm. "
+            f"NÃO é prova — quantidades entram como estimado, confira a escala do "
+            f"seu arquivo."),
+    }
+
+
 def _unidade_por_plausibilidade(doc, unit_factor: float) -> dict:
     """Última régua: o desenho, na unidade declarada, é fisicamente possível?
 
     Devolve {'status': 'corrigida_plausibilidade', 'fator_corrigido', 'mensagem'}
     ou {'status': None, 'motivo'}. Nunca lança.
+    🩸 29/09: quando o NÚCLEO não decide, a altura do texto decide (ver
+    `_unidade_pela_altura_do_texto`).
     """
+    r = _unidade_pelo_nucleo(doc, unit_factor)
+    if r.get("status"):
+        return r
+    try:
+        t = _unidade_pela_altura_do_texto(doc, unit_factor)
+    except Exception as e:
+        t = {"status": None, "motivo": f"texto falhou: {type(e).__name__}"}
+    if t.get("status"):
+        return t
+    return {"status": None, "motivo": f"{r.get('motivo', '')} | {t.get('motivo', '')}"}
+
+
+def _unidade_pelo_nucleo(doc, unit_factor: float) -> dict:
+    """A régua do NÚCLEO denso (17/08/2026, caso cliente-81) — ver `_unidade_por_plausibilidade`."""
     try:
         nucleo = _nucleo_denso(doc)
         if not nucleo:
