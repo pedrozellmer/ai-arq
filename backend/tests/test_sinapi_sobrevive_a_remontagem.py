@@ -241,7 +241,9 @@ def _remontar(monkeypatch, tmp_path, candidatos=None, escolha_da_ia="87263",
     monkeypatch.setattr(main, "WORK_DIR", str(tmp_path))
 
     r = asyncio.run(main.rebuild_planilha_from_review(JOB, request=None))
-    saida = os.path.join(str(tmp_path), JOB, "orcamento_%s_revisado.xlsx" % JOB)
+    # 29/09: a remontagem entrega no arquivo que o DOWNLOAD serve (antes ficava
+    # em `_revisado.xlsx`, que ninguém baixava — ver `_publicar_planilha`)
+    saida = main._planilha_local(JOB)
     return r, saida, logs
 
 

@@ -3923,15 +3923,60 @@ def _supabase_storage_download(remote_key: str, local_path: str) -> bool:
         return False
 
 
+def _planilha_local(job_id: str) -> str:
+    """O arquivo que o /api/download entrega — e que `_publicar_planilha` troca."""
+    return os.path.join(WORK_DIR, job_id, f"orcamento_{job_id}.xlsx")
+
+
 def get_planilha_path(job_id: str) -> Optional[str]:
     """Retorna o path local da planilha de um job. Se sumiu (Render
     /tmp volátil), tenta baixar do Supabase Storage. None se falhou."""
-    local = os.path.join(WORK_DIR, job_id, f"orcamento_{job_id}.xlsx")
+    local = _planilha_local(job_id)
     if os.path.exists(local):
         return local
     if _supabase_storage_download(f"{job_id}.xlsx", local):
         return local
     return None
+
+
+def _publicar_planilha(job_id: str, gerada: str) -> bool:
+    """Sobe a planilha pro Storage E põe no lugar da cópia que o download
+    entrega. Devolve o resultado do upload.
+
+    🩸 29/09/2026 — a planilha REVISADA não chegava ao cliente. O /finalize (o
+    "Exportar .xlsx" da tela de revisão) e o refazer-planilha do admin geravam
+    `orcamento_<job>_revisado.xlsx` e subiam pro Storage; o download entrega
+    primeiro `orcamento_<job>.xlsx`, que o processamento deixa no disco até o
+    próximo deploy. Quem revisava e exportava levava a planilha de ANTES. No
+    log de downloads desde 15/09: 5 clientes — um com 162 linhas revisadas
+    levou 43.925 bytes; o Storage tinha 25.023.
+    🔑 Sobe ANTES de mover: depois do `replace` o arquivo gerado não existe mais
+    no caminho dele.
+    🔑 Se a troca falhar, a cópia velha SAI — sem ela o download busca no
+    Storage, que é a nova. Servir a velha é o defeito inteiro; ficar sem cópia
+    local custa só um download do Storage.
+    🚨 Quem gera a planilha em OUTRO caminho sobe por aqui. O processamento e
+    o informar-área geram no próprio `orcamento_<job>.xlsx` e sobem direto — o
+    guarda (tests/test_a_planilha_revisada_e_a_que_o_cliente_baixa.py) confere
+    que todo upload de `<job>.xlsx` fora daqui sobe exatamente esse arquivo.
+    """
+    ok = _supabase_storage_upload(gerada, f"{job_id}.xlsx")
+    alvo = _planilha_local(job_id)
+    if os.path.abspath(gerada) != os.path.abspath(alvo):
+        try:
+            os.makedirs(os.path.dirname(alvo), exist_ok=True)
+            os.replace(gerada, alvo)
+        except Exception as e:
+            try:
+                os.remove(alvo)
+            except FileNotFoundError:
+                pass
+            except Exception as e2:
+                _log_error("entrega:planilha-velha-no-disco",
+                           f"não troquei ({type(e).__name__}) nem apaguei "
+                           f"({type(e2).__name__}) a cópia local — o download "
+                           f"pode entregar a planilha anterior", job_id)
+    return ok
 
 
 # Swagger/OpenAPI só quando LIGADO explicitamente (env EXPOSE_API_DOCS=1). Em
@@ -32505,8 +32550,9 @@ async def rebuild_planilha_from_review(job_id: str, request: Request):
         output_path = os.path.join(work_dir, f"orcamento_{job_id}_revisado.xlsx")
         generate_spreadsheet(pd, items, output_path, typology=typology)
 
-        # 5) Subir pra Storage sobrescrevendo o antigo
-        _storage_ok = _supabase_storage_upload(output_path, f"{job_id}.xlsx")
+        # 5) Subir pra Storage E trocar a cópia que o download entrega
+        #    (29/09: o download servia a de antes da revisão — `_publicar_planilha`)
+        _storage_ok = _publicar_planilha(job_id, output_path)
         # A planilha agora bate com os itens revisados — tira o aviso de velha.
         _carimbar_planilha(job_id)
 
