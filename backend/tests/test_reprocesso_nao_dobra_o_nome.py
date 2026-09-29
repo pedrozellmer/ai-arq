@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Reprocessar um reprocesso não dobra o "(reprocessado)" no nome.
 
-🩸 29/09/2026 (caso 18c57c3c): o cliente recebeu "SHOPPE (reprocessado)
+🩸 29/09/2026 (caso 18c57c3c): o cliente recebeu "Galpão A (reprocessado)
 (reprocessado) — sua planilha está pronta" — o nome é o de antes + sufixo, e o
 de antes já era reprocesso.
 """
@@ -20,9 +20,9 @@ from _corpo import fonte  # noqa: E402
 
 
 @pytest.mark.parametrize("antes,depois", [
-    ("SHOPPE", "SHOPPE (reprocessado)"),
-    ("SHOPPE (reprocessado)", "SHOPPE (reprocessado)"),
-    ("SHOPPE (reprocessado) (reprocessado)", "SHOPPE (reprocessado)"),
+    ("Galpão A", "Galpão A (reprocessado)"),
+    ("Galpão A (reprocessado)", "Galpão A (reprocessado)"),
+    ("Galpão A (reprocessado) (reprocessado)", "Galpão A (reprocessado)"),
     ("  Casa 2  ", "Casa 2 (reprocessado)"),
     ("", "Projeto (reprocessado)"),
     (None, "Projeto (reprocessado)"),

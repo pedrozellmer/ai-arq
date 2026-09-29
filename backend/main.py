@@ -34782,7 +34782,7 @@ def _nome_do_reprocesso(nome) -> str:
     """O nome do projeto reprocessado: o de antes + " (reprocessado)", UMA vez.
 
     🩸 29/09/2026 (caso 18c57c3c): reprocessamos um projeto que já era
-    reprocesso e o cliente recebeu "SHOPPE (reprocessado) (reprocessado) — sua
+    reprocesso e o cliente recebeu "Galpão A (reprocessado) (reprocessado) — sua
     planilha está pronta"; a lista dele passou a mostrar o nome dobrado.
     """
     base = str(nome or "").strip()
