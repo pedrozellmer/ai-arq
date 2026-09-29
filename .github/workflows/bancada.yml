@@ -211,7 +211,12 @@ jobs:
           # no modelo, chave do selo com escala, contenção) levaram a colheita a
           # 6952 e o guarda de 75% cobrou 5214. Mesmo critério: 6000 é 86% dos
           # 6952, aguenta até 8.000 e pega qualquer queda maior que 14%.
-          PISO: 6000
+          # 29/09/2026, 13ª vez: 6000 -> 6900. Consertos do motor do caso de
+          # 28–29/09 (resgate pelos blocos, sigla, vistas, anotação, altura,
+          # unidade pelo texto, blocos citados, coluna da legenda) levaram a
+          # colheita a 8003 e o guarda de 75% cobrou 6002. Mesmo critério: 6900 é
+          # 86% dos 8003, aguenta até ~9.200 e pega qualquer queda maior que 14%.
+          PISO: 6900
         run: |
           N=$(python -m pytest tests/ -q --collect-only 2>/dev/null | tail -1 | grep -oE '^[0-9]+' || echo 0)
           echo "testes colhidos: $N (piso: $PISO)"

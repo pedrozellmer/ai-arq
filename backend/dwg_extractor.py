@@ -14,6 +14,7 @@ import logging
 import math
 import os
 import re
+import statistics
 import subprocess
 import sys
 import tempfile
@@ -3165,6 +3166,11 @@ _LEG_COLUNA_MIN = 2      # outros rótulos na mesma coluna (x ±0,5h, altura ±1
 _LEG_COLUNA_H = 15       # ... a até 15 alturas na vertical
 _LEG_PALAVRAS_FORA = frozenset({"de", "da", "do", "das", "dos", "com", "para", "em",
                                 "na", "no", "ind", "blk", "bloco", "the"})
+#: A COLUNA de símbolos da legenda (ver `amostras_de_legenda`, 29/09): ≥3
+#: amostras já provadas pelo nome na mesma faixa x; a inserção vizinha na
+#: coluna (até 1,5 passo de um membro) também é amostra.
+_LEG_COLUNA_BLOCOS_MIN = 3
+_LEG_COLUNA_PASSOS = 1.5
 
 
 def _nota_da_legenda(n):
@@ -3210,6 +3216,20 @@ def amostras_de_legenda(insercoes, textos):
     "Drenagem Superficial" junto do tê) virava amostra: 6 falsos medidos.
     Limite: rótulo que não repete o nome (SOLDA × "CONEXÃO APARAFUSADA") ou
     nome do conversor ('BLOCO1') não é pego.
+
+    🩸 29/09/2026 (caso 18c57c3c, elétrico): a legenda de segurança tinha 8
+    símbolos pegos pelo nome e 5 não — 'SP' ao lado de "SENSOR DE PRESENÇA",
+    'SI' de "SIRENE", 'CÂMERAS 360°' de "CÂMERA DOME", 'LUM SOM' sem rótulo, 1
+    CONDULETE —, e nas duas cópias da legenda de tomadas o sensor (rótulo 14 cm
+    fora do alinhamento) e a emergência ("ILE") também escaparam. A planilha
+    saiu com câmera, luminária com som, 2 sensores e 2 emergências que só
+    existem na legenda (na planta: nenhum).
+    🔑 (d) a COLUNA de símbolos: ≥3 amostras provadas acima cujos desenhos
+      se encostam na horizontal formam a coluna (a faixa x que ocupam); a
+      inserção que cai nessa faixa a até 1,5 passo (a mediana do espaçamento
+      da coluna) de um membro também é amostra, e a coluna cresce por ela.
+      Símbolo mais largo que 12h fica fora. Chave: LEGENDA_POR_COLUNA=0
+      desliga sem deploy.
     """
     tx = []           # (x, y, h, palavras) — texto sem palavra conta na COLUNA
     for t in textos or []:
@@ -3281,19 +3301,68 @@ def amostras_de_legenda(insercoes, textos):
                     continue
                 if not _em_coluna(i):
                     continue
-                return True
-        return False
+                return h          # a altura do rótulo: a régua da coluna (d)
+        return 0.0
 
     out = {}
+    provadas, resto = [], []
     for ins in insercoes or []:
         try:
             nome, caixa, pos = ins
             x0, y0, x1, y1 = (float(v) for v in caixa)
-        except (TypeError, ValueError):
+            py = float(pos[1])
+        except (TypeError, ValueError, IndexError):
             continue
-        if _tem_rotulo(nome, x0, y0, x1, y1):
+        h = _tem_rotulo(nome, x0, y0, x1, y1)
+        if h:
+            out.setdefault(nome, []).append(pos)
+            provadas.append((x0, x1, py, h))
+        else:
+            resto.append((nome, pos, x0, x1, py))
+    if os.environ.get("LEGENDA_POR_COLUNA", "1") != "0":
+        for nome, pos in _vizinhas_da_coluna(provadas, resto):
             out.setdefault(nome, []).append(pos)
     return out
+
+
+def _vizinhas_da_coluna(provadas, resto):
+    """(d) de `amostras_de_legenda`: as inserções de `resto` que continuam
+    uma coluna de amostras provadas. `provadas` = [(x0, x1, y, h do rótulo)];
+    `resto` = [(nome, pos, x0, x1, y)]. Devolve [(nome, pos)].
+
+    A coluna é a FAIXA x que os desenhos dos símbolos provados ocupam (um
+    encosta no outro). 🪤 Pelo ponto de inserção (±0,5h) a 2ª cópia da legenda
+    de tomadas escapava: lá os símbolos foram empurrados até 20 cm pro lado."""
+    colunas = []
+    for x0, x1, y, h in sorted(provadas):
+        if colunas and x0 <= colunas[-1][1]:
+            colunas[-1][1] = max(colunas[-1][1], x1)
+            colunas[-1][2].append((y, h))
+        else:
+            colunas.append([x0, x1, [(y, h)]])
+    achadas, usadas = [], set()
+    for cx0, cx1, membros in colunas:
+        if len(membros) < _LEG_COLUNA_BLOCOS_MIN:
+            continue
+        ys = sorted(y for y, _h in membros)
+        passos = [b - a for a, b in zip(ys, ys[1:]) if b - a > 0]
+        if not passos:
+            continue
+        h = statistics.median(hh for _y, hh in membros)
+        alcance = _LEG_COLUNA_PASSOS * statistics.median(passos)
+        cand = [k for k, r in enumerate(resto)
+                if k not in usadas and r[2] <= cx1 and r[3] >= cx0
+                and r[3] - r[2] <= _LEG_LARGURA_H * h]
+        cresceu = True
+        while cresceu:
+            cresceu = False
+            for k in cand:
+                if k not in usadas and any(abs(resto[k][4] - y) <= alcance for y in ys):
+                    usadas.add(k)
+                    ys.append(resto[k][4])
+                    achadas.append((resto[k][0], resto[k][1]))
+                    cresceu = True
+    return achadas
 
 
 #: Nome que o AutoCAD dá ao bloco criado por "Colar como bloco" (PASTEBLOCK):
