@@ -5057,6 +5057,46 @@ def e_vinculo_de_modelo(texto) -> bool:
     return bool(_RE_VINCULO_DE_MODELO.search(str(texto or "")))
 
 
+# 🩸 29/09/2026 (caso 18c57c3c): "Dispositivo elétrico tipo WN — 23 un" e "W-FFF
+# — 23 un" (as marcas de NEUTRO e de FASES que o diagrama põe em cada circuito) e
+# "Caixa de revisão elétrica (C-REV) — 2 un ✓" (a etiqueta de revisão "01" do
+# desenho). Anotação do desenho virou peça na planilha do cliente.
+# 📏 Medido no acervo antes: "bloco só de 1–3 traços" pegaria VIGA_3_1, GUARDA-
+# CORPO e "CONDU. C" — peças de verdade. O que separa a marca é o NOME: sigla sem
+# nenhuma palavra que nomeie peça (≥ 4 letras). No acervo sobram só WN, W-FFF e
+# um bloco colado A$C… de 2 traços.
+_RE_REVISAO_DO_DESENHO = _re.compile(
+    r"(?:^|[^A-Z0-9])REV(?:[^A-Z]|$)|REVIS[AÃ]O|NUVEM", _re.IGNORECASE)
+
+
+def nota_de_bloco_de_anotacao(nome, assinatura="") -> str:
+    """A nota da linha do bloco quando ele é ANOTAÇÃO do desenho ('' se não é).
+
+    Revisão: "REV" como sigla (C-REV, REV_01), REVISÃO, NUVEM — em qualquer bloco.
+    Marca: definição só de LINE (1–3) E nome sem palavra de ≥ 4 letras (WN,
+    W-FFF). Anônimo (*U/*X) fica de fora: o nome dele não diz nada, pra nenhum lado.
+    """
+    n = str(nome or "").strip()
+    if not n or n.startswith("*"):
+        return ""
+    if _RE_REVISAO_DO_DESENHO.search(n):
+        return ("  ⚠ ETIQUETA/NUVEM DE REVISÃO do desenho — NÃO é peça: não conte "
+                "como quantidade")
+    tipos = {}
+    for parte in str(assinatura or "").split("|"):
+        if ":" in parte and not parte.startswith("bb:"):
+            t, _, q = parte.partition(":")
+            try:
+                tipos[t] = tipos.get(t, 0) + int(q)
+            except ValueError:
+                return ""
+    if set(tipos) == {"LINE"} and 1 <= tipos["LINE"] <= 3 and \
+            not any(len(p) >= 4 for p in _re.findall(r"[^\W\d_]+", n)):
+        return ("  ⚠ SÓ TRAÇOS e sigla sem nome de peça — MARCA DE ANOTAÇÃO do desenho "
+                "(fiação, eixo, chamada): não conte como peça")
+    return ""
+
+
 def marca_de_rebaixamento(obs) -> str:
     """A marca de rebaixamento que a observação carrega ('' se nenhuma)."""
     t = str(obs or "")

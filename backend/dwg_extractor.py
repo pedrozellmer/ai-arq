@@ -436,13 +436,17 @@ class DXFExtraction:
                 _juntados = sum(1 for v in _grupos.values() if v[1] > 1)
                 lines.append(f"CONTAGEM DE BLOCOS ({len(_grupos)} tipos):")
                 from engine_rules import e_vinculo_de_modelo as _vinc
+                from engine_rules import nota_de_bloco_de_anotacao as _anotacao
                 for (_r, _a), (count, n_nomes, rotulo) in sorted(
                         _grupos.items(), key=lambda x: -x[1][0]):
+                    _nota_anot = _anotacao(rotulo, _a)
                     if _quantos_por_raiz.get(_r, 1) > 1 and _a:
                         _seq[_r] = _seq.get(_r, 0) + 1
                         rotulo = f"{rotulo} (tipo {_seq[_r]})"
                     _nota = f"  [{n_nomes} nomes do conversor, mesma peca]" if n_nomes > 1 else ""
                     _nota += _nota_da_legenda(_amo_grupo[(_r, _a)])
+                    # 🩸 29/09 (caso 18c57c3c): marca de fiação e nuvem de revisão
+                    _nota += _nota_anot
                     if _vinc(rotulo):
                         _nota += ("  ⚠ VÍNCULO DE MODELO (outro arquivo do Revit/IFC colado "
                                   "como bloco) — NÃO é peça: não conte como quantidade")

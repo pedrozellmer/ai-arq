@@ -16430,10 +16430,20 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                 if getattr(b, "amostras_legenda", 0)}
                         except Exception:
                             _blocos_amostra = {}
+                        # 🩸 29/09 (caso 18c57c3c): bloco que é ANOTAÇÃO do desenho
+                        # (marca de fiação, nuvem de revisão) — {nome: contagem}
+                        try:
+                            from engine_rules import nota_de_bloco_de_anotacao as _nota_anot
+                            _blocos_anotacao = {
+                                b.name: b.count for b in (extraction.blocks or [])
+                                if _nota_anot(b.name, getattr(b, "assinatura", ""))}
+                        except Exception:
+                            _blocos_anotacao = {}
                         _n_resgate_proc = 0
                         # Extrair itens
                         _n_item_perdido = 0   # quantos morreram no except do laço
                         _so_legenda_fora = []  # 29/09: linha ZERO de item só da legenda
+                        _anotacao_fora = []    # 29/09: linha que é contagem de ANOTAÇÃO
                         for item_data in result.get("items", []):
                             try:
                                 desc = item_data.get("description", "")
@@ -16602,6 +16612,14 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                 if _bl_leg:
                                     _so_legenda_fora.append(_bl_leg)
                                     continue
+                                # 🩸 29/09 (caso 18c57c3c): a linha que é exatamente a
+                                # contagem de um bloco de ANOTAÇÃO (WN/W-FFF, C-REV) sai.
+                                _bl_anot = (_contagem_de_bloco_citada(
+                                    obs_raw, qty, normalized_unit, _blocos_anotacao)
+                                    if _blocos_anotacao else "")
+                                if _bl_anot:
+                                    _anotacao_fora.append(_bl_anot)
+                                    continue
 
                                 # 🚨 18/09/2026 — SOMA NÃO É LEITURA DIRETA (regra dura nº1).
                                 # O prompt (~11713) manda: "se você multiplicou, somou ou fez
@@ -16741,6 +16759,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                        # 29/09: linhas zeradas de item só da legenda que saíram
                                        f"so_legenda={len(_so_legenda_fora)}"
                                        f"{('[' + '|'.join(str(_n)[:24] for _n in _so_legenda_fora[:6]) + ']') if _so_legenda_fora else ''} "
+                                       f"anotacao={len(_anotacao_fora)}"
+                                       f"{('[' + '|'.join(str(_n)[:24] for _n in _anotacao_fora[:6]) + ']') if _anotacao_fora else ''} "
                                        f"resp_chars={len(text)}", job_id)
                             if _laco.get("laco"):
                                 _log_error(
