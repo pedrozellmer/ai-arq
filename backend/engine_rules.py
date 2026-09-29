@@ -2497,6 +2497,22 @@ def _atributos_fusao(desc: str) -> dict:
     return {k: v for k, v in cats.items() if v}
 
 
+def alturas_diferentes(desc_a, desc_b) -> bool:
+    """As duas descrições dizem ALTURAS de instalação diferentes?
+
+    A mesma régua de altura da fusão (`_RX_ALTURA` + `_norm_altura`, em cm): "h=1,10",
+    "110 cm do piso" e "altura 1,10 m" são a mesma altura. Altura de um lado só
+    não conta.
+    🩸 29/09/2026 (caso 18c57c3c): os pontos de força da condensadora a h=3,00 m,
+    h=3,50 m e na fachada a h=0,80 m viraram "3 variantes consolidadas" com a
+    descrição de um deles. As passadas 1 e 2 já separavam alturas (pelo
+    `motivo_para_nao_fundir`); a passada 3 perguntava só ao `pode_fundir`.
+    """
+    ha = _atributos_fusao(desc_a).get("altura") or frozenset()
+    hb = _atributos_fusao(desc_b).get("altura") or frozenset()
+    return bool(ha and hb and not (ha & hb))
+
+
 def assinatura_de_atributos(desc: str) -> tuple:
     """Os atributos de compra num formato que entra em CHAVE de agrupamento.
 

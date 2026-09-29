@@ -73,6 +73,7 @@ from engine_rules import (
     FLOOR_M2_UNITS as _FLOOR_M2_UNITS,
     linhas_pai_e_filho as _linhas_pai_e_filho,
     pode_fundir as _pode_fundir,
+    alturas_diferentes as _alturas_diferentes,
     perfil_de_fusao as _perfil_de_fusao,
     motivo_para_nao_fundir as _motivo_para_nao_fundir,
     prova_de_mesmo_item as _prova_de_mesmo_item,
@@ -9095,7 +9096,8 @@ def _consolidate_items(items: list, registro: list | None = None) -> list:
         # vale pra todo balde com atributo em conflito, queira esta passada fundir
         # ou não.
         _descs_p3 = [it.description or "" for it in group]
-        if any(not _pode_fundir(_a, _b)
+        # 29/09 (caso 18c57c3c): e ALTURA de instalação diferente também separa
+        if any(not _pode_fundir(_a, _b) or _alturas_diferentes(_a, _b)
                for _i, _a in enumerate(_descs_p3) for _b in _descs_p3[_i + 1:]):
             _recusados_p3.update(id(_x) for _x in group)
             pass3.extend(group)
