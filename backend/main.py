@@ -34742,6 +34742,19 @@ async def pranchas_com_imagem(job_id: str, request: Request):
 REPROCESS_FREE_LIMIT = None  # beta: ilimitado (ver o bloco acima)
 
 
+def _nome_do_reprocesso(nome) -> str:
+    """O nome do projeto reprocessado: o de antes + " (reprocessado)", UMA vez.
+
+    🩸 29/09/2026 (caso 18c57c3c): reprocessamos um projeto que já era
+    reprocesso e o cliente recebeu "SHOPPE (reprocessado) (reprocessado) — sua
+    planilha está pronta"; a lista dele passou a mostrar o nome dobrado.
+    """
+    base = str(nome or "").strip()
+    while base.endswith("(reprocessado)"):
+        base = base[: -len("(reprocessado)")].rstrip()
+    return f"{base or 'Projeto'} (reprocessado)"
+
+
 @app.post("/api/project/{job_id}/reprocess")
 async def reprocess_project(job_id: str, request: Request):
     """Baixa os arquivos originais do Storage e cria novo job com os mesmos
@@ -34931,7 +34944,7 @@ async def reprocess_project(job_id: str, request: Request):
         "user_id": orig.get("user_id") or "anonymous",
         "user_email": orig.get("user_email") or "",
         "user_name": orig.get("user_name") or "",
-        "project_name": f"{orig.get('project_name','Projeto')} (reprocessado)",
+        "project_name": _nome_do_reprocesso(orig.get("project_name")),
         "typology": typology,
         "project_type": ptype,  # propaga tipo: projeto ESTRUTURAL não vira arquitetura
         "files_count": len(new_file_paths),
