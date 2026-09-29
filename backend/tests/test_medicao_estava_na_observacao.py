@@ -168,6 +168,8 @@ def _laco_de_itens_de_producao(items, areas=None, compr=None):
         # 26/09: o laço consulta os blocos com amostra de legenda (montados
         # antes dele, ao lado de _blocos_n); aqui nenhum bloco tem amostra.
         "_blocos_amostra": {},
+        # 29/09 (caso 18c57c3c): blocos de anotação e as linhas que o laço tira
+        "_blocos_anotacao": {}, "_so_legenda_fora": [], "_anotacao_fora": [],
         "_n_resgate_proc": 0,
         "_n_item_perdido": 0,
         "dxf_items": [],
@@ -298,6 +300,7 @@ def test_o_resgate_VIRA_linha_de_log():
         "response": _Resp(),
         "_dxf_truncado": False,
         "_n_resgate_proc": 31,          # os 31 zeros do cliente-19
+        "_so_legenda_fora": [], "_anotacao_fora": [],   # 29/09: o log conta as duas
         "text": "x" * 100,
         "job_id": "job-teste",
     }

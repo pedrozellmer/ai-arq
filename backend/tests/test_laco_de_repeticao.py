@@ -173,6 +173,7 @@ def _rodar_o_call_site(texto, tokens, itens=0):
         "_n_item_perdido": 0,
         "_dxf_truncado": False,
         "_n_resgate_proc": 0,
+        "_so_legenda_fora": [], "_anotacao_fora": [],   # 29/09: o log conta as duas
         # 🪤 A dependência REAL entra de verdade. Se faltasse, o `except` do
         # próprio trecho engoliria o NameError e `_laco` viraria
         # {"laco": False} — verde falso pelo pior caminho possível, que é o
