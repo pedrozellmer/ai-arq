@@ -2806,9 +2806,11 @@ def cobertura_fusao(a, b) -> float:
 #
 # 🪤 As outras ressalvas CONTINUAM valendo pra tudo:
 #   - extração estéril (0 medições) → nada é confiável, nem contagem;
-#   - xref não resolvido → a geometria contada pode estar incompleta;
-#   - duto com medição suspeita → é sobre comprimento, mas o item é de duto.
-# Só a de UNIDADE é dimensional por natureza.
+#   - xref não resolvido → a geometria contada pode estar incompleta.
+# A de UNIDADE é dimensional por natureza — e a do DUTO também (29/09): ela
+# fala do comprimento de um layer desenhado em duas faces, não de quantos
+# blocos o desenho tem. Aqui dizia "é sobre comprimento, mas o item é de duto";
+# na prática rebaixava as tomadas e os splits do mesmo arquivo.
 
 _UNIDADES_QUE_DEPENDEM_DE_ESCALA = {
     "m", "ml", "m²", "m2", "m³", "m3", "km", "cm", "mm",
@@ -2826,8 +2828,8 @@ def caveat_atinge_unidade(metadata, unidade: str) -> bool:
     """A ressalva desta extração impede confirmar um item DESTA unidade?
 
     - Sem ressalva nenhuma → False.
-    - Ressalva NÃO-dimensional (estéril, xref, duto) → True pra qualquer item.
-    - Ressalva SÓ de escala → True apenas pra unidade que depende de escala
+    - Ressalva NÃO-dimensional (estéril, xref) → True pra qualquer item.
+    - Ressalva SÓ de escala (ou de duto) → True apenas pra unidade que depende de escala
       (m, m², m³ e afins). Contagem (`un`), peso (`kg`), verba (`vb`) e tempo
       (`mês`) passam — não se medem com régua.
     """
@@ -2836,11 +2838,16 @@ def caveat_atinge_unidade(metadata, unidade: str) -> bool:
     _outras = bool(
         metadata.get("extracao_esteril")
         or metadata.get("xref_nao_resolvido")
-        or metadata.get("duto_medicao_suspeita")
     )
     if _outras:
         return True
-    _so_escala = any(metadata.get(k) for k in _RESSALVAS_SO_DE_ESCALA)
+    # 🩸 29/09/2026 (job 6437838e): a do DUTO também é dimensional — fala do
+    # comprimento de um layer. Rebaixava o desenho inteiro: 50 contagens de
+    # bloco (tomadas, splits, carregadores) de um projeto elétrico, que
+    # terminou com 0 linha medida de 311. Em 60 dias, 116 linhas de contagem
+    # em 9 projetos. Ver tests/test_ressalva_de_duto_nao_rebaixa_contagem.py.
+    _so_escala = (any(metadata.get(k) for k in _RESSALVAS_SO_DE_ESCALA)
+                  or bool(metadata.get("duto_medicao_suspeita")))
     if not _so_escala:
         return False
     return (unidade or "").strip().lower() in _UNIDADES_QUE_DEPENDEM_DE_ESCALA
