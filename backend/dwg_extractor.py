@@ -4507,6 +4507,186 @@ def aplicar_leitura_por_folha(walls, hatches, polygon_areas, blocks, mapa) -> di
     return res
 
 
+# ── VISTAS DA MESMA BASE (28/09/2026) ──────────────────────────────────────────
+# 🩸 Caso 18c57c3c (elétrico de um centro de distribuição): a folha tem QUATRO
+# vistas do MESMO pavimento — alimentadores, iluminação, sistemas, tomadas —, cada
+# uma com a base de arquitetura inserida de novo (translação pura). Tomada só na
+# vista de tomadas, interruptor só na de iluminação: contados 1× cada. Mas o
+# QDF-ADM1 e o QDF-MANUT aparecem nas TRÊS vistas, no mesmo ponto da planta: a
+# planilha disse 11 quadros "✓ medido" e são 7. Os títulos das vistas ("TOMADAS",
+# "ILUMINAÇÃO") não viraram desenho na leitura por folha, e o registro em sombra
+# das cópias (D1) procura a planta INTEIRA copiada — não viu nenhum dos dois.
+# 🔑 O deslocamento entre as inserções da base é EXATO: símbolo que cai no mesmo
+# ponto da planta em duas vistas (tolerância de 0,01% do deslocamento) é a mesma
+# peça. Medido no acervo antes de escrever: a regra ingênua ("bloco grande inserido
+# 2×") apagava 84 mesas de escritório em grade e as cópias do elétrico ×3. As
+# quatro travas abaixo separam os casos — só age com as quatro:
+_VISTAS_BASE_MIN = 0.20          # a base é PLANTA: ≥ 20% da largura ou da altura do desenho
+_VISTAS_SEPARACAO_MIN = 0.75     # vistas SEPARADAS: deslocamento ≥ 75% da base (não é grade)
+_VISTAS_PARCELA_MAX = 0.10       # POUCOS símbolos repetem (planta inteira copiada é o D1)
+_VISTAS_EXCLUSIVIDADE_MIN = 0.80  # cada tipo mora na SUA vista (andares repetem tudo)
+_VISTAS_TOL = 1e-4               # coincidência: fração do deslocamento
+
+
+def vistas_da_mesma_base(doc, blocks) -> dict:
+    """A mesma peça desenhada em várias vistas temáticas do MESMO pavimento conta 1×.
+
+    Vistas = inserções da mesma base (≥ 2, mesma escala, sem rotação) que é planta
+    (extensão ≥ `_VISTAS_BASE_MIN` do desenho) e que estão separadas (cada
+    deslocamento ≥ `_VISTAS_SEPARACAO_MIN` da base). Repetido = mesmo tipo de
+    bloco no ponto p e em p + deslocamento. Só age se os repetidos são poucos
+    (≤ `_VISTAS_PARCELA_MAX` dos símbolos) E cada tipo mora na sua vista
+    (≥ `_VISTAS_EXCLUSIVIDADE_MIN`) — num prédio de vários andares a mesma base
+    se repete por andar e a tomada aparece em TODOS: aí nada sai.
+    Muta `blocks` só quando age; devolve o que viu ({} quando não há vista).
+    """
+    from ezdxf import bbox as _ezbbox
+    msp = doc.modelspace()
+    por_nome = {}
+    for ins in msp.query("INSERT"):
+        por_nome.setdefault(ins.dxf.name, []).append(ins)
+    todos = [(i.dxf.insert.x, i.dxf.insert.y) for lst in por_nome.values() for i in lst]
+    if len(todos) < 10:
+        return {}
+    candidatas = []
+    for nome, lst in por_nome.items():
+        if len(lst) < 2:
+            continue
+        formas = {(round(i.dxf.xscale, 4), round(i.dxf.yscale, 4),
+                   round((i.dxf.rotation or 0.0) % 360.0, 3)) for i in lst}
+        if len(formas) != 1:
+            continue
+        sx, sy, rot = formas.pop()
+        if rot not in (0.0, 360.0):
+            continue
+        blk = doc.blocks.get(nome)
+        if blk is None:
+            continue
+        geo = [e for e in blk if e.dxftype() != "INSERT"]
+        caixa = None
+        try:
+            if geo:
+                ext = _ezbbox.extents(geo, fast=True)
+                if ext.has_data:
+                    caixa = (ext.extmin.x, ext.extmin.y, ext.extmax.x, ext.extmax.y)
+        except Exception:
+            caixa = None
+        if caixa is None:
+            pts = [e.dxf.insert for e in blk if e.dxftype() == "INSERT"]
+            if len(pts) < 2:
+                continue
+            caixa = (min(p.x for p in pts), min(p.y for p in pts),
+                     max(p.x for p in pts), max(p.y for p in pts))
+        w, h = (caixa[2] - caixa[0]) * abs(sx), (caixa[3] - caixa[1]) * abs(sy)
+        if w <= 0 and h <= 0:
+            continue
+        caixas = []
+        for i in lst:
+            px, py = i.dxf.insert.x, i.dxf.insert.y
+            x0, x1 = sorted((px + caixa[0] * sx, px + caixa[2] * sx))
+            y0, y1 = sorted((py + caixa[1] * sy, py + caixa[3] * sy))
+            caixas.append((x0, y0, x1, y1))
+        candidatas.append((nome, lst, w, h, caixas))
+    if not candidatas:
+        return {}
+    xs = [p[0] for p in todos] + [c[k] for b in candidatas for c in b[4] for k in (0, 2)]
+    ys = [p[1] for p in todos] + [c[k] for b in candidatas for c in b[4] for k in (1, 3)]
+    larg, alt = max(xs) - min(xs), max(ys) - min(ys)
+    desloc = set()
+    base = None
+    nomes_base = set()
+    for nome, lst, w, h, caixas in candidatas:
+        if not ((larg > 0 and w >= _VISTAS_BASE_MIN * larg) or (alt > 0 and h >= _VISTAS_BASE_MIN * alt)):
+            continue
+        pts = [(i.dxf.insert.x, i.dxf.insert.y) for i in lst]
+        ds = [(b[0] - a[0], b[1] - a[1]) for a in pts for b in pts if a != b]
+        if not ds or any(abs(dx) < _VISTAS_SEPARACAO_MIN * w and abs(dy) < _VISTAS_SEPARACAO_MIN * h
+                         for dx, dy in ds):
+            continue
+        desloc.update((round(dx, 6), round(dy, 6)) for dx, dy in ds)
+        nomes_base.add(nome)                   # a base é a vista, não peça: não se deduplica
+        if base is None or len(caixas) > len(base[1]):
+            base = (nome, caixas)
+    if not desloc:
+        return {}
+
+    def _dona(p):
+        ks = [k for k, c in enumerate(base[1]) if c[0] <= p[0] <= c[2] and c[1] <= p[1] <= c[3]]
+        return ks[0] if len(ks) == 1 else None
+
+    grupos_por_tipo = {}
+    total = repetidos = 0
+    for b in blocks:
+        pos = list(getattr(b, "positions", None) or [])
+        if b.name in nomes_base or len(pos) != b.count or len(pos) < 2:
+            continue
+        pai = list(range(len(pos)))
+
+        def _raiz(i):
+            while pai[i] != i:
+                pai[i] = pai[pai[i]]
+                i = pai[i]
+            return i
+        for dx, dy in desloc:
+            tol = _VISTAS_TOL * math.hypot(dx, dy)
+            if tol <= 0:
+                continue
+            grade = {}
+            for k, p in enumerate(pos):
+                grade.setdefault((math.floor(p[0] / tol), math.floor(p[1] / tol)), []).append(k)
+            for k, p in enumerate(pos):
+                qx, qy = p[0] + dx, p[1] + dy
+                cx, cy = math.floor(qx / tol), math.floor(qy / tol)
+                for gx in (cx - 1, cx, cx + 1):
+                    for gy in (cy - 1, cy, cy + 1):
+                        for j in grade.get((gx, gy), ()):
+                            if j != k and abs(pos[j][0] - qx) <= tol and abs(pos[j][1] - qy) <= tol:
+                                pai[_raiz(k)] = _raiz(j)
+        grupos = {}
+        for k in range(len(pos)):
+            grupos.setdefault(_raiz(k), []).append(k)
+        total += len(pos)
+        repetidos += len(pos) - len(grupos)
+        grupos_por_tipo[b.name] = (b, pos, list(grupos.values()))
+    if not repetidos:
+        return {}
+    # exclusividade: quanto de cada tipo mora na vista dele (um de cada grupo)
+    na_vista = dominante = 0
+    for b, pos, grupos in grupos_por_tipo.values():
+        cont = Counter(_dona(pos[g[0]]) for g in grupos)
+        cont.pop(None, None)
+        if sum(cont.values()) >= 3:
+            na_vista += sum(cont.values())
+            dominante += max(cont.values())
+    parcela = repetidos / float(total or 1)
+    exclusiva = dominante / float(na_vista) if na_vista >= 10 else 0.0
+    rep = {n: len(pos) - len(g) for n, (b, pos, g) in grupos_por_tipo.items() if len(pos) > len(g)}
+    out = {"base": base[0], "vistas": len(base[1]), "parcela": round(parcela, 3),
+           "exclusividade": round(exclusiva, 2), "repetidos": rep, "aplicada": False}
+    if parcela > _VISTAS_PARCELA_MAX:
+        out["motivo"] = "muitos símbolos repetidos — planta copiada, não vistas temáticas"
+        return out
+    if exclusiva < _VISTAS_EXCLUSIVIDADE_MIN:
+        out["motivo"] = "os tipos se repetem entre as vistas — podem ser andares"
+        return out
+    novos = []
+    for b in blocks:
+        g = grupos_por_tipo.get(b.name)
+        if g and len(g[2]) < len(g[1]):
+            b_, pos, grupos = g
+            # fica, de cada grupo, a posição na vista onde o tipo mais aparece
+            cont = Counter(_dona(pos[x[0]]) for x in grupos)
+            cont.pop(None, None)
+            vista_do_tipo = cont.most_common(1)[0][0] if cont else None
+            fica = [pos[next((k for k in x if _dona(pos[k]) == vista_do_tipo), x[0])] for x in grupos]
+            b.positions, b.count = fica, len(fica)
+        if b.count > 0:
+            novos.append(b)
+    blocks[:] = novos
+    out["aplicada"] = True
+    return out
+
+
 def copias_em_sombra(blocks, unit_factor) -> dict:
     """A mesma planta desenhada 2 ou 3 vezes no modelo — SÓ MEDE, nada muda.
 
@@ -6490,6 +6670,17 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         except Exception as _efl:
             logger.warning("[leitura-por-folha] falhou (não-fatal): %s", _efl)
             _folhas = {"aplicada": False, "motivo": "erro: %s" % str(_efl)[:120]}
+
+    # 🩸 28/09 (caso 18c57c3c): vistas temáticas do MESMO pavimento, cada uma com
+    # a base inserida de novo — a peça que aparece em várias vistas conta 1× (ver
+    # `vistas_da_mesma_base`). Chave: VISTAS_DA_MESMA_BASE=0 desliga sem deploy.
+    if os.environ.get("VISTAS_DA_MESMA_BASE", "1") != "0":
+        try:
+            _vis = vistas_da_mesma_base(doc, blocks)
+            if _vis:
+                metadata["vistas_da_mesma_base"] = _vis
+        except Exception as _evb:
+            logger.warning("[vistas-da-mesma-base] falhou (não-fatal): %s", _evb)
 
     # 📏 28/09 (estudo, D1): a planta repetida no modelo — SÓ registro, sobre
     # o que a leitura por folha deixou (é o que vai pro cliente)

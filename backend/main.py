@@ -1135,6 +1135,13 @@ def _procedencia_dos_blocos(extraction) -> str:
     if cop.get("vetores"):
         vs = "|".join(f"{v[0]},{v[1]}:{v[2]}/{v[3]}" for v in cop["vetores"])
         txt += f" copias=[pecas={cop.get('pecas')} v={vs} nomes={_lista(cop.get('nomes') or {})}]"
+    # 🩸 28/09 (caso 18c57c3c): a mesma peça em vistas temáticas do mesmo pavimento
+    vb = md.get("vistas_da_mesma_base") or {}
+    if vb:
+        txt += (f" vistas=[{'aplicada' if vb.get('aplicada') else 'NAO'} n={vb.get('vistas')} "
+                f"parcela={vb.get('parcela')} exclusiva={vb.get('exclusividade')} "
+                f"rep={_lista(vb.get('repetidos') or {})}"
+                f"{(' motivo=' + str(vb.get('motivo'))[:60]) if vb.get('motivo') else ''}]")
     return txt
 
 
