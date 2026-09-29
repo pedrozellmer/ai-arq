@@ -297,6 +297,21 @@ def test_CONTROLE_amostra_em_layer_de_anotacao_nao_vale():
     assert "CHAMADA" not in dx._legenda_de_linha_dupla(msp)
 
 
+@pytest.mark.parametrize("generico", ["0", "Defpoints"])
+def test_amostra_no_layer_generico_nao_diz_o_que_o_layer_e(generico):
+    """🩸 29/09 (job 35146640): amostra da eletrocalha no layer "0" virou
+    "layer 0 = eletrocalha" e a planilha levou o layer 0 inteiro (3.678 m)."""
+    doc, msp = _doc()
+    _legenda(msp, lay_leito=generico, texto_leito="- ELETROCALHA LISA COM TAMPA 100X50MM")
+    assert generico not in dx._legenda_de_linha_dupla(msp)
+
+
+def test_CONTROLE_a_mesma_legenda_em_layer_de_codigo_vale():
+    doc, msp = _doc()
+    _legenda(msp, lay_leito="K-04", texto_leito="- ELETROCALHA LISA COM TAMPA 100X50MM")
+    assert "K-04" in dx._legenda_de_linha_dupla(msp)
+
+
 def test_CONTROLE_amostra_tracejada_e_linha_unica():
     """Tracejado = vários traços NA MESMA linha, não duas bordas."""
     doc, msp = _doc()

@@ -930,6 +930,12 @@ _DUTO_MAX_SEG_LAYER = 3000   # teto anti-O(n²) por layer
 
 _RE_LEGENDA_LINHA_DUPLA = re.compile(
     r"\b(?:leitos?|eletrocalhas?|bandejas?|calhas?|dutos?|ductos?)\b")
+#: 🩸 29/09/2026 (job 35146640): a amostra de "ELETROCALHA LISA COM TAMPA" da
+#: legenda estava no layer "0" — o padrão do AutoCAD, onde cai de tudo (base,
+#: moldura, diagrama). O motor disse à IA "layer 0 = eletrocalha" e a planilha
+#: saiu com 3.678 m de eletrocalha: o layer 0 inteiro. Layer genérico não diz
+#: o que a peça é — e medir o layer inteiro pelo eixo cortaria a parede também.
+_LAYERS_GENERICOS = frozenset({"0", "DEFPOINTS"})
 
 
 def _legenda_de_linha_dupla(msp) -> dict:
@@ -1030,6 +1036,8 @@ def _legenda_de_linha_dupla(msp) -> dict:
             for lay, ss in por_layer.items():
                 if layer_is_anotacao(lay):
                     continue                    # chamada/cota/texto não é o objeto
+                if str(lay).strip().upper() in _LAYERS_GENERICOS:
+                    continue                    # layer 0: cai de tudo (ver acima)
                 achou = False
                 for i, a in enumerate(ss):
                     for b in ss[i + 1:]:
@@ -2682,7 +2690,13 @@ _MAX_DXF_BYTES = 250 * 1024 * 1024  # 250 MB — prancha normal é <20 MB
 # fica em ~1,7 GB; com um pessimista 35x, em 2,1 GB — a mesma folga que o teto
 # antigo se propunha a deixar, agora sobre número medido e não sobre
 # extrapolação.
-_MAX_DWG_BYTES = 60 * 1024 * 1024  # 60 MB de DWG ≈ 1,7 GB na conversão (medido)
+# 🩸 29/09/2026 (caso 18c57c3c, 2º dia): o mesmo cliente mandou mais 3 pranchas
+# do mesmo projeto com 60,2 MB — recusadas antes de converter por 0,2 MB (a 1ª,
+# de 59,7 MB, passou e entregou). Medido aqui no mesmo dia, LibreDWG na de
+# 59,7 MB: pico de 2.000 MB = 33,5× (o pior fator medido até hoje; o 35×
+# pessimista dos testes segue valendo). 62 MB é a mínima que passa as três e
+# cabe no mesmo orçamento de 2.200 MB (62 × 35 = 2.170).
+_MAX_DWG_BYTES = 62 * 1024 * 1024  # 62 MB de DWG ≈ 2,1 GB na conversão (33,5× medido)
 
 
 # Fator em metros por $INSUNITS, lido direto do TEXTO do cabeçalho (sem ezdxf).
