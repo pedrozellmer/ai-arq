@@ -3720,6 +3720,31 @@
     });
   }
 
+  // 🩸 29/09/2026 — o `accessToken` desta página é o do login de QUANDO ELA
+  // ABRIU (ver STATE). O login do Supabase vence em 1 h: com a aba aberta mais
+  // que isso, o envio mandava o vencido e o servidor respondia 401. 90 dias:
+  // 4 pessoas, 9 envios, entre 1h43 e 11h09 de aba aberta — 3 nunca mais
+  // subiram nada (uma era cliente novo, sem nenhum projeto). A de 28/09 só
+  // passou quando voltou pelo e-mail e a página recarregou.
+  // Pede a sessão NA HORA (o supabase-js renova a vencida) e renova de novo se
+  // faltar menos de 15 min: o servidor confere o login quando o arquivo acaba
+  // de subir, e o envio pode levar até 15 min (o `timeout` do XHR).
+  // Devolve '' se não conseguiu — quem chama fica com o que tinha.
+  async function _tokenDoEnvio() {
+    const FOLGA_S = 900;
+    try {
+      let { data: { session: s } } = await sbClient.auth.getSession();
+      if (s && s.expires_at && s.expires_at - Date.now() / 1000 < FOLGA_S
+          && sbClient.auth.refreshSession) {
+        const r = await sbClient.auth.refreshSession();
+        s = (r && r.data && r.data.session) || s;
+      }
+      return (s && s.access_token) || '';
+    } catch (_) {
+      return '';
+    }
+  }
+
   async function startProcessing() {
     // Os avisos do envio ANTERIOR saem antes de qualquer caminho abaixo abrir a
     // tela de processamento — ver `_limparAvisosDoEnvio`.
@@ -3875,6 +3900,9 @@
 
       if (window.trackEvent) trackEvent('start_project', { type: params.project_type || '' });
 
+      // o login de AGORA, não o de quando a página abriu (ver `_tokenDoEnvio`)
+      accessToken = (await _tokenDoEnvio()) || accessToken;
+
       // Upload via XHR (não fetch) pra mostrar PROGRESSO REAL do envio: arquivo
       // grande (ex.: DXF de 30MB+, caso cliente-40 21/07) fazia a barra ficar travada
       // em 0% com fetch (fetch não reporta upload) — parecia travado mesmo vivo.
@@ -3910,6 +3938,12 @@
       if (!res.ok) {
         const errText = await res.text();
         try { trackEvent('upload_erro', { type: String(res.status) }); } catch (_) {}
+        // 401 = o login não valeu (ver `_tokenDoEnvio`). O texto cru do servidor
+        // ("Bearer token ausente ou inválido") não dizia à pessoa o que fazer.
+        if (res.status === 401) {
+          throw new Error('Sua sessão expirou ou não deu pra confirmar seu login. '
+            + 'Recarregue a página, entre de novo e escolha os arquivos outra vez.');
+        }
         throw new Error(errText || `Erro HTTP ${res.status}`);
       }
 
@@ -4168,6 +4202,7 @@
         // Também passa user_id pra aplicar créditos disponíveis automaticamente.
         const numPranchas = (lastEstimate && lastEstimate.total_pranchas) || numFiles;
         const userIdParam = currentUser?.id ? `&user_id=${encodeURIComponent(currentUser.id)}` : '';
+        accessToken = (await _tokenDoEnvio()) || accessToken;   // ver `_tokenDoEnvio`
         const res = await fetch(`${API_BASE}/api/checkout?num_pranchas=${numPranchas}&num_files=${numFiles}${userIdParam}`, {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${accessToken}` }

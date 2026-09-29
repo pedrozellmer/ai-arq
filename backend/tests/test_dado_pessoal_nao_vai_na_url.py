@@ -99,6 +99,9 @@ var currentJobId = 'job0001';
 var q = %(pergunta)s;
 var agentConversation = [{ role: 'user', content: 'oi' }, { role: 'assistant', content: 'ola' }];
 function authFetch(u, o) { __chamou = [u, o]; return { json: function () { return {}; } }; }
+// 29/09: o envio pede o login de agora (test_o_envio_usa_o_login_de_agora.py);
+// aqui o assunto é a URL — sem sessão nova, fica o `accessToken` acima.
+function _tokenDoEnvio() { return ''; }
 """
 
 

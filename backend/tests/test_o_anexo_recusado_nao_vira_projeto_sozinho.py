@@ -61,7 +61,9 @@ _FUNCOES = ("startProcessing", "_acharProjetoIrmao", "_assinaturaLocalDXF",
             "_tipoDoProjetoNovoAposAnexo", "_textoDoAnexoRecusado",
             "_escolhaAposAnexoRecusado", "_marcarTipoEscolhidoAMao",
             "_premissasEmBranco", "_confirmarPremissasVazias",
-            "_soPdfNoEnvio", "_confirmarSoPdf")
+            "_soPdfNoEnvio", "_confirmarSoPdf",
+            # 29/09: o login de AGORA no envio (test_o_envio_usa_o_login_de_agora.py)
+            "_tokenDoEnvio")
 
 
 def _padrao_do_select(site):
