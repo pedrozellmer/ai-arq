@@ -2549,6 +2549,22 @@ def _numeros_fusao(desc: str) -> frozenset:
     return frozenset(out)
 
 
+# 🩸 28/09/2026 (caso 18c57c3c): a SIGLA entre parênteses é o nome do bloco/da
+# legenda — "Disjuntor tripolar (DJIII)" e "Disjuntor (DJKI)" são dois símbolos
+# do desenho. O `_RX_CODIGO` só reconhece código COM número (LM05, P21, PM-01), e
+# a passada 2 juntou os dois pela quantidade igual (9 × 9): 9 disjuntores
+# tripolares sumiram da planilha. Em 90 dias de fusões com sigla, só esse caso
+# tinha as DUAS siglas e diferentes; "(PD)" × "(PD)" e "(ST)" × "(ST)" —
+# réplicas de verdade — seguem juntando, e sigla de um lado só não bloqueia.
+_RX_SIGLA_ENTRE_PARENTESES = _re.compile(r"\(\s*([A-Z][A-Z0-9._\-]{1,11})\s*\)")
+
+
+def _siglas_fusao(desc: str) -> frozenset:
+    """{"DJIII"} — a sigla EM MAIÚSCULA entre parênteses (fora as de norma/material)."""
+    return frozenset(m.group(1).rstrip(".") for m in _RX_SIGLA_ENTRE_PARENTESES.finditer(str(desc or ""))
+                     if m.group(1).rstrip(".") not in _NAO_E_CODIGO)
+
+
 def _rotulos_fusao(desc: str) -> dict:
     """{"banheiro": {"1"}, "conjunto": {"CD"}} — o rótulo que separa gêmeos."""
     out: dict = {}
@@ -2619,6 +2635,7 @@ def perfil_de_fusao(desc: str, unidade: str = "", ref_sheet: str = "") -> dict:
         "raizes": frozenset(toks),
         "atributos": _atributos_fusao(desc),
         "rotulos": _rotulos_fusao(desc),
+        "siglas": _siglas_fusao(desc),
         # número solto que rotula o item (medida, unidade e norma já saíram)
         "numeros": _numeros_fusao(desc),
         "elementos": frozenset(t for t in toks if t in _ELEMENTOS_R),
@@ -2654,6 +2671,11 @@ def motivo_para_nao_fundir(a, b) -> str:
         if (not (va & vb)) or (cat == "codigo" and (va - vb) and (vb - va)):
             return "%s %s × %s" % (cat, "/".join(sorted(va - vb or va))[:30],
                                    "/".join(sorted(vb - va or vb))[:30])
+    # sigla entre parênteses: como o código, basta cada lado ter uma que o outro
+    # não tem ("(DJIII)" × "(DJKI)"); a mesma sigla, ou sigla de um lado só, não bloqueia
+    if (a["siglas"] - b["siglas"]) and (b["siglas"] - a["siglas"]):
+        return "sigla %s × %s" % ("/".join(sorted(a["siglas"] - b["siglas"]))[:20],
+                                   "/".join(sorted(b["siglas"] - a["siglas"]))[:20])
     for cat in set(a["rotulos"]) & set(b["rotulos"]):
         if not (a["rotulos"][cat] & b["rotulos"][cat]):
             return "rotulo %s %s × %s" % (cat, "/".join(sorted(a["rotulos"][cat])),
