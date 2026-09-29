@@ -6410,3 +6410,47 @@ def andares_do_titulo(titulo):
     if _RE_UM_ANDAR.search(t):
         return 1, "um"
     return 1, ""
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  ANEXO DE CAD DE OUTRA DISCIPLINA NÃO APAGA O PDF (29/09/2026)
+# ══════════════════════════════════════════════════════════════════════════
+#: 🩸 Job a5d54b42: projeto com o PDF da ELÉTRICA (…-PE-ELE-…); a
+#: cliente anexou o DWG da HIDRÁULICA (…-PE-HID-…). O anexo processa
+#: "só o CAD e descarta os PDFs" (o PDF seria a mesma prancha em estimativa) —
+#: e a planilha trocou 29 linhas de elétrica por 23 de hidráulica.
+#: 🔑 Descartar continua certo no caso comum, medido em 25 projetos com PDF e
+#: CAD juntos: um DWG com todas as folhas + um PDF por folha, com nomes que não
+#: batem ("…R00.dwg" × "…R00-F01.pdf", "PROJETO 01.dwg" × "Folha 03.pdf"). O
+#: que separa o caso daqui é a DISCIPLINA escrita no nome dos dois: o PDF só
+#: fica quando ele e TODOS os CADs trazem código de disciplina e nenhum bate.
+#: Nos 25, só este projeto muda.
+_DISCIPLINAS_NO_NOME = frozenset({
+    "ARQ", "EST", "ELE", "ELT", "HID", "HIDR", "SAN", "PCI", "INC", "SPDA",
+    "HVAC", "AVAC", "CLI", "CLIM", "AC", "TEL", "CAB", "DAD", "GAS", "SEG",
+    "LUM", "MEC", "AUT"})
+
+
+def disciplinas_no_nome(caminho) -> frozenset:
+    """Os códigos de disciplina escritos como PEDAÇO do nome do arquivo."""
+    import os as _os
+    base = _os.path.splitext(_os.path.basename(str(caminho or "")))[0]
+    return frozenset(t for t in _re.split(r"[^A-Za-z0-9]+", base.upper())
+                     if t in _DISCIPLINAS_NO_NOME)
+
+
+def pdfs_de_outra_disciplina(pdfs, cads) -> list:
+    """Os PDFs do projeto que NÃO são a mesma prancha de nenhum CAD anexado.
+
+    Só fica o PDF cujo nome traz disciplina, com TODOS os CADs trazendo
+    disciplina também e nenhuma em comum. Sem código em algum dos lados, vale a
+    regra antiga (o CAD substitui o PDF)."""
+    d_cads = [disciplinas_no_nome(c) for c in (cads or [])]
+    if not d_cads or not all(d_cads):
+        return []
+    fica = []
+    for p in pdfs or []:
+        d = disciplinas_no_nome(p)
+        if d and all(not (d & dc) for dc in d_cads):
+            fica.append(p)
+    return fica

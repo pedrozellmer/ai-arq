@@ -6567,6 +6567,32 @@ def _resolve_client_name(email: str = "", user_id: str = "", hint: str = "") -> 
     return ""
 
 
+def _alerta_de_projeto_novo(job_id, nome, email, user_id, project_name, n_arquivos, tipos):
+    """O alerta "Novo projeto recebido" pro Pedro — roda em thread, fora do upload.
+
+    🩸 29/09/2026: desde 25/09 o nome do dono vem só do LOGIN (tirar da URL, por
+    privacidade). Quem se cadastrou por e-mail e senha não tem nome lá — ele mora
+    em `profiles.full_name` — e o alerta saía "Usuário: —" (o projeto também
+    gravava `user_name` vazio). Resolve pela mesma régua dos e-mails ao cliente
+    e grava no projeto. Best-effort: falhou, o alerta sai como antes.
+    """
+    import html as _h
+    nome = (nome or "").strip()
+    if not nome:
+        try:
+            nome = _resolve_client_name(email or "", user_id or "")
+            if nome:
+                _projeto_patch(job_id, {"user_name": nome})
+        except Exception as _e:
+            print(f"[notify] nome do dono {job_id}: {_e}")
+            nome = nome or ""
+    corpo = (f"<b>Usuário:</b> {_h.escape(nome or '—')} &lt;{_h.escape(email or 'anônimo')}&gt;<br>"
+             f"<b>Projeto:</b> {_h.escape(project_name or '(sem nome)')}<br>"
+             f"<b>Arquivos:</b> {n_arquivos} ({tipos})<br>"
+             f"<b>Código:</b> {job_id}")
+    _notify_admin("Novo projeto recebido", corpo)
+
+
 def _build_nudge_email(name: str, kind: str, magic_link: str):
     """Monta (subject, html) do email de lembrete por kind. Separado do envio
     pra reuso no preview. kinds: 'cadastro', 'onboarding', 'feedback'."""
@@ -7005,7 +7031,10 @@ def _retomar_job_do_storage(job_id: str, typology: str = "office",
             _cads_r = [p for p in file_paths if p.lower().endswith((".dwg", ".dxf"))]
             if _cads_r:
                 _cads_r, _av_ext_r = _escolher_cads_do_anexo(_cads_r, job_id)
-                file_paths = _cads_r
+                # a MESMA exceção da rota: PDF de outra disciplina fica (29/09)
+                from engine_rules import pdfs_de_outra_disciplina as _pdfs_outra_disc_r
+                file_paths = _cads_r + _pdfs_outra_disc_r(
+                    [p for p in file_paths if p.lower().endswith(".pdf")], _cads_r)
                 if _av_ext_r:
                     try:
                         _supabase_update("projects", "job_id", job_id,
@@ -22347,13 +22376,12 @@ async def process_files(
 
     # Alerta interno pro Pedro: novo projeto entrou (em thread — não atrasa a resposta)
     try:
-        import html as _h4, threading as _th4
+        import threading as _th4
         _types_str = ", ".join(f"{v} {k.upper()}" for k, v in file_types.items() if v > 0)
-        _alert_body = (f"<b>Usuário:</b> {_h4.escape(user_name or '—')} &lt;{_h4.escape(user_email or 'anônimo')}&gt;<br>"
-                       f"<b>Projeto:</b> {_h4.escape(project_name or '(sem nome)')}<br>"
-                       f"<b>Arquivos:</b> {len(file_paths)} ({_types_str})<br>"
-                       f"<b>Código:</b> {job_id}")
-        _th4.Thread(target=_notify_admin, args=("Novo projeto recebido", _alert_body), daemon=True).start()
+        _th4.Thread(target=_alerta_de_projeto_novo,
+                    args=(job_id, user_name, user_email, user_id, project_name,
+                          len(file_paths), _types_str),
+                    daemon=True).start()
     except Exception as _na:
         print(f"[notify] alerta novo-projeto falhou: {_na}")
 
@@ -37612,7 +37640,17 @@ async def add_file_and_reprocess(job_id: str, request: Request, files: list[Uplo
         # arquivo). Caso forro MEP do Pedro (15/07) continua coberto: DXF de
         # verdade re-exportado de um DWG que falhava segue vencendo o DWG.
         _cads, _avisos_ext = _escolher_cads_do_anexo(_cads, job_id)
-        file_paths = _cads
+        # 🩸 29/09 (job a5d54b42): o PDF de OUTRA disciplina não é a mesma
+        # prancha do CAD — descartá-lo apagava a elétrica ao anexar a hidráulica.
+        from engine_rules import pdfs_de_outra_disciplina as _pdfs_outra_disc
+        _pdfs_ficam = _pdfs_outra_disc(
+            [p for p in file_paths if p.lower().endswith(".pdf")], _cads)
+        if _pdfs_ficam:
+            _log_error("anexo:pdf-de-outra-disciplina",
+                       "o CAD anexado é de outra disciplina — o(s) PDF(s) seguem na "
+                       "leitura: %s" % ", ".join(os.path.basename(p) for p in _pdfs_ficam)[:300],
+                       job_id, severity="info")
+        file_paths = _cads + _pdfs_ficam
     if _avisos_ext:
         # O process_job só avisa quem ELE renomeia; aqui a renomeação já
         # aconteceu, então o aviso pro cliente sai deste ponto.
