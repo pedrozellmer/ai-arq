@@ -2591,7 +2591,22 @@ def _rotulos_fusao(desc: str) -> dict:
     return {k: frozenset(v) for k, v in out.items()}
 
 
-def perfil_de_fusao(desc: str, unidade: str = "", ref_sheet: str = "") -> dict:
+# 🩸 29/09/2026 (caso 18c57c3c, 2ª vez): "Disjuntor (tipo DJIII)" e "Disjuntor (tipo DJKI)",
+# 9 un cada, fundiram de novo — a sigla veio com "tipo" dentro do parêntese e a
+# trava da sigla (f6356df) depende da REDAÇÃO da IA. O que não depende: a
+# observação de cada linha cita o bloco de onde veio a contagem ("Fonte: 9
+# INSERTs do bloco 'DJIII'"). Duas linhas com blocos citados DIFERENTES (e nenhum
+# em comum) são dois símbolos do desenho — dois itens.
+_RX_BLOCO_CITADO = _re.compile(r"\bblocos?\s+['\"\u2018\u201c]([^'\"\u2019\u201d]{1,80})['\"\u2019\u201d]", _re.I)
+
+
+def blocos_citados(obs) -> frozenset:
+    """Os nomes de bloco que a observação cita como fonte (\"bloco 'X'\"), em minúsculas."""
+    return frozenset(m.group(1).strip().lower() for m in _RX_BLOCO_CITADO.finditer(str(obs or ""))
+                     if m.group(1).strip())
+
+
+def perfil_de_fusao(desc: str, unidade: str = "", ref_sheet: str = "", obs: str = "") -> dict:
     """Tudo o que as duas réguas abaixo comparam, calculado UMA vez por item."""
     brutos = _re.findall(r"[a-z0-9]+", _texto_fusao(desc))
     toks = _tokens_fusao(desc)
@@ -2661,6 +2676,8 @@ def perfil_de_fusao(desc: str, unidade: str = "", ref_sheet: str = "") -> dict:
         "aparelhos": frozenset(t for t in toks if t in _APARELHOS_R),
         "cores": cores,
         "nomes": {k: frozenset(v) for k, v in nomes.items()},
+        # 29/09: os blocos que a OBSERVAÇÃO cita como fonte (vazio sem obs)
+        "blocos": blocos_citados(obs),
     }
 
 
@@ -2687,6 +2704,10 @@ def motivo_para_nao_fundir(a, b) -> str:
         if (not (va & vb)) or (cat == "codigo" and (va - vb) and (vb - va)):
             return "%s %s × %s" % (cat, "/".join(sorted(va - vb or va))[:30],
                                    "/".join(sorted(vb - va or vb))[:30])
+    # blocos citados como fonte: os dois citam e nenhum em comum → dois símbolos
+    if a.get("blocos") and b.get("blocos") and not (a["blocos"] & b["blocos"]):
+        return "blocos %s × %s" % ("/".join(sorted(a["blocos"]))[:30],
+                                    "/".join(sorted(b["blocos"]))[:30])
     # sigla entre parênteses: como o código, basta cada lado ter uma que o outro
     # não tem ("(DJIII)" × "(DJKI)"); a mesma sigla, ou sigla de um lado só, não bloqueia
     if (a["siglas"] - b["siglas"]) and (b["siglas"] - a["siglas"]):
