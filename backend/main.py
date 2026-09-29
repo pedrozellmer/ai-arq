@@ -16636,7 +16636,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                 from engine_rules import (
                                     selo_apos_amostra_de_legenda as _regra_amostra)
                                 conf, obs_raw, _era_legenda = _regra_amostra(
-                                    conf, obs_raw, qty, normalized_unit, _blocos_amostra)
+                                    conf, obs_raw, qty, normalized_unit, _blocos_amostra,
+                                    _blocos_n)
                                 if _era_legenda:
                                     _rebaixado_pela_fonte = True
 
@@ -16651,8 +16652,11 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                     continue
                                 # 🩸 29/09 (caso 18c57c3c): a linha que é exatamente a
                                 # contagem de um bloco de ANOTAÇÃO (WN/W-FFF, C-REV) sai.
+                                # Só se a anotação é a FONTE do número (29/09: o
+                                # bloco citado de passagem com o mesmo número não).
                                 _bl_anot = (_contagem_de_bloco_citada(
-                                    obs_raw, qty, normalized_unit, _blocos_anotacao)
+                                    obs_raw, qty, normalized_unit, _blocos_anotacao,
+                                    todos=_blocos_n)
                                     if _blocos_anotacao else "")
                                 if _bl_anot:
                                     _anotacao_fora.append(_bl_anot)

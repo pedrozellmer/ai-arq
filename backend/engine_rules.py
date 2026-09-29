@@ -5295,9 +5295,59 @@ def prova_da_geometria(quantity, unit, obs, indice):
 _UNIDADES_DE_BLOCO = {"un", "und", "unid", "unidade", "unidades", "pç", "pc",
                       "peca", "peça", "pecas", "peças", "cj", "conj", "par"}
 _RE_CITA_BLOCO = _re.compile(r"\b(bloco|blocos|insert|inserts)\b", _re.IGNORECASE)
+_RE_FONTE = _re.compile(r"\bfonte\s*:", _re.IGNORECASE)
 
 
-def contagem_de_bloco_citada(obs, quantity, unit, blocos):
+def _primeira_citacao(nm, tl, desde=0):
+    """Posição da 1ª vez que `nm` aparece em `tl` como nome inteiro (sem letra,
+    número, _ ou - colado dos lados), a partir de `desde`; -1 se não aparece."""
+    for m in _re.finditer(_re.escape(nm), tl):
+        if m.start() < desde:
+            continue
+        antes = tl[m.start() - 1] if m.start() > 0 else " "
+        depois = tl[m.end()] if m.end() < len(tl) else " "
+        if not (antes.isalnum() or antes in "_-") and \
+                not (depois.isalnum() or depois in "_-"):
+            return m.start()
+    return -1
+
+
+def bloco_fonte_da_linha(obs, nomes):
+    """O bloco de onde a linha tirou o NÚMERO: o primeiro de `nomes` citado
+    depois de "Fonte:" — sem "Fonte:" (ou sem bloco depois dele), o primeiro
+    citado no texto. Devolve o nome, ou "".
+
+    🩸 29/09/2026 (job 7939350d): "Fonte: 4 INSERTs do bloco 'PULSADOR DE
+    CAMPAINHA' − 2 ocorrências identificadas na legenda = 2 un. Confirmar se há
+    campainha associada (bloco 'CAMPAINHA PAREDE' resultou em 0 peças…)". O
+    aviso de legenda procurava QUALQUER bloco citado com a contagem igual à
+    quantidade, achou a campainha (2 inserções, as 2 na legenda) e disse ao
+    cliente que o pulsador era só o símbolo da legenda. Das 55 linhas com o
+    aviso no banco, 4 citavam o bloco errado — as outras 3 assim: "Fonte: 1
+    INSERT do bloco 'CÂMERAS 360°'. […] Bloco 'CAMERA CFTV' (1 INSERT) é
+    flagado como símbolo de legenda e não foi contabilizado".
+    🔑 A IA escreve a fonte primeiro ("Fonte:" em 75% das linhas de contagem de
+    bloco); o bloco citado depois é comparação, exclusão ou pergunta.
+    🔑 `nomes` são TODOS os blocos da extração, não só os suspeitos: com a lista
+    curta, a câmera não achava 'CÂMERAS 360°' e a 1ª citação virava a errada.
+    Mesma posição, dois nomes ('TOMADA' dentro de 'TOMADA BAIXA'): o mais longo.
+    """
+    tl = str(obs or "").lower()
+    cands = [(str(n), str(n or "").strip().lower()) for n in (nomes or ())]
+    cands = [(n, nm) for n, nm in cands if len(nm) >= 2]
+    mf = _RE_FONTE.search(tl)
+    for desde in ((mf.end(), 0) if mf else (0,)):
+        melhor = None
+        for nome, nm in cands:
+            p = _primeira_citacao(nm, tl, desde)
+            if p >= 0 and (melhor is None or (p, -len(nm)) < melhor[0]):
+                melhor = ((p, -len(nm)), nome)
+        if melhor:
+            return melhor[1]
+    return ""
+
+
+def contagem_de_bloco_citada(obs, quantity, unit, blocos, todos=None):
     """A linha é a CONTAGEM de um bloco que a extração contou — com o mesmo
     número? Devolve o nome do bloco, ou "".
 
@@ -5312,6 +5362,9 @@ def contagem_de_bloco_citada(obs, quantity, unit, blocos):
     da trava. A prova é o PAR: o nome de um bloco que a extração contou E a
     quantidade da linha IGUAL à contagem dele. Contagem é número exato: sem
     tolerância.
+    🔑 Com `todos` (os nomes de todos os blocos da extração), só vale o bloco
+    FONTE da linha (`bloco_fonte_da_linha`): o citado de passagem com o mesmo
+    número não conta (29/09, o pulsador e a campainha).
     """
     if str(unit or "").strip().lower() not in _UNIDADES_DE_BLOCO:
         return ""
@@ -5324,6 +5377,12 @@ def contagem_de_bloco_citada(obs, quantity, unit, blocos):
         return ""
     if q <= 0 or q != int(q):
         return ""
+    if todos is not None:
+        blocos = blocos or {}
+        fonte = bloco_fonte_da_linha(t, set(todos) | set(blocos))
+        if fonte not in blocos:
+            return ""
+        blocos = {fonte: blocos[fonte]}
     tl = t.lower()
     for nome, n in (blocos or {}).items():
         nm = str(nome or "").strip().lower()
@@ -5343,12 +5402,15 @@ def contagem_de_bloco_citada(obs, quantity, unit, blocos):
     return ""
 
 
-def selo_apos_amostra_de_legenda(conf, obs, quantity, unit, amostras):
+def selo_apos_amostra_de_legenda(conf, obs, quantity, unit, amostras, blocos):
     """A contagem de bloco que inclui o SÍMBOLO desenhado na legenda não sai
     medida. Devolve `(conf, obs, rebaixou)`.
 
     `amostras` = {nome do bloco: (contagem, quantas são amostra de legenda)} —
-    ver `dwg_extractor.amostras_de_legenda`.
+    ver `dwg_extractor.amostras_de_legenda`. `blocos` = todos os blocos da
+    extração ({nome: contagem}): só o bloco FONTE da linha decide (29/09 —
+    ver `bloco_fonte_da_linha`). Obrigatório de propósito: sem ele a regra
+    volta a casar o bloco citado de passagem.
 
     🩸 26/09/2026, job 32a27efc: "Pilar nasce = 1 un ✓ MEDIDO" em 3 pranchas.
     O único INSERT 'IND PILAR NASCE' de cada folha era o símbolo da coluna
@@ -5379,7 +5441,8 @@ def selo_apos_amostra_de_legenda(conf, obs, quantity, unit, amostras):
         if n > 0:
             pares[nome] = (m, n)
     nome = contagem_de_bloco_citada(obs, quantity, unit,
-                                    {k: v[0] for k, v in pares.items()})
+                                    {k: v[0] for k, v in pares.items()},
+                                    todos=blocos or {})
     if nome:
         m, n = pares[nome]
         if n >= m:
@@ -5392,7 +5455,8 @@ def selo_apos_amostra_de_legenda(conf, obs, quantity, unit, amostras):
                  "(bloco '%s'). Confirme a quantidade. " % (abre, planta, nome))
         return "estimado", aviso + str(obs or ""), True
     nome = contagem_de_bloco_citada(obs, quantity, unit,
-                                    {k: v[0] - v[1] for k, v in pares.items()})
+                                    {k: v[0] - v[1] for k, v in pares.items()},
+                                    todos=blocos or {})
     if not nome:
         return conf, obs, False
     m, n = pares[nome]

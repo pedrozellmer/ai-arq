@@ -41,7 +41,15 @@ sys.path.insert(0, _AQUI)
 
 import dwg_extractor as dx  # noqa: E402
 from dwg_extractor import amostras_de_legenda  # noqa: E402
-from engine_rules import selo_apos_amostra_de_legenda as rebaixa  # noqa: E402
+from engine_rules import selo_apos_amostra_de_legenda  # noqa: E402
+
+
+def rebaixa(conf, obs, quantity, unit, amostras):
+    """Estes casos citam um bloco só: a lista de todos os blocos da extração
+    são os mesmos das amostras (a fonte entre vários: test_aviso_de_legenda_
+    fala_do_bloco_fonte)."""
+    return selo_apos_amostra_de_legenda(conf, obs, quantity, unit, amostras,
+                                        dict.fromkeys(amostras or {}, 0))
 
 H = 2.0          # altura do rótulo (a do caso: 2 mm)
 
@@ -580,7 +588,8 @@ def test_o_motor_chama_a_regra_uma_vez_e_usa_o_retorno():
     alvos = {n.id for t in ch[0].targets for n in ast.walk(t) if isinstance(n, ast.Name)}
     assert {"conf", "obs_raw", "_era_legenda"} <= alvos, sorted(alvos)
     args = [getattr(a, "id", None) for a in ch[0].value.args]
-    assert args == ["conf", "obs_raw", "qty", "normalized_unit", "_blocos_amostra"], args
+    assert args == ["conf", "obs_raw", "qty", "normalized_unit", "_blocos_amostra",
+                    "_blocos_n"], args
 
 
 def test_a_regra_roda_entre_a_trava_de_anotacao_e_a_da_soma_no_mesmo_bloco():
