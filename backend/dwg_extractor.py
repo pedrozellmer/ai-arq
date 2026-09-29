@@ -261,6 +261,22 @@ class DXFExtraction:
                 lines.append(f"  {k}: {v}")
             lines.append("")
 
+        # 🩸 29/09/2026 (caso 18c57c3c): com as vistas aplicadas, a IA via só o
+        # dicionário cru dos metadados e escrevia "confirmar se a contagem já
+        # está deduplicada" na tomada e "pode estar inflada" nos quadros — que o
+        # motor já tinha contado 1× (11 → 7). Dito em português, como a folha.
+        _vb = (self.metadata or {}).get("vistas_da_mesma_base") or {}
+        if _vb.get("aplicada"):
+            _rep = _vb.get("repetidos") or {}
+            _saiu = ", ".join("%s de '%s'" % (n, k) for k, n in list(_rep.items())[:8])
+            lines.append(
+                "VISTAS DA MESMA PLANTA (as contagens abaixo JÁ refletem isto): o arquivo desenha "
+                "o mesmo pavimento em %s vistas temáticas. A peça que aparece em mais de uma "
+                "vista, no mesmo ponto, já foi contada UMA vez%s. NÃO desconte de novo e NÃO "
+                "escreva que a contagem pode estar inflada ou duplicada por causa das vistas."
+                % (_vb.get("vistas"), (" (saíram as repetições: %s)" % _saiu) if _saiu else ""))
+            lines.append("")
+
         # 📄 Leitura por folha: a IA precisa saber que as medidas abaixo JÁ vêm
         # sem o esquema/detalhe e com a planta-tipo multiplicada — senão ela
         # soma de novo o que tiramos, ou multiplica duas vezes.

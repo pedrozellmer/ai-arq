@@ -95,6 +95,25 @@ def test_o_log_de_producao_conta_o_que_saiu(tmp_path):
     assert "vistas=[aplicada n=4" in linha and "QUADRO=6" in linha, linha
 
 
+def test_o_prompt_diz_que_a_contagem_ja_vale_uma_vez(tmp_path):
+    """🩸 29/09: a IA via só o dicionário cru e escrevia "pode estar inflada"
+    nos quadros que o motor já tinha contado 1×."""
+    _c, _v, e = _contagem(_tematicas(tmp_path))
+    p = e.to_structured_prompt()
+    assert "VISTAS DA MESMA PLANTA (as contagens abaixo JÁ refletem isto)" in p, p[:1500]
+    assert "4 vistas temáticas" in p and "6 de 'QUADRO'" in p, p[:1500]
+
+
+def test_CONTROLE_sem_vista_aplicada_o_prompt_nao_fala_nisso(tmp_path, monkeypatch):
+    monkeypatch.setenv("VISTAS_DA_MESMA_BASE", "0")
+    _c, _v, e = _contagem(_tematicas(tmp_path))
+    assert "VISTAS DA MESMA PLANTA" not in e.to_structured_prompt()
+    _c, _v, e = _contagem(_tematicas(tmp_path, desvio=0.3))
+    e.metadata["vistas_da_mesma_base"] = dict(e.metadata.get("vistas_da_mesma_base") or {},
+                                              aplicada=False)
+    assert "VISTAS DA MESMA PLANTA" not in e.to_structured_prompt()
+
+
 def test_chave_desligada_nao_mexe(tmp_path, monkeypatch):
     monkeypatch.setenv("VISTAS_DA_MESMA_BASE", "0")
     c, v, _e = _contagem(_tematicas(tmp_path))
