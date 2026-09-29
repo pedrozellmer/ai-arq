@@ -18,10 +18,10 @@ import engine_rules as er  # noqa: E402
 import main  # noqa: E402
 from models import BudgetItem, Confidence  # noqa: E402
 
-_COND = [
-    "Ponto de força para condensadora de ar-condicionado, altura h=3,00 m — fornecimento e instalação",
-    "Ponto de força para condensadora de ar-condicionado, altura h=3,50 m — fornecimento e instalação",
-    "Ponto de força para condensadora de ar-condicionado na fachada, h=0,80m da passarela — fornecimento e instalação",
+_COND = [   # como a IA escreveu no caso: a altura DEPOIS do travessão (abertura igual)
+    "Ponto de força de condensadora de ar-condicionado — h=3,00m sobre a plataforma técnica — fornecimento e instalação",
+    "Ponto de força de condensadora de ar-condicionado — h=3,50m sobre a plataforma técnica — fornecimento e instalação",
+    "Ponto de força de condensadora de ar-condicionado na fachada — h=0,80m da passarela metálica — fornecimento e instalação",
 ]
 
 
