@@ -16433,6 +16433,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         _n_resgate_proc = 0
                         # Extrair itens
                         _n_item_perdido = 0   # quantos morreram no except do laço
+                        _so_legenda_fora = []  # 29/09: linha ZERO de item só da legenda
                         for item_data in result.get("items", []):
                             try:
                                 desc = item_data.get("description", "")
@@ -16592,6 +16593,16 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                 if _era_legenda:
                                     _rebaixado_pela_fonte = True
 
+                                # 🩸 29/09 (caso 18c57c3c): linha com quantidade ZERO
+                                # de item que o desenho só mostra na LEGENDA sai da
+                                # planilha — não é lacuna de medida, é fora da prancha.
+                                # A decisão mora em engine_rules (a lição da soma).
+                                from engine_rules import linha_zerada_so_de_legenda as _so_legenda
+                                _bl_leg = _so_legenda(obs_raw, qty, normalized_unit, _blocos_amostra)
+                                if _bl_leg:
+                                    _so_legenda_fora.append(_bl_leg)
+                                    continue
+
                                 # 🚨 18/09/2026 — SOMA NÃO É LEITURA DIRETA (regra dura nº1).
                                 # O prompt (~11713) manda: "se você multiplicou, somou ou fez
                                 # qualquer cálculo além de copiar o valor, NÃO é confirmado".
@@ -16727,6 +16738,9 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                        # 26/08: quantas linhas vieram zeradas com a
                                        # medição NOSSA escrita na própria observação.
                                        f"resgate_procedencia={_n_resgate_proc} "
+                                       # 29/09: linhas zeradas de item só da legenda que saíram
+                                       f"so_legenda={len(_so_legenda_fora)}"
+                                       f"{('[' + '|'.join(str(_n)[:24] for _n in _so_legenda_fora[:6]) + ']') if _so_legenda_fora else ''} "
                                        f"resp_chars={len(text)}", job_id)
                             if _laco.get("laco"):
                                 _log_error(

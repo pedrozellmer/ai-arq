@@ -5325,6 +5325,53 @@ def selo_apos_amostra_de_legenda(conf, obs, quantity, unit, amostras):
     return "estimado", aviso + str(obs or ""), True
 
 
+def linha_zerada_so_de_legenda(obs, quantity, unit, amostras) -> str:
+    """Linha com quantidade ZERO cujo bloco citado existe SÓ na legenda da prancha.
+
+    Devolve o nome do bloco (a linha sai da planilha) ou "".
+
+    🩸 29/09/2026 (caso 18c57c3c): a legenda da prancha elétrica tinha 18 símbolos
+    que a planta não usa (tomada de forro, pontos de telefonia, a central de
+    alarme e seus sensores…). A IA listou cada um com quantidade 0 — 18 linhas
+    vazias pro cliente "preencher", quando o próprio desenho diz que aquilo não
+    está nesta planta. Linha zerada é do produto (o que a gente não conseguiu
+    medir, o cliente completa); linha de item que o desenho só MOSTRA na legenda
+    não é lacuna de medida, é fora do escopo da prancha.
+    🔑 Só com as duas provas: quantidade exatamente 0 E a linha cita um bloco
+    cujas inserções são TODAS amostra de legenda (a mesma régua de
+    `selo_apos_amostra_de_legenda`). Quantidade > 0, ou bloco com uma inserção
+    fora da legenda, fica.
+    """
+    if str(unit or "").strip().lower() not in _UNIDADES_DE_BLOCO:
+        return ""
+    try:
+        if float(quantity or 0) != 0:
+            return ""
+    except (TypeError, ValueError):
+        return ""
+    t = str(obs or "")
+    if not _RE_CITA_BLOCO.search(t):
+        return ""
+    tl = t.lower()
+    for nome, par in (amostras or {}).items():
+        try:
+            m, n = int(par[0]), int(par[1])
+        except (TypeError, ValueError, IndexError):
+            continue
+        if m < 1 or n < m:
+            continue
+        nm = str(nome or "").strip().lower()
+        if len(nm) < 2:
+            continue
+        for mt in _re.finditer(_re.escape(nm), tl):
+            antes = tl[mt.start() - 1] if mt.start() > 0 else " "
+            depois = tl[mt.end()] if mt.end() < len(tl) else " "
+            if not (antes.isalnum() or antes in "_-") and \
+                    not (depois.isalnum() or depois in "_-"):
+                return str(nome)
+    return ""
+
+
 def selo_com_prova_da_geometria(items, indice):
     """Promove a 'confirmado' as linhas que a geometria do arquivo prova.
 
