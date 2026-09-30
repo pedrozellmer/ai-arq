@@ -180,6 +180,25 @@ def test_parede_em_polilinha_fechada_pelos_lados():
     assert r.get("k") == 10 and r["espessura_cm"] == pytest.approx(1.5, abs=0.01), r
 
 
+def test_a_medida_sai_sempre_mesmo_sem_disparar():
+    # pro estudo medir a MARGEM no acervo sem reimplementar a régua
+    certo = dx.espessura_dos_pares(_walls(_faces(), 0.01), 0.01)
+    assert certo["plausivel"] == pytest.approx(1.0) and certo["fina"][10] == 0.0, certo
+    errado = dx.espessura_dos_pares(_walls(_faces(), 0.001), 0.001)
+    assert errado["fina"][10] == pytest.approx(1.0) and errado["plausivel"] == 0.0, errado
+    assert errado["espessura_cm"][10] == pytest.approx(1.5, abs=0.01) and errado["n"] == 34, errado
+
+
+def test_coordenada_do_numpy_sai_em_float():
+    np = pytest.importorskip("numpy")
+    ws = [dx.WallSegment(layer="PAREDE", length=w.length, start=tuple(np.float64(v) for v in w.start),
+                         end=tuple(np.float64(v) for v in w.end)) for w in _walls(_faces(), 0.001)]
+    r = dx.unidade_contradita_pela_parede(ws, 0.001, None)
+    assert type(r["espessura_cm"]) is float and type(r["fracao_fina"]) is float, r
+    e = dx.espessura_dos_pares(ws, 0.001)
+    assert all(type(e[c]) is float for c in ("tot_m", "par_m", "em_par", "plausivel")), e
+
+
 # ══════════════════════════════════════════════════════════════════════════
 #  2. O texto e o selo
 # ══════════════════════════════════════════════════════════════════════════

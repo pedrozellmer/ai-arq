@@ -2782,18 +2782,43 @@ def unidade_contradita_pela_parede(walls, unit_factor, status_da_regua=None, tex
     """{'k', 'espessura_cm', 'fracao_fina', 'em_par', 'n'} quando a espessura das
     paredes só é plausível com o desenho k× MAIOR (k = 10 ou 100); {} se não.
 
-    Pra cada trecho reto de layer de parede (fora de vista/corte/fachada), a
-    parceira paralela mais perto (≤ 1°) que cobre ≥ metade dele, até 60 cm na
-    unidade lida — a mesma medida da varredura do estudo. Dispara quando ≥ 60%
-    do que pareou fica na faixa 5–35 cm ÷ k e < 20% já fica em 5–35 cm.
-    Unidade provada (cota, DIMLFAC, rótulo) → {}. `texto` = (quantos, altura
-    mediana crua) do modelo: letra plausível na unidade lida veta."""
+    A medida é a de `espessura_dos_pares`. Dispara com ≥ `_ESP_MIN_PARES` pares,
+    metade do comprimento em par, ≥ 60% do que pareou na faixa 5–35 cm ÷ k e
+    < 20% já em 5–35 cm. Unidade provada (cota, DIMLFAC, rótulo) → {}. `texto`
+    = (quantos, altura mediana crua) do modelo: letra plausível na unidade lida
+    veta."""
     if status_da_regua in _REGUA_QUE_PROVA:
         return {}
     uf = float(unit_factor or 0.0)
     if uf <= 0 or not walls:
         return {}
     if texto and texto[0] >= _PLAUS_TEXTO_MIN and texto[1] * uf >= _ESP_VETO_TEXTO_M:
+        return {}
+    e = espessura_dos_pares(walls, uf)
+    if not e or e["n"] < _ESP_MIN_PARES or e["em_par"] < _ESP_FRACAO_PAR:
+        return {}
+    if e["plausivel"] >= _ESP_FRACAO_PLAUSIVEL_MAX:
+        return {}
+    for k in (10, 100):
+        if e["fina"][k] >= _ESP_FRACAO_FINA:
+            return {"k": k, "espessura_cm": e["espessura_cm"][k],
+                    "fracao_fina": round(e["fina"][k], 2),
+                    "em_par": round(min(e["em_par"], 1.0), 2), "n": e["n"]}
+    return {}
+
+
+def espessura_dos_pares(walls, unit_factor) -> dict:
+    """A MEDIDA da régua da espessura, sem a decisão ({} sem trecho que baste).
+
+    Pra cada trecho reto de layer de parede (fora de vista/corte/fachada), a
+    parceira paralela mais perto (≤ 1°) que cobre ≥ metade dele, até 60 cm na
+    unidade lida — a mesma medida da varredura do estudo. Devolve, em float:
+    'n' (pares), 'tot_m', 'par_m', 'em_par' (par_m / tot_m), 'plausivel' (fração
+    do que pareou em 5–35 cm) e, por k (10, 100), 'fina' (fração em 5–35 cm ÷ k)
+    e 'espessura_cm' (mediana ponderada na faixa, em cm na unidade lida).
+    Existe separada pra medir a MARGEM no acervo sem reimplementar a régua."""
+    uf = float(unit_factor or 0.0)
+    if uf <= 0 or not walls:
         return {}
     from engine_rules import layer_e_parede
     segs = []
@@ -2864,31 +2889,34 @@ def unidade_contradita_pela_parede(walls, unit_factor, status_da_regua=None, tex
                     break
                 j, vistos = j - 1, vistos + 1
             if melhor is not None:
-                pares.append((melhor * uf, L * uf))
+                # 🪤 float(): coordenada de polilinha vem do numpy, e round()
+                # de numpy devolve numpy — o log saía "np.float64(1.499)"
+                pares.append((float(melhor * uf), float(L * uf)))
+    tot_m = float(tot_m)
     par_m = sum(L for _d, L in pares)
-    if len(pares) < _ESP_MIN_PARES or tot_m <= 0 or par_m < _ESP_FRACAO_PAR * tot_m:
-        return {}
+    if tot_m <= 0 or par_m <= 0:
+        return {"n": len(pares), "tot_m": tot_m, "par_m": par_m, "em_par": 0.0,
+                "plausivel": 0.0, "fina": {10: 0.0, 100: 0.0},
+                "espessura_cm": {10: 0.0, 100: 0.0}}
 
     def _massa(lo, hi):
         return sum(L for d, L in pares if lo <= d <= hi)
 
-    if _massa(*_ESP_PAREDE_M) >= _ESP_FRACAO_PLAUSIVEL_MAX * par_m:
-        return {}
+    fina, esp_cm = {}, {}
     for k in (10, 100):
         lo, hi = _ESP_PAREDE_M[0] / k, _ESP_PAREDE_M[1] / k
-        fina = _massa(lo, hi)
-        if fina >= _ESP_FRACAO_FINA * par_m:
-            # a espessura típica: mediana ponderada pelo comprimento, na faixa
-            acum, esp = 0.0, lo
-            for d, L in sorted(p for p in pares if lo <= p[0] <= hi):
-                acum += L
-                esp = d
-                if acum >= fina / 2.0:
-                    break
-            return {"k": k, "espessura_cm": round(esp * 100, 3),
-                    "fracao_fina": round(fina / par_m, 2),
-                    "em_par": round(min(par_m / tot_m, 1.0), 2), "n": len(pares)}
-    return {}
+        m = _massa(lo, hi)
+        fina[k] = m / par_m
+        # a espessura típica: mediana ponderada pelo comprimento, na faixa
+        acum, esp = 0.0, 0.0
+        for d, L in sorted(p for p in pares if lo <= p[0] <= hi):
+            acum += L
+            esp = d
+            if acum >= m / 2.0:
+                break
+        esp_cm[k] = round(esp * 100, 3)
+    return {"n": len(pares), "tot_m": tot_m, "par_m": par_m, "em_par": par_m / tot_m,
+            "plausivel": _massa(*_ESP_PAREDE_M) / par_m, "fina": fina, "espessura_cm": esp_cm}
 
 
 def ressalva_da_parede_fina(r, unit_factor) -> str:
