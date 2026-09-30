@@ -614,8 +614,13 @@ def emagrecer_dxf_se_preciso(path: str, limiar_mb: int = LIMIAR_SLIM_MB,
                 _motivo = "RESGATE (passou a caber)" if _resgatou else "economia"
                 if log is not None:
                     try:
+                        # 🪤 30/09: dizia "ezdxf falhou" — e quem falha é a
+                        # LEITURA EM FLUXO (iterdxf), não o readfile do
+                        # extrator, que abre o mesmo arquivo. A frase fez
+                        # parecer que o arquivo do cliente saía cortado.
                         log("motor:dxf-slim",
-                            f"arq={os.path.basename(path)} ezdxf falhou "
+                            f"arq={os.path.basename(path)} a leitura em fluxo "
+                            f"(iterdxf) falhou "
                             f"({type(exc).__name__}) e o filtro TEXTUAL "
                             f"{_motivo}: {size // 1048576} MB -> "
                             f"{_novo // 1048576} MB ({_m} mantidas, "
