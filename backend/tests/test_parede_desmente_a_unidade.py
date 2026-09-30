@@ -262,6 +262,15 @@ def _textos(altura, n=40):
     return _f
 
 
+def test_a_altura_do_texto_e_a_mediana_nao_a_menor():
+    d = ezdxf.new("R2010")
+    msp = d.modelspace()
+    for i in range(31):
+        msp.add_text("T%d" % i, dxfattribs={"height": 5.0 if i < 10 else 150.0, "insert": (i, 0)})
+    msp.add_mtext("NOTA", dxfattribs={"char_height": 150.0})
+    assert dx._texto_mediano_do_modelo(d) == (32, 150.0)
+
+
 def test_CONTROLE_de_ponta_a_ponta_letra_plausivel_veta(tmp_path):
     md = dx.extract_dxf(_dxf(tmp_path, _faces(), extra=_textos(150.0))).metadata
     assert not md.get("unidade_contradita_pela_parede"), md.get("unidade_contradita_pela_parede")
