@@ -13772,6 +13772,13 @@ def _resumo_escala_arquivo(caminho: str, md: dict) -> dict:
                     "declarada": md.get("unidade_desenho") or "?",
                     "alerta": ("a escala não foi provada: %s"
                                % str(md["unidade_por_desempate"])[:200])}
+        if md.get("unidade_cega"):
+            # 🩸 30/09/2026 (job 9a2c5d87) — o fator é o palpite de mm: o
+            # metro sai laranja e o cliente tem de saber por quê.
+            return {"nome": nome, "status": "alerta",
+                    "declarada": md.get("unidade_desenho") or "?",
+                    "alerta": ("a escala não foi provada: %s"
+                               % str(md["unidade_cega"])[:200])}
     except Exception:
         pass
     return {"nome": nome, "status": "sem_prova",

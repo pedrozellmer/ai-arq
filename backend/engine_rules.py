@@ -350,6 +350,8 @@ def extraction_has_quality_caveat(metadata) -> bool:
         or metadata.get("unidade_por_desempate")
         # 🩸 29/09: a planta aparece repetida no modelo (mesmo job).
         or metadata.get("planta_repetida")
+        # 🩸 30/09: o fator é o palpite de mm e nada o provou (job 9a2c5d87).
+        or metadata.get("unidade_cega")
     )
 
 
@@ -2827,8 +2829,10 @@ _UNIDADES_QUE_DEPENDEM_DE_ESCALA = {
 # `alerta_unidade`: a 5ª régua (rótulo de área que bate) apaga aquela.
 #: 🩸 29/09: `planta_repetida` também — o comprimento do layer e a área da
 #: hachura somam as cópias; a contagem se decide por tipo (`selo_apos_planta_repetida`).
+#: 🩸 30/09: `unidade_cega` — o fator é o palpite de mm; contar bloco não depende dele.
 _RESSALVAS_SO_DE_ESCALA = ("unidade_suspeita", "alerta_unidade", "escala_por_vista",
-                           "escala_ambigua", "unidade_por_desempate", "planta_repetida")
+                           "escala_ambigua", "unidade_por_desempate", "planta_repetida",
+                           "unidade_cega")
 
 
 def caveat_atinge_unidade(metadata, unidade: str) -> bool:

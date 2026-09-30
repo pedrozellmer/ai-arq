@@ -1477,7 +1477,19 @@ def _detect_unit_factor(doc) -> float:
     if inferido is not None:
         return inferido
 
+    # 🩸 30/09: antes do mm às cegas, a nota do desenho ("MEDIDAS EM
+    # CENTÍMETROS") — só com a cota explodida confirmando. Job 9a2c5d87.
+    pela_nota, _det_nota = _unidade_pela_nota_e_cota_explodida(doc)
+    if pela_nota is not None:
+        return pela_nota
+
     # Default for Brazilian architecture: millimeters
+    # 🔑 30/09: marca que o fator é o PALPITE — sem cota que o prove, o que
+    # depende de escala não sai medido (`ressalva_da_unidade_cega`).
+    try:
+        setattr(doc, "_aiarq_unidade_palpite", True)
+    except Exception:
+        pass
     return 0.001
 
 
@@ -1696,9 +1708,179 @@ def _diag_unidade_cabecalho(doc) -> dict:
                     d["objetos"] = _fator_pelos_objetos(doc, _pl)[1]
         except Exception:
             pass
+        # 30/09: quando o fator caiu no mm por falta de evidência, a nota do
+        # desenho + a cota explodida vão pro log (é ela que decide ali)
+        try:
+            _nc = getattr(doc, "_aiarq_nota_cota", None)
+            if _nc:
+                d["nota_cota"] = _nc[1]
+        except Exception:
+            pass
     except Exception:
         pass
     return d
+
+
+#: "MEDIDAS EM CENTÍMETROS", "COTAS EM MM", "DIMENSÕES EM METROS"… — a NOTA
+#: geral que diz em que unidade estão as cotas. Texto já sem acento e em
+#: maiúsculas. 🪤 "COTAS DE NÍVEIS EM METROS" (nível, não comprimento) não casa:
+#: o verbo vem colado em MEDIDAS/COTAS/DIMENSÕES.
+_RE_NOTA_UNIDADE = re.compile(
+    r"\b(?:MEDIDAS|COTAS|DIMENSOES)\s+(?:(?:ESTAO|SAO|DADAS|EXPRESSAS|INDICADAS)\s+)?EM\s+"
+    r"(CENTIMETROS?|CM|MILIMETROS?|MM|METROS?|M)\b")
+_NOTA_UNIDADE_FATOR = {"CENTIMETRO": 0.01, "CENTIMETROS": 0.01, "CM": 0.01,
+                       "MILIMETRO": 0.001, "MILIMETROS": 0.001, "MM": 0.001,
+                       "METRO": 1.0, "METROS": 1.0, "M": 1.0}
+_RE_TEXTO_DE_COTA = re.compile(r"^\s*(\d{1,5}(?:[.,]\d{1,3})?)\s*$")
+#: valor do texto ÷ comprimento da linha: a cota escreve na unidade da nota,
+#: a linha mede na unidade do modelo — a razão é uma potência de 10.
+_RAZOES_DE_COTA = (1.0, 10.0, 100.0, 1000.0, 0.1, 0.01, 0.001)
+#: Menos cota explodida que isto não é evidência.
+_COTAS_EXPLODIDAS_MIN = 8
+#: A razão vencedora precisa desta fração das cotas que casaram.
+_COTAS_EXPLODIDAS_ACORDO = 0.8
+#: Teto de textos numéricos examinados (desenho enorme não trava a leitura).
+_COTAS_EXPLODIDAS_MAX_TEXTOS = 4000
+
+
+def _texto_normalizado(ent) -> str:
+    try:
+        s = ent.dxf.text if ent.dxftype() == "TEXT" else ent.plain_text()
+    except Exception:
+        return ""
+    s = unicodedata.normalize("NFKD", s or "")
+    s = "".join(c for c in s if not unicodedata.combining(c)).upper()
+    return re.sub(r"\s+", " ", s)
+
+
+def _notas_de_unidade(msp) -> dict:
+    """{fator: vezes} das notas "MEDIDAS/COTAS/DIMENSÕES EM <unidade>" do modelo."""
+    achadas: dict = {}
+    for t in msp.query("TEXT MTEXT"):
+        for m in _RE_NOTA_UNIDADE.finditer(_texto_normalizado(t)):
+            f = _NOTA_UNIDADE_FATOR[m.group(1)]
+            achadas[f] = achadas.get(f, 0) + 1
+    return achadas
+
+
+def _cotas_explodidas(msp) -> dict:
+    """{razão: cotas} — cota EXPLODIDA é o texto numérico colado a uma linha
+    paralela; a razão é o valor escrito ÷ o comprimento da linha no modelo.
+
+    Linha mais próxima do centro do texto, paralela (±5°), a até 3 alturas de
+    texto e dentro do trecho. O texto da cota é arredondado: tolerância de
+    meia unidade da última casa (ou 0,6%).
+    """
+    linhas = []
+    for e in msp.query("LINE"):
+        a, b = e.dxf.start, e.dxf.end
+        L = math.hypot(b.x - a.x, b.y - a.y)
+        if L > 0:
+            linhas.append((a.x, a.y, b.x, b.y, L))
+    if not linhas:
+        return {}
+    textos = []
+    for t in msp.query("TEXT"):
+        try:
+            m = _RE_TEXTO_DE_COTA.match(t.dxf.text or "")
+        except Exception:
+            m = None
+        if m and float(m.group(1).replace(",", ".")) > 0:
+            textos.append((t, m))
+            if len(textos) >= _COTAS_EXPLODIDAS_MAX_TEXTOS:
+                break
+    if not textos:
+        return {}
+    comps = sorted(l[4] for l in linhas)
+    alts = sorted(float(t.dxf.get("height", 0) or 0) or 1.0 for t, _m in textos)
+    # 🪤 a célula acompanha a linha E a letra: linha curta com letra grande
+    # faria cada texto varrer milhares de células
+    cel = max(comps[len(comps) // 2] * 2, alts[len(alts) // 2] * 3, 1e-9)
+    grade: dict = {}
+    for i, (x1, y1, x2, y2, _L) in enumerate(linhas):
+        grade.setdefault((int(((x1 + x2) / 2) // cel), int(((y1 + y2) / 2) // cel)), []).append(i)
+    votos: dict = {}
+    for t, m in textos:
+        s = m.group(1).replace(",", ".")
+        v = float(s)
+        h = float(t.dxf.get("height", 0) or 0) or 1.0
+        rot = math.radians(float(t.dxf.get("rotation", 0) or 0))
+        ux, uy = math.cos(rot), math.sin(rot)
+        nch = len(m.group(1))
+        px = t.dxf.insert.x + ux * 0.45 * h * nch - uy * 0.5 * h
+        py = t.dxf.insert.y + uy * 0.45 * h * nch + ux * 0.5 * h
+        melhor = None
+        gx, gy = int(px // cel), int(py // cel)
+        alc = min(int(max(1, math.ceil(3 * h / cel))) + 1, 6)
+        for ix in range(gx - alc, gx + alc + 1):
+            for iy in range(gy - alc, gy + alc + 1):
+                for i in grade.get((ix, iy), ()):
+                    x1, y1, x2, y2, L = linhas[i]
+                    dxl, dyl = (x2 - x1) / L, (y2 - y1) / L
+                    if abs(dxl * uy - dyl * ux) > 0.09:          # não paralela (> ~5°)
+                        continue
+                    rx, ry = px - x1, py - y1
+                    ao_longo = rx * dxl + ry * dyl
+                    perp = abs(rx * dyl - ry * dxl)
+                    if perp > 3 * h or ao_longo < -h or ao_longo > L + h:
+                        continue
+                    if melhor is None or perp < melhor[0]:
+                        melhor = (perp, L)
+        if melhor is None:
+            continue
+        casas = len(s.split(".")[1]) if "." in s else 0
+        tol = max(0.006 * v, 0.5 * 10 ** (-casas))
+        for k in _RAZOES_DE_COTA:
+            if abs(v - melhor[1] * k) <= tol:
+                votos[k] = votos.get(k, 0) + 1
+                break
+    return votos
+
+
+def _unidade_pela_nota_e_cota_explodida(doc):
+    """(fator ou None, detalhe) — a unidade pela NOTA do desenho, SÓ se as
+    cotas desenhadas à mão (explodidas) confirmarem.
+
+    🩸 30/09/2026 (job 9a2c5d87, alvenaria de embasamento). DWG sem $INSUNITS,
+    sem uma cota de verdade (DIMENSION) e 4.205 unidades de largura: o mm dava
+    4,2 m, passava no freio de 2 m, e ficou mm. Era CENTÍMETRO — a nota do
+    próprio desenho dizia "1 - MEDIDAS EM CENTÍMETROS", e 278 de 279 cotas
+    explodidas (a linha de 101 com o texto "101" ao lado) davam razão 1. As
+    3 linhas com "✓ MEDIDO" saíram 10× pequenas.
+    🔑 A nota SOZINHA não basta: "medidas em cm" com o modelo em metro e a cota
+    em cm (DIMLFAC 100) é comum. É a cota explodida que liga a nota ao modelo:
+    fator = razão × unidade da nota. Duas notas de unidades diferentes, poucas
+    cotas ou cotas sem acordo → None.
+    Só é chamada quando o fator ia cair no mm por falta de evidência
+    (`_detect_unit_factor`).
+    """
+    guardado = getattr(doc, "_aiarq_nota_cota", None)
+    if guardado is not None:
+        return guardado
+    det: dict = {}
+    res = (None, det)
+    try:
+        msp = doc.modelspace()
+        notas = _notas_de_unidade(msp)
+        det["notas"] = {str(k): v for k, v in notas.items()}
+        if len(notas) == 1:
+            f_nota = next(iter(notas))
+            votos = _cotas_explodidas(msp)
+            det["cotas"] = {str(k): v for k, v in votos.items()}
+            tot = sum(votos.values())
+            if tot >= _COTAS_EXPLODIDAS_MIN:
+                k, qn = max(votos.items(), key=lambda kv: kv[1])
+                f = round(k * f_nota, 6)
+                if qn >= _COTAS_EXPLODIDAS_ACORDO * tot and f in (0.001, 0.01, 1.0):
+                    det["escolha"] = f
+                    res = (f, det)
+    except Exception:
+        res = (None, det)
+    try:
+        setattr(doc, "_aiarq_nota_cota", res)
+    except Exception:
+        pass
+    return res
 
 
 # Padrões que indicam bloco de esquadria (porta ou janela).
@@ -2003,6 +2185,24 @@ def ressalva_da_unidade_por_desempate(voto_guardado, status_da_regua) -> str:
             "pelo tamanho dos objetos desenhados (móveis, louças, vagas) lemos em %s "
             "(%d%% dos tipos com tamanho real) — nenhuma cota confirmou"
             % (nome, round(100 * float(fr.get(str(fator), 0) or 0))))
+
+
+def ressalva_da_unidade_cega(palpite, status_da_regua) -> str:
+    """Texto da ressalva quando o fator é o PALPITE de milímetro ('' se não).
+
+    🩸 30/09/2026 (job 9a2c5d87). Sem $INSUNITS, sem cota, sem nota: o motor
+    lê em mm porque é o mais comum — e o selo carimbava "✓ MEDIDO" em cima
+    disso, com o aviso "escala não conferida" no resumo da mesma planilha. O
+    desenho era em cm: as 3 medidas saíram 10× pequenas. `palpite` é a marca
+    que `_detect_unit_factor` deixa no documento; cota que VALIDOU ou CORRIGIU
+    prova a escala e aí não há ressalva.
+    """
+    if not palpite or status_da_regua in ("validada", "corrigida", "corrigida_lfac",
+                                          "provada_por_rotulo", "corrigida_plausibilidade"):
+        return ""
+    return ("o arquivo não diz a unidade e nenhuma cota ou nota do desenho a "
+            "confirmou; lemos em milímetro, o mais comum — confira uma medida "
+            "conhecida antes de usar comprimentos e áreas")
 
 
 def _unidade_por_dimlfac(doc, unit_factor):
@@ -5747,6 +5947,13 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             getattr(doc, "_aiarq_voto_objetos", None), _dim_status)
         if _desemp:
             metadata["unidade_por_desempate"] = _desemp
+        # 🩸 30/09: o fator é o palpite de mm (nem cabeçalho, nem largura, nem
+        # nota) e as cotas não provaram — m/m²/m³ não saem medidos. Job 9a2c5d87.
+        _cega = "" if _unit_consenso else ressalva_da_unidade_cega(
+            bool(getattr(doc, "_aiarq_unidade_palpite", None))
+            and abs(float(unit_factor) - 0.001) < 1e-12, _dim_status)
+        if _cega:
+            metadata["unidade_cega"] = _cega
         if dim_check.get("motivo"):
             metadata["regua_cotas_motivo"] = str(dim_check["motivo"])[:200]
         # 📏 27/09 (estudo, item 5): quando o DIMLFAC ou a plausibilidade
@@ -6939,7 +7146,7 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             # cotas não desempataram. A folha de papel (escala_por_vista) NÃO:
             # um rótulo prova UMA vista, não a folha inteira.
             for _k in ("unidade_suspeita", "alerta_unidade", "escala_ambigua",
-                       "unidade_por_desempate"):
+                       "unidade_por_desempate", "unidade_cega"):
                 if metadata.get(_k):
                     metadata[f"{_k}_superada_por_rotulo"] = metadata.pop(_k)
             logger.info("[unit-rotulo] %s", metadata["unidade_provada_por_rotulo"])
