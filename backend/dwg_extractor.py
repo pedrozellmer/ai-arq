@@ -5537,6 +5537,23 @@ def tipos_nas_copias(blocks, vetores_m, unit_factor, tol_m: float = 0.05) -> dic
         return {}
 
 
+# 🩸 30/09/2026 (estudo do acervo, casa de 1 banheiro exportada do ArchiCAD) —
+# a MESMA peça da biblioteca sai com um nome por vista: "Lavatório" na planta
+# baixa e "Lavatório[16]_3" no layout (o [N] é o número da peça na biblioteca,
+# o _N a vista). Vaso, lavatório, ducha, bancada e tanque saíram 2× com selo,
+# deslocados EXATAMENTE (447,3; 0) m, e a sombra não via: ela casa por nome
+# igual. Junta pela família SÓ o sufixo [N] da biblioteca — um "_N" solto fica:
+# fora do ArchiCAD "PORTA_1" e "PORTA_2" são peças diferentes.
+# 📏 Nos 93 DXF do acervo local muda só esse arquivo (0 → 6 peças); nos 6 que
+# já tinham cópia o resultado fica idêntico.
+_RE_SUFIXO_BIBLIOTECA_ARCHICAD = re.compile(r"\[\d+\](?:_\d+)?$")
+
+
+def familia_do_bloco(nome: str) -> str:
+    """'Lavatório[16]_3' → 'Lavatório'; 'PORTA_1' fica 'PORTA_1'."""
+    return _RE_SUFIXO_BIBLIOTECA_ARCHICAD.sub("", nome or "").strip() or (nome or "")
+
+
 def copias_em_sombra(blocks, unit_factor) -> dict:
     """A mesma planta desenhada 2 ou 3 vezes no modelo — SÓ MEDE, nada muda.
 
@@ -5578,8 +5595,9 @@ def copias_em_sombra(blocks, unit_factor) -> dict:
     pos = {}
     for b in blocks:
         p = [tuple(map(float, q)) for q in (getattr(b, "positions", None) or [])]
-        if 2 <= len(p) <= 150 and len(p) == b.count:
-            pos[b.name] = p
+        if p and len(p) == b.count:
+            pos.setdefault(familia_do_bloco(b.name), []).extend(p)
+    pos = {n: p for n, p in pos.items() if 2 <= len(p) <= 150}
     if len(pos) < 5:
         return {}
     copia = {n: set() for n in pos}      # índices já casados como CÓPIA

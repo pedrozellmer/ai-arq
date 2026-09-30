@@ -190,3 +190,46 @@ def test_a_linha_do_log_leva_as_copias():
                                       "nomes": {"TOMADA": 4, "LUMINARIA": 3}}}
     s = m._procedencia_dos_blocos(_Ex())
     assert "copias=[pecas=16 v=0.0,60.0:16/6 nomes=TOMADA=4|LUMINARIA=3]" in s, s
+
+
+# ── 30/09: ArchiCAD — um nome por vista ("Lavatório" × "Lavatório[16]_3") ──
+# Casa de 1 banheiro: planta baixa e layout lado a lado no modelo, a 447,3 m.
+# Cada peça da biblioteca aparece 1× em cada vista, com nome diferente.
+CASA = {"VASO": [(5.47, 4.18)], "LAVATORIO": [(3.59, 3.73)], "DUCHA": [(4.92, 5.58)],
+        "BANCADA": [(0.07, 6.18)], "TANQUE": [(0.07, 9.05)], "NORTE": [(-3.47, -3.37)]}
+
+
+def _casa_archicad():
+    blocos = []
+    for k, (n, ps) in enumerate(CASA.items(), start=1):
+        blocos.append(BlockCount(name=n, count=1, layer="0", positions=ps))
+        blocos.append(BlockCount(name=f"{n}[{k}]_3", count=1, layer="0",
+                                 positions=[(x + 447.3, y) for x, y in ps]))
+    return blocos
+
+
+def test_archicad_a_mesma_peca_com_um_nome_por_vista_e_achada():
+    c = copias_em_sombra(_casa_archicad(), 1.0)
+    assert c and c["pecas"] == 6, c
+    assert [v[:2] for v in c["vetores"]] == [[447.3, 0.0]], c
+    assert set(c["nomes"]) == set(CASA), c
+
+
+def test_CONTROLE_sufixo_underscore_solto_nao_e_familia():
+    # fora do ArchiCAD "TOMADA_1" e "TOMADA_2" são peças diferentes: uma
+    # planta com os tipos _1 e outra com os tipos _2 NÃO são cópia uma da outra
+    blocos = []
+    for n, ps in PLANTA.items():
+        blocos.append(BlockCount(name=f"{n}_1", count=len(ps), layer="0", positions=ps))
+        blocos.append(BlockCount(name=f"{n}_2", count=len(ps), layer="0",
+                                 positions=[(x, y - 60) for x, y in ps]))
+    assert copias_em_sombra(blocos, 1.0) == {}
+
+
+def test_familia_do_bloco_so_tira_o_sufixo_da_biblioteca():
+    from dwg_extractor import familia_do_bloco
+    assert familia_do_bloco("Lavatório[16]_3") == "Lavatório"
+    assert familia_do_bloco("Vaso Sanitário Acessível[4]") == "Vaso Sanitário Acessível"
+    assert familia_do_bloco("PORTA_1") == "PORTA_1"
+    assert familia_do_bloco("Parede_8_9") == "Parede_8_9"
+    assert familia_do_bloco("[3]") == "[3]"          # nome que é só o sufixo não vira vazio
