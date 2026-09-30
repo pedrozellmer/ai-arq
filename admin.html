@@ -4281,7 +4281,11 @@ async function sendNewsletter(testOnly, tipo) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || 'erro no envio');
     out.className = 'mt-4 text-sm text-green-700 font-medium';
-    out.textContent = `✓ ${testOnly ? 'Teste enviado pra você' : ('Enviado (' + (data.tipo || tipo) + ')')}: ${data.sent}/${data.recipients} ok` + (data.fail ? ` · ${data.fail} falharam` : '');
+    // 30/09: o envio de verdade roda em segundo plano (o síncrono derrubou o servidor);
+    // a rota responde na hora e o resultado aparece no histórico quando terminar.
+    out.textContent = data.background
+      ? `✓ Enviando em segundo plano para até ${data.recipients} pessoa(s) (${data.tipo || tipo}). Quem já recebeu esta edição é pulado. Em alguns minutos o resultado aparece no histórico.`
+      : `✓ ${testOnly ? 'Teste enviado pra você' : ('Enviado (' + (data.tipo || tipo) + ')')}: ${data.sent}/${data.recipients} ok` + (data.fail ? ` · ${data.fail} falharam` : '');
   } catch (e) {
     out.className = 'mt-4 text-sm text-red-600 font-medium';
     out.textContent = '✗ Erro: ' + (e.message || e);

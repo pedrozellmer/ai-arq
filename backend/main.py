@@ -25264,11 +25264,48 @@ def _so_quem_aceitou_marketing(destinatarios):
     return [(e, n) for e, n in destinatarios if e in aceitaram]
 
 
-def _newsletter_blast(subject, html_template, recipients):
+def _tirar_quem_ja_recebeu(subject, recipients, dias=7):
+    """Tira da lista quem já recebeu ESTA edição (mesmo assunto) nos últimos `dias`.
+
+    🩸 30/09/2026 — o envio de setembro parou no meio: 50 de 140 e o servidor
+    reiniciou (ver `admin_newsletter_send`). Reenviar sem este filtro mandaria a
+    mesma edição de novo pros 50. Lê o `email_sent_log` (kind=newsletter + subject).
+    🔑 FALHA FECHADA: se não der pra ler o log, devolve None e NINGUÉM recebe —
+    mandar duas vezes é dano que não se desfaz; esperar é adiamento.
+    """
+    import urllib.parse as _up_q
+    import urllib.request as _ur_q
+    from datetime import datetime as _dt_q, timedelta as _td_q, timezone as _tz_q
+    desde = (_dt_q.now(_tz_q.utc) - _td_q(days=dias)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    url = (f"{SUPABASE_URL}/rest/v1/email_sent_log?select=email&kind=eq.newsletter"
+           f"&subject=eq.{_up_q.quote(subject, safe='')}&sent_at=gte.{desde}&limit=5000")
+    try:
+        r = _ur_q.Request(url, method="GET")
+        r.add_header("apikey", SUPABASE_KEY)
+        r.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        linhas = _json.loads(_ur_q.urlopen(r, timeout=20).read().decode("utf-8"))
+        ja = {(l.get("email") or "").strip().lower() for l in linhas}
+    except Exception as _e:
+        _log_error("newsletter:ja-receberam",
+                   f"não li o email_sent_log — ninguém recebe: {str(_e)[:160]}",
+                   None, severity="error")
+        return None
+    fica = [(e, n) for e, n in recipients if (e or "").strip().lower() not in ja]
+    if len(fica) < len(recipients):
+        print(f"[newsletter] {len(recipients) - len(fica)} já receberam "
+              f"{subject[:40]!r} nos últimos {dias} dias — pulados")
+    return fica
+
+
+def _newsletter_blast(subject, html_template, recipients, pular_quem_ja_recebeu=True):
     """Manda html_template (com {{SAUDACAO}} e {{UNSUB}}) pra cada (email, nome).
     Retorna (sent, fail). Best-effort por destinatário. Usado pelo envio manual e
-    pelo tick agendado."""
+    pelo tick agendado. Pula quem já recebeu esta edição (só o teste pro admin não pula)."""
     import urllib.parse as _up
+    if pular_quem_ja_recebeu:
+        recipients = _tirar_quem_ja_recebeu(subject, recipients)
+        if recipients is None:
+            return 0, 0
     sent = 0
     fail = 0
     for email, name in recipients:
@@ -25311,29 +25348,65 @@ async def admin_newsletter_send(request: Request):
     tipo = str((data or {}).get("tipo") or "campanha").strip().lower()
     if tipo not in ("servico", "campanha"):
         raise HTTPException(400, "tipo tem que ser 'servico' ou 'campanha'")
-    recipients = [(ADMIN_EMAIL, "Pedro")] if test_only else _newsletter_recipients(tipo)
-    sent, fail = _newsletter_blast(_NEWSLETTER_SUBJECT, _NEWSLETTER_HTML, recipients)
-    print(f"[newsletter] tipo={tipo} test_only={test_only} "
-          f"recipients={len(recipients)} sent={sent} fail={fail}")
-    if not test_only:
+    # 🩸 30/09/2026 — ESTA ROTA DERRUBOU O SERVIDOR. Ela é `async def` e chamava o
+    # envio (SMTP síncrono, um e-mail de cada vez, ~2,5 s cada) direto no laço de
+    # eventos: com 140 destinatários o laço ficou preso por minutos, o /health do
+    # Render não respondeu, a instância foi reiniciada às 10:03:57 e o envio parou
+    # em 50 — e um job de cliente que rodava junto caiu. Agora nada bloqueante roda
+    # no laço: o teste (1 e-mail) vai pra thread e espera; o envio de verdade vai
+    # pra uma thread em segundo plano e a rota responde na hora.
+    if test_only:
+        recipients = [(ADMIN_EMAIL, "Pedro")]
+        sent, fail = await _asyncio.to_thread(
+            _newsletter_blast, _NEWSLETTER_SUBJECT, _NEWSLETTER_HTML, recipients, False)
+        print(f"[newsletter] teste sent={sent} fail={fail}")
+        return {"status": "ok", "test_only": True, "tipo": tipo,
+                "recipients": 1, "sent": sent, "fail": fail}
+    if not _NEWSLETTER_TRAVA.acquire(blocking=False):
+        raise HTTPException(409, "Já tem um envio da newsletter em andamento — espere terminar "
+                                 "(o resultado aparece no histórico).")
+    try:
+        recipients = await _asyncio.to_thread(_newsletter_recipients, tipo)
+        threading.Thread(target=_newsletter_disparar, args=(tipo, recipients),
+                         daemon=True, name="newsletter-disparo").start()
+    except Exception:
+        _NEWSLETTER_TRAVA.release()
+        raise
+    return {"status": "enviando", "test_only": False, "tipo": tipo, "background": True,
+            "recipients": len(recipients)}
+
+
+# Um envio de newsletter por vez: dois cliques (ou dois admins) não disparam em dobro.
+_NEWSLETTER_TRAVA = threading.Lock()
+
+
+def _newsletter_disparar(tipo, recipients):
+    """O envio de verdade, fora do laço de eventos (ver `admin_newsletter_send`).
+    Grava o resultado no error_log e no histórico ao terminar, e solta a trava."""
+    try:
+        sent, fail = _newsletter_blast(_NEWSLETTER_SUBJECT, _NEWSLETTER_HTML, recipients)
+        print(f"[newsletter] tipo={tipo} recipients={len(recipients)} sent={sent} fail={fail}")
         _log_error("newsletter:disparo",
                    "tipo=%s destinatarios=%d enviados=%d falhas=%d assunto=%r"
                    % (tipo, len(recipients), sent, fail, _NEWSLETTER_SUBJECT[:80]),
                    None, severity="warning")
-    if not test_only and sent:
-        # registra o envio manual no histórico (mesma tabela dos agendamentos)
-        try:
-            from datetime import datetime as _dt, timezone as _tz
-            _now = _dt.now(_tz.utc).isoformat()
-            _supabase_insert("newsletter_scheduled", {
-                "subject": _NEWSLETTER_SUBJECT, "html_template": _NEWSLETTER_HTML,
-                "scheduled_for": _now, "status": "sent",
-                "recipients": len(recipients), "sent": sent, "sent_at": _now,
-            })
-        except Exception as _e:
-            print(f"[newsletter] log histórico falhou: {_e}")
-    return {"status": "ok", "test_only": test_only, "tipo": tipo,
-            "recipients": len(recipients), "sent": sent, "fail": fail}
+        if sent:
+            # registra o envio manual no histórico (mesma tabela dos agendamentos)
+            try:
+                from datetime import datetime as _dt, timezone as _tz
+                _now = _dt.now(_tz.utc).isoformat()
+                _supabase_insert("newsletter_scheduled", {
+                    "subject": _NEWSLETTER_SUBJECT, "html_template": _NEWSLETTER_HTML,
+                    "scheduled_for": _now, "status": "sent",
+                    "recipients": len(recipients), "sent": sent, "sent_at": _now,
+                })
+            except Exception as _e:
+                print(f"[newsletter] log histórico falhou: {_e}")
+    except Exception as _e:
+        _log_error("newsletter:disparo", f"o envio quebrou: {str(_e)[:200]}", None,
+                   severity="error")
+    finally:
+        _NEWSLETTER_TRAVA.release()
 
 
 @app.get("/api/admin/newsletter/publico")
