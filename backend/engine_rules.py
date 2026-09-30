@@ -1128,7 +1128,12 @@ def corrigir_comprimento_medido(desc, unit, quantity, obs, texto_de_pdf=False):
 #   66ebe2d9  91,7 / 88,8 / 53,41 / 28,6 kg — "linha Ø8.0 da TABELA DE QUANTITATIVOS"
 #   6c986633  809,55 / 806,31 / 803,07 kg  — "QUADRO/RESUMO DE AÇO lido da prancha"
 #   04c3f98e  60 un                        — "'60 ESTACAS DE CONCRETO fck > 30,0 MPa'"
-# É o quadro do próprio projetista. A regra proposta rebaixaria TUDO isso —
+# É o quadro do próprio projetista.
+# 🩸 CORREÇÃO 30/09/2026: a linha do 6c986633 NÃO era quadro. 803,07/806,31/
+# 809,55 são NÍVEIS do topo das lajes (31× ao lado de "L5 / h=12"; sobem de
+# 3,24 m) que o parser leu como kg porque uma NOTA com "PESO" virou cabeçalho.
+# Consertado na fonte (`structural_extractor._e_cabecalho_de_peso`), não aqui:
+# as outras duas linhas continuam sendo medição boa. A regra proposta rebaixaria TUDO isso —
 # quebraria medição boa, exatamente o que o parágrafo acima já protegia.
 # 🔑 E o cliente não fica no escuro: a observação começa com "Fonte: texto layer
 # X", e a tela de revisão mostra os primeiros 110 caracteres — ele lê a

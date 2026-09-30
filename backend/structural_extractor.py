@@ -214,6 +214,29 @@ _CELULA_M_RE = re.compile(r"^\s*\d[\d.,]*\s*m\s*$", re.IGNORECASE)
 _ESPACADO_RE = re.compile(r"(?<!\S)(?:[^\W\d_] ){2,}[^\W\d_](?!\S)")
 
 
+# 🩸 30/09/2026 — A NOTA COM "PESO" VIROU CABEÇALHO E O NÍVEL DA LAJE VIROU kg.
+#
+# Estrutura do TQS (14 plantas de fôrma, sem quadro de aço nenhum). A nota
+# "PARA AS ÁREAS REBAIXADAS (PESO < 150 kgf/m2)" tem a palavra *peso*; na mesma
+# altura dela caíram "205", "DET.2" e "1084.5", espalhados pela folha — o
+# "quadro" ganhou colunas do tamanho do desenho e, sendo o último cabeçalho,
+# desceu até o fim. Um Ø10 solto virou linha, e o nível do topo da laje
+# (803,07, escrito 31× ao lado de "L5 / h=12") virou "Aço Ø10: 803,07 kg",
+# confiável, [MEDIDO]. Nas folhas seguintes 806,31 e 809,55 — sobem de 3,24 m.
+# 🔑 Cabeçalho de coluna é CURTO ("PESO", "PESO (kg)", "PESO + 10% (kg)");
+# frase de nota não é. Vale nas duas portas: a linha de cabeçalho (senão a
+# nota no meio de um quadro de verdade o corta como "próximo quadro") e a
+# coluna de peso. 📏 Acervo local: 17 DXF com "peso" em cabeçalho/quadro, 13
+# com quadro lido; mudam só 6 folhas deste projeto (todas quadro-fantasma de
+# nota, incluindo um "total 190 kg"); os 7 quadros de verdade ficam iguais.
+_TETO_CABECALHO = 30
+
+
+def _e_cabecalho_de_peso(txt: str) -> bool:
+    """'PESO (kg)' sim; 'PARA AS ÁREAS REBAIXADAS (PESO < 150 kgf/m2)' não."""
+    return bool(_PESO_HDR_RE.search(txt)) and len(txt.strip()) <= _TETO_CABECALHO
+
+
 def _desespaca(txt: str) -> str:
     """'P E S O   T O T A L = 1.234,56kg' → 'PESO   TOTAL = 1.234,56kg'."""
     return _ESPACADO_RE.sub(lambda m: m.group(0).replace(" ", ""), txt)
@@ -322,7 +345,7 @@ def parse_steel_table(texts) -> dict | None:
             # rótulo de LINHA do resumo do Eberick (job 32a27efc). Como
             # cabeçalho, abria um quadro-fantasma do tamanho da folha e a cota
             # "300" do desenho saía como PESO TOTAL. Ele é lido no modo RESUMO.
-            if (_PESO_HDR_RE.search(c[0]) and not _KG_PER_M_RE.search(c[0])
+            if (_e_cabecalho_de_peso(c[0]) and not _KG_PER_M_RE.search(c[0])
                     and not _TOTAL_ROW_RE.match(c[0])
                     and not _RESUMO_BITOLA_RE.match(c[0])):
                 header_idxs.append(i)
@@ -336,7 +359,7 @@ def parse_steel_table(texts) -> dict | None:
         #                    viram âncora "outro" pra ABSORVER os números da própria
         #                    coluna (senão massa linear 0,395 vazava pro peso)
         for c in hdr:
-            if _PESO_HDR_RE.search(c[0]):
+            if _e_cabecalho_de_peso(c[0]):
                 if _KG_PER_M_RE.search(c[0]):
                     outros.append(("outro", c[1]))  # PESO (kg/m) = massa linear, não é peso
                 elif peso_x is None or "total" in c[0].lower():
