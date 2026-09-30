@@ -6851,6 +6851,25 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
     }
     # Nomes que são claramente xrefs/referências externas (arquivo com extensão ou GUID no nome)
     _XREF_NAME_RE = re.compile(r"\.(dwg|dxf)$|\.xref|^xref", re.IGNORECASE)
+    # 🩸 30/09/2026 (H16 do estudo): os símbolos do TQS contados como PEÇA — 14
+    # plantas de fôrma de um cliente, 10+ linhas com selo ("indicação de desnível
+    # 85 un", "AVCR 19 un"). O que cada um desenha (sem texto nenhum):
+    # `_DESNIV` = círculo + 2 linhas (desnível); `_CORTEA`… = a marca do corte;
+    # `AVCR` = círculo com cruz colado aos "a", "b", "a×b" de um detalhe que se
+    # repete em todo andar; `SN` = círculo + 3 linhas ao lado de cotas (nível).
+    # 🪤 NÃO é o prefixo "_": `_VAONER065250652500550005500` é o VÃO da laje
+    # nervurada — a cubeta, peça de verdade, 2.719 num pavimento só.
+    # 🪤 "SN" é curto demais pra valer em qualquer desenho: só é símbolo quando o
+    # arquivo tem outra marca do TQS. No acervo (111 desenhos), esses nomes só
+    # aparecem nos 14 do TQS.
+    _TQS_SIMBOLOS = {"_DESNIV", "AVCR"}
+    _TQS_CORTE_RE = re.compile(r"^_CORTE[A-Z]?$", re.IGNORECASE)
+    try:
+        _nomes_def = {str(b.name).upper() for b in doc.blocks}
+    except Exception:
+        _nomes_def = set()
+    _arquivo_tqs = bool(_nomes_def & _TQS_SIMBOLOS) or any(
+        _TQS_CORTE_RE.match(n) or n.startswith("_VAONER") for n in _nomes_def)
 
     def _is_annotation_block(name: str) -> bool:
         if not name:
@@ -6860,6 +6879,10 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         if _XREF_NAME_RE.search(name):
             return True
         if name.upper() in _ANNOTATION_EXACT_NAMES:
+            return True
+        if name.upper() in _TQS_SIMBOLOS or _TQS_CORTE_RE.match(name):
+            return True
+        if _arquivo_tqs and name.upper() == "SN":
             return True
         return False
 
