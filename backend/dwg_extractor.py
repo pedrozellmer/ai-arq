@@ -2739,7 +2739,12 @@ _ESP_MIN_M = 0.0004                # mais perto que isto é a mesma linha em ped
 _ESP_ANG_TOL = 1.0                 # graus
 _ESP_SOBREPOE = 0.5                # a parceira cobre ≥ metade do trecho
 _ESP_FRACAO_PAR = 0.5              # ≥ metade do comprimento com parceira
-_ESP_FRACAO_FINA = 0.6             # ≥ 60% do que pareou na faixa "fina"
+# 📏 30/09 (distribuição do estudo, 38 desenhos com parede, medida antes do eixo):
+# os 4 H51 dão 0,61–0,91; o maior desenho certo que passa nas outras travas dá
+# 0,50 (um CYPE; e o do reboco, 0,50, se a cota não o provasse). 55% fica no
+# meio — 0,05 de folga dos dois lados. Com 60% o H51 de 0,61 passava raspando,
+# e deixar passar é o erro caro (selo em número 10× errado).
+_ESP_FRACAO_FINA = 0.55            # ≥ 55% do que pareou na faixa "fina"
 _ESP_FRACAO_PLAUSIVEL_MAX = 0.2    # e < 20% já na faixa plausível
 _ESP_MIN_PARES = 20
 _ESP_MAX_SEG = 60000               # teto (amostra os trechos mais longos)
@@ -2783,7 +2788,7 @@ def unidade_contradita_pela_parede(walls, unit_factor, status_da_regua=None, tex
     paredes só é plausível com o desenho k× MAIOR (k = 10 ou 100); {} se não.
 
     A medida é a de `espessura_dos_pares`. Dispara com ≥ `_ESP_MIN_PARES` pares,
-    metade do comprimento em par, ≥ 60% do que pareou na faixa 5–35 cm ÷ k e
+    metade do comprimento em par, ≥ 55% do que pareou na faixa 5–35 cm ÷ k e
     < 20% já em 5–35 cm. Unidade provada (cota, DIMLFAC, rótulo) → {}. `texto`
     = (quantos, altura mediana crua) do modelo: letra plausível na unidade lida
     veta."""

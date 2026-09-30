@@ -154,6 +154,28 @@ def test_CONTROLE_desenho_misto_com_um_quarto_ja_plausivel():
     assert _r(_faces() + _faces(u=10.0, ox=5000, xs=(0, 60), ys=(0, 40)), 0.001) == {}
 
 
+def _fina_misturada(xs_b, ys_b):
+    # a planta de parede fina (1,5 cm lido em mm) + outra com pares a 4,5 cm
+    # (nem fina nem plausível), no tamanho que dá a fração pedida
+    return _faces() + _faces(esp=45.0, ox=5000, xs=xs_b, ys=ys_b)
+
+
+def test_o_corte_de_55_por_cento_pega_o_h51_raspando():
+    # o 29e2cfc4 dá 0,61; aqui 0,59 — com o corte antigo de 60% não disparava
+    fs = _fina_misturada((0, 400, 800), (0, 300, 600))
+    e = dx.espessura_dos_pares(_walls(fs, 0.001), 0.001)
+    assert 0.55 <= e["fina"][10] < 0.60 and e["plausivel"] == 0.0, e
+    assert _r(fs, 0.001).get("k") == 10
+
+
+def test_CONTROLE_abaixo_do_corte_nao_dispara():
+    # o maior desenho CERTO que passa nas outras travas dá 0,50; aqui 0,54
+    fs = _fina_misturada((0, 500, 1000), (0, 350, 700))
+    e = dx.espessura_dos_pares(_walls(fs, 0.001), 0.001)
+    assert 0.50 < e["fina"][10] < 0.55, e
+    assert _r(fs, 0.001) == {}
+
+
 def test_CONTROLE_metade_fina_metade_em_nenhuma_faixa():
     # pares a 4,5 cm na unidade lida: nem fina (×10 daria 45 cm) nem plausível
     assert _r(_faces() + _faces(esp=45.0, ox=2000), 0.001) == {}
