@@ -175,6 +175,8 @@ def _laco_de_itens_de_producao(items, areas=None, compr=None, extra=None):
         "_blocos_copiados": set(),
         # 30/09: os layers de COTA explodida (anotação pela prova do desenho)
         "_ly_cota": set(),
+        # 30/09: as contagens das peças desenhadas sem bloco
+        "_objetos_n": set(),
         # 29/09 (caso 18c57c3c): blocos de anotação e as linhas que o laço tira
         "_blocos_anotacao": {}, "_so_legenda_fora": [], "_anotacao_fora": [],
         "_n_resgate_proc": 0,

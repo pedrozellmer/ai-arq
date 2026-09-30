@@ -5038,7 +5038,11 @@ MARCA_ACIMA_DO_QUADRO = "⚠ CONTAGEM ACIMA DO QUADRO DE ÁREAS"
 MARCA_ESCOPO_MOBILIARIO = "⚠ MÓVEL/EQUIPAMENTO — confirme o escopo"
 #: 🩸 29/09/2026 (job 6437838e) — ver `selo_apos_planta_repetida`.
 MARCA_PLANTA_REPETIDA = "⚠ A PLANTA APARECE REPETIDA no desenho"
-MARCAS_DE_REBAIXAMENTO = (MARCA_PLANTA_REPETIDA, MARCA_LIDO_DE_TEXTO, MARCA_SOMA, MARCA_CARIMBO,
+#: 🩸 30/09/2026 (filhote evefe9af) — ver `selo_apos_peca_sem_bloco` e `selo_apos_layer_sem_nome`.
+MARCA_PECA_SEM_BLOCO = "⚠ PEÇA DESENHADA SEM BLOCO"
+MARCA_LAYER_SEM_NOME = "⚠ LAYER SEM NOME"
+MARCAS_DE_REBAIXAMENTO = (MARCA_PECA_SEM_BLOCO, MARCA_LAYER_SEM_NOME,
+                          MARCA_PLANTA_REPETIDA, MARCA_LIDO_DE_TEXTO, MARCA_SOMA, MARCA_CARIMBO,
                           MARCA_MENOS_PAREDE, MARCA_UNIDADE_DE_CONTAGEM,
                           MARCA_EXTRACAO_COM_RESSALVA, MARCA_QUANTIDADE_RECUPERADA,
                           MARCA_ESCALA_DIVERGENTE, MARCA_ACIMA_DO_QUADRO,
@@ -5521,6 +5525,66 @@ def raiz_do_nome_do_bloco(nome) -> str:
     if " - " in n:
         return n.split(" - ", 1)[0].strip() or n
     return _re.sub(r"(_\d+)+$", "", n) or n
+
+
+_RE_CITA_PECA_SEM_BLOCO = _re.compile(r"PE[ÇC]A\s+POR\s+PE[ÇC]A|RET[ÂA]NGULO|C[ÍI]RCULO", _re.IGNORECASE)
+
+
+def selo_apos_peca_sem_bloco(conf, obs, quantity, unit, contagens):
+    """(conf, obs, rebaixou) — a contagem de PEÇA DESENHADA SEM BLOCO não sai ✓.
+
+    🩸 30/09/2026 (filhote evefe9af, job 9a2c5d87). Com a contagem das peças
+    no prompt, a IA marcou "confirmado" em 10 linhas: os 776 blocos (certo o
+    número), mas também "pilar circular Ø50,6 — 26" (eram balões de VISTA),
+    "pilar Ø60 — 10" (bolinhas de eixo) e peças da legenda. O NÚMERO é contado
+    no desenho; o que a peça É sai da leitura da legenda — é inferência, e o
+    prompt já pedia 'estimado'. Aqui a régua decide: se a quantidade é a
+    contagem de um grupo de peças sem bloco e a observação cita a peça
+    (retângulo/círculo/peça por peça), sai laranja com o motivo.
+    `contagens` = as quantidades dos grupos (`objetos_sem_bloco` da extração).
+    """
+    if conf != "confirmado" or not contagens:
+        return conf, obs, False
+    if str(unit or "").strip().lower() not in _UNIDADES_DE_BLOCO:
+        return conf, obs, False
+    try:
+        q = float(quantity)
+    except (TypeError, ValueError):
+        return conf, obs, False
+    if q <= 0 or abs(q - round(q)) > 1e-6 or int(round(q)) not in contagens:
+        return conf, obs, False
+    if not _RE_CITA_PECA_SEM_BLOCO.search(str(obs or "")):
+        return conf, obs, False
+    return ("estimado",
+            MARCA_PECA_SEM_BLOCO + " — o número foi contado no desenho, mas o que a peça é "
+            "(bloco, pilar, furo, luminária) saiu da leitura da legenda: confira. " + str(obs or ""),
+            True)
+
+
+_RE_LAYER_SO_NUMERO = _re.compile(r"\blayer\s*['\"]?(\d+)['\"]?(?![\w.-])", _re.IGNORECASE)
+
+
+def selo_apos_layer_sem_nome(conf, obs, unit, layers_com_nome):
+    """(conf, obs, rebaixou) — comprimento/área de layer SEM NOME ("205") que a
+    própria IA marcou "confirmado" volta a estimado.
+
+    🩸 30/09/2026 (filhote evefe9af): "Comprimento linear de paredes = 265,99 m
+    ✓" era o layer "205" — os EIXOS. A chave do selo já não promove layer sem
+    nome (`layer_sem_nome`), mas a IA marca "confirmado" por conta própria, e a
+    régua que lê layer da observação só enxerga nome com letra. Se a linha é de
+    m/m² e só cita layer de número, o serviço é inferência.
+    """
+    if conf != "confirmado" or layers_com_nome:
+        return conf, obs, False
+    if str(unit or "").strip().lower() not in _PROVA_POR_UNIDADE:
+        return conf, obs, False
+    m = _RE_LAYER_SO_NUMERO.search(str(obs or ""))
+    if not m:
+        return conf, obs, False
+    return ("estimado",
+            MARCA_LAYER_SEM_NOME + " ('%s') — o nome não diz o que o traço é: o comprimento foi "
+            "medido, mas o serviço é leitura nossa; confira. " % m.group(1) + str(obs or ""),
+            True)
 
 
 def selo_apos_planta_repetida(conf, obs, quantity, unit, copiados, blocos):

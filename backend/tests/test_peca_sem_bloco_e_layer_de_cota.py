@@ -67,7 +67,7 @@ def _doc_pecas():
 def test_o_caso_o_bloco_desenhado_como_retangulo_vira_contagem():
     ob = dx.objetos_repetidos_sem_bloco(_doc_pecas().modelspace(), 0.01)
     assert ob.get("1") == [{"forma": "retângulo", "a_cm": 19.0, "b_cm": 39.0, "n": 12,
-                            "borda_m": 13.92}], ob.get("1")
+                            "borda_m": 13.92, "concentrada": False}], ob.get("1")
 
 
 def test_circulo_repetido_tambem():
@@ -308,3 +308,136 @@ def test_o_resgate_barra_cota_e_borda_mesmo_com_nome_de_letra():
     esc = _roda("_nao_prova_ig = _layers_que_nao_provam(extraction.metadata)",
                 {"extraction": ex, "_indice_geom": {"comprimento": [], "area": [], "contagem": []}})
     assert dict(esc["_indice_geom"]["comprimento"]) == {"PAREDE": 30.0}
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  5. 🩸 30/09 — o filhote evefe9af: balão não é pilar; peça sem bloco e
+#     layer sem nome não saem ✓ (nem quando é a IA que marca)
+# ══════════════════════════════════════════════════════════════════════════
+def _doc_circulos(n_com_texto, n_total=12, texto="VISTA"):
+    d = ezdxf.new("R2010")
+    msp = d.modelspace()
+    for i in range(n_total):
+        msp.add_circle((i * 100, 0), 25.3, dxfattribs={"layer": "230"})
+        if i < n_com_texto:
+            msp.add_text(texto, dxfattribs={"height": 8, "insert": (i * 100 - 10, -4)})
+    return d
+
+
+def test_o_caso_balao_de_vista_nao_e_peca():
+    assert "230" not in dx.objetos_repetidos_sem_bloco(_doc_circulos(12).modelspace(), 0.01)
+
+
+def test_CONTROLE_circulo_sem_texto_e_peca():
+    ob = dx.objetos_repetidos_sem_bloco(_doc_circulos(0).modelspace(), 0.01)
+    assert ob.get("230") and ob["230"][0]["n"] == 12, ob
+
+
+def test_CONTROLE_poucos_com_texto_ainda_e_peca():
+    ob = dx.objetos_repetidos_sem_bloco(_doc_circulos(4).modelspace(), 0.01)
+    assert ob.get("230") and ob["230"][0]["n"] == 12, ob
+
+
+def _doc_legenda(espalhado, titulo="FAMÍLIA DE BLOCOS", titulo_longe=False):
+    d = ezdxf.new("R2010")
+    msp = d.modelspace()
+    for i in range(12):
+        x = i * 300 if espalhado else i * 30
+        _ret(msp, x, 0 if espalhado else 10, 12, 12, "238")
+    if titulo:
+        msp.add_text(titulo, dxfattribs={"height": 10, "insert": (3500, 2800) if titulo_longe else (0, 60)})
+    d.header["$EXTMIN"] = (0.0, 0.0, 0.0)
+    d.header["$EXTMAX"] = (4000.0, 3000.0, 0.0)
+    return d
+
+
+def test_o_caso_pecas_no_canto_da_legenda_sao_marcadas():
+    ob = dx.objetos_repetidos_sem_bloco(_doc_legenda(False).modelspace(), 0.01)
+    assert ob["238"][0].get("concentrada") is True, ob
+    md = {"objetos_sem_bloco": ob}
+    p = _extracao(md, {"238": 5.0}).to_structured_prompt()
+    assert "provável LEGENDA ou DETALHE" in p, p
+
+
+def test_CONTROLE_pecas_espalhadas_nao_sao_legenda():
+    ob = dx.objetos_repetidos_sem_bloco(_doc_legenda(True).modelspace(), 0.01)
+    assert ob["238"][0].get("concentrada") is False, ob
+
+
+def test_CONTROLE_grupo_pequeno_sem_titulo_de_legenda_nao_e_legenda():
+    # as luminárias de uma sala pequena num desenho grande também cabem num canto
+    ob = dx.objetos_repetidos_sem_bloco(_doc_legenda(False, titulo="SALA 12").modelspace(), 0.01)
+    assert ob["238"][0].get("concentrada") is False, ob
+
+
+def test_CONTROLE_titulo_de_legenda_longe_do_grupo_nao_marca():
+    ob = dx.objetos_repetidos_sem_bloco(_doc_legenda(False, titulo_longe=True).modelspace(), 0.01)
+    assert ob["238"][0].get("concentrada") is False, ob
+
+
+def test_CONTROLE_sem_extensao_no_cabecalho_nada_e_legenda():
+    d = _doc_legenda(False)
+    d.header["$EXTMIN"] = (1e20, 1e20, 1e20)
+    d.header["$EXTMAX"] = (-1e20, -1e20, -1e20)
+    ob = dx.objetos_repetidos_sem_bloco(d.modelspace(), 0.01)
+    assert ob["238"][0].get("concentrada") is False, ob
+
+
+def test_a_contagem_de_peca_sem_bloco_nao_sai_confirmada():
+    c, o, r = er.selo_apos_peca_sem_bloco(
+        "confirmado", "Fonte: 26 círculos de raio 25,3cm contados no layer 230", 26, "un", {26, 776})
+    assert (c, r) == ("estimado", True) and o.startswith(er.MARCA_PECA_SEM_BLOCO), o
+
+
+@pytest.mark.parametrize("conf,obs,q,unit", [
+    ("confirmado", "Fonte: 14 INSERTs do bloco 'tomada'", 14, "un"),        # não cita a peça
+    ("confirmado", "Fonte: 26 INSERTs do bloco 'pilar'", 26, "un"),          # número de grupo, fonte é bloco
+    ("confirmado", "Fonte: 27 retângulos no layer 1", 27, "un"),           # número de outro grupo
+    ("estimado", "Fonte: 26 círculos", 26, "un"),                          # já é laranja
+    ("confirmado", "Fonte: 26 círculos", 26, "m"),                         # não é contagem
+])
+def test_CONTROLE_o_que_nao_e_contagem_de_peca_segue(conf, obs, q, unit):
+    assert er.selo_apos_peca_sem_bloco(conf, obs, q, unit, {26, 776}) == (conf, obs, False)
+
+
+def test_o_comprimento_de_layer_sem_nome_nao_sai_confirmado():
+    c, o, r = er.selo_apos_layer_sem_nome(
+        "confirmado", "Fonte: comprimento total do layer 205 = 265,99m", "ml", [])
+    assert (c, r) == ("estimado", True) and "('205')" in o, o
+
+
+@pytest.mark.parametrize("conf,obs,unit,com_nome", [
+    ("confirmado", "Fonte: comprimento do layer PAREDE = 30 m", "ml", ["PAREDE"]),
+    ("confirmado", "Fonte: layer PAREDE = 30 m (o layer 205 é o eixo)", "ml", ["PAREDE"]),
+    ("confirmado", "Fonte: comprimento do layer 205A = 30 m", "ml", []),
+    ("confirmado", "Fonte: layer 205 com 12 peças", "un", []),
+    ("estimado", "Fonte: comprimento do layer 205 = 30 m", "ml", []),
+])
+def test_CONTROLE_layer_com_nome_ou_contagem_segue(conf, obs, unit, com_nome):
+    assert er.selo_apos_layer_sem_nome(conf, obs, unit, com_nome) == (conf, obs, False)
+
+
+def test_as_marcas_novas_travam_a_chave_do_selo():
+    assert er.MARCA_PECA_SEM_BLOCO in er.MARCAS_DE_REBAIXAMENTO
+    assert er.MARCA_LAYER_SEM_NOME in er.MARCAS_DE_REBAIXAMENTO
+
+
+def test_o_laco_de_producao_aplica_as_duas_regras():
+    from test_medicao_estava_na_observacao import _laco_de_itens_de_producao
+    itens, _esc, _ = _laco_de_itens_de_producao([
+        {"item_num": "1", "description": "Pilar circular", "unit": "un", "quantity": 26,
+         "confidence": "confirmado",
+         "observations": "Fonte: 26 círculos de raio 25,3cm contados no layer 230 (OBJETOS DESENHADOS PEÇA POR PEÇA)."},
+        {"item_num": "2", "description": "Comprimento de paredes", "unit": "ml", "quantity": 265.99,
+         "confidence": "confirmado",
+         "observations": "Fonte: comprimento total do layer 205 = 265,99m (COMPRIMENTOS POR LAYER)."},
+    ], areas={}, compr={}, extra={"_objetos_n": {26, 776}})
+    assert [i.confidence.value for i in itens] == ["estimado", "estimado"], [i.observations for i in itens]
+    assert itens[0].observations.startswith(er.MARCA_PECA_SEM_BLOCO)
+    assert itens[1].observations.startswith(er.MARCA_LAYER_SEM_NOME)
+
+
+def test_as_contagens_das_pecas_vem_da_extracao():
+    ex = _Extr(dict(_MD), {})
+    esc = _roda('_objetos_n = {int(_p.get("n") or 0) for _ps in', {"extraction": ex})
+    assert esc["_objetos_n"] == {776, 817}, esc["_objetos_n"]

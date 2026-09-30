@@ -16597,6 +16597,13 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                         ((extraction.metadata or {}).get("layers_de_cota") or {})}
                         except Exception:
                             _ly_cota = set()
+                        # 🩸 30/09 (filhote evefe9af): as contagens das peças sem bloco
+                        try:
+                            _objetos_n = {int(_p.get("n") or 0) for _ps in
+                                          ((extraction.metadata or {}).get("objetos_sem_bloco") or {}).values()
+                                          for _p in _ps}
+                        except Exception:
+                            _objetos_n = set()
                         _n_resgate_proc = 0
                         # Extrair itens
                         _n_item_perdido = 0   # quantos morreram no except do laço
@@ -16770,6 +16777,17 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                     conf, obs_raw, qty, normalized_unit, _blocos_copiados,
                                     _blocos_n)
                                 if _era_copia:
+                                    _rebaixado_pela_fonte = True
+                                # 🩸 30/09 (filhote evefe9af): peça desenhada sem bloco e
+                                # layer sem nome — o número é medido, o serviço não
+                                from engine_rules import (
+                                    selo_apos_peca_sem_bloco as _regra_peca,
+                                    selo_apos_layer_sem_nome as _regra_sem_nome)
+                                conf, obs_raw, _era_peca = _regra_peca(
+                                    conf, obs_raw, qty, normalized_unit, _objetos_n)
+                                conf, obs_raw, _era_sem_nome = _regra_sem_nome(
+                                    conf, obs_raw, normalized_unit, _lys)
+                                if _era_peca or _era_sem_nome:
                                     _rebaixado_pela_fonte = True
 
                                 # 🩸 29/09 (caso 18c57c3c): linha com quantidade ZERO

@@ -548,10 +548,13 @@ class DXFExtraction:
                 _desc = []
                 for _p in _pecas[:6]:
                     if _p.get("forma") == "círculo":
-                        _desc.append("%d círculos de raio %s cm" % (_p["n"], ("%g" % _p["r_cm"]).replace(".", ",")))
+                        _d1 = "%d círculos de raio %s cm" % (_p["n"], ("%g" % _p["r_cm"]).replace(".", ","))
                     else:
-                        _desc.append("%d retângulos de %s × %s cm" % (
-                            _p["n"], ("%g" % _p["a_cm"]).replace(".", ","), ("%g" % _p["b_cm"]).replace(".", ",")))
+                        _d1 = "%d retângulos de %s × %s cm" % (
+                            _p["n"], ("%g" % _p["a_cm"]).replace(".", ","), ("%g" % _p["b_cm"]).replace(".", ","))
+                    if _p.get("concentrada"):
+                        _d1 += " (todas num canto do desenho: provável LEGENDA ou DETALHE, não obra)"
+                    _desc.append(_d1)
                 lines.append(f"  {_ly_sb}: " + " · ".join(_desc))
             lines.append("  (O que cada peça é — bloco de alvenaria, placa, furo, luminária — sai da "
                          "legenda e das notas: diga isso na observação. A CONTAGEM é a quantidade da "
@@ -1937,6 +1940,95 @@ _OBJETO_SEM_BLOCO_M = (0.02, 20.0)
 _CIRCULO_SEM_BLOCO_M = (0.002, 2.0)
 #: Layer cujo comprimento é, nesta fração, a BORDA dessas peças.
 _LAYER_DE_BORDA_FRACAO = 0.8
+#: Círculo com TEXTO dentro é balão (vista, eixo, chamada), não peça — nesta
+#: fração do grupo, o grupo inteiro sai.
+_CIRCULO_BALAO_FRACAO = 0.5
+#: Grupo PEQUENO (diagonal da caixa < esta fração da diagonal do desenho) e
+#: com um texto de legenda por perto: provável legenda ou detalhe (a IA é
+#: avisada; nada é apagado). 🪤 Só tamanho não basta: as luminárias de uma sala
+#: pequena num desenho grande também cabem num canto.
+_PECAS_LEGENDA_DIAGONAL = 0.1
+_RE_TITULO_DE_LEGENDA = re.compile(
+    r"\b(LEGENDA|FAMILIA|DETALHE|PERSPECTIVA|ESQUEMA|SEPTO|CONVENC|SIMBOLOGIA)")
+
+
+def _diagonal_do_desenho(msp) -> float:
+    """Diagonal (unidades do modelo) da extensão do cabeçalho; 0 se não houver ou
+    se for a extensão vazia de desenho novo (EXTMIN > EXTMAX, ±1e20)."""
+    try:
+        h = msp.doc.header
+        a, b = h.get("$EXTMIN"), h.get("$EXTMAX")
+        if a and b and b[0] > a[0] and b[1] > a[1] and max(map(abs, (a[0], a[1], b[0], b[1]))) < 1e15:
+            return float(math.hypot(b[0] - a[0], b[1] - a[1]))
+    except Exception:
+        pass
+    return 0.0
+
+
+def _pontos_de_legenda(msp) -> list:
+    """Onde estão os títulos de legenda/detalhe ("LEGENDA", "FAMÍLIA DE BLOCOS"…)."""
+    pts = []
+    for t in msp.query("TEXT MTEXT"):
+        try:
+            if _RE_TITULO_DE_LEGENDA.search(_texto_normalizado(t)):
+                pts.append((t.dxf.insert.x, t.dxf.insert.y))
+        except Exception:
+            continue
+    return pts
+
+
+def _na_legenda(centros, pts_legenda, diag_des) -> bool:
+    """Grupo pequeno E com título de legenda dentro da caixa alargada? Provável legenda."""
+    if not centros or not pts_legenda or diag_des <= 0:
+        return False
+    xs = [c[0] for c in centros]
+    ys = [c[1] for c in centros]
+    w, h = max(xs) - min(xs), max(ys) - min(ys)
+    d = math.hypot(w, h)
+    if d >= _PECAS_LEGENDA_DIAGONAL * diag_des:
+        return False
+    folga = max(d, 0.02 * diag_des)
+    return bool(any(min(xs) - folga <= x <= max(xs) + folga and min(ys) - folga <= y <= max(ys) + folga
+                    for x, y in pts_legenda))
+
+
+def _pontos_de_texto(msp) -> list:
+    """Pontos de inserção (e de alinhamento) dos TEXT/MTEXT do modelo."""
+    pts = []
+    for t in msp.query("TEXT MTEXT"):
+        try:
+            pts.append((t.dxf.insert.x, t.dxf.insert.y))
+            if t.dxftype() == "TEXT" and t.dxf.hasattr("align_point"):
+                pts.append((t.dxf.align_point.x, t.dxf.align_point.y))
+        except Exception:
+            continue
+    return pts
+
+
+def _fracao_com_texto_dentro(circulos, pontos) -> float:
+    """Fração dos círculos (x, y, raio) que têm algum ponto de texto dentro."""
+    if not circulos:
+        return 0.0
+    r0 = max(c[2] for c in circulos) * 1.05 or 1.0
+    grade: dict = {}
+    for x, y in pontos:
+        grade.setdefault((int(x // r0), int(y // r0)), []).append((x, y))
+    com = 0
+    for x, y, r in circulos:
+        gx, gy = int(x // r0), int(y // r0)
+        achou = False
+        for ix in (gx - 1, gx, gx + 1):
+            for iy in (gy - 1, gy, gy + 1):
+                for px, py in grade.get((ix, iy), ()):
+                    if math.hypot(px - x, py - y) <= r * 1.05:
+                        achou = True
+                        break
+                if achou:
+                    break
+            if achou:
+                break
+        com += achou
+    return com / len(circulos)
 
 
 def objetos_repetidos_sem_bloco(msp, unit_factor) -> dict:
@@ -1991,11 +2083,15 @@ def objetos_repetidos_sem_bloco(msp, unit_factor) -> dict:
             if not _e_peca(e.dxf.layer):
                 continue
             k = (e.dxf.layer, round(a * 1000), round(b * 1000))       # mm
-            ret[k] = ret.get(k, 0) + 1
-        for (ly, a, b), n in ret.items():
+            ret.setdefault(k, []).append((sum(p[0] for p in pts) / 4, sum(p[1] for p in pts) / 4))
+        diag_des = _diagonal_do_desenho(msp)
+        pts_leg = _pontos_de_legenda(msp) if diag_des > 0 else []
+        for (ly, a, b), cs in ret.items():
+            n = len(cs)
             if n >= _OBJETOS_SEM_BLOCO_MIN:
                 out.setdefault(ly, []).append({"forma": "retângulo", "a_cm": a / 10, "b_cm": b / 10,
-                                               "n": n, "borda_m": round(n * 2 * (a + b) / 1000, 2)})
+                                               "n": n, "borda_m": round(n * 2 * (a + b) / 1000, 2),
+                                               "concentrada": _na_legenda(cs, pts_leg, diag_des)})
         cir: dict = {}
         for e in msp.query("CIRCLE"):
             r = float(e.dxf.radius) * uf
@@ -2004,11 +2100,23 @@ def objetos_repetidos_sem_bloco(msp, unit_factor) -> dict:
             if not _e_peca(e.dxf.layer):
                 continue
             k = (e.dxf.layer, round(r * 1000))
-            cir[k] = cir.get(k, 0) + 1
-        for (ly, r), n in cir.items():
-            if n >= _OBJETOS_SEM_BLOCO_MIN:
-                out.setdefault(ly, []).append({"forma": "círculo", "r_cm": r / 10, "n": n,
-                                               "borda_m": round(n * 2 * math.pi * r / 1000, 2)})
+            cir.setdefault(k, []).append((e.dxf.center.x, e.dxf.center.y, float(e.dxf.radius)))
+        _txt = None
+        for (ly, r), cs in cir.items():
+            n = len(cs)
+            if n < _OBJETOS_SEM_BLOCO_MIN:
+                continue
+            # 🩸 30/09 (filhote evefe9af): 26 balões de "VISTA" e 10 bolinhas de
+            # eixo viraram "pilar circular Ø50,6 / Ø60 — ✓". Todos com texto
+            # dentro; as 1.634 barras de aço do mesmo desenho, nenhum.
+            if _txt is None:
+                _txt = _pontos_de_texto(msp)
+            if _fracao_com_texto_dentro(cs, _txt) >= _CIRCULO_BALAO_FRACAO:
+                continue
+            out.setdefault(ly, []).append({"forma": "círculo", "r_cm": r / 10, "n": n,
+                                           "borda_m": round(n * 2 * math.pi * r / 1000, 2),
+                                           "concentrada": _na_legenda([(c[0], c[1]) for c in cs],
+                                                                      pts_leg, diag_des)})
         for ly in out:
             out[ly].sort(key=lambda p: -p["n"])
     except Exception:
