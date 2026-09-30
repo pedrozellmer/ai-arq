@@ -115,3 +115,75 @@ def test_o_motor_tira_o_pdf_antes_de_ler_os_pdfs():
     assert ifs and any(isinstance(s, ast.Assign)
                        and any(getattr(t, "id", "") == "pdf_paths" for t in s.targets)
                        for s in ast.walk(ifs[0])), "o PDF não sai de pdf_paths"
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  29/09 (Pedro): prancha de TABELA fica mesmo com o CAD lido
+# ══════════════════════════════════════════════════════════════════════════
+# 🩸 job 6437838e: o quadro de cargas, o unifilar e o rack em PDF traziam os
+# totais do projetista (69 luminárias de teto alto, 14 tomadas de elevacar…),
+# disjuntores e cabos; a leitura do DWG das mesmas folhas não trouxe — o texto
+# estava dentro de bloco. (Trechos de texto reescritos, com a forma dos reais.)
+@pytest.mark.parametrize("texto, esperado", [
+    ("01-QUADRO DE DISTRIBUIÇÃO … QUADRO DE CARGAS  TOTAIS 22 69", "QUADRO DE CARGA"),
+    ("DIAGRAMA\nUNIFILAR  QGBT  disjuntor 3P", "DIAGRAMA UNIFILAR"),
+    ("DIAGRAMA DE LIGAÇÃO UNIFILAR PARA DADOS  RACK 18U", "LIGACAO UNIFILAR"),
+    ("RESUMO DO AÇO  AÇO DIAM (MM) C.TOTAL (M) PESO + 10% (KG)", "RESUMO DO ACO"),
+    ("PLANTA CIVIL  TABELA DE ESQUADRIAS DE ALUMÍNIO  CX. ALTURA LARGURA", "TABELA DE ESQUADRIA"),
+    ("QUADRO DE QUANTITATIVOS  CONCRETO 4,90 m³", "QUANTITATIVO"),
+])
+def test_a_tabela_de_quantidade_no_texto(texto, esperado):
+    assert er.tabela_de_quantidade_no_texto(texto) == esperado
+
+
+@pytest.mark.parametrize("texto", [
+    "ATUALIZAÇÃO DA TABELA DE REVESTIMENTOS CONFORME NOVA TABELA",   # nota de revisão
+    "OS ESFORÇOS INDICADOS NESTA TABELA SÃO OS VALORES MÁXIMOS",
+    "PLANTA BAIXA ESCALA 1/100  CIRCUITO 1.4  DISJUNTOR 20A  TOMADA",
+    "", None,
+])
+def test_CONTROLE_planta_e_nota_nao_sao_tabela(texto):
+    assert er.tabela_de_quantidade_no_texto(texto) == ""
+
+
+def test_a_prancha_de_tabela_fica_e_a_de_planta_sai():
+    tab = "/j/OBR-ELE-004-CARGA-R01.pdf"
+    planta = "/j/OBR-ELE-001-ILUM-R01.pdf"
+    refs = ["OBR-ELE-004-CARGA-R01.dxf", "OBR-ELE-001-ILUM-R01.dxf"]
+    textos = {tab: "QUADRO DE CARGAS  TOTAIS", planta: "PLANTA BAIXA 1/100"}
+    ficam = []
+    sai = er.pdfs_da_prancha_ja_lida_no_cad([tab, planta], refs,
+                                           texto_do_pdf=textos.get, ficam_por_tabela=ficam)
+    assert sai == [planta]
+    assert ficam == [(tab, "QUADRO DE CARGA")]
+
+
+def test_CONTROLE_leitor_que_falha_vale_a_regra_sem_a_excecao():
+    def _quebra(p):
+        raise OSError("pdf ilegível")
+    assert er.pdfs_da_prancha_ja_lida_no_cad([PDF_006], ["OBR.FR.EX.HT.006.3PAVXXXXXX-R01.dxf"],
+                                             texto_do_pdf=_quebra) == [PDF_006]
+
+
+def test_o_motor_le_o_texto_com_o_leitor_da_producao():
+    """🪤 `fitz` (PyMuPDF) NÃO está no requirements — a 1ª versão da escala por
+    texto importava ele, o import falhava em produção e o except engolia."""
+    fn = next(n for n in ast.walk(ast.parse(io.open(os.path.join(os.path.dirname(_AQUI), "main.py"),
+                                                    encoding="utf-8").read()))
+              if isinstance(n, ast.FunctionDef) and n.name == "_texto_das_folhas_do_pdf")
+    importados = {a.name for n in ast.walk(fn) if isinstance(n, ast.Import) for a in n.names}
+    assert "pypdfium2" in importados and "fitz" not in importados, importados
+
+
+def test_o_leitor_nao_levanta():
+    import main
+    assert main._texto_das_folhas_do_pdf("/nao/existe.pdf") == ""
+
+
+def test_o_motor_passa_o_leitor_e_registra_quem_ficou():
+    fn = _process_job()
+    ch = [n for n in ast.walk(fn) if isinstance(n, ast.Call)
+          and getattr(n.func, "id", "") == "_pdfs_irmaos"]
+    kw = {k.arg: getattr(k.value, "id", None) for k in ch[0].keywords}
+    assert kw.get("texto_do_pdf") == "_texto_das_folhas_do_pdf", kw
+    assert kw.get("ficam_por_tabela") == "_tabelas_ficam", kw

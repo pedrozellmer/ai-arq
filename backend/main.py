@@ -10828,6 +10828,24 @@ def _recusa_por_paginas(job_id, file_paths) -> bool:
     return True
 
 
+def _texto_das_folhas_do_pdf(caminho, paginas: int = 3) -> str:
+    """O texto das primeiras folhas do PDF (pypdfium2, o leitor do motor).
+    Qualquer falha devolve '' — quem pergunta decide sem o texto.
+    🪤 NÃO trocar por `fitz`: o PyMuPDF não está no requirements."""
+    try:
+        import pypdfium2 as _pdfium_txt
+        _doc = _pdfium_txt.PdfDocument(caminho)
+        try:
+            partes = []
+            for i in range(min(len(_doc), paginas)):
+                partes.append(_doc[i].get_textpage().get_text_range() or "")
+            return "\n".join(partes)
+        finally:
+            _doc.close()
+    except Exception:
+        return ""
+
+
 def _sem_arquivos_repetidos(job_id, file_paths) -> list:
     """A lista sem o MESMO arquivo (sha256) repetido — fica a 1ª ocorrência.
 
@@ -17002,8 +17020,19 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # Sai o PDF cujo CAD rendeu linha; o de CAD que falhou fica (plano B).
         # Decisão em engine_rules — ver `pdfs_da_prancha_ja_lida_no_cad`.
         from engine_rules import pdfs_da_prancha_ja_lida_no_cad as _pdfs_irmaos
+        # 29/09 (Pedro): prancha de TABELA fica (o texto do quadro pode morar
+        # dentro de bloco no DWG). Lê com pypdfium2 — o `fitz` NÃO está no
+        # requirements (pdf_vector.py, 1ª versão da escala por texto).
+        _tabelas_ficam = []
         _pdf_irmao = _pdfs_irmaos(pdf_paths,
-                                  [getattr(_it, "ref_sheet", "") for _it in dxf_items])
+                                  [getattr(_it, "ref_sheet", "") for _it in dxf_items],
+                                  texto_do_pdf=_texto_das_folhas_do_pdf,
+                                  ficam_por_tabela=_tabelas_ficam)
+        if _tabelas_ficam:
+            _log_error("motor:pdf-da-prancha-do-cad",
+                       "ficam por serem TABELA: " + "; ".join(
+                           "%s (%s)" % (os.path.basename(_p), _k) for _p, _k in _tabelas_ficam[:8]),
+                       job_id, severity="info")
         if _pdf_irmao:
             _fora_pdf = set(_pdf_irmao)
             pdf_paths = [_p for _p in pdf_paths if _p not in _fora_pdf]

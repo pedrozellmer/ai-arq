@@ -6638,7 +6638,36 @@ def radical_da_prancha(nome) -> str:
     return "".join(c for c in n if not _ud.combining(c))
 
 
-def pdfs_da_prancha_ja_lida_no_cad(pdfs, refs_do_cad) -> list:
+#: Expressões de TABELA DE QUANTIDADE numa prancha — onde o PDF traz o que a
+#: leitura do CAD pode não trazer (texto dentro de bloco). Expressão, não
+#: palavra solta: "TABELA" sozinha é nota de revisão ("atualização da tabela de
+#: revestimentos"), e "RESUMO" também aparece à toa.
+_TABELAS_DE_QUANTIDADE = (
+    "QUADRO DE CARGA", "DIAGRAMA UNIFILAR", "LIGACAO UNIFILAR", "DIAGRAMA TRIFILAR",
+    "LISTA DE MATERIA", "QUANTITATIVO", "QUADRO DE ESQUADRIA", "TABELA DE ESQUADRIA",
+    "RESUMO DO ACO", "RESUMO DE ACO", "TABELA DE ACO", "QUADRO DE ACO", "LISTA DE FERRO",
+    "QUADRO DE AREA", "TABELA DE AREA", "POTENCIA INSTALADA",
+)
+
+
+def tabela_de_quantidade_no_texto(texto) -> str:
+    """A expressão de tabela de quantidade achada no texto da prancha ('' se não).
+
+    🩸 29/09/2026 (job 6437838e). Os PDFs do quadro de cargas, do unifilar e do
+    rack traziam os totais do projetista por quadro (69 luminárias de teto alto,
+    14 tomadas de elevacar…), disjuntores e cabos — e a leitura do DWG das
+    mesmas folhas não trouxe: o texto estava dentro de bloco.
+    """
+    t = _ud.normalize("NFKD", str(texto or "")).encode("ascii", "ignore").decode().upper()
+    t = _re.sub(r"\s+", " ", t)
+    for k in _TABELAS_DE_QUANTIDADE:
+        if k in t:
+            return k
+    return ""
+
+
+def pdfs_da_prancha_ja_lida_no_cad(pdfs, refs_do_cad, texto_do_pdf=None,
+                                   ficam_por_tabela=None) -> list:
     """Os PDFs do envio que são a MESMA prancha de um CAD que rendeu linhas.
 
     `refs_do_cad` = o `ref_sheet` das linhas que a leitura do CAD produziu.
@@ -6654,7 +6683,26 @@ def pdfs_da_prancha_ja_lida_no_cad(pdfs, refs_do_cad) -> list:
     vezes e as 14 linhas vieram do PDF.
     🔑 Nome igual, e só nome igual: "prancha 01.pdf" com um DWG "geral.dwg"
     continua como hoje (lá a consolidação é quem junta).
+    🔑 29/09 (Pedro): prancha de TABELA fica mesmo com o CAD lido — o texto do
+    quadro pode morar dentro de bloco no DWG (`tabela_de_quantidade_no_texto`).
+    `texto_do_pdf(caminho)` dá o texto da folha; quem fica por isso vai pra
+    `ficam_por_tabela` como (caminho, expressão). Sem leitor, ou se ele falha,
+    vale a regra sem a exceção.
     """
     lidos = {radical_da_prancha(r) for r in (refs_do_cad or ()) if r}
     lidos.discard("")
-    return [p for p in (pdfs or ()) if radical_da_prancha(p) in lidos]
+    sai = []
+    for p in (pdfs or ()):
+        if radical_da_prancha(p) not in lidos:
+            continue
+        if texto_do_pdf is not None:
+            try:
+                k = tabela_de_quantidade_no_texto(texto_do_pdf(p))
+            except Exception:
+                k = ""
+            if k:
+                if ficam_por_tabela is not None:
+                    ficam_por_tabela.append((p, k))
+                continue
+        sai.append(p)
+    return sai
