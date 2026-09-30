@@ -25151,7 +25151,7 @@ Qual dúvida de levantamento mais te travou este mês? Critério de medição, p
 <div style="border-top:1px solid #eef2f7;padding-top:16px;font-size:14px;color:#475569;">Um abraço,<br><b style="color:#0F172A;">Pedro</b> <span style="color:#475569;">— AI.arq</span>
 <div style="margin-top:12px;"><a href="{{WPP}}" style="display:inline-block;border:1px solid #25D366;color:#128C4A;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;">&#128172; Falar no WhatsApp</a></div>
 <p style="margin:14px 0 0;font-size:13px;line-height:1.6;color:#475569;"><b>P.S.:</b> o AI.arq tem página no LinkedIn — <a href="https://www.linkedin.com/company/aiarq/" style="color:#4F46E5;">linkedin.com/company/aiarq</a>.</p></div>
-<div style="margin-top:14px;font-size:11px;color:#475569;line-height:1.6;">Você recebe porque tem conta no AI.arq e marcou que aceita receber novidades. <a href="{{UNSUB}}" style="color:#4F46E5;">Sair da lista</a> &middot; <a href="https://ai.arq.br/privacidade.html?utm_source=newsletter&utm_campaign=set26" style="color:#4F46E5;">Privacidade</a></div>
+<div style="margin-top:14px;font-size:11px;color:#475569;line-height:1.6;">Você recebe porque tem conta no AI.arq. <a href="{{UNSUB}}" style="color:#4F46E5;">Sair da lista</a> &middot; <a href="https://ai.arq.br/privacidade.html?utm_source=newsletter&utm_campaign=set26" style="color:#4F46E5;">Privacidade</a></div>
 </div></div></div>"""
 
 import hmac as _hmac_nl, hashlib as _hashlib_nl
