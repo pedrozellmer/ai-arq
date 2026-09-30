@@ -7258,11 +7258,31 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
                 verts = [(v.dxf.location.x, v.dxf.location.y) for v in poly.vertices]
                 start = verts[0] if verts else (0, 0)
                 end = verts[-1] if verts else (0, 0)
+                # 🩸 30/09/2026 (H52 do estudo do acervo): a POLILINHA "pesada"
+                # (2D/3D, com VERTEX) ia sem os lados, como a LWPOLYLINE antes de
+                # 25/09. Uma parede desenhada pelo contorno — vai 71 m e volta a
+                # 15 cm — virava uma reta de 15 cm do 1º ao último vértice, e o
+                # eixo nunca a via: 239 dos 457 m de alvenaria de um projeto de
+                # cliente eram as duas faces somadas. Mesma regra da LWPOLYLINE
+                # (só layer candidato a linha dupla); malha e polyface não são
+                # caminho. A 3D vai no plano (o z era lixo) e sem arco.
+                _pontos = ()
+                _lay_p = str(poly.dxf.layer)
+                if (verts and (poly.is_2d_polyline or poly.is_3d_polyline)
+                        and (poly.dxf.layer in _layers_linha_dupla or _RE_DUTO_DUPLO.search(_lay_p)
+                             or _layer_e_parede(poly.dxf.layer) or _RE_LAYER_DE_TUBO.search(_lay_p))):
+                    _blg = [float(v.dxf.get("bulge", 0) or 0) if poly.is_2d_polyline else 0.0
+                            for v in poly.vertices]
+                    _xyb = [(x, y, b) for (x, y), b in zip(verts, _blg)]
+                    if poly.is_closed:
+                        _xyb.append(_xyb[0])
+                    _pontos = tuple(_xyb)
                 walls.append(WallSegment(
                     layer=poly.dxf.layer,
                     length=length,
                     start=start,
                     end=end,
+                    pontos=_pontos,
                 ))
         except Exception:
             continue
