@@ -25209,6 +25209,19 @@ def _newsletter_recipients(tipo: str = "campanha") -> list:
     except Exception as _e:
         print(f"[newsletter] recipients erro: {_e}")
         return []
+    if tipo == "cadastro":
+        # 30/09/2026, Pedro: "todos que têm cadastro". A lista sempre saiu de `projects`,
+        # então quem tem conta e nunca subiu projeto (58 de 202 nesse dia) ficava de fora.
+        # Soma as contas do Auth; as mesmas exclusões de baixo continuam valendo
+        # (descadastro, admin, teste) e a lista de supressão vale no envio.
+        for _u in _auth_admin_list_users():
+            e = (_u.get("email") or "").strip().lower()
+            if not (e and "@" in e):
+                continue
+            _meta = _u.get("user_metadata") or {}
+            n = str(_meta.get("full_name") or _meta.get("name") or "").strip()
+            if e not in by_email or (not by_email[e] and n):
+                by_email[e] = n
     # 28/07: o repositório é PÚBLICO. E-mails de pessoas reais saíram daqui —
     # ficam só as impressões digitais (SHA-256). Mesma lista de antes:
     # a conta de smoke test e um descadastro manual.
@@ -25226,7 +25239,7 @@ def _newsletter_recipients(tipo: str = "campanha") -> list:
         for e in sorted(by_email)
         if e not in opt and e != ADMIN_EMAIL and not _blocked(e) and "+smoke" not in e
     ]
-    if tipo == "servico":
+    if tipo in ("servico", "cadastro"):
         # 🔑 COMUNICAÇÃO DE SERVIÇO fala do que a pessoa JÁ TEM: função nova na
         # ferramenta que ela usa, mudança de comportamento, aviso de manutenção.
         # É a mesma categoria de "sua planilha está pronta", que sempre saiu
@@ -25358,8 +25371,9 @@ async def admin_newsletter_send(request: Request):
     # 🪤 Default "campanha", o mais restrito: quem esquecer o campo manda pra
     # MENOS gente, não pra mais. Erro de omissão não pode virar envio indevido.
     tipo = str((data or {}).get("tipo") or "campanha").strip().lower()
-    if tipo not in ("servico", "campanha"):
-        raise HTTPException(400, "tipo tem que ser 'servico' ou 'campanha'")
+    # "cadastro" (30/09): toda conta, com ou sem projeto — só com o pedido explícito do Pedro.
+    if tipo not in ("servico", "campanha", "cadastro"):
+        raise HTTPException(400, "tipo tem que ser 'servico', 'campanha' ou 'cadastro'")
     # 🩸 30/09/2026 — ESTA ROTA DERRUBOU O SERVIDOR. Ela é `async def` e chamava o
     # envio (SMTP síncrono, um e-mail de cada vez, ~2,5 s cada) direto no laço de
     # eventos: com 140 destinatários o laço ficou preso por minutos, o /health do

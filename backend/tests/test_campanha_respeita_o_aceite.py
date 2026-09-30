@@ -102,6 +102,25 @@ def test_CAMPANHA_nao_vai_pra_quem_recusou(base):
     assert saiu == ["aceitou1@example.com", "aceitou2@example.com"], saiu
 
 
+def test_CADASTRO_soma_quem_tem_conta_sem_projeto_e_respeita_o_descadastro(base, monkeypatch):
+    """30/09/2026, Pedro: 'todos que têm cadastro'. A lista saía de `projects`, e quem tem
+    conta mas nunca subiu projeto ficava de fora. O descadastro continua valendo."""
+    monkeypatch.setattr(main, "_auth_admin_list_users", lambda *a, **k: [
+        {"email": "So.Conta@example.com", "user_metadata": {"full_name": "Só Conta"}},
+        {"email": "saiu@example.com", "user_metadata": {}},
+        {"email": "aceitou1@example.com", "user_metadata": {}},     # já está nos projetos
+        {"email": None},
+    ])
+    base["optout"] = ["saiu@example.com"]
+    lista = main._newsletter_recipients("cadastro")
+    saiu = _emails(lista)
+    assert "so.conta@example.com" in saiu and "saiu@example.com" not in saiu, saiu
+    assert len(saiu) == 6 and len(set(saiu)) == 6, saiu     # 5 com projeto + 1 só com conta
+    assert dict(lista)["so.conta@example.com"] == "Só Conta"
+    # 🧪 controle: sem somar as contas, "servico" continua só com quem tem projeto
+    assert "so.conta@example.com" not in _emails(main._newsletter_recipients("servico"))
+
+
 def test_SERVICO_vai_pra_base_toda(base):
     """Comunicação sobre o que a pessoa já usa não depende do aceite de
     marketing — é a mesma categoria de 'sua planilha está pronta'."""
