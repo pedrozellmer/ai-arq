@@ -13732,6 +13732,18 @@ def _resumo_escala_arquivo(caminho: str, md: dict) -> dict:
             return {"nome": nome, "status": "rotulo", "n": 0, "unidade": uni}
         if md.get("unidade_por_consenso_projeto"):
             return {"nome": nome, "status": "consenso", "n": 0, "unidade": uni}
+        # 🩸 30/09/2026 (job 9a2c5d87): a unidade saiu da NOTA do desenho
+        # ("MEDIDAS EM CENTÍMETROS") confirmada pelas cotas explodidas — é
+        # prova (texto escrito × geometria), e o resumo dizia "nenhuma cota da
+        # prancha pôde provar a unidade".
+        _dg = md.get("diag_unidade")
+        _nc = (_dg.get("nota_cota") or {}) if isinstance(_dg, dict) else {}
+        if _nc.get("escolha"):
+            _cts = [int(v) for v in (_nc.get("cotas") or {}).values() if str(v).isdigit()]
+            _uni_nota = {0.001: "milímetro", 0.01: "centímetro", 1.0: "metro"}.get(
+                float(_nc["escolha"]), "")
+            return {"nome": nome, "status": "nota", "n": max(_cts) if _cts else 0,
+                    "unidade": _uni_nota}
         if md.get("alerta_unidade") or md.get("unidade_corrigida_por_plausibilidade"):
             # 🚨 01/09/2026 — CASO cliente-80 (job ffac8a79, NOTA 1/5).
             # Este ramo devolvia só {"nome", "status": "alerta"} com o comentário
@@ -13804,7 +13816,7 @@ def _linhas_escala_projeto(arqs: list, n_medidos: int = -1,
     a gente parou. `n_medidos = -1` significa "não deu pra saber", e aí nada é
     afirmado.
     """
-    provadas = [a for a in arqs if a.get("status") in ("cotas", "rotulo", "consenso")]
+    provadas = [a for a in arqs if a.get("status") in ("cotas", "rotulo", "consenso", "nota")]
     sem = [a for a in arqs if a.get("status") == "sem_prova"]
     # 🚨 01/09 (caso cliente-80): 'alerta' não gerava linha NENHUMA — o desfecho
     # mais grave era o único mudo. Vai PRIMEIRO, porque "a escala está suspeita"
@@ -13864,6 +13876,10 @@ def _linhas_escala_projeto(arqs: list, n_medidos: int = -1,
                               + (" — unidade do arquivo corrigida por elas" if a.get("corrigida") else ""))
             elif a["status"] == "rotulo":
                 partes.append(f"{a['nome']}: a área rotulada na prancha bate com a geometria{u}")
+            elif a["status"] == "nota":
+                # 30/09: a nota diz a unidade; as cotas desenhadas à mão confirmam
+                partes.append(f"{a['nome']}: a nota do desenho diz {a.get('unidade') or 'a unidade'} "
+                              f"e {a.get('n') or 'as'} cotas desenhadas batem com a geometria")
             else:
                 partes.append(f"{a['nome']}: usa a escala provada por cota em outra prancha deste projeto{u}")
         _linha_ok = "✅ Escala conferida pelo próprio desenho — " + "; ".join(partes) + "."

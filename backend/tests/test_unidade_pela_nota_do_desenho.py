@@ -197,3 +197,38 @@ def test_o_palpite_chega_ao_cliente_como_alerta_de_escala():
                                                       "unidade_desenho": "Sem unidade"})
     assert arq["status"] == "alerta", arq
     assert "milímetro" in arq["alerta"], arq
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  4. O resumo que o cliente lê conhece a prova da nota
+#     (30/09: dizia "nenhuma cota da prancha pôde provar a unidade")
+# ══════════════════════════════════════════════════════════════════════════
+_MD_NOTA = {"unidade_desenho": "Sem unidade",
+            "diag_unidade": {"insunits": 0, "nota_cota": {"notas": {"0.01": 1},
+                                                          "cotas": {"1.0": 276, "0.1": 2},
+                                                          "escolha": 0.01}}}
+
+
+def test_o_resumo_diz_que_a_nota_e_as_cotas_provaram():
+    import main
+    arq = main._resumo_escala_arquivo("prancha.dxf", dict(_MD_NOTA))
+    assert (arq["status"], arq["n"], arq["unidade"]) == ("nota", 276, "centímetro"), arq
+    linhas = main._linhas_escala_projeto([arq])
+    assert len(linhas) == 1 and linhas[0].startswith("✅ Escala conferida"), linhas
+    assert "a nota do desenho diz centímetro e 276 cotas desenhadas batem" in linhas[0], linhas
+    assert not any("nenhuma cota da prancha pôde" in l for l in linhas), linhas
+
+
+def test_CONTROLE_nota_sem_decisao_segue_sem_prova():
+    import main
+    md = {"unidade_desenho": "Sem unidade",
+          "diag_unidade": {"nota_cota": {"notas": {"0.01": 1}, "cotas": {"1.0": 3}}}}
+    assert main._resumo_escala_arquivo("prancha.dxf", md)["status"] == "sem_prova"
+
+
+def test_de_ponta_a_ponta_o_resumo_da_extracao(tmp_path):
+    import main
+    p = str(tmp_path / "planta.dxf")
+    _doc("1 - MEDIDAS EM CENTÍMETROS", _cotas(30)).saveas(p)
+    arq = main._resumo_escala_arquivo(p, dx.extract_dxf(p).metadata)
+    assert arq["status"] == "nota" and arq["unidade"] == "centímetro", arq
