@@ -2711,6 +2711,182 @@ def ressalva_da_unidade_cega(palpite, status_da_regua) -> str:
             "conhecida antes de usar comprimentos e áreas")
 
 
+# ---------------------------------------------------------------------------
+# UNIDADE CONTRADITA PELA ESPESSURA DA PAREDE
+# ---------------------------------------------------------------------------
+# 🩸 30/09/2026 — H51 do estudo do acervo. Desenho em CENTÍMETRO com o
+# cabeçalho dizendo MILÍMETRO ($INSUNITS = 4): tudo sai 10× menor, e com selo.
+# 3 jobs de cliente (2 clientes), todos com a régua de cotas "não-decidiu":
+# "parede de alvenaria 49,51 ml ✓" (real ≈ 495 m) — aprovada pelo cliente —,
+# laje ×100; numa casa de 46,79 m², "tubulação 1,42 m ✓".
+# A PAREDE entrega a unidade: as duas faces ficam a 5–35 cm uma da outra. Lido
+# em mm, o par desses desenhos dava 1,0–2,0 cm; nos 17 desenhos certos da
+# varredura do estudo, 16–20 cm.
+# v1: DETECTA e vira ressalva de ESCALA (m/m²/m³ sem selo + aviso). NÃO troca o
+# fator: um dos arquivos mistura cm (a planta) e mm (um detalhe distante) — não
+# há um fator que sirva pro desenho inteiro.
+# 🪤 Só age com a unidade NÃO provada: linha de reboco a 3–4 cm da face deu
+# moda "fina" num desenho certo (1 falso alarme na varredura) — lá as cotas
+# provaram o metro.
+# 🪤 Só no sentido "fina demais" (×10, ×100). O "grossa demais" pegou layer de
+# VISTA (63/50 cm), e parede de linha única não tem par pra medir.
+_RE_LAYER_DE_VISTA = re.compile(
+    r"(?<![a-z])(?:vistas?|cortes?|fachadas?|eleva[cç](?:[aã]o|[oõ]es)|elev|"
+    r"se[cç](?:[aã]o|[oõ]es)|sections?|elevations?|detalhes?)(?![a-z])", re.IGNORECASE)
+_ESP_PAREDE_M = (0.05, 0.35)       # espessura plausível de parede
+_ESP_BUSCA_M = 0.60                # parceira até 60 cm NA UNIDADE LIDA
+_ESP_MIN_M = 0.0004                # mais perto que isto é a mesma linha em pedaços
+_ESP_ANG_TOL = 1.0                 # graus
+_ESP_SOBREPOE = 0.5                # a parceira cobre ≥ metade do trecho
+_ESP_FRACAO_PAR = 0.5              # ≥ metade do comprimento com parceira
+_ESP_FRACAO_FINA = 0.6             # ≥ 60% do que pareou na faixa "fina"
+_ESP_FRACAO_PLAUSIVEL_MAX = 0.2    # e < 20% já na faixa plausível
+_ESP_MIN_PARES = 20
+_ESP_MAX_SEG = 60000               # teto (amostra os trechos mais longos)
+_ESP_MAX_VIZINHOS = 400            # teto da busca por trecho, em cada lado
+_REGUA_QUE_PROVA = ("validada", "corrigida", "corrigida_lfac", "provada_por_rotulo")
+_NOME_DA_UNIDADE = {0.001: "milímetro", 0.01: "centímetro", 0.1: "decímetro", 1.0: "metro"}
+
+
+def _nome_da_unidade(fator) -> str:
+    for f, nome in _NOME_DA_UNIDADE.items():
+        if abs(float(fator) - f) <= 1e-9 * max(1.0, f):
+            return nome
+    return ""
+
+
+def unidade_contradita_pela_parede(walls, unit_factor, status_da_regua=None) -> dict:
+    """{'k', 'espessura_cm', 'fracao_fina', 'em_par', 'n'} quando a espessura das
+    paredes só é plausível com o desenho k× MAIOR (k = 10 ou 100); {} se não.
+
+    Pra cada trecho reto de layer de parede (fora de vista/corte/fachada), a
+    parceira paralela mais perto (≤ 1°) que cobre ≥ metade dele, até 60 cm na
+    unidade lida — a mesma medida da varredura do estudo. Dispara quando ≥ 60%
+    do que pareou fica na faixa 5–35 cm ÷ k e < 20% já fica em 5–35 cm.
+    Unidade provada (cota, DIMLFAC, rótulo) → {}."""
+    if status_da_regua in _REGUA_QUE_PROVA:
+        return {}
+    uf = float(unit_factor or 0.0)
+    if uf <= 0 or not walls:
+        return {}
+    from engine_rules import layer_e_parede
+    segs = []
+    for w in walls:
+        lay = str(getattr(w, "layer", "") or "")
+        if getattr(w, "curvo", False) or _RE_LAYER_DE_VISTA.search(lay) or not layer_e_parede(lay):
+            continue
+        pts = getattr(w, "pontos", ()) or ()
+        if len(pts) >= 2:
+            for p, q in zip(pts, pts[1:]):
+                if len(p) > 2 and p[2]:
+                    continue                           # lado em arco
+                if (p[0], p[1]) != (q[0], q[1]):
+                    segs.append(((p[0], p[1]), (q[0], q[1])))
+        else:
+            a = tuple(getattr(w, "start", (0, 0)))[:2]
+            b = tuple(getattr(w, "end", (0, 0)))[:2]
+            if a != b:
+                segs.append((a, b))
+    if len(segs) < _ESP_MIN_PARES:
+        return {}
+    if len(segs) > _ESP_MAX_SEG:
+        segs = sorted(segs, key=lambda ab: -math.hypot(ab[1][0] - ab[0][0],
+                                                        ab[1][1] - ab[0][1]))[:_ESP_MAX_SEG]
+    itens = sorted((math.degrees(math.atan2(by - ay, bx - ax)) % 180.0, (ax, ay), (bx, by))
+                   for (ax, ay), (bx, by) in segs)
+    grupos, atual = [], [itens[0]]
+    for it in itens[1:]:
+        if it[0] - atual[-1][0] <= _ESP_ANG_TOL:
+            atual.append(it)
+        else:
+            grupos.append(atual)
+            atual = [it]
+    grupos.append(atual)
+    if len(grupos) > 1 and grupos[0][0][0] + 180.0 - grupos[-1][-1][0] <= _ESP_ANG_TOL:
+        grupos[0] = grupos.pop() + grupos[0]
+    busca, minimo = _ESP_BUSCA_M / uf, _ESP_MIN_M / uf
+    tot_m = 0.0
+    pares = []                                         # (espessura em m, trecho em m)
+    for g in grupos:
+        th = math.radians(g[0][0])
+        ux, uy = math.cos(th), math.sin(th)
+        nx, ny = -uy, ux
+        sg = []
+        for _ang, (ax, ay), (bx, by) in g:
+            t0, t1 = sorted((ax * ux + ay * uy, bx * ux + by * uy))
+            sg.append((((ax + bx) / 2.0) * nx + ((ay + by) / 2.0) * ny, t0, t1))
+        sg.sort()
+        rhos = [x[0] for x in sg]
+        for ri, a0, a1 in sg:
+            L = a1 - a0
+            if L <= 0:
+                continue
+            tot_m += L * uf
+            melhor = None
+            j, vistos = bisect_left(rhos, ri + minimo), 0
+            while j < len(sg) and rhos[j] - ri <= busca and vistos < _ESP_MAX_VIZINHOS:
+                if min(a1, sg[j][2]) - max(a0, sg[j][1]) >= _ESP_SOBREPOE * L:
+                    melhor = rhos[j] - ri
+                    break
+                j, vistos = j + 1, vistos + 1
+            j, vistos = bisect_right(rhos, ri - minimo) - 1, 0
+            while j >= 0 and ri - rhos[j] <= busca and vistos < _ESP_MAX_VIZINHOS:
+                if melhor is not None and ri - rhos[j] >= melhor:
+                    break
+                if min(a1, sg[j][2]) - max(a0, sg[j][1]) >= _ESP_SOBREPOE * L:
+                    melhor = ri - rhos[j]
+                    break
+                j, vistos = j - 1, vistos + 1
+            if melhor is not None:
+                pares.append((melhor * uf, L * uf))
+    par_m = sum(L for _d, L in pares)
+    if len(pares) < _ESP_MIN_PARES or tot_m <= 0 or par_m < _ESP_FRACAO_PAR * tot_m:
+        return {}
+
+    def _massa(lo, hi):
+        return sum(L for d, L in pares if lo <= d <= hi)
+
+    if _massa(*_ESP_PAREDE_M) >= _ESP_FRACAO_PLAUSIVEL_MAX * par_m:
+        return {}
+    for k in (10, 100):
+        lo, hi = _ESP_PAREDE_M[0] / k, _ESP_PAREDE_M[1] / k
+        fina = _massa(lo, hi)
+        if fina >= _ESP_FRACAO_FINA * par_m:
+            # a espessura típica: mediana ponderada pelo comprimento, na faixa
+            acum, esp = 0.0, lo
+            for d, L in sorted(p for p in pares if lo <= p[0] <= hi):
+                acum += L
+                esp = d
+                if acum >= fina / 2.0:
+                    break
+            return {"k": k, "espessura_cm": round(esp * 100, 3),
+                    "fracao_fina": round(fina / par_m, 2),
+                    "em_par": round(min(par_m / tot_m, 1.0), 2), "n": len(pares)}
+    return {}
+
+
+def ressalva_da_parede_fina(r, unit_factor) -> str:
+    """Texto da ressalva de `unidade_contradita_pela_parede` ('' sem achado)."""
+    if not r or not r.get("k"):
+        return ""
+    k, moda = int(r["k"]), float(r["espessura_cm"])
+    lida = _nome_da_unidade(unit_factor)
+    outra = _nome_da_unidade(float(unit_factor) * k)
+    return ("as paredes medem %s cm de espessura na unidade lida%s, em %d%% das faces "
+            "que formam par — parede não tem essa espessura; com o desenho %d× maior%s, "
+            "dariam %s cm. A escala não foi provada: confira uma medida conhecida "
+            "antes de usar comprimentos e áreas"
+            % (_num_br(moda), ", %s" % lida if lida else "", round(100 * r.get("fracao_fina", 0)),
+               k, ", em %s" % outra if outra else "", _num_br(moda * k)))
+
+
+def _num_br(v) -> str:
+    """1.6 → '1,6'; 16.0 → '16'; 0.15 → '0,15'."""
+    v = float(v)
+    s = (("%.1f" if abs(v) >= 1 else "%.2f") % v).rstrip("0").rstrip(".")
+    return s.replace(".", ",")
+
+
 def _unidade_por_dimlfac(doc, unit_factor):
     """Decide a unidade pelo DIMLFAC das cotas. Devolve dict (nunca levanta).
 
@@ -7676,6 +7852,18 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         walls, unit_factor, layers_extra=_layers_linha_dupla)
     if _rel_duto:
         metadata["duto_linha_dupla"] = _rel_duto
+    # 🩸 30/09 (H51): a espessura da parede desmente a unidade lida — ANTES do
+    # eixo, que junta as faces que esta régua mede. Fator do consenso do
+    # projeto veio de cota de outra prancha, ou a nota do desenho com as cotas
+    # explodidas decidiu: provado, não entra.
+    try:
+        if not _unit_consenso and not (getattr(doc, "_aiarq_nota_cota", None) or (None,))[0]:
+            _pf = unidade_contradita_pela_parede(walls, unit_factor, dim_check.get("status"))
+            if _pf:
+                metadata["unidade_contradita_pela_parede"] = ressalva_da_parede_fina(_pf, unit_factor)
+                logger.warning("[unit-parede] %s: %s", os.path.basename(filepath), _pf)
+    except Exception as _epf:
+        logger.warning("[unit-parede] falhou (não-fatal): %s", _epf)
     # 26/09: parede em duas faces também mede pelo EIXO (ver a função)
     _zona_cinza_parede: dict = {}
     walls, _rel_parede = _corrigir_parede_linha_dupla(walls, unit_factor, _zona_cinza_parede)
@@ -7766,7 +7954,8 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             # cotas não desempataram. A folha de papel (escala_por_vista) NÃO:
             # um rótulo prova UMA vista, não a folha inteira.
             for _k in ("unidade_suspeita", "alerta_unidade", "escala_ambigua",
-                       "unidade_por_desempate", "unidade_cega"):
+                       "unidade_por_desempate", "unidade_cega",
+                       "unidade_contradita_pela_parede"):
                 if metadata.get(_k):
                     metadata[f"{_k}_superada_por_rotulo"] = metadata.pop(_k)
             logger.info("[unit-rotulo] %s", metadata["unidade_provada_por_rotulo"])

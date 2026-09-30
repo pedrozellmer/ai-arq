@@ -352,6 +352,8 @@ def extraction_has_quality_caveat(metadata) -> bool:
         or metadata.get("planta_repetida")
         # 🩸 30/09: o fator é o palpite de mm e nada o provou (job 9a2c5d87).
         or metadata.get("unidade_cega")
+        # 🩸 30/09 (H51): a espessura da parede desmente a unidade lida.
+        or metadata.get("unidade_contradita_pela_parede")
     )
 
 
@@ -2894,9 +2896,10 @@ _UNIDADES_QUE_DEPENDEM_DE_ESCALA = {
 #: 🩸 29/09: `planta_repetida` também — o comprimento do layer e a área da
 #: hachura somam as cópias; a contagem se decide por tipo (`selo_apos_planta_repetida`).
 #: 🩸 30/09: `unidade_cega` — o fator é o palpite de mm; contar bloco não depende dele.
+#: 🩸 30/09 (H51): `unidade_contradita_pela_parede` — idem: é o fator que está em dúvida.
 _RESSALVAS_SO_DE_ESCALA = ("unidade_suspeita", "alerta_unidade", "escala_por_vista",
                            "escala_ambigua", "unidade_por_desempate", "planta_repetida",
-                           "unidade_cega")
+                           "unidade_cega", "unidade_contradita_pela_parede")
 
 
 def caveat_atinge_unidade(metadata, unidade: str) -> bool:

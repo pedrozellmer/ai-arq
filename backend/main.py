@@ -13752,6 +13752,12 @@ def _resumo_escala_arquivo(caminho: str, md: dict) -> dict:
                 float(_nc["escolha"]), "")
             return {"nome": nome, "status": "nota", "n": max(_cts) if _cts else 0,
                     "unidade": _uni_nota}
+        if md.get("unidade_contradita_pela_parede"):
+            # 🩸 30/09/2026 (H51) — a espessura das paredes desmente a unidade
+            # lida: é a razão mais concreta, e o texto já diz o fator provável.
+            return {"nome": nome, "status": "alerta",
+                    "declarada": md.get("unidade_desenho") or "?",
+                    "alerta": str(md["unidade_contradita_pela_parede"])[:280]}
         if md.get("alerta_unidade") or md.get("unidade_corrigida_por_plausibilidade"):
             # 🚨 01/09/2026 — CASO cliente-80 (job ffac8a79, NOTA 1/5).
             # Este ramo devolvia só {"nome", "status": "alerta"} com o comentário
@@ -13860,6 +13866,9 @@ def _linhas_escala_projeto(arqs: list, n_medidos: int = -1,
         # "maior elemento mede 5127m (>500m)" explica sozinho por que desconfiar.
         _motivos = [a.get("alerta") for a in alerta if a.get("alerta")]
         _porque = (" Motivo: " + _motivos[0].split("|")[0].strip()) if _motivos else ""
+        # 30/09: motivo sem ponto final colava no "Por isso" ("…e áreas Por isso")
+        if _porque and not _porque.endswith((".", "!", "?")):
+            _porque += "."
         out.append(
             "⚠ ESCALA SUSPEITA em %s.%s Por isso NENHUMA quantidade em metro, m² "
             "ou m³ dessas pranchas saiu com o selo \"✓ MEDIDO do CAD\" — as "
