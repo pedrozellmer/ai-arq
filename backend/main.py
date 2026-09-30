@@ -13736,6 +13736,24 @@ def _resumo_escala_arquivo(caminho: str, md: dict) -> dict:
                     "declarada": md.get("unidade_desenho") or "?",
                     "alerta": ("a escala não foi provada: mais de um fator de unidade "
                                "bate com as cotas (%s)" % str(md["escala_ambigua"])[:160])}
+        if md.get("planta_repetida"):
+            # 🩸 29/09/2026 (job 6437838e) — a planta-base desenhada várias vezes
+            # no modelo: comprimento, área e a contagem das peças repetidas
+            # saem estimados, e o cliente tem de saber por quê.
+            return {"nome": nome, "status": "alerta",
+                    "declarada": md.get("unidade_desenho") or "?",
+                    "alerta": ("%s: comprimentos, áreas e a contagem das peças que se "
+                               "repetem saíram como estimativa — confira se são vistas "
+                               "da mesma planta ou andares diferentes"
+                               % str(md["planta_repetida"])[:160])}
+        if md.get("unidade_por_desempate"):
+            # 🩸 29/09/2026 — a unidade saiu do desempate cm × metro pelos
+            # objetos, sem cota que confirme: m/m²/m³ saem estimados e o
+            # cliente precisa saber por quê (mesma lição do caso cliente-80).
+            return {"nome": nome, "status": "alerta",
+                    "declarada": md.get("unidade_desenho") or "?",
+                    "alerta": ("a escala não foi provada: %s"
+                               % str(md["unidade_por_desempate"])[:200])}
     except Exception:
         pass
     return {"nome": nome, "status": "sem_prova",
@@ -15953,7 +15971,14 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                                 _indice_geom["area"].append((str(_lyr), round(float(_a), 2)))
                             for _lyr, _a in (extraction.get_polygon_areas_by_layer() or {}).items():
                                 _indice_geom["area"].append((str(_lyr), round(float(_a), 2)))
+                        # 🩸 29/09: o tipo achado nas cópias da planta não prova
+                        # contagem — a chave não sobe o que a regra rebaixou.
+                        _cop_ig = (extraction.metadata or {}).get("copias_sombra") or {}
+                        _copiados_ig = set(_cop_ig.get("tipos_copiados")
+                                           or _cop_ig.get("nomes") or {})
                         for _blk, _n in (extraction.get_block_summary() or {}).items():
+                            if str(_blk) in _copiados_ig:
+                                continue
                             _indice_geom["contagem"].append((str(_blk), int(_n)))
                     except Exception as _eig:
                         print(f"[selo:indice] {os.path.basename(dxf_path)}: nao consegui guardar ({_eig})")
@@ -16512,6 +16537,15 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                 if getattr(b, "amostras_legenda", 0)}
                         except Exception:
                             _blocos_amostra = {}
+                        # 🩸 29/09 (job 6437838e): os tipos de bloco que o detector
+                        # de planta repetida achou em CÓPIA — a contagem deles só
+                        # rebaixa (`selo_apos_planta_repetida`).
+                        try:
+                            _cop_md = (extraction.metadata or {}).get("copias_sombra") or {}
+                            _blocos_copiados = set(_cop_md.get("tipos_copiados")
+                                                   or _cop_md.get("nomes") or {})
+                        except Exception:
+                            _blocos_copiados = set()
                         # 🩸 29/09 (caso 18c57c3c): bloco que é ANOTAÇÃO do desenho
                         # (marca de fiação, nuvem de revisão) — {nome: contagem}
                         try:
@@ -16684,6 +16718,15 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                     conf, obs_raw, qty, normalized_unit, _blocos_amostra,
                                     _blocos_n)
                                 if _era_legenda:
+                                    _rebaixado_pela_fonte = True
+                                # 🩸 29/09 (job 6437838e): a planta repetida no modelo —
+                                # a contagem do tipo que aparece nas cópias só rebaixa.
+                                from engine_rules import (
+                                    selo_apos_planta_repetida as _regra_copias)
+                                conf, obs_raw, _era_copia = _regra_copias(
+                                    conf, obs_raw, qty, normalized_unit, _blocos_copiados,
+                                    _blocos_n)
+                                if _era_copia:
                                     _rebaixado_pela_fonte = True
 
                                 # 🩸 29/09 (caso 18c57c3c): linha com quantidade ZERO

@@ -345,6 +345,11 @@ def extraction_has_quality_caveat(metadata) -> bool:
         or metadata.get("escala_por_vista")
         # 🩸 27/09: mais de um fator bateu com as cotas e nada desempatou.
         or metadata.get("escala_ambigua")
+        # 🩸 29/09: sem unidade no cabeçalho, o fator saiu do desempate cm × m
+        # pelos objetos e nenhuma cota confirmou (job 6437838e).
+        or metadata.get("unidade_por_desempate")
+        # 🩸 29/09: a planta aparece repetida no modelo (mesmo job).
+        or metadata.get("planta_repetida")
     )
 
 
@@ -2820,8 +2825,10 @@ _UNIDADES_QUE_DEPENDEM_DE_ESCALA = {
 # vistas em escalas diferentes. É de ESCALA: a contagem de pilares e o kg do
 # quadro de aço da mesma prancha não dependem dela. 🪤 Chave própria, e não
 # `alerta_unidade`: a 5ª régua (rótulo de área que bate) apaga aquela.
+#: 🩸 29/09: `planta_repetida` também — o comprimento do layer e a área da
+#: hachura somam as cópias; a contagem se decide por tipo (`selo_apos_planta_repetida`).
 _RESSALVAS_SO_DE_ESCALA = ("unidade_suspeita", "alerta_unidade", "escala_por_vista",
-                           "escala_ambigua")
+                           "escala_ambigua", "unidade_por_desempate", "planta_repetida")
 
 
 def caveat_atinge_unidade(metadata, unidade: str) -> bool:
@@ -4999,7 +5006,9 @@ MARCA_EXTRACAO_COM_RESSALVA = "Procedência: extração com ressalva"
 MARCA_ACIMA_DO_QUADRO = "⚠ CONTAGEM ACIMA DO QUADRO DE ÁREAS"
 #: 📏 28/09/2026 (estudo de leitura, P1a) — ver `e_mobiliario_ou_equipamento`.
 MARCA_ESCOPO_MOBILIARIO = "⚠ MÓVEL/EQUIPAMENTO — confirme o escopo"
-MARCAS_DE_REBAIXAMENTO = (MARCA_LIDO_DE_TEXTO, MARCA_SOMA, MARCA_CARIMBO,
+#: 🩸 29/09/2026 (job 6437838e) — ver `selo_apos_planta_repetida`.
+MARCA_PLANTA_REPETIDA = "⚠ A PLANTA APARECE REPETIDA no desenho"
+MARCAS_DE_REBAIXAMENTO = (MARCA_PLANTA_REPETIDA, MARCA_LIDO_DE_TEXTO, MARCA_SOMA, MARCA_CARIMBO,
                           MARCA_MENOS_PAREDE, MARCA_UNIDADE_DE_CONTAGEM,
                           MARCA_EXTRACAO_COM_RESSALVA, MARCA_QUANTIDADE_RECUPERADA,
                           MARCA_ESCALA_DIVERGENTE, MARCA_ACIMA_DO_QUADRO,
@@ -5471,6 +5480,82 @@ def selo_apos_amostra_de_legenda(conf, obs, quantity, unit, amostras, blocos):
              "ter outros símbolos que o motor não achou (bloco '%s'). Confirme a "
              "quantidade. " % (m, n, nome))
     return "estimado", aviso + str(obs or ""), True
+
+
+def raiz_do_nome_do_bloco(nome) -> str:
+    """O nome com que o bloco aparece pra IA na CONTAGEM DE BLOCOS (quando a
+    definição tem assinatura): "FAMÍLIA - TIPO-<id>" → "FAMÍLIA"; "Viga_12_1" →
+    "Viga". Uma receita só — o prompt (`dwg_extractor`) e as regras que casam o
+    nome citado pela IA chamam esta."""
+    n = str(nome or "")
+    if " - " in n:
+        return n.split(" - ", 1)[0].strip() or n
+    return _re.sub(r"(_\d+)+$", "", n) or n
+
+
+def selo_apos_planta_repetida(conf, obs, quantity, unit, copiados, blocos):
+    """A contagem de um bloco que aparece nas CÓPIAS da planta não sai medida.
+    Devolve `(conf, obs, rebaixou)`.
+
+    `copiados` = os tipos de bloco que o detector de planta repetida achou em
+    cópia (`dwg_extractor.copias_em_sombra`, chave `nomes`); `blocos` = todos os
+    blocos da extração ({nome: contagem}) — só o bloco FONTE da linha decide.
+
+    🩸 29/09/2026 (job 6437838e). O DWG elétrico tinha a planta-base desenhada 5
+    vezes no modelo, uma por prancha de disciplina. Pia 10 (real 2), bacia 10
+    (2), vaga PNE 5 (1): tudo o que é da base aparecia 5×; o que é da disciplina
+    (70 luminárias, 14 tomadas de força), 1×. Com a unidade certa as cotas
+    provam a escala e a contagem inflada saía ✓ MEDIDO.
+    🔑 SÓ REBAIXA (Pedro, 29/09): não divide, não apaga. Pode ser vista temática
+    da mesma planta (conte uma vez) ou andar repetido (a soma está certa) — só
+    quem conhece o projeto decide; o aviso diz as duas.
+    🔑 O tipo que NÃO foi achado em cópia fica como está: é o que mora numa
+    vista só (os símbolos da disciplina).
+    """
+    if conf != "confirmado" or not copiados:
+        return conf, obs, False
+    blocos = blocos or {}
+    # A IA cita o nome que o prompt mostrou — a RAIZ ("Asta con bandera T3", não
+    # "Asta con bandera T3 - Planta-flat-1-flat-1"): as duas formas valem.
+    todos = dict(blocos)
+    for n, c in blocos.items():
+        r = raiz_do_nome_do_bloco(n)
+        if r != n:
+            todos[r] = todos.get(r, 0) + c
+    alvo = {}
+    for n in copiados:
+        if n not in blocos:
+            continue
+        alvo[n] = blocos[n]
+        r = raiz_do_nome_do_bloco(n)
+        if r != n:
+            alvo[r] = alvo.get(r, 0) + blocos[n]
+    nome = contagem_de_bloco_citada(obs, quantity, unit, alvo, todos=todos)
+    if not nome:
+        return conf, obs, False
+    aviso = ("%s: a contagem pode somar a mesma peça em mais de uma cópia — se as cópias "
+             "forem andares diferentes, a soma está certa; se forem vistas da mesma planta, "
+             "conte uma vez (bloco '%s'). Confirme a quantidade. "
+             % (MARCA_PLANTA_REPETIDA, nome))
+    return "estimado", aviso + str(obs or ""), True
+
+
+def ressalva_da_planta_repetida(copias) -> str:
+    """Texto da ressalva quando o desenho tem a planta repetida ('' se não).
+
+    Entra nas ressalvas de ESCALA (m/m²/m³ não saem medidos): o comprimento de
+    um layer e a área de uma hachura somam as cópias. A contagem é decidida por
+    tipo, em `selo_apos_planta_repetida`."""
+    try:
+        vet = (copias or {}).get("vetores") or []
+        pecas = int((copias or {}).get("pecas") or 0)
+    except Exception:
+        return ""
+    if not vet or pecas <= 0:
+        return ""
+    return ("a mesma planta aparece repetida no desenho (%d peça(s) em cópia, %d "
+            "deslocamento(s)) — comprimento de layer e área de hachura somam as cópias"
+            % (pecas, len(vet)))
 
 
 def linha_zerada_so_de_legenda(obs, quantity, unit, amostras) -> str:

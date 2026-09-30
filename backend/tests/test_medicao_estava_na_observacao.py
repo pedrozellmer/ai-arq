@@ -171,6 +171,8 @@ def _laco_de_itens_de_producao(items, areas=None, compr=None):
         # 29/09: todos os blocos da extração — a régua da FONTE do aviso de
         # legenda e da saída da anotação (`bloco_fonte_da_linha`)
         "_blocos_n": {},
+        # 29/09: os tipos de bloco achados nas cópias da planta (`selo_apos_planta_repetida`)
+        "_blocos_copiados": set(),
         # 29/09 (caso 18c57c3c): blocos de anotação e as linhas que o laço tira
         "_blocos_anotacao": {}, "_so_legenda_fora": [], "_anotacao_fora": [],
         "_n_resgate_proc": 0,

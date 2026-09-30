@@ -422,6 +422,9 @@ class DXFExtraction:
                 for b in self.blocks:
                     _amo_nome[b.name] += getattr(b, "amostras_legenda", 0) or 0
                 _amo_grupo = Counter()
+                # a raiz: receita em engine_rules — as regras que casam o nome
+                # citado pela IA usam a MESMA (29/09)
+                from engine_rules import raiz_do_nome_do_bloco as _raiz_bloco
                 for name, count in other.items():
                     a = _assin.get(name, "")
                     # 🚨 DOIS formatos de fragmentacao, medidos em arquivo real:
@@ -431,10 +434,7 @@ class DXFExtraction:
                     #     essa secao dava 99.901 chars. Agrupar pela FAMILIA
                     #     derruba pra 17.464 (-83%).
                     #  b) sufixo do conversor: "Viga_12_1" -> "Viga".
-                    if " - " in name:
-                        raiz = name.split(" - ", 1)[0].strip() or name
-                    else:
-                        raiz = re.sub(r"(_\d+)+$", "", name) or name
+                    raiz = _raiz_bloco(name)
                     chave = (raiz, a) if a else (name, "")
                     _amo_grupo[chave] += _amo_nome[name]
                     if chave in _grupos:
@@ -1509,16 +1509,112 @@ def _inferir_unidade_sem_insunits(doc):
             return None
 
         lo, hi = _EXTENSAO_PLAUSIVEL_M
-        for fator in (0.01, 1.0):                        # cm, depois metros
-            if lo <= largura * fator <= hi:
-                logger.warning(
-                    "[unit-inferida] $INSUNITS=0 e mm daria %.2f m de largura "
-                    "(absurdo) — adotando fator %s (%.0f m de largura)",
-                    largura * 0.001, fator, largura * fator)
-                return fator
-        return None
+        plausiveis = [f for f in (0.01, 1.0) if lo <= largura * f <= hi]   # cm, metros
+        if not plausiveis:
+            return None
+        fator = plausiveis[0]
+        if len(plausiveis) > 1:
+            # 🩸 29/09/2026 — cm E metro plausíveis: a largura não decide. O
+            # "menor fator" errou os DOIS desenhos que caíram aqui em 90 dias
+            # (as cotas de um corrigiram pra metro; o outro, 8 pranchas lado a
+            # lado no modelo, ficou 100× pequeno). Os OBJETOS do desenho
+            # desempatam — ver `_fator_pelos_objetos`. Sem voto claro, fica o
+            # menor, como antes.
+            voto, _det = _fator_pelos_objetos(doc, plausiveis)
+            if voto is not None:
+                fator = voto
+        logger.warning(
+            "[unit-inferida] $INSUNITS=0 e mm daria %.2f m de largura "
+            "(absurdo) — adotando fator %s (%.0f m de largura)",
+            largura * 0.001, fator, largura * fator)
+        return fator
     except Exception:
         return None
+
+
+#: Tamanho de objeto físico, em metros: do símbolo de tomada à vaga e ao carro.
+_OBJETO_FISICO_M = (0.05, 8.0)
+#: Menos tipos de bloco que isto não é evidência (legenda, carimbo, 2 símbolos).
+_OBJETOS_MIN_TIPOS = 8
+#: O fator vencedor precisa pôr esta fração dos tipos no tamanho de objeto…
+_OBJETOS_PISO = 0.6
+#: …e pelo menos este múltiplo da fração do outro.
+_OBJETOS_RAZAO = 2.0
+
+
+def _fator_pelos_objetos(doc, candidatos):
+    """Qual dos fatores `candidatos` faz os BLOCOS do desenho terem tamanho de
+    objeto físico? Devolve (fator ou None, detalhe).
+
+    Cada TIPO de bloco inserido no modelo vota uma vez, com a mediana do seu
+    tamanho real (definição × escala de inserção): 70 luminárias iguais são um
+    voto, não 70. Ganha o fator que põe ≥ 60% dos tipos entre 5 cm e 8 m e pelo
+    menos o dobro da fração do outro; senão None.
+
+    🩸 29/09/2026 (job 6437838e). Mesa "CONJ MESA 1.40M" = 1,400 unidades, vaga
+    5,0 × 3,7, bacia 0,62: o desenho estava em METROS e a largura escolheu cm
+    (8 pranchas lado a lado no modelo = 1.584 unidades). Em cm, os 75 tipos
+    dariam 13% de objetos; em metro, 96%.
+    📏 Acervo local (90 DXF): onde a votação decidiu entre cm e m, acertou TODOS
+    os que declaravam cm ou m (~45) e os 2 que declaravam mm mas eram metro (a
+    produção corrigiu os dois depois, por cotas e por plausibilidade).
+    🔑 Só escolhe entre cm e m (100× de distância). Entre mm e cm (10×) a
+    faixa de objeto não separa — por isso esta função só desempata.
+    """
+    chave = tuple(candidatos)
+    guardado = getattr(doc, "_aiarq_voto_objetos", None)
+    if guardado and guardado[0] == chave:
+        return guardado[1]            # a decisão e o log do cabeçalho perguntam o mesmo
+    res = _votar_pelos_objetos(doc, candidatos)
+    try:
+        setattr(doc, "_aiarq_voto_objetos", (chave, res))
+    except Exception:
+        pass
+    return res
+
+
+def _votar_pelos_objetos(doc, candidatos):
+    detalhe = {"tipos": 0}
+    try:
+        from ezdxf import bbox as _bb
+        from statistics import median as _med
+        caixa, por_tipo = {}, {}
+        for ins in doc.modelspace().query("INSERT"):
+            nome = ins.dxf.name
+            if not nome or nome.startswith("*"):
+                continue                               # anônimo: hachura, cota, grupo
+            if nome not in caixa:
+                caixa[nome] = None
+                blk = doc.blocks.get(nome)
+                try:
+                    if blk is not None and not blk.block.is_xref:
+                        ext = _bb.extents(blk, fast=True)
+                        if ext.has_data:
+                            caixa[nome] = (ext.size.x, ext.size.y)
+                except Exception:
+                    caixa[nome] = None
+            wh = caixa[nome]
+            if not wh:
+                continue
+            s = max(wh[0] * abs(ins.dxf.xscale or 1.0), wh[1] * abs(ins.dxf.yscale or 1.0))
+            if s > 0:
+                por_tipo.setdefault(nome, []).append(s)
+        tams = [_med(v) for v in por_tipo.values()]
+        detalhe["tipos"] = len(tams)
+        if len(tams) < _OBJETOS_MIN_TIPOS:
+            return None, detalhe
+        lo, hi = _OBJETO_FISICO_M
+        frac = {f: sum(1 for s in tams if lo <= s * f <= hi) / len(tams) for f in candidatos}
+        detalhe["fracoes"] = {str(f): round(v, 2) for f, v in frac.items()}
+        melhor = max(frac, key=frac.get)
+        outros = [v for f, v in frac.items() if f != melhor]
+        if frac[melhor] >= _OBJETOS_PISO and all(
+                frac[melhor] >= _OBJETOS_RAZAO * max(v, 0.01) for v in outros):
+            detalhe["escolha"] = melhor
+            return melhor, detalhe
+        return None, detalhe
+    except Exception:
+        return None, detalhe
 
 
 def _diag_unidade_cabecalho(doc) -> dict:
@@ -1558,6 +1654,17 @@ def _diag_unidade_cabecalho(doc) -> dict:
                     and int(d.get("measurement", 1) or 0) == 0):
                 inf = _inferir_unidade_sem_insunits(doc)
                 d["sem_regra_pes"] = inf if inf is not None else 0.001
+        except Exception:
+            pass
+        # 29/09: na faixa em que cm E metro são plausíveis, o voto dos objetos
+        # vai pro log (é ele que decide ali — ver `_fator_pelos_objetos`)
+        try:
+            if int(d.get("insunits", 0) or 0) == 0 and d.get("ext"):
+                _larg = max(d["ext"])
+                _lo, _hi = _EXTENSAO_PLAUSIVEL_M
+                _pl = [f for f in (0.01, 1.0) if _lo <= _larg * f <= _hi]
+                if len(_pl) > 1 and _larg * 0.001 < _MM_ACEITAVEL_ATE_M:
+                    d["objetos"] = _fator_pelos_objetos(doc, _pl)[1]
         except Exception:
             pass
     except Exception:
@@ -1842,6 +1949,31 @@ def ressalva_da_escala_ambigua(dim_check) -> str:
         return ""
     return str(dim_check.get("motivo")
                or "mais de um fator de unidade bate com as cotas")[:200]
+
+
+def ressalva_da_unidade_por_desempate(voto_guardado, status_da_regua) -> str:
+    """Texto da ressalva quando o fator veio do DESEMPATE cm × metro ('' se não).
+
+    `voto_guardado` = o que `_fator_pelos_objetos` deixou no documento:
+    (candidatos, (fator ou None, detalhe)) — só existe quando a largura não
+    decidiu. As cotas que VALIDARAM ou CORRIGIRAM o fator provam a escala: aí
+    não há ressalva.
+    """
+    if not voto_guardado or status_da_regua in ("validada", "corrigida"):
+        return ""
+    try:
+        fator, det = voto_guardado[1]
+        fr = (det or {}).get("fracoes") or {}
+    except Exception:
+        return ""
+    if fator is None:
+        return ("o arquivo não diz a unidade e a largura cabe em centímetro e em "
+                "metro; sem objetos que decidissem, lemos em centímetro")
+    nome = "metro" if fator == 1.0 else "centímetro"
+    return ("o arquivo não diz a unidade e a largura cabe em centímetro e em metro; "
+            "pelo tamanho dos objetos desenhados (móveis, louças, vagas) lemos em %s "
+            "(%d%% dos tipos com tamanho real) — nenhuma cota confirmou"
+            % (nome, round(100 * float(fr.get(str(fator), 0) or 0))))
 
 
 def _unidade_por_dimlfac(doc, unit_factor):
@@ -4820,6 +4952,56 @@ def vistas_da_mesma_base(doc, blocks) -> dict:
     return out
 
 
+def tipos_nas_copias(blocks, vetores_m, unit_factor, tol_m: float = 0.05) -> dict:
+    """Depois que `copias_em_sombra` PROVOU os vetores da planta repetida: quais
+    tipos de bloco têm peça no ponto p + v? Devolve {nome: peças em cópia}.
+
+    🩸 29/09/2026 (job 6437838e). O detector achou os vetores certos (128,65 m
+    e 82,9 m entre as 5 cópias da planta-base), mas as travas POR NOME — feitas
+    pra não inventar vetor — deixaram de fora vagas, mastro, pórtico,
+    carregadores e totem (1 ou 2 por cópia). Aqui nenhum vetor nasce: só se
+    pergunta, com a tolerância do detector, quem mora nos vetores provados, na
+    soma e na diferença dos dois e no dobro de cada (a 3ª cópia de uma fila).
+    """
+    try:
+        uf = float(unit_factor or 0)
+        if uf <= 0 or not vetores_m:
+            return {}
+        tol = tol_m / uf
+        vs = [(float(v[0]) / uf, float(v[1]) / uf) for v in vetores_m]
+        desl = set()
+        for a in vs:
+            desl.add(a)
+            desl.add((2 * a[0], 2 * a[1]))
+            for b in vs:
+                if a != b:
+                    desl.add((a[0] + b[0], a[1] + b[1]))
+                    desl.add((a[0] - b[0], a[1] - b[1]))
+        out = {}
+        for b in blocks or []:
+            pos = [tuple(map(float, q)) for q in (getattr(b, "positions", None) or [])]
+            if len(pos) < 2:
+                continue
+            grade = {}
+            for j, q in enumerate(pos):
+                grade.setdefault((round(q[0] / tol), round(q[1] / tol)), []).append(j)
+            em_copia = set()
+            for i, p in enumerate(pos):
+                for dx_, dy_ in desl:
+                    ax, ay = p[0] + dx_, p[1] + dy_
+                    ci, cj = round(ax / tol), round(ay / tol)
+                    for gx in (ci - 1, ci, ci + 1):
+                        for gy in (cj - 1, cj, cj + 1):
+                            for j in grade.get((gx, gy), ()):
+                                if j != i and math.hypot(pos[j][0] - ax, pos[j][1] - ay) <= tol:
+                                    em_copia.add(j)
+            if em_copia:
+                out[b.name] = len(em_copia)
+        return out
+    except Exception:
+        return {}
+
+
 def copias_em_sombra(blocks, unit_factor) -> dict:
     """A mesma planta desenhada 2 ou 3 vezes no modelo — SÓ MEDE, nada muda.
 
@@ -5528,6 +5710,14 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         _amb = "" if _unit_consenso else ressalva_da_escala_ambigua(dim_check)
         if _amb:
             metadata["escala_ambigua"] = _amb
+        # 🩸 29/09: sem unidade no cabeçalho, cm E metro cabiam na largura e o
+        # fator saiu de um DESEMPATE (`_fator_pelos_objetos`). Se as cotas não
+        # provaram, é ressalva de escala — m/m²/m³ não saem medidos. Antes, o
+        # que segurava isto no job 6437838e era a ressalva do DUTO, por acaso.
+        _desemp = "" if _unit_consenso else ressalva_da_unidade_por_desempate(
+            getattr(doc, "_aiarq_voto_objetos", None), _dim_status)
+        if _desemp:
+            metadata["unidade_por_desempate"] = _desemp
         if dim_check.get("motivo"):
             metadata["regua_cotas_motivo"] = str(dim_check["motivo"])[:200]
         # 📏 27/09 (estudo, item 5): quando o DIMLFAC ou a plausibilidade
@@ -6719,7 +6909,8 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             # 🩸 27/09: a régua ambígua também — o rótulo desempata o que as
             # cotas não desempataram. A folha de papel (escala_por_vista) NÃO:
             # um rótulo prova UMA vista, não a folha inteira.
-            for _k in ("unidade_suspeita", "alerta_unidade", "escala_ambigua"):
+            for _k in ("unidade_suspeita", "alerta_unidade", "escala_ambigua",
+                       "unidade_por_desempate"):
                 if metadata.get(_k):
                     metadata[f"{_k}_superada_por_rotulo"] = metadata.pop(_k)
             logger.info("[unit-rotulo] %s", metadata["unidade_provada_por_rotulo"])
@@ -6820,7 +7011,22 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
     try:
         _cop = copias_em_sombra(blocks, unit_factor)
         if _cop:
+            # 🩸 29/09: os tipos que moram nos vetores PROVADOS (a 2ª passada —
+            # ver `tipos_nas_copias`); é esta lista que o rebaixamento usa
+            _tc = dict(_cop.get("nomes") or {})
+            for _n, _k in tipos_nas_copias(blocks, _cop.get("vetores"), unit_factor).items():
+                _tc[_n] = max(_tc.get(_n, 0), _k)
+            _cop["tipos_copiados"] = _tc
             metadata["copias_sombra"] = _cop
+            # 🩸 29/09 (Pedro): da sombra para o REBAIXAMENTO — só selo, nenhum
+            # número muda. m/m²/m³ por esta ressalva; contagem, por tipo, em
+            # `engine_rules.selo_apos_planta_repetida`. 🪤 Fica FORA da lista que
+            # a prova por rótulo apaga: o rótulo prova a escala, não que a
+            # planta é uma só.
+            from engine_rules import ressalva_da_planta_repetida as _ress_rep
+            _rep = _ress_rep(_cop)
+            if _rep:
+                metadata["planta_repetida"] = _rep
     except Exception as _ecs:
         logger.warning("[copias-sombra] falhou (não-fatal): %s", _ecs)
 
