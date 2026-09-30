@@ -444,7 +444,11 @@ def parse_steel_table(texts) -> dict | None:
                     outros.append(("outro", c[1]))
             elif _COMP_HDR_RE.search(c[0]):
                 comp_x = c[1]
-            elif _BITOLA_HDR_RE.search(c[0]):
+            elif _BITOLA_HDR_RE.search(c[0]) and not _DIA_RE.search(c[0]):
+                # 🩸 30/09 (H37 do estudo): "Ø 6.3" do DESENHO na altura do
+                # cabeçalho casava `\bø\b` e, sendo o último, roubava a coluna do
+                # "BIT" de verdade. Título de coluna não traz o diâmetro; marcação
+                # de ferro traz.
                 bitola_x = c[1]
             else:
                 outros.append(("outro", c[1]))
@@ -537,6 +541,13 @@ def parse_steel_table(texts) -> dict | None:
             for c in row_cells:
                 m = _DIA_RE.search(c[0])
                 if m:
+                    # 🩸 30/09 (H37): com a coluna BITOLA conhecida, o "Ø n" que
+                    # vale é o que cai NELA — o "Ø 10" da planta dentro da borda
+                    # virava a bitola da linha do Ø12,5 (e passava na massa
+                    # linear: 0,963 / 0,617 = 1,56).
+                    if bitola_x is not None and abs(c[1] - bitola_x) != min(
+                            abs(c[1] - ax) for _, ax in anchors):
+                        continue
                     bitola = _match_bitola(_num(m.group(1)))
                     bitola_cell = c
                     break
