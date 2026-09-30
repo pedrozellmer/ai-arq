@@ -144,6 +144,16 @@ def test_FALHA_FECHADA_sem_ler_o_log_ninguem_recebe(monkeypatch):
     assert enviados == [], "mandou sem saber quem já tinha recebido"
 
 
+def test_FALHA_FECHADA_com_mil_linhas_no_log_nao_da_pra_saber_quem_recebeu(monkeypatch):
+    """O banco corta em 1000: com 1000 cheias, alguém pode ter ficado de fora da conta."""
+    def urlopen(req, timeout=None):
+        return _Resp(json.dumps([{"email": "p%d@x.com" % i} for i in range(1000)]).encode())
+
+    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(main, "_log_error", lambda *a, **k: None)
+    assert main._tirar_quem_ja_recebeu("x", [("a@x.com", "A")]) is None
+
+
 def test_CONTROLE_sem_o_filtro_quem_ja_recebeu_receberia_de_novo(monkeypatch):
     """Prova que é o filtro que evita o dobro: com ele desligado, os 3 recebem."""
     enviados = []

@@ -25278,12 +25278,16 @@ def _tirar_quem_ja_recebeu(subject, recipients, dias=7):
     from datetime import datetime as _dt_q, timedelta as _td_q, timezone as _tz_q
     desde = (_dt_q.now(_tz_q.utc) - _td_q(days=dias)).strftime("%Y-%m-%dT%H:%M:%SZ")
     url = (f"{SUPABASE_URL}/rest/v1/email_sent_log?select=email&kind=eq.newsletter"
-           f"&subject=eq.{_up_q.quote(subject, safe='')}&sent_at=gte.{desde}&limit=5000")
+           f"&subject=eq.{_up_q.quote(subject, safe='')}&sent_at=gte.{desde}&limit=1000")
     try:
         r = _ur_q.Request(url, method="GET")
         r.add_header("apikey", SUPABASE_KEY)
         r.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         linhas = _json.loads(_ur_q.urlopen(r, timeout=20).read().decode("utf-8"))
+        # 🪤 o banco devolve no máximo 1000 linhas: com 1000 cheias não dá pra saber se
+        # viu todo mundo — e quem ficou de fora receberia de novo. Falha fechada.
+        if len(linhas) >= 1000:
+            raise RuntimeError("1000+ envios desta edição no log — não dá pra ver todos")
         ja = {(l.get("email") or "").strip().lower() for l in linhas}
     except Exception as _e:
         _log_error("newsletter:ja-receberam",
