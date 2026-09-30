@@ -4964,6 +4964,26 @@ def _desenhos_no_modelo(msp, caixa=None) -> list:
         return []
 
 
+# 🩸 30/09/2026 — H54 do estudo do acervo: a PLANTA virava vista pelo texto do
+# modelo. Na planta do Revit as marcas "CORTE 1" / "CORTE 2" (e, noutra casa,
+# "ELEVAÇÃO") são a MAIOR letra da região — e viravam o título dela: 84,86 m²
+# do piso da casa saíram como "superfície vista de lado, NÃO é piso".
+# 🔑 Marca é curta e genérica ("CORTE 1", "CORTE A-A", "ELEVAÇÃO"); título de
+# corte de verdade que vem do MODELO costuma ser descritivo. Só marca + 3 ou
+# mais nomes de AMBIENTE na região = é a planta com as marcas desenhadas nela.
+# 🪤 Nome de ambiente SOZINHO não separa (o esquema de prumada tem 30; o corte
+# do Revit etiqueta os ambientes): por isso só vale junto da marca genérica, e
+# só no título que veio do texto do modelo.
+_RE_MARCA_DE_VISTA = re.compile(
+    r"^\s*(?:corte|vista|eleva[cç][aã]o|fachada)\s*[\w\-]{0,4}\s*$", re.IGNORECASE)
+_RE_NOME_DE_AMBIENTE = re.compile(
+    r"^\s*(?:(?:sala|sal[aã]o|quarto|qto|su[ií]te|dormit[oó]rio|banheiro|bwc|wc|lavabo|"
+    r"cozinha|copa|varanda|sacada|terra[cç]o|closet|escrit[oó]rio|circula[cç][aã]o|"
+    r"corredor|hall|dep[oó]sito|lavanderia|garagem|estar|jantar|despensa|gourmet)"
+    r"(?![a-zà-ú])|[aá]rea\s+(?:de\s+)?serv|a\.\s*serv|i\.\s*s\.)", re.IGNORECASE)
+_AMBIENTES_QUE_FAZEM_PLANTA = 3
+
+
 def mapa_de_folhas(doc) -> dict:
     """Os desenhos do modelspace, pelas folhas: [{folha, titulo, tipo, andares, caixa}].
 
@@ -5026,6 +5046,7 @@ def mapa_de_folhas(doc) -> dict:
             except Exception:
                 continue
         alturas = []                     # (x, y, altura) de TODO texto
+        ambientes = []                   # (x, y) dos nomes de ambiente (H54)
         for e in msp.query("TEXT MTEXT"):
             try:
                 p = e.dxf.insert
@@ -5034,6 +5055,8 @@ def mapa_de_folhas(doc) -> dict:
                 alturas.append((p[0], p[1], alt))
                 t = _texto_do_text(e) if e.dxftype() == "TEXT" else e.plain_text()
                 t = " ".join((t or "").split())
+                if t and _RE_NOME_DE_AMBIENTE.match(t):
+                    ambientes.append((p[0], p[1]))
                 if t and len(t) <= 90 and parece_titulo_de_desenho(t) and tipo_do_desenho(t):
                     textos.append((t, p[0], p[1], alt))
             except Exception:
@@ -5055,7 +5078,15 @@ def mapa_de_folhas(doc) -> dict:
                 hmax = max(hs) if hs else 0.0
                 cand = [t for t in textos if _dentro((t[1], t[2]), j["caixa"])]
                 tits = [t[0] for t in cand if hmax > 0 and t[3] >= 0.8 * hmax]
-            if not tits:
+                # 🩸 H54: a marca de corte desenhada NA planta não é o título dela
+                if tits and all(_RE_MARCA_DE_VISTA.match(t) for t in tits):
+                    _n_amb = sum(1 for a in ambientes if _dentro(a, j["caixa"]))
+                    if _n_amb >= _AMBIENTES_QUE_FAZEM_PLANTA:
+                        j["marca_na_planta"] = "%s (%d ambientes)" % (" | ".join(tits)[:60], _n_amb)
+                        tits = []
+                        # e o papel também não: é a planta, não se sabe qual
+                        j["sem_titulo_de_proposito"] = True
+            if not tits and not j.get("sem_titulo_de_proposito"):
                 # 25/09: o Revit escreve o título da vista no PAPEL, logo
                 # abaixo da janela — não no modelo, onde se procurava até aqui
                 _tp = _titulo_no_papel(j.get("papel"), textos_papel.get(j["folha"], []))
