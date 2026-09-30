@@ -129,6 +129,23 @@ def test_CONTROLE_poucos_trechos():
     assert _r(_faces(xs=(0, 400), ys=(0,)), 0.001) == {}
 
 
+def test_CONTROLE_poucos_pares_mesmo_com_trechos_soltos():
+    # 14 faces em par + 8 trechos curtos soltos: passa do piso de trechos,
+    # não do de pares
+    soltas = [((0.0, 10000.0 + 2000 * i), (50.0, 10000.0 + 2000 * i)) for i in range(8)]
+    assert _r(_faces(xs=(0, 400, 800), ys=(0, 300)) + soltas, 0.001) == {}
+
+
+def test_CONTROLE_desenho_misto_com_um_quarto_ja_plausivel():
+    # 25% do que pareou já dá 15 cm: não há um fator que sirva pro arquivo
+    assert _r(_faces() + _faces(u=10.0, ox=5000, xs=(0, 60), ys=(0, 40)), 0.001) == {}
+
+
+def test_CONTROLE_metade_fina_metade_em_nenhuma_faixa():
+    # pares a 4,5 cm na unidade lida: nem fina (×10 daria 45 cm) nem plausível
+    assert _r(_faces() + _faces(esp=45.0, ox=2000), 0.001) == {}
+
+
 def test_CONTROLE_curva_fica_de_fora():
     ws = _walls(_faces(), 0.001, curvo=True)
     assert dx.unidade_contradita_pela_parede(ws, 0.001, None) == {}
@@ -221,6 +238,14 @@ def test_de_ponta_a_ponta_cm_declarado_como_mm(tmp_path):
 
 def test_CONTROLE_de_ponta_a_ponta_cm_declarado_como_cm(tmp_path):
     md = dx.extract_dxf(_dxf(tmp_path, _faces(), insunits=5)).metadata
+    assert not md.get("unidade_contradita_pela_parede"), md.get("unidade_contradita_pela_parede")
+
+
+def test_de_ponta_a_ponta_cota_que_valida_o_mm_derruba(tmp_path, monkeypatch):
+    monkeypatch.setattr(dx, "_validate_unit_by_dimensions", lambda doc, uf: {
+        "status": "validada", "n_cotas": 30, "unidade_nome": "milímetro"})
+    md = dx.extract_dxf(_dxf(tmp_path, _faces())).metadata
+    assert md.get("regua_cotas_status") == "validada", md.get("regua_cotas_status")
     assert not md.get("unidade_contradita_pela_parede"), md.get("unidade_contradita_pela_parede")
 
 
