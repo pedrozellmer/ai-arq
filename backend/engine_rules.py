@@ -1507,7 +1507,31 @@ _NOME_DA_GRANDEZA = {
 }
 
 
-def quantidade_apos_troca_de_unidade(qtd, de, para):
+#: 🩸 30/09/2026 (H4 do estudo do acervo): PISO TÁTIL contado em peça (bloco
+#: da placa) e orçado em m² saía EM BRANCO pela régua abaixo — 41 de 50 linhas
+#: de piso tátil em m² em 90 dias. Quando a descrição diz o tamanho da placa
+#: ("placa 40×40 cm", "módulo 25×25cm", "20×20"), contagem × área da placa é
+#: CONTA com dado do próprio projeto — sai estimada, com a conta escrita.
+_RE_PISO_TATIL = _re.compile(r"t[aá]til|podot", _re.IGNORECASE)
+_RE_TAMANHO_DA_PLACA = _re.compile(r"(?<![\d,.])(\d{2,3})\s*[x×X]\s*(\d{2,3})(?![\d,.])\s*(?:cm)?")
+_PLACA_CM = (10, 100)
+
+
+def placa_de_piso_tatil(descricao):
+    """(a_cm, b_cm) da placa de PISO TÁTIL escrita na descrição, ou None."""
+    d = str(descricao or "")
+    if not _RE_PISO_TATIL.search(d):
+        return None
+    m = _RE_TAMANHO_DA_PLACA.search(d)
+    if not m:
+        return None
+    a, b = int(m.group(1)), int(m.group(2))
+    if not (_PLACA_CM[0] <= a <= _PLACA_CM[1] and _PLACA_CM[0] <= b <= _PLACA_CM[1]):
+        return None
+    return a, b
+
+
+def quantidade_apos_troca_de_unidade(qtd, de, para, descricao=""):
     """A unidade da linha foi reescrita. O número sobrevive? Devolve (qtd, nota).
 
     🩸 14/09/2026 — MEDIDO na base: o motor reescreveu a unidade de **550
@@ -1548,6 +1572,14 @@ def quantidade_apos_troca_de_unidade(qtd, de, para):
     if g_de is None or g_para is None or g_de == g_para:
         return qtd, ""          # só rótulo, ou incomparável: o número vale
     _n = ("%g" % q) if q == int(q) else ("%.2f" % q)
+    if g_de == "contagem" and g_para == "area" and q == int(q):
+        _pl = placa_de_piso_tatil(descricao)
+        if _pl:
+            _m2 = round(q * _pl[0] * _pl[1] / 10000.0, 2)
+            return _m2, (
+                "⚠ CONTA, não medida: %s placas × %d × %d cm (tamanho lido na descrição) "
+                "= %.2f m² — confira o tamanho e se cada peça contada é UMA placa."
+                % (_n, _pl[0], _pl[1], _m2))
     return 0, (
         "⚠ QUANTIDADE EM BRANCO DE PROPÓSITO: a leitura levantou %s %s, e este "
         "item se mede em %s — %s e %s são grandezas diferentes, e converter "

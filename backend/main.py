@@ -16734,8 +16734,10 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                     # no texto, que é como a doença começa.
                                     from engine_rules import (
                                         quantidade_apos_troca_de_unidade as _qtd_troca)
+                                    # 30/09 (H4): a descrição entra — piso tátil
+                                    # com a placa escrita vira conta, não branco
                                     qty, _nota_un = _qtd_troca(
-                                        qty, original_unit, normalized_unit)
+                                        qty, original_unit, normalized_unit, descricao=desc)
                                     if _nota_un:
                                         obs_raw = f"{_nota_un} {obs_raw}"
                                 if item_data.get("_procedencia_rebaixada"):
@@ -18027,7 +18029,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         from engine_rules import (
                             quantidade_apos_troca_de_unidade as _qtd_troca2)
                         qty, _nota_un2 = _qtd_troca2(
-                            qty, original_unit, normalized_unit)
+                            qty, original_unit, normalized_unit, descricao=desc)
                         if _nota_un2:
                             obs_raw = f"{_nota_un2} {obs_raw}"
                     if _pdf_downgrade:
