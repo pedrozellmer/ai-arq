@@ -16620,7 +16620,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
                             from engine_rules import nota_de_bloco_de_anotacao as _nota_anot
                             _blocos_anotacao = {
                                 b.name: b.count for b in (extraction.blocks or [])
-                                if _nota_anot(b.name, getattr(b, "assinatura", ""))}
+                                if _nota_anot(b.name, getattr(b, "assinatura", ""),
+                                              getattr(b, "camadas", None))}
                         except Exception:
                             _blocos_anotacao = {}
                         # 🩸 30/09 (job 9a2c5d87): layer de COTA explodida é anotação

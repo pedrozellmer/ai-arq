@@ -98,6 +98,10 @@ class BlockCount:
     # desenhado na legenda da prancha, não peça (ver `amostras_de_legenda`).
     # Continuam contadas: o selo é que não pode sair "medido" (main.py).
     amostras_legenda: int = 0
+    # 30/09/2026: {layer: inserções}. `layer` é o da PRIMEIRA inserção; a régua
+    # da marca de anotação decide pela MAIORIA (sprinkler: X3 = 82 no SPK e 3
+    # no 0-PILAR — a primeira podia ser a do pilar).
+    camadas: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -489,6 +493,9 @@ class DXFExtraction:
                 lines.append(f"CONTAGEM DE BLOCOS ({len(_grupos)} tipos):")
                 from engine_rules import e_vinculo_de_modelo as _vinc
                 from engine_rules import nota_de_bloco_de_anotacao as _anotacao
+                # 30/09: os layers das inserções, pra régua decidir pela maioria
+                _camadas_bloco = {b.name: getattr(b, "camadas", None)
+                                  for b in (self.blocks or [])}
                 # 🩸 29/09/2026 (caso 18c57c3c): o mesmo bloco com ATRIBUTO diferente
                 # por inserção — 'DISJ-3F' 4 un, 2 com 63A=63A e 2 com 63A=D-32A. A
                 # lista de atributos (mais abaixo) junta as linhas iguais sem dizer
@@ -520,7 +527,7 @@ class DXFExtraction:
                                       + " · ".join(f"{_l[:40]} ×{_n}" for _l, _n in _qa.most_common(4))
                                       + (f" · +{len(_qa) - 4} valor(es)" if len(_qa) > 4 else "")
                                       + " — separe por valor; não descreva todas com um valor só]")
-                    _nota_anot = _anotacao(rotulo, _a)
+                    _nota_anot = _anotacao(rotulo, _a, _camadas_bloco.get(rotulo))
                     if _quantos_por_raiz.get(_r, 1) > 1 and _a:
                         _seq[_r] = _seq.get(_r, 0) + 1
                         rotulo = f"{rotulo} (tipo {_seq[_r]})"
@@ -6683,9 +6690,11 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         if bname not in block_counter:
             block_counter[bname] = {
                 "count": 0, "layer": layer, "positions": [],
-                "widths": [], "heights": [],
+                "widths": [], "heights": [], "camadas": {},
             }
         block_counter[bname]["count"] += 1
+        _cam = block_counter[bname]["camadas"]
+        _cam[layer] = _cam.get(layer, 0) + 1
         try:
             if float(insert.dxf.get("extrusion", (0, 0, 1))[2]) < 0:
                 _espelhados[bname] = _espelhados.get(bname, 0) + 1
@@ -6740,6 +6749,7 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             width_m=round(_median(info.get("widths", [])), 2),
             height_m=round(_median(info.get("heights", [])), 2),
             assinatura=_assinatura_do_bloco(name),
+            camadas=dict(info.get("camadas") or {}),
         )
         for name, info in block_counter.items()
     ]

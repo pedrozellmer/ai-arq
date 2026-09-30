@@ -5169,9 +5169,33 @@ _RE_REVISAO_DO_DESENHO = _re.compile(
 # (círculo) não são só LINE → continuam peça.
 _RE_FUNCAO_DE_CONDUTOR = _re.compile(
     r"^(?:cond(?:utor(?:es)?)?[\s._-]*)?(?:fase|neutro|terra|retorno|protecao)s?$")
+# 🩸 30/09/2026 (varredura do estudo do acervo, 127 DXF): a regra da SIGLA
+# marcava PEÇA num sprinkler — X1 (104), X2 (88), X3 (85) no layer SPK são as
+# conexões dos bicos (X1 + X2 = 192 ≈ 201 bicos), e IF/IP1/IC2 são acessórios
+# atravessados no tubo (HPLU100, PVC, HAF). Tudo o que a regra marcou em layer
+# de tubulação era peça; nenhuma marca de verdade do acervo mora lá (as de
+# fiação ficam em layer de ELÉTRICA; a cruz do eixo em PILAR_EIXOS; o _H0 do TQS
+# no 224). Decide pela MAIORIA das inserções (≥ 80%): o X3 tem 3 de 85 no pilar.
+_RE_LAYER_DE_TUBULACAO = _re.compile(
+    r"spk|sprink|c?pvc|haf|hplu|ppr|pead|esgot|tubula|[aá]gua|hidr[aá]ul|pluvi|hidrante",
+    _re.IGNORECASE)
+# 🪤 "incêndio" NÃO entra: o alarme de incêndio (SDAI) é ELÉTRICA, e a marca
+# de fiação dele pode morar num layer "INCÊNDIO" — soltá-la viraria peça.
+_TUBULACAO_MAIORIA = 0.8
 
 
-def nota_de_bloco_de_anotacao(nome, assinatura="") -> str:
+def insercoes_em_tubulacao(camadas) -> bool:
+    """≥ 80% das inserções do bloco em layer de tubulação/sprinkler?"""
+    try:
+        tot = sum(int(v) for v in (camadas or {}).values())
+        em = sum(int(v) for k, v in (camadas or {}).items()
+                 if _RE_LAYER_DE_TUBULACAO.search(str(k)))
+    except (TypeError, ValueError):
+        return False
+    return tot > 0 and em >= _TUBULACAO_MAIORIA * tot
+
+
+def nota_de_bloco_de_anotacao(nome, assinatura="", camadas=None) -> str:
     """A nota da linha do bloco quando ele é ANOTAÇÃO do desenho ('' se não é).
 
     Revisão: "REV" como sigla (C-REV, REV_01), REVISÃO, NUVEM — em qualquer bloco.
@@ -5179,6 +5203,8 @@ def nota_de_bloco_de_anotacao(nome, assinatura="") -> str:
     W-FFF) — ou nome que é a FUNÇÃO de um condutor (fase, neutro, terra,
     retorno, proteção). Anônimo (*U/*X) fica de fora: o nome dele não diz
     nada, pra nenhum lado.
+    `camadas` ({layer: inserções}): inserido na maioria (≥ 80%) em layer de
+    TUBULAÇÃO/sprinkler, a marca não vale — ali os traços são conexão.
     """
     n = str(nome or "").strip()
     if not n or n.startswith("*"):
@@ -5194,7 +5220,8 @@ def nota_de_bloco_de_anotacao(nome, assinatura="") -> str:
                 tipos[t] = tipos.get(t, 0) + int(q)
             except ValueError:
                 return ""
-    if set(tipos) == {"LINE"} and 1 <= tipos["LINE"] <= 3:
+    if set(tipos) == {"LINE"} and 1 <= tipos["LINE"] <= 3 \
+            and not insercoes_em_tubulacao(camadas):
         if _RE_FUNCAO_DE_CONDUTOR.match(_minusculo_sem_acento(n).strip()):
             return ("  ⚠ MARCA DE CONDUTOR (fase/neutro/terra/retorno) em traços — MARCA "
                     "DE ANOTAÇÃO do desenho (fiação): não conte como peça")
