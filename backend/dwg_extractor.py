@@ -260,7 +260,9 @@ class DXFExtraction:
                                            "layers_de_borda",
                                            # 30/09 (H10): o comprimento já está
                                            # no layer; isto é registro do log
-                                           "splines_medidas"})
+                                           "splines_medidas",
+                                           # 30/09 (H34): dito na linha do layer
+                                           "tubos_em_face_dupla"})
 
     def to_structured_prompt(self) -> str:
         """Converts extraction to a structured text prompt for Claude."""
@@ -621,6 +623,7 @@ class DXFExtraction:
             # desenho, não pelo nome) e o que é só a borda das peças repetidas
             _cota_ly = (self.metadata or {}).get("layers_de_cota") or {}
             _borda_ly = (self.metadata or {}).get("layers_de_borda") or {}
+            _tubo_fd = (self.metadata or {}).get("tubos_em_face_dupla") or {}
             for layer, length in sorted(walls_by_layer.items()):
                 if layer in _cota_ly and not _anot(layer):
                     _n_anot += 1
@@ -628,6 +631,13 @@ class DXFExtraction:
                                  f"   ⚠ ANOTAÇÃO DO DESENHO — são LINHAS DE COTA "
                                  f"({_cota_ly[layer].get('cotas')} com o valor escrito ao lado): "
                                  f"NÃO é elemento de obra, não use como quantidade")
+                elif layer in _tubo_fd and not _anot(layer):
+                    _dfd = ", ".join("ø%d" % d for d in (_tubo_fd[layer].get("diametros_mm") or [])[:5])
+                    lines.append(f"  {layer}: {length:.2f} m"
+                                 f"   ⚠ TUBO EM FACE DUPLA — são as DUAS paredes de cada tubo "
+                                 f"({int(100 * float(_tubo_fd[layer].get('fracao') or 0))}% em par, "
+                                 f"à distância do diâmetro: {_dfd}): o comprimento do tubo "
+                                 f"(eixo) é cerca da METADE deste número — não use como medido")
                 elif layer in _borda_ly and not _anot(layer):
                     lines.append(f"  {layer}: {length:.2f} m"
                                  f"   ⚠ BORDAS das peças repetidas listadas em OBJETOS "
@@ -1429,6 +1439,136 @@ _PAREDE_MIN_SEG = 0.03
 #: par; o drywall de um gabarito de cliente — que aprovou a pintura pela soma
 #: das linhas — tinha 34%, e ficaria 17% menor.
 _PAREDE_MIN_FRACAO_PAR = 0.50
+
+
+# ---------------------------------------------------------------------------
+# TUBO desenhado em FACE DUPLA — as duas paredes do tubo, sem eixo
+# ---------------------------------------------------------------------------
+# 🩸 30/09/2026 — H34 do estudo do acervo. O Revit exporta o tubo ("P-PIPE")
+# pelas DUAS paredes: duas linhas paralelas à distância do diâmetro externo,
+# sem linha de eixo. A soma do layer é o dobro do tubo. Um projeto de cliente
+# saiu com "tubulação hidrossanitária 1.056 ml CONFIRMADO" (≈ 530 m de tubo),
+# e o cliente aprovou. Medido em dois setores do mesmo prédio: 97 e 100% do
+# P-PIPE com parceira paralela; 87 e 93% dela a um diâmetro ROTULADO no próprio
+# desenho (ø150, ø100, ø75, ø50…).
+# 🔑 NÃO divide nem pareia trecho a trecho: num feixe de tubos lado a lado o
+# vão até o vizinho (0,133) é MENOR que o diâmetro (0,150) — "a parceira mais
+# perto" seria o tubo errado, e 44% do comprimento é ambíguo. v1: DETECTA o
+# layer em face dupla, AVISA no prompt e TIRA o selo da linha que usa o
+# comprimento dele (regra nº3: razão só alerta).
+_RE_LAYER_DE_TUBO = re.compile(r"(?<![a-z])(?:pipe|tubo|tubula)", re.IGNORECASE)
+# ø150, Ø 100, %%c75 (o código do AutoCAD pro ø), "PVC-ø75", "ø35-CPVC" — em mm
+_RE_DIAMETRO_ROTULADO = re.compile(r"(?:%%[cC]|[øØ⌀])\s*(\d{2,3})(?!\d)")
+_TUBO_DIAM_MM = (15, 400)       # faixa de diâmetro que vale como rótulo de tubo
+_TUBO_DIST_TOL = 0.12           # distância do par = diâmetro ± 12%
+_TUBO_ANG_TOL = 1.0             # graus
+_TUBO_COBERTURA = 0.5           # o trecho tem parceira em ≥ metade do comprimento
+_TUBO_FRACAO_LAYER = 0.8        # ≥ 80% do layer em par → face dupla
+_TUBO_MIN_M = 5.0               # layer menor que isso não conta
+_TUBO_MAX_SEG = 20000           # teto de trechos por layer
+
+
+def _diametros_rotulados(texts) -> list:
+    """Os diâmetros (mm) escritos no desenho: 'ø150', '%%c100', 'PVC-ø75'."""
+    ds = set()
+    for t in texts or ():
+        for m in _RE_DIAMETRO_ROTULADO.finditer(str(getattr(t, "text", "") or "")):
+            v = int(m.group(1))
+            if _TUBO_DIAM_MM[0] <= v <= _TUBO_DIAM_MM[1]:
+                ds.add(v)
+    return sorted(ds)
+
+
+def tubos_em_face_dupla(walls, texts, unit_factor: float = 1.0) -> dict:
+    """{layer: {'m', 'fracao', 'diametros_mm'}} dos layers de TUBO desenhados
+    pelas duas paredes: ≥ 80% do comprimento com uma parceira paralela a um
+    diâmetro ROTULADO no desenho (± 12%), sobrepondo ≥ metade do trecho.
+
+    Sem rótulo de diâmetro no desenho, não decide (devolve {}): paralelas a
+    uma distância qualquer podem ser AF e AQ lado a lado."""
+    diam = _diametros_rotulados(texts)
+    if not diam or not walls:
+        return {}
+    uf = float(unit_factor) if unit_factor else 1.0
+    d_bruto = [d / 1000.0 / uf for d in diam]        # na unidade do desenho
+    d_min = min(d_bruto) * (1 - _TUBO_DIST_TOL)
+    d_max = max(d_bruto) * (1 + _TUBO_DIST_TOL)
+    por_layer: dict = {}
+    total_m: dict = {}
+    for w in walls:
+        lay = str(getattr(w, "layer", "") or "")
+        if not _RE_LAYER_DE_TUBO.search(lay):
+            continue
+        total_m[lay] = total_m.get(lay, 0.0) + float(getattr(w, "length", 0.0) or 0.0)
+        if getattr(w, "curvo", False):
+            continue
+        pts = getattr(w, "pontos", ()) or ()
+        lados = []
+        if len(pts) >= 2:
+            for p, q in zip(pts, pts[1:]):
+                if len(p) > 2 and p[2]:
+                    continue                           # lado em arco
+                lados.append(((p[0], p[1]), (q[0], q[1])))
+        elif tuple(getattr(w, "start", (0, 0))) != tuple(getattr(w, "end", (0, 0))):
+            lados.append((tuple(w.start)[:2], tuple(w.end)[:2]))
+        for a, b in lados:
+            if a != b:
+                por_layer.setdefault(lay, []).append((a, b))
+    out = {}
+    for lay, segs in por_layer.items():
+        if total_m.get(lay, 0.0) < _TUBO_MIN_M or len(segs) > _TUBO_MAX_SEG:
+            continue
+        itens = []
+        for (ax, ay), (bx, by) in segs:
+            ang = math.degrees(math.atan2(by - ay, bx - ax)) % 180.0
+            itens.append((ang, (ax, ay), (bx, by)))
+        itens.sort(key=lambda it: it[0])
+        grupos, atual = [], [itens[0]]
+        for it in itens[1:]:
+            if it[0] - atual[-1][0] <= _TUBO_ANG_TOL:
+                atual.append(it)
+            else:
+                grupos.append(atual)
+                atual = [it]
+        grupos.append(atual)
+        if len(grupos) > 1 and grupos[0][0][0] + 180.0 - grupos[-1][-1][0] <= _TUBO_ANG_TOL:
+            grupos[0] = grupos.pop() + grupos[0]
+        em_par_m = 0.0
+        for g in grupos:
+            th = math.radians(g[0][0])
+            ux, uy = math.cos(th), math.sin(th)
+            nx, ny = -uy, ux
+            sg = []
+            for _ang, (ax, ay), (bx, by) in g:
+                t0, t1 = sorted((ax * ux + ay * uy, bx * ux + by * uy))
+                rho = ((ax + bx) / 2.0) * nx + ((ay + by) / 2.0) * ny
+                sg.append((rho, t0, t1))
+            sg.sort()
+            cob = [0.0] * len(sg)
+            for i in range(len(sg)):
+                ri, a0, a1 = sg[i]
+                for j in range(i + 1, len(sg)):
+                    rj, b0, b1 = sg[j]
+                    dist = rj - ri
+                    if dist > d_max:
+                        break
+                    if dist < d_min:
+                        continue
+                    if not any(abs(dist - d) <= _TUBO_DIST_TOL * d for d in d_bruto):
+                        continue
+                    ov = min(a1, b1) - max(a0, b0)
+                    if ov > 0:
+                        cob[i] += ov
+                        cob[j] += ov
+            for (rho, t0, t1), c in zip(sg, cob):
+                comp = t1 - t0
+                if comp > 0 and min(c, comp) >= _TUBO_COBERTURA * comp:
+                    em_par_m += comp * uf
+        fr = em_par_m / total_m[lay] if total_m[lay] > 0 else 0.0
+        if fr >= _TUBO_FRACAO_LAYER:
+            out[lay] = {"m": round(total_m[lay], 2), "fracao": round(min(fr, 1.0), 2),
+                        "diametros_mm": diam[:8]}
+    return out
 
 
 def _corrigir_parede_linha_dupla(walls, unit_factor: float = 1.0, zona_cinza=None):
@@ -6847,7 +6987,8 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
                 # e — 26/09 — parede: sem eles a parede em polilinha entrava
                 # como UMA reta do 1º ao último vértice e não pareava)
                 if (lwpoly.dxf.layer in _layers_linha_dupla or _RE_DUTO_DUPLO.search(str(lwpoly.dxf.layer))
-                        or _layer_e_parede(lwpoly.dxf.layer)):
+                        or _layer_e_parede(lwpoly.dxf.layer)
+                        or _RE_LAYER_DE_TUBO.search(str(lwpoly.dxf.layer))):
                     _xyb = [(p[0], p[1], p[2]) for p in lwpoly.get_points(format="xyb")]
                     if lwpoly.closed and _xyb:
                         _xyb.append(_xyb[0])
@@ -7731,6 +7872,13 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
                 metadata["layers_de_borda"] = _lb
     except Exception as _eob:
         logger.warning("[objetos-sem-bloco] falhou (não-fatal): %s", _eob)
+    # 🩸 30/09 (H34): tubo desenhado pelas duas paredes (Revit P-PIPE)
+    try:
+        _tfd = tubos_em_face_dupla(walls, texts, unit_factor)
+        if _tfd:
+            metadata["tubos_em_face_dupla"] = _tfd
+    except Exception as _etfd:
+        logger.warning("[tubo-face-dupla] falhou (não-fatal): %s", _etfd)
 
     return DXFExtraction(
         filename=os.path.basename(filepath),

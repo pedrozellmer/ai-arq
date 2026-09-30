@@ -1249,7 +1249,8 @@ def layers_que_nao_provam(metadata) -> set:
     `layers_de_borda_de_objeto`). 🩸 30/09 (job 9a2c5d87)."""
     md = metadata or {}
     out = set()
-    for k in ("layers_de_cota", "layers_de_borda"):
+    # 30/09 (H34): o tubo em face dupla — a soma é das duas paredes
+    for k in ("layers_de_cota", "layers_de_borda", "tubos_em_face_dupla"):
         for ly in (md.get(k) or {}):
             out.add(str(ly).strip().upper())
     return out
@@ -5046,7 +5047,8 @@ MARCA_PLANTA_REPETIDA = "⚠ A PLANTA APARECE REPETIDA no desenho"
 #: 🩸 30/09/2026 (filhote evefe9af) — ver `selo_apos_peca_sem_bloco` e `selo_apos_layer_sem_nome`.
 MARCA_PECA_SEM_BLOCO = "⚠ PEÇA DESENHADA SEM BLOCO"
 MARCA_LAYER_SEM_NOME = "⚠ LAYER SEM NOME"
-MARCAS_DE_REBAIXAMENTO = (MARCA_PECA_SEM_BLOCO, MARCA_LAYER_SEM_NOME,
+MARCA_TUBO_FACE_DUPLA = "⚠ TUBO EM FACE DUPLA"
+MARCAS_DE_REBAIXAMENTO = (MARCA_PECA_SEM_BLOCO, MARCA_LAYER_SEM_NOME, MARCA_TUBO_FACE_DUPLA,
                           MARCA_PLANTA_REPETIDA, MARCA_LIDO_DE_TEXTO, MARCA_SOMA, MARCA_CARIMBO,
                           MARCA_MENOS_PAREDE, MARCA_UNIDADE_DE_CONTAGEM,
                           MARCA_EXTRACAO_COM_RESSALVA, MARCA_QUANTIDADE_RECUPERADA,
@@ -5631,6 +5633,29 @@ def selo_apos_layer_sem_nome(conf, obs, unit, layers_com_nome):
     return ("estimado",
             MARCA_LAYER_SEM_NOME + " ('%s') — o nome não diz o que o traço é: o comprimento foi "
             "medido, mas o serviço é leitura nossa; confira. " % m.group(1) + str(obs or ""),
+            True)
+
+
+def selo_apos_tubo_em_face_dupla(conf, obs, unit, layers_citados, layers_face_dupla):
+    """(conf, obs, rebaixou) — comprimento de layer de TUBO desenhado pelas duas
+    paredes (`dwg_extractor.tubos_em_face_dupla`) não sai medido.
+
+    🩸 30/09/2026 (H34): "tubulação hidrossanitária 1.056 ml CONFIRMADO" era a
+    soma das duas paredes do P-PIPE do Revit (≈ 530 m de tubo), e o cliente
+    aprovou. SÓ REBAIXA e avisa: não divide por 2 — num feixe de tubos lado a
+    lado não dá pra saber, trecho a trecho, qual linha é a parede de qual tubo.
+    """
+    if conf != "confirmado" or not layers_face_dupla:
+        return conf, obs, False
+    if str(unit or "").strip().lower() not in _PROVA_POR_UNIDADE:
+        return conf, obs, False
+    fd = {str(x).strip().upper() for x in layers_face_dupla}
+    hit = next((str(ly) for ly in (layers_citados or ()) if str(ly).strip().upper() in fd), "")
+    if not hit:
+        return conf, obs, False
+    return ("estimado",
+            MARCA_TUBO_FACE_DUPLA + " ('%s') — o layer traz as DUAS paredes de cada tubo: "
+            "o comprimento do tubo é cerca da METADE; confira. " % hit + str(obs or ""),
             True)
 
 
