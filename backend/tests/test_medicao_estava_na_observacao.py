@@ -133,7 +133,7 @@ class _ExtracaoSemRessalva:
     metadata = {}
 
 
-def _laco_de_itens_de_producao(items, areas=None, compr=None):
+def _laco_de_itens_de_producao(items, areas=None, compr=None, extra=None):
     """Roda o LAÇO INTEIRO `for item_data in result.get("items", [])` de
     `process_job` — código de produção recortado por AST — e devolve
     `(dxf_items, escopo, logs)`.
@@ -173,6 +173,8 @@ def _laco_de_itens_de_producao(items, areas=None, compr=None):
         "_blocos_n": {},
         # 29/09: os tipos de bloco achados nas cópias da planta (`selo_apos_planta_repetida`)
         "_blocos_copiados": set(),
+        # 30/09: os layers de COTA explodida (anotação pela prova do desenho)
+        "_ly_cota": set(),
         # 29/09 (caso 18c57c3c): blocos de anotação e as linhas que o laço tira
         "_blocos_anotacao": {}, "_so_legenda_fora": [], "_anotacao_fora": [],
         "_n_resgate_proc": 0,
@@ -187,6 +189,8 @@ def _laco_de_itens_de_producao(items, areas=None, compr=None):
         "dxf_path": "/work/j/prancha.dxf",
         "job_id": "job-teste",
     })
+    # 30/09: quem precisa de outro estado do laço (ex.: `_ly_cota`) passa aqui
+    escopo.update(extra or {})
     _executa.roda("process_job",
                   "from analyzer import _normalize_br_number as _norm_br", escopo)
     _executa.roda("process_job",

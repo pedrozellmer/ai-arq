@@ -66,6 +66,8 @@ from engine_rules import (
     MARCA_UNIDADE_DE_CONTAGEM as _MARCA_UNIDADE_DE_CONTAGEM,
     MARCA_EXTRACAO_COM_RESSALVA as _MARCA_EXTRACAO_COM_RESSALVA,
     layer_is_anotacao as _layer_is_anotacao,
+    layer_sem_nome as _layer_sem_nome,
+    layers_que_nao_provam as _layers_que_nao_provam,
     contagem_de_bloco_citada as _contagem_de_bloco_citada,
     medida_de_comprimento_na_observacao as _medida_comprimento_obs,
     medida_e_base_de_calculo as _medida_e_base_de_calculo,
@@ -15983,8 +15985,13 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                             # linhas — o eixo não rodou e a soma pode contar as
                             # duas faces (131 m ✓ × 74 pelo eixo): não prova.
                             _cinza_ig = (extraction.metadata or {}).get("parede_zona_cinza") or {}
+                            # 🩸 30/09 (job 9a2c5d87): cota explodida, borda de peça
+                            # repetida e layer sem nome ("250") não provam serviço.
+                            _nao_prova_ig = _layers_que_nao_provam(extraction.metadata)
                             for _lyr, _c in (extraction.get_walls_by_layer() or {}).items():
                                 if _lyr in _cinza_ig:
+                                    continue
+                                if str(_lyr).strip().upper() in _nao_prova_ig or _layer_sem_nome(_lyr):
                                     continue
                                 _indice_geom["comprimento"].append((str(_lyr), round(float(_c), 2)))
                             # 🩸 27/09: seção de parede cortada não prova m² (shaft
@@ -16540,8 +16547,11 @@ bloco — só cite os que estão no inventário deste arquivo."""
                             # automático não há ninguém pra julgar depois, então
                             # a régua decide. `sinal_medido` não é tocado: ele
                             # conta a LISTA `walls`, não este dicionário.
+                            _nao_prova_rs = _layers_que_nao_provam(extraction.metadata)
                             _compr_ly = {k: v for k, v in _compr_ly.items()
-                                         if not _layer_is_anotacao(k)}
+                                         if not _layer_is_anotacao(k)
+                                         and str(k).strip().upper() not in _nao_prova_rs
+                                         and not _layer_sem_nome(k)}
                             _areas_ly = {k: v for k, v in _areas_ly.items()
                                          if not _layer_is_anotacao(k)}
                         except Exception:
@@ -16580,6 +16590,13 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                 if _nota_anot(b.name, getattr(b, "assinatura", ""))}
                         except Exception:
                             _blocos_anotacao = {}
+                        # 🩸 30/09 (job 9a2c5d87): layer de COTA explodida é anotação
+                        # pela prova do desenho — o nome ("250") não diz nada
+                        try:
+                            _ly_cota = {str(_k).strip().upper() for _k in
+                                        ((extraction.metadata or {}).get("layers_de_cota") or {})}
+                        except Exception:
+                            _ly_cota = set()
                         _n_resgate_proc = 0
                         # Extrair itens
                         _n_item_perdido = 0   # quantos morreram no except do laço
@@ -16719,7 +16736,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                 # layer TEXTO-02 confirma '0,70 x 2,10'" — o número é
                                 # do BLOCO, o texto só confirma a especificação. Se a
                                 # contagem bate com a extração, a fonte não é anotação.
-                                elif _lys and all(_layer_is_anotacao(_l) for _l in _lys) \
+                                elif _lys and all(_layer_is_anotacao(_l) or str(_l).upper() in _ly_cota
+                                                  for _l in _lys) \
                                         and not _contagem_de_bloco_citada(
                                             obs_raw, qty, normalized_unit, _blocos_n):
                                     conf = "estimado"

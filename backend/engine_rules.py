@@ -1224,6 +1224,32 @@ def layer_is_anotacao(layer_name) -> bool:
     return False
 
 
+def layer_sem_nome(layer_name) -> bool:
+    """True se o nome do layer não tem LETRA nenhuma ("250", "218", "0").
+
+    🩸 30/09/2026 (job 9a2c5d87): o projetista nomeava os layers pela cor
+    (250, 218, 205). O comprimento deles bateu com a linha da IA ("linhas de
+    modulação" — ela mesma escreveu que era inferência) e saiu "✓ MEDIDO". Um
+    nome sem letra não diz o que o traço é: o número pode ser medido, mas não
+    prova o serviço. 📏 90 dias: 1 projeto (este) em 50 linhas assim.
+    """
+    s = str(layer_name or "").strip()
+    return bool(s) and not any(c.isalpha() for c in s)
+
+
+def layers_que_nao_provam(metadata) -> set:
+    """Layers (em MAIÚSCULAS) cujo comprimento não prova quantidade, pela prova
+    do próprio desenho: os de COTA explodida e os que são só a BORDA de peças
+    repetidas (`dwg_extractor.layers_de_cota_explodida` /
+    `layers_de_borda_de_objeto`). 🩸 30/09 (job 9a2c5d87)."""
+    md = metadata or {}
+    out = set()
+    for k in ("layers_de_cota", "layers_de_borda"):
+        for ly in (md.get(k) or {}):
+            out.add(str(ly).strip().upper())
+    return out
+
+
 # ─── Área total lida do QUADRO DE ÁREAS, por regra (08/08/2026) ──────────────
 # 🚨 POR QUE existe: a área total do projeto sai HOJE só da IA lendo o quadro de
 # áreas da prancha. Medido em 08/08 — o MESMO arquivo, rodado duas vezes no

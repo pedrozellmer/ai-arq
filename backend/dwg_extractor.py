@@ -250,7 +250,10 @@ class DXFExtraction:
     # -- prompt generation --------------------------------------------------
 
     #: registros de máquina que a IA NÃO lê crus (vão ditos em português)
-    _METADADOS_FORA_DO_PROMPT = frozenset({"copias_sombra", "planta_repetida"})
+    _METADADOS_FORA_DO_PROMPT = frozenset({"copias_sombra", "planta_repetida",
+                                           # 30/09: ditos nas seções próprias
+                                           "objetos_sem_bloco", "layers_de_cota",
+                                           "layers_de_borda"})
 
     def to_structured_prompt(self) -> str:
         """Converts extraction to a structured text prompt for Claude."""
@@ -534,6 +537,32 @@ class DXFExtraction:
                                  f"DIFERENTES com o mesmo nome de origem.)")
                 lines.append("")
 
+        # 🩸 30/09/2026 (job 9a2c5d87) — a peça desenhada UMA A UMA, sem bloco:
+        # os 776 blocos de alvenaria e os 787 furos de graute eram retângulos, e
+        # a IA só via o comprimento do layer (a soma das bordas).
+        _obj_sb = (self.metadata or {}).get("objetos_sem_bloco") or {}
+        if _obj_sb:
+            lines.append("OBJETOS DESENHADOS PEÇA POR PEÇA (sem bloco — contagem DETERMINÍSTICA "
+                         "feita no arquivo: retângulo ou círculo do MESMO tamanho, repetido):")
+            for _ly_sb, _pecas in sorted(_obj_sb.items(), key=lambda kv: -max(p["n"] for p in kv[1])):
+                _desc = []
+                for _p in _pecas[:6]:
+                    if _p.get("forma") == "círculo":
+                        _desc.append("%d círculos de raio %s cm" % (_p["n"], ("%g" % _p["r_cm"]).replace(".", ",")))
+                    else:
+                        _desc.append("%d retângulos de %s × %s cm" % (
+                            _p["n"], ("%g" % _p["a_cm"]).replace(".", ","), ("%g" % _p["b_cm"]).replace(".", ",")))
+                lines.append(f"  {_ly_sb}: " + " · ".join(_desc))
+            lines.append("  (O que cada peça é — bloco de alvenaria, placa, furo, luminária — sai da "
+                         "legenda e das notas: diga isso na observação. A CONTAGEM é a quantidade da "
+                         "peça; marque 'estimado'. O comprimento destas camadas é a soma das bordas "
+                         "das peças, não um elemento linear.)")
+            if (self.metadata or {}).get("planta_repetida"):
+                lines.append("  ⚠ A PLANTA APARECE REPETIDA neste desenho: estas contagens podem somar "
+                             "as cópias. Use o número como está, marque 'estimado' e escreva isso na "
+                             "observação — NÃO divida e NÃO estime 'por planta'.")
+            lines.append("")
+
         # Wall lengths
         # 🩸 09/09/2026 — ESTA LISTA IA CRUA PRA IA, E UM QUARTO DELA É TEXTO.
         # `walls` recebe TODA LINE/LWPOLYLINE/POLYLINE/ARC/CIRCLE do modelspace,
@@ -575,8 +604,23 @@ class DXFExtraction:
             lines.append("COMPRIMENTOS POR LAYER:")
             _n_anot = 0
             _cinza = (self.metadata or {}).get("parede_zona_cinza") or {}
+            # 🩸 30/09 (job 9a2c5d87): o layer que É cota explodida (pela prova do
+            # desenho, não pelo nome) e o que é só a borda das peças repetidas
+            _cota_ly = (self.metadata or {}).get("layers_de_cota") or {}
+            _borda_ly = (self.metadata or {}).get("layers_de_borda") or {}
             for layer, length in sorted(walls_by_layer.items()):
-                if _anot(layer):
+                if layer in _cota_ly and not _anot(layer):
+                    _n_anot += 1
+                    lines.append(f"  {layer}: {length:.2f} m"
+                                 f"   ⚠ ANOTAÇÃO DO DESENHO — são LINHAS DE COTA "
+                                 f"({_cota_ly[layer].get('cotas')} com o valor escrito ao lado): "
+                                 f"NÃO é elemento de obra, não use como quantidade")
+                elif layer in _borda_ly and not _anot(layer):
+                    lines.append(f"  {layer}: {length:.2f} m"
+                                 f"   ⚠ BORDAS das peças repetidas listadas em OBJETOS "
+                                 f"DESENHADOS PEÇA POR PEÇA — é perímetro de peça, não "
+                                 f"elemento linear: use a CONTAGEM")
+                elif _anot(layer):
                     _n_anot += 1
                     # 🪤 O texto NÃO pode conter "layer <palavra>": a régua
                     # que lê layer da observação (`_LAYER_RE`, main.py) casa
@@ -1763,22 +1807,24 @@ def _notas_de_unidade(msp) -> dict:
     return achadas
 
 
-def _cotas_explodidas(msp) -> dict:
-    """{razão: cotas} — cota EXPLODIDA é o texto numérico colado a uma linha
-    paralela; a razão é o valor escrito ÷ o comprimento da linha no modelo.
+def _cotas_explodidas_casadas(msp) -> list:
+    """[(layer da linha, comprimento, razão)] — uma entrada por LINHA de cota
+    explodida: o texto numérico colado a uma linha paralela, e a razão é o
+    valor escrito ÷ o comprimento da linha no modelo (uma potência de 10).
 
     Linha mais próxima do centro do texto, paralela (±5°), a até 3 alturas de
     texto e dentro do trecho. O texto da cota é arredondado: tolerância de
-    meia unidade da última casa (ou 0,6%).
+    meia unidade da última casa (ou 0,6%). É a MESMA régua para a unidade
+    (`_cotas_explodidas`) e para o layer de cota (`layers_de_cota_explodida`).
     """
     linhas = []
     for e in msp.query("LINE"):
         a, b = e.dxf.start, e.dxf.end
         L = math.hypot(b.x - a.x, b.y - a.y)
         if L > 0:
-            linhas.append((a.x, a.y, b.x, b.y, L))
+            linhas.append((a.x, a.y, b.x, b.y, L, e.dxf.layer))
     if not linhas:
-        return {}
+        return []
     textos = []
     for t in msp.query("TEXT"):
         try:
@@ -1790,16 +1836,16 @@ def _cotas_explodidas(msp) -> dict:
             if len(textos) >= _COTAS_EXPLODIDAS_MAX_TEXTOS:
                 break
     if not textos:
-        return {}
+        return []
     comps = sorted(l[4] for l in linhas)
     alts = sorted(float(t.dxf.get("height", 0) or 0) or 1.0 for t, _m in textos)
     # 🪤 a célula acompanha a linha E a letra: linha curta com letra grande
     # faria cada texto varrer milhares de células
     cel = max(comps[len(comps) // 2] * 2, alts[len(alts) // 2] * 3, 1e-9)
     grade: dict = {}
-    for i, (x1, y1, x2, y2, _L) in enumerate(linhas):
+    for i, (x1, y1, x2, y2, _L, _ly) in enumerate(linhas):
         grade.setdefault((int(((x1 + x2) / 2) // cel), int(((y1 + y2) / 2) // cel)), []).append(i)
-    votos: dict = {}
+    casadas: dict = {}
     for t, m in textos:
         s = m.group(1).replace(",", ".")
         v = float(s)
@@ -1815,7 +1861,7 @@ def _cotas_explodidas(msp) -> dict:
         for ix in range(gx - alc, gx + alc + 1):
             for iy in range(gy - alc, gy + alc + 1):
                 for i in grade.get((ix, iy), ()):
-                    x1, y1, x2, y2, L = linhas[i]
+                    x1, y1, x2, y2, L, _ly = linhas[i]
                     dxl, dyl = (x2 - x1) / L, (y2 - y1) / L
                     if abs(dxl * uy - dyl * ux) > 0.09:          # não paralela (> ~5°)
                         continue
@@ -1825,16 +1871,168 @@ def _cotas_explodidas(msp) -> dict:
                     if perp > 3 * h or ao_longo < -h or ao_longo > L + h:
                         continue
                     if melhor is None or perp < melhor[0]:
-                        melhor = (perp, L)
-        if melhor is None:
+                        melhor = (perp, i)
+        if melhor is None or melhor[1] in casadas:
             continue
+        L = linhas[melhor[1]][4]
         casas = len(s.split(".")[1]) if "." in s else 0
         tol = max(0.006 * v, 0.5 * 10 ** (-casas))
         for k in _RAZOES_DE_COTA:
-            if abs(v - melhor[1] * k) <= tol:
-                votos[k] = votos.get(k, 0) + 1
+            if abs(v - L * k) <= tol:
+                casadas[melhor[1]] = k
                 break
+    return [(linhas[i][5], linhas[i][4], k) for i, k in casadas.items()]
+
+
+def _cotas_explodidas(msp) -> dict:
+    """{razão: cotas} das cotas explodidas do modelo (`_cotas_explodidas_casadas`)."""
+    votos: dict = {}
+    for _ly, _L, k in _cotas_explodidas_casadas(msp):
+        votos[k] = votos.get(k, 0) + 1
     return votos
+
+
+#: Layer em que as linhas de cota são esta fração do comprimento é layer de
+#: COTA: o resto são as linhas de chamada e os traços das pontas.
+_LAYER_DE_COTA_FRACAO = 0.5
+
+
+def layers_de_cota_explodida(msp) -> dict:
+    """{layer: {"cotas": n, "fracao": f}} — layer cujas linhas são, na maioria,
+    COTA EXPLODIDA (o texto com o valor ao lado de cada uma).
+
+    🩸 30/09/2026 (job 9a2c5d87). O layer "250" era só cota: 276 linhas com o
+    valor escrito ao lado, 73% do comprimento (o resto, linha de chamada). Nome
+    de layer não diz nada ("250"), e a régua de anotação lê só o NOME — a soma
+    das cotas (787 m) virou "comprimento de linhas de modulação" ✓ MEDIDO.
+    Aqui a prova é o desenho: ≥ 8 cotas e ≥ 50% do comprimento do layer.
+    """
+    try:
+        cas = _cotas_explodidas_casadas(msp)
+        if not cas:
+            return {}
+        tot: dict = {}
+        for e in msp.query("LINE"):
+            a, b = e.dxf.start, e.dxf.end
+            tot[e.dxf.layer] = tot.get(e.dxf.layer, 0.0) + math.hypot(b.x - a.x, b.y - a.y)
+        cot: dict = {}
+        n: dict = {}
+        for ly, L, _k in cas:
+            cot[ly] = cot.get(ly, 0.0) + L
+            n[ly] = n.get(ly, 0) + 1
+        out = {}
+        for ly, c in cot.items():
+            f = c / tot[ly] if tot.get(ly) else 0.0
+            if n[ly] >= _COTAS_EXPLODIDAS_MIN and f >= _LAYER_DE_COTA_FRACAO:
+                out[ly] = {"cotas": n[ly], "fracao": round(f, 2)}
+        return out
+    except Exception:
+        return {}
+
+
+#: Quantas peças iguais no mesmo layer fazem um "objeto repetido".
+_OBJETOS_SEM_BLOCO_MIN = 10
+#: Faixa de tamanho de peça, em metros (lado do retângulo / raio do círculo).
+_OBJETO_SEM_BLOCO_M = (0.02, 20.0)
+_CIRCULO_SEM_BLOCO_M = (0.002, 2.0)
+#: Layer cujo comprimento é, nesta fração, a BORDA dessas peças.
+_LAYER_DE_BORDA_FRACAO = 0.8
+
+
+def objetos_repetidos_sem_bloco(msp, unit_factor) -> dict:
+    """{layer: [peça, ...]} — o objeto desenhado PEÇA POR PEÇA, sem bloco:
+    retângulo (polilinha fechada de 4 lados) ou círculo do MESMO tamanho,
+    repetido ≥ 10 vezes no mesmo layer. Cada peça: {"forma", "a_cm", "b_cm"
+    (retângulo) ou "r_cm" (círculo), "n", "borda_m"}.
+
+    🩸 30/09/2026 (job 9a2c5d87, planta de modulação da 1ª fiada). Os 776
+    blocos de 19 × 39 e os 787 furos de graute de 14 × 14 estavam desenhados um
+    a um, como retângulo — e a IA só via o COMPRIMENTO do layer (939 m, 441 m:
+    a soma das bordas), que virou "linhas de modulação" ✓ MEDIDO. A contagem,
+    que é o que se orça, não chegava.
+    """
+    out: dict = {}
+    try:
+        from engine_rules import layer_is_anotacao, layer_is_carimbo
+        uf = float(unit_factor or 0)
+        if uf <= 0:
+            return {}
+        # 🪤 layer de anotação/carimbo não é peça: no acervo, 84 quadrados de
+        # "CHAMADA" (balão de chamada) e as amostras da legenda de piso
+        _fora: dict = {}
+
+        def _e_peca(ly):
+            if ly not in _fora:
+                _fora[ly] = bool(layer_is_anotacao(ly) or layer_is_carimbo(ly))
+            return not _fora[ly]
+        ret: dict = {}
+        for e in msp.query("LWPOLYLINE"):
+            try:
+                crus = [(p[0], p[1]) for p in e.get_points("xy")]
+            except Exception:
+                continue
+            if len(crus) == 5 and math.hypot(crus[0][0] - crus[-1][0], crus[0][1] - crus[-1][1]) < 1e-9:
+                pts = crus[:4]                            # fechada repetindo o 1º ponto
+            elif len(crus) == 4 and e.closed:
+                pts = crus
+            else:
+                continue
+            lados = [math.hypot(pts[(i + 1) % 4][0] - pts[i][0], pts[(i + 1) % 4][1] - pts[i][1])
+                     for i in range(4)]
+            d1 = math.hypot(pts[2][0] - pts[0][0], pts[2][1] - pts[0][1])
+            d2 = math.hypot(pts[3][0] - pts[1][0], pts[3][1] - pts[1][1])
+            if min(lados) <= 0 or abs(d1 - d2) > 0.01 * max(d1, d2):
+                continue                                  # não é retângulo
+            if abs(lados[0] - lados[2]) > 0.01 * lados[0] or abs(lados[1] - lados[3]) > 0.01 * lados[1]:
+                continue
+            a, b = sorted((lados[0] * uf, lados[1] * uf))
+            if a < _OBJETO_SEM_BLOCO_M[0] or b > _OBJETO_SEM_BLOCO_M[1]:
+                continue
+            if not _e_peca(e.dxf.layer):
+                continue
+            k = (e.dxf.layer, round(a * 1000), round(b * 1000))       # mm
+            ret[k] = ret.get(k, 0) + 1
+        for (ly, a, b), n in ret.items():
+            if n >= _OBJETOS_SEM_BLOCO_MIN:
+                out.setdefault(ly, []).append({"forma": "retângulo", "a_cm": a / 10, "b_cm": b / 10,
+                                               "n": n, "borda_m": round(n * 2 * (a + b) / 1000, 2)})
+        cir: dict = {}
+        for e in msp.query("CIRCLE"):
+            r = float(e.dxf.radius) * uf
+            if not (_CIRCULO_SEM_BLOCO_M[0] <= r <= _CIRCULO_SEM_BLOCO_M[1]):
+                continue
+            if not _e_peca(e.dxf.layer):
+                continue
+            k = (e.dxf.layer, round(r * 1000))
+            cir[k] = cir.get(k, 0) + 1
+        for (ly, r), n in cir.items():
+            if n >= _OBJETOS_SEM_BLOCO_MIN:
+                out.setdefault(ly, []).append({"forma": "círculo", "r_cm": r / 10, "n": n,
+                                               "borda_m": round(n * 2 * math.pi * r / 1000, 2)})
+        for ly in out:
+            out[ly].sort(key=lambda p: -p["n"])
+    except Exception:
+        return {}
+    return out
+
+
+def layers_de_borda_de_objeto(objetos, walls_by_layer) -> dict:
+    """{layer: fração} — layer cujo comprimento é, quase todo, a BORDA das
+    peças repetidas (`objetos_repetidos_sem_bloco`): o número é perímetro de
+    peça, não elemento linear de obra."""
+    out = {}
+    try:
+        for ly, pecas in (objetos or {}).items():
+            tot = float((walls_by_layer or {}).get(ly) or 0)
+            if tot <= 0:
+                continue
+            borda = sum(p.get("borda_m", 0) for p in pecas if p.get("forma") == "retângulo")
+            f = borda / tot
+            if f >= _LAYER_DE_BORDA_FRACAO:
+                out[ly] = round(min(f, 1.0), 2)
+    except Exception:
+        return {}
+    return out
 
 
 def _unidade_pela_nota_e_cota_explodida(doc):
@@ -7278,6 +7476,26 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         if _am_bl:
             # nome ≠ 'amostras_legenda' (as HACHURAS da legenda, 24/09)
             metadata["blocos_da_legenda"] = _am_bl
+
+    # 🩸 30/09 (job 9a2c5d87): o layer que é só COTA explodida e a peça
+    # desenhada uma a uma, sem bloco — a IA vê a contagem, e o comprimento
+    # desses layers não prova quantidade (a chave do selo não usa).
+    try:
+        _msp_ob = doc.modelspace()
+        _lc = layers_de_cota_explodida(_msp_ob)
+        if _lc:
+            metadata["layers_de_cota"] = _lc
+        _obj = objetos_repetidos_sem_bloco(_msp_ob, unit_factor)
+        if _obj:
+            metadata["objetos_sem_bloco"] = _obj
+            _wbl: dict = {}
+            for _w in walls:
+                _wbl[_w.layer] = _wbl.get(_w.layer, 0.0) + _w.length * getattr(_w, "peso", 1.0)
+            _lb = layers_de_borda_de_objeto(_obj, _wbl)
+            if _lb:
+                metadata["layers_de_borda"] = _lb
+    except Exception as _eob:
+        logger.warning("[objetos-sem-bloco] falhou (não-fatal): %s", _eob)
 
     return DXFExtraction(
         filename=os.path.basename(filepath),
