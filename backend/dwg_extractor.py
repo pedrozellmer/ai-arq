@@ -2746,6 +2746,29 @@ _ESP_MAX_SEG = 60000               # teto (amostra os trechos mais longos)
 _ESP_MAX_VIZINHOS = 400            # teto da busca por trecho, em cada lado
 _REGUA_QUE_PROVA = ("validada", "corrigida", "corrigida_lfac", "provada_por_rotulo")
 _NOME_DA_UNIDADE = {0.001: "milímetro", 0.01: "centímetro", 0.1: "decímetro", 1.0: "metro"}
+# VETO pelo texto (estudo, 90 leituras do acervo): com a unidade errada, a letra
+# do modelo dá 5–16 mm (1:1 na unidade lida); com a certa, 10–25 cm. Com
+# ≥ `_PLAUS_TEXTO_MIN` textos e a mediana ≥ 5 cm, a unidade lida é plausível e
+# o par "fino" é outra coisa (linha de reboco, esquadria) — não age.
+_ESP_VETO_TEXTO_M = 0.05
+
+
+def _texto_mediano_do_modelo(doc):
+    """(quantos, altura mediana CRUA) dos TEXT/MTEXT do modelo."""
+    hs = []
+    try:
+        for e in doc.modelspace().query("TEXT MTEXT"):
+            try:
+                h = float(e.dxf.get("height", 0) if e.dxftype() == "TEXT"
+                          else e.dxf.get("char_height", 0))
+            except (TypeError, ValueError):
+                continue
+            if h > 0:
+                hs.append(h)
+    except Exception:
+        return 0, 0.0
+    hs.sort()
+    return len(hs), (hs[len(hs) // 2] if hs else 0.0)
 
 
 def _nome_da_unidade(fator) -> str:
@@ -2755,7 +2778,7 @@ def _nome_da_unidade(fator) -> str:
     return ""
 
 
-def unidade_contradita_pela_parede(walls, unit_factor, status_da_regua=None) -> dict:
+def unidade_contradita_pela_parede(walls, unit_factor, status_da_regua=None, texto=None) -> dict:
     """{'k', 'espessura_cm', 'fracao_fina', 'em_par', 'n'} quando a espessura das
     paredes só é plausível com o desenho k× MAIOR (k = 10 ou 100); {} se não.
 
@@ -2763,11 +2786,14 @@ def unidade_contradita_pela_parede(walls, unit_factor, status_da_regua=None) -> 
     parceira paralela mais perto (≤ 1°) que cobre ≥ metade dele, até 60 cm na
     unidade lida — a mesma medida da varredura do estudo. Dispara quando ≥ 60%
     do que pareou fica na faixa 5–35 cm ÷ k e < 20% já fica em 5–35 cm.
-    Unidade provada (cota, DIMLFAC, rótulo) → {}."""
+    Unidade provada (cota, DIMLFAC, rótulo) → {}. `texto` = (quantos, altura
+    mediana crua) do modelo: letra plausível na unidade lida veta."""
     if status_da_regua in _REGUA_QUE_PROVA:
         return {}
     uf = float(unit_factor or 0.0)
     if uf <= 0 or not walls:
+        return {}
+    if texto and texto[0] >= _PLAUS_TEXTO_MIN and texto[1] * uf >= _ESP_VETO_TEXTO_M:
         return {}
     from engine_rules import layer_e_parede
     segs = []
@@ -7858,7 +7884,8 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
     # explodidas decidiu: provado, não entra.
     try:
         if not _unit_consenso and not (getattr(doc, "_aiarq_nota_cota", None) or (None,))[0]:
-            _pf = unidade_contradita_pela_parede(walls, unit_factor, dim_check.get("status"))
+            _pf = unidade_contradita_pela_parede(walls, unit_factor, dim_check.get("status"),
+                                                 _texto_mediano_do_modelo(doc))
             if _pf:
                 metadata["unidade_contradita_pela_parede"] = ressalva_da_parede_fina(_pf, unit_factor)
                 logger.warning("[unit-parede] %s: %s", os.path.basename(filepath), _pf)

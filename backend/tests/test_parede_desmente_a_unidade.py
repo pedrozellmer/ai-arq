@@ -100,6 +100,19 @@ def test_layer_de_parede_que_so_parece_vista_entra(layer):
     assert _r(_faces(), 0.001, layer=layer).get("k") == 10
 
 
+def test_CONTROLE_letra_plausivel_na_unidade_lida_veta():
+    # 40 textos de 15 cm lidos em mm: o mm é plausível, o par fino é outra coisa
+    ws = _walls(_faces(), 0.001)
+    assert dx.unidade_contradita_pela_parede(ws, 0.001, None, (40, 150.0)) == {}
+
+
+@pytest.mark.parametrize("texto", [(40, 15.8), (29, 150.0), (0, 0.0), None])
+def test_letra_de_1_cm_ou_texto_de_menos_nao_veta(texto):
+    # os casos do estudo: letra de 5–16 mm na unidade lida; um deles, 9 textos
+    ws = _walls(_faces(), 0.001)
+    assert dx.unidade_contradita_pela_parede(ws, 0.001, None, texto).get("k") == 10
+
+
 def test_CONTROLE_layer_que_nao_e_parede():
     assert _r(_faces(), 0.001, layer="MOBILIARIO") == {}
 
@@ -239,6 +252,24 @@ def test_de_ponta_a_ponta_cm_declarado_como_mm(tmp_path):
 def test_CONTROLE_de_ponta_a_ponta_cm_declarado_como_cm(tmp_path):
     md = dx.extract_dxf(_dxf(tmp_path, _faces(), insunits=5)).metadata
     assert not md.get("unidade_contradita_pela_parede"), md.get("unidade_contradita_pela_parede")
+
+
+def _textos(altura, n=40):
+    def _f(msp):
+        for i in range(n):
+            msp.add_text("SALA %d" % i, dxfattribs={"height": altura, "insert": (100.0 * i, -500.0),
+                                                   "layer": "TEXTO"})
+    return _f
+
+
+def test_CONTROLE_de_ponta_a_ponta_letra_plausivel_veta(tmp_path):
+    md = dx.extract_dxf(_dxf(tmp_path, _faces(), extra=_textos(150.0))).metadata
+    assert not md.get("unidade_contradita_pela_parede"), md.get("unidade_contradita_pela_parede")
+
+
+def test_de_ponta_a_ponta_letra_de_1_6_cm_nao_veta(tmp_path):
+    md = dx.extract_dxf(_dxf(tmp_path, _faces(), extra=_textos(15.8))).metadata
+    assert md.get("unidade_contradita_pela_parede"), sorted(md)
 
 
 def test_de_ponta_a_ponta_cota_que_valida_o_mm_derruba(tmp_path, monkeypatch):
