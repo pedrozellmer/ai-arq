@@ -636,8 +636,8 @@ class DXFExtraction:
                     _dfd = ", ".join("ø%d" % d for d in (_tubo_fd[layer].get("diametros_mm") or [])[:5])
                     lines.append(f"  {layer}: {length:.2f} m"
                                  f"   ⚠ TUBO EM FACE DUPLA — são as DUAS paredes de cada tubo "
-                                 f"({int(100 * float(_tubo_fd[layer].get('fracao') or 0))}% em par, "
-                                 f"à distância do diâmetro: {_dfd}): o comprimento do tubo "
+                                 f"({int(100 * float(_tubo_fd[layer].get('fracao') or 0))}% em par; "
+                                 f"diâmetros em par: {_dfd}): o comprimento do tubo "
                                  f"(eixo) é cerca da METADE deste número — não use como medido")
                 elif layer in _borda_ly and not _anot(layer):
                     lines.append(f"  {layer}: {length:.2f} m"
@@ -1465,6 +1465,15 @@ _TUBO_DIST_TOL = 0.12           # distância do par = diâmetro ± 12%
 _TUBO_ANG_TOL = 1.0             # graus
 _TUBO_COBERTURA = 0.5           # o trecho tem parceira em ≥ metade do comprimento
 _TUBO_FRACAO_LAYER = 0.8        # ≥ 80% do layer em par → face dupla
+# 🩸 30/09 (calibração do estudo): um P-PIPE de 862,8 m com 99% em par, mas só
+# 69% a Ø ROTULADO — o resto era tubo de 35 mm SEM rótulo (dreno do ar). A
+# 2ª porta: ≥ 90% com QUALQUER parceira (10–300 mm) E ≥ 50% a Ø rotulado.
+# Rede de linha única não chega a 90% de parceira; e um par de tubos lado a
+# lado a 60 mm (hidráulica comum, rótulos ø25/32) tem 95% de parceira mas 0%
+# a Ø rotulado — nenhuma das duas marca.
+_TUBO_PAR_QUALQUER = (10, 300)  # mm: faixa da "qualquer parceira"
+_TUBO_FRACAO_QUALQUER = 0.9
+_TUBO_FRACAO_ROTULO_MIN = 0.5
 _TUBO_MIN_M = 5.0               # layer menor que isso não conta
 # 🩸 30/09 (medição do estudo nos 3 de produção): os maiores danos têm 23, 37 e
 # 41 MIL trechos no P-PIPE — um teto que PULA o layer pulava justo eles. Acima
@@ -1497,6 +1506,9 @@ def tubos_em_face_dupla(walls, texts, unit_factor: float = 1.0) -> dict:
     d_bruto = [d / 1000.0 / uf for d in diam]        # na unidade do desenho
     d_min = min(d_bruto) * (1 - _TUBO_DIST_TOL)
     d_max = max(d_bruto) * (1 + _TUBO_DIST_TOL)
+    q_min = _TUBO_PAR_QUALQUER[0] / 1000.0 / uf
+    q_max = _TUBO_PAR_QUALQUER[1] / 1000.0 / uf
+    j_min, j_max = min(d_min, q_min), max(d_max, q_max)
     por_layer: dict = {}
     total_m: dict = {}
     for w in walls:
@@ -1545,6 +1557,7 @@ def tubos_em_face_dupla(walls, texts, unit_factor: float = 1.0) -> dict:
         if len(grupos) > 1 and grupos[0][0][0] + 180.0 - grupos[-1][-1][0] <= _TUBO_ANG_TOL:
             grupos[0] = grupos.pop() + grupos[0]
         em_par_m = 0.0
+        em_par_qualquer_m = 0.0
         # 30/09 (antes/depois do estudo): o aviso listava os 5 MENORES rotulados
         # (ø25…ø75) e o ø150 que dominava o layer não aparecia — agora são os que
         # PAREARAM, pelos metros
@@ -1560,32 +1573,45 @@ def tubos_em_face_dupla(walls, texts, unit_factor: float = 1.0) -> dict:
                 sg.append((rho, t0, t1))
             sg.sort()
             rhos = [x[0] for x in sg]
-            cob = [0.0] * len(sg)
+            cob = [0.0] * len(sg)          # parceira a Ø ROTULADO
+            cob_q = [0.0] * len(sg)        # parceira a QUALQUER distância da faixa
             for i in range(len(sg)):
                 ri, a0, a1 = sg[i]
-                # busca binária: só o que está entre d_min e d_max do lado — os
-                # pedaços da MESMA linha (dist ≈ 0) nem entram na conta
-                j0 = bisect.bisect_left(rhos, ri + d_min, i + 1)
-                j1 = bisect.bisect_right(rhos, ri + d_max, j0)
+                # busca binária: só o que está na faixa do lado — os pedaços da
+                # MESMA linha (dist ≈ 0) nem entram na conta
+                j0 = bisect.bisect_left(rhos, ri + j_min, i + 1)
+                j1 = bisect.bisect_right(rhos, ri + j_max, j0)
                 for j in range(j0, j1):
                     rj, b0, b1 = sg[j]
                     dist = rj - ri
+                    ov = min(a1, b1) - max(a0, b0)
+                    if ov <= 0:
+                        continue
+                    if q_min <= dist <= q_max:
+                        cob_q[i] += ov
+                        cob_q[j] += ov
                     _k = next((k for k, d in enumerate(d_bruto)
                                if abs(dist - d) <= _TUBO_DIST_TOL * d), None)
                     if _k is None:
                         continue
-                    ov = min(a1, b1) - max(a0, b0)
-                    if ov > 0:
-                        cob[i] += ov
-                        cob[j] += ov
-                        par_por_d[diam[_k]] = par_por_d.get(diam[_k], 0.0) + ov * uf
-            for (rho, t0, t1), c in zip(sg, cob):
+                    cob[i] += ov
+                    cob[j] += ov
+                    par_por_d[diam[_k]] = par_por_d.get(diam[_k], 0.0) + ov * uf
+            for (rho, t0, t1), c, cq in zip(sg, cob, cob_q):
                 comp = t1 - t0
                 if comp > 0 and min(c, comp) >= _TUBO_COBERTURA * comp:
                     em_par_m += comp * uf
+                if comp > 0 and min(cq, comp) >= _TUBO_COBERTURA * comp:
+                    em_par_qualquer_m += comp * uf
         fr = em_par_m / _base_m if _base_m > 0 else 0.0
-        if fr >= _TUBO_FRACAO_LAYER:
-            out[lay] = {"m": round(total_m[lay], 2), "fracao": round(min(fr, 1.0), 2),
+        fr_q = em_par_qualquer_m / _base_m if _base_m > 0 else 0.0
+        _porta_a = fr >= _TUBO_FRACAO_LAYER
+        _porta_b = fr_q >= _TUBO_FRACAO_QUALQUER and fr >= _TUBO_FRACAO_ROTULO_MIN
+        if _porta_a or _porta_b:
+            out[lay] = {"m": round(total_m[lay], 2),
+                        # o que o aviso diz: a fração EM PAR (a da porta que abriu)
+                        "fracao": round(min(fr if _porta_a else fr_q, 1.0), 2),
+                        "fracao_diametro": round(min(fr, 1.0), 2),
                         "diametros_mm": [d for d, _m in sorted(par_por_d.items(),
                                                                key=lambda kv: -kv[1])][:8]}
     return out

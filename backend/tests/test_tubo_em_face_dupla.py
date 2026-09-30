@@ -70,7 +70,9 @@ def test_layer_acima_do_teto_e_amostrado_e_nao_pulado(monkeypatch):
     """17d6e1f2/788d0270/4b2db70b: 23 a 41 mil trechos no P-PIPE. Pular o
     layer grande pulava justo os maiores danos."""
     monkeypatch.setattr(dx, "_TUBO_MAX_SEG", 4)
-    ws = _feixe(n=3) + [W("P-PIPE", (0, 20 + k), (0.5, 20 + k)) for k in range(6)]
+    # 130 trechos curtos soltos (65 m): sobre o layer INTEIRO a fração em par
+    # cairia pra 60/125 — nem a 2ª porta salvaria; sobre o amostrado é 100%
+    ws = _feixe(n=3) + [W("P-PIPE", (0, 20 + k), (0.5, 20 + k)) for k in range(130)]
     fd = dx.tubos_em_face_dupla(ws, [T("ø150")])
     assert "P-PIPE" in fd and fd["P-PIPE"]["fracao"] >= 0.8, fd
 
@@ -184,3 +186,36 @@ def test_de_ponta_a_ponta_a_extracao_marca_e_o_prompt_avisa(tmp_path):
     linha = next((l for l in txt.splitlines() if l.strip().startswith("P-PIPE:")), "")
     assert "TUBO EM FACE DUPLA" in linha and "METADE" in linha, linha
     assert "tubos_em_face_dupla" not in txt
+
+
+def _deslocado(ws, dy):
+    for w in ws:
+        w.start = (w.start[0], w.start[1] + dy)
+        w.end = (w.end[0], w.end[1] + dy)
+    return ws
+
+
+def test_porta_b_face_dupla_com_rotulo_incompleto():
+    """Calibração (30/09): P-PIPE de 862,8 m, 99% em par mas só 69% a Ø
+    rotulado — o resto era tubo de 35 mm SEM rótulo (dreno do ar)."""
+    rot = _feixe(n=3, d=0.150, comp=10.0)                   # 60 m a ø150 rotulado
+    # vão de 0,50 entre os tubos pequenos: FORA da faixa de 'qualquer parceira'
+    # (10–300 mm) — só a parede do próprio tubo, a 35 mm, faz par
+    sem = _deslocado(_feixe(n=4, d=0.035, vao=0.50, comp=5.0), 5)  # 40 m a 35 mm, sem rótulo
+    fd = dx.tubos_em_face_dupla(rot + sem, [T("ø150"), T("ø100")])
+    assert "P-PIPE" in fd, fd
+    assert fd["P-PIPE"]["fracao"] >= 0.9 and 0.5 <= fd["P-PIPE"]["fracao_diametro"] < 0.8, fd
+
+
+def test_CONTROLE_par_lado_a_lado_sem_diametro_rotulado_nao_marca():
+    """TUBO-PVC (hidráulica comum): 95% com parceira a 60 mm, rótulos ø25/32."""
+    ws = _feixe(n=4, d=0.060, vao=0.50, comp=10.0)
+    assert dx.tubos_em_face_dupla(ws, [T("ø25"), T("ø32")]) == {}
+
+
+def test_CONTROLE_porta_b_exige_90_por_cento_de_parceira():
+    rot = _feixe(n=3, d=0.150, comp=10.0)                           # 60 m a ø150
+    sem = _deslocado(_feixe(n=2, d=0.035, vao=0.30, comp=6.25), 5)  # 25 m a 35 mm
+    solo = [W("P-PIPE", (0, 10 + k), (7.5, 10 + k)) for k in range(2)]  # 15 m sozinho
+    fd = dx.tubos_em_face_dupla(rot + sem + solo, [T("ø150")])
+    assert fd == {}, fd
