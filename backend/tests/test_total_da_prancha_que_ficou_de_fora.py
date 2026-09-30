@@ -117,6 +117,28 @@ def test_CONTROLE_arredondamento_de_1_kg_num_total_pequeno():
     assert r["confiavel"] is True, r["avisos"]
 
 
+def test_o_aviso_traz_os_maiores_primeiro():
+    extra = []
+    for i, v in enumerate((2, 900, 7, 50, 1200)):
+        extra += [_t("Peso Total 50A =", 300, -9 - 5 * i), _t("%g kgf" % v, 340, -9 - 5 * i)]
+    r = se.parse_steel_table(_quadro_lido() + extra)
+    av = next(a for a in r["avisos"] if "ficou de fora" in a)
+    assert "os maiores: 1200, 900, 50, 7 kg e mais 1" in av, av
+
+
+def test_o_detalhe_por_quadro_pra_medir():
+    r = se.parse_steel_table(_dois_quadros_com_classes())
+    pq = {q["quadro"]: q for q in r["por_quadro"]}
+    assert (pq[0]["n_linhas"], pq[0]["linhas_kg"], pq[0]["total_lido_kg"]) == (3, 211.1, 220.0), pq
+    assert (pq[1]["n_linhas"], pq[1]["linhas_kg"], pq[1]["total_lido_kg"]) == (3, 237.0, 247.0), pq
+    assert pq[0]["cabecalho_xy"][1] == 10 and pq[1]["cabecalho_xy"][1] == -40, pq
+
+
+def test_o_detalhe_por_quadro_nao_vai_pro_prompt():
+    txt = se.structural_prompt_section({"aco": se.parse_steel_table(_dois_quadros_com_classes())})
+    assert "por_quadro" not in txt and "cabecalho_xy" not in txt, txt
+
+
 @pytest.mark.parametrize("texto", ["TOTAL = 24", "TOTAL: 24"])
 def test_CONTROLE_total_sem_peso_nem_kg_no_proprio_texto(texto):
     r = se.parse_steel_table(_quadro_lido() + [_t(texto, 300, -9)])

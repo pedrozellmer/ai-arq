@@ -442,6 +442,7 @@ def parse_steel_table(texts) -> dict | None:
     totals: list[tuple] = []   # (kg, indice_do_quadro | None)
     n_quadros = 0
     consumed_cells: set = set()  # ids de células já usadas pelo modo-tabela
+    _cab_pos: dict = {}          # quadro → (x da borda esquerda, y do cabeçalho)
 
     # ---- modo TABELA (célula por célula, reconstruída por posição) --------
     header_idxs = []
@@ -552,6 +553,7 @@ def parse_steel_table(texts) -> dict | None:
             _passo = 0.0
         _passo = max(_passo, 1e-9)
         _x_ini, _x_fim = _axs[0] - _passo, _axs[-1] + _passo
+        _cab_pos[hi_pos] = (round(float(_x_ini), 2), round(float(rows[hi]["y"]), 2))
 
         def _dentro_do_quadro(cells):
             """A linha pertence a ESTA tabela? Julga pela célula mais próxima."""
@@ -934,10 +936,35 @@ def parse_steel_table(texts) -> dict | None:
         _fora = [v for v in _decl if not any(abs(v - t) <= max(0.005 * v, 1.0) for t in _lidos)]
         if _fora:
             confiavel = False
+            # os MAIORES primeiro: a ordem da folha escondia o que pesa ("2, 1770,
+            # 7, 5998…"). Sem somar: o 50A, o 60B e o TOTAL do mesmo quadro
+            # somados contariam o aço duas vezes.
+            _maiores = sorted(_fora, reverse=True)
             avisos.append(
-                "a prancha declara %d peso(s) total(is) e %d não entrou na leitura (%s kg) — "
-                "algum quadro de aço ficou de fora; tratando como ESTIMADO"
-                % (len(_decl), len(_fora), ", ".join("%g" % v for v in _fora[:4])))
+                "a prancha declara %d peso(s) total(is) e %d não entrou na leitura "
+                "(os maiores: %s kg%s) — algum quadro de aço ficou de fora; tratando como ESTIMADO"
+                % (len(_decl), len(_fora), ", ".join("%g" % v for v in _maiores[:4]),
+                   " e mais %d" % (len(_fora) - 4) if len(_fora) > 4 else ""))
+
+    # 📏 30/09: o detalhe por QUADRO, só pra MEDIR — no acervo, as linhas lidas
+    # passavam +518 kg (+4,6%) dos totais dos próprios quadros lidos, e o
+    # agregado não diz em qual. Não muda selo nem quantidade. `quadro` None =
+    # linha/total do modo RESUMO ou LINHA (sem cabeçalho).
+    _pq: dict = {}
+    for e in entries:
+        d = _pq.setdefault(e.get("quadro"), {"n_linhas": 0, "linhas_kg": 0.0, "total_lido_kg": None})
+        d["n_linhas"] += 1
+        d["linhas_kg"] += e["kg"]
+    for kg, q in totals:
+        d = _pq.setdefault(q, {"n_linhas": 0, "linhas_kg": 0.0, "total_lido_kg": None})
+        d["total_lido_kg"] = (d["total_lido_kg"] or 0.0) + kg
+    por_quadro = []
+    for q in sorted(_pq, key=lambda k: (k is None, k or 0)):
+        d = _pq[q]
+        por_quadro.append({
+            "quadro": q, "cabecalho_xy": _cab_pos.get(q), "n_linhas": d["n_linhas"],
+            "linhas_kg": round(d["linhas_kg"], 2),
+            "total_lido_kg": round(d["total_lido_kg"], 2) if d["total_lido_kg"] is not None else None})
 
     return {
         "por_bitola": [
@@ -950,6 +977,7 @@ def parse_steel_table(texts) -> dict | None:
         "confiavel": confiavel,
         "avisos": avisos,
         "n_quadros": max(n_quadros, 1 if entries or totals else 0),
+        "por_quadro": por_quadro,
     }
 
 
