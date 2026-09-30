@@ -318,6 +318,54 @@ def _desespaca(txt: str) -> str:
     return _ESPACADO_RE.sub(lambda m: m.group(0).replace(" ", ""), txt)
 
 
+# 🩸 30/09/2026 — A CONFERÊNCIA DO TOTAL SÓ VIA OS QUADROS QUE FORAM LIDOS.
+#
+# Antes/depois do H37 no acervo (estrutura de vigas, 13 quadros, 20 linhas
+# "Peso Total 50A/60A"): a leitura somou 11.670 kg e o total que ela mesma leu
+# dava 11.152 — bateu nos 5% e saiu CONFIÁVEL. A prancha declara 12.221 kg:
+# faltavam ~551 kg de CA-50, de um quadro cujas linhas E cujo total ficaram de
+# fora juntos. Soma parcial conferida contra total parcial não prova nada.
+# 🔑 O total declarado na prancha INTEIRA, com o valor, tem de estar entre os
+# totais que a leitura usou. Sobrou um → algum quadro não foi lido → estimado.
+# Só total de PESO: "peso" no rótulo ou "kg" no valor ("TOTAL 24" de uma
+# tabela de quantidades não é aço); e o valor tem de ser valor — depois de "="
+# ou com kg —, não a classe do aço ("PESO TOTAL CA 50").
+# 🪤 A linha TOTAL de tabela ("TOTAL | 350 | 211,1") fica de fora: o número mais
+# perto à direita é o comprimento, e ele viraria um "total que sobrou". O valor
+# à direita só vale depois de rótulo que termina em "=" / ":" ou com kg nele.
+_TOTAL_VALOR_NO_TEXTO_RE = re.compile(
+    r"(?:=\s*(\d[\d.,]*)\s*(kgf?)?|(\d[\d.,]*)\s*(kgf?))\.?\s*$", re.IGNORECASE)
+
+
+def _totais_declarados(cells) -> list:
+    """Os valores dos "PESO TOTAL … = N kg(f)" da prancha inteira."""
+    out = []
+    for txt, x, y, h in cells:
+        if not _TOTAL_ROW_RE.match(txt):
+            continue
+        tem_peso = "peso" in txt.lower()
+        m = _TOTAL_VALOR_NO_TEXTO_RE.search(txt)
+        if m:
+            v = _num(m.group(1) or m.group(3))
+            if v and v > 0 and (tem_peso or m.group(2) or m.group(4)):
+                out.append(v)
+            continue
+        # valor na célula à direita, na mesma linha de base (o par do modo RESUMO)
+        hh = h if h and h > 0 else 1.0
+        viz = sorted((c2[1] - x, c2[0]) for c2 in cells
+                     if abs(c2[2] - y) <= 0.6 * hh and 0 < c2[1] - x <= 60 * hh
+                     and _num(c2[0]) is not None)
+        if not viz:
+            continue
+        tem_kg = bool(re.search(r"kg", viz[0][1], re.IGNORECASE))
+        if not (tem_kg or re.search(r"[=:]\s*$", txt)) or not (tem_peso or tem_kg):
+            continue
+        v = _num(viz[0][1])
+        if v and v > 0:
+            out.append(v)
+    return out
+
+
 def _match_bitola(value: float | None) -> float | None:
     """Casa um valor numérico com uma bitola comercial (±0,11 mm)."""
     if value is None:
@@ -862,6 +910,34 @@ def parse_steel_table(texts) -> dict | None:
         confiavel = False
     if any("descartada" in a for a in avisos):
         confiavel = False
+
+    # 🩸 30/09/2026: total declarado que a leitura não usou = quadro não lido
+    # (ver `_totais_declarados`).
+    if por_bitola:
+        # o que a leitura cobre: cada total lido, a soma dos totais de cada
+        # quadro (o "TOTAL" do quadro = 50A + 60B) e a de todos (o resumo
+        # geral); e as somas das LINHAS lidas — por classe de aço ("PESO TOTAL
+        # CA-50" do resumo do Eberick), por quadro, por quadro e classe, e tudo
+        _lidos = [kg for kg, _q in totals]
+        _por_q: dict = {}
+        for kg, q in totals:
+            _por_q[q] = _por_q.get(q, 0.0) + kg
+        _lidos += list(_por_q.values()) + ([sum(_lidos)] if _lidos else [])
+        _somas: dict = {}
+        for e in entries:
+            for chave in (("aco", e.get("aco")), ("q", e.get("quadro")),
+                          ("qa", e.get("quadro"), e.get("aco"))):
+                _somas[chave] = _somas.get(chave, 0.0) + e["kg"]
+        _lidos += list(_somas.values()) + [soma]
+        _decl = _totais_declarados(cells)
+        # 1 kg de folga pro arredondamento linha a linha num total pequeno
+        _fora = [v for v in _decl if not any(abs(v - t) <= max(0.005 * v, 1.0) for t in _lidos)]
+        if _fora:
+            confiavel = False
+            avisos.append(
+                "a prancha declara %d peso(s) total(is) e %d não entrou na leitura (%s kg) — "
+                "algum quadro de aço ficou de fora; tratando como ESTIMADO"
+                % (len(_decl), len(_fora), ", ".join("%g" % v for v in _fora[:4])))
 
     return {
         "por_bitola": [
