@@ -246,6 +246,73 @@ def _e_cabecalho_de_peso(txt: str) -> bool:
     return len(t) <= _TETO_CABECALHO or bool(_UNIDADE_KG_RE.search(t))
 
 
+# 🩸 30/09/2026 — A LINHA DE CABEÇALHO JUNTAVA A FOLHA INTEIRA.
+#
+# O agrupamento em linhas é da prancha toda: na altura do cabeçalho do quadro
+# caem textos do DESENHO ("C/11", "90", "344"…). Cada um virava coluna "outro",
+# a borda de 29/08 (`_x_ini`/`_x_fim`) ia da ponta esquerda do desenho até o
+# quadro, e duas coisas entravam como se fossem do quadro:
+#   · Eberick (estrutura de edifício, resumo "AÇO | BIT | COMPR | PESO"): na
+#     linha do Ø10 havia um "Ø 16" de marcação do desenho, 24 unidades à
+#     esquerda. Ele virou a bitola da linha ("Ø16 1114 kg"), reprovou na massa
+#     linear e sumiu. Soma 17.138 × total declarado 18.252 → tudo estimado. Com
+#     a borda, Ø10 1.114 volta e a soma bate EXATO com o total.
+#   · CYPE (quadro de pilares, 3 resumos): as linhas "Total:" das tabelas
+#     vizinhas, na mesma altura, viraram TOTAL deste quadro → "621 kg"
+#     confiável, número que não existe na prancha.
+# 🔑 A coluna "outro" só é do quadro se estiver COLADA nas colunas
+# reconhecidas (peso, comprimento, bitola): até 1,5 passo da mais próxima, em
+# cadeia. Passo = vão típico entre as reconhecidas; com uma só, o vão até a
+# vizinha mais perto.
+# 🪤 Borda certa pede a parada por VÃO (ver `_VAO_DO_QUADRO`): com a borda
+# estreita, as linhas do desenho entre o cabeçalho e os dados ficam "fora" e a
+# trava antiga de 3 seguidas encerrava o quadro antes do primeiro dado.
+# 📏 Acervo (34 folhas de estrutura, borda + vão): o Eberick acima vira
+# confiável; o CYPE de pilares sai None (sem o 621); o radier do CYPE mantém as
+# bitolas e perde o "total declarado 266,4" (era o "Total: 88,8" da tabela ao
+# lado, lido 3 vezes); em 2 folhas do Eberick com vários resumos lado a lado,
+# linhas que conferem na NBR e eram descartadas ou lidas como total voltam
+# (13→15 e 26→35; seguem estimadas, a soma não bate o total). 🪤 Numa 3ª, o
+# lixo sem comprimento cai de 37 linhas pra 7, mas uma linha conferida troca de
+# bitola (Ø12,5 → Ø10): lá a coluna BITOLA reconhecida é um "Ø" do DESENHO (o
+# último que casa vence), a borda continua larga e o "Ø 10" da planta entra
+# antes do "12.5" da coluna — antes acertava por sorte, com outro "Ø" do
+# desenho. Estimado nas duas versões. O Eberick em modo RESUMO (7) e o TQS (14)
+# não mudam.
+_FOLGA_DA_COLUNA = 1.5
+
+# A tabela acaba quando a próxima linha dentro da borda fica mais de 6 alturas
+# de letra (a do cabeçalho) abaixo da última lida; linha do desenho no meio
+# (fora da borda) é pulada sem contar. Sem altura de letra não há régua: fica a
+# trava antiga (3 linhas fora seguidas).
+_VAO_DO_QUADRO = 6
+
+
+def _colunas_coladas(reconhecidas: list, outros: list) -> list:
+    """As colunas "outro" do cabeçalho que são DESTE quadro (ver acima)."""
+    xs = sorted(x for _n, x in reconhecidas)
+    if not xs or not outros:
+        return []
+    if len(xs) >= 2:
+        vaos = [b - a for a, b in zip(xs, xs[1:]) if b > a]
+        passo = median(vaos) if vaos else 0.0
+    else:
+        passo = min(abs(x - xs[0]) for _n, x in outros)
+    if passo <= 0:
+        return []
+    fica, resto, coladas = list(xs), list(outros), []
+    mudou = True
+    while mudou:
+        mudou = False
+        for o in list(resto):
+            if min(abs(o[1] - a) for a in fica) <= _FOLGA_DA_COLUNA * passo:
+                coladas.append(o)
+                fica.append(o[1])
+                resto.remove(o)
+                mudou = True
+    return coladas
+
+
 def _desespaca(txt: str) -> str:
     """'P E S O   T O T A L = 1.234,56kg' → 'PESO   TOTAL = 1.234,56kg'."""
     return _ESPACADO_RE.sub(lambda m: m.group(0).replace(" ", ""), txt)
@@ -388,7 +455,9 @@ def parse_steel_table(texts) -> dict | None:
             anchors.append(("comp", comp_x))
         if bitola_x is not None:
             anchors.append(("bitola", bitola_x))
-        anchors.extend(outros)
+        # só a coluna "outro" colada nas reconhecidas: o resto é o desenho na
+        # mesma altura (ver `_colunas_coladas`)
+        anchors.extend(_colunas_coladas(anchors, outros))
 
         # 🚨 29/08/2026 — O QUADRO NÃO TINHA BORDA E ENGOLIA A PRANCHA INTEIRA.
         #
@@ -441,17 +510,25 @@ def parse_steel_table(texts) -> dict | None:
         # 🪤 Parada vertical: depois do quadro vem o desenho. Sem isto, o último
         # cabeçalho da prancha continuaria varrendo até o fim do papel — só que
         # agora filtrando por x, o que ainda deixaria passar o que estivesse
-        # alinhado com as colunas por coincidência.
+        # alinhado com as colunas por coincidência. A régua é o vão (ver
+        # `_VAO_DO_QUADRO`).
+        _alturas = [c[3] for c in hdr if c[3] and _x_ini <= c[1] <= _x_fim]
+        _h_cab = median(_alturas) if _alturas else 0.0
+        _ultimo_y = rows[hi]["y"]
         _fora_seguidas = 0
         for r in rows[hi + 1:]:
             if r["y"] <= y_min:
                 break
             if not _dentro_do_quadro(r["cells"]):
-                _fora_seguidas += 1
-                if _fora_seguidas >= 3:
-                    break
+                if _h_cab <= 0:
+                    _fora_seguidas += 1
+                    if _fora_seguidas >= 3:
+                        break
                 continue
+            if _h_cab > 0 and _ultimo_y - r["y"] > _VAO_DO_QUADRO * _h_cab:
+                break
             _fora_seguidas = 0
+            _ultimo_y = r["y"]
             row_cells = [c for c in r["cells"] if _x_ini <= c[1] <= _x_fim]
             row_text = " ".join(c[0] for c in row_cells)
             # bitola da linha: prefixo ø explícito, ou número puro na coluna BITOLA
