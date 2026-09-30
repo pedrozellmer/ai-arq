@@ -34917,8 +34917,54 @@ def _find_prancha_file(job_id: str, ref: str) -> Optional[str]:
     return best if best_score >= 1 else None
 
 
+# 🔗 30/09/2026 — validade do link assinado que a rota de admin devolve com
+# `link=1`. Curta de propósito: o link é credencial ao portador (quem tiver o
+# endereço baixa, sem login) — 10 min cobrem o clique e morrem logo depois.
+_LINK_ADMIN_VALIDADE_S = 600
+
+
+def _link_assinado_da_prancha(job_id: str, filename: str,
+                              validade_s: int = _LINK_ADMIN_VALIDADE_S) -> Optional[str]:
+    """Link ASSINADO (com validade) de um arquivo do balde das pranchas. O
+    download sai do Supabase direto pra quem pediu — não passa pelo servidor.
+
+    Devolve None se a assinatura falhar: quem chama decide o que fazer, e
+    NUNCA há queda pra link público (o balde é privado). O link em si não vai
+    pro log — ele é a credencial."""
+    import urllib.request, urllib.parse as _up
+    import json as _json_sign  # 🪤 não existe `json` global neste módulo
+    remote_key = f"{job_id}/{_up.quote(filename)}"
+    url = f"{SUPABASE_URL}/storage/v1/object/sign/{PRANCHAS_BUCKET}/{remote_key}"
+    req = urllib.request.Request(
+        url, data=_json_sign.dumps({"expiresIn": int(validade_s)}).encode("utf-8"),
+        method="POST")
+    req.add_header("apikey", SUPABASE_KEY)
+    req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+    req.add_header("Content-Type", "application/json")
+    try:
+        signed = _json_sign.loads(urllib.request.urlopen(req, timeout=20).read().decode("utf-8"))
+    except Exception as _e:
+        try:
+            _log_error("storage:assinar-link", f"{filename}: {type(_e).__name__}", job_id)
+        except Exception:
+            pass
+        return None
+    caminho = ""
+    if isinstance(signed, dict):
+        caminho = signed.get("signedURL") or signed.get("signedUrl") or ""
+    if not caminho:
+        return None
+    # `download=` faz o Storage mandar "Content-Disposition: attachment" com o
+    # nome — o link abre como DOWNLOAD, não como página, e o navegador salva
+    # com o nome do arquivo (o atributo `download` do <a> é ignorado quando o
+    # link é de outro domínio).
+    _sep = "&" if "?" in caminho else "?"
+    return f"{SUPABASE_URL}/storage/v1{caminho}{_sep}download={_up.quote(filename)}"
+
+
 @app.get("/api/admin/baixar-arquivo/{job_id}")
-async def admin_baixar_arquivo(job_id: str, request: Request, nome: str = ""):
+async def admin_baixar_arquivo(job_id: str, request: Request, nome: str = "",
+                               link: int = 0):
     """ADMIN — baixa um ARQUIVO ORIGINAL do job direto do Storage.
 
     Por que existe (16/08/2026): investigar o motor exige o arquivo real do
@@ -34929,7 +34975,17 @@ async def admin_baixar_arquivo(job_id: str, request: Request, nome: str = ""):
     resto de propósito, pra não despejar 232 MB de DWG na memória do servidor).
     Esta rota aqui é a que traz o arquivo ORIGINAL, e por isso é só de admin.
     Sem `nome`, lista os arquivos do job.
-    Uso legítimo: depuração interna pelo Pedro/admin (LGPD: operador)."""
+    Uso legítimo: depuração interna pelo Pedro/admin (LGPD: operador).
+
+    🔗 30/09/2026 — `link=1` devolve um LINK ASSINADO do Storage (10 min), em
+    vez dos bytes: `{"nome", "url", "expira_em_s"}`. O arquivo vai do Supabase
+    direto pro navegador. Por quê, medido: (1) setembro passou dos 5 GB de
+    banda do plano do Render, e só numa manhã de estudo saíram 208 MB por esta
+    rota (7 DWG de ~30 MB + PDFs) — tudo o que ela entrega sai da conta do
+    Render; (2) o caminho dos bytes, abaixo, carrega o arquivo INTEIRO na
+    memória do servidor antes de mandar — um DXF de 200 MB do acervo são 200 MB
+    a mais ao lado do job de um cliente, num servidor que já caiu por memória.
+    Sem `link`, segue como era (pra quem já usa)."""
     _require_admin(request)
     from fastapi.responses import Response
     from urllib.parse import unquote as _unq
@@ -34943,6 +34999,13 @@ async def admin_baixar_arquivo(job_id: str, request: Request, nome: str = ""):
     alvo = next((n for n in nomes if n == nome or _unq(n) == nome), None)
     if not alvo:
         raise HTTPException(404, f"'{nome}' não está no job (tem: {nomes[:10]})")
+    if link:
+        # Sem link, sem bytes: se a assinatura falha, a resposta é ERRO — cair
+        # pro caminho dos bytes traria de volta o que `link=1` existe pra evitar.
+        _url = await run_in_threadpool(_link_assinado_da_prancha, job_id, alvo)
+        if not _url:
+            raise HTTPException(502, "Storage não assinou o link — tente de novo")
+        return {"nome": alvo, "url": _url, "expira_em_s": _LINK_ADMIN_VALIDADE_S}
     data = await run_in_threadpool(
         _supabase_storage_download_prancha, job_id, alvo)
     if not data:
