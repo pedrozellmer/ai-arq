@@ -230,11 +230,20 @@ _ESPACADO_RE = re.compile(r"(?<!\S)(?:[^\W\d_] ){2,}[^\W\d_](?!\S)")
 # com quadro lido; mudam só 6 folhas deste projeto (todas quadro-fantasma de
 # nota, incluindo um "total 190 kg"); os 7 quadros de verdade ficam iguais.
 _TETO_CABECALHO = 30
+# 🪤 30/09 (revisão antes do push): só o teto cortava cabeçalho LONGO de
+# verdade — "PESO COM 10% DE PERDAS NAS BARRAS (kg)" tem 38 caracteres, era lido antes, e o quadro
+# inteiro deixaria de ser lido. Passando do teto, vale se a célula declara a
+# UNIDADE da coluna entre parênteses, "(kg)", como cabeçalho declara e nota
+# não: a do TQS diz "kgf/m2", que o padrão não aceita.
+_UNIDADE_KG_RE = re.compile(r"\(\s*kg\s*\)", re.IGNORECASE)
 
 
 def _e_cabecalho_de_peso(txt: str) -> bool:
     """'PESO (kg)' sim; 'PARA AS ÁREAS REBAIXADAS (PESO < 150 kgf/m2)' não."""
-    return bool(_PESO_HDR_RE.search(txt)) and len(txt.strip()) <= _TETO_CABECALHO
+    t = (txt or "").strip()
+    if not _PESO_HDR_RE.search(t):
+        return False
+    return len(t) <= _TETO_CABECALHO or bool(_UNIDADE_KG_RE.search(t))
 
 
 def _desespaca(txt: str) -> str:

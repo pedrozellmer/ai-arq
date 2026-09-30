@@ -70,3 +70,23 @@ def test_o_teto_do_cabecalho():
     assert se._e_cabecalho_de_peso("PESO (kg)")
     assert se._e_cabecalho_de_peso("PESO + 10% PERDAS (kg)")
     assert not se._e_cabecalho_de_peso("PARA AS ÁREAS REBAIXADAS (PESO < 150 kgf/m2)")
+
+
+def test_cabecalho_LONGO_com_a_unidade_kg_continua_abrindo():
+    # 38 caracteres e lido antes do teto; só o teto o recusava, e o quadro
+    # inteiro deixava de ser lido. ("PESO TOTAL…" não serve de exemplo: é
+    # recusado por outra regra, `_TOTAL_ROW_RE`, desde antes.)
+    assert se._e_cabecalho_de_peso("PESO COM 10% DE PERDAS NAS BARRAS (kg)")
+    r = se.parse_steel_table(_quadro("PESO COM 10% DE PERDAS NAS BARRAS (kg)"))
+    assert r and sorted((b["bitola_mm"], b["kg"]) for b in r["por_bitola"]) == [(8.0, 20.5), (10.0, 12.5)], r
+
+
+def test_cabecalho_curto_SEM_unidade_continua_valendo_pelo_teto():
+    assert se._e_cabecalho_de_peso("PESO")
+    r = se.parse_steel_table(_quadro("PESO"))
+    assert r and sorted((b["bitola_mm"], b["kg"]) for b in r["por_bitola"]) == [(8.0, 20.5), (10.0, 12.5)], r
+
+
+def test_nota_longa_sem_a_unidade_kg_continua_nota():
+    assert not se._e_cabecalho_de_peso("PESO TOTAL DAS BARRAS JÁ COM 10% DE PERDAS")
+    assert not se._e_cabecalho_de_peso("SOBRECARGA E PESO PRÓPRIO DA LAJE CONFORME NBR 6120 (kgf/m2)")
