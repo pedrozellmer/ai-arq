@@ -1192,6 +1192,12 @@ def _leitura_por_folha_resumo(extraction) -> str:
     mult = [f"{(x.get('titulo') or x.get('folha'))[:40]}×{x['andares']}"
             for x in ds if x.get("tipo") == "planta" and (x.get("andares") or 1) > 1]
     n_fora = sum(1 for x in ds if x.get("tipo") == "fora")
+    # 🩸 30/09: o título de CADA desenho que saiu. "PLANTA BAIXA - DIAGRAMAS"
+    # zerou uma planta elétrica inteira e o log só dizia fora=1 — não dava pra
+    # medir no banco quantas folhas assim existem (ver engine_rules
+    # `_planta_e_diagrama_na_mesma_folha`).
+    _tit_fora = "|".join((x.get("titulo") or x.get("folha") or "")[:40]
+                         for x in ds if x.get("tipo") == "fora")[:260]
     n_neutro = sum(1 for x in ds if not x.get("tipo"))
     # vista (corte/elevação): desde 25/09 o comprimento sai (ver
     # `engine_rules._RE_DESENHO_VISTA`); o `vista_fora` abaixo diz quanto
@@ -1208,7 +1214,9 @@ def _leitura_por_folha_resumo(extraction) -> str:
     _vt = f.get("vista") or {}
     if _vt:
         _orig += " vista_fora=[-%sm -%sm2 -%sbl]" % (_vt.get("m", 0), _vt.get("m2", 0), _vt.get("blocos", 0))
-    return (f"aplicada=sim{_orig} desenhos={len(ds)} fora={n_fora} vistas={n_vista} neutros={n_neutro} "
+    return (f"aplicada=sim{_orig} desenhos={len(ds)} fora={n_fora}"
+            f"{(' fora_titulos=[' + _tit_fora + ']') if _tit_fora else ''} "
+            f"vistas={n_vista} neutros={n_neutro} "
             f"multiplicadas=[{'; '.join(mult)}] "
             f"comprimento {a.get('comprimento')}→{d.get('comprimento')} m "
             f"area {a.get('area')}→{d.get('area')} m2 "

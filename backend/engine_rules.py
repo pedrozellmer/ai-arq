@@ -6568,18 +6568,46 @@ def parece_titulo_de_desenho(texto):
     return bool(_RE_COMECO_DE_TITULO.match(_minusculo_sem_acento(texto)))
 
 
+# 🩸 30/09/2026 (estudo do acervo, elétrico de uma casa de ~50 m²) — a folha
+# inteira era UMA janela com o título "PLANTA BAIXA - DIAGRAMAS": a planta com
+# os eletrodutos no canto e, no resto, quadro de cargas e unifilar. "diagrama"
+# é testado antes de "planta", a folha foi pra 'fora' e o comprimento caiu de
+# 4.061 para 51 m — somem os ~133 m de eletroduto e as tomadas.
+# 🔑 Só volta a ser planta o título COMPOSTO (com separador) em que uma parte
+# diz "planta" e TODA parte de fora é diagrama elétrico: o unifilar é desenhado
+# em layer próprio, não redesenha o eletroduto. Esquema e isométrico ficam
+# 'fora' — eles SÃO o tubo da planta de novo (o 837 m do esquema vertical).
+# "DETALHE PLANTA BAIXA TÍPICA" (sem separador) também continua 'fora'.
+# 📏 Nos 97 DXF do acervo local, 21 têm desenho 'fora'; só este é composto.
+_RE_SEPARADOR_DE_TITULO = _re.compile(r"\s+[-–—+|]\s+|\s*/\s*|\s+e\s+")
+_RE_SO_DIAGRAMA_ELETRICO = _re.compile(r"\b(?:diagrama|unifilar|multifilar|trifilar)")
+_RE_PALAVRA_PLANTA = _re.compile(r"\bplanta\b")
+
+
+def _planta_e_diagrama_na_mesma_folha(t):
+    """t já em minúsculo sem acento. "planta baixa - diagramas" → True."""
+    # sem separador sai 1 parte só — e ela já é 'fora' (o título casou): nunca é planta
+    partes = [p for p in _RE_SEPARADOR_DE_TITULO.split(t) if p.strip()]
+    fora = [p for p in partes if _RE_DESENHO_FORA_DA_SOMA.search(p)]
+    planta = [p for p in partes if p not in fora and _RE_PALAVRA_PLANTA.search(p)]
+    return bool(planta) and all(_RE_SO_DIAGRAMA_ELETRICO.search(p) for p in fora)
+
+
 def tipo_do_desenho(titulo):
     """'fora' (não soma), 'vista' (fica como está), 'planta' (soma) ou '' (não sei).
 
     "PLANTA BAIXA TÉRREO"                  → 'planta'
     "ESQUEMA VERTICAL DE GÁS"              → 'fora'
     "DETALHE PLANTA BAIXA TÍPICA DO PI"    → 'fora'   (detalhe ganha de planta)
+    "PLANTA BAIXA - DIAGRAMAS"             → 'planta' (folha com as duas coisas)
     "ELEVAÇÃO 1" / "CORTE AA"              → 'vista'  (revestimento de parede mora aqui)
     "LEGENDA"                              → ''
     """
     # %%U/%%O (sublinhado do AutoCAD) colado na palavra: "%%UCORTE" não é "corte"
     t = _minusculo_sem_acento(_RE_SUBLINHADO_AUTOCAD.sub("", titulo or ""))
     if _RE_DESENHO_FORA_DA_SOMA.search(t):
+        if _planta_e_diagrama_na_mesma_folha(t):
+            return "planta"
         return "fora"
     if _RE_DESENHO_VISTA.search(t):
         return "vista"
