@@ -110,6 +110,33 @@ def test_CONTROLE_curva_de_movel_dentro_de_bloco_nao_entra(tmp_path):
     assert _por_layer(_extrai(tmp_path, d)).get("MOVEIS", 0.0) == 0.0
 
 
+def test_curva_de_SIMBOLO_no_modelo_nao_soma_metro(tmp_path):
+    """dd52081b: CARROS 649 → 1.000 m com a curva dos carros; LAYOUT (móveis)."""
+    d = _doc()
+    msp = d.modelspace()
+    for lay in ("CARROS", "CARROS-LF", "LAY-OUT-LF", "LAYOUT", "VEGETACAO", "MOBILIARIO"):
+        msp.add_spline(_quarto_de_circulo(), dxfattribs={"layer": lay})
+    msp.add_line((0, 0), (4, 0), dxfattribs={"layer": "CARROS"})     # a linha reta fica
+    ex = _extrai(tmp_path, d)
+    tot = _por_layer(ex)
+    assert tot.get("CARROS") == pytest.approx(4.0), tot
+    for lay in ("CARROS-LF", "LAY-OUT-LF", "LAYOUT", "VEGETACAO", "MOBILIARIO"):
+        assert tot.get(lay, 0.0) == 0.0, (lay, tot)
+    assert "fora (símbolo/anotação): 6" in ex.metadata.get("splines_medidas", ""), ex.metadata
+
+
+def test_CONTROLE_os_layers_de_eletroduto_do_caso_nao_casam_com_simbolo():
+    for lay in ("Ele piso", "TELEFONE", "Eletroduto gesso", "ALARME", "TVCABO", "INTERFONE",
+                "EL-Condutos (Teto)", "CARRETEL", "ELE-CARREGADOR VEICULAR"):
+        assert not dx._RE_LAYER_SIMBOLO_EM_CURVA.search(lay), lay
+
+
+def test_curva_em_layer_de_ANOTACAO_nao_soma_metro(tmp_path):
+    d = _doc()
+    d.modelspace().add_spline(_quarto_de_circulo(), dxfattribs={"layer": "COTAS"})
+    assert _por_layer(_extrai(tmp_path, d)).get("COTAS", 0.0) == 0.0
+
+
 def test_CONTROLE_sem_spline_nada_muda(tmp_path):
     d = _doc()
     d.modelspace().add_line((0, 0), (5, 0), dxfattribs={"layer": "PAREDE"})

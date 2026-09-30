@@ -3622,6 +3622,15 @@ def _polyline_length(entity) -> float:
 
 # teto de SPLINE medidas por prancha (texto explodido em curva vira milhares)
 _MAX_SPLINES = 20000
+# 30/09 (H10, antes/depois do estudo em 16 DXF): curva de SÍMBOLO — carro,
+# móvel, vegetação, figura humana — somava metro em layer que não é obra
+# (CARROS +351 m, CARROS-LF +192, LAY-OUT-LF +23, LAYOUT +12; nenhum layer de
+# eletroduto casa aqui). "veicul" ficou de fora de propósito: "CARREGADOR
+# VEICULAR" é elétrica. Esses layers seguem com as LINHAS deles, como antes;
+# só a curva não entra. E curva em layer de anotação também não.
+_RE_LAYER_SIMBOLO_EM_CURVA = re.compile(
+    r"carr[oa]|[aá]rvore|veget|paisag|mob[ií]l|lay-?out|pessoa|human|figur",
+    re.IGNORECASE)
 
 
 def _spline_pontos(entity) -> list:
@@ -6899,10 +6908,16 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
     # milhares — passando dele, pára e registra (nunca derruba a prancha).
     _spl_n = 0
     _spl_por_layer: dict = {}
+    _spl_simbolo = 0
+    from engine_rules import layer_is_anotacao as _anot_spl
     for spl in msp.query("SPLINE"):
         if _spl_n >= _MAX_SPLINES:
             break
         try:
+            if (_RE_LAYER_SIMBOLO_EM_CURVA.search(str(spl.dxf.layer))
+                    or _anot_spl(spl.dxf.layer)):
+                _spl_simbolo += 1
+                continue                 # antes de achatar: não custa tempo
             _pts_s = _spline_pontos(spl)
             length = sum(_line_length(_pts_s[i], _pts_s[i + 1])
                          for i in range(len(_pts_s) - 1)) * unit_factor if _pts_s else 0.0
@@ -6920,6 +6935,9 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         metadata["splines_medidas"] = "%d SPLINE, %.2f m | %s" % (
             _spl_n, sum(_spl_por_layer.values()),
             " · ".join("%s %.2f m" % (l, m) for l, m in _top_s))
+    if _spl_simbolo:
+        metadata["splines_medidas"] = (metadata.get("splines_medidas", "0 SPLINE")
+                                       + " | fora (símbolo/anotação): %d" % _spl_simbolo)
 
     # ---- Comprimento de INFRA LINEAR dentro de BLOCOS ----------------------
     # O laço acima só vê o MODELSPACE. Em muitos projetos de instalação o
