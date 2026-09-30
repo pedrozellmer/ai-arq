@@ -11,6 +11,7 @@ Suporta:
 
 import ezdxf
 import logging
+import bisect
 import math
 import os
 import re
@@ -1465,7 +1466,10 @@ _TUBO_ANG_TOL = 1.0             # graus
 _TUBO_COBERTURA = 0.5           # o trecho tem parceira em ≥ metade do comprimento
 _TUBO_FRACAO_LAYER = 0.8        # ≥ 80% do layer em par → face dupla
 _TUBO_MIN_M = 5.0               # layer menor que isso não conta
-_TUBO_MAX_SEG = 20000           # teto de trechos por layer
+# 🩸 30/09 (medição do estudo nos 3 de produção): os maiores danos têm 23, 37 e
+# 41 MIL trechos no P-PIPE — um teto que PULA o layer pulava justo eles. Acima
+# do teto, entram os trechos MAIS LONGOS (o tubo; os curtos são conexão).
+_TUBO_MAX_SEG = 60000           # teto de trechos por layer (amostra os longos)
 
 
 def _diametros_rotulados(texts) -> list:
@@ -1516,8 +1520,15 @@ def tubos_em_face_dupla(walls, texts, unit_factor: float = 1.0) -> dict:
                 por_layer.setdefault(lay, []).append((a, b))
     out = {}
     for lay, segs in por_layer.items():
-        if total_m.get(lay, 0.0) < _TUBO_MIN_M or len(segs) > _TUBO_MAX_SEG:
+        if total_m.get(lay, 0.0) < _TUBO_MIN_M:
             continue
+        _base_m = total_m[lay]
+        if len(segs) > _TUBO_MAX_SEG:
+            segs = sorted(segs, key=lambda ab: -math.hypot(ab[1][0] - ab[0][0],
+                                                            ab[1][1] - ab[0][1]))[:_TUBO_MAX_SEG]
+            # 🪤 com amostra, a fração é sobre o AMOSTRADO — sobre o layer
+            # inteiro ela cairia só por ter deixado trecho de fora
+            _base_m = sum(math.hypot(b[0] - a[0], b[1] - a[1]) for a, b in segs) * uf
         itens = []
         for (ax, ay), (bx, by) in segs:
             ang = math.degrees(math.atan2(by - ay, bx - ax)) % 180.0
@@ -1534,6 +1545,10 @@ def tubos_em_face_dupla(walls, texts, unit_factor: float = 1.0) -> dict:
         if len(grupos) > 1 and grupos[0][0][0] + 180.0 - grupos[-1][-1][0] <= _TUBO_ANG_TOL:
             grupos[0] = grupos.pop() + grupos[0]
         em_par_m = 0.0
+        # 30/09 (antes/depois do estudo): o aviso listava os 5 MENORES rotulados
+        # (ø25…ø75) e o ø150 que dominava o layer não aparecia — agora são os que
+        # PAREARAM, pelos metros
+        par_por_d: dict = {}
         for g in grupos:
             th = math.radians(g[0][0])
             ux, uy = math.cos(th), math.sin(th)
@@ -1544,30 +1559,35 @@ def tubos_em_face_dupla(walls, texts, unit_factor: float = 1.0) -> dict:
                 rho = ((ax + bx) / 2.0) * nx + ((ay + by) / 2.0) * ny
                 sg.append((rho, t0, t1))
             sg.sort()
+            rhos = [x[0] for x in sg]
             cob = [0.0] * len(sg)
             for i in range(len(sg)):
                 ri, a0, a1 = sg[i]
-                for j in range(i + 1, len(sg)):
+                # busca binária: só o que está entre d_min e d_max do lado — os
+                # pedaços da MESMA linha (dist ≈ 0) nem entram na conta
+                j0 = bisect.bisect_left(rhos, ri + d_min, i + 1)
+                j1 = bisect.bisect_right(rhos, ri + d_max, j0)
+                for j in range(j0, j1):
                     rj, b0, b1 = sg[j]
                     dist = rj - ri
-                    if dist > d_max:
-                        break
-                    if dist < d_min:
-                        continue
-                    if not any(abs(dist - d) <= _TUBO_DIST_TOL * d for d in d_bruto):
+                    _k = next((k for k, d in enumerate(d_bruto)
+                               if abs(dist - d) <= _TUBO_DIST_TOL * d), None)
+                    if _k is None:
                         continue
                     ov = min(a1, b1) - max(a0, b0)
                     if ov > 0:
                         cob[i] += ov
                         cob[j] += ov
+                        par_por_d[diam[_k]] = par_por_d.get(diam[_k], 0.0) + ov * uf
             for (rho, t0, t1), c in zip(sg, cob):
                 comp = t1 - t0
                 if comp > 0 and min(c, comp) >= _TUBO_COBERTURA * comp:
                     em_par_m += comp * uf
-        fr = em_par_m / total_m[lay] if total_m[lay] > 0 else 0.0
+        fr = em_par_m / _base_m if _base_m > 0 else 0.0
         if fr >= _TUBO_FRACAO_LAYER:
             out[lay] = {"m": round(total_m[lay], 2), "fracao": round(min(fr, 1.0), 2),
-                        "diametros_mm": diam[:8]}
+                        "diametros_mm": [d for d, _m in sorted(par_por_d.items(),
+                                                               key=lambda kv: -kv[1])][:8]}
     return out
 
 

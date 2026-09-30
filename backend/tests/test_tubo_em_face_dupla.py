@@ -52,7 +52,27 @@ def _feixe(layer="P-PIPE", n=3, d=0.150, vao=0.133, comp=10.0, uf=1.0):
 def test_o_caso_real_feixe_de_tubos_em_face_dupla():
     fd = dx.tubos_em_face_dupla(_feixe(), [T("ø150"), T("PVC-ø75")])
     assert "P-PIPE" in fd and fd["P-PIPE"]["fracao"] >= 0.8, fd
-    assert fd["P-PIPE"]["diametros_mm"] == [75, 150]
+    # os que PAREARAM, por metros — o ø75 foi rotulado mas não tem par (30/09:
+    # o aviso listava os 5 menores rotulados e escondia o ø150 que dominava)
+    assert fd["P-PIPE"]["diametros_mm"] == [150]
+
+
+def test_os_diametros_do_aviso_vao_pelos_metros_em_par():
+    ws = _feixe(n=1, d=0.075, comp=2.0) + _feixe(n=3, d=0.150, comp=10.0)
+    for w in ws[2:]:
+        w.start = (w.start[0], w.start[1] + 5)
+        w.end = (w.end[0], w.end[1] + 5)
+    fd = dx.tubos_em_face_dupla(ws, [T("ø25"), T("ø75"), T("ø150")])
+    assert fd["P-PIPE"]["diametros_mm"] == [150, 75], fd
+
+
+def test_layer_acima_do_teto_e_amostrado_e_nao_pulado(monkeypatch):
+    """17d6e1f2/788d0270/4b2db70b: 23 a 41 mil trechos no P-PIPE. Pular o
+    layer grande pulava justo os maiores danos."""
+    monkeypatch.setattr(dx, "_TUBO_MAX_SEG", 4)
+    ws = _feixe(n=3) + [W("P-PIPE", (0, 20 + k), (0.5, 20 + k)) for k in range(6)]
+    fd = dx.tubos_em_face_dupla(ws, [T("ø150")])
+    assert "P-PIPE" in fd and fd["P-PIPE"]["fracao"] >= 0.8, fd
 
 
 def test_desenho_em_milimetro_tambem():
