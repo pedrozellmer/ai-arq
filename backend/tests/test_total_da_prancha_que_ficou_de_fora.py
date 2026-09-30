@@ -81,6 +81,48 @@ def test_CONTROLE_total_geral_do_quadro_e_a_soma_das_classes():
     assert not any("ficou de fora" in a for a in r["avisos"]), r["avisos"]
 
 
+def _dois_quadros_com_classes():
+    """Dois quadros; os totais por classe (50A + 60B) diferem das linhas em ~4%
+    (dentro dos 5%): só a SOMA DOS TOTAIS LIDOS explica o total do quadro e o
+    geral."""
+    ts = []
+    for y0, linhas, t50, t60 in ((10, (("8", 100, 39.5), ("10", 200, 123.4), ("12.5", 50, 48.2)), 120, 100),
+                                 (-40, (("8", 200, 79.0), ("10", 100, 61.7), ("12.5", 100, 96.3)), 150, 97)):
+        ts += [_t("BITOLA", 10, y0), _t("COMPR (m)", 40, y0), _t("PESO (kg)", 70, y0)]
+        for i, (b, comp, kg) in enumerate(linhas):
+            y = y0 - 5 - 4 * i
+            ts += [_t(b, 10, y), _t("%g" % comp, 40, y), _t("%g" % kg, 70, y)]
+        ts += [_t("PESO TOTAL 50A =", 10, y0 - 19), _t("%g kgf" % t50, 70, y0 - 19),
+               _t("PESO TOTAL 60B =", 10, y0 - 23), _t("%g kgf" % t60, 70, y0 - 23)]
+    return ts
+
+
+def test_CONTROLE_os_dois_quadros_sem_nada_a_mais_sao_confiaveis():
+    r = se.parse_steel_table(_dois_quadros_com_classes())
+    assert r["confiavel"] is True and r["total_kg"] == pytest.approx(467.0), r
+
+
+@pytest.mark.parametrize("extra", ["PESO TOTAL QUADRO 1 = 220 kgf",     # = 120 + 100 (um quadro)
+                                   "PESO TOTAL GERAL = 467 kgf"])        # = os dois
+def test_CONTROLE_total_que_e_soma_dos_totais_lidos_nao_sobra(extra):
+    r = se.parse_steel_table(_dois_quadros_com_classes() + [_t(extra, 300, -80)])
+    assert r["confiavel"] is True, (extra, r["avisos"])
+
+
+def test_CONTROLE_arredondamento_de_1_kg_num_total_pequeno():
+    # uma linha de 39,5 kg e o resumo "PESO TOTAL CA-50 = 40 kgf" fora do quadro
+    ts = [_t("BITOLA", 10, 10), _t("COMPR (m)", 40, 10), _t("PESO (kg)", 70, 10),
+          _t("8", 10, 5), _t("100", 40, 5), _t("39.5", 70, 5), _t("PESO TOTAL CA-50 = 40 kgf", 300, -80)]
+    r = se.parse_steel_table(ts)
+    assert r["confiavel"] is True, r["avisos"]
+
+
+@pytest.mark.parametrize("texto", ["TOTAL = 24", "TOTAL: 24"])
+def test_CONTROLE_total_sem_peso_nem_kg_no_proprio_texto(texto):
+    r = se.parse_steel_table(_quadro_lido() + [_t(texto, 300, -9)])
+    assert r["confiavel"] is True, (texto, r["avisos"])
+
+
 @pytest.mark.parametrize("total", [
     ("TOTAL", "24"),                    # tabela de quantidades: sem "peso" e sem kg
     ("PESO TOTAL CA 50", ""),           # rótulo com a classe, sem valor
