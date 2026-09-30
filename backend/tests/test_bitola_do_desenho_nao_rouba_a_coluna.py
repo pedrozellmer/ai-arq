@@ -37,8 +37,9 @@ def _kg(r):
     return out
 
 
-def test_o_caso_o_o_do_desenho_no_cabecalho_nao_rouba_a_coluna():
-    extra = [("1", "Ø 6.3", 9.0, _Y_CAB, 0.1),          # marcação do desenho, na altura do "BIT"
+@pytest.mark.parametrize("x_marcacao", [9.0, 1.0])     # depois do cabeçalho (o caso) e antes dele
+def test_o_caso_o_o_do_desenho_no_cabecalho_nao_rouba_a_coluna(x_marcacao):
+    extra = [("1", "Ø 6.3", x_marcacao, _Y_CAB, 0.1),   # marcação do desenho, na altura do "BIT"
              ("1", "Ø 10", 8.5, _Y_12_5, 0.1)]          # e o "Ø 10" da planta na linha do Ø12,5
     r = se.parse_steel_table(_textos(_EBERICK + extra))
     assert r, r
