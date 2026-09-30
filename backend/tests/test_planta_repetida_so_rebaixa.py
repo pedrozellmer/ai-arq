@@ -273,3 +273,43 @@ def test_a_chave_do_selo_nao_sobe_a_contagem_do_tipo_copiado():
                 and any(isinstance(y, ast.Continue) for y in s.body)]
         achou = achou or bool(pula)
     assert achou, "a chave do selo voltou a indexar a contagem do tipo copiado"
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  6. O prompt: a planta repetida dita em português, não o dicionário cru
+# ══════════════════════════════════════════════════════════════════════════
+# 🩸 29/09/2026 (eval eve6ae9c): com `copias_sombra` cru nos METADADOS, a IA
+# rebaixou TODA contagem por conta própria — inclusive as 70 luminárias que só
+# existem na vista de iluminação — e escreveu "estimativa: ~35 un por planta".
+def test_o_prompt_diz_quais_tipos_estao_nas_copias(tmp_path):
+    import dwg_extractor as dx
+    p = str(tmp_path / "eletrico.dxf")
+    _dxf_da_planta_repetida(p)
+    txt = dx.extract_dxf(p).to_structured_prompt()
+    assert "PLANTA REPETIDA NO MODELO" in txt, txt[:1500]
+    trecho = txt[txt.index("PLANTA REPETIDA NO MODELO"):][:1200]
+    assert "'PIA-P'" in trecho and "'vaga PNE'" in trecho, trecho
+    assert "'AMBAR'" not in trecho, "o tipo que mora numa vista só não é das cópias"
+    assert "NÃO divida" in trecho and "DEMAIS tipos" in trecho
+
+
+def test_o_dicionario_cru_nao_vai_pra_ia(tmp_path):
+    import dwg_extractor as dx
+    p = str(tmp_path / "eletrico.dxf")
+    _dxf_da_planta_repetida(p)
+    txt = dx.extract_dxf(p).to_structured_prompt()
+    meta = txt[txt.index("METADADOS DO ARQUIVO:"):].split("\n\n", 1)[0]
+    assert "copias_sombra:" not in meta and "planta_repetida:" not in meta, meta[:800]
+
+
+def test_CONTROLE_sem_planta_repetida_o_prompt_nao_fala_nisso(tmp_path):
+    import dwg_extractor as dx
+    import ezdxf
+    p = str(tmp_path / "simples.dxf")
+    d = ezdxf.new("R2010")
+    d.header["$INSUNITS"] = 6
+    d.blocks.new(name="TOMADA").add_lwpolyline([(0, 0), (0.3, 0), (0.3, 0.3)], close=True)
+    for i in range(6):
+        d.modelspace().add_blockref("TOMADA", (i * 3.0, 0))
+    d.saveas(p)
+    assert "PLANTA REPETIDA NO MODELO" not in dx.extract_dxf(p).to_structured_prompt()

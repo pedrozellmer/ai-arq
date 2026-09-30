@@ -249,6 +249,9 @@ class DXFExtraction:
 
     # -- prompt generation --------------------------------------------------
 
+    #: registros de máquina que a IA NÃO lê crus (vão ditos em português)
+    _METADADOS_FORA_DO_PROMPT = frozenset({"copias_sombra", "planta_repetida"})
+
     def to_structured_prompt(self) -> str:
         """Converts extraction to a structured text prompt for Claude."""
         lines: list[str] = []
@@ -258,6 +261,11 @@ class DXFExtraction:
         if self.metadata:
             lines.append("METADADOS DO ARQUIVO:")
             for k, v in self.metadata.items():
+                # 🩸 29/09: o registro do detector de cópias, cru, fazia a IA
+                # duvidar de TODA contagem ("~35 por planta" nas 70 luminárias
+                # que eram 70). Vai dito em português, logo abaixo.
+                if k in self._METADADOS_FORA_DO_PROMPT:
+                    continue
                 lines.append(f"  {k}: {v}")
             lines.append("")
 
@@ -275,6 +283,27 @@ class DXFExtraction:
                 "vista, no mesmo ponto, já foi contada UMA vez%s. NÃO desconte de novo e NÃO "
                 "escreva que a contagem pode estar inflada ou duplicada por causa das vistas."
                 % (_vb.get("vistas"), (" (saíram as repetições: %s)" % _saiu) if _saiu else ""))
+            lines.append("")
+
+        # 🩸 29/09/2026 (job 6437838e): a planta repetida no modelo, dita em
+        # português — QUAIS tipos estão nas cópias. Com o dicionário cru, a IA
+        # rebaixou as 70 luminárias da vista de iluminação (que só existem lá)
+        # e escreveu "estimativa: ~35 un por planta".
+        _pr_md = self.metadata or {}
+        _cp = _pr_md.get("copias_sombra") or {}
+        _tc = _cp.get("tipos_copiados") or _cp.get("nomes") or {}
+        if _pr_md.get("planta_repetida") and _tc:
+            _nomes_cp = list(_tc)
+            lines.append(
+                "PLANTA REPETIDA NO MODELO: a mesma planta-base aparece desenhada mais de uma "
+                "vez neste arquivo (uma cópia por prancha, ou um andar por cópia). Estes tipos "
+                "de bloco têm peças NAS CÓPIAS, e a contagem deles soma as cópias: %s%s. Use a "
+                "contagem como ela está — NÃO divida e NÃO estime 'por planta': o motor marca "
+                "essas linhas como estimativa e explica ao cliente. Os DEMAIS tipos de bloco "
+                "aparecem numa cópia só: a contagem deles vale como está. Comprimento de layer e "
+                "área de hachura deste arquivo somam as cópias."
+                % (", ".join("'%s'" % n for n in _nomes_cp[:20]),
+                   " (e mais %d)" % (len(_nomes_cp) - 20) if len(_nomes_cp) > 20 else ""))
             lines.append("")
 
         # 📄 Leitura por folha: a IA precisa saber que as medidas abaixo JÁ vêm
