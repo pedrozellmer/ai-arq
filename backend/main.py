@@ -15777,6 +15777,15 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                                 f"varridas={_md_u.get('proxy_aec_varridas')} "
                                 f"segmentos_medidos={_md_u.get('proxy_aec_segmentos')}",
                                 job_id)
+                        # 30/09 (H10): quanto do comprimento veio de SPLINE —
+                        # sem esta linha, "mediu a curva" e "não tinha curva"
+                        # ficam iguais no banco.
+                        if _md_u.get("splines_medidas"):
+                            _log_error(
+                                "motor:spline",
+                                f"arq={os.path.basename(dxf_path)} "
+                                f"{_md_u.get('splines_medidas')}",
+                                job_id)
 
                         # 📐 O QUE A PRANCHA ENTREGOU DE GEOMETRIA — sempre, uma
                         # linha por arquivo. É a matéria-prima de TODA medição:

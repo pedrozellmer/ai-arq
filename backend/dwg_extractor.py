@@ -253,7 +253,10 @@ class DXFExtraction:
     _METADADOS_FORA_DO_PROMPT = frozenset({"copias_sombra", "planta_repetida",
                                            # 30/09: ditos nas seções próprias
                                            "objetos_sem_bloco", "layers_de_cota",
-                                           "layers_de_borda"})
+                                           "layers_de_borda",
+                                           # 30/09 (H10): o comprimento já está
+                                           # no layer; isto é registro do log
+                                           "splines_medidas"})
 
     def to_structured_prompt(self) -> str:
         """Converts extraction to a structured text prompt for Claude."""
@@ -3617,6 +3620,50 @@ def _polyline_length(entity) -> float:
     return total
 
 
+# teto de SPLINE medidas por prancha (texto explodido em curva vira milhares)
+_MAX_SPLINES = 20000
+
+
+def _spline_pontos(entity) -> list:
+    """A SPLINE achatada: [(x, y), ...] em unidade do desenho ([] se não deu).
+
+    Erro de corda de 1/1000 do tamanho da curva. Sem pontos de controle,
+    usa os pontos de ajuste ligados por reta."""
+    pts = []
+    try:
+        ct = entity.construction_tool()
+        cps = list(ct.control_points)
+        if cps:
+            xs = [p[0] for p in cps]
+            ys = [p[1] for p in cps]
+            diag = math.hypot(max(xs) - min(xs), max(ys) - min(ys))
+            tol = diag / 1000.0 if diag > 0 else 1e-9
+            pts = [(p.x, p.y) for p in ct.flattening(tol, segments=8)]
+    except Exception:
+        pts = []
+    if len(pts) < 2:
+        try:
+            pts = [(p[0], p[1]) for p in entity.fit_points]
+        except Exception:
+            pts = []
+    return pts if len(pts) >= 2 else []
+
+
+def _spline_length(entity) -> float:
+    """Comprimento de uma SPLINE (unidade do desenho), pela curva ACHATADA.
+
+    🩸 30/09/2026 (H10 do estudo do acervo, job 73c6f0ed): eletroduto de piso,
+    de gesso e o circuito de telefone desenhados em SPLINE — 108, 55 e 65 m,
+    ≥ 99% dos layers. O motor somava só LINE/POLYLINE/ARC/CIRCLE, e o único
+    traço reto de cada layer era a AMOSTRA DA LEGENDA: saíram "✓ MEDIDO
+    0,6 m". A curva é achatada com erro de corda de 1/1000 do tamanho dela
+    (quarto de círculo de raio 10: 15,705 contra 15,708).
+    Sem pontos de controle, liga os pontos de ajuste. Falhou → 0 (não mede).
+    """
+    pts = _spline_pontos(entity)
+    return sum(_line_length(pts[i], pts[i + 1]) for i in range(len(pts) - 1)) if pts else 0.0
+
+
 def _hatch_bbox(entity):
     """Retângulo envolvente (x_min, y_min, x_max, y_max) de um HATCH, em
     COORDENADA CRUA do desenho — a mesma de `TextAnnotation.position`, senão o
@@ -6846,6 +6893,34 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         except Exception:
             continue
 
+    # SPLINEs (30/09, H10): eletroduto e circuito desenhados em curva. Sem
+    # isto, o layer só tinha a amostra reta da legenda e saía "✓ MEDIDO 0,6 m".
+    # Teto de quantidade: texto explodido em curva pode trazer dezenas de
+    # milhares — passando dele, pára e registra (nunca derruba a prancha).
+    _spl_n = 0
+    _spl_por_layer: dict = {}
+    for spl in msp.query("SPLINE"):
+        if _spl_n >= _MAX_SPLINES:
+            break
+        try:
+            _pts_s = _spline_pontos(spl)
+            length = sum(_line_length(_pts_s[i], _pts_s[i + 1])
+                         for i in range(len(_pts_s) - 1)) * unit_factor if _pts_s else 0.0
+            if length > 0:
+                _spl_n += 1
+                _lay_s = spl.dxf.layer
+                _spl_por_layer[_lay_s] = _spl_por_layer.get(_lay_s, 0.0) + length
+                # como no ARC: `length` é a curva; start/end, as pontas
+                walls.append(WallSegment(layer=_lay_s, length=length,
+                                         start=_pts_s[0], end=_pts_s[-1], curvo=True))
+        except Exception:
+            continue
+    if _spl_n:
+        _top_s = sorted(_spl_por_layer.items(), key=lambda kv: -kv[1])[:5]
+        metadata["splines_medidas"] = "%d SPLINE, %.2f m | %s" % (
+            _spl_n, sum(_spl_por_layer.values()),
+            " · ".join("%s %.2f m" % (l, m) for l, m in _top_s))
+
     # ---- Comprimento de INFRA LINEAR dentro de BLOCOS ----------------------
     # O laço acima só vê o MODELSPACE. Em muitos projetos de instalação o
     # eletroduto/eletrocalha/tubulação é desenhado DENTRO de blocos (MATRIZ,
@@ -6897,7 +6972,7 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
                         if _n_block_walls >= _MAX_BLOCK_WALLS or _n_scanned >= _MAX_BLOCK_SCAN:
                             break
                         _et = _e.dxftype()
-                        if _et not in ("LINE", "LWPOLYLINE", "POLYLINE", "ARC"):
+                        if _et not in ("LINE", "LWPOLYLINE", "POLYLINE", "ARC", "SPLINE"):
                             continue
                         _lay = _e.dxf.layer
                         if not _INFRA_LINEAR_RX.search(str(_lay)):
@@ -6910,6 +6985,8 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
                                 _L = _lwpolyline_length(_e)
                             elif _et == "POLYLINE":
                                 _L = _polyline_length(_e)
+                            elif _et == "SPLINE":
+                                _L = _spline_length(_e)
                             else:  # ARC
                                 _r = _e.dxf.radius
                                 _a0 = math.radians(_e.dxf.start_angle)

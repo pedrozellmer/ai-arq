@@ -9,10 +9,12 @@ Solução: acima de um teto de leitura segura, um passe com
 `ezdxf.addons.iterdxf` — que lê entidade por entidade, memória O(1) —
 copia pra um DXF enxuto SÓ o que o motor mede/lê:
 
-  mantém: LINE, LWPOLYLINE, POLYLINE, ARC, CIRCLE, ELLIPSE, HATCH,
+  mantém: LINE, LWPOLYLINE, POLYLINE, ARC, CIRCLE, ELLIPSE, SPLINE, HATCH,
           TEXT, MTEXT, INSERT, DIMENSION, POINT, SOLID, ATTRIB
-  descarta: 3DSOLID, MESH, IMAGE, WIPEOUT, ACAD_PROXY_ENTITY, SPLINE,
+  descarta: 3DSOLID, MESH, IMAGE, WIPEOUT, ACAD_PROXY_ENTITY,
             REGION, BODY e afins — lastro que não vira quantitativo.
+  (SPLINE era descartada até 30/09: o motor não a media. Passou a medir — H10,
+  eletroduto em curva — e sair daqui seria perder o eletroduto nos grandes.)
 
 O header/tables/blocks são copiados como estão (o iterdxf preserva a
 estrutura), então INSERTs continuam resolvendo. Se o resultado ainda for
@@ -47,6 +49,7 @@ _KEEP = {
     "LINE", "LWPOLYLINE", "POLYLINE", "ARC", "CIRCLE", "ELLIPSE",
     "HATCH", "TEXT", "MTEXT", "INSERT", "DIMENSION", "POINT",
     "SOLID", "ATTRIB",
+    "SPLINE",   # 30/09 (H10): o motor mede — eletroduto em curva
 }
 
 
@@ -233,7 +236,7 @@ def emagrecer_por_texto(path: str, out: str) -> tuple:
 #     etiqueta de representação de bloco dinâmico).
 # Esvaziando só isso: 511 -> 228 MB, pico de ~1,9 GB na extração, e a extração
 # saiu IDÊNTICA à do arquivo inteiro (campo a campo e o texto que vai pra IA).
-# 🪤 SPLINE parece lastro (o motor não mede) mas NÃO sai daqui: a `assinatura`
+# 🪤 SPLINE NÃO sai daqui (e desde 30/09 o motor MEDE SPLINE — H10): a `assinatura`
 # do bloco conta os tipos de dentro dele, e sem a SPLINE a assinatura muda —
 # medido no mesmo arquivo (a comparação reprovou).
 # 🪤 Pelo mesmo motivo o OLE2FRAME de dentro de bloco FICA, sem o binário
