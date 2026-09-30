@@ -5159,6 +5159,16 @@ def e_vinculo_de_modelo(texto) -> bool:
 # um bloco colado A$C… de 2 traços.
 _RE_REVISAO_DO_DESENHO = _re.compile(
     r"(?:^|[^A-Z0-9])REV(?:[^A-Z]|$)|REVIS[AÃ]O|NUVEM", _re.IGNORECASE)
+# 🩸 30/09/2026 (H29 do estudo do acervo; em produção, conta de casa de 22/07:
+# "símbolo de condutor FASE 109 un CONFIRMADO", mais NEUTRO 14, TERRA 24 e
+# RETORNO 16). As marcas de condutor que a planta elétrica põe em cada trecho de
+# eletroduto — FASE e RETORNO (1 traço), NEUTRO e TERRA (2 traços) — são blocos
+# com a FUNÇÃO no nome, palavra de ≥ 4 letras, e escapavam da regra da sigla.
+# Nome = a função (com "cond"/"condutor" na frente, singular ou plural) E
+# desenho só de 1–3 LINE. Caixa de terra (retângulo = polilinha) e haste
+# (círculo) não são só LINE → continuam peça.
+_RE_FUNCAO_DE_CONDUTOR = _re.compile(
+    r"^(?:cond(?:utor(?:es)?)?[\s._-]*)?(?:fase|neutro|terra|retorno|protecao)s?$")
 
 
 def nota_de_bloco_de_anotacao(nome, assinatura="") -> str:
@@ -5166,7 +5176,9 @@ def nota_de_bloco_de_anotacao(nome, assinatura="") -> str:
 
     Revisão: "REV" como sigla (C-REV, REV_01), REVISÃO, NUVEM — em qualquer bloco.
     Marca: definição só de LINE (1–3) E nome sem palavra de ≥ 4 letras (WN,
-    W-FFF). Anônimo (*U/*X) fica de fora: o nome dele não diz nada, pra nenhum lado.
+    W-FFF) — ou nome que é a FUNÇÃO de um condutor (fase, neutro, terra,
+    retorno, proteção). Anônimo (*U/*X) fica de fora: o nome dele não diz
+    nada, pra nenhum lado.
     """
     n = str(nome or "").strip()
     if not n or n.startswith("*"):
@@ -5182,10 +5194,13 @@ def nota_de_bloco_de_anotacao(nome, assinatura="") -> str:
                 tipos[t] = tipos.get(t, 0) + int(q)
             except ValueError:
                 return ""
-    if set(tipos) == {"LINE"} and 1 <= tipos["LINE"] <= 3 and \
-            not any(len(p) >= 4 for p in _re.findall(r"[^\W\d_]+", n)):
-        return ("  ⚠ SÓ TRAÇOS e sigla sem nome de peça — MARCA DE ANOTAÇÃO do desenho "
-                "(fiação, eixo, chamada): não conte como peça")
+    if set(tipos) == {"LINE"} and 1 <= tipos["LINE"] <= 3:
+        if _RE_FUNCAO_DE_CONDUTOR.match(_minusculo_sem_acento(n).strip()):
+            return ("  ⚠ MARCA DE CONDUTOR (fase/neutro/terra/retorno) em traços — MARCA "
+                    "DE ANOTAÇÃO do desenho (fiação): não conte como peça")
+        if not any(len(p) >= 4 for p in _re.findall(r"[^\W\d_]+", n)):
+            return ("  ⚠ SÓ TRAÇOS e sigla sem nome de peça — MARCA DE ANOTAÇÃO do desenho "
+                    "(fiação, eixo, chamada): não conte como peça")
     return ""
 
 
