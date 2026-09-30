@@ -1004,8 +1004,12 @@ _INSUNITS_TO_METERS[14] = 0.1
 # Agora ela usa esta máquina em `_corrigir_parede_linha_dupla`.
 # 25/09: leito de cabos, eletrocalha e bandeja são desenhados do mesmo jeito
 # (as duas bordas). "eletroduto" continua de fora: é linha ÚNICA.
+# 🩸 30/09 (H34 do estudo do acervo): o Revit exporta o duto como
+# "M-HVAC-DUCT", em INGLÊS, com as duas faces — "ducto" (espanhol) não casava
+# e o layer somava as duas bordas (acervo: 1.423 m de face → 903 m de eixo).
+# A trava de letra antes do nome segura "conduct"/"product".
 _RE_DUTO_DUPLO = re.compile(
-    r"(?<![a-z])(?:duto|ducto|leito|eletrocalha|bandeja)", re.IGNORECASE)
+    r"(?<![a-z])(?:duto|ducto|duct|leito|eletrocalha|bandeja)", re.IGNORECASE)
 
 _DUTO_ANG_TOL = 3.0      # graus: paralelas de verdade
 _DUTO_SEP_MIN = 0.05     # m: abaixo disso é a mesma linha repetida, não um par
