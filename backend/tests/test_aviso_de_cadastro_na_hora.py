@@ -458,6 +458,12 @@ def test_o_tick_HORARIO_so_passa_pela_MESMA_funcao(mundo, monkeypatch):
     monkeypatch.setattr(main, "_email_auto_ja_enviado", lambda *a, **k: False)
     monkeypatch.setattr(main, "_email_auto_recente", lambda *a, **k: False)
     monkeypatch.setattr(main, "_email_auto_registrar", lambda *a, **k: None)
+    # 🩸 30/09/2026 — este teste ficou VERMELHO das 9h às 10h do último dia útil
+    # do mês: o tick de verdade manda também o lembrete da newsletter (janela
+    # 9–10 h de Brasília), e o `_email_auto_ja_enviado` acima diz "nunca saiu".
+    # O relógio do teste fica num dia comum — o assunto aqui é o cadastro.
+    from datetime import datetime as _dt_nl
+    monkeypatch.setattr(main, "_agora_br_fn", lambda: _dt_nl(2026, 9, 15, 14, 0))
     mundo.conta("fulano@exemplo.test", minutos=40)
 
     def _tudo(path, params=None, **k):
