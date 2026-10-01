@@ -1252,7 +1252,9 @@ def layers_que_nao_provam(metadata) -> set:
     md = metadata or {}
     out = set()
     # 30/09 (H34): o tubo em face dupla — a soma é das duas paredes
-    for k in ("layers_de_cota", "layers_de_borda", "tubos_em_face_dupla"):
+    # 01/10 (H76): o layer de conexão cujo metro é o contorno das peças
+    for k in ("layers_de_cota", "layers_de_borda", "tubos_em_face_dupla",
+              "layers_contorno_de_peca"):
         for ly in (md.get(k) or {}):
             out.add(str(ly).strip().upper())
     return out
@@ -5085,7 +5087,10 @@ MARCA_PLANTA_REPETIDA = "⚠ A PLANTA APARECE REPETIDA no desenho"
 MARCA_PECA_SEM_BLOCO = "⚠ PEÇA DESENHADA SEM BLOCO"
 MARCA_LAYER_SEM_NOME = "⚠ LAYER SEM NOME"
 MARCA_TUBO_FACE_DUPLA = "⚠ TUBO EM FACE DUPLA"
+#: 🩸 01/10/2026 (H76) — ver `selo_apos_contorno_de_peca`.
+MARCA_CONTORNO_DE_PECA = "⚠ CONTORNO DE PEÇA, NÃO METRO"
 MARCAS_DE_REBAIXAMENTO = (MARCA_PECA_SEM_BLOCO, MARCA_LAYER_SEM_NOME, MARCA_TUBO_FACE_DUPLA,
+                          MARCA_CONTORNO_DE_PECA,
                           MARCA_PLANTA_REPETIDA, MARCA_LIDO_DE_TEXTO, MARCA_SOMA, MARCA_CARIMBO,
                           MARCA_MENOS_PAREDE, MARCA_UNIDADE_DE_CONTAGEM,
                           MARCA_EXTRACAO_COM_RESSALVA, MARCA_QUANTIDADE_RECUPERADA,
@@ -5752,6 +5757,30 @@ def selo_apos_tubo_em_face_dupla(conf, obs, unit, layers_citados, layers_face_du
     return ("estimado",
             MARCA_TUBO_FACE_DUPLA + " ('%s') — o layer traz as DUAS paredes de cada tubo: "
             "o comprimento do tubo é cerca da METADE; confira. " % hit + str(obs or ""),
+            True)
+
+
+def selo_apos_contorno_de_peca(conf, obs, unit, layers_citados, layers_contorno):
+    """(conf, obs, rebaixou) — metro de layer de CONEXÃO que é o contorno das
+    peças desenhadas em bloco (`dwg_extractor.layers_de_contorno_de_peca`) não
+    sai medido.
+
+    🩸 01/10/2026 (H76): "conexões para eletroduto 376,8 ml ✓" eram 988
+    conduletes de 0,38 m de contorno cada, também contados em un. SÓ REBAIXA e
+    avisa — a quantidade de peça é a contagem, que já existe em outra linha.
+    """
+    if conf != "confirmado" or not layers_contorno:
+        return conf, obs, False
+    if str(unit or "").strip().lower() not in _PROVA_POR_UNIDADE:
+        return conf, obs, False
+    ct = {str(x).strip().upper() for x in layers_contorno}
+    hit = next((str(ly) for ly in (layers_citados or ()) if str(ly).strip().upper() in ct), "")
+    if not hit:
+        return conf, obs, False
+    return ("estimado",
+            MARCA_CONTORNO_DE_PECA + " ('%s') — o número é o contorno das peças "
+            "desenhadas (conexões, conduletes, caixas), não comprimento de rede: a "
+            "quantidade dessas peças é a CONTAGEM em un. " % hit + str(obs or ""),
             True)
 
 

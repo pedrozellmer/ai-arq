@@ -16683,6 +16683,12 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                       ((extraction.metadata or {}).get("tubos_em_face_dupla") or {})}
                         except Exception:
                             _fd_ly = set()
+                        # 🩸 01/10 (H76): layers de conexão cujo metro é contorno de peça
+                        try:
+                            _ctp_ly = {str(_k).strip().upper() for _k in
+                                       ((extraction.metadata or {}).get("layers_contorno_de_peca") or {})}
+                        except Exception:
+                            _ctp_ly = set()
                         # 🩸 30/09 (filhote evefe9af): as contagens das peças sem bloco
                         try:
                             _objetos_n = {int(_p.get("n") or 0) for _ps in
@@ -16900,6 +16906,13 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                 conf, obs_raw, _era_fd = _regra_face_dupla(
                                     conf, obs_raw, normalized_unit, _lys, _fd_ly)
                                 if _era_fd:
+                                    _rebaixado_pela_fonte = True
+                                # 🩸 01/10 (H76): metro de layer de conexão = contorno de peça
+                                from engine_rules import (
+                                    selo_apos_contorno_de_peca as _regra_contorno)
+                                conf, obs_raw, _era_ctp = _regra_contorno(
+                                    conf, obs_raw, normalized_unit, _lys, _ctp_ly)
+                                if _era_ctp:
                                     _rebaixado_pela_fonte = True
 
                                 # 🩸 29/09 (caso 18c57c3c): linha com quantidade ZERO

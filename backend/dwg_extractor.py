@@ -264,6 +264,8 @@ class DXFExtraction:
                                            "splines_medidas",
                                            # 30/09 (H34): dito na linha do layer
                                            "tubos_em_face_dupla",
+                                           # 01/10 (H76): idem
+                                           "layers_contorno_de_peca",
                                            # 30/09 (H13): seção própria
                                            "pecas_no_vinculo"})
 
@@ -665,8 +667,17 @@ class DXFExtraction:
             _cota_ly = (self.metadata or {}).get("layers_de_cota") or {}
             _borda_ly = (self.metadata or {}).get("layers_de_borda") or {}
             _tubo_fd = (self.metadata or {}).get("tubos_em_face_dupla") or {}
+            _ctp = (self.metadata or {}).get("layers_contorno_de_peca") or {}
             for layer, length in sorted(walls_by_layer.items()):
-                if layer in _cota_ly and not _anot(layer):
+                if layer in _ctp and not _anot(layer):
+                    # 🩸 01/10 (H76) — sem "layer <palavra>" no texto (ver abaixo)
+                    lines.append(f"  {layer}: {length:.2f} m"
+                                 f"   ⚠ CONTORNO DE PEÇA — é a soma do desenho de "
+                                 f"{_ctp[layer].get('insercoes')} peças em bloco "
+                                 f"(~{_ctp[layer].get('m_por_insercao')} m cada: conexões, "
+                                 f"conduletes, caixas), NÃO comprimento de rede: não use "
+                                 f"como metro, use a CONTAGEM das peças")
+                elif layer in _cota_ly and not _anot(layer):
                     _n_anot += 1
                     lines.append(f"  {layer}: {length:.2f} m"
                                  f"   ⚠ ANOTAÇÃO DO DESENHO — são LINHAS DE COTA "
@@ -1791,6 +1802,41 @@ def eletrodutos_em_face_dupla(walls, unit_factor: float = 1.0) -> dict:
                         "diametros_mm": [d for d, _o in sorted(por_mm.items(),
                                                                key=lambda kv: -kv[1])][:3],
                         "eletroduto": True}
+    return out
+
+
+#: 🩸 01/10/2026 — H76 do estudo do acervo. O motor mede a linha de DENTRO dos
+#: blocos nos layers de infra linear — e a PEÇA (condulete, conexão, luva, caixa)
+#: mora em layer com nome de eletroduto. O metro desses layers é o CONTORNO das
+#: peças somado: um job de iluminação entregou "conexões para eletroduto
+#: 376,8 ml ✓" (988 conduletes de 0,38 m de contorno) e "conexões de eletrocalha
+#: 132,1 ml ✓", com as mesmas peças também contadas em un.
+_CONTORNO_FRACAO_BLOCO = 0.9      # ≥ 90 % do metro do layer veio de dentro de bloco
+_CONTORNO_MIN_INSERCOES = 20      # peça repetida, não um trecho desenhado em bloco
+_CONTORNO_MAX_M_POR_INSERCAO = 5.0
+
+
+def layers_de_contorno_de_peca(walls, metro_de_bloco) -> dict:
+    """{layer: {'m', 'insercoes', 'm_por_insercao'}} — layer de CONEXÃO (pelo
+    nome: `_RE_LAYER_DE_CONEXAO`) cujo metro é quase todo o contorno de peças
+    repetidas desenhadas em bloco. Não é quantidade linear: a peça se conta em un.
+    🔑 Só o nome de conexão + as três provas do desenho. Layer de ELETRODUTO cujo
+    trecho mora em bloco (o Revit faz isso) não entra: o nome não é de peça."""
+    out = {}
+    tot: dict = {}
+    for w in walls or ():
+        lay = str(getattr(w, "layer", "") or "")
+        tot[lay] = tot.get(lay, 0.0) + float(getattr(w, "length", 0.0) or 0.0)
+    for lay, (m_blk, ins) in (metro_de_bloco or {}).items():
+        n = len(ins)
+        if not _RE_LAYER_DE_CONEXAO.search(lay) or n < _CONTORNO_MIN_INSERCOES:
+            continue
+        t = tot.get(lay, 0.0)
+        if t <= 0 or m_blk < _CONTORNO_FRACAO_BLOCO * t:
+            continue
+        if m_blk / n > _CONTORNO_MAX_M_POR_INSERCAO:
+            continue
+        out[lay] = {"m": round(t, 2), "insercoes": n, "m_por_insercao": round(m_blk / n, 2)}
     return out
 
 
@@ -7861,6 +7907,7 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
     # linha em layers CLARAMENTE de infra linear (allowlist abaixo), onde o
     # comprimento é a quantidade legítima. Pulamos blocos de anotação/carimbo.
     # Interruptor de emergência: DXF_MEASURE_BLOCK_INFRA=0 desliga sem deploy.
+    _metro_de_bloco: dict = {}       # H76: {layer: [metro de dentro de bloco, {inserções}]}
     if os.getenv("DXF_MEASURE_BLOCK_INFRA", "1") != "0":
         _INFRA_LINEAR_RX = INFRA_LINEAR_RX
         _MAX_BLOCK_WALLS = 40000     # teto de segmentos adicionados (anti-explosão)
@@ -7929,6 +7976,10 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
                         if _L > 0:
                             walls.append(WallSegment(layer=_lay, length=_L, start=(0, 0), end=(0, 0)))
                             _n_block_walls += 1
+                            # H76: quanto do layer veio de dentro de bloco, e de quantas inserções
+                            _st = _metro_de_bloco.setdefault(str(_lay), [0.0, set()])
+                            _st[0] += _L
+                            _st[1].add(id(insert))
                 except Exception:
                     continue   # bloco problemático nunca derruba a prancha (regra nº1)
         finally:
@@ -8649,6 +8700,13 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             metadata["tubos_em_face_dupla"] = _tfd
     except Exception as _etfd:
         logger.warning("[tubo-face-dupla] falhou (não-fatal): %s", _etfd)
+    # 🩸 01/10 (H76): metro de layer de CONEXÃO que é o contorno das peças
+    try:
+        _ctp = layers_de_contorno_de_peca(walls, _metro_de_bloco)
+        if _ctp:
+            metadata["layers_contorno_de_peca"] = _ctp
+    except Exception as _ectp:
+        logger.warning("[contorno-de-peca] falhou (não-fatal): %s", _ectp)
     # 🩸 01/10 (H75): o eletroduto do Revit também vem pelas duas paredes, sem ø
     try:
         _efd = eletrodutos_em_face_dupla(walls, unit_factor)

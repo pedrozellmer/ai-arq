@@ -179,6 +179,8 @@ def _laco_de_itens_de_producao(items, areas=None, compr=None, extra=None):
         "_objetos_n": set(),
         # 30/09 (H34): os layers de tubo desenhados pelas duas paredes
         "_fd_ly": set(),
+        # 01/10 (H76): layers de conexão cujo metro é contorno de peça
+        "_ctp_ly": set(),
         # 30/09 (H13): as contagens e os nomes das peças de dentro do vínculo
         "_vinc_n": set(), "_vinc_nomes": set(),
         # 29/09 (caso 18c57c3c): blocos de anotação e as linhas que o laço tira
