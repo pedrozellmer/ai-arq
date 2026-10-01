@@ -65,6 +65,18 @@ def test_tubulacao_de_eletroduto_sem_rotulo_e_desta_regua(tmp_path):
     assert fd.get("TUBULACAO ELETRODUTO", {}).get("eletroduto"), fd
 
 
+def test_mesmo_layer_nas_duas_reguas_a_do_tubo_rotulado_vence(tmp_path):
+    """'TUBULACAO ELETRODUTO' com ø25 escrito: as duas réguas marcam; fica a do
+    tubo, que traz o diâmetro ROTULADO (prova mais forte que a distância)."""
+    def d(m):
+        _trechos(m, "TUBULACAO ELETRODUTO", (0, 0.025))
+        for i in range(6):
+            m.add_text("ELETRODUTO ø25", dxfattribs={"height": 0.1, "insert": (1, i * 3.0 + 0.3)})
+    ex = _ler(tmp_path, d)
+    fd = ex.metadata.get("tubos_em_face_dupla") or {}
+    assert "TUBULACAO ELETRODUTO" in fd and not fd["TUBULACAO ELETRODUTO"].get("eletroduto"), fd
+
+
 def test_tubo_rotulado_e_eletroduto_no_mesmo_desenho(tmp_path):
     """As duas réguas no mesmo arquivo: nenhuma apaga a outra."""
     def d(m):
