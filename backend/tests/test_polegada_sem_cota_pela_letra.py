@@ -49,6 +49,7 @@ def test_o_caso_unidade_imperial_com_letra_impossivel(altura, fator, uf, nome):
     (0.5, 0.3048, "letra de 15 cm em pé: possível"),
     (50.0, 0.0254, "1,27 m em polegada; em mm 5 cm e em cm 50 cm: duas unidades, não decide"),
     (5000.0, 1.0, "metro declarado: implantação 1:2000 tem letra de 5 m de verdade"),
+    (3.0, 1.0, "metro declarado, letra de 3 m: só o dm caberia — e metro não entra nesta régua"),
     (5000.0, 0.001, "milímetro declarado: a régua imperial não vale"),
 ])
 def test_CONTROLE_nao_corrige(altura, uf, motivo):
