@@ -5105,6 +5105,7 @@ def mapa_de_folhas(doc) -> dict:
                                        textos_papel.get(f, []), parece_titulo_de_desenho,
                                        tipo_do_desenho)
                 for f in {j["folha"] for j in uteis}}
+        out["convencao"] = {f: c for f, c in conv.items() if c}   # pro log e pra medir
         n_plantas_na_folha = {}
         for j in uteis:
             x0, y0, x1, y1 = j["caixa"]

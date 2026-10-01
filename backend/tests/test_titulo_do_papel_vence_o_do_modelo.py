@@ -54,6 +54,16 @@ def test_o_caso_corte_com_niveis_e_titulo_no_papel_abaixo_nao_e_planta():
     assert fs[3]["tipo"] == "planta", fs[3]
 
 
+def test_a_convencao_sai_no_mapa():
+    doc = ezdxf.new("R2018")
+    lay = doc.layouts.new("CORTES")
+    for k in range(3):
+        doc.modelspace().add_line((40.0 * k + 1, 1), (40.0 * k + 18, 1))
+        _viewport(lay, (40.0 * k, 0, 40.0 * k + 20, 15), centro_papel=(150 + 250 * k, 150))
+        lay.add_text("CORTE %d" % k, dxfattribs={"height": 5, "insert": (150 + 250 * k - 95, 65)})
+    assert dx.mapa_de_folhas(doc).get("convencao") == {"CORTES": "abaixo"}
+
+
 def test_convencao_de_5_contra_3_ainda_decide():
     # a casa do Revit: 5 títulos abaixo × 3 acima
     fs = _folha([["TELHADO"], [], [], [], []],
