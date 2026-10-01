@@ -1722,9 +1722,8 @@ def eletrodutos_em_face_dupla(walls, unit_factor: float = 1.0) -> dict:
     total_m: dict = {}
     for w in walls:
         lay = str(getattr(w, "layer", "") or "")
-        if (not _RE_LAYER_DE_ELETRODUTO.search(lay) or _RE_LAYER_DE_CONEXAO.search(lay)
-                or _RE_LAYER_DE_TUBO.search(lay)):
-            continue                                   # o tubo é da régua do H34
+        if not _RE_LAYER_DE_ELETRODUTO.search(lay) or _RE_LAYER_DE_CONEXAO.search(lay):
+            continue
         total_m[lay] = total_m.get(lay, 0.0) + float(getattr(w, "length", 0.0) or 0.0)
         if getattr(w, "curvo", False):
             continue
@@ -8654,8 +8653,9 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
     try:
         _efd = eletrodutos_em_face_dupla(walls, unit_factor)
         if _efd:
-            metadata["tubos_em_face_dupla"] = {**(metadata.get("tubos_em_face_dupla") or {}),
-                                               **_efd}
+            # o que a régua do TUBO (com ø rotulado) já decidiu vence
+            metadata["tubos_em_face_dupla"] = {**_efd,
+                                               **(metadata.get("tubos_em_face_dupla") or {})}
     except Exception as _eefd:
         logger.warning("[eletroduto-face-dupla] falhou (não-fatal): %s", _eefd)
 

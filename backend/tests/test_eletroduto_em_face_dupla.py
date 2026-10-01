@@ -54,7 +54,28 @@ def test_multi_linha_com_a_parede_do_tubo(tmp_path):
 
 def test_desenho_em_milimetro(tmp_path):
     ex = _ler(tmp_path, lambda m: _trechos(m, "ELETRODUTO", (0, 0.025), k=1000.0), insunits=4)
-    assert "ELETRODUTO" in (ex.metadata.get("tubos_em_face_dupla") or {})
+    fd = ex.metadata.get("tubos_em_face_dupla") or {}
+    assert "ELETRODUTO" in fd and fd["ELETRODUTO"]["diametros_mm"][0] == 25, fd
+
+
+def test_tubulacao_de_eletroduto_sem_rotulo_e_desta_regua(tmp_path):
+    """O nome diz tubo E eletroduto; sem ø escrito o H34 não decide — esta decide."""
+    ex = _ler(tmp_path, lambda m: _trechos(m, "TUBULACAO ELETRODUTO", (0, 0.025)))
+    fd = ex.metadata.get("tubos_em_face_dupla") or {}
+    assert fd.get("TUBULACAO ELETRODUTO", {}).get("eletroduto"), fd
+
+
+def test_tubo_rotulado_e_eletroduto_no_mesmo_desenho(tmp_path):
+    """As duas réguas no mesmo arquivo: nenhuma apaga a outra."""
+    def d(m):
+        _trechos(m, "P-PIPE", (0, 0.100))
+        for i in range(6):
+            m.add_text("PVC ø100", dxfattribs={"height": 0.1, "insert": (1, i * 3.0 + 0.3)})
+        _trechos(m, "ELETRODUTO", (40, 40.025))
+    ex = _ler(tmp_path, d)
+    fd = ex.metadata.get("tubos_em_face_dupla") or {}
+    assert "P-PIPE" in fd and not fd["P-PIPE"].get("eletroduto"), fd
+    assert fd.get("ELETRODUTO", {}).get("eletroduto"), fd
 
 
 def test_a_linha_confirmada_que_usa_o_layer_cai():
