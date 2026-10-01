@@ -11,6 +11,7 @@ import os
 import sys
 
 import ezdxf
+import pytest
 
 _AQUI = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(_AQUI))
@@ -20,12 +21,12 @@ import dwg_extractor as dx  # noqa: E402
 _TITULOS = ["DETALHE 01 - MURO", "CORTE AA", "ELEVAÇÃO FRONTAL"]
 
 
-def _modelo(colado=True):
+def _modelo(colado=True, n=3):
     """3 folhas 100 × 50 empilhadas (x 0–100, y 0–150), cada uma com um desenho
     e o título embaixo; e a SITUAÇÃO solta ao lado (x 150–250)."""
     doc = ezdxf.new("R2018")
     msp = doc.modelspace()
-    for k, tit in enumerate(_TITULOS):
+    for k, tit in enumerate(_TITULOS[:n]):
         y = 50.0 * k
         for a, b in (((0, y), (100, y)), ((100, y), (100, y + 50)),
                      ((100, y + 50), (0, y + 50)), ((0, y + 50), (0, y))):
@@ -42,8 +43,9 @@ def _modelo(colado=True):
     return msp
 
 
-def test_o_caso_a_mesma_caixa_pega_por_varios_titulos_nao_vale():
-    regs = dx._desenhos_no_modelo(_modelo())
+@pytest.mark.parametrize("n", [2, 3])
+def test_o_caso_a_mesma_caixa_pega_por_varios_titulos_nao_vale(n):
+    regs = dx._desenhos_no_modelo(_modelo(n=n))
     assert [r["titulo"] for r in regs] == ["SITUAÇÃO"], regs
 
 
