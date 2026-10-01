@@ -8947,6 +8947,7 @@ def _nucleo_denso(doc, limite_pontos: int = 20000):
 _PLAUS_TEXTO_MIN = 30              # textos no modelo pra julgar pela altura
 _PLAUS_TEXTO_IMPOSSIVEL_M = 0.001  # texto mediano < 1 mm de verdade = impossível
 _PLAUS_TEXTO_OK = (0.05, 1.0)      # texto do modelo em 1:25–1:200: 5 cm a 1 m
+_FATORES_IMPERIAIS = {0.0254: "polegadas", 0.3048: "pés"}
 
 
 def _unidade_pela_altura_do_texto(doc, unit_factor: float) -> dict:
@@ -8979,9 +8980,37 @@ def _unidade_pela_altura_do_texto(doc, unit_factor: float) -> dict:
         return {"status": None, "motivo": f"só {len(hs)} textos no modelo"}
     hs.sort()
     med = hs[len(hs) // 2]
+    # 🩸 01/10/2026 — H56 do estudo do acervo (liberado pelo Pedro): POLEGADA sem
+    # cota que prove. Em 120 dias, 5 pranchas declararam polegada — erradas nas
+    # DUAS direções: um ar-condicionado desenhado em mm saiu 25× MAIOR (duto de
+    # 22.332 m, real ~879 m — a avaliação NOTA 1 de 01/09), uma estrutura em
+    # metro saiu 39× MENOR. A letra entrega: 4 m em polegada (16 cm em mm); 2,5 mm
+    # em polegada (10 cm em metro). Só pra unidade IMPERIAL declarada: em metro,
+    # uma implantação 1:2000 tem letra de ~5 m de verdade e não pode "virar" cm.
+    # Mesmas travas da régua de baixo: ≥ 30 textos e EXATAMENTE uma unidade
+    # métrica que põe a letra entre 5 cm e 1 m; NÃO é prova, entra como ressalva.
+    lo, hi = _PLAUS_TEXTO_OK
+    _imp = next((n for f, n in _FATORES_IMPERIAIS.items() if abs(unit_factor - f) < 1e-9), "")
+    if _imp:
+        if lo <= med * unit_factor <= hi:
+            return {"status": None, "motivo": f"texto mediano {med * unit_factor * 100:.1f} cm em {_imp} é possível"}
+        cands = [f for f in _CANONICAL_METRIC_FACTORS if lo <= med * f <= hi]
+        if len(cands) != 1:
+            return {"status": None, "motivo": f"texto mediano {med:g} un em {_imp}: sem unidade métrica única ({len(cands)})"}
+        fator = cands[0]
+        return {
+            "status": "corrigida_plausibilidade",
+            "fator_corrigido": fator,
+            "mensagem": (
+                f"unidade corrigida por PLAUSIBILIDADE (altura do texto): o arquivo "
+                f"declara {_imp} e nenhuma cota confirma; em {_imp} o texto do desenho "
+                f"teria {med * unit_factor * 100:.2f} cm (impossível); em "
+                f"{_UNIT_FACTOR_NAMES.get(fator, fator)}, {med * fator * 100:.1f} cm. "
+                f"NÃO é prova — quantidades entram como estimado, confira a escala do "
+                f"seu arquivo."),
+        }
     if med * unit_factor >= _PLAUS_TEXTO_IMPOSSIVEL_M:
         return {"status": None, "motivo": f"texto mediano {med * unit_factor * 1000:.1f} mm é possível"}
-    lo, hi = _PLAUS_TEXTO_OK
     cands = [f for f in _CANONICAL_METRIC_FACTORS if f > unit_factor and lo <= med * f <= hi]
     if len(cands) != 1:
         return {"status": None, "motivo": f"texto mediano {med:g} un sem unidade única ({len(cands)})"}

@@ -1777,7 +1777,9 @@ def aviso_unidade_imperial(insunits, dim_status=None):
         return None
     if _ins not in _IMPERIAIS_INSUNITS:
         return None
-    if dim_status in ("validada", "corrigida"):
+    # 01/10 (H56): corrigida pela plausibilidade (a letra) ou pelo DIMLFAC, o
+    # "saem cerca de 25× maiores" fica falso — quem fala é a mensagem da correção
+    if dim_status in ("validada", "corrigida", "corrigida_lfac", "corrigida_plausibilidade"):
         return None
     nome, fator = _IMPERIAIS_INSUNITS[_ins]
     return (f"o cabeçalho do arquivo declara {nome} (unidade imperial) e a "
