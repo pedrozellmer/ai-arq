@@ -325,6 +325,59 @@ def _pagina_e_imperial(brutos) -> bool:
     return casam_imperial >= 2 and casam_metrico == 0
 
 
+#: 🩸 01/10/2026 — H68 do estudo do acervo: o `/C` do viewport de DESENHO vem em
+#: METRO por ponto, com o `/U` em branco. É o PDF do AutoCAD/Revit com o modelo
+#: em metro: a folha de papel sai em mm (C = 25,4/72 = 0,35278) e cada desenho
+#: na unidade do modelo — 0,03528 = 1:100, 0,02646 = 1:75, 0,01764 = 1:50,
+#: 0,00882 = 1:25. Lido como cm, dá 1:1 / 0,75 / 0,5 / 0,25: o `_snap_scale`
+#: descarta (< 5) e o viewport some. Aí sobra um recorte pequeno como principal
+#: (1:11 no lugar de 1:100 num viewport de 85 % da folha; 1:40 no lugar de 1:200)
+#: ou a escala cai pro carimbo.
+#: 📏 Acervo local, 92 páginas com /VP em 16 jobs: 57 ganham escala, 6 trocam
+#: de escala errada pra certa, 9 ficam iguais e 20 seguem sem viewport útil. Onde
+#: a produção tinha carimbo ou cota na MESMA folha, a escala em metro bate em 13
+#: de 15 (2 delas provadas por cota). As 2 que divergem são a favor do viewport:
+#: plantas a 1:125 que o rótulo deu como 1:100, e folha de detalhes a 1:25
+#: medida a 1:100.
+#: 🪤 C = 0,35278 é AMBÍGUO: papel 1:1 em mm, 1:10 em cm e 1:1000 em m dão o
+#: MESMO número. Só sai da conta quando a FOLHA da página também é papel em mm —
+#: aí é recorte do papel (carimbo, legenda), não desenho. Sem a folha pra dizer,
+#: fica como era (1:10).
+_PAPEL_MM = 25.4 / 72.0     # /C da folha de papel 1:1 em milímetro
+_TOL_PAPEL = 0.001          # 0,1 %
+_M_PARA_CM = 100.0
+_U_METRO = ("m", "metro", "metros", "meter", "meters", "metre", "metres")
+
+
+def _e_papel_mm(c) -> bool:
+    try:
+        return abs(float(c) - _PAPEL_MM) <= _TOL_PAPEL * _PAPEL_MM
+    except (TypeError, ValueError):
+        return False
+
+
+def _pagina_e_metro(brutos) -> bool:
+    """A medida dos viewports da PÁGINA está em METRO (com o `/U` calado)?
+
+    🔑 Decisão por PÁGINA, pela maioria: lidos como metro, MAIS viewports caem em
+    escala padrão do que lidos como cm. Empate fica no cm (o que era). As duas
+    leituras diferem 100×, então o mesmo viewport quase nunca casa nas duas.
+    🔒 `/U` declarado manda, como na polegada: "m"/"metro" é metro, qualquer
+    outro fica como era. Nos 658 viewports do acervo local NENHUM declarava.
+    """
+    declarados = [str(b.get("u") or "").strip().strip("()").lower() for b in brutos]
+    declarados = [u for u in declarados if u]
+    if declarados:
+        return all(u in _U_METRO for u in declarados)
+
+    def _casa(c, mult):
+        return bool((_snap_scale(float(c or 0) * mult / _CM_PER_PT) or (0, False))[1])
+
+    em_cm = sum(1 for b in brutos if _casa(b.get("c"), 1.0))
+    em_m = sum(1 for b in brutos if _casa(b.get("c"), _M_PARA_CM))
+    return em_m > em_cm
+
+
 def _snap_scale(raw: float):
     """Aproxima pra escala padrão de arquitetura se estiver a ≤5%. C é cm/pt
     (padrão do /RL). NÃO tenta unidades alternativas — isso fazia a folha 1:1
@@ -355,6 +408,7 @@ def scale_from_viewport(pdf_path: str, page_index: int = 0) -> dict:
         # 1ª passada: junta o que cada viewport DIZ, sem decidir unidade ainda —
         # a unidade é da página, e pra saber dela é preciso ver todas.
         brutos = []
+        folha_papel_mm = False
         for v in vps:
             try:
                 meas = v.get("/Measure")
@@ -367,6 +421,7 @@ def scale_from_viewport(pdf_path: str, page_index: int = 0) -> dict:
             # ignora a viewport da folha inteira (é o quadro do papel, não um
             # desenho) — sempre por ÁREA, nunca pelo denominador.
             if area >= 0.9 * page_area:
+                folha_papel_mm = folha_papel_mm or _e_papel_mm(c)
                 continue
             try:
                 u = str(x0.get("/U") or "")
@@ -374,7 +429,12 @@ def scale_from_viewport(pdf_path: str, page_index: int = 0) -> dict:
                 u = ""
             brutos.append({"bbox": bbox, "c": c, "area": area, "u": u})
 
+        # H68: com a folha em papel-mm, recorte com o MESMO /C é papel, não desenho
+        if folha_papel_mm:
+            brutos = [b for b in brutos if not _e_papel_mm(b["c"])]
         imperial = _pagina_e_imperial(brutos)
+        metro = not imperial and _pagina_e_metro(brutos)
+        mult = _M_PARA_CM if metro else 1.0
         views = []
         for b in brutos:
             if imperial:
@@ -383,18 +443,25 @@ def scale_from_viewport(pdf_path: str, page_index: int = 0) -> dict:
                     continue      # numa página imperial, o que não é imperial não entra
                 snapped = True
             else:
-                snap = _snap_scale(b["c"] / _CM_PER_PT)
+                snap = _snap_scale(b["c"] * mult / _CM_PER_PT)
                 if not snap:
                     continue
                 denom, snapped = snap
             views.append({"bbox": b["bbox"], "scale": denom, "snapped": snapped,
-                          "area": b["area"], "unidade": "polegada" if imperial else "cm"})
+                          "area": b["area"],
+                          "unidade": "polegada" if imperial else ("m" if metro else "cm")})
         if not views:
             return {}
         main = max(views, key=lambda x: x["area"])
         for x in views:
             x.pop("area", None)
-        return {"main_scale": main["scale"], "main_bbox": main["bbox"],
+        # 🪤 H68: na página em METRO o viewport traz a ESCALA, não o RECORTE.
+        # Medido no acervo (01/10): recortar no maior viewport derrubava área
+        # que hoje sai PROVADA por cota — 294 m² (3 cotas) → 27,8 m² numa folha
+        # cujo maior viewport cobre 16 % do papel; 1.512 m² (4 cotas) → 1.002.
+        # A região medida fica a de hoje (o agrupamento das vistas); recortar é
+        # outra decisão, com medida própria.
+        return {"main_scale": main["scale"], "main_bbox": None if metro else main["bbox"],
                 "snapped": main["snapped"], "viewports": views,
                 "unidade": main.get("unidade", "cm"),
                 "page_size": (pw, ph)}
