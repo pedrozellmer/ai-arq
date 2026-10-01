@@ -544,11 +544,10 @@ class DXFExtraction:
                     if _vinc(rotulo):
                         _nota += ("  ⚠ VÍNCULO DE MODELO (outro arquivo do Revit/IFC colado "
                                   "como bloco) — NÃO é peça: não conte como quantidade")
-                        # 30/09 (H13): da mesma disciplina, o conteúdo vai dito abaixo
-                        if any(str(rotulo).startswith(_b) for _b in
-                               ((self.metadata or {}).get("pecas_no_vinculo") or {})):
-                            _nota += ("; as peças de DENTRO dele estão em 'PEÇAS DENTRO DO "
-                                      "VÍNCULO' abaixo")
+                        # 🪤 30/09 (H13): o "o conteúdo está abaixo" ia em CADA linha
+                        # de vínculo — 152 linhas num pavimento, 2/3 do que a seção
+                        # acrescentava, e apontava também pras vistas NÃO somadas.
+                        # Vai uma vez, no cabeçalho da seção.
                     lines.append(f"  {rotulo}: {count} un{_nota}")
                 if _juntados:
                     lines.append(f"  ({_juntados} grupo(s) tinham nomes duplicados pelo "
@@ -567,7 +566,8 @@ class DXFExtraction:
                 "de PLANTA). Contagem SEM selo: marque 'estimado' e escreva 'vínculo' na "
                 "observação. A FASE está no nome da peça (DEMOLIR / A DEMOLIR / EXISTENTE / "
                 "NOVO) e decide o serviço: peça a DEMOLIR é demolição/retirada — nunca "
-                "fornecimento e instalação; EXISTENTE não se compra.")
+                "fornecimento e instalação; EXISTENTE não se compra. Na CONTAGEM DE BLOCOS "
+                "estes vínculos aparecem como '⚠ VÍNCULO DE MODELO': o conteúdo deles é ESTE.")
             for _base, _d in sorted(_pv.items(), key=lambda kv: -sum(kv[1]["pecas"].values())):
                 _outras = _d.get("outras_vistas") or []
                 lines.append(f"  • {_base} ({_d['disciplina']}, {_d['instancias']} instância(s), "
@@ -576,6 +576,10 @@ class DXFExtraction:
                                 if _outras else "") + "):")
                 for _nome, _n in _d["pecas"].items():
                     lines.append(f"      {_nome}: {_n} un")
+                _nl = _d.get("nao_listadas") or {}
+                if _nl.get("tipos"):
+                    lines.append(f"      (e mais {_nl['pecas']} peça(s) em {_nl['tipos']} tipo(s) "
+                                 f"não listados — a lista acima são os maiores)")
             lines.append("")
 
         # 🩸 30/09/2026 (job 9a2c5d87) — a peça desenhada UMA A UMA, sem bloco:
@@ -4080,6 +4084,10 @@ def pecas_no_vinculo(doc, nomes_inseridos, nome_do_arquivo, e_anotacao=None) -> 
         out[base] = {"disciplina": disc, "instancias": len(conts), "vista": vista,
                      "outras_vistas": outras[:4],
                      "pecas": dict(pecas.most_common(_VINCULO_MAX_PECAS))}
+        _resto = pecas.most_common()[_VINCULO_MAX_PECAS:]
+        if _resto:
+            # a IA precisa saber que há mais (no caso do toldo, 20 linhas a DEMOLIR)
+            out[base]["nao_listadas"] = {"tipos": len(_resto), "pecas": sum(n for _p, n in _resto)}
     return out
 
 

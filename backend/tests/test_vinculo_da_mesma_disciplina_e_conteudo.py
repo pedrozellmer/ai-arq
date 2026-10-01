@@ -186,8 +186,25 @@ def test_a_ia_le_as_pecas_e_a_fase(tmp_path):
     txt = _arquivo(tmp_path).to_structured_prompt()
     assert "PEÇAS DENTRO DO VÍNCULO DO REVIT DA MESMA DISCIPLINA" in txt
     assert "TOLDO - DEMOLIR: 3 un" in txt and "nunca fornecimento" in txt
-    assert "as peças de DENTRO dele estão em 'PEÇAS DENTRO DO VÍNCULO'" in txt
+    assert txt.count("o conteúdo deles é ESTE") == 1, txt   # uma vez, no cabeçalho
+    assert "as peças de DENTRO dele" not in txt          # não em cada linha de vínculo
     assert "pecas_no_vinculo:" not in txt              # o dict cru não vai
+
+
+def test_o_que_passa_do_limite_e_dito(tmp_path):
+    pecas = {"PEÇA %03d" % i: 2 for i in range(130)}
+
+    def extra(doc, msp):
+        _vinculo(doc, msp, "OBRA-ARQ-ANEXO_rvt-1-PLANTA TERREO", pecas, x=900)
+    ex = _arquivo(tmp_path, extra=extra)
+    d = ex.metadata["pecas_no_vinculo"]["OBRA-ARQ-ANEXO"]
+    assert len(d["pecas"]) == 100 and d["nao_listadas"] == {"tipos": 30, "pecas": 60}, d.get("nao_listadas")
+    assert "(e mais 60 peça(s) em 30 tipo(s) não listados" in ex.to_structured_prompt()
+
+
+def test_CONTROLE_sem_passar_do_limite_nao_ha_resto(tmp_path):
+    d = _arquivo(tmp_path).metadata["pecas_no_vinculo"][BASE]
+    assert "nao_listadas" not in d, d
 
 
 # ── o que NÃO muda ─────────────────────────────────────────────────────────────
