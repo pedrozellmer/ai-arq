@@ -94,6 +94,13 @@ def test_CONTROLE_convencao_fraca_fica_como_hoje(ab, ac):
     assert fs[0]["tipo"] == "planta" and not fs[0].get("papel_venceu_modelo"), fs[0]
 
 
+def test_CONTROLE_texto_do_papel_que_nao_e_titulo_nao_faz_convencao():
+    # embaixo das outras janelas há texto, mas é nota — não diz o que o desenho é
+    fs = _folha([_NIVEIS, [], [], []],
+                ab={0: "CORTE AA", 1: "NOTA GERAL", 2: "COTAS EM CM", 3: "REV 02"})
+    assert fs[0]["tipo"] == "planta" and not fs[0].get("papel_venceu_modelo"), fs[0]
+
+
 def test_CONTROLE_sem_titulo_no_modelo_segue_pegando_o_papel_de_baixo():
     fs = _folha([[], [], []], ab={0: "CORTE AA"})
     assert fs[0]["tipo"] == "vista" and fs[0].get("titulo_no_papel"), fs[0]
