@@ -9067,12 +9067,84 @@ def _unidade_por_plausibilidade(doc, unit_factor: float) -> dict:
     if r.get("status"):
         return r
     try:
+        u = _unidade_pela_coordenada_utm(doc, unit_factor)
+    except Exception as e:
+        u = {"status": None, "motivo": f"utm falhou: {type(e).__name__}"}
+    if u.get("status"):
+        return u
+    try:
         t = _unidade_pela_altura_do_texto(doc, unit_factor)
     except Exception as e:
         t = {"status": None, "motivo": f"texto falhou: {type(e).__name__}"}
     if t.get("status"):
         return t
-    return {"status": None, "motivo": f"{r.get('motivo', '')} | {t.get('motivo', '')}"}
+    return {"status": None,
+            "motivo": f"{r.get('motivo', '')} | {u.get('motivo', '')} | {t.get('motivo', '')}"}
+
+
+#: Faixa UTM do Brasil no hemisfério SUL (fusos 18–25, SIRGAS 2000): o leste
+#: vai de ~166 a ~834 km e o norte de ~6.200 km (sul do RS) a 10.000 km (o
+#: equador). O hemisfério norte (Roraima, Amapá) tem norte de 0 a ~600 km —
+#: confunde com coordenada comum e fica de fora.
+_UTM_BR_LESTE = (160_000.0, 840_000.0)
+_UTM_BR_NORTE = (6_200_000.0, 10_000_000.0)
+
+
+def _unidade_pela_coordenada_utm(doc, unit_factor: float) -> dict:
+    """Unidade IMPERIAL num desenho georreferenciado em UTM: é metro.
+
+    🩸 01/10/2026 — H63 do estudo do acervo, job b445916a (loteamento e
+    pavimentação, 15/09): o cabeçalho declara PÉS, sem cota, e a letra cabe nas
+    duas unidades (o H56 não decide, e certo). Mas o desenho está em
+    coordenada UTM (leste ~245 mil, norte ~8,98 milhões) — e UTM é metro por
+    definição: em pés, 8,98 milhões seriam 2.738 km. A entrega saiu 3,3×
+    menor no comprimento e 10,8× na área ("terraplenagem 9.453 m²").
+    🔑 Só com as três: unidade declarada imperial, ≥ `_PLAUS_MIN_PONTOS`
+    pontos e o NÚCLEO (percentis 25–75, os dois eixos) inteiro dentro da
+    faixa UTM do Brasil. Como as outras plausibilidades, NÃO é prova: entra
+    como ressalva e nada sai 'confirmado'.
+    """
+    imp = next((n for f, n in _FATORES_IMPERIAIS.items() if abs(unit_factor - f) < 1e-9), "")
+    if not imp:
+        return {"status": None, "motivo": "utm: unidade declarada não é imperial"}
+    xs: list = []
+    ys: list = []
+    for ent in doc.modelspace():
+        if len(xs) >= 20000:
+            break
+        try:
+            t = ent.dxftype()
+            if t == "LINE":
+                xs.extend((ent.dxf.start.x, ent.dxf.end.x))
+                ys.extend((ent.dxf.start.y, ent.dxf.end.y))
+            elif t == "LWPOLYLINE":
+                for p in ent.get_points():
+                    xs.append(p[0]); ys.append(p[1])
+            elif t in ("TEXT", "MTEXT"):
+                xs.append(ent.dxf.insert.x); ys.append(ent.dxf.insert.y)
+        except Exception:
+            continue
+    if len(xs) < _PLAUS_MIN_PONTOS:
+        return {"status": None, "motivo": f"utm: {len(xs)} pontos, pouco pra julgar"}
+    xs.sort(); ys.sort()
+
+    def _p(v, q):
+        return v[min(len(v) - 1, int(len(v) * q))]
+    x0, x1, y0, y1 = _p(xs, 0.25), _p(xs, 0.75), _p(ys, 0.25), _p(ys, 0.75)
+    (le0, le1), (no0, no1) = _UTM_BR_LESTE, _UTM_BR_NORTE
+    if not (le0 <= x0 and x1 <= le1 and no0 <= y0 and y1 <= no1):
+        return {"status": None, "motivo": "utm: o núcleo não está na faixa UTM do Brasil"}
+    xm = f"{_p(xs, 0.5):,.0f}".replace(",", ".")
+    ym = f"{_p(ys, 0.5):,.0f}".replace(",", ".")
+    return {
+        "status": "corrigida_plausibilidade",
+        "fator_corrigido": 1.0,
+        "mensagem": (
+            f"unidade corrigida por PLAUSIBILIDADE (coordenada UTM): o arquivo declara "
+            f"{imp}, mas o desenho está em coordenada UTM (leste ~{xm}, norte ~{ym}), "
+            f"que é sempre em metros. NÃO é prova — quantidades entram como estimado, "
+            f"confira a escala do seu arquivo."),
+    }
 
 
 def _unidade_pelo_nucleo(doc, unit_factor: float) -> dict:
