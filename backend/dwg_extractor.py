@@ -4707,7 +4707,7 @@ def _dentro(p, cx):
 _RE_SO_ESCALA = re.compile(r"^\s*(?:esc(?:ala)?\.?\s*:?\s*)?1\s*[:/]\s*\d{1,4}\s*$", re.IGNORECASE)
 
 
-def _titulo_no_papel(papel, textos) -> str:
+def _titulo_no_papel(papel, textos, lado="abaixo") -> str:
     """O título da vista escrito no PAPEL, logo abaixo da janela ('' se não há).
 
     🩸 25/09/2026 — job `42f99f4f` (esgoto e pluvial exportados do REVIT): 16
@@ -4719,6 +4719,8 @@ def _titulo_no_papel(papel, textos) -> str:
 
     Pega o texto MAIOR na faixa logo abaixo da janela (até 15% da altura dela),
     começando perto da borda esquerda; a linha só de escala não vale.
+    `lado="acima"`: a mesma faixa, espelhada no topo (folha que escreve o
+    título em cima do desenho — ver `_convencao_da_folha`).
     """
     if not papel or not textos:
         return ""
@@ -4726,14 +4728,46 @@ def _titulo_no_papel(papel, textos) -> str:
     w, h = (x1 - x0), (y1 - y0)
     if w <= 0 or h <= 0:
         return ""
+    if lado == "acima":
+        faixa, borda = (y1 - 0.02 * h, y1 + 0.15 * h), y1
+    else:
+        faixa, borda = (y0 - 0.15 * h, y0 + 0.02 * h), y0
     cand = [t for t in textos
-            if y0 - 0.15 * h <= t[2] <= y0 + 0.02 * h
+            if faixa[0] <= t[2] <= faixa[1]
             and x0 - 0.05 * w <= t[1] <= x0 + 0.6 * w
             and not _RE_SO_ESCALA.match(t[0]) and len(t[0]) <= 90]
     if not cand:
         return ""
-    cand.sort(key=lambda t: (-t[3], abs(t[2] - y0) + abs(t[1] - x0)))
+    cand.sort(key=lambda t: (-t[3], abs(t[2] - borda) + abs(t[1] - x0)))
     return cand[0][0]
+
+
+#: 🩸 30/09/2026 — H54, o erro INVERSO: o CORTE somado como PLANTA. No corte do
+#: Revit, os níveis escritos no desenho ("TÉRREO", "COBERTURA", "TELHADO") são a
+#: maior letra da região e viravam o título → 'planta'; o título de verdade
+#: ("CORTE AA", "CORTE 1") estava no PAPEL, logo abaixo da janela. Tabela do
+#: estudo (12 janelas com título no modelo E no papel): o papel do lado da
+#: convenção da folha acerta 8, erra 0. O papel do lado CONTRÁRIO errou 1 (um
+#: esquema de rede com "Planta Baixa" escrito em cima) — por isso só vale o lado
+#: da convenção. E a convenção tem de ser CLARA: ≥ 3 janelas e 1,5× o outro
+#: lado (a folha de escadas com 8 abaixo × 6 acima não decide; a casa do Revit
+#: com 5 × 3 decide).
+_CONVENCAO_MIN_JANELAS = 3
+_CONVENCAO_RAZAO = 1.5
+
+
+def _convencao_da_folha(janelas_da_folha, textos, parece, tipo) -> str:
+    """'abaixo', 'acima' ou '' — de que lado da janela a folha escreve o título."""
+    n = {"abaixo": 0, "acima": 0}
+    for j in janelas_da_folha:
+        for lado in n:
+            t = _titulo_no_papel(j.get("papel"), textos, lado)
+            if t and parece(t) and tipo(t):
+                n[lado] += 1
+    for lado, outro in (("abaixo", "acima"), ("acima", "abaixo")):
+        if n[lado] >= _CONVENCAO_MIN_JANELAS and n[lado] >= _CONVENCAO_RAZAO * n[outro]:
+            return lado
+    return ""
 
 
 def _desenhos_no_modelo(msp, caixa=None) -> list:
@@ -5066,6 +5100,11 @@ def mapa_de_folhas(doc) -> dict:
                     textos.append((t, p[0], p[1], alt))
             except Exception:
                 continue
+        # de que lado cada folha escreve o título no papel (H54, ver a constante)
+        conv = {f: _convencao_da_folha([j for j in uteis if j["folha"] == f],
+                                       textos_papel.get(f, []), parece_titulo_de_desenho,
+                                       tipo_do_desenho)
+                for f in {j["folha"] for j in uteis}}
         n_plantas_na_folha = {}
         for j in uteis:
             x0, y0, x1, y1 = j["caixa"]
@@ -5091,10 +5130,22 @@ def mapa_de_folhas(doc) -> dict:
                         tits = []
                         # e o papel também não: é a planta, não se sabe qual
                         j["sem_titulo_de_proposito"] = True
+            _lado = conv.get(j["folha"]) or ""
+            if tits and _lado and not j.get("sem_titulo_de_proposito"):
+                # 🩸 H54, o erro inverso: o papel do lado da convenção da folha
+                # vence o texto do modelo quando os dois discordam no tipo
+                _tp = _titulo_no_papel(j.get("papel"), textos_papel.get(j["folha"], []), _lado)
+                _tt = tipo_do_desenho(_tp) if _tp else ""
+                if _tt and _tt not in {tipo_do_desenho(t) for t in tits}:
+                    j["papel_venceu_modelo"] = " | ".join(tits)[:80]
+                    tits = [_tp]
+                    j["titulo_no_papel"] = True
             if not tits and not j.get("sem_titulo_de_proposito"):
                 # 25/09: o Revit escreve o título da vista no PAPEL, logo
-                # abaixo da janela — não no modelo, onde se procurava até aqui
-                _tp = _titulo_no_papel(j.get("papel"), textos_papel.get(j["folha"], []))
+                # abaixo da janela — não no modelo, onde se procurava até aqui.
+                # 30/09: na folha que escreve o título EM CIMA, procura em cima.
+                _tp = _titulo_no_papel(j.get("papel"), textos_papel.get(j["folha"], []),
+                                       _lado or "abaixo")
                 if _tp:
                     tits = [_tp]
                     j["titulo_no_papel"] = True
