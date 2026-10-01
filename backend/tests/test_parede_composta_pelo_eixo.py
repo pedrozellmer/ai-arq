@@ -45,6 +45,14 @@ def test_o_caso_parede_composta_mede_o_eixo(tmp_path, ys, motivo):
     assert ex.get_walls_by_layer()["A-WALL"] == pytest.approx(10.0, abs=0.05), motivo
 
 
+def test_parede_grossa_a_face_de_fora_passa_dos_40_cm_da_outra(tmp_path):
+    """Alvenaria de 38 cm com reboco de 3 cm por fora: a face de fora fica a
+    41 cm da de dentro — longe demais pra parear sozinha. É a mesma face do
+    reboco, então entra pelo reboco."""
+    ex = _ler(tmp_path, lambda m: _linhas(m, "PAREDE", 0, 10, (0, 0.03, 0.41)))
+    assert ex.get_walls_by_layer()["PAREDE"] == pytest.approx(10.0, abs=0.05)
+
+
 def test_parede_composta_em_milimetro(tmp_path):
     ex = _ler(tmp_path, lambda m: _linhas(m, "PAREDE", 0, 10, (0, 0.025, 0.165, 0.19), k=1000.0),
               insunits=4)
@@ -84,6 +92,17 @@ def test_CONTROLE_linha_fina_sem_par_nao_e_tocada(tmp_path):
         _linhas(m, "PAREDE", 0, 5, (5, 5.03))
     ex = _ler(tmp_path, d)
     assert ex.get_walls_by_layer()["PAREDE"] == pytest.approx(20.0, abs=0.05)
+
+
+def test_CONTROLE_linha_que_so_encosta_na_ponta_nao_e_reboco(tmp_path):
+    """Uma linha a 2 cm da face que só cruza o último metro da parede (segue
+    outro elemento até x=20): não corre junto com a face — não é reboco, conta
+    inteira. Parede 10 m pelo eixo + a linha de 11 m."""
+    def d(m):
+        _linhas(m, "PAREDE", 0, 10, (0, 0.15))
+        _linhas(m, "PAREDE", 9, 20, (0.02,))
+    ex = _ler(tmp_path, d)
+    assert ex.get_walls_by_layer()["PAREDE"] == pytest.approx(21.0, abs=0.05)
 
 
 def test_CONTROLE_duto_nao_junta_face_fina():
