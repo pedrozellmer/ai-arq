@@ -226,7 +226,7 @@ def _cascata_com(status, *, lfac_decide=True, monkeypatch=None, doc=None,
                 "mensagem": "DIMLFAC prova %s" % lfac_unidade,
                 "unidade_nome": lfac_unidade}
 
-    def _plaus(doc, uf):
+    def _plaus(doc, uf, cotas=None):     # 01/10 (H74): a cascata passa as cotas
         chamou["plausibilidade"] += 1
         return {"status": "corrigida_plausibilidade", "fator_corrigido": 0.01,
                 "mensagem": "o desenho em metro seria fisicamente impossível"}

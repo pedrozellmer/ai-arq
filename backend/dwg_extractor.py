@@ -3578,6 +3578,10 @@ def _validate_unit_by_dimensions(doc, unit_factor: float) -> dict:
                 % (usable, n_digitadas, len(proven),
                    (" (" + ", ".join("%g" % f for f in proven) + ")")
                    if proven else " — nenhum"))
+        # H74 (01/10): o que qualificou, pra plausibilidade do imperial ler
+        out["qualificados"] = [{"fator": f, "n": len(support[f]),
+                                "mediana_m": round(_median_of(support[f]), 3),
+                                "digitadas": apoio_digitado[f]} for f in proven]
         return out
     except Exception as exc:  # defensivo: a régua NUNCA derruba a extração
         logger.warning("[unit-cotas] validação por cotas falhou (ignorada): %s", exc)
@@ -7104,7 +7108,7 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             # apartamentos não é. Corrige SÓ no regime impossível e a
             # correção NÃO é prova: entra como ressalva (nada sai
             # 'confirmado') e o cliente lê a procedência.
-            _plaus = _unidade_por_plausibilidade(doc, unit_factor)
+            _plaus = _unidade_por_plausibilidade(doc, unit_factor, cotas=_regua_1a)
             if _plaus.get("status") == "corrigida_plausibilidade":
                 unit_factor = _plaus["fator_corrigido"]
                 logger.warning("[unit-plausibilidade] %s", _plaus["mensagem"])
@@ -9258,13 +9262,15 @@ def _unidade_pela_altura_do_texto(doc, unit_factor: float) -> dict:
     }
 
 
-def _unidade_por_plausibilidade(doc, unit_factor: float) -> dict:
+def _unidade_por_plausibilidade(doc, unit_factor: float, cotas=None) -> dict:
     """Última régua: o desenho, na unidade declarada, é fisicamente possível?
 
     Devolve {'status': 'corrigida_plausibilidade', 'fator_corrigido', 'mensagem'}
     ou {'status': None, 'motivo'}. Nunca lança.
     🩸 29/09: quando o NÚCLEO não decide, a altura do texto decide (ver
     `_unidade_pela_altura_do_texto`).
+    `cotas`: o que a régua das cotas devolveu (`_validate_unit_by_dimensions`),
+    pra régua das cotas automáticas no imperial (H74).
     """
     r = _unidade_pelo_nucleo(doc, unit_factor)
     if r.get("status"):
@@ -9276,13 +9282,64 @@ def _unidade_por_plausibilidade(doc, unit_factor: float) -> dict:
     if u.get("status"):
         return u
     try:
+        c = _unidade_pelas_cotas_automaticas(cotas, unit_factor)
+    except Exception as e:
+        c = {"status": None, "motivo": f"cotas automáticas falharam: {type(e).__name__}"}
+    if c.get("status"):
+        return c
+    try:
         t = _unidade_pela_altura_do_texto(doc, unit_factor)
     except Exception as e:
         t = {"status": None, "motivo": f"texto falhou: {type(e).__name__}"}
     if t.get("status"):
         return t
     return {"status": None,
-            "motivo": f"{r.get('motivo', '')} | {u.get('motivo', '')} | {t.get('motivo', '')}"}
+            "motivo": f"{r.get('motivo', '')} | {u.get('motivo', '')} | "
+                      f"{c.get('motivo', '')} | {t.get('motivo', '')}"}
+
+
+_COTAS_AUTO_MIN = 30                  # cotas que qualificaram o fator
+_COTAS_AUTO_MEDIANA_M = (0.5, 15.0)   # vão, porta, pé-direito — não furação de 40 cm
+
+
+def _unidade_pelas_cotas_automaticas(cotas, unit_factor: float) -> dict:
+    """Unidade IMPERIAL que as cotas automáticas desmentem: o único fator métrico
+    que elas qualificam vira plausibilidade (estimado).
+
+    🩸 01/10/2026 — H74 do estudo do acervo. Um refeitório declara POLEGADA, sem
+    cota digitada, com 109 cotas automáticas medindo 0,8 / 0,9 / 1,8 / 2,0 —
+    vãos e portas em METRO; lido em polegada, sairia 39× menor. A correção por
+    cota exige número digitado (cota "<>" é circular: prova qualquer fator) —
+    mas no imperial, que no Brasil já é suspeito, a MAGNITUDE das automáticas é
+    plausibilidade, como o núcleo e a letra.
+    🪤 Medido: fora do imperial o mesmo sinal ERRA 3 de 7 — folha de detalhe
+    (furação, pontos) com mediana crua de 20–50 em cm qualifica METRO. Daí as
+    travas: só imperial, ≥ `_COTAS_AUTO_MIN` cotas e mediana sob o fator em
+    0,5–15 m (as erradas davam 25–48 m; as certas 1,0 e 2,5).
+    """
+    imp = next((n for f, n in _FATORES_IMPERIAIS.items() if abs(unit_factor - f) < 1e-9), "")
+    if not imp:
+        return {"status": None, "motivo": "cotas automáticas: unidade declarada não é imperial"}
+    quals = list((cotas or {}).get("qualificados") or [])
+    if len(quals) != 1:
+        return {"status": None,
+                "motivo": f"cotas automáticas: {len(quals)} fator(es) qualificaram, não decide"}
+    q = quals[0]
+    fator, n, med = float(q.get("fator") or 0), int(q.get("n") or 0), float(q.get("mediana_m") or 0)
+    lo, hi = _COTAS_AUTO_MEDIANA_M
+    if fator <= 0 or n < _COTAS_AUTO_MIN or not (lo <= med <= hi):
+        return {"status": None,
+                "motivo": f"cotas automáticas: {n} cotas, mediana {med:g} m — não decide"}
+    return {
+        "status": "corrigida_plausibilidade",
+        "fator_corrigido": fator,
+        "mensagem": (
+            f"unidade corrigida por PLAUSIBILIDADE (cotas automáticas): o arquivo declara "
+            f"{imp}, mas {n} cotas automáticas medem, em "
+            f"{_UNIT_FACTOR_NAMES.get(fator, fator)}, mediana de {med:.2f} m (vãos e "
+            f"portas). NÃO é prova — quantidades entram como estimado, confira a escala "
+            f"do seu arquivo."),
+    }
 
 
 #: Faixa UTM do Brasil no hemisfério SUL (fusos 18–25, SIRGAS 2000): o leste
