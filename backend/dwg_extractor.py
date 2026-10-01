@@ -674,10 +674,14 @@ class DXFExtraction:
                                  f"NÃO é elemento de obra, não use como quantidade")
                 elif layer in _tubo_fd and not _anot(layer):
                     _dfd = ", ".join("ø%d" % d for d in (_tubo_fd[layer].get("diametros_mm") or [])[:5])
+                    # 01/10 (H75): o eletroduto não tem ø escrito — a distância é a MEDIDA
+                    _el = bool(_tubo_fd[layer].get("eletroduto"))
                     lines.append(f"  {layer}: {length:.2f} m"
-                                 f"   ⚠ TUBO EM FACE DUPLA — são as DUAS paredes de cada tubo "
+                                 f"   ⚠ {'ELETRODUTO' if _el else 'TUBO'} EM FACE DUPLA — são as "
+                                 f"DUAS paredes de cada {'eletroduto' if _el else 'tubo'} "
                                  f"({int(100 * float(_tubo_fd[layer].get('fracao') or 0))}% em par; "
-                                 f"diâmetros em par: {_dfd}): o comprimento do tubo "
+                                 f"{'distância medida entre as paredes' if _el else 'diâmetros em par'}: "
+                                 f"{_dfd}): o comprimento do {'eletroduto' if _el else 'tubo'} "
                                  f"(eixo) é cerca da METADE deste número — não use como medido")
                 elif layer in _borda_ly and not _anot(layer):
                     lines.append(f"  {layer}: {length:.2f} m"
@@ -1681,6 +1685,113 @@ def tubos_em_face_dupla(walls, texts, unit_factor: float = 1.0) -> dict:
                         "fracao_diametro": round(min(fr, 1.0), 2),
                         "diametros_mm": [d for d, _m in sorted(par_por_d.items(),
                                                                key=lambda kv: -kv[1])][:8]}
+    return out
+
+
+#: 🩸 01/10/2026 — H75 do estudo do acervo. O Revit exporta o ELETRODUTO como o
+#: tubo: as duas paredes (às vezes 2 a 4 linhas, com a espessura da parede), sem
+#: rótulo de ø — então a régua do tubo (que exige ø escrito) não marca. Um job de
+#: cliente (iluminação, 05/09) entregou "1.798,8 ml ✓": 80 % do layer com UMA
+#: parceira a 25 mm (o 3/4"), pelo eixo ~1.070 m. Os layers de eletroduto de
+#: linha ÚNICA do acervo têm 0 % em par a essa distância.
+_RE_LAYER_DE_ELETRODUTO = re.compile(r"(?<![a-z])(?:eletrodut|conduit|condu[ií]te)", re.IGNORECASE)
+#: a PEÇA (condulete, conexão, luva…) mora em layer com nome de eletroduto e o
+#: comprimento dela é contorno de bloco — outra régua (H76), não esta
+_RE_LAYER_DE_CONEXAO = re.compile(r"conex|condulet|caixa|luva|curva|bucha|acess", re.IGNORECASE)
+_ELETRODUTO_PAR_MM = (15, 60)     # diâmetro externo de 1/2" a 2"
+_ELETRODUTO_FRACAO = 0.6          # ≥ 60 % do layer com parceira → face dupla
+
+
+def eletrodutos_em_face_dupla(walls, unit_factor: float = 1.0) -> dict:
+    """{layer: {'m', 'fracao', 'diametros_mm'}} dos layers de ELETRODUTO
+    desenhados pelas duas paredes: ≥ `_ELETRODUTO_FRACAO` do comprimento com
+    uma parceira paralela a 15–60 mm, sobrepondo ≥ metade do trecho.
+
+    Mesmo destino do tubo (`tubos_em_face_dupla`): entra em
+    `metadata["tubos_em_face_dupla"]`, a IA é avisada e a linha que usa o
+    comprimento não sai medida. SÓ marca — não divide (feixe de eletrodutos
+    lado a lado não diz, trecho a trecho, qual linha é de qual tubo).
+    `diametros_mm` aqui é a distância MEDIDA do par (não há rótulo).
+    """
+    if not walls:
+        return {}
+    uf = float(unit_factor) if unit_factor else 1.0
+    q_min = _ELETRODUTO_PAR_MM[0] / 1000.0 / uf
+    q_max = _ELETRODUTO_PAR_MM[1] / 1000.0 / uf
+    por_layer: dict = {}
+    total_m: dict = {}
+    for w in walls:
+        lay = str(getattr(w, "layer", "") or "")
+        if (not _RE_LAYER_DE_ELETRODUTO.search(lay) or _RE_LAYER_DE_CONEXAO.search(lay)
+                or _RE_LAYER_DE_TUBO.search(lay)):
+            continue                                   # o tubo é da régua do H34
+        total_m[lay] = total_m.get(lay, 0.0) + float(getattr(w, "length", 0.0) or 0.0)
+        if getattr(w, "curvo", False):
+            continue
+        pts = getattr(w, "pontos", ()) or ()
+        if len(pts) >= 2:
+            for p, q in zip(pts, pts[1:]):
+                if len(p) > 2 and p[2]:
+                    continue
+                if (p[0], p[1]) != (q[0], q[1]):
+                    por_layer.setdefault(lay, []).append(((p[0], p[1]), (q[0], q[1])))
+        elif tuple(getattr(w, "start", (0, 0))) != tuple(getattr(w, "end", (0, 0))):
+            por_layer.setdefault(lay, []).append((tuple(w.start)[:2], tuple(w.end)[:2]))
+    out = {}
+    for lay, segs in por_layer.items():
+        if total_m.get(lay, 0.0) < _TUBO_MIN_M:
+            continue
+        base_m = total_m[lay]
+        if len(segs) > _TUBO_MAX_SEG:
+            segs = sorted(segs, key=lambda ab: -math.hypot(ab[1][0] - ab[0][0],
+                                                            ab[1][1] - ab[0][1]))[:_TUBO_MAX_SEG]
+            base_m = sum(math.hypot(b[0] - a[0], b[1] - a[1]) for a, b in segs) * uf
+        itens = sorted((math.degrees(math.atan2(b[1] - a[1], b[0] - a[0])) % 180.0, a, b)
+                       for a, b in segs)
+        grupos, atual = [], [itens[0]]
+        for it in itens[1:]:
+            if it[0] - atual[-1][0] <= _TUBO_ANG_TOL:
+                atual.append(it)
+            else:
+                grupos.append(atual)
+                atual = [it]
+        grupos.append(atual)
+        if len(grupos) > 1 and grupos[0][0][0] + 180.0 - grupos[-1][-1][0] <= _TUBO_ANG_TOL:
+            grupos[0] = grupos.pop() + grupos[0]
+        em_par_m = 0.0
+        por_mm: dict = {}
+        for g in grupos:
+            th = math.radians(g[0][0])
+            ux, uy = math.cos(th), math.sin(th)
+            nx, ny = -uy, ux
+            sg = sorted((((ax + bx) / 2.0) * nx + ((ay + by) / 2.0) * ny,
+                         *sorted((ax * ux + ay * uy, bx * ux + by * uy)))
+                        for _ang, (ax, ay), (bx, by) in g)
+            rhos = [x[0] for x in sg]
+            cob = [0.0] * len(sg)
+            for i in range(len(sg)):
+                ri, a0, a1 = sg[i]
+                j0 = bisect.bisect_left(rhos, ri + q_min, i + 1)
+                j1 = bisect.bisect_right(rhos, ri + q_max, j0)
+                for j in range(j0, j1):
+                    rj, b0, b1 = sg[j]
+                    ov = min(a1, b1) - max(a0, b0)
+                    if ov <= 0:
+                        continue
+                    cob[i] += ov
+                    cob[j] += ov
+                    _mm = int(round((rj - ri) * uf * 1000.0))
+                    por_mm[_mm] = por_mm.get(_mm, 0.0) + ov
+            for (_r, t0, t1), c in zip(sg, cob):
+                comp = t1 - t0
+                if comp > 0 and min(c, comp) >= _TUBO_COBERTURA * comp:
+                    em_par_m += comp * uf
+        fr = em_par_m / base_m if base_m > 0 else 0.0
+        if fr >= _ELETRODUTO_FRACAO:
+            out[lay] = {"m": round(total_m[lay], 2), "fracao": round(min(fr, 1.0), 2),
+                        "diametros_mm": [d for d, _o in sorted(por_mm.items(),
+                                                               key=lambda kv: -kv[1])][:3],
+                        "eletroduto": True}
     return out
 
 
@@ -8539,6 +8650,14 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             metadata["tubos_em_face_dupla"] = _tfd
     except Exception as _etfd:
         logger.warning("[tubo-face-dupla] falhou (não-fatal): %s", _etfd)
+    # 🩸 01/10 (H75): o eletroduto do Revit também vem pelas duas paredes, sem ø
+    try:
+        _efd = eletrodutos_em_face_dupla(walls, unit_factor)
+        if _efd:
+            metadata["tubos_em_face_dupla"] = {**(metadata.get("tubos_em_face_dupla") or {}),
+                                               **_efd}
+    except Exception as _eefd:
+        logger.warning("[eletroduto-face-dupla] falhou (não-fatal): %s", _eefd)
 
     return DXFExtraction(
         filename=os.path.basename(filepath),
