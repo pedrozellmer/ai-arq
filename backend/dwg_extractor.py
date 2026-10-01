@@ -1220,7 +1220,7 @@ def _legenda_de_linha_dupla(msp) -> dict:
 def _corrigir_duto_linha_dupla(walls, unit_factor: float = 1.0, layers_extra=None,
                                escolhe=None, sep_max_m=None, min_seg_m=None,
                                min_fracao_par=None, zona_cinza=None,
-                               junta_face_fina=False):
+                               junta_face_fina=False, max_seg=None):
     """Troca a soma das duas faces pelo comprimento do EIXO, em layer de duto.
 
     `layers_extra`: layers que a LEGENDA da prancha diz serem leito/duto
@@ -1302,7 +1302,7 @@ def _corrigir_duto_linha_dupla(walls, unit_factor: float = 1.0, layers_extra=Non
                             sub.append((i, (p[0], p[1]), (q[0], q[1])))
                 elif tuple(w.start) != tuple(w.end):
                     sub.append((i, tuple(w.start), tuple(w.end)))
-            if len(sub) < 2 or len(sub) > _DUTO_MAX_SEG_LAYER:
+            if len(sub) < 2 or len(sub) > (max_seg or _DUTO_MAX_SEG_LAYER):
                 continue
             bruto = sum(walls[i].length for i in {s_[0] for s_ in sub})
             uteis = list(range(len(sub)))
@@ -1522,6 +1522,12 @@ _PAREDE_MIN_SEG = 0.03
 #: par; o drywall de um gabarito de cliente — que aprovou a pintura pela soma
 #: das linhas — tinha 34%, e ficaria 17% menor.
 _PAREDE_MIN_FRACAO_PAR = 0.50
+#: 🩸 01/10/2026 — H73b do estudo do acervo. Acima do teto do duto (3.000
+#: trechos) o layer é PULADO inteiro: uma escola tinha 3.070 trechos de parede
+#: composta no térreo e saía 2.746 m (pelo eixo, 816; o feixe dá 776). Medido:
+#: 2 layers de parede em 152 passam de 3.000, e o pareamento de 3.735 trechos
+#: leva ~5 s. O de 11 mil trechos levaria 65 s e fica de fora.
+_PAREDE_MAX_SEG_LAYER = 6000
 
 
 # ---------------------------------------------------------------------------
@@ -1861,7 +1867,7 @@ def _corrigir_parede_linha_dupla(walls, unit_factor: float = 1.0, zona_cinza=Non
     novos, relato, _ressalva = _corrigir_duto_linha_dupla(
         walls, unit_factor, escolhe=layer_e_parede, sep_max_m=_PAREDE_SEP_MAX,
         min_seg_m=_PAREDE_MIN_SEG, min_fracao_par=_PAREDE_MIN_FRACAO_PAR,
-        zona_cinza=zona_cinza, junta_face_fina=True)
+        zona_cinza=zona_cinza, junta_face_fina=True, max_seg=_PAREDE_MAX_SEG_LAYER)
     return novos, relato
 
 
