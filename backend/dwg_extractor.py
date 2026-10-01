@@ -4705,6 +4705,11 @@ def _dentro(p, cx):
 
 
 _RE_SO_ESCALA = re.compile(r"^\s*(?:esc(?:ala)?\.?\s*:?\s*)?1\s*[:/]\s*\d{1,4}\s*$", re.IGNORECASE)
+# 🩸 30/09/2026 (H54, medido pelo estudo): o bloco de título de vista do Revit
+# põe no papel o NÚMERO da vista ("6") com letra MAIOR que o nome ("CORTE AA").
+# Pela altura, o título saía "6" — não diz o que o desenho é, e a janela ficava
+# sem tipo (e não votava na convenção da folha).
+_RE_SO_NUMERO_DA_VISTA = re.compile(r"^\s*\d{1,3}\s*$")
 
 
 def _titulo_no_papel(papel, textos, lado="abaixo") -> str:
@@ -4735,7 +4740,8 @@ def _titulo_no_papel(papel, textos, lado="abaixo") -> str:
     cand = [t for t in textos
             if faixa[0] <= t[2] <= faixa[1]
             and x0 - 0.05 * w <= t[1] <= x0 + 0.6 * w
-            and not _RE_SO_ESCALA.match(t[0]) and len(t[0]) <= 90]
+            and not _RE_SO_ESCALA.match(t[0]) and not _RE_SO_NUMERO_DA_VISTA.match(t[0])
+            and len(t[0]) <= 90]
     if not cand:
         return ""
     cand.sort(key=lambda t: (-t[3], abs(t[2] - borda) + abs(t[1] - x0)))

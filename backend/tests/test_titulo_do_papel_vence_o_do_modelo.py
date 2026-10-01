@@ -54,6 +54,35 @@ def test_o_caso_corte_com_niveis_e_titulo_no_papel_abaixo_nao_e_planta():
     assert fs[3]["tipo"] == "planta", fs[3]
 
 
+def test_o_numero_da_vista_do_revit_nao_e_o_titulo():
+    # o bloco de título do Revit: o número da vista em letra MAIOR que o nome
+    pap = (100, 75, 300, 225)
+    tx = [("6", 106, 66, 4.0), ("CORTE AA", 112, 66, 3.5), ("1 : 50", 112, 60, 2.5)]
+    assert dx._titulo_no_papel(pap, tx) == "CORTE AA"
+    assert dx._titulo_no_papel(pap, [("6", 106, 66, 4.0)]) == ""
+
+
+def test_o_caso_do_revit_com_numero_da_vista_tambem_decide_a_convencao():
+    doc = ezdxf.new("R2018")
+    msp = doc.modelspace()
+    lay = doc.layouts.new("FOLHA REVIT")
+    nomes = ["CORTE AA", "CORTE BB", "CORTE CC", "PLANTA BAIXA TÉRREO"]
+    for k, nome in enumerate(nomes):
+        x0 = 40.0 * k
+        if k < 3:                                # os cortes: os níveis viram o título do modelo
+            for i, t in enumerate(_NIVEIS):
+                msp.add_text(t, dxfattribs={"height": 0.3, "insert": (x0 + 2 + 6 * i, 2)})
+        msp.add_line((x0 + 1, 1), (x0 + 18, 1))
+        cx = 150 + 250 * k
+        _viewport(lay, (x0, 0, x0 + 20, 15), centro_papel=(cx, 150))
+        lay.add_text(str(k + 5), dxfattribs={"height": 6, "insert": (cx - 98, 65)})   # o número, maior
+        lay.add_text(nome, dxfattribs={"height": 5, "insert": (cx - 90, 65)})
+    m = dx.mapa_de_folhas(doc)
+    fs = sorted(m["folhas"], key=lambda f: f["caixa"][0])
+    assert m.get("convencao") == {"FOLHA REVIT": "abaixo"}, m.get("convencao")
+    assert [f["tipo"] for f in fs] == ["vista", "vista", "vista", "planta"], fs
+
+
 def test_a_convencao_sai_no_mapa():
     doc = ezdxf.new("R2018")
     lay = doc.layouts.new("CORTES")
