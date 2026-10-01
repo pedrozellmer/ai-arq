@@ -65,8 +65,9 @@ def test_CONTROLE_poucos_pontos():
 
 
 def test_CONTROLE_so_parte_do_desenho_em_utm():
-    """Metade do núcleo perto da origem: não é desenho georreferenciado."""
-    d = _doc(244_847, 8_982_516, n=300)
+    """A maior parte em UTM, mas ~40% perto da origem: a mediana cai na faixa e
+    o núcleo (25–75) não. Não é desenho georreferenciado inteiro — não decide."""
+    d = _doc(244_847, 8_982_516)
     for i in range(400):
         d.modelspace().add_line((i, 0), (i + 1, 1))
     assert dx._unidade_pela_coordenada_utm(d, 0.3048)["status"] is None
