@@ -96,6 +96,18 @@ def test_CONTROLE_rede_sem_retangulo(tmp_path):
     assert "MEIO-FIO" not in (ex.metadata.get("layers_moldura_ou_limite") or {})
 
 
+def test_CONTROLE_rua_com_os_dois_meios_fios_paralelos(tmp_path):
+    """Duas bordas da mesma extensão, sem os lados verticais: é rua, não moldura."""
+    def d(m):
+        _ret(m, "0", 0, 0, 400.0, 300.0)
+        for k in range(4):
+            y = 20.0 + k * 60.0
+            m.add_line((10, y), (350, y), dxfattribs={"layer": "MEIO-FIO"})
+            m.add_line((10, y + 8.0), (350, y + 8.0), dxfattribs={"layer": "MEIO-FIO"})
+    ex = _ler(tmp_path, d)
+    assert "MEIO-FIO" not in (ex.metadata.get("layers_moldura_ou_limite") or {})
+
+
 def test_CONTROLE_retangulos_pequenos_sao_ambientes(tmp_path):
     """Rodapé em volta de salas de 4 × 3 m num desenho de 300 m: lado < 10 %."""
     def d(m):
