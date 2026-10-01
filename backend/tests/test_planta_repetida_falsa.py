@@ -18,11 +18,15 @@ from dwg_extractor import BlockCount, copias_em_sombra  # noqa: E402
 from test_copias_da_planta_em_sombra import _blocos  # noqa: E402
 
 
-def _soltas(n):
-    """`n` peças avulsas (um nome por peça, espalhadas): o resto do arquivo."""
-    return [BlockCount(name="PECA-%d" % i, count=1, layer="0",
-                       positions=[(200.0 + (i % 50) * 3.0, 200.0 + (i // 50) * 3.0)])
-            for i in range(n)]
+def _soltas(n, por_nome=50):
+    """`n` peças do resto do arquivo, `por_nome` por tipo, cada tipo num traçado
+    próprio (passo crescente diferente) — nenhum vetor comum entre os tipos."""
+    out = []
+    for t in range(n // por_nome):
+        ps = [(200.0 + k * (1.0 + 0.013 * (t + 1) * k), 200.0 + t * 7.0 + 0.05 * k * k)
+              for k in range(por_nome)]
+        out.append(BlockCount(name="PECA-%d" % t, count=por_nome, layer="0", positions=ps))
+    return out
 
 
 def test_o_caso_poucas_pecas_em_copia_num_arquivo_cheio():
