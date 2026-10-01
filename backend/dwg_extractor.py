@@ -268,6 +268,8 @@ class DXFExtraction:
                                            "layers_contorno_de_peca",
                                            # 01/10 (H79): idem
                                            "layers_moldura_ou_limite",
+                                           # 01/10 (H84): rastro; a soma já é 1×
+                                           "copias_exatas",
                                            # 30/09 (H13): seção própria
                                            "pecas_no_vinculo"})
 
@@ -7896,11 +7898,38 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
     _legenda_dupla = _legenda_de_linha_dupla(msp)
     _layers_linha_dupla = set(_legenda_dupla)
 
+    # 🩸 01/10/2026 — H84 do estudo do acervo: CÓPIA EXATA em pilha. A mesma
+    # treliça colada 16× no mesmo lugar (68,7 m → 1.099 m), difusores colados
+    # uns sobre os outros (611 trechos, 247 repetidos 4×+), a rampa com as 40
+    # linhas 2×. Copiar-colar em pilha não é obra: conta UMA vez, só quando a
+    # cópia é do MESMO tipo — LINE com as mesmas pontas (±1 mm), ou polilinha
+    # ABERTA com os mesmos vértices. 🪤 Polilinha FECHADA e aresta de figura
+    # sobre linha ficam: o lado comum de duas figuras vizinhas é legítimo
+    # (rodapé e pintura dos dois lados).
+    _tol_copia = 0.001 / unit_factor if unit_factor else 0.001
+    _vistas_copia: set = set()
+    _copias_exatas: dict = {}
+
+    def _ja_visto(chave, layer, metros) -> bool:
+        if chave in _vistas_copia:
+            _c = _copias_exatas.setdefault(str(layer), {"m": 0.0, "n": 0})
+            _c["m"] += metros
+            _c["n"] += 1
+            return True
+        _vistas_copia.add(chave)
+        return False
+
+    def _q(p):
+        return (round(p[0] / _tol_copia), round(p[1] / _tol_copia))
+
     for line in msp.query("LINE"):
         try:
             start = (line.dxf.start.x, line.dxf.start.y)
             end = (line.dxf.end.x, line.dxf.end.y)
             length = _line_length(start, end) * unit_factor
+            if length > 0 and _ja_visto(("L", str(line.dxf.layer)) + tuple(sorted((_q(start), _q(end)))),
+                                        line.dxf.layer, length):
+                continue
             if length > 0:
                 walls.append(WallSegment(
                     layer=line.dxf.layer,
@@ -7915,6 +7944,12 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
     for lwpoly in msp.query("LWPOLYLINE"):
         try:
             length = _lwpolyline_length(lwpoly) * unit_factor
+            if length > 0 and not lwpoly.closed:
+                # H84: polilinha ABERTA idêntica (mesmos vértices, qualquer sentido)
+                _vq = [(_q(p) + (round(float(p[2]), 3),)) for p in lwpoly.get_points(format="xyb")]
+                _vq_r = [(_q(p) + (round(-float(p[2]), 3),)) for p in reversed(list(lwpoly.get_points(format="xyb")))]
+                if _ja_visto(("P", str(lwpoly.dxf.layer)) + tuple(min(_vq, _vq_r)), lwpoly.dxf.layer, length):
+                    continue
             if length > 0:
                 pts = list(lwpoly.get_points(format="xy"))
                 start = pts[0] if pts else (0, 0)
@@ -7939,6 +7974,14 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
                 ))
         except Exception:
             continue
+
+    if _copias_exatas:
+        # H84: o que a cópia em pilha somaria (rastro pro log; a soma já é 1×)
+        metadata["copias_exatas"] = {ly: {"m": round(v["m"], 2), "n": v["n"]}
+                                     for ly, v in _copias_exatas.items()}
+        logger.info("[copia-exata] %d trecho(s) repetido(s) contado(s) 1×: %s",
+                    sum(v["n"] for v in _copias_exatas.values()),
+                    ", ".join("%s %.1f m" % (k, v["m"]) for k, v in list(_copias_exatas.items())[:5]))
 
     for poly in msp.query("POLYLINE"):
         try:
