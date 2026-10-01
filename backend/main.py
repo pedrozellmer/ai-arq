@@ -15794,6 +15794,22 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                             _escala_arqs.append(_resumo_escala_arquivo(dxf_path, _md_u))
                         except Exception as _eea:
                             print(f"[escala-resumo] nao-fatal: {_eea}")
+                        # 🩸 01/10 (job e3b8ddce): CONSENSO TARDIO. O pré-passe
+                        # pula prancha grande; a que prova a escala por cota
+                        # dentro do laço passa a valer pras SEGUINTES. Só
+                        # preenche o vazio — não troca o que o pré-passe achou.
+                        if _unit_consensus is None:
+                            try:
+                                from dwg_extractor import escala_provada_pela_prancha
+                                _f_tarde = escala_provada_pela_prancha(_md_u)
+                                if _f_tarde:
+                                    _unit_consensus = _f_tarde
+                                    _log_error("motor:unidade-consenso",
+                                               f"tardio: {os.path.basename(dxf_path)} provou "
+                                               f"fator {_f_tarde} por cota — vale pras "
+                                               f"pranchas seguintes", job_id, severity="info")
+                            except Exception as _ect:
+                                print(f"[unit-consenso] tardio nao-fatal: {_ect}")
                         # 🎯 Proxy AEC/MEP: grava SEMPRE que a prancha tiver
                         # proxies. "achou 300 e mediu 0" e "não tem proxy" são
                         # diagnósticos OPOSTOS — sem esta linha viram a mesma

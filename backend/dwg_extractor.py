@@ -8666,6 +8666,26 @@ def category_for_layer(layer_name: str) -> str | None:
 # Entry point — handles both .dxf and .dwg
 # ---------------------------------------------------------------------------
 
+def escala_provada_pela_prancha(metadata) -> Optional[float]:
+    """O fator (p/ metros) que ESTA prancha provou por cota, ou None.
+
+    É a mesma régua do `probe_unit` (cota validou ou corrigiu), lida do que a
+    extração já gravou — serve de consenso TARDIO pras pranchas seguintes.
+    🩸 01/10/2026 — job e3b8ddce: o pré-passe pula prancha > 60 MB, e a única
+    que provava a escala era a de arquitetura (163 MB, emagrecida pra 21 MB e
+    validada por 1.062 cotas DENTRO do laço). O elétrico, lido logo depois,
+    não soube e saiu 10× menor (decímetro por plausibilidade).
+    """
+    try:
+        md = metadata or {}
+        if md.get("regua_cotas_status") not in ("validada", "corrigida"):
+            return None
+        f = float(md.get("fator_para_metros") or 0)
+        return f if f > 0 else None
+    except (TypeError, ValueError, AttributeError):
+        return None
+
+
 def probe_unit(filepath: str) -> Optional[float]:
     """Sondagem LEVE de unidade: lê o DXF e retorna o fator (p/ metros) PROVADO
     por COTA nesta prancha, ou None se ela não tem cotas suficientes. Usado no
