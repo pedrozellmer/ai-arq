@@ -97,12 +97,15 @@ def test_CONTROLE_rede_sem_retangulo(tmp_path):
 
 
 def test_CONTROLE_rua_com_os_dois_meios_fios_paralelos(tmp_path):
-    """As duas frentes de uma quadra, longas, paralelas, da mesma extensão e a
-    80 m uma da outra — sem os lados verticais: é meio-fio, não moldura."""
+    """As frentes das quadras, longas, paralelas, da mesma extensão e a 80 m uma
+    da outra, e a rua transversal (verticais longas) que NÃO fecha as pontas:
+    é meio-fio, não moldura."""
     def d(m):
         _ret(m, "0", 0, 0, 400.0, 300.0)
         for y in (20.0, 100.0, 180.0, 260.0):
             m.add_line((10, y), (350, y), dxfattribs={"layer": "MEIO-FIO"})
+        for x in (370.0, 385.0):
+            m.add_line((x, 5), (x, 290), dxfattribs={"layer": "MEIO-FIO"})
     ex = _ler(tmp_path, d)
     assert "MEIO-FIO" not in (ex.metadata.get("layers_moldura_ou_limite") or {})
 
