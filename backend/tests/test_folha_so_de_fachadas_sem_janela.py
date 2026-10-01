@@ -73,7 +73,14 @@ def test_CONTROLE_com_detalhe_nao_mexe():
 
 
 def test_CONTROLE_uma_fachada_so_nao_mexe():
-    assert not dx.mapa_de_folhas(_doc(["FACHADA A"])).get("folhas")
+    # 🪤 com a fachada sozinha, a região dela é a folha toda e já cai por isso;
+    # um desenho SEM título ao lado faz a regra das 2 vistas decidir
+    doc = _doc(["FACHADA A"])
+    msp = doc.modelspace()
+    for a, b in (((100, 0), (140, 0)), ((140, 0), (140, 12)), ((140, 12), (100, 12)), ((100, 12), (100, 0))):
+        msp.add_line(a, b)
+    assert len(dx._desenhos_no_modelo(msp)) == 1          # a fachada É achada
+    assert not dx.mapa_de_folhas(doc).get("folhas")
 
 
 def test_CONTROLE_regiao_com_cara_de_planta_nao_mexe():
