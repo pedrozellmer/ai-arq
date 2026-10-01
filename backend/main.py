@@ -16653,6 +16653,15 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                           for _p in _ps}
                         except Exception:
                             _objetos_n = set()
+                        # 🩸 30/09 (H13): as peças de dentro do vínculo da mesma disciplina
+                        try:
+                            _vinc_pecas = [(str(_nm).lower()[:30], int(_q)) for _d in
+                                           ((extraction.metadata or {}).get("pecas_no_vinculo") or {}).values()
+                                           for _nm, _q in (_d.get("pecas") or {}).items()]
+                            _vinc_n = {_q for _nm, _q in _vinc_pecas}
+                            _vinc_nomes = {_nm for _nm, _q in _vinc_pecas if len(_nm) >= 4}
+                        except Exception:
+                            _vinc_n, _vinc_nomes = set(), set()
                         _n_resgate_proc = 0
                         # Extrair itens
                         _n_item_perdido = 0   # quantos morreram no except do laço
@@ -16839,6 +16848,13 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                 conf, obs_raw, _era_sem_nome = _regra_sem_nome(
                                     conf, obs_raw, normalized_unit, _lys)
                                 if _era_peca or _era_sem_nome:
+                                    _rebaixado_pela_fonte = True
+                                # 🩸 30/09 (H13): peça de dentro do vínculo do Revit
+                                from engine_rules import (
+                                    selo_apos_peca_no_vinculo as _regra_vinculo)
+                                conf, obs_raw, _era_vinc = _regra_vinculo(
+                                    conf, obs_raw, qty, normalized_unit, _vinc_n, _vinc_nomes)
+                                if _era_vinc:
                                     _rebaixado_pela_fonte = True
                                 # 🩸 30/09 (H34): tubo em face dupla — a soma é das
                                 # duas paredes; só rebaixa e avisa (não divide)

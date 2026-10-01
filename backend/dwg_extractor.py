@@ -263,7 +263,9 @@ class DXFExtraction:
                                            # no layer; isto é registro do log
                                            "splines_medidas",
                                            # 30/09 (H34): dito na linha do layer
-                                           "tubos_em_face_dupla"})
+                                           "tubos_em_face_dupla",
+                                           # 30/09 (H13): seção própria
+                                           "pecas_no_vinculo"})
 
     def to_structured_prompt(self) -> str:
         """Converts extraction to a structured text prompt for Claude."""
@@ -542,6 +544,11 @@ class DXFExtraction:
                     if _vinc(rotulo):
                         _nota += ("  ⚠ VÍNCULO DE MODELO (outro arquivo do Revit/IFC colado "
                                   "como bloco) — NÃO é peça: não conte como quantidade")
+                        # 30/09 (H13): da mesma disciplina, o conteúdo vai dito abaixo
+                        if any(str(rotulo).startswith(_b) for _b in
+                               ((self.metadata or {}).get("pecas_no_vinculo") or {})):
+                            _nota += ("; as peças de DENTRO dele estão em 'PEÇAS DENTRO DO "
+                                      "VÍNCULO' abaixo")
                     lines.append(f"  {rotulo}: {count} un{_nota}")
                 if _juntados:
                     lines.append(f"  ({_juntados} grupo(s) tinham nomes duplicados pelo "
@@ -549,6 +556,27 @@ class DXFExtraction:
                                  f"geometrica e IDENTICA. 'tipo 1/2/3' sao pecas "
                                  f"DIFERENTES com o mesmo nome de origem.)")
                 lines.append("")
+
+        # 🩸 30/09/2026 (H13): o vínculo do Revit da MESMA disciplina traz o
+        # próprio projeto — as peças de dentro, ditas uma vez por instância
+        _pv = (self.metadata or {}).get("pecas_no_vinculo") or {}
+        if _pv:
+            lines.append(
+                "PEÇAS DENTRO DO VÍNCULO DO REVIT DA MESMA DISCIPLINA (o arquivo traz o PRÓPRIO "
+                "projeto dentro do bloco de vínculo; contadas UMA vez por instância, só na vista "
+                "de PLANTA). Contagem SEM selo: marque 'estimado' e escreva 'vínculo' na "
+                "observação. A FASE está no nome da peça (DEMOLIR / A DEMOLIR / EXISTENTE / "
+                "NOVO) e decide o serviço: peça a DEMOLIR é demolição/retirada — nunca "
+                "fornecimento e instalação; EXISTENTE não se compra.")
+            for _base, _d in sorted(_pv.items(), key=lambda kv: -sum(kv[1]["pecas"].values())):
+                _outras = _d.get("outras_vistas") or []
+                lines.append(f"  • {_base} ({_d['disciplina']}, {_d['instancias']} instância(s), "
+                             f"vista: {_d.get('vista', '')}"
+                             + (f"; outras vistas da mesma base NÃO somadas: {', '.join(_outras)}"
+                                if _outras else "") + "):")
+                for _nome, _n in _d["pecas"].items():
+                    lines.append(f"      {_nome}: {_n} un")
+            lines.append("")
 
         # 🩸 30/09/2026 (job 9a2c5d87) — a peça desenhada UMA A UMA, sem bloco:
         # os 776 blocos de alvenaria e os 787 furos de graute eram retângulos, e
@@ -3957,6 +3985,101 @@ _MTEXT_FORMAT_CODES_RE = re.compile(
 )
 
 
+# ---------------------------------------------------------------------------
+# VÍNCULO DO REVIT DA MESMA DISCIPLINA — o conteúdo, não o contexto (H13)
+# ---------------------------------------------------------------------------
+# O Revit exporta o modelo vinculado como UM BLOCO POR INSTÂNCIA × VISTA:
+# "<base>_rvt-<N>-<vista>", e insere todos. Medido no acervo (19 desenhos):
+# a mesma base tem conteúdo DIFERENTE em cada vista (planta 1.503 peças × corte
+# 15 × isométrico 37), e muitos blocos vêm VAZIOS (60 de 72 num pavimento: a
+# instância que não aparece naquela vista). Por isso: só vista de PLANTA, UMA
+# vista por base (a de mais peças), e cada bloco não vazio dela uma vez.
+_RE_VINCULO_INSTANCIA = re.compile(r"^(?P<base>.+?)_(?:rvt|ifc)-(?P<n>\d+)-(?P<vista>.*)$",
+                                   re.IGNORECASE)
+_VINCULO_MAX_PECAS = 40
+# 🪤 corte, elevação, 3D, isométrico, perspectiva e detalhe já saem pelo
+# `tipo_do_desenho` da vista ('vista'/'fora'); "1º Pav_" (sem tipo) entra.
+# 🩸 30/09 (antes/depois do estudo): o Revit põe no nome da peça o ID do
+# elemento e a VISTA — "…montante 50x75mm-9884787-PREDIO - TÉRREO…" — e a mesma
+# família saía partida em dezenas de linhas (246 montantes em 5+). O corte das
+# 40 maiores, antes de juntar, deixou de fora os 3 chuveiros a DEMOLIR. Tira o
+# id (5+ dígitos) e o que vem depois, e a variante "-V14"; junta; só então corta.
+_RE_ID_DO_REVIT = re.compile(r"-\d{5,}(?:-.*)?$")
+_RE_VARIANTE_DO_REVIT = re.compile(r"-V\d+$", re.IGNORECASE)
+
+
+def _nome_da_peca_no_vinculo(nome, vista="") -> str:
+    """Nome da família/tipo sem o que o Revit cola: a VISTA da instância
+    ("…-V14-PREDIO - TÉRREO…", conhecida pelo nome do bloco pai — 🩸 30/09: sem
+    tirá-la, a variante não ficava no fim e 26 + 7 + 3 portas não juntavam), o
+    id do elemento e a variante."""
+    n = str(nome or "")
+    v = str(vista or "").strip()
+    if v and n.lower().endswith("-" + v.lower()):
+        n = n[:-(len(v) + 1)]
+    n = _RE_ID_DO_REVIT.sub("", n).strip()
+    n = _RE_VARIANTE_DO_REVIT.sub("", n).strip()
+    return n or str(nome or "")
+
+
+def pecas_no_vinculo(doc, nomes_inseridos, nome_do_arquivo, e_anotacao=None) -> dict:
+    """{base: {disciplina, instancias, vista, outras_vistas, pecas: {nome: n}}}
+    dos vínculos da MESMA disciplina do arquivo; {} se o arquivo não diz a
+    disciplina."""
+    from engine_rules import disciplina_do_nome, tipo_do_desenho
+    disc = disciplina_do_nome(os.path.splitext(os.path.basename(str(nome_do_arquivo or "")))[0])
+    if not disc:
+        return {}
+    escolhido: dict = {}                       # (base, vista) → [Counter de cada instância]
+    for nome in nomes_inseridos or ():
+        m = _RE_VINCULO_INSTANCIA.match(str(nome or ""))
+        if not m:
+            continue
+        base, vista = m.group("base").strip(), m.group("vista").strip()
+        if disciplina_do_nome(base) != disc:
+            continue
+        if tipo_do_desenho(vista) in ("vista", "fora"):
+            continue
+        try:
+            bdef = doc.blocks.get(nome)
+        except Exception:
+            bdef = None
+        if bdef is None:
+            continue
+        cont: Counter = Counter()
+        for e in bdef:
+            if e.dxftype() != "INSERT":
+                continue
+            fn = str(e.dxf.name or "")
+            if (not fn or fn.startswith("*") or _RE_VINCULO_INSTANCIA.match(fn)
+                    or (e_anotacao is not None and e_anotacao(fn))):
+                continue
+            cont[_nome_da_peca_no_vinculo(fn, vista)] += 1
+        if not cont:
+            continue                           # bloco vazio: a instância não aparece nesta vista
+        escolhido.setdefault((base, vista), []).append(cont)
+    # 🩸 30/09 (antes/depois do estudo, alojamento de 7 pavimentos): a vista
+    # "<PAV> - TIPOLOGIAS" repete os MESMOS 6 quartos, no mesmo lugar, com OUTRO
+    # N — "cada (base, N) uma vez" deu 12. UMA vista por base: a de mais peças.
+    # 🪤 Se um arquivo mostrar ANDARES diferentes do mesmo vínculo em vistas
+    # diferentes, só um conta (a menos — e a contagem já sai sem selo).
+    vista_da_base: dict = {}
+    for (base, vista), conts in escolhido.items():
+        total = sum(sum(c.values()) for c in conts)
+        if base not in vista_da_base or total > vista_da_base[base][0]:
+            vista_da_base[base] = (total, vista, conts)
+    out = {}
+    for base, (_t, vista, conts) in vista_da_base.items():
+        pecas: Counter = Counter()
+        for c in conts:
+            pecas.update(c)
+        outras = sorted({v for (b, v) in escolhido if b == base and v != vista})
+        out[base] = {"disciplina": disc, "instancias": len(conts), "vista": vista,
+                     "outras_vistas": outras[:4],
+                     "pecas": dict(pecas.most_common(_VINCULO_MAX_PECAS))}
+    return out
+
+
 def _texto_do_text(e) -> str:
     """O texto de um TEXT/ATTRIB como se LÊ na folha, sem os códigos de controle
     do AutoCAD: `%%U` (sublinhado) e `%%O` somem, `%%C` vira Ø, `%%D` vira °,
@@ -7342,6 +7465,13 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
                 p: f for p, (_t, f) in sorted(_filhos_por_pai.items(), key=lambda kv: -kv[1][0])[:5]}
     except Exception as _ean:
         logger.warning("[aninhados] falhou (não-fatal): %s", _ean)
+    # 🩸 30/09 (H13): o vínculo do Revit da MESMA disciplina é o conteúdo
+    try:
+        _pv = pecas_no_vinculo(doc, list(block_counter.keys()), filepath, _is_annotation_block)
+        if _pv:
+            metadata["pecas_no_vinculo"] = _pv
+    except Exception as _epv:
+        logger.warning("[vinculo-conteudo] falhou (não-fatal): %s", _epv)
     if _proc_blocos:
         metadata["procedencia_blocos"] = _proc_blocos
 

@@ -5186,6 +5186,65 @@ def e_vinculo_de_modelo(texto) -> bool:
     return bool(_RE_VINCULO_DE_MODELO.search(str(texto or "")))
 
 
+# 🩸 30/09/2026 — H13 do estudo do acervo: o vínculo do Revit DA MESMA
+# disciplina é o CONTEÚDO, não o contexto. Uma implantação "construir e demolir"
+# trazia o prédio inteiro dentro do vínculo de arquitetura: 16 linhas, 0 medidas,
+# e "fornecimento e instalação de toldo 3 un" — os 3 toldos estavam marcados
+# DEMOLIR. O `project_type` do job não diz a disciplina (é sempre o que o cliente
+# escolheu); quem diz é o CÓDIGO no nome do arquivo e no nome do vínculo.
+_CODIGO_DE_DISCIPLINA = {
+    "ARQ": "ARQ", "HID": "HID", "HIDR": "HID", "HS": "HID", "ELE": "ELE", "ELET": "ELE",
+    "EST": "EST", "ES": "EST", "CLI": "CLI", "HVAC": "CLI", "CLF": "CLF", "AIT": "AIT",
+    "MET": "MET", "MAD": "MAD", "INC": "INC", "PCI": "INC", "GAS": "GAS", "SPDA": "SPDA",
+    "TEL": "TEL", "FUN": "FUN",
+}
+
+
+def disciplina_do_nome(nome) -> str:
+    """O código de disciplina escrito no nome ('' se nenhum ou ambíguo).
+
+    "XYZ-ABC-HID-ALOJ-GO" → HID; "ABC_ES_EX_HT" → EST. 🪤 "ES" de 2 letras
+    também é a sigla do estado ("VITORIA-ES-ARQ"): só vale se nenhum código de
+    3+ letras aparece. Dois códigos diferentes no mesmo nome → ''."""
+    toks = [t for t in _re.split(r"[^A-Za-z0-9]+", str(nome or "").upper()) if t]
+    achados = [t for t in toks if t in _CODIGO_DE_DISCIPLINA]
+    longos = {_CODIGO_DE_DISCIPLINA[t] for t in achados if len(t) >= 3}
+    if longos:
+        return longos.pop() if len(longos) == 1 else ""
+    curtos = {_CODIGO_DE_DISCIPLINA[t] for t in achados}
+    return curtos.pop() if len(curtos) == 1 else ""
+
+
+MARCA_PECA_NO_VINCULO = "⚠ PEÇA DE DENTRO DO VÍNCULO"
+_RE_CITA_VINCULO = _re.compile(r"v[íi]nculo", _re.IGNORECASE)
+
+
+def selo_apos_peca_no_vinculo(conf, obs, quantity, unit, contagens, nomes):
+    """(conf, obs, rebaixou) — a contagem da peça de DENTRO do vínculo não sai ✓.
+
+    🩸 30/09/2026 (H13). Quem escolhe a vista (só a planta) e a instância (só o
+    bloco com conteúdo, uma vez) é heurística sobre o jeito do Revit exportar —
+    um engano conta a peça em dobro. Até medir em produção, a contagem vai pra
+    IA como base e sai laranja. `contagens` = as quantidades por peça; `nomes` =
+    os nomes das peças (minúsculos)."""
+    if conf != "confirmado" or not contagens:
+        return conf, obs, False
+    if str(unit or "").strip().lower() not in _UNIDADES_DE_BLOCO:
+        return conf, obs, False
+    try:
+        q = float(quantity)
+    except (TypeError, ValueError):
+        return conf, obs, False
+    if q <= 0 or abs(q - round(q)) > 1e-6 or int(round(q)) not in contagens:
+        return conf, obs, False
+    o = str(obs or "")
+    if not (_RE_CITA_VINCULO.search(o) or any(n and n in o.lower() for n in (nomes or ()))):
+        return conf, obs, False
+    return ("estimado",
+            MARCA_PECA_NO_VINCULO + " — contada dentro do modelo vinculado do Revit (uma vez por "
+            "instância, só na vista de planta): confira a quantidade no projeto. " + o, True)
+
+
 # 🩸 29/09/2026 (caso 18c57c3c): "Dispositivo elétrico tipo WN — 23 un" e "W-FFF
 # — 23 un" (as marcas de NEUTRO e de FASES que o diagrama põe em cada circuito) e
 # "Caixa de revisão elétrica (C-REV) — 2 un ✓" (a etiqueta de revisão "01" do
