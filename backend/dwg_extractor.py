@@ -5185,6 +5185,38 @@ _RE_NOME_DE_AMBIENTE = re.compile(
 _AMBIENTES_QUE_FAZEM_PLANTA = 3
 
 
+def _so_vistas_no_modelo(msp) -> list:
+    """Arquivo SEM janela útil, lido pelo modelo — só quando é folha de VISTAS.
+
+    🩸 30/09/2026 — H61 do estudo do acervo. Sem janela, o arquivo nunca era
+    lido por desenho: uma folha só de fachadas entregou "guarda-corpo de
+    fachada 1.247,45 ml ✓" — o layer inteiro na elevação (horizontais,
+    verticais e as diagonais), em fachadas que somam 178,5 m de largura.
+    🪤 Ligar geral NÃO: no acervo, sem janela, a caixa "logo acima do título"
+    falhava mais (planta com caixa 0 × 0, detalhe de 120 m engolindo os
+    vizinhos — a família do H57). Por isso só age quando é inequívoco: 2+
+    desenhos, TODOS vista (elevação/corte — nenhum detalhe, esquema ou planta),
+    e nenhuma região com 3+ nomes de ambiente (cara de planta). Senão, [].
+    """
+    regs = _desenhos_no_modelo(msp)
+    if len(regs) < 2 or any(r.get("tipo") != "vista" for r in regs):
+        return []
+    amb = []
+    for e in msp.query("TEXT MTEXT"):
+        try:
+            t = _texto_do_text(e) if e.dxftype() == "TEXT" else e.plain_text()
+            if t and _RE_NOME_DE_AMBIENTE.match(" ".join(t.split())):
+                amb.append((e.dxf.insert[0], e.dxf.insert[1]))
+        except Exception:
+            continue
+    if any(sum(1 for a in amb if _dentro(a, r["caixa"])) >= _AMBIENTES_QUE_FAZEM_PLANTA
+           for r in regs):
+        return []
+    for r in regs:
+        r["como"] = "modelo sem janela"
+    return regs
+
+
 def mapa_de_folhas(doc) -> dict:
     """Os desenhos do modelspace, pelas folhas: [{folha, titulo, tipo, andares, caixa}].
 
@@ -5221,6 +5253,12 @@ def mapa_de_folhas(doc) -> dict:
                     continue
             textos_papel[lay.name] = tp
         if not janelas:
+            # 🩸 30/09 (H61): sem janela nenhuma, a folha só de elevações
+            # nunca era lida por desenho (ver `_so_vistas_no_modelo`)
+            _mv = _so_vistas_no_modelo(doc.modelspace())
+            if _mv:
+                out["folhas"] = _mv
+                out["origem"] = "modelo sem janela"
             return out
         # Janela GERAL: a que mostra o desenho todo (contém o centro de 3+
         # outras). No arquivo real, toda folha tinha uma, 1:1000, cobrindo tudo.
@@ -5339,6 +5377,11 @@ def mapa_de_folhas(doc) -> dict:
             if _mod:
                 uteis = _mod
                 out["origem"] = "modelo"
+        if not uteis:                            # só a janela geral (H61)
+            _mv = _so_vistas_no_modelo(msp)
+            if _mv:
+                uteis = _mv
+                out["origem"] = "modelo sem janela"
         out["folhas"] = uteis
     except Exception as e:                   # nunca derruba a extração
         logger.warning("mapa_de_folhas: %s", e)
