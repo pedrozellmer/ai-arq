@@ -1882,7 +1882,6 @@ def layers_de_moldura_ou_limite(msp, walls, unit_factor: float = 1.0) -> dict:
         ly = str(getattr(w, "layer", "") or "")
         tot[ly] = tot.get(ly, 0.0) + float(getattr(w, "length", 0.0) or 0.0)
     segs: dict = {}
-    xs, ys = [], []
     for e in msp.query("LINE LWPOLYLINE"):
         try:
             ly = str(e.dxf.layer)
@@ -1896,9 +1895,19 @@ def layers_de_moldura_ou_limite(msp, walls, unit_factor: float = 1.0) -> dict:
             continue
         for a, b in zip(pts, pts[1:]):
             segs.setdefault(ly, []).append((a, b))
-            if len(xs) < 40000:
+    # 🪤 o lado do desenho sai de uma AMOSTRA COM PASSO sobre todos os trechos —
+    # os primeiros N na ordem do arquivo podem ser só um canto do desenho, e aí
+    # o retângulo de uma sala passaria do piso de 10 % (achado do estudo, 01/10)
+    _total = sum(len(ss) for ss in segs.values())
+    _passo = max(1, _total // 20000)
+    xs, ys = [], []
+    _k = 0
+    for ss in segs.values():
+        for a, b in ss:
+            if _k % _passo == 0:
                 xs.extend((a[0], b[0]))
                 ys.extend((a[1], b[1]))
+            _k += 1
     if len(xs) < 8:
         return {}
     xs.sort()

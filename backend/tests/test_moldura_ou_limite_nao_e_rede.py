@@ -120,6 +120,24 @@ def test_CONTROLE_retangulos_pequenos_sao_ambientes(tmp_path):
     assert "RODAPE" not in (ex.metadata.get("layers_moldura_ou_limite") or {})
 
 
+def test_CONTROLE_o_tamanho_do_desenho_nao_sai_so_do_comeco_do_arquivo():
+    """Um detalhe denso num canto vem PRIMEIRO no arquivo (25 mil trechos em
+    10 m) e a planta (1.000 m) depois: o lado do desenho é o da planta, e as
+    salas de 30 × 20 m não são moldura."""
+    d = ezdxf.new("R2018")
+    m = d.modelspace()
+    for i in range(25000):
+        x, y = (i % 100) * 0.1, (i // 100) * 0.04
+        m.add_line((x, y), (x + 0.05, y), dxfattribs={"layer": "DETALHE"})
+    for i in range(25000):
+        x, y = (i * 37 % 1000) * 1.0, (i * 53 % 800) * 1.0
+        m.add_line((x, y), (x + 3.0, y + 1.0), dxfattribs={"layer": "REDE"})
+    for k in range(8):
+        _ret(m, "RODAPE", 100.0 + k * 90.0, 400.0, 30.0, 20.0)
+    walls = [dx.WallSegment(layer="RODAPE", length=8 * 100.0)]
+    assert "RODAPE" not in dx.layers_de_moldura_ou_limite(m, walls, 1.0)
+
+
 def test_CONTROLE_menos_da_metade_em_retangulo(tmp_path):
     def d(m):
         _ret(m, "INC_LIN02", 0, 0, 300.0, 200.0)          # 1.000 m de retângulo
