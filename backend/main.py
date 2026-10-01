@@ -2421,6 +2421,27 @@ def _observacao_que_cabe(obs, teto: int = _OBS_TETO_GRAVADO) -> str:
     return cabeca + _OBS_EMENDA + fim
 
 
+def _de_onde_vem_a_revisao(job_id, parent_job_id, anexo_em_curso) -> list:
+    """De quais jobs a releitura funde o que o cliente corrigiu e rejeitou.
+
+    🩸 01/10/2026 — job f08cf26b: a cliente preencheu à mão o concreto e a
+    fôrma que o PDF tinha deixado zerados, anexou o DWG, e as duas correções
+    sumiram da planilha. O `/add-file` relê no MESMO job (apaga e regrava
+    `project_items`), e a fusão só olhava o PAI — releitura de anexo não tem.
+    `_soltar_revisoes_do_cascade` salvava o registro, não o número. Desde
+    sempre: 2 jobs (f08cf26b e um de 22/09). Regra dura nº7.
+    🔑 Releitura (filhote) funde o pai, como antes. Anexo funde o PRÓPRIO job
+    — o que ele vê na tela antes do anexo — e, se for filhote, o pai também
+    (primeiro o pai, depois o que ele corrigiu por cima).
+    """
+    fontes = []
+    if parent_job_id:
+        fontes.append(str(parent_job_id))
+    if str(anexo_em_curso or "").strip() and job_id and str(job_id) not in fontes:
+        fontes.append(str(job_id))
+    return fontes
+
+
 def _fundir_revisoes_do_cliente(items: list, parent_job_id: str):
     """Faz a releitura PRESERVAR o que o cliente corrigiu à mão (regra dura nº7).
 
@@ -20733,7 +20754,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
             # limpo — o rastro que eu acrescentei ontem cobria a fusão, não
             # este request, que é o que decide se ela roda.
             _st_pai, _pai_rows = _supa_rest_service("GET", "projects", params={
-                "job_id": f"eq.{job_id}", "select": "parent_job_id"})
+                "job_id": f"eq.{job_id}", "select": "parent_job_id,anexo_em_curso"})
             if _st_pai != 200:
                 _log_error("motor:fusao-revisao",
                            f"🚨 NÃO consegui saber se este job tem pai (HTTP {_st_pai}) — "
@@ -20741,24 +20762,26 @@ bloco — só cite os que estão no inventário deste arquivo."""
                            job_id, severity="critical")
                 raise RuntimeError(f"leitura do parent_job_id falhou (HTTP {_st_pai})")
             _pai = ((_pai_rows or [{}]) or [{}])[0]
-            _pai_id = _pai.get("parent_job_id")
-            if _pai_id:
-                all_items, _fusao = _fundir_revisoes_do_cliente(all_items, _pai_id)
-                if _fusao["revisoes"]:
-                    _amb = int(_fusao.get("ambiguas") or 0)
-                    _acr = int(_fusao.get("acrescentadas") or 0)
+            for _pai_id in _de_onde_vem_a_revisao(job_id, _pai.get("parent_job_id"),
+                                                  _pai.get("anexo_em_curso")):
+                all_items, _fz = _fundir_revisoes_do_cliente(all_items, _pai_id)
+                for _k in ("revisoes", "casadas", "acrescentadas"):
+                    _fusao[_k] = int(_fusao.get(_k) or 0) + int(_fz.get(_k) or 0)
+                if _fz["revisoes"]:
+                    _amb = int(_fz.get("ambiguas") or 0)
+                    _acr = int(_fz.get("acrescentadas") or 0)
                     _log_error("motor:fusao-revisao",
-                               f"pai={_pai_id} revisoes={_fusao['revisoes']} "
-                               f"casadas={_fusao['casadas']} "
+                               f"pai={_pai_id} revisoes={_fz['revisoes']} "
+                               f"casadas={_fz['casadas']} "
                                f"acrescentadas={_acr} ambiguas={_amb}", job_id)
                     # 🚨 24/08 (2ª validação): o aviso garantia que "o motor corrigiu
                     # apenas as outras linhas" mesmo quando a correção entrou como
                     # linha NOVA convivendo com a do motor. Quem somasse a coluna
                     # contava duas vezes — e o aviso dizia que estava tudo certo.
-                    _txt = (f"✏️ Esta releitura MANTEVE as {_fusao['revisoes']} correção(ões) "
+                    _txt = (f"✏️ Esta releitura MANTEVE as {_fz['revisoes']} correção(ões) "
                             f"que você fez à mão — elas não foram sobrescritas.")
-                    if _fusao["casadas"]:
-                        _txt += (f" {_fusao['casadas']} entraram por cima da linha "
+                    if _fz["casadas"]:
+                        _txt += (f" {_fz['casadas']} entraram por cima da linha "
                                  f"correspondente da leitura nova.")
                     if _acr:
                         _txt += (f" ⚠ {_acr} entraram como LINHA NOVA (marcadas REV.), porque a "
@@ -20771,7 +20794,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 # aqui não pode desfazer a fusão das edições acima).
                 try:
                     all_items, _rej = _tirar_rejeitadas_pelo_cliente(all_items, _pai_id)
-                    _fusao["rejeitadas_tiradas"] = _rej["tiradas"]
+                    _fusao["rejeitadas_tiradas"] = (int(_fusao.get("rejeitadas_tiradas") or 0)
+                                                    + int(_rej["tiradas"] or 0))
                     if _rej["rejeicoes"] or _rej.get("erro_leitura"):
                         _log_error("motor:fusao-rejeicao",
                                    f"pai={_pai_id} rejeicoes={_rej['rejeicoes']} "

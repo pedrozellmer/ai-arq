@@ -213,6 +213,7 @@ def roda_ate_o_email(itens, cab_planob=None, medidos_antes=None, avisos=None,
             lambda *a, **k: diario["regua"].append({"args": a, "kwargs": k}),
         "_supa_rest_service": lambda m, p, **k: (200, [{"parent_job_id": None}]),
         "_fundir_revisoes_do_cliente": lambda its, pai: (its, {}),
+        "_de_onde_vem_a_revisao": main._de_onde_vem_a_revisao,
         "_persist_items_to_supabase": lambda j, its: len(its),
         "_comparar_com_versao_anterior": lambda *a, **k: {},
         # `done_grava=False` simula a RPC do `done` falhando (ela devolve

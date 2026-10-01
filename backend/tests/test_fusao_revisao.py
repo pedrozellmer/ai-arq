@@ -388,6 +388,10 @@ def _executa_o_fim(fusao=None, frase_versao="", acrescenta_linha=False,
         "_log_error": lambda *a, **k: diario["logs"].append(
             " ".join(str(x) for x in a)),
     }
+    # 01/10: de onde vem a revisão (pai, ou o próprio job no anexo) — a REAL
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from _corpo import corpo_de
+    exec(compile(corpo_de("_de_onde_vem_a_revisao"), "de_onde", "exec"), ns)
     exec(compile(_fatia_do_fim_do_process_job(), "fim_process_job", "exec"), ns)
 
     # 🪤 A fatia tem três `except` que engolem tudo e seguem. Se o harness
@@ -548,7 +552,8 @@ def test_o_aviso_ao_cliente_conta_as_linhas_NOVAS():
     quem somasse a coluna contava duas vezes, com o aviso dizendo que estava
     tudo certo."""
     src = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
-    i = src.index("MANTEVE as {_fusao['revisoes']}")
+    # 01/10: o aviso agora sai por fonte (pai, ou o próprio job no anexo): `_fz`
+    i = src.index("MANTEVE as {_fz['revisoes']}")
     trecho = src[max(0, i - 800):i + 1500]
     assert "LINHA NOVA" in trecho, "o aviso não distingue sobrescrita de linha acrescentada"
     assert "antes de somar a coluna" in trecho, "não alerta sobre a soma em dobro"
