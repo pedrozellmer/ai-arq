@@ -469,8 +469,16 @@ class DXFExtraction:
                 # a raiz: receita em engine_rules — as regras que casam o nome
                 # citado pela IA usam a MESMA (29/09)
                 from engine_rules import raiz_do_nome_do_bloco as _raiz_bloco
+                from engine_rules import e_vinculo_de_modelo as _e_vinc_nome
                 for name, count in other.items():
                     a = _assin.get(name, "")
+                    # 🩸 30/09/2026 (H60 do estudo do acervo): "CONDOMINIO X - TORRE
+                    # _vinculo__rvt-1-TORRE B" — a raiz corta no " - " e o "_rvt"
+                    # some: o vínculo COM conteúdo (tem assinatura) saía "CONDOMINIO X
+                    # (tipo 1): 1 un" SEM a marca, e só o vazio era marcado. Uma
+                    # entrega saiu "7 un ✓". Nome de vínculo não junta pela raiz.
+                    if a and _e_vinc_nome(name):
+                        a = ""
                     # 🚨 DOIS formatos de fragmentacao, medidos em arquivo real:
                     #  a) Revit/ArchiCAD: "CHUVEIRO - CHUVEIRO-1320392-PORTARIA"
                     #     (FAMILIA - TIPO-<id>-<vista>). Nas pranchas da cliente-16

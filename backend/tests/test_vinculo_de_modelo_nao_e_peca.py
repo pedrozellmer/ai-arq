@@ -47,6 +47,28 @@ def test_a_ia_e_avisada_na_contagem_de_blocos(tmp_path, monkeypatch):
     assert porta and "VÍNCULO" not in porta[0], porta
 
 
+def test_vinculo_com_tracinho_no_nome_e_conteudo_tambem_e_marcado(tmp_path, monkeypatch):
+    """🩸 30/09 (H60): "FAMÍLIA - TORRE _vinculo__rvt-N-VISTA" — a raiz cortava no
+    " - " e o vínculo COM conteúdo saía "FAMÍLIA (tipo N): 1 un" sem a marca; só
+    o VAZIO (sem assinatura) era marcado."""
+    monkeypatch.setenv("LEITURA_POR_FOLHA", "0")
+    doc = ezdxf.new("R2018")
+    msp = doc.modelspace()
+    for k in (1, 2):
+        b = doc.blocks.new("CONDOMINIO X - TORRE _vinculo__rvt-%d-TORRE B" % k)
+        b.add_line((0, 0), (10 * k, 0))
+        b.add_circle((0, 0), k)
+        msp.add_blockref(b.name, (50 * k, 0))
+    doc.blocks.new("CONDOMINIO X - TORRE _vinculo__rvt-7-TORRE B")        # vazio
+    msp.add_blockref("CONDOMINIO X - TORRE _vinculo__rvt-7-TORRE B", (500, 0))
+    p = str(tmp_path / "vinc2.dxf")
+    doc.saveas(p)
+    txt = dx.extract_dxf(p).to_structured_prompt()
+    linhas = [l for l in txt.splitlines() if "CONDOMINIO X" in l and " un" in l]
+    assert len(linhas) == 3 and all("VÍNCULO DE MODELO" in l for l in linhas), linhas
+    assert not any("(tipo" in l for l in linhas), linhas
+
+
 def _fatia_da_trava():
     src = open(os.path.join(os.path.dirname(_AQUI), "main.py"), encoding="utf-8").read()
     a = src.index("            from engine_rules import (marca_de_rebaixamento as _marca_reb,")
