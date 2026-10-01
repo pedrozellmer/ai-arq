@@ -6824,8 +6824,25 @@ def copias_em_sombra(blocks, unit_factor) -> dict:
                         sum(len(ps) for ps in pares.values()), len(pares), top])
     if not vetores:
         return {}
-    return {"pecas": sum(por_nome.values()), "vetores": vetores,
+    pecas = sum(por_nome.values())
+    # 🩸 01/10/2026 — H78 do estudo do acervo. Família do Revit, legenda e
+    # pilha de fixação davam "planta repetida" FALSA, e a IA escrevia "o valor
+    # real pode ser ~metade" em arruela/porca/parafuso que são peças iguais
+    # lado a lado. Medido: a cópia VERDADEIRA põe ≥ 4,6 % das inserções do
+    # arquivo em cópia; as falsas que derrubavam contagem, ≤ 2,0 %.
+    # 🪤 Cobertura na caixa (< 30 %) derrubava cópia verdadeira de planta-base
+    # (só a base se repete), "caixa < 2 m" depende da unidade estar certa, e
+    # "menos de 10 peças" derrubava a casa do ArchiCAD de 1 banheiro (6 peças,
+    # verdadeira) — fica só a fração.
+    _n_ins = sum(int(getattr(b, "count", 0) or 0) for b in blocks)
+    if _n_ins > 0 and pecas < _COPIA_MIN_FRACAO * _n_ins:
+        logger.info("[copias] descartada: %d peça(s) em cópia de %d inserção(ões)", pecas, _n_ins)
+        return {}
+    return {"pecas": pecas, "vetores": vetores,
             "nomes": dict(sorted(por_nome.items(), key=lambda kv: -kv[1])[:8])}
+
+
+_COPIA_MIN_FRACAO = 0.03     # H78: ≥ 3 % das inserções do arquivo em cópia
 
 
 def medir_por_folha(walls, hatches, polygon_areas, blocks, mapa) -> dict:
