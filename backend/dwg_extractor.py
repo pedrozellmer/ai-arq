@@ -266,6 +266,8 @@ class DXFExtraction:
                                            "tubos_em_face_dupla",
                                            # 01/10 (H76): idem
                                            "layers_contorno_de_peca",
+                                           # 01/10 (H79): idem
+                                           "layers_moldura_ou_limite",
                                            # 30/09 (H13): seção própria
                                            "pecas_no_vinculo"})
 
@@ -668,8 +670,16 @@ class DXFExtraction:
             _borda_ly = (self.metadata or {}).get("layers_de_borda") or {}
             _tubo_fd = (self.metadata or {}).get("tubos_em_face_dupla") or {}
             _ctp = (self.metadata or {}).get("layers_contorno_de_peca") or {}
+            _mol = (self.metadata or {}).get("layers_moldura_ou_limite") or {}
             for layer, length in sorted(walls_by_layer.items()):
-                if layer in _ctp and not _anot(layer):
+                if layer in _mol and not _anot(layer):
+                    # 🩸 01/10 (H79) — sem "layer <palavra>" no texto (ver abaixo)
+                    lines.append(f"  {layer}: {length:.2f} m"
+                                 f"   ⚠ MOLDURA OU LIMITE — {int(100 * float(_mol[layer].get('fracao') or 0))}% "
+                                 f"deste comprimento são LADOS DE RETÂNGULOS grandes (moldura "
+                                 f"da folha, limite de obra ou de lote), não rede nem elemento "
+                                 f"de obra: não use como medido")
+                elif layer in _ctp and not _anot(layer):
                     # 🩸 01/10 (H76) — sem "layer <palavra>" no texto (ver abaixo)
                     lines.append(f"  {layer}: {length:.2f} m"
                                  f"   ⚠ CONTORNO DE PEÇA — é a soma do desenho de "
@@ -1843,6 +1853,115 @@ def layers_de_contorno_de_peca(walls, metro_de_bloco) -> dict:
         if m_blk / n > _CONTORNO_MAX_M_POR_INSERCAO:
             continue
         out[lay] = {"m": round(t, 2), "insercoes": n, "m_por_insercao": round(m_blk / n, 2)}
+    return out
+
+
+#: 🩸 01/10/2026 — H79 do estudo do acervo. Um projeto de incêndio entregou
+#: "ramais secundários 12.642 ml ✓": 72 % do layer eram os LADOS de retângulos de
+#: ~494 × 461 m (o limite da obra, repetido) — não rede. Medido no acervo: o
+#: retângulo de lados contínuos separa (alvos 72–98 %, controles 0 % — meio-fio,
+#: eletroduto, eletrocalha e 10 layers de parede, que porta e encontro
+#: interrompem). Linha "longa" sozinha NÃO separa (o meio-fio dá 31 %).
+_MOLDURA_FRACAO = 0.5        # ≥ 50 % do metro do layer em lado de retângulo
+_MOLDURA_LADO_MIN = 0.10     # lado ≥ 10 % do lado do desenho (p2–p98)
+_MOLDURA_TOL = 0.002         # 0,2 % do lado do desenho
+#: limite de lote em layer de MURO é quantidade (ml de muro de divisa)
+_RE_LAYER_LIMITE_QUE_E_OBRA = re.compile(r"muro|divisa|cerca|gradil|alambrado", re.IGNORECASE)
+
+
+def layers_de_moldura_ou_limite(msp, walls, unit_factor: float = 1.0) -> dict:
+    """{layer: {'m', 'fracao'}} — layer cujo metro é, na maior parte, os LADOS
+    de retângulos grandes de lados contínuos (moldura de folha, limite de
+    obra/lote): ≥ `_MOLDURA_FRACAO`. Lados horizontais/verticais de LINE e de
+    LWPOLYLINE, emendados quando colineares. Parede e muro/divisa/cerca ficam
+    de fora. SÓ MARCA (aviso + selo), não tira o número."""
+    from engine_rules import layer_e_parede
+    uf = float(unit_factor) if unit_factor else 1.0
+    tot: dict = {}
+    for w in walls or ():
+        ly = str(getattr(w, "layer", "") or "")
+        tot[ly] = tot.get(ly, 0.0) + float(getattr(w, "length", 0.0) or 0.0)
+    segs: dict = {}
+    xs, ys = [], []
+    for e in msp.query("LINE LWPOLYLINE"):
+        try:
+            ly = str(e.dxf.layer)
+            if e.dxftype() == "LINE":
+                pts = [(e.dxf.start[0], e.dxf.start[1]), (e.dxf.end[0], e.dxf.end[1])]
+            else:
+                pts = [(p[0], p[1]) for p in e.get_points("xy")]
+                if e.closed and pts:
+                    pts.append(pts[0])
+        except Exception:
+            continue
+        for a, b in zip(pts, pts[1:]):
+            segs.setdefault(ly, []).append((a, b))
+            if len(xs) < 40000:
+                xs.extend((a[0], b[0]))
+                ys.extend((a[1], b[1]))
+    if len(xs) < 8:
+        return {}
+    xs.sort()
+    ys.sort()
+
+    def _p(v, q):
+        return v[min(len(v) - 1, int(len(v) * q))]
+    lado = max(_p(xs, 0.98) - _p(xs, 0.02), _p(ys, 0.98) - _p(ys, 0.02))
+    if lado <= 0:
+        return {}
+    tol, lmin = _MOLDURA_TOL * lado, _MOLDURA_LADO_MIN * lado
+
+    def _corridas(itens):
+        """[(coord, ini, fim)] emendando os colineares (mesma coord, vão ≤ tol)."""
+        por = {}
+        for c, a, b in itens:
+            por.setdefault(round(c / tol), []).append((min(a, b), max(a, b), c))
+        out = []
+        for lst in por.values():
+            lst.sort()
+            ini, fim, c = lst[0]
+            for a, b, _c in lst[1:]:
+                if a <= fim + tol:
+                    fim = max(fim, b)
+                else:
+                    out.append((c, ini, fim))
+                    ini, fim = a, b
+            out.append((c, ini, fim))
+        return out
+
+    out = {}
+    for ly, ss in segs.items():
+        if layer_e_parede(ly) or _RE_LAYER_LIMITE_QUE_E_OBRA.search(ly):
+            continue
+        t = tot.get(ly, 0.0)
+        if t <= 0:
+            continue
+        hs = _corridas([(a[1], a[0], b[0]) for a, b in ss if abs(b[1] - a[1]) <= tol])
+        vs = _corridas([(a[0], a[1], b[1]) for a, b in ss if abs(b[0] - a[0]) <= tol])
+        hs = [h for h in hs if h[2] - h[1] >= lmin]
+        vs = [v for v in vs if v[2] - v[1] >= lmin]
+        if len(hs) < 2 or len(vs) < 2:
+            continue
+
+        def _vert(x, y0, y1):
+            return any(abs(v[0] - x) <= tol and v[1] <= y0 + tol and v[2] >= y1 - tol for v in vs)
+        rect_bruto = 0.0
+        usados = set()
+        hs.sort()
+        for i, h1 in enumerate(hs):
+            for h2 in hs[i + 1:]:
+                if (h2[0] - h1[0] < lmin or abs(h1[1] - h2[1]) > tol or abs(h1[2] - h2[2]) > tol):
+                    continue
+                if not (_vert(h1[1], h1[0], h2[0]) and _vert(h1[2], h1[0], h2[0])):
+                    continue
+                chave = (round(h1[0] / tol), round(h2[0] / tol), round(h1[1] / tol), round(h1[2] / tol))
+                if chave in usados:
+                    continue
+                usados.add(chave)
+                rect_bruto += 2 * ((h1[2] - h1[1]) + (h2[0] - h1[0]))
+        f = rect_bruto * uf / t
+        if f >= _MOLDURA_FRACAO:
+            out[ly] = {"m": round(t, 2), "fracao": round(min(f, 1.0), 2)}
     return out
 
 
@@ -8710,6 +8829,13 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             metadata["tubos_em_face_dupla"] = _tfd
     except Exception as _etfd:
         logger.warning("[tubo-face-dupla] falhou (não-fatal): %s", _etfd)
+    # 🩸 01/10 (H79): metro de layer que é lado de moldura / limite de obra
+    try:
+        _mol = layers_de_moldura_ou_limite(msp, walls, unit_factor)
+        if _mol:
+            metadata["layers_moldura_ou_limite"] = _mol
+    except Exception as _emol:
+        logger.warning("[moldura-ou-limite] falhou (não-fatal): %s", _emol)
     # 🩸 01/10 (H76): metro de layer de CONEXÃO que é o contorno das peças
     try:
         _ctp = layers_de_contorno_de_peca(walls, _metro_de_bloco)

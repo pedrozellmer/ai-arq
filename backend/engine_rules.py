@@ -1254,7 +1254,7 @@ def layers_que_nao_provam(metadata) -> set:
     # 30/09 (H34): o tubo em face dupla — a soma é das duas paredes
     # 01/10 (H76): o layer de conexão cujo metro é o contorno das peças
     for k in ("layers_de_cota", "layers_de_borda", "tubos_em_face_dupla",
-              "layers_contorno_de_peca"):
+              "layers_contorno_de_peca", "layers_moldura_ou_limite"):
         for ly in (md.get(k) or {}):
             out.add(str(ly).strip().upper())
     return out
@@ -5089,8 +5089,10 @@ MARCA_LAYER_SEM_NOME = "⚠ LAYER SEM NOME"
 MARCA_TUBO_FACE_DUPLA = "⚠ TUBO EM FACE DUPLA"
 #: 🩸 01/10/2026 (H76) — ver `selo_apos_contorno_de_peca`.
 MARCA_CONTORNO_DE_PECA = "⚠ CONTORNO DE PEÇA, NÃO METRO"
+#: 🩸 01/10/2026 (H79) — ver `selo_apos_moldura_ou_limite`.
+MARCA_MOLDURA_OU_LIMITE = "⚠ MOLDURA OU LIMITE, NÃO REDE"
 MARCAS_DE_REBAIXAMENTO = (MARCA_PECA_SEM_BLOCO, MARCA_LAYER_SEM_NOME, MARCA_TUBO_FACE_DUPLA,
-                          MARCA_CONTORNO_DE_PECA,
+                          MARCA_CONTORNO_DE_PECA, MARCA_MOLDURA_OU_LIMITE,
                           MARCA_PLANTA_REPETIDA, MARCA_LIDO_DE_TEXTO, MARCA_SOMA, MARCA_CARIMBO,
                           MARCA_MENOS_PAREDE, MARCA_UNIDADE_DE_CONTAGEM,
                           MARCA_EXTRACAO_COM_RESSALVA, MARCA_QUANTIDADE_RECUPERADA,
@@ -5781,6 +5783,29 @@ def selo_apos_contorno_de_peca(conf, obs, unit, layers_citados, layers_contorno)
             MARCA_CONTORNO_DE_PECA + " ('%s') — o número é o contorno das peças "
             "desenhadas (conexões, conduletes, caixas), não comprimento de rede: a "
             "quantidade dessas peças é a CONTAGEM em un. " % hit + str(obs or ""),
+            True)
+
+
+def selo_apos_moldura_ou_limite(conf, obs, unit, layers_citados, layers_moldura):
+    """(conf, obs, rebaixou) — metro de layer que é, na maior parte, lado de
+    retângulo grande (`dwg_extractor.layers_de_moldura_ou_limite`) não sai medido.
+
+    🩸 01/10/2026 (H79): "ramais secundários 12.642 ml ✓" eram, em 72 %, os
+    lados do limite da obra repetido. SÓ REBAIXA e avisa — a rede de verdade
+    que mora no mesmo layer não se separa trecho a trecho com segurança.
+    """
+    if conf != "confirmado" or not layers_moldura:
+        return conf, obs, False
+    if str(unit or "").strip().lower() not in _PROVA_POR_UNIDADE:
+        return conf, obs, False
+    ml = {str(x).strip().upper() for x in layers_moldura}
+    hit = next((str(ly) for ly in (layers_citados or ()) if str(ly).strip().upper() in ml), "")
+    if not hit:
+        return conf, obs, False
+    return ("estimado",
+            MARCA_MOLDURA_OU_LIMITE + " ('%s') — a maior parte desse comprimento são os "
+            "lados de retângulos grandes (moldura da folha, limite de obra ou de lote): "
+            "confira quanto é a rede de verdade. " % hit + str(obs or ""),
             True)
 
 
