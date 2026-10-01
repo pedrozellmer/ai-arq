@@ -3996,7 +3996,10 @@ _MTEXT_FORMAT_CODES_RE = re.compile(
 # vista por base (a de mais peças), e cada bloco não vazio dela uma vez.
 _RE_VINCULO_INSTANCIA = re.compile(r"^(?P<base>.+?)_(?:rvt|ifc)-(?P<n>\d+)-(?P<vista>.*)$",
                                    re.IGNORECASE)
-_VINCULO_MAX_PECAS = 40
+# 🩸 30/09 (lista inteira medida pelo estudo): junto o nome, o caso do toldo dá
+# 100 linhas — e com 40 o "TOLDO - DEMOLIR 3" caía fora (empate no fim). A peça
+# pequena com FASE é a que decide o serviço de demolição.
+_VINCULO_MAX_PECAS = 100
 # 🪤 corte, elevação, 3D, isométrico, perspectiva e detalhe já saem pelo
 # `tipo_do_desenho` da vista ('vista'/'fora'); "1º Pav_" (sem tipo) entra.
 # 🩸 30/09 (antes/depois do estudo): o Revit põe no nome da peça o ID do
@@ -5117,6 +5120,20 @@ def _desenhos_no_modelo(msp, caixa=None) -> list:
             out.append({"folha": "modelo", "caixa": (bx0, by0, bx1, by1),
                         "titulo": t[:160], "tipo": tipo, "andares": 1,
                         "como": "modelo"})
+        # 🩸 30/09/2026 — H57 do estudo do acervo: 7 folhas A1 EMPILHADAS no
+        # modelo, as molduras se tocando — a geometria virou UM bloco (a coluna
+        # inteira, 42% da área, abaixo do teto de 60%) e 11 títulos (detalhes,
+        # cortes, elevações) pegaram a MESMA caixa. Cada um tirava a coluna toda
+        # da soma: 2.705 m → 0,19 m, com as plantas dentro. Um bloco que DOIS ou
+        # mais títulos reclamam não é "um desenho": nenhum deles vale (fica como
+        # antes da leitura por folha).
+        _por_caixa: dict = {}
+        for f in out:
+            _por_caixa[f["caixa"]] = _por_caixa.get(f["caixa"], 0) + 1
+        _repartidas = sum(1 for f in out if _por_caixa[f["caixa"]] > 1)
+        if _repartidas:
+            logger.info("_desenhos_no_modelo: %d título(s) pegaram a mesma caixa — fora", _repartidas)
+            out = [f for f in out if _por_caixa[f["caixa"]] == 1]
         # 🪤 Uma linha que emenda o detalhe na planta estica a caixa do detalhe
         # por cima da planta — e o que da planta caísse ali sairia da soma.
         # Caixa de detalhe/corte que CRUZA caixa de planta: não vale (fica 1).

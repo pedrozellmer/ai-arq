@@ -171,6 +171,17 @@ def test_a_mesma_familia_junta_e_a_peca_pequena_nao_some_no_corte(tmp_path):
     assert pv[BASE]["pecas"]["CHUVEIRO - DEMOLIR"] == 3, pv
 
 
+def test_a_peca_pequena_com_fase_nao_cai_no_corte(tmp_path):
+    # o caso: 100 linhas depois de juntar, e o toldo a DEMOLIR (3) empatava no fim
+    pecas = {"PEÇA %02d" % i: 3 for i in range(60)}
+    pecas["TOLDO - DEMOLIR"] = 3
+
+    def extra(doc, msp):
+        _vinculo(doc, msp, "OBRA-ARQ-ANEXO_rvt-1-PLANTA TERREO", pecas, x=800)
+    pv = _arquivo(tmp_path, extra=extra).metadata.get("pecas_no_vinculo") or {}
+    assert pv["OBRA-ARQ-ANEXO"]["pecas"].get("TOLDO - DEMOLIR") == 3, len(pv["OBRA-ARQ-ANEXO"]["pecas"])
+
+
 def test_a_ia_le_as_pecas_e_a_fase(tmp_path):
     txt = _arquivo(tmp_path).to_structured_prompt()
     assert "PEÇAS DENTRO DO VÍNCULO DO REVIT DA MESMA DISCIPLINA" in txt
