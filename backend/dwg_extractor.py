@@ -1204,12 +1204,16 @@ def _legenda_de_linha_dupla(msp) -> dict:
 
 def _corrigir_duto_linha_dupla(walls, unit_factor: float = 1.0, layers_extra=None,
                                escolhe=None, sep_max_m=None, min_seg_m=None,
-                               min_fracao_par=None, zona_cinza=None):
+                               min_fracao_par=None, zona_cinza=None,
+                               junta_face_fina=False):
     """Troca a soma das duas faces pelo comprimento do EIXO, em layer de duto.
 
     `layers_extra`: layers que a LEGENDA da prancha diz serem leito/duto
     desenhado em duas linhas (ver `_legenda_de_linha_dupla`) — o nome do layer
     não precisa dizer.
+    `junta_face_fina`: linhas a até `_DUTO_SEP_MIN` uma da outra, no mesmo
+    trecho, são UMA face (o reboco da parede composta) — ver
+    `_corrigir_parede_linha_dupla`.
     `escolhe` (layer → bool), `sep_max_m` e `min_seg_m` trocam QUEM entra, a
     seção máxima e o menor lado que ainda entra no pareamento/tampa — é como a
     PAREDE usa esta mesma máquina (ver `_corrigir_parede_linha_dupla`).
@@ -1308,6 +1312,7 @@ def _corrigir_duto_linha_dupla(walls, unit_factor: float = 1.0, layers_extra=Non
                 grupos[0] = grupos.pop() + grupos[0]
             pares = set()
             pareado = _dd(float)        # índice -> comprimento BRUTO pareado
+            perda = _dd(float)          # índice -> comprimento BRUTO que sai da soma
             for g in grupos:
                 if len(g) < 2:
                     continue
@@ -1324,33 +1329,55 @@ def _corrigir_duto_linha_dupla(walls, unit_factor: float = 1.0, layers_extra=Non
                 # de pelo menos metade da menor (trecho que nem se olha não é par)
                 por_d = sorted(g, key=lambda i: d[i])
                 viz = _dd(set)
+                fino = _dd(set)         # a ≤ sep_min e se olhando: mesma face
                 for a_pos, a in enumerate(por_d):
                     for b in por_d[a_pos + 1:]:
                         sep = d[b] - d[a]
                         if sep >= sep_max:
                             break
-                        if sep <= sep_min:
-                            continue
                         sobrep = min(t1[a], t1[b]) - max(t0[a], t0[b])
-                        if sobrep >= 0.5 * min(t1[a] - t0[a], t1[b] - t0[b]) and sobrep > 0:
+                        olha = sobrep > 0 and sobrep >= 0.5 * min(t1[a] - t0[a], t1[b] - t0[b])
+                        if sep <= sep_min:
+                            if junta_face_fina and olha:
+                                fino[a].add(b)
+                                fino[b].add(a)
+                            continue
+                        if olha:
                             viz[a].add(b)
                             viz[b].add(a)
                 if not viz:
                     continue
-                cand = list(viz)
+                cand = set(viz) | set(fino)
                 cortes = sorted({t for i in cand for t in (t0[i], t1[i])})
                 for ta, tb in zip(cortes, cortes[1:]):
                     if tb - ta <= 0:
                         continue
                     tm = (ta + tb) / 2.0
                     ativos = sorted((i for i in cand if t0[i] <= tm <= t1[i]), key=lambda i: d[i])
+                    # 🩸 01/10/2026 (H73 do estudo do acervo): a parede COMPOSTA
+                    # do Revit vem em 4 linhas — face, reboco (2–5 cm), bloco,
+                    # reboco, face. O reboco fica abaixo de `sep_min`, então
+                    # só as duas do meio pareavam e as faces somavam inteiras:
+                    # "Alvenaria 1.419,73 ml ✓" numa escola de ~363 m (3,9×).
+                    # A linha a ≤ sep_min da vizinha é a MESMA face; a face
+                    # pareada conta meio metro por metro, dividido entre as
+                    # linhas dela. Sem `junta_face_fina` cada face é 1 linha:
+                    # o pareamento de antes, igual.
+                    faces = []
+                    for i in ativos:
+                        if faces and any(j in fino[i] for j in faces[-1]):
+                            faces[-1].append(i)
+                        else:
+                            faces.append([i])
                     k = 0
-                    while k + 1 < len(ativos):
-                        a, b = ativos[k], ativos[k + 1]
-                        if b in viz[a]:
-                            pareado[a] += tb - ta
-                            pareado[b] += tb - ta
-                            pares.add((min(a, b), max(a, b)))
+                    while k + 1 < len(faces):
+                        fa, fb = faces[k], faces[k + 1]
+                        if any(b in viz[a] for a in fa for b in fb):
+                            for f_ in (fa, fb):
+                                for x in f_:
+                                    pareado[x] += tb - ta
+                                    perda[x] += (1.0 - 0.5 / len(f_)) * (tb - ta)
+                            pares.add((min(fa[0], fb[0]), max(fa[0], fb[0])))
                             k += 2
                         else:
                             k += 1
@@ -1399,10 +1426,10 @@ def _corrigir_duto_linha_dupla(walls, unit_factor: float = 1.0, layers_extra=Non
                     tampa[k] = L
             # quanto sai de cada linha do desenho (em metro)
             tira = _dd(float)
-            for k, p in pareado.items():
+            for k, p in perda.items():
                 (ax, ay), (bx, by) = seg_a[k], seg_b[k]
                 L = math.hypot(bx - ax, by - ay)
-                tira[sub[k][0]] += 0.5 * min(p, L) * uf
+                tira[sub[k][0]] += min(p, L) * uf
             for k, L in tampa.items():
                 tira[sub[k][0]] += L * uf
             for i, t in tira.items():
@@ -1678,7 +1705,7 @@ def _corrigir_parede_linha_dupla(walls, unit_factor: float = 1.0, zona_cinza=Non
     novos, relato, _ressalva = _corrigir_duto_linha_dupla(
         walls, unit_factor, escolhe=layer_e_parede, sep_max_m=_PAREDE_SEP_MAX,
         min_seg_m=_PAREDE_MIN_SEG, min_fracao_par=_PAREDE_MIN_FRACAO_PAR,
-        zona_cinza=zona_cinza)
+        zona_cinza=zona_cinza, junta_face_fina=True)
     return novos, relato
 
 
