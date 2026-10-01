@@ -378,6 +378,32 @@ def _pagina_e_metro(brutos) -> bool:
     return em_m > em_cm
 
 
+#: 🩸 01/10/2026 — estudo do acervo (H68c). Um PDF de 10 pranchas de pilar trazia,
+#: em CADA página, a lista de viewports de TODAS as folhas juntas (28, com várias
+#: "folhas inteiras" de A0). Numa página A1 metida no meio, 22 das 28 caixas
+#: ficavam FORA da página — e as 6 que caíam dentro, por acaso, davam 1:50 a uma
+#: folha de detalhes que diz "ESCALA 1:25" cinco vezes. Lista cuja MAIORIA está
+#: fora da página não é desta página: fica como se não houvesse /VP.
+_TOL_FORA_PT = 2.0
+
+
+def _fora_da_pagina(bbox, mb) -> bool:
+    x0, y0, x1, y1 = mb
+    return (min(bbox[0], bbox[2]) < x0 - _TOL_FORA_PT or min(bbox[1], bbox[3]) < y0 - _TOL_FORA_PT
+            or max(bbox[0], bbox[2]) > x1 + _TOL_FORA_PT or max(bbox[1], bbox[3]) > y1 + _TOL_FORA_PT)
+
+
+def _lista_de_outra_pagina(vps, mb) -> bool:
+    """A MAIORIA das caixas do /VP cai fora da página → a lista veio de outra folha."""
+    caixas = []
+    for v in vps:
+        try:
+            caixas.append([float(x) for x in v.get("/BBox")])
+        except Exception:
+            continue
+    return bool(caixas) and 2 * sum(1 for b in caixas if _fora_da_pagina(b, mb)) > len(caixas)
+
+
 def _snap_scale(raw: float):
     """Aproxima pra escala padrão de arquitetura se estiver a ≤5%. C é cm/pt
     (padrão do /RL). NÃO tenta unidades alternativas — isso fazia a folha 1:1
@@ -402,8 +428,11 @@ def scale_from_viewport(pdf_path: str, page_index: int = 0) -> dict:
         vps = page.get("/VP")
         if not vps:
             return {}
-        pw = float(page.MediaBox[2]) - float(page.MediaBox[0])
-        ph = float(page.MediaBox[3]) - float(page.MediaBox[1])
+        mb = [float(x) for x in page.MediaBox]
+        if _lista_de_outra_pagina(vps, mb):
+            return {}             # H68c: viewports de OUTRA folha — o carimbo/texto decide
+        pw = mb[2] - mb[0]
+        ph = mb[3] - mb[1]
         page_area = pw * ph
         # 1ª passada: junta o que cada viewport DIZ, sem decidir unidade ainda —
         # a unidade é da página, e pra saber dela é preciso ver todas.
