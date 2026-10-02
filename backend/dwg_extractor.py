@@ -268,6 +268,8 @@ class DXFExtraction:
                                            "layers_contorno_de_peca",
                                            # 01/10 (H79): idem
                                            "layers_moldura_ou_limite",
+                                           # 02/10 (H88): idem
+                                           "layers_esteira_por_travessa",
                                            # 01/10 (H84): rastro; a soma já é 1×
                                            "copias_exatas",
                                            # 30/09 (H13): seção própria
@@ -673,8 +675,16 @@ class DXFExtraction:
             _tubo_fd = (self.metadata or {}).get("tubos_em_face_dupla") or {}
             _ctp = (self.metadata or {}).get("layers_contorno_de_peca") or {}
             _mol = (self.metadata or {}).get("layers_moldura_ou_limite") or {}
+            _est = (self.metadata or {}).get("layers_esteira_por_travessa") or {}
             for layer, length in sorted(walls_by_layer.items()):
-                if layer in _mol and not _anot(layer):
+                if layer in _est and not _anot(layer):
+                    # 🩸 02/10 (H88) — sem "layer <palavra>" no texto (ver abaixo)
+                    lines.append(f"  {layer}: {length:.2f} m"
+                                 f"   ⚠ ROLETES/TRAVESSAS — {int(100 * float(_est[layer].get('fracao') or 0))}% "
+                                 f"deste comprimento são peças curtas (~{_est[layer].get('peca_m')} m: "
+                                 f"roletes, travessas, caixas) SOLTAS ou LADO A LADO em escada, "
+                                 f"não o comprimento da esteira: não use como medido")
+                elif layer in _mol and not _anot(layer):
                     # 🩸 01/10 (H79) — sem "layer <palavra>" no texto (ver abaixo)
                     lines.append(f"  {layer}: {length:.2f} m"
                                  f"   ⚠ MOLDURA OU LIMITE — {int(100 * float(_mol[layer].get('fracao') or 0))}% "
@@ -1973,6 +1983,237 @@ def layers_de_moldura_ou_limite(msp, walls, unit_factor: float = 1.0) -> dict:
         f = rect_bruto * uf / t
         if f >= _MOLDURA_FRACAO:
             out[ly] = {"m": round(t, 2), "fracao": round(min(f, 1.0), 2)}
+    return out
+
+
+#: 🩸 02/10/2026 — H88 do estudo do acervo. Um layout de fábrica entregou
+#: "esteira 999,31 ml ✓" e "543,19 ml ✓": os layers de esteira traziam ROLETES,
+#: TRAVESSAS (em 2 linhas, de comprimentos diferentes) e CAIXAS com X, e o
+#: comprimento da esteira era ~60 m. O ✓ veio da IA citando o comprimento do
+#: layer. Medido no acervo (346 DXF): só esse arquivo tem layer de esteira com
+#: geometria; os controles são sintéticos.
+#: 🔑 Duas anatomias, medidas no arquivo, cada peça contada uma vez:
+#:   • peça SOLTA — trecho curto que não continua em linha (travessa, caixa,
+#:     rolete isolado): a esteira proposta, 64 %;
+#:   • ESCADA — gêmeos paralelos ao lado a ≤ 0,25 L, em ≥ 4 posições: a
+#:     existente, 81 %, onde os roletes das faixas empilhadas caem na mesma
+#:     reta e "emendam" (solta dava 1 %).
+#: Borda e eixo — inteiros, em módulos, com folga, em curva, em perfil duplo —
+#: emendam e não fazem escada (as bordas ficam a ≥ 0,5 L uma da outra).
+#: 🪤 1ª régua (só a fileira, gêmeos a ≤ 3 L) perdia a proposta; 2ª (só a
+#: solta) perdia a existente. Sem cláusula de borda: a existente tinha as
+#: bordas desenhadas e o total ainda era 9× o eixo.
+#: 🪤 O NOME segura: sem ele, 17 % dos layers de uma amostra marcariam (brise,
+#: pérgola, esquadria, mobiliário são escadas perfeitas).
+#: 🪤 Fronteira só à ESQUERDA: "Conveyor_Proposed" tem "_" depois (letra para o
+#: \b), e "testeira" tem "esteira" dentro.
+#: 🪤 TEMPO: a 1ª versão varria células de 1,5 m para toda peça — 42 s só nela
+#: num layer de 8,7 mil trechos, quase todos em 10 × 15 m (hoje ~1–2 s). A
+#: busca agora é numa grade do
+#: tamanho do RAIO da própria peça (a ponta comum: 0,5 % de L; a reta: 0,5 L,
+#: só entre paralelas), e layer acima de `_ESTEIRA_MAX_TRECHOS` não roda.
+#: 🪤 Limites aceitos (só tiram o ✓): transportador curto (≤ 3 m) desenhado só
+#: pelo eixo e solto conta como peça; faixas estreitas paralelas a < 0,25 L
+#: desenhadas pelas bordas em módulos soltos fazem escada.
+_RE_LAYER_DE_ESTEIRA = re.compile(
+    r"(?<![a-zà-ú])(conveyor|esteira|transportador|rolete|correia)", re.IGNORECASE)
+_SOLTA_MAX_M = 3.0          # peça curta: até a largura máxima de esteira
+_SOLTA_PONTA_TOL = 0.005    # ponta comum / mesma reta: ≤ 0,5 % de L (o tubo em 2 linhas: 1,5–2 %)
+_SOLTA_GIRO_MAX = 20.0      # graus: ponta comum que SEGUE (curva de polilinha), não canto
+_SOLTA_ALINH_TOL = 2.0      # graus: colinear / paralelo
+_SOLTA_FOLGA = 0.5          # colinear com folga de até 0,5 L entre as pontas
+_FILEIRA_PECA_MIN_M = 0.2   # custo: o picado de < 20 cm (texto, hachura) fica fora da escada
+_FILEIRA_DESVIO = 0.10      # gêmeo ao LADO: desvio ao longo ≤ 10 % de L
+_FILEIRA_PASSO_MAX = 0.25   # ...a ≤ 0,25 L (rolete da existente: 0,09 L)
+_FILEIRA_MIN_POSICOES = 4   # escada: ≥ 4 posições de lado (bordas + eixo: 3)
+_FILEIRA_POSICAO_TOL = 0.02 # posições a ≤ 2 % de L são a mesma (a cópia quase em pilha)
+_ESTEIRA_FRACAO = 0.5       # ≥ 50 % do metro do layer em peça solta ou em escada
+_ESTEIRA_MAX_TRECHOS = 60000  # teto por layer (acima: não roda, só loga)
+_ESTEIRA_NIVEIS = 8         # grade do raio: célula = base / 2^k, k ≤ 8
+
+
+def layers_esteira_por_travessa(msp, walls, unit_factor: float = 1.0) -> dict:
+    """{layer: {'m', 'fracao', 'peca_m', 'pecas'}} — layer de ESTEIRA (pelo
+    nome: `_RE_LAYER_DE_ESTEIRA`, fora anotação) cujo metro é, na maior parte,
+    peças curtas (≤ 3 m) que NÃO são percurso: SOLTAS (não continuam em linha
+    por nenhuma das pontas — nem ponta comum com giro ≤ 20°, nem colinear com
+    folga ≤ 0,5 L) ou em ESCADA (gêmeos paralelos ao lado, a ≤ 0,25 L, em ≥ 4
+    posições). `peca_m` é a mediana pelo METRO. SÓ MARCA (aviso + selo)."""
+    from engine_rules import layer_is_anotacao
+    uf = float(unit_factor) if unit_factor else 1.0
+    tot: dict = {}
+    for w in walls or ():
+        ly = str(getattr(w, "layer", "") or "")
+        if _RE_LAYER_DE_ESTEIRA.search(ly) and not layer_is_anotacao(ly):
+            tot[ly] = tot.get(ly, 0.0) + float(getattr(w, "length", 0.0) or 0.0)
+    if not tot:
+        return {}
+    hi, lo = _SOLTA_MAX_M / uf, _FILEIRA_PECA_MIN_M / uf
+    # 🪤 a cópia exata em pilha conta UMA vez — o denominador (`walls`) já vem
+    # assim (H84); sem isto, o rolete colado 2× dobrava o numerador
+    _tq = 0.001 / uf
+    vistos: set = set()
+    segs: dict = {}
+    for e in msp.query("LINE LWPOLYLINE"):
+        try:
+            ly = str(e.dxf.layer)
+            if ly not in tot:
+                continue
+            if e.dxftype() == "LINE":
+                pts = [(e.dxf.start[0], e.dxf.start[1]), (e.dxf.end[0], e.dxf.end[1])]
+            else:
+                pts = [(p[0], p[1]) for p in e.get_points("xy")]
+                if e.closed and pts:
+                    pts.append(pts[0])
+        except Exception:
+            continue
+        for (ax, ay), (bx, by) in zip(pts, pts[1:]):
+            L = math.hypot(bx - ax, by - ay)
+            if L <= 0:
+                continue
+            _ch = (ly,) + tuple(sorted(((round(ax / _tq), round(ay / _tq)),
+                                        (round(bx / _tq), round(by / _tq)))))
+            if _ch in vistos:
+                continue
+            vistos.add(_ch)
+            segs.setdefault(ly, []).append((ax, ay, bx, by, L))
+    cos_giro = math.cos(math.radians(_SOLTA_GIRO_MAX))
+    cos_alinh = math.cos(math.radians(_SOLTA_ALINH_TOL))
+    nb = int(180.0 // _SOLTA_ALINH_TOL)
+    bases = {"ponta": _SOLTA_PONTA_TOL * hi, "reta": _SOLTA_FOLGA * hi,
+             "meio": (_FILEIRA_PASSO_MAX + _FILEIRA_DESVIO) * hi}
+    out = {}
+    for ly, ss in segs.items():
+        t = tot.get(ly, 0.0)
+        if t <= 0:
+            continue
+        if len(ss) > _ESTEIRA_MAX_TRECHOS:
+            logger.warning("[esteira-por-travessa] '%s' com %d trechos — acima do teto, "
+                           "não medido", ly, len(ss))
+            continue
+        bal = [int((math.degrees(math.atan2(by - ay, bx - ax)) % 180.0) // _SOLTA_ALINH_TOL) % nb
+               for ax, ay, bx, by, _L in ss]
+        grades: dict = {}
+
+        def _grade(tipo, k):
+            """Pontas (ou meios) em células de base/2^k — o raio de busca da
+            peça cabe em 1 célula, então bastam as 9 em volta."""
+            g = grades.get((tipo, k))
+            if g is None:
+                s = bases[tipo] / (2 ** k)
+                cel: dict = {}
+                for j, (ax, ay, bx, by, Lj) in enumerate(ss):
+                    if tipo == "meio":
+                        if not lo <= Lj <= hi:
+                            continue
+                        pts_j = (((ax + bx) / 2.0, (ay + by) / 2.0),)
+                    else:
+                        pts_j = ((ax, ay), (bx, by))
+                    for px, py in pts_j:
+                        ch = ((int(px // s), int(py // s)) if tipo == "ponta"
+                              else (bal[j], int(px // s), int(py // s)))
+                        cel.setdefault(ch, []).append((j, px, py))
+                g = grades[(tipo, k)] = (cel, s)
+            return g
+
+        def _vizinhos(tipo, k, px, py, b0):
+            cel, s = _grade(tipo, k)
+            cx, cy = int(px // s), int(py // s)
+            if tipo == "ponta":
+                chaves = ((cx + b, cy + c) for b in (-1, 0, 1) for c in (-1, 0, 1))
+            else:
+                chaves = ((p, cx + b, cy + c) for p in ((b0 - 1) % nb, b0, (b0 + 1) % nb)
+                          for b in (-1, 0, 1) for c in (-1, 0, 1))
+            for ch in chaves:
+                yield from cel.get(ch, ())
+
+        def _nivel(L):
+            return min(_ESTEIRA_NIVEIS, max(0, int(math.log2(hi / L))))
+        conta: set = set()
+        # ── peça SOLTA ──
+        for i, (ax, ay, bx, by, L) in enumerate(ss):
+            if L > hi:
+                continue
+            ux, uy = (bx - ax) / L, (by - ay) / L
+            k = _nivel(L)
+            emenda = False
+            for px, py in ((ax, ay), (bx, by)):
+                # ponta comum que segue (giro ≤ 20°)
+                for j, qx, qy in _vizinhos("ponta", k, px, py, 0):
+                    if j != i and math.hypot(qx - px, qy - py) <= _SOLTA_PONTA_TOL * L:
+                        jax, jay, jbx, jby, Lj = ss[j]
+                        if abs(ux * (jbx - jax) + uy * (jby - jay)) / Lj >= cos_giro:
+                            emenda = True
+                            break
+                if emenda:
+                    break
+                # a mesma reta, com folga (só entre paralelas)
+                for j, qx, qy in _vizinhos("reta", k, px, py, bal[i]):
+                    if j == i:
+                        continue
+                    d = math.hypot(qx - px, qy - py)
+                    if _SOLTA_PONTA_TOL * L < d <= _SOLTA_FOLGA * L:
+                        jax, jay, jbx, jby, Lj = ss[j]
+                        if (abs(ux * (jbx - jax) + uy * (jby - jay)) / Lj >= cos_alinh
+                                and abs(-(qx - ax) * uy + (qy - ay) * ux) <= _SOLTA_PONTA_TOL * L):
+                            emenda = True
+                            break
+                if emenda:
+                    break
+            if not emenda:
+                conta.add(i)
+        # ── ESCADA ── gêmeo paralelo AO LADO e perto
+        cand = [i for i, s_ in enumerate(ss) if lo <= s_[4] <= hi]
+        pai = {i: i for i in cand}
+
+        def _raiz(a):
+            while pai[a] != a:
+                pai[a] = pai[pai[a]]
+                a = pai[a]
+            return a
+        for i in cand:
+            ax, ay, bx, by, L = ss[i]
+            ux, uy = (bx - ax) / L, (by - ay) / L
+            mx, my = (ax + bx) / 2.0, (ay + by) / 2.0
+            for j, qx, qy in _vizinhos("meio", _nivel(L), mx, my, bal[i]):
+                if j == i:
+                    continue
+                jax, jay, jbx, jby, Lj = ss[j]
+                if abs(ux * (jbx - jax) + uy * (jby - jay)) / Lj < cos_alinh:
+                    continue
+                dx_, dy_ = qx - mx, qy - my
+                if (abs(dx_ * ux + dy_ * uy) <= _FILEIRA_DESVIO * L
+                        and abs(-dx_ * uy + dy_ * ux) <= _FILEIRA_PASSO_MAX * L):
+                    ri, rj = _raiz(i), _raiz(j)
+                    if ri != rj:
+                        pai[ri] = rj
+        grupos: dict = {}
+        for i in cand:
+            grupos.setdefault(_raiz(i), []).append(i)
+        for g in grupos.values():
+            if len(g) < _FILEIRA_MIN_POSICOES:
+                continue
+            ax, ay, bx, by, _L = ss[g[0]]
+            Lg = math.hypot(bx - ax, by - ay)
+            nx, ny = -(by - ay) / Lg, (bx - ax) / Lg
+            comps = sorted(ss[i][4] for i in g)
+            tol = _FILEIRA_POSICAO_TOL * comps[len(comps) // 2]
+            pos = sorted((ss[i][0] + ss[i][2]) / 2.0 * nx + (ss[i][1] + ss[i][3]) / 2.0 * ny
+                         for i in g)
+            if 1 + sum(1 for p, q in zip(pos, pos[1:]) if q - p > tol) >= _FILEIRA_MIN_POSICOES:
+                conta.update(g)
+        compr = sorted(ss[i][4] for i in conta)
+        f = sum(compr) * uf / t
+        if f >= _ESTEIRA_FRACAO:
+            # a peça típica pelo METRO: o picado de poucos cm não manda na mediana
+            meio, acum, peca = sum(compr) / 2.0, 0.0, 0.0
+            for c in compr:
+                acum += c
+                if acum >= meio:
+                    peca = c
+                    break
+            out[ly] = {"m": round(t, 2), "fracao": round(min(f, 1.0), 2),
+                       "peca_m": round(peca * uf, 2), "pecas": len(compr)}
     return out
 
 
@@ -8905,6 +9146,13 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             metadata["layers_moldura_ou_limite"] = _mol
     except Exception as _emol:
         logger.warning("[moldura-ou-limite] falhou (não-fatal): %s", _emol)
+    # 🩸 02/10 (H88): metro de layer de esteira que é rolete/travessa lado a lado
+    try:
+        _est = layers_esteira_por_travessa(msp, walls, unit_factor)
+        if _est:
+            metadata["layers_esteira_por_travessa"] = _est
+    except Exception as _eest:
+        logger.warning("[esteira-por-travessa] falhou (não-fatal): %s", _eest)
     # 🩸 01/10 (H76): metro de layer de CONEXÃO que é o contorno das peças
     try:
         _ctp = layers_de_contorno_de_peca(walls, _metro_de_bloco)

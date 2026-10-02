@@ -1254,7 +1254,8 @@ def layers_que_nao_provam(metadata) -> set:
     # 30/09 (H34): o tubo em face dupla — a soma é das duas paredes
     # 01/10 (H76): o layer de conexão cujo metro é o contorno das peças
     for k in ("layers_de_cota", "layers_de_borda", "tubos_em_face_dupla",
-              "layers_contorno_de_peca", "layers_moldura_ou_limite"):
+              "layers_contorno_de_peca", "layers_moldura_ou_limite",
+              "layers_esteira_por_travessa"):
         for ly in (md.get(k) or {}):
             out.add(str(ly).strip().upper())
     return out
@@ -5091,8 +5092,11 @@ MARCA_TUBO_FACE_DUPLA = "⚠ TUBO EM FACE DUPLA"
 MARCA_CONTORNO_DE_PECA = "⚠ CONTORNO DE PEÇA, NÃO METRO"
 #: 🩸 01/10/2026 (H79) — ver `selo_apos_moldura_ou_limite`.
 MARCA_MOLDURA_OU_LIMITE = "⚠ MOLDURA OU LIMITE, NÃO REDE"
+#: 🩸 02/10/2026 (H88) — ver `selo_apos_travessa_de_esteira`.
+MARCA_TRAVESSA_DE_ESTEIRA = "⚠ ROLETES/TRAVESSAS, NÃO COMPRIMENTO DA ESTEIRA"
 MARCAS_DE_REBAIXAMENTO = (MARCA_PECA_SEM_BLOCO, MARCA_LAYER_SEM_NOME, MARCA_TUBO_FACE_DUPLA,
                           MARCA_CONTORNO_DE_PECA, MARCA_MOLDURA_OU_LIMITE,
+                          MARCA_TRAVESSA_DE_ESTEIRA,
                           MARCA_PLANTA_REPETIDA, MARCA_LIDO_DE_TEXTO, MARCA_SOMA, MARCA_CARIMBO,
                           MARCA_MENOS_PAREDE, MARCA_UNIDADE_DE_CONTAGEM,
                           MARCA_EXTRACAO_COM_RESSALVA, MARCA_QUANTIDADE_RECUPERADA,
@@ -5806,6 +5810,32 @@ def selo_apos_moldura_ou_limite(conf, obs, unit, layers_citados, layers_moldura)
             MARCA_MOLDURA_OU_LIMITE + " ('%s') — a maior parte desse comprimento são os "
             "lados de retângulos grandes (moldura da folha, limite de obra ou de lote): "
             "confira quanto é a rede de verdade. " % hit + str(obs or ""),
+            True)
+
+
+def selo_apos_travessa_de_esteira(conf, obs, unit, layers_citados, layers_esteira):
+    """(conf, obs, rebaixou) — metro de layer de ESTEIRA que é, na maior parte,
+    peças curtas — roletes, travessas, caixas — soltas ou lado a lado em escada
+    (`dwg_extractor.layers_esteira_por_travessa`) não sai medido.
+
+    🩸 02/10/2026 (H88): um layout de fábrica entregou "esteira 999,31 ml ✓" e
+    "543,19 ml ✓": a soma de TODAS as linhas dos layers, e lá estavam roletes,
+    travessas e caixas de ~2 m — o comprimento da esteira era ~60 m. O ✓
+    veio da IA citando o comprimento do layer. SÓ REBAIXA e avisa: o
+    comprimento de verdade (bordas ou eixo) não se separa com segurança.
+    """
+    if conf != "confirmado" or not layers_esteira:
+        return conf, obs, False
+    if str(unit or "").strip().lower() not in _PROVA_POR_UNIDADE:
+        return conf, obs, False
+    es = {str(x).strip().upper() for x in layers_esteira}
+    hit = next((str(ly) for ly in (layers_citados or ()) if str(ly).strip().upper() in es), "")
+    if not hit:
+        return conf, obs, False
+    return ("estimado",
+            MARCA_TRAVESSA_DE_ESTEIRA + " ('%s') — a maior parte desse comprimento são "
+            "peças curtas (roletes, travessas, caixas) soltas ou lado a lado, não o "
+            "comprimento da esteira: confira pelo eixo ou pelas bordas. " % hit + str(obs or ""),
             True)
 
 

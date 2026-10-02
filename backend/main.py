@@ -16695,6 +16695,12 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                        ((extraction.metadata or {}).get("layers_moldura_ou_limite") or {})}
                         except Exception:
                             _mol_ly = set()
+                        # 🩸 02/10 (H88): layers de esteira cujo metro é rolete/travessa
+                        try:
+                            _est_ly = {str(_k).strip().upper() for _k in
+                                       ((extraction.metadata or {}).get("layers_esteira_por_travessa") or {})}
+                        except Exception:
+                            _est_ly = set()
                         # 🩸 30/09 (filhote evefe9af): as contagens das peças sem bloco
                         try:
                             _objetos_n = {int(_p.get("n") or 0) for _ps in
@@ -16926,6 +16932,13 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                 conf, obs_raw, _era_mol = _regra_moldura(
                                     conf, obs_raw, normalized_unit, _lys, _mol_ly)
                                 if _era_mol:
+                                    _rebaixado_pela_fonte = True
+                                # 🩸 02/10 (H88): metro de esteira que é rolete/travessa
+                                from engine_rules import (
+                                    selo_apos_travessa_de_esteira as _regra_esteira)
+                                conf, obs_raw, _era_est = _regra_esteira(
+                                    conf, obs_raw, normalized_unit, _lys, _est_ly)
+                                if _era_est:
                                     _rebaixado_pela_fonte = True
 
                                 # 🩸 29/09 (caso 18c57c3c): linha com quantidade ZERO
