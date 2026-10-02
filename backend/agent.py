@@ -532,14 +532,30 @@ def tool_search_items(job_id: str, query: str, max_hits: int = 20) -> dict:
     return buscar_linhas(linhas, query, max_hits=max_hits)
 
 
+#: 🩸 02/10/2026 (job 72a9aafe): depois do done o DXF do processamento já não
+#: existe, a ferramenta devolvia `available_dxfs: []` e o chat disse a um cliente
+#: novo que "o DWG não foi convertido", que a planilha era "leitura de imagem" e
+#: que reenviando em DXF "a área sai medida" — os três falsos (o motivo era a
+#: unidade e a planta repetida). Ele anexou o PDF à toa.
+_AVISO_DXF_TEMPORARIO = (
+    "O DXF do processamento é TEMPORÁRIO: some quando o projeto termina. Lista "
+    "vazia NÃO quer dizer que o DWG não foi convertido, nem que a planilha veio "
+    "de imagem — se o cliente mandou DWG/DXF, ele foi convertido e lido. O que não "
+    "saiu medido do CAD tem outro motivo (escala, planta repetida, layer), escrito "
+    "nos avisos e nas observações das linhas: use a planilha. Nunca sugira "
+    "reenviar em DXF por causa disto.")
+
+
 def tool_read_dxf_summary(job_id: str, dxf_filename: str = "") -> dict:
     """Estatísticas dos DXFs de um job — layers, blocos, walls.
     Se dxf_filename vazio, lista os arquivos disponíveis."""
     work = os.path.join(WORK_DIR, job_id)
     if not os.path.isdir(work):
-        return {"error": f"work dir do job {job_id} não encontrado"}
+        return {"available_dxfs": [], "aviso": _AVISO_DXF_TEMPORARIO}
     dxfs = [f for f in os.listdir(work) if f.lower().endswith(".dxf")]
     if not dxf_filename:
+        if not dxfs:
+            return {"available_dxfs": [], "aviso": _AVISO_DXF_TEMPORARIO}
         return {"available_dxfs": dxfs}
     target = next((f for f in dxfs if dxf_filename.lower() in f.lower()), None)
     if not target:
@@ -860,7 +876,7 @@ TOOLS = [
     },
     {
         "name": "read_dxf_summary",
-        "description": "Estatísticas de um DXF (layers, qtd de blocos, walls). Sem dxf_filename, lista os DXFs do projeto.",
+        "description": "Estatísticas de um DXF (layers, qtd de blocos, walls). Sem dxf_filename, lista os DXFs ainda guardados — o do processamento é temporário: lista vazia não quer dizer que o DWG não foi lido.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -1096,7 +1112,12 @@ def contexto_dos_arquivos(tipos) -> str:
                 "medir de verdade, o caminho é enviar o DXF da mesma prancha."
                 % (pdf, "" if pdf == 1 else "s"))
     return ("\n\nARQUIVOS DESTE PROJETO: %d DWG, %d DXF e %d PDF. O que veio de PDF "
-            "é leitura da imagem (estimativa); layer e bloco só existem nos DWG/DXF."
+            "é leitura da imagem (estimativa); layer e bloco só existem nos DWG/DXF. "
+            "O DWG/DXF foi convertido e LIDO no processamento — o DXF é temporário e "
+            "pode não aparecer depois em read_dxf_summary. Nunca diga que o DWG não "
+            "foi convertido, nem que as quantidades vieram de imagem, nem sugira "
+            "reenviar em DXF: o motivo de um número não ter saído medido está nos "
+            "avisos e nas observações da planilha."
             % (dwg, dxf, pdf))
 
 
