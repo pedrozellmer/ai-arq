@@ -593,6 +593,123 @@ def derive_scale_from_cotas(pdf_path: str, page_index: int = 0,
     }
 
 
+# ──────────────── o juiz: cota × a PRÓPRIA linha de cota (H87) ────────────────
+#
+# 🩸 02/10/2026 — estudo do acervo (H87). Uma planta de casa em 1:40 (a própria
+# folha escreve "1:40" numa das pranchas) saiu "escala 1:50 PROVADA por 3
+# cota(s)" e "por 4 cota(s)": o `validate_scale` aceita 2 pares cota × parede a
+# ±2 %, e com ~180 cotas e centenas de paredes a coincidência passa. Na mesma
+# folha, cada cota medida contra a LINHA DE COTA que ela mede dá 1:40 em ~100
+# valores distintos (e a cama de casal mede 1,65 × 1,93 m em 1:40; 2,06 × 2,41
+# em 1:50).
+# 📏 Mínimo de pares não separa: das 37 provas verdadeiras do acervo, 12 têm 2 a
+# 4 pares (4 delas só 2) — subir o mínimo pra 5 derrubaria essas 12.
+# 🔑 Então o juiz só DESMENTE: a prova cai quando, na MESMA região da
+# validação, as linhas de cota sustentam com folga OUTRA escala. A escala não
+# muda e nada é promovido — a prova vira declaração.
+JUIZ_DIST_PT: float = 12.0        # o texto da cota fica a até isto da linha dela
+JUIZ_FAMILIA_REL: float = 0.02    # valores a 2 % um do outro são a mesma cota
+JUIZ_JANELA_REL: float = 0.03     # um grupo de escala implícita tem ±3 %
+JUIZ_MIN_FAMILIAS: int = 10       # grupo forte: ≥ 10 famílias de valor…
+JUIZ_MIN_AMPLITUDE: float = 3.0   # …e o maior valor ≥ 3× o menor
+JUIZ_OUTRA_ESCALA: float = 0.15   # o grupo forte é OUTRA escala se a > 15 %
+JUIZ_APOIO_REL: float = 0.10      # apoio da escala provada: pares a ±10 %
+JUIZ_PROPORCAO: float = 3.0       # desmente se o grupo tem > 3× o apoio dela
+JUIZ_MAX_PARES: int = 8000        # teto de pares (custo da varredura)
+
+
+def pares_cota_linha(tokens: Sequence[dict], segs: Sequence) -> list[tuple[float, float]]:
+    """(escala implícita, valor em m) de cada cota × traço reto paralelo a ela
+    que passa SOB o centro do texto (a até JUIZ_DIST_PT).
+
+    `tokens` = `extract_cota_tokens`; `segs` = a coleta crua da página
+    (`[((x0, y0), (x1, y1)), ...]`, mesmo espaço). Texto mais largo que alto
+    procura traço horizontal; mais alto que largo, vertical. Puro.
+    """
+    hor: dict[int, list] = {}
+    ver: dict[int, list] = {}
+    for (x0, y0), (x1, y1) in segs:
+        if abs(y1 - y0) < 0.5 and abs(x1 - x0) > 2:
+            y = (y0 + y1) / 2
+            hor.setdefault(int(y // JUIZ_DIST_PT), []).append((min(x0, x1), max(x0, x1), y))
+        elif abs(x1 - x0) < 0.5 and abs(y1 - y0) > 2:
+            x = (x0 + x1) / 2
+            ver.setdefault(int(x // JUIZ_DIST_PT), []).append((min(y0, y1), max(y0, y1), x))
+    pares: list[tuple[float, float]] = []
+    for t in tokens:
+        val = t.get("value_m")
+        if not val or val <= 0:
+            continue
+        bx0, by0, bx1, by1 = t["bbox"]
+        cx, cy = t["center"]
+        deitado = (bx1 - bx0) >= (by1 - by0)
+        ao_longo, perp, idx = (cx, cy, hor) if deitado else (cy, cx, ver)
+        k = int(perp // JUIZ_DIST_PT)
+        for kk in (k - 1, k, k + 1):
+            for a, b, c in idx.get(kk, ()):
+                if a <= ao_longo <= b and abs(c - perp) <= JUIZ_DIST_PT:
+                    pares.append((val / ((b - a) * PT_TO_M), val))
+                    if len(pares) >= JUIZ_MAX_PARES:
+                        return pares
+    return pares
+
+
+def _familias(valores) -> int:
+    """Quantas cotas DIFERENTES: valores a JUIZ_FAMILIA_REL do 1º da família
+    contam uma vez (os níveis "750,80 / 750,65 / 750,35" são uma só)."""
+    n, ini = 0, None
+    for v in sorted(valores):
+        if ini is None or v > ini * (1 + JUIZ_FAMILIA_REL):
+            n, ini = n + 1, v
+    return n
+
+
+def juiz_desmente(pares: Sequence[tuple[float, float]], den: float) -> Optional[dict]:
+    """O grupo de escala que desmente a prova de `den`, ou None se ela fica.
+
+    Desmente só com as três: (1) há um grupo de escala implícita com ≥
+    JUIZ_MIN_FAMILIAS famílias de valor e amplitude ≥ JUIZ_MIN_AMPLITUDE;
+    (2) ele está a mais de JUIZ_OUTRA_ESCALA de `den`; (3) o apoio de `den`
+    (famílias a ±JUIZ_APOIO_REL) × JUIZ_PROPORCAO fica abaixo dele. Puro.
+    """
+    if not pares or not den or den <= 0:
+        return None
+    ps = sorted(pares)
+    melhor = None                                   # (famílias, amplitude, escala)
+    j = 0
+    for i, (s, _) in enumerate(ps):
+        if j < i:
+            j = i
+        while j < len(ps) and ps[j][0] <= s * (1 + 2 * JUIZ_JANELA_REL):
+            j += 1
+        if melhor and j - i <= melhor[0]:
+            continue                                # não tem pares pra ganhar
+        vals = [v for _, v in ps[i:j]]
+        fam = _familias(vals)
+        if melhor is None or fam > melhor[0]:
+            melhor = (fam, max(vals) / min(vals), ps[(i + j - 1) // 2][0])
+    if not melhor:
+        return None
+    fam, amp, esc = melhor
+    if fam < JUIZ_MIN_FAMILIAS or amp < JUIZ_MIN_AMPLITUDE:
+        return None
+    if abs(esc - den) / den <= JUIZ_OUTRA_ESCALA:
+        return None
+    apoio = _familias([v for s, v in ps if abs(s - den) / den <= JUIZ_APOIO_REL])
+    if apoio * JUIZ_PROPORCAO >= fam:
+        return None
+    return {"escala": round(esc, 1), "familias": fam, "amplitude": round(amp, 1), "apoio": apoio}
+
+
+def prova_desmentida_pela_linha_de_cota(pdf_path: str, page_index: int, scale_denominator: float,
+                                        region_bbox: Optional[Sequence[float]], segs: Sequence) -> Optional[dict]:
+    """O juiz na MESMA região da validação (`region_bbox`, como o
+    `validate_scale`): numa folha com implantação 1:200 e planta 1:75, as cotas
+    da implantação não podem derrubar a prova da planta."""
+    tokens = extract_cota_tokens(pdf_path, page_index, region_bbox)
+    return juiz_desmente(pares_cota_linha(tokens, segs), float(scale_denominator))
+
+
 # ─────────────────────────── auto-teste no corpus ───────────────────────────
 
 if __name__ == "__main__":

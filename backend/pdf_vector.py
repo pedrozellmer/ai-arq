@@ -574,6 +574,22 @@ def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
         out["cotas_encontradas"] = cot["n_cotas"]
         out["cotas_batem"] = cot["n_matches"]
         out["escala_validada"] = bool(cot["validada"])
+        if out["escala_validada"] and _segs is not None:
+            # 🩸 02/10/2026 (H87) — PROVA POR COINCIDÊNCIA. Planta em 1:40 saiu
+            # "1:50 PROVADA por 3 cota(s)": 2 pares a ±2 % passam por acaso.
+            # O juiz mede cada cota contra a PRÓPRIA linha de cota, na mesma
+            # região; se elas sustentam com folga outra escala, a prova cai
+            # (vira declaração). A escala não muda. Erro no juiz não derruba
+            # a validação: ela fica como estava.
+            try:
+                from pdfvec_cotas import prova_desmentida_pela_linha_de_cota
+                _desm = prova_desmentida_pela_linha_de_cota(
+                    pdf_path, page_index, room_den, room_bbox, _segs[0])
+                if _desm:
+                    out["escala_validada"] = False
+                    out["prova_desmentida"] = _desm
+            except Exception as e:
+                out["err_prova_juiz"] = f"{type(e).__name__}: {e}"[:120]
         # 28/09 (D7b, SOMBRA): a melhor OUTRA escala nos mesmos elementos. Não
         # decide nada — é o dado pra calibrar a dominância antes de ligá-la
         if cot.get("segunda"):
@@ -807,6 +823,8 @@ def _run(page_units: list, job_id: str, api_key: str, log_fn, pular=None) -> Non
                     "n_viewports", "n_views", "scale_snapped", "indicadas",
                     "err_rooms", "err_viewport", "err_carimbo", "err_views",
                     "err_escala_vista",
+                    # 02/10/2026 (H87): a linha de cota desmentiu a prova?
+                    "prova_desmentida", "err_prova_juiz",
                     # 🩸 10/09/2026: qual leitor fez o parse (rápido ou pdfminer)
                     "parse_leitor", "err_parse_rapido")
             d = {k: r[k] for k in keep if r.get(k) is not None}

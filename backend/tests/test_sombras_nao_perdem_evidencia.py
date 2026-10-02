@@ -298,6 +298,7 @@ def _roda_a_sombra_gorda(monkeypatch, tmp_path, n_paginas, resposta):
     ("indicadas", False),           # o carimbo disse "indicadas"?
     ("walls_m", 276.3),             # o comprimento de parede — o gargalo do PDF
     ("n_walls", 41),
+    ("prova_desmentida", {"escala": 40.4, "familias": 67}),     # H87: a linha de cota derrubou a prova?
 ])
 def test_o_campo_que_RESPONDE_pergunta_chega_no_log(monkeypatch, tmp_path, campo, valor):
     """🩸 10/09/2026 — `_measure_page` produz 44 campos e a keep-list gravava
