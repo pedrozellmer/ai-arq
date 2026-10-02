@@ -75,7 +75,12 @@ COPY --from=libredwg-build /usr/local/bin/dwg2dxf /usr/local/bin/dwg2dxf
 RUN test -x /usr/local/bin/dwg2dxf && (dwg2dxf --version 2>&1 | head -1 || true)
 
 # Baixar e instalar ODA File Converter
-RUN wget -q -O /tmp/oda.deb "https://www.opendesign.com/guestfiles/get?filename=ODAFileConverter_QT6_lnxX64_8.3dll_27.1.deb" && \
+# 🩸 02/10/2026: o arquivo "…_8.3dll_27.1.deb" saiu do site (404) e o build do
+# d5b1c55 subiu SEM ODA (o RUN é tolerante: "ODA install failed"), com /health
+# dizendo dwg=false. O nome atual na página de downloads é "…_11dll.deb"; o
+# antigo fica como 2ª tentativa. Sem ODA o DWG vai direto pro LibreDWG.
+RUN (wget -q -O /tmp/oda.deb "https://www.opendesign.com/guestfiles/get?filename=ODAFileConverter_QT6_lnxX64_11dll.deb" \
+     || wget -q -O /tmp/oda.deb "https://www.opendesign.com/guestfiles/get?filename=ODAFileConverter_QT6_lnxX64_8.3dll_27.1.deb") && \
     apt-get update && \
     dpkg -i /tmp/oda.deb || apt-get install -f -y --no-install-recommends && \
     rm -f /tmp/oda.deb && \
