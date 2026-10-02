@@ -1569,7 +1569,13 @@ _PAREDE_MAX_SEG_LAYER = 6000
 # comprimento dele (regra nº3: razão só alerta).
 _RE_LAYER_DE_TUBO = re.compile(r"(?<![a-z])(?:pipe|tubo|tubula)", re.IGNORECASE)
 # ø150, Ø 100, %%c75 (o código do AutoCAD pro ø), "PVC-ø75", "ø35-CPVC" — em mm
-_RE_DIAMETRO_ROTULADO = re.compile(r"(?:%%[cC]|[øØ⌀])\s*(\d{2,3})(?!\d)")
+# 🩸 02/10/2026 (H34b): o Revit em português rotula "75mmø", "110mmø" — o ø
+# DEPOIS. Sem ler esse formato, `_diametros_rotulados` dava [] e o H34 não
+# decidia: uma piscina saiu "tubulação 1.157 + 1.544 ml ✓" com o P-PIPE em
+# face dupla (91 e 98 % em par). Só com o ø: "150mm" sozinho é nota/cota.
+_RE_DIAMETRO_ROTULADO = re.compile(
+    r"(?:%%[cC]|[øØ⌀])\s*(\d{2,3})(?!\d)"
+    r"|(?<![\d.,])(\d{2,3})\s*mm\s*(?:%%[cC]|[øØ⌀])", re.IGNORECASE)
 _TUBO_DIAM_MM = (15, 400)       # faixa de diâmetro que vale como rótulo de tubo
 _TUBO_DIST_TOL = 0.12           # distância do par = diâmetro ± 12%
 _TUBO_ANG_TOL = 1.0             # graus
@@ -1592,11 +1598,12 @@ _TUBO_MAX_SEG = 60000           # teto de trechos por layer (amostra os longos)
 
 
 def _diametros_rotulados(texts) -> list:
-    """Os diâmetros (mm) escritos no desenho: 'ø150', '%%c100', 'PVC-ø75'."""
+    """Os diâmetros (mm) escritos no desenho: 'ø150', '%%c100', 'PVC-ø75',
+    e o do Revit em português, com o ø depois: '75mmø', '110 mm ø'."""
     ds = set()
     for t in texts or ():
         for m in _RE_DIAMETRO_ROTULADO.finditer(str(getattr(t, "text", "") or "")):
-            v = int(m.group(1))
+            v = int(m.group(1) or m.group(2))
             if _TUBO_DIAM_MM[0] <= v <= _TUBO_DIAM_MM[1]:
                 ds.add(v)
     return sorted(ds)
