@@ -211,6 +211,34 @@ def test_um_rotulo_so_nao_prova(tmp_path):
     assert not md.get("unidade_provada_por_rotulo"), md.get("unidade_provada_por_rotulo")
 
 
+def _com_rotulos_que_nao_batem(n):
+    """Os 3 cômodos que batem + `n` cômodos cujo rótulo NÃO bate (12 m² × 20+k)."""
+    base = _comodos("INVISIVEIS", lambda a: "SALA ÁREA=%.2fm²" % a)
+
+    def _f(msp):
+        base(msp)
+        for k in range(n):
+            x = 60000 + k * 6000
+            msp.add_lwpolyline([(x, 0), (x + 4000, 0), (x + 4000, 3000), (x, 3000)], close=True,
+                               dxfattribs={"layer": "INVISIVEIS"})
+            msp.add_text("DEP %d ÁREA=%.2fm²" % (k, 20.0 + k),
+                         dxfattribs={"height": 100, "insert": (x + 2000, 1500), "layer": "TEXTO"})
+    return _f
+
+
+def test_poucos_rotulos_batendo_entre_muitos_nao_prova(tmp_path):
+    """3 de 33 (9 %): com contorno de qualquer layer, par por acaso fica mais
+    fácil — abaixo de 10 % dos rótulos batendo, a prova nova não vale."""
+    _, md = _md(tmp_path, _com_rotulos_que_nao_batem(30))
+    assert not md.get("unidade_provada_por_rotulo"), md.get("unidade_provada_por_rotulo")
+
+
+def test_CONTROLE_acima_de_dez_por_cento_prova(tmp_path):
+    """3 de 23 (13 %): prova."""
+    _, md = _md(tmp_path, _com_rotulos_que_nao_batem(20))
+    assert md.get("unidade_provada_por_rotulo"), sorted(md)
+
+
 def test_o_rastro_do_h94_nao_vai_pro_prompt(tmp_path):
     ext, md = _md(tmp_path, _comodos("INVISIVEIS", lambda a: "%.2f m²" % a))
     assert md.get("prova_por_rotulo_de_comodo")

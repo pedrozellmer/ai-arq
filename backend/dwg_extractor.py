@@ -9015,11 +9015,18 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         #   (3) só os rótulos de área disputam a região (o nome não a ocupa antes).
         # Rótulo e contorno de LOTE/TERRENO/DIVISA/IMPLANTAÇÃO não provam: no
         # evaa4391 a implantação estava em cm e o prédio em mm.
+        # 🪤 E ≥ 10 % dos rótulos batendo: com o contorno de QUALQUER layer há
+        # muito mais região pra um par casar por acaso. Nos 6 desenhos que
+        # destravam no acervo a razão é 34–79 %; os de 3–4 % (5 de 196, 4 de
+        # 118) não tinham trava e ficam sem esta prova nova.
+        _PROVA_COMODO_FRACAO_MIN = 0.10
         _prova_h94 = None
         if not _v5.get("provada"):
             _v94 = _prova5(_pares94(texts, list(_contornos_de_prova) + list(hatches)),
                            leitor=_rot94)
-            if _v94.get("provada"):
+            if _v94.get("provada") and (int(_v94.get("n_batem") or 0)
+                                        >= _PROVA_COMODO_FRACAO_MIN
+                                        * max(1, int(_v94.get("n_rotulos_area") or 0))):
                 _prova_h94 = _v94
         _vp = _prova_h94 or _v5
         if _vp.get("provada"):
