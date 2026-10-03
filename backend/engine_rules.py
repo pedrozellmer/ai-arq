@@ -2986,21 +2986,86 @@ def rotulo_area_como_numero(texto: str):
     return v if v >= _AREA_MIN_M2 else None
 
 
-def unidade_provada_por_rotulo(pares, tol: float = _AREA_TOL) -> dict:
+#: H94 (02/10/2026) — o rótulo de área ESCRITO NO FIM do texto, depois de "=" ou
+#: ":": "MODA ESPORTIVA ÁREA=9,99m²", "QUARTO 1 Ar = 12.34 m²". O
+#: `_RE_ROTULO_AREA` só aceita o texto INTEIRO ("57,16 m²") e, medido no acervo,
+#: recusava os 100 rótulos de uma loja e 49 de um sobrado. Milhar com ponto
+#: ("1.234,56") vale. O "m²" escrito continua obrigatório.
+_RE_ROTULO_AREA_NO_FIM = _re.compile(
+    r"[=:]\s*(\d{1,3}(?:\.\d{3})+,\d{1,2}|\d{1,5}(?:[.,]\d{1,2})?)\s*(?:m²|m2|M²|M2)\s*$")
+#: 🩸 H94 — rótulo ou contorno de LOTE não prova a unidade da PRANCHA: no acervo
+#: (evaa4391, projeto de prefeitura) a implantação vinha em cm (o rótulo "ÁREA
+#: REAL" no contorno da divisa) e o prédio em mm. "QUADRA" sai junto (quadra do lote; a
+#: quadra de esporte perde a prova — conservador). Lido sem acento, minúsculo.
+_RE_AREA_DE_LOTE = _re.compile(
+    r"\blote\b|terreno|divisa|implanta|\bgleba\b|\bquadra\b|area\s*real|\bc\.?\s*p\.?\s*[=:]")
+
+
+def rotulo_area_de_comodo(texto: str):
+    """Número (m²) de um rótulo de área de CÔMODO — o formato puro
+    (`rotulo_area_como_numero`) ou o número + "m²" no FIM, depois de "=" ou ":".
+    None para rótulo de LOTE/TERRENO/DIVISA/IMPLANTAÇÃO (`_RE_AREA_DE_LOTE`).
+    H94 (02/10/2026)."""
+    s = str(texto or "").replace("\\U+00B2", "²").replace("%%178", "²")
+    if _RE_AREA_DE_LOTE.search(_sem_acento(s).lower()):
+        return None
+    v = rotulo_area_como_numero(s)
+    if v is not None:
+        return v
+    m = _RE_ROTULO_AREA_NO_FIM.search(" ".join(s.split()))
+    if not m:
+        return None
+    n = m.group(1)
+    if _re.match(r"^\d{1,3}(?:\.\d{3})+,", n):
+        n = n.replace(".", "")
+    try:
+        v = float(n.replace(",", "."))
+    except ValueError:
+        return None
+    return v if v >= _AREA_MIN_M2 else None
+
+
+def pares_de_prova_por_rotulo(textos, regioes) -> list:
+    """H94 (02/10/2026) — os pares rótulo × região que podem PROVAR a unidade.
+
+    Difere de `casar_texto_com_regiao(textos, regioes)` em duas coisas:
+    - só os RÓTULOS DE ÁREA DE CÔMODO disputam as regiões — com o nome junto,
+      o nome do cômodo ocupava a região primeiro (1 texto por região) e o
+      rótulo "43,11 m²" do apartamento ficava sem par (b249f3e4, no acervo);
+    - região de layer de LOTE/TERRENO/DIVISA/IMPLANTAÇÃO fica de fora.
+    A menor região que contém o rótulo continua ganhando (cômodo ganha do andar).
+    """
+    def _txt(t):
+        return (getattr(t, "text", "") if not isinstance(t, dict) else t.get("text")) or ""
+
+    def _lay(r):
+        return (getattr(r, "layer", "") if not isinstance(r, dict) else r.get("layer")) or ""
+
+    rot = [t for t in (textos or []) if rotulo_area_de_comodo(_txt(t)) is not None]
+    if not rot:
+        return []
+    regs = [r for r in (regioes or []) if not _RE_AREA_DE_LOTE.search(_sem_acento(_lay(r)).lower())]
+    return casar_texto_com_regiao(rot, regs)
+
+
+def unidade_provada_por_rotulo(pares, tol: float = _AREA_TOL, leitor=None) -> dict:
     """A unidade está PROVADA pelos rótulos de área da própria prancha?
 
     `pares`: saída de `casar_texto_com_regiao` — [{texto, area, ...}].
     Devolve {'provada': bool, 'n_batem', 'n_rotulos_area', 'exemplos'}.
+    `leitor`: como ler o número do rótulo (padrão: `rotulo_area_como_numero`;
+    o H94 passa `rotulo_area_de_comodo`).
 
     Prova = pelo menos `_AREA_MIN_PARES` rótulos de área batendo ±tol com a
     região que rotulam. 🪤 Só conta rótulos DISTINTOS: a mesma área repetida
     em 4 ambientes iguais é uma evidência, não quatro.
     """
+    leitor = leitor or rotulo_area_como_numero
     vistos = set()
     batem = []
     n_rot = 0
     for p in (pares or []):
-        alvo = rotulo_area_como_numero(p.get("texto"))
+        alvo = leitor(p.get("texto"))
         if alvo is None:
             continue
         n_rot += 1

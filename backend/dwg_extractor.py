@@ -273,7 +273,10 @@ class DXFExtraction:
                                            # 01/10 (H84): rastro; a soma já é 1×
                                            "copias_exatas",
                                            # 30/09 (H13): seção própria
-                                           "pecas_no_vinculo"})
+                                           "pecas_no_vinculo",
+                                           # 02/10 (H94): rastro; a prova já vai
+                                           # em `unidade_provada_por_rotulo`
+                                           "prova_por_rotulo_de_comodo"})
 
     def to_structured_prompt(self) -> str:
         """Converts extraction to a structured text prompt for Claude."""
@@ -8567,6 +8570,28 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
     _poly_recusa = {"deny": 0, "fora_da_allowlist": 0, "area_minima": 0,
                     "poucos_pontos": 0}
     _poly_layers_recusados: dict = {}
+    # 🔑 H94 (02/10/2026): contorno fechado SÓ COMO REGIÃO DE PROVA da 5ª régua
+    # (rótulo de área × região). A allowlist acima continua valendo pra MEDIR:
+    # nada daqui entra em `polygon_areas`, `walls` ou nas somas. Medido no
+    # acervo: o cômodo de um sobrado estava no layer "INVISIVEIS" (34 rótulos
+    # "QUARTO 1 Ar = 12.34 m²" batendo) e a peneira de nome jogava fora.
+    # Aninhado entra (o cômodo dentro do piso é a região do rótulo); layer da
+    # denylist (cota, legenda, quadro…) continua fora.
+    _contornos_de_prova: list = []
+    _MAX_CONTORNOS_DE_PROVA = 20000
+
+    def _guardar_contorno_de_prova(layer_name, pts, a):
+        if a < 0.5 or len(_contornos_de_prova) >= _MAX_CONTORNOS_DE_PROVA:
+            return
+        xs = [p[0] for p in pts]
+        ys = [p[1] for p in pts]
+        _w, _h = max(xs) - min(xs), max(ys) - min(ys)
+        if _w <= 0 or _h <= 0 or not area_factor:
+            return
+        _contornos_de_prova.append(HatchArea(
+            layer=layer_name, area=a, pattern="contorno de prova",
+            bbox=(min(xs), min(ys), max(xs), max(ys)),
+            preenchimento=round(min(1.0, (a / area_factor) / (_w * _h)), 4)))
 
     def _consider_poly(layer_name, pts):
         try:
@@ -8581,6 +8606,8 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
                 _poly_recusa["fora_da_allowlist"] += 1
                 _poly_layers_recusados[layer_name] = (
                     _poly_layers_recusados.get(layer_name, 0) + 1)
+                # H94: só região de prova — não vira medição
+                _guardar_contorno_de_prova(layer_name, pts, abs(_shoelace_area(pts)) * area_factor)
                 return  # allowlist: só superfície física reconhecível
             a = abs(_shoelace_area(pts)) * area_factor
             if a < 0.5:
@@ -8589,6 +8616,7 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             xs = [p[0] for p in pts]
             ys = [p[1] for p in pts]
             _poly_cands.append((a, (min(xs), min(ys), max(xs), max(ys)), layer_name))
+            _guardar_contorno_de_prova(layer_name, pts, a)
         except Exception:
             return
 
@@ -8973,14 +9001,38 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
     # continuam valendo — o rótulo prova a régua, não a completude do desenho.
     try:
         from engine_rules import (casar_texto_com_regiao as _casar5,
-                                  unidade_provada_por_rotulo as _prova5)
+                                  unidade_provada_por_rotulo as _prova5,
+                                  pares_de_prova_por_rotulo as _pares94,
+                                  rotulo_area_de_comodo as _rot94)
         _p5 = _casar5(texts, list(polygon_areas) + list(hatches))
         _v5 = _prova5(_p5)
-        if _v5.get("provada"):
-            _ex = "; ".join(f'"{e["texto"]}"={e["medida"]}' for e in _v5["exemplos"][:3])
+        # 🔑 H94 (02/10/2026) — quando a régua de hoje não prova, a mesma régua
+        # com três aberturas, medidas no acervo (de 3 para 21 provas em 94
+        # desenhos com rótulo "m²"; ×100 e ÷100 não provam em nenhum):
+        #   (1) o rótulo com o número no FIM ("SALA ÁREA=9,99m²", "Ar = 12.34 m²");
+        #   (2) contorno fechado de QUALQUER layer como região (`_contornos_de_prova`,
+        #       nunca medição);
+        #   (3) só os rótulos de área disputam a região (o nome não a ocupa antes).
+        # Rótulo e contorno de LOTE/TERRENO/DIVISA/IMPLANTAÇÃO não provam: no
+        # evaa4391 a implantação estava em cm e o prédio em mm.
+        _prova_h94 = None
+        if not _v5.get("provada"):
+            _v94 = _prova5(_pares94(texts, list(_contornos_de_prova) + list(hatches)),
+                           leitor=_rot94)
+            if _v94.get("provada"):
+                _prova_h94 = _v94
+        _vp = _prova_h94 or _v5
+        if _vp.get("provada"):
+            _ex = "; ".join(f'"{e["texto"]}"={e["medida"]}' for e in _vp["exemplos"][:3])
             metadata["unidade_provada_por_rotulo"] = (
-                f"{_v5['n_batem']} rótulo(s) de área da própria prancha conferem "
+                f"{_vp['n_batem']} rótulo(s) de área da própria prancha conferem "
                 f"com a geometria medida ({_ex}) — escala provada pelo desenho.")
+            if _prova_h94:
+                # registro do log (fora do prompt): qual caminho provou
+                metadata["prova_por_rotulo_de_comodo"] = {
+                    "rotulos": int(_prova_h94.get("n_rotulos_area") or 0),
+                    "batem": int(_prova_h94.get("n_batem") or 0),
+                    "contornos": len(_contornos_de_prova)}
             # a prova supera a ressalva de ESCALA (não as outras)
             # 🩸 27/09: a régua ambígua também — o rótulo desempata o que as
             # cotas não desempataram. A folha de papel (escala_por_vista) NÃO:
