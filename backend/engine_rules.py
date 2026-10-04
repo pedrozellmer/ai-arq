@@ -6799,9 +6799,10 @@ def layer_e_parede(nome) -> bool:
 #: "4 - ARQUITETURA 01", "ARQ_ARQUITETURA"; não "arquiteturapaisagismo") entra
 #: na RÉGUA DA ESPESSURA do H51 (`dwg_extractor.espessura_dos_pares`) — e SÓ
 #: lá. 🩸 Num projeto do acervo (cm lido como mm) as paredes estavam em
-#: "4 - ARQUITETURA 01..06" e o H51 não as via: "Alvenaria 1º–6º nível" saiu
-#: ✓ ~10× menor. Medido nos 163 desenhos que citam "arquitetura": dispara a mais
-#: nesse e num que já tinha ressalva; nenhum alarme falso com o veto da letra.
+#: "4 - ARQUITETURA 01..06" (layers de ESPESSURA DE PENA, não de andar) e o
+#: H51 não as via: 6 linhas de alvenaria saíram ✓ com a unidade errada (de
+#: 0,05× a ~6× por linha). Antes × depois do extract nos 342 DXF do acervo:
+#: muda só esse desenho; nenhuma soma, nenhum alarme falso.
 #: Ficam de fora o `_RE_LAYER_NAO_PAREDE` e o que mora no layer de arquitetura
 #: sem ser parede: mobiliário, equipamento, layout, paisagismo, vegetação.
 _RE_LAYER_ARQUITETURA = _re.compile(r"(?:^|[^a-z])arquitetura(?:[^a-z]|$)")

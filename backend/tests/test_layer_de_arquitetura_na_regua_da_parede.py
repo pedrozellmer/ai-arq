@@ -2,12 +2,13 @@
 """O layer genérico "ARQUITETURA" entra na régua da espessura do H51 (H95, 04/10/2026).
 
 🩸 Num projeto do acervo, desenhado em CENTÍMETRO e declarado MILÍMETRO, as
-paredes estavam em "4 - ARQUITETURA 01..06". O H51 (a parede de 1,5 cm desmente
-a unidade) só olhava layer com NOME de parede e não viu nada: "Alvenaria 1º–6º
-nível" saiu ✓ ~10× menor. Medido nos 163 desenhos do acervo que citam
-"arquitetura": com o layer genérico na régua, dispara a mais só nesse e num que
-já tinha ressalva; com o veto da letra, nenhum alarme falso (o par a 1,5–2 cm de
-reboco/revestimento em mm de verdade é vetado pela letra plausível).
+paredes estavam em "4 - ARQUITETURA 01..06" (layers de espessura de pena, não
+de andar). O H51 (a parede de 1,5 cm desmente a unidade) só olhava layer com
+NOME de parede e não viu nada: 6 linhas de alvenaria saíram ✓ com a unidade
+errada (de 0,05× a ~6× por linha). Antes × depois do extract nos 342 DXF do
+acervo: com o layer genérico na régua, muda só esse desenho; nenhuma soma muda e
+não há alarme falso (o par a 1,5–2 cm de reboco/revestimento em mm de verdade é
+vetado pela letra plausível).
 Só REBAIXA: é a mesma ressalva de escala do H51; nenhuma quantidade muda.
 """
 import os
