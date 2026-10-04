@@ -163,3 +163,23 @@ def test_as_IAs_NOMEADAS_nao_pedem_detalhe():
     for v in ("ia_chatgpt", "ia_gemini", "ia_claude", "ia_copilot"):
         assert ("'%s'" % v) not in trecho, (
             "%s abre o campo de detalhe sem precisar" % v)
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  04/10/2026 — "Pesquisa no Bing" (Pedro: separar a busca do Bing; o texto é dele)
+# ══════════════════════════════════════════════════════════════════════════
+def test_o_bing_tem_opcao_propria_logo_depois_do_google():
+    """O Bing é o 2º buscador que traz gente e não tinha opção: quem veio dele marcava Google, Outro ou o
+    Copilot. Os três mapas de rótulo já são cobrados pelos guardas acima — aqui, a opção e o texto."""
+    opcoes = _opcoes_do_cadastro()
+    assert "bing" in opcoes and opcoes.index("bing") == opcoes.index("google") + 1, opcoes
+    assert '<option value="bing">Pesquisa no Bing (resultado da busca)</option>' in _ler("cadastro.html")
+    assert "ia_copilot" in opcoes, "o Copilot (a IA da Microsoft) segue no grupo das IAs, separado da busca"
+
+
+def test_quem_escreveu_bing_no_outro_conta_como_bing():
+    """Mesma régua do Google: 'Outro' + detalhe exatamente "bing" é Bing no gráfico de origem."""
+    admin = _ler("admin.html")
+    i = admin.index("function _fonteNormalizada(u){")
+    corpo = admin[i:admin.index("\n  }", i)]
+    assert "if (k === 'outro' && /^bing$/i.test(d)) return 'bing';" in corpo
