@@ -6795,6 +6795,28 @@ def layer_e_parede(nome) -> bool:
     return bool(_RE_LAYER_PAREDE.search(n)) and not _RE_LAYER_NAO_PAREDE.search(n)
 
 
+#: H95 (04/10/2026) — o layer genérico de ARQUITETURA (a palavra inteira:
+#: "4 - ARQUITETURA 01", "ARQ_ARQUITETURA"; não "arquiteturapaisagismo") entra
+#: na RÉGUA DA ESPESSURA do H51 (`dwg_extractor.espessura_dos_pares`) — e SÓ
+#: lá. 🩸 Num projeto do acervo (cm lido como mm) as paredes estavam em
+#: "4 - ARQUITETURA 01..06" e o H51 não as via: "Alvenaria 1º–6º nível" saiu
+#: ✓ ~10× menor. Medido nos 163 desenhos que citam "arquitetura": dispara a mais
+#: nesse e num que já tinha ressalva; nenhum alarme falso com o veto da letra.
+#: Ficam de fora o `_RE_LAYER_NAO_PAREDE` e o que mora no layer de arquitetura
+#: sem ser parede: mobiliário, equipamento, layout, paisagismo, vegetação.
+_RE_LAYER_ARQUITETURA = _re.compile(r"(?:^|[^a-z])arquitetura(?:[^a-z]|$)")
+_RE_ARQUITETURA_NAO_PAREDE = _re.compile(
+    r"(?:^|[^a-z])(?:mobili\w*|equip\w*|layout|paisag\w*|vegeta\w*)(?:[^a-z]|$)")
+
+
+def layer_de_arquitetura(nome) -> bool:
+    """O LAYER genérico de arquitetura entra na régua da espessura (H95)?
+    Só pra MEDIR a espessura das paredes — não vira parede em mais nada."""
+    n = _minusculo_sem_acento(str(nome or ""))
+    return (bool(_RE_LAYER_ARQUITETURA.search(n)) and not _RE_LAYER_NAO_PAREDE.search(n)
+            and not _RE_ARQUITETURA_NAO_PAREDE.search(n))
+
+
 def e_parede_pelo_nome(descricao):
     """A linha É parede? Decide a CABEÇA do nome do serviço (antes do travessão).
 

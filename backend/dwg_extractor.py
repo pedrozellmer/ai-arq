@@ -3425,7 +3425,9 @@ def unidade_contradita_pela_parede(walls, unit_factor, status_da_regua=None, tex
 def espessura_dos_pares(walls, unit_factor) -> dict:
     """A MEDIDA da régua da espessura, sem a decisão ({} sem trecho que baste).
 
-    Pra cada trecho reto de layer de parede (fora de vista/corte/fachada), a
+    Pra cada trecho reto de layer de parede — ou do layer genérico de
+    ARQUITETURA (H95, `engine_rules.layer_de_arquitetura`) — fora de
+    vista/corte/fachada, a
     parceira paralela mais perto (≤ 1°) que cobre ≥ metade dele, até 60 cm na
     unidade lida — a mesma medida da varredura do estudo. Devolve, em float:
     'n' (pares), 'tot_m', 'par_m', 'em_par' (par_m / tot_m), 'plausivel' (fração
@@ -3435,11 +3437,12 @@ def espessura_dos_pares(walls, unit_factor) -> dict:
     uf = float(unit_factor or 0.0)
     if uf <= 0 or not walls:
         return {}
-    from engine_rules import layer_e_parede
+    from engine_rules import layer_de_arquitetura, layer_e_parede
     segs = []
     for w in walls:
         lay = str(getattr(w, "layer", "") or "")
-        if getattr(w, "curvo", False) or _RE_LAYER_DE_VISTA.search(lay) or not layer_e_parede(lay):
+        if getattr(w, "curvo", False) or _RE_LAYER_DE_VISTA.search(lay) or not (
+                layer_e_parede(lay) or layer_de_arquitetura(lay)):
             continue
         pts = getattr(w, "pontos", ()) or ()
         if len(pts) >= 2:
