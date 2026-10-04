@@ -159,6 +159,15 @@ def _supa_log(line: str):
 # gravar a falha dele nele mesmo seria recursão.
 _FALHAS_DE_GRAVACAO = {}   # tabela -> {"hora": "AAAA-MM-DDTHH", "n": int, "total": int}
 
+# 🩸 04/10/2026 — o alarme acima apitou 6 vezes em 6 dias e TODAS eram MARCA que já existia: 5× a trava
+# `fim_de_job` da raiz regravada pelo `_email_auto_registrar` depois do e-mail de complemento/reprocesso, 1× o
+# descadastro da newsletter clicado duas vezes. Nenhum e-mail saiu repetido (conferido no email_sent_log). Alarme que
+# apita à toa ensina a ignorar alarme. Nestas tabelas, 409 com 23505 (chave única) quer dizer "o estado pedido já
+# está no banco": não conta como falha. 🪤 O RETORNO continua False (a linha não foi inserida AGORA) — quem um dia
+# usar insert como trava ("consegui a vez?") não pode receber True de uma vez que era de outro. As travas de hoje
+# usam `_supa_rest_service` com ignore-duplicates e não passam por aqui.
+_TABELAS_DE_MARCA = frozenset({"email_auto_log", "newsletter_optout"})
+
 
 def _conta_falha_de_gravacao(tabela: str, motivo: str) -> bool:
     """Conta a falha; True quando é a 1ª da hora pra esta tabela (e foi pro error_log)."""
@@ -203,6 +212,9 @@ def _supabase_insert(table, data):
             resp_body = e.read().decode('utf-8', errors='replace')[:500]
         except Exception:
             resp_body = '(unreadable)'
+        if table in _TABELAS_DE_MARCA and e.code == 409 and '23505' in resp_body:
+            _supa_log(f"INSERT {table} já existia (409/23505)  campos={sorted(data) if isinstance(data, dict) else '?'}")
+            return False
         msg = f"INSERT {table} HTTP {e.code}: {resp_body}  data={json.dumps(data)[:200]}"
         print(f"Supabase insert HTTP {e.code} ({table}): {_sem_email(resp_body)}")
         _supa_log(msg)
