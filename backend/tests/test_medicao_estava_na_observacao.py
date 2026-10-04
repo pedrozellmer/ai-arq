@@ -185,6 +185,8 @@ def _laco_de_itens_de_producao(items, areas=None, compr=None, extra=None):
         "_mol_ly": set(),
         # 02/10 (H88): layers de esteira cujo metro é rolete/travessa
         "_est_ly": set(),
+        # 04/10 (E12): layers de parede com parede grossa pelas duas faces
+        "_esp_ly": set(),
         # 30/09 (H13): as contagens e os nomes das peças de dentro do vínculo
         "_vinc_n": set(), "_vinc_nomes": set(),
         # 29/09 (caso 18c57c3c): blocos de anotação e as linhas que o laço tira

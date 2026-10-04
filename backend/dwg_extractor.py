@@ -276,7 +276,9 @@ class DXFExtraction:
                                            "pecas_no_vinculo",
                                            # 02/10 (H94): rastro; a prova já vai
                                            # em `unidade_provada_por_rotulo`
-                                           "prova_por_rotulo_de_comodo"})
+                                           "prova_por_rotulo_de_comodo",
+                                           # 04/10 (E12): dito na linha do layer
+                                           "parede_espessa_pelas_faces"})
 
     def to_structured_prompt(self) -> str:
         """Converts extraction to a structured text prompt for Claude."""
@@ -679,6 +681,7 @@ class DXFExtraction:
             _ctp = (self.metadata or {}).get("layers_contorno_de_peca") or {}
             _mol = (self.metadata or {}).get("layers_moldura_ou_limite") or {}
             _est = (self.metadata or {}).get("layers_esteira_por_travessa") or {}
+            _esp = (self.metadata or {}).get("parede_espessa_pelas_faces") or {}
             for layer, length in sorted(walls_by_layer.items()):
                 if layer in _est and not _anot(layer):
                     # 🩸 02/10 (H88) — sem "layer <palavra>" no texto (ver abaixo)
@@ -741,6 +744,15 @@ class DXFExtraction:
                                  f"LINHAS ({_cinza[layer]:.0%} do traçado em pares de face): "
                                  f"esta soma pode contar as duas faces — trate como "
                                  f"ESTIMADO, confira o comprimento no projeto")
+                elif layer in _esp:
+                    # 🩸 04/10 (E12) — sem "layer <palavra>" no texto (ver acima);
+                    # sem número de "comprimento certo": a IA o copiaria com ✓
+                    lines.append(f"  {layer}: {length:.2f} m   ⚠ PAREDE ESPESSA PELAS DUAS FACES — "
+                                 f"há paredes de MAIS de 40 cm (perímetro, muro, contenção) "
+                                 f"desenhadas pelas duas faces, e esta soma conta as DUAS "
+                                 f"(pelo menos {int(100 * float(_esp[layer].get('fracao') or 0))}% "
+                                 f"desta soma é a face a mais): o comprimento das paredes é "
+                                 f"MENOR — trate como ESTIMADO, não use como medido")
                 else:
                     lines.append(f"  {layer}: {length:.2f} m")
             if _n_anot:
@@ -1242,10 +1254,75 @@ def _legenda_de_linha_dupla(msp) -> dict:
         return {}
 
 
+def _menos_intervalos(livre, tira):
+    """Os intervalos de `livre` sem os de `tira` (listas de (início, fim))."""
+    for x0, x1 in tira:
+        novo = []
+        for a, b in livre:
+            if x1 <= a or x0 >= b:
+                novo.append((a, b))
+                continue
+            if a < x0:
+                novo.append((a, x0))
+            if x1 < b:
+                novo.append((x1, b))
+        livre = novo
+        if not livre:
+            break
+    return livre
+
+
+def _sobra_das_faces_espessas(grupos_geo, em_par, sep_max, esp_max, min_sobrep):
+    """{trecho: comprimento CRU que sobra na soma} — as duas faces SEM PAR de uma
+    parede mais grossa que a seção da régua (ver `_PAREDE_ESPESSA_MAX_M`).
+
+    Par = duas paralelas do mesmo grupo de direção a `sep_max`–`esp_max` uma da
+    outra e sobrepostas em pelo menos `min_sobrep` (pilarete e ponta não
+    entram). Conta só o trecho em que nenhuma das duas está em par (`em_par`)
+    nem tem outra linha do layer no meio (aí são duas paredes). Cada face
+    entra em um par só, o mais estreito primeiro. A sobra de um par é o trecho
+    sobreposto (as duas faces somam 2×, o eixo seria 1×), metade em cada linha.
+    🪤 O reboco da parede grossa (linha a ≤ 5 cm da face) também fica na soma e
+    não entra aqui: a sobra sai por BAIXO do que a soma tem a mais.
+    """
+    from collections import defaultdict as _dd
+    sobra = _dd(float)
+    for por_d, d, t0, t1 in grupos_geo:
+        cands = []
+        for a_pos, a in enumerate(por_d):
+            for b_pos in range(a_pos + 1, len(por_d)):
+                b = por_d[b_pos]
+                sep = d[b] - d[a]
+                if sep > esp_max:
+                    break
+                if sep < sep_max:
+                    continue
+                lo, hi = max(t0[a], t0[b]), min(t1[a], t1[b])
+                if hi - lo >= min_sobrep:
+                    cands.append((sep, a_pos, b_pos, lo, hi))
+        usado = _dd(list)
+        for _sep, a_pos, b_pos, lo, hi in sorted(cands):
+            a, b = por_d[a_pos], por_d[b_pos]
+            livre = [(lo, hi)]
+            for k in (a, b):
+                livre = _menos_intervalos(livre, em_par.get(k, ()))
+                livre = _menos_intervalos(livre, usado[k])
+            for m in por_d[a_pos + 1:b_pos]:
+                if livre and t0[m] < hi and t1[m] > lo:
+                    livre = _menos_intervalos(livre, [(t0[m], t1[m])])
+            tot = sum(y - x for x, y in livre)
+            if tot <= 0:
+                continue
+            for k in (a, b):
+                usado[k].extend(livre)
+                sobra[k] += tot / 2.0
+    return sobra
+
+
 def _corrigir_duto_linha_dupla(walls, unit_factor: float = 1.0, layers_extra=None,
                                escolhe=None, sep_max_m=None, min_seg_m=None,
                                min_fracao_par=None, zona_cinza=None,
-                               junta_face_fina=False, max_seg=None):
+                               junta_face_fina=False, max_seg=None, faces_espessas=None):
     """Troca a soma das duas faces pelo comprimento do EIXO, em layer de duto.
 
     `layers_extra`: layers que a LEGENDA da prancha diz serem leito/duto
@@ -1259,6 +1336,9 @@ def _corrigir_duto_linha_dupla(walls, unit_factor: float = 1.0, layers_extra=Non
     PAREDE usa esta mesma máquina (ver `_corrigir_parede_linha_dupla`).
     `min_fracao_par`: o layer só é corrigido se pelo menos essa fração do
     comprimento dele estiver em par (a convenção DO LAYER é linha dupla).
+    `faces_espessas` (dict, saída): {índice em `walls`: metros da sobra} das
+    faces sem par a `sep_max`–`_PAREDE_ESPESSA_MAX_M` — só registro, nenhuma
+    soma muda (ver `_sobra_das_faces_espessas`).
 
     Devolve (walls_corrigidos, relato_eixo, ressalva_hachura).
     Sem par encontrado, devolve a lista original — na dúvida, não mexe.
@@ -1353,6 +1433,9 @@ def _corrigir_duto_linha_dupla(walls, unit_factor: float = 1.0, layers_extra=Non
             pares = set()
             pareado = _dd(float)        # índice -> comprimento BRUTO pareado
             perda = _dd(float)          # índice -> comprimento BRUTO que sai da soma
+            # E12: onde cada linha ficou em par (pra achar a parede grossa sem par)
+            em_par = _dd(list) if faces_espessas is not None else None
+            grupos_geo = []
             for g in grupos:
                 if len(g) < 2:
                     continue
@@ -1368,6 +1451,8 @@ def _corrigir_duto_linha_dupla(walls, unit_factor: float = 1.0, layers_extra=Non
                 # quem pode ser par de quem: separação de seção + sobreposição
                 # de pelo menos metade da menor (trecho que nem se olha não é par)
                 por_d = sorted(g, key=lambda i: d[i])
+                if em_par is not None:
+                    grupos_geo.append((por_d, d, t0, t1))
                 viz = _dd(set)
                 fino = _dd(set)         # a ≤ sep_min e se olhando: mesma face
                 for a_pos, a in enumerate(por_d):
@@ -1417,10 +1502,20 @@ def _corrigir_duto_linha_dupla(walls, unit_factor: float = 1.0, layers_extra=Non
                                 for x in f_:
                                     pareado[x] += tb - ta
                                     perda[x] += (1.0 - 0.5 / len(f_)) * (tb - ta)
+                                    if em_par is not None:
+                                        em_par[x].append((ta, tb))
                             pares.add((min(fa[0], fb[0]), max(fa[0], fb[0])))
                             k += 2
                         else:
                             k += 1
+            if em_par is not None:
+                # 🩸 E12 — antes do `if not pares`: o muro SÓ de parede grossa não
+                # tem par nenhum e é justamente o que não pode passar calado
+                _sob = _sobra_das_faces_espessas(
+                    grupos_geo, em_par, sep_max, _PAREDE_ESPESSA_MAX_M / uf,
+                    _PAREDE_ESPESSA_SOBREP_MIN_M / uf)
+                for k, s in _sob.items():
+                    faces_espessas[sub[k][0]] = faces_espessas.get(sub[k][0], 0.0) + s * uf
             if not pares:
                 continue
             if min_fracao_par:
@@ -1553,6 +1648,22 @@ _PAREDE_MIN_FRACAO_PAR = 0.50
 #: 2 layers de parede em 152 passam de 3.000, e o pareamento de 3.735 trechos
 #: leva ~5 s. O de 11 mil trechos levaria 65 s e fica de fora.
 _PAREDE_MAX_SEG_LAYER = 6000
+#: 🩸 04/10/2026 — E12 da conferência dos danos. A parede de MAIS de 40 cm
+#: (perímetro, muro, contenção) não pareia e soma as duas faces inteiras. Num
+#: estacionamento, a parede de 50 cm do perímetro pôs ~100 m a mais no layer
+#: (347,9 m contra ~218): "Parede de alvenaria 647,88 ml ✓" saiu antes do eixo
+#: e o eixo do H73 tirou o layer da zona cinza — a soma voltou a valer ✓ pela
+#: chave do selo. As faces sem par a 40 cm–1 m, sobrepostas em ≥ 1 m, viram
+#: ressalva do layer (`parede_espessa_na_soma`). SÓ REBAIXA: não dá pra saber,
+#: trecho a trecho, se são as faces de uma parede grossa ou duas paredes de
+#: linha única com um shaft no meio — marcar a mais custa um ✓; a menos, um ✓
+#: errado.
+_PAREDE_ESPESSA_MAX_M = 1.00
+_PAREDE_ESPESSA_SOBREP_MIN_M = 1.0
+#: a ressalva vale com sobra ≥ 5 m E ≥ 5 % da soma do layer (ponta e chanfro
+#: de parede composta ficam abaixo)
+_PAREDE_ESPESSA_SOBRA_MIN_M = 5.0
+_PAREDE_ESPESSA_FRACAO_MIN = 0.05
 
 
 # ---------------------------------------------------------------------------
@@ -2227,8 +2338,13 @@ def layers_esteira_por_travessa(msp, walls, unit_factor: float = 1.0) -> dict:
     return out
 
 
-def _corrigir_parede_linha_dupla(walls, unit_factor: float = 1.0, zona_cinza=None):
+def _corrigir_parede_linha_dupla(walls, unit_factor: float = 1.0, zona_cinza=None,
+                                 faces_espessas=None):
     """Parede desenhada pelas DUAS FACES mede pelo EIXO. Devolve (walls, relato).
+
+    `faces_espessas` (lista, saída): (segmento já corrigido, metros da sobra) das
+    faces da parede de mais de 40 cm, que o eixo não junta (E12, 04/10) — vai
+    para `parede_espessa_na_soma` depois da leitura por folha.
 
     🩸 26/09/2026 — job befab5aa (interiores): a planilha trouxe "pintura
     1.977 m²" = "659 m × 3 m de pé-direito, por face". Os 659 m eram a SOMA
@@ -2245,21 +2361,62 @@ def _corrigir_parede_linha_dupla(walls, unit_factor: float = 1.0, zona_cinza=Non
     parede com padrão gráfico no layer é caso de outra régua.
     """
     from engine_rules import layer_e_parede
+    _esp = {} if faces_espessas is not None else None
     novos, relato, _ressalva = _corrigir_duto_linha_dupla(
         walls, unit_factor, escolhe=layer_e_parede, sep_max_m=_PAREDE_SEP_MAX,
         min_seg_m=_PAREDE_MIN_SEG, min_fracao_par=_PAREDE_MIN_FRACAO_PAR,
-        zona_cinza=zona_cinza, junta_face_fina=True, max_seg=_PAREDE_MAX_SEG_LAYER)
+        zona_cinza=zona_cinza, junta_face_fina=True, max_seg=_PAREDE_MAX_SEG_LAYER,
+        faces_espessas=_esp)
+    if _esp:
+        # a saída tem a mesma ordem da entrada: o índice aponta o segmento novo
+        faces_espessas.extend((novos[i], s) for i, s in sorted(_esp.items()))
     return novos, relato
+
+
+def parede_espessa_na_soma(walls, faces_espessas) -> dict:
+    """{layer: {"sobra_m", "fracao"}} — o layer de parede em que as faces da
+    parede de mais de 40 cm põem na SOMA pelo menos 5 m e 5 % a mais (E12).
+
+    Conta o que ficou depois da leitura por folha: a face que saiu (corte,
+    detalhe) não conta, e a da planta de N andares conta N vezes, como a soma.
+    🔒 Só registro e ressalva: nenhuma soma muda."""
+    try:
+        vivos = {id(w): w for w in walls}
+        sobra, soma = {}, {}
+        for w, s in faces_espessas or ():
+            if vivos.get(id(w)) is w:
+                sobra[w.layer] = sobra.get(w.layer, 0.0) + s * getattr(w, "peso", 1.0)
+        if not sobra:
+            return {}
+        for w in walls:
+            if w.layer in sobra:
+                soma[w.layer] = soma.get(w.layer, 0.0) + w.length * getattr(w, "peso", 1.0)
+        out = {}
+        for ly, s in sobra.items():
+            tot = soma.get(ly, 0.0)
+            if tot > 0 and s >= _PAREDE_ESPESSA_SOBRA_MIN_M and s >= _PAREDE_ESPESSA_FRACAO_MIN * tot:
+                out[ly] = {"sobra_m": round(float(s), 1), "fracao": round(float(s / tot), 2)}
+        return out
+    except Exception as e:                       # nunca derruba a extração
+        logger.warning("parede_espessa_na_soma: %s", e)
+        return {}
 
 
 _RE_RELATO_EIXO = re.compile(r"^(.*): [\d.]+m de face -> [\d.]+m de eixo \(\d+ par\(es\)\)$")
 
 
-def _relato_do_eixo_na_soma(relato: str, walls) -> str:
+def _relato_do_eixo_na_soma(relato: str, walls, espessas=None, corte_fora=True) -> str:
     """Reescreve o relato do eixo com o que FICOU na soma (depois da folha).
 
     Sem número de antes: número que não está na soma vira quantidade na mão
-    da IA. Trecho que não casa o formato fica como veio."""
+    da IA. Trecho que não casa o formato fica como veio.
+
+    🩸 04/10/2026 (E12): o texto dizia sempre "JÁ pelo EIXO (… corte e detalhe
+    já fora)" e a IA copiava com ✓ — numa prancha em que a parede de 50 cm
+    somava as duas faces e o corte não tinha sido reconhecido. Agora:
+    `espessas` (layers de `parede_espessa_na_soma`) diz que parte da soma NÃO é
+    eixo; "corte e detalhe já fora" só com `corte_fora` (a leitura por folha
+    rodou e reconheceu corte ou detalhe)."""
     try:
         novos = []
         for trecho in (relato or "").split(" | "):
@@ -2273,9 +2430,13 @@ def _relato_do_eixo_na_soma(relato: str, walls) -> str:
                 novos.append(f"{lay}: desenhado em 2 linhas, mas todo o traçado desta prancha "
                              f"está em corte/detalhe/planta-chave — NADA deste layer entra "
                              f"na soma desta prancha")
+            elif lay in (espessas or ()):
+                novos.append(f"{lay}: {atual:.1f}m na soma — as paredes de até 40 cm pelo "
+                             f"EIXO, mas parte da soma são paredes de MAIS de 40 cm contadas "
+                             f"pelas DUAS faces: este número NÃO é o comprimento das paredes")
             else:
                 novos.append(f"{lay}: {atual:.1f}m na soma, JÁ pelo EIXO (as 2 bordas contadas "
-                             f"uma vez; corte e detalhe já fora)")
+                             f"uma vez{'; corte e detalhe já fora' if corte_fora else ''})")
         return " | ".join(novos)
     except Exception as e:                       # nunca derruba a extração
         logger.warning("_relato_do_eixo_na_soma: %s", e)
@@ -8929,7 +9090,9 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         logger.warning("[unit-parede] falhou (não-fatal): %s", _epf)
     # 26/09: parede em duas faces também mede pelo EIXO (ver a função)
     _zona_cinza_parede: dict = {}
-    walls, _rel_parede = _corrigir_parede_linha_dupla(walls, unit_factor, _zona_cinza_parede)
+    _faces_espessas: list = []          # E12: a parede de mais de 40 cm (ver a função)
+    walls, _rel_parede = _corrigir_parede_linha_dupla(walls, unit_factor, _zona_cinza_parede,
+                                                      _faces_espessas)
     if _rel_parede:
         metadata["parede_linha_dupla"] = _rel_parede
     if _zona_cinza_parede:
@@ -9098,6 +9261,7 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
     # andares. Ver `mapa_de_folhas`. Chave: LEITURA_POR_FOLHA=0 desliga sem
     # deploy. Qualquer falha aqui deixa a medição como estava.
     _folhas = {}
+    _parede_espessa = None
     if os.environ.get("LEITURA_POR_FOLHA", "1") != "0":
         try:
             _mapa = mapa_de_folhas(doc)
@@ -9126,13 +9290,27 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             # leu o relato e entregou 212,5 m de leito BRANCO. Depois da folha,
             # o relato só fala do que ficou na soma (sem folha aplicada nada
             # saiu — o número é o mesmo, muda só a redação).
+            # 🩸 04/10 (E12): "corte e detalhe já fora" só se a folha rodou e
+            # reconheceu corte ou detalhe; o layer com parede grossa pelas duas
+            # faces não é "JÁ pelo EIXO".
+            _parede_espessa = parede_espessa_na_soma(walls, _faces_espessas)
+            _corte_fora = bool(_folhas.get("aplicada")) and any(
+                f.get("tipo") in ("vista", "fora") for f in _mapa.get("folhas", []))
             for _chave_eixo in ("duto_linha_dupla", "parede_linha_dupla"):
                 if metadata.get(_chave_eixo):
                     metadata[_chave_eixo] = _relato_do_eixo_na_soma(
-                        metadata[_chave_eixo], walls)
+                        metadata[_chave_eixo], walls, espessas=_parede_espessa,
+                        corte_fora=_corte_fora)
         except Exception as _efl:
             logger.warning("[leitura-por-folha] falhou (não-fatal): %s", _efl)
             _folhas = {"aplicada": False, "motivo": "erro: %s" % str(_efl)[:120]}
+    # 🩸 04/10 (E12): a parede de mais de 40 cm somada pelas duas faces — ressalva
+    # do layer (fora da chave do selo e do resgate; ⚠ no prompt)
+    if _parede_espessa is None:
+        _parede_espessa = parede_espessa_na_soma(walls, _faces_espessas)
+    if _parede_espessa:
+        metadata["parede_espessa_pelas_faces"] = _parede_espessa
+        logger.warning("[parede-espessa] %s: %s", os.path.basename(filepath), _parede_espessa)
 
     # 🩸 28/09 (caso 18c57c3c): vistas temáticas do MESMO pavimento, cada uma com
     # a base inserida de novo — a peça que aparece em várias vistas conta 1× (ver

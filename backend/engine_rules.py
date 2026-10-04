@@ -1253,9 +1253,10 @@ def layers_que_nao_provam(metadata) -> set:
     out = set()
     # 30/09 (H34): o tubo em face dupla — a soma é das duas paredes
     # 01/10 (H76): o layer de conexão cujo metro é o contorno das peças
+    # 04/10 (E12): a parede de mais de 40 cm somada pelas duas faces
     for k in ("layers_de_cota", "layers_de_borda", "tubos_em_face_dupla",
               "layers_contorno_de_peca", "layers_moldura_ou_limite",
-              "layers_esteira_por_travessa"):
+              "layers_esteira_por_travessa", "parede_espessa_pelas_faces"):
         for ly in (md.get(k) or {}):
             out.add(str(ly).strip().upper())
     return out
@@ -5159,9 +5160,11 @@ MARCA_CONTORNO_DE_PECA = "⚠ CONTORNO DE PEÇA, NÃO METRO"
 MARCA_MOLDURA_OU_LIMITE = "⚠ MOLDURA OU LIMITE, NÃO REDE"
 #: 🩸 02/10/2026 (H88) — ver `selo_apos_travessa_de_esteira`.
 MARCA_TRAVESSA_DE_ESTEIRA = "⚠ ROLETES/TRAVESSAS, NÃO COMPRIMENTO DA ESTEIRA"
+#: 🩸 04/10/2026 (E12) — ver `selo_apos_parede_espessa`.
+MARCA_PAREDE_ESPESSA = "⚠ PAREDE ESPESSA PELAS DUAS FACES"
 MARCAS_DE_REBAIXAMENTO = (MARCA_PECA_SEM_BLOCO, MARCA_LAYER_SEM_NOME, MARCA_TUBO_FACE_DUPLA,
                           MARCA_CONTORNO_DE_PECA, MARCA_MOLDURA_OU_LIMITE,
-                          MARCA_TRAVESSA_DE_ESTEIRA,
+                          MARCA_TRAVESSA_DE_ESTEIRA, MARCA_PAREDE_ESPESSA,
                           MARCA_PLANTA_REPETIDA, MARCA_LIDO_DE_TEXTO, MARCA_SOMA, MARCA_CARIMBO,
                           MARCA_MENOS_PAREDE, MARCA_UNIDADE_DE_CONTAGEM,
                           MARCA_EXTRACAO_COM_RESSALVA, MARCA_QUANTIDADE_RECUPERADA,
@@ -5901,6 +5904,33 @@ def selo_apos_travessa_de_esteira(conf, obs, unit, layers_citados, layers_esteir
             MARCA_TRAVESSA_DE_ESTEIRA + " ('%s') — a maior parte desse comprimento são "
             "peças curtas (roletes, travessas, caixas) soltas ou lado a lado, não o "
             "comprimento da esteira: confira pelo eixo ou pelas bordas. " % hit + str(obs or ""),
+            True)
+
+
+def selo_apos_parede_espessa(conf, obs, unit, layers_citados, layers_espessa):
+    """(conf, obs, rebaixou) — COMPRIMENTO de layer de parede em que paredes de
+    mais de 40 cm somam as duas faces (`dwg_extractor.parede_espessa_na_soma`)
+    não sai medido.
+
+    🩸 04/10/2026 (E12): "Parede de alvenaria/concreto 647,88 ml ✓" num
+    estacionamento de ~218 m; com o eixo do H73, a soma de hoje é 347,9 — a
+    parede de 50 cm do perímetro conta as duas faces — e ia ✓ de novo. SÓ
+    REBAIXA e avisa: não divide (a face pode ser de duas paredes de linha
+    única com um vão no meio). Área (m²) do layer não é tocada: a hachura da
+    parede não conta face.
+    """
+    if conf != "confirmado" or not layers_espessa:
+        return conf, obs, False
+    if _PROVA_POR_UNIDADE.get(str(unit or "").strip().lower()) != "comprimento":
+        return conf, obs, False
+    es = {str(x).strip().upper() for x in layers_espessa}
+    hit = next((str(ly) for ly in (layers_citados or ()) if str(ly).strip().upper() in es), "")
+    if not hit:
+        return conf, obs, False
+    return ("estimado",
+            MARCA_PAREDE_ESPESSA + " ('%s') — há paredes de mais de 40 cm desenhadas pelas "
+            "duas faces e a soma conta as DUAS: o comprimento das paredes é menor; confira "
+            "pelo eixo. " % hit + str(obs or ""),
             True)
 
 
