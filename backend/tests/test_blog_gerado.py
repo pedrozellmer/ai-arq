@@ -15,6 +15,7 @@ esquecer de rodar o gerador depois de mexer no posts.json, a bancada reprova
 ANTES do push — em vez de o deploy desfazer em silêncio.
 """
 import io
+import json
 import os
 import re
 import shutil
@@ -42,15 +43,47 @@ def _estavel(txt):
     return txt.strip()
 
 
+def _data_da_copia_commitada(sitemap_path=None, posts_path=None):
+    """A data editorial em que a cópia COMMITADA foi gerada: o maior
+    `publish_date` entre os posts que o sitemap commitado já publica.
+
+    🩸 04/10/2026: o teste regenerava com a data REAL. No dia em que um post
+    agendado entrava, o gerador o publicava (sai do noindex, entra no sitemap,
+    no llms.txt e nos cards de relacionados) e a cópia commitada ficava "velha"
+    — 20 falhas no CI, com o site certo (o deploy regenera). Regenerando na
+    data da cópia, a comparação volta a medir o que importa: HTML editado à mão
+    ou posts.json mexido sem rodar o gerador."""
+    sitemap_path = sitemap_path or os.path.join(_RAIZ, "sitemap.xml")
+    posts_path = posts_path or os.path.join(_BLOG, "posts.json")
+    if not (os.path.exists(sitemap_path) and os.path.exists(posts_path)):
+        return None
+    slugs = set(re.findall(r"/blog/posts/([^/<\"]+)\.html",
+                           io.open(sitemap_path, encoding="utf-8").read()))
+    d = json.load(io.open(posts_path, encoding="utf-8"))
+    posts = d if isinstance(d, list) else d.get("posts", [])
+    datas = [p["publish_date"] for p in posts if p.get("slug") in slugs]
+    return max(datas) if datas else None
+
+
+def _hoje_real():
+    from datetime import datetime, timedelta, timezone
+    return (datetime.now(timezone.utc) - timedelta(hours=3)).date().isoformat()
+
+
 @pytest.fixture(scope="module")
 def gerado():
-    """Roda o gerador numa CÓPIA — nunca no repo — e devolve a pasta."""
+    """Roda o gerador numa CÓPIA — nunca no repo — na data editorial da cópia
+    commitada (`_data_da_copia_commitada`), e devolve a pasta."""
     if not os.path.isdir(_BLOG):
         pytest.skip("pasta blog/ não encontrada")
     tmp = tempfile.mkdtemp(prefix="blog_gen_")
     dest = os.path.join(tmp, "blog")
     shutil.copytree(_BLOG, dest)
-    r = subprocess.run([sys.executable, "generate.py"], cwd=dest,
+    env = dict(os.environ)
+    data = _data_da_copia_commitada()
+    if data:
+        env["BLOG_HOJE"] = data
+    r = subprocess.run([sys.executable, "generate.py"], cwd=dest, env=env,
                        capture_output=True, text=True, timeout=300,
                        encoding="utf-8", errors="replace")
     if r.returncode != 0:
@@ -122,3 +155,43 @@ def test_o_gerador_ignora_update_note_ausente():
     html = io.open(alvo, encoding="utf-8").read()
     assert "bg-indigo-50 px-4 py-3 text-sm text-indigo-900" not in html, (
         "post sem nota ganhou a tarja de atualização vazia")
+
+
+# ── 04/10/2026: a data editorial da cópia commitada ──────────────────────────
+def _sitemap_e_posts(tmp_path, publicados, todos):
+    sm = tmp_path / "sitemap.xml"
+    sm.write_text("<urlset>" + "".join(
+        "<url><loc>https://ai.arq.br/blog/posts/%s.html</loc></url>" % s for s in publicados)
+        + "</urlset>", encoding="utf-8")
+    pj = tmp_path / "posts.json"
+    pj.write_text(json.dumps([{"slug": s, "publish_date": d} for s, d in todos]), encoding="utf-8")
+    return str(sm), str(pj)
+
+
+def test_a_data_da_copia_e_o_ultimo_post_que_o_sitemap_publica(tmp_path):
+    sm, pj = _sitemap_e_posts(tmp_path, ["a", "b"],
+                              [("a", "2026-09-20"), ("b", "2026-09-27"), ("c", "2026-10-04")])
+    assert _data_da_copia_commitada(sm, pj) == "2026-09-27"
+
+
+def test_CONTROLE_sem_post_no_sitemap_nao_fixa_data(tmp_path):
+    sm, pj = _sitemap_e_posts(tmp_path, [], [("c", "2026-10-04")])
+    assert _data_da_copia_commitada(sm, pj) is None
+
+
+def test_a_copia_commitada_nao_publica_post_do_futuro():
+    """O outro lado da porta: se alguém gerar o blog com a data adiantada e
+    commitar, um post agendado iria pro sitemap antes da hora."""
+    data = _data_da_copia_commitada()
+    assert data is not None, "o sitemap commitado não publica nenhum post do blog"
+    assert data <= _hoje_real(), (
+        "a cópia commitada publica post de %s, depois de hoje (%s)" % (data, _hoje_real()))
+
+
+def test_o_gerador_aceita_a_data_fixa():
+    """`BLOG_HOJE` é o que o teste usa pra regenerar na data da cópia."""
+    env = dict(os.environ, BLOG_HOJE="2026-01-02")
+    r = subprocess.run([sys.executable, "-B", "-c", "import generate; print(generate.hoje_editorial())"],
+                       cwd=_BLOG, env=env, capture_output=True, text=True, timeout=60,
+                       encoding="utf-8", errors="replace")
+    assert r.stdout.strip() == "2026-01-02", r.stdout + r.stderr

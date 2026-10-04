@@ -18,8 +18,17 @@ def hoje_editorial():
     o relógio editorial é um só, em qualquer máquina.
     Brasília é UTC-3 fixo desde 2019 (sem horário de verão) — a conta na mão
     evita depender de tzdata no Windows.
+
+    🩸 04/10/2026: `BLOG_HOJE=AAAA-MM-DD` fixa a data — SÓ pro teste que compara
+    a cópia commitada com o gerador (`test_blog_gerado`), que regenera NA DATA
+    em que a cópia foi gerada. Sem isso, todo post agendado deixava o CI
+    vermelho no dia em que entrava (o deploy regenera com a data real; o site
+    estava certo). O deploy não define a variável.
     """
-    from datetime import datetime, timedelta, timezone
+    from datetime import date, datetime, timedelta, timezone
+    _fixa = os.environ.get("BLOG_HOJE", "").strip()
+    if _fixa:
+        return date.fromisoformat(_fixa)
     return (datetime.now(timezone.utc) - timedelta(hours=3)).date()
 
 
