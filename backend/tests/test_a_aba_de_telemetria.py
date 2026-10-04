@@ -22,7 +22,7 @@ _ADMIN = "admin.html"
 
 # 28/09 (Pedro): "deixa o gráfico de clientes por semana também no dash" → dash-cadastros-semana
 _RESUMO = ("mov-farol", "mov-frase", "mov-saude", "mov-cadastros", "mov-projetos", "mov-alerta",
-           "dash-cadastros-semana")
+           "dash-cadastros-semana", "dash-clientes-voltaram")   # 04/10: quem voltou também
 _MUDARAM = ("mov-barras", "mov-inflacao", "mov-funil", "mov-paginas", "mov-origem", "mov-origem-nota",
             "mov-referencia", "mov-referencia-nota", "origem-box")
 _ATIVIDADE = ("act-auto-refresh", "act-live-dot", "act-days", "act-cards", "act-funnel-body", "act-by-event",
@@ -94,7 +94,7 @@ def _painel(hash_inicial="", switch_src=None):
         "  querySelector: function () { return null; } };"
         "function closeSidebar() {}"
         % json.dumps(hash_inicial))
-    for f in ("loadDashboardStats", "loadCadastrosPorSemana", "loadOrigem", "loadFilhotes", "carregarBadgeMensagens", "loadActivity",
+    for f in ("loadDashboardStats", "loadCadastrosPorSemana", "loadClientesQueVoltaram", "loadOrigem", "loadFilhotes", "carregarBadgeMensagens", "loadActivity",
               "carregarMovimentoDoSite", "loadUsers", "_filtroPadraoAoEntrar", "loadProjects",
               "loadCalibrationFactors", "loadAgentData", "loadNPSData", "loadEmailCatalog", "loadInsights",
               "loadMessages", "loadNewsletterPreview", "loadNewsletterScheduled", "loadInstagramPosts",
@@ -123,6 +123,7 @@ def test_o_dashboard_nao_carrega_mais_a_origem():
     chamou = _ler(js, "__chamou")
     assert "loadDashboardStats" in chamou and "loadOrigem" not in chamou, chamou
     assert "loadCadastrosPorSemana" in chamou, "o gráfico de cadastros por semana saiu do dash"
+    assert "loadClientesQueVoltaram" in chamou, "o card de quem voltou saiu do dash"
 
 
 def test_link_e_favorito_velhos_da_atividade_abrem_a_telemetria():
@@ -158,7 +159,7 @@ def test_o_boot_do_dashboard_nao_chama_a_origem():
     boot = html[i:html.index("})();", i)]
     ramo = boot[boot.index("if (aba === 'dashboard')"):boot.index("} else {")]
     assert "loadDashboardStats()" in ramo and not re.search(r"loadOrigem\(\)", ramo), ramo
-    assert "loadCadastrosPorSemana()" in ramo, ramo
+    assert "loadCadastrosPorSemana()" in ramo and "loadClientesQueVoltaram()" in ramo, ramo
 
 
 # ─── o gráfico de cadastros por semana (no dash) desenha de verdade ────────────────────────────
@@ -197,3 +198,39 @@ def test_o_ao_vivo_da_atividade_olha_a_aba_nova():
     corpo = funcao_js("startActivityAutoRefresh", _ADMIN)
     assert "getElementById('tab-telemetria')" in corpo and "tab-atividade" not in corpo
     assert "tab-atividade" not in html
+
+
+# ─── "Clientes que voltaram" (de volta no dash em 04/10) desenha de verdade ────────────────────
+def _voltaram(users):
+    js = motor("function esc(s) { return String(s == null ? '' : s); }")
+    js.evaljs(funcao_js("htmlClientesQueVoltaram", _ADMIN) + "; null;")
+    return js.evaljs("htmlClientesQueVoltaram(%s)" % json.dumps(users))
+
+
+_CLIENTES = [
+    {"full_name": "Pessoa Exemplo A", "num_projects": 3, "dias_com_projeto": 2,
+     "primeiro_projeto": "2026-09-01T12:00:00", "ultimo_projeto": "2026-09-10T12:00:00"},
+    {"full_name": "Pessoa Exemplo B", "num_projects": 2, "dias_com_projeto": 1},
+    {"full_name": "Pessoa Exemplo C", "num_projects": 1, "dias_com_projeto": 1},
+    {"full_name": "Conta da Casa", "num_projects": 5, "dias_com_projeto": 4, "conta_da_casa": True,
+     "primeiro_projeto": "2026-08-01T12:00:00", "ultimo_projeto": "2026-09-20T12:00:00"},
+]
+
+
+def test_quem_voltou_e_outro_dia_e_a_casa_fica_fora():
+    h = _voltaram(_CLIENTES)
+    assert "Clientes que voltaram" in h
+    assert "voltaram (33.3% de 3 que usaram)" in h, h[:900]        # só A voltou; B tem 2 projetos no MESMO dia
+    assert "Pessoa Exemplo A" in h and "9 dias depois" in h
+    assert "Conta da Casa" not in h and "1 conta(s) de teste fora" in h
+
+
+def test_CONTROLE_sem_tirar_a_casa_a_retencao_infla():
+    sem_marca = [dict(u, conta_da_casa=False) for u in _CLIENTES]
+    assert "voltaram (50% de 4 que usaram)" in _voltaram(sem_marca)
+
+
+def test_quem_voltou_saiu_da_origem_e_nao_aparece_duas_vezes():
+    html = fonte_html(_ADMIN)
+    assert "Clientes que voltaram" not in funcao_js("loadOrigem", _ADMIN)
+    assert html.count('<h3 class="font-semibold text-gray-900">Clientes que voltaram</h3>') == 1

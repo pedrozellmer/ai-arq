@@ -422,6 +422,8 @@
 
         <!-- ═══ Cadastros por semana (28/09/2026, Pedro: "deixa o gráfico de clientes por semana também no
              dash"). O resto da antiga "Origem dos clientes" mora na aba Telemetria. -->
+        <!-- 04/10/2026, Pedro: "Clientes que voltaram" também volta pro dash. -->
+        <div id="dash-clientes-voltaram" class="mt-6"><p class="text-gray-400 text-sm">Carregando&#8230;</p></div>
         <div id="dash-cadastros-semana" class="mt-6"><p class="text-gray-400 text-sm">Carregando&#8230;</p></div>
 
       </div>
@@ -1112,7 +1114,7 @@
           <div class="mt-6 pt-5 border-t">
             <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
               <p class="text-xs font-semibold text-gray-500">O que declararam no cadastro (&#8220;Como nos conheceu?&#8221;)</p>
-              <span class="text-xs text-gray-400">quem voltou &middot; de onde v&#234;m &middot; regi&#227;o aprox. DDD &middot; declarou &times; chegou</span>
+              <span class="text-xs text-gray-400">de onde v&#234;m &middot; regi&#227;o aprox. DDD &middot; declarou &times; chegou</span>
             </div>
             <div id="origem-box"><p class="text-gray-400 text-sm">Carregando&#8230;</p></div>
           </div>
@@ -1552,7 +1554,7 @@ function switchTab(tabName, interno) {
   if (tabName === 'projetos') { _filtroPadraoAoEntrar(); loadProjects(); }
   if (tabName === 'filhotes') loadFilhotes();
   // 28/09/2026: a "Origem dos clientes" saiu do dashboard pra aba Telemetria — carrega lá, só quando abre
-  if (tabName === 'dashboard') { loadDashboardStats(); loadCadastrosPorSemana(); loadFilhotes(); carregarBadgeMensagens(); }
+  if (tabName === 'dashboard') { loadDashboardStats(); loadClientesQueVoltaram(); loadCadastrosPorSemana(); loadFilhotes(); carregarBadgeMensagens(); }
   if (tabName === 'calibracao') loadCalibrationFactors();
   if (tabName === 'agente') loadAgentData();
   if (tabName === 'nps') loadNPSData();
@@ -7068,6 +7070,89 @@ async function loadCadastrosPorSemana() {
     : '<p class="text-gray-500 text-sm">Sem dados de cadastro ainda.</p>';
 }
 
+// 🔁 04/10/2026 — Pedro: trazer "Clientes que voltaram" de volta pro dashboard. O card morava dentro do
+// loadOrigem e foi junto com ele pra aba Telemetria (0567cc0); agora é função própria, como o gráfico de
+// cadastros por semana.
+function htmlClientesQueVoltaram(users) {
+  // ── QUEM VOLTOU (retenção) ────────────────────────────────────────────
+  //
+  // 🚨 "Voltou" = subiu projeto em OUTRO DIA. NÃO é "tem mais de 1 projeto".
+  // Medido em 12/08/2026: mais da metade dos clientes tinha >1 projeto, mas só
+  // uma fração pequena voltou noutro dia — quase todo mundo sobe 2-3 arquivos na
+  // MESMA sessão. Foi esse engano que inflou a "retenção" várias vezes.
+  // O card mostra os DOIS números de propósito, com o enganoso rotulado, pra
+  // ninguém (eu inclusive) reler errado daqui a um mês.
+  //
+  // 🪤 `dias_com_projeto` já vem do RPC ignorando is_eval — job de avaliação é
+  // nosso, contar inflaria a retenção com o nosso próprio teste.
+  const _DIA = 86400000;
+  // 🚨 CONTAS DE TESTE FORA (Pedro, 12/08: "tira cliente-38 e Pedro Zellmer").
+  // São nossas, não de cliente — o Pedro tem 18 projetos e a cliente-38 12, os
+  // dois maiores da base. Deixar dentro faria a retenção parecer o dobro do
+  // que é, que é o mesmo vício dos "57%" que na real eram 2%.
+  // 🪤 O painel MOSTRA que foram tiradas. Excluir calado é como número honesto
+  // vira mentira daqui a um mês.
+  // 🔑 02/09/2026 — a lista NÃO mora mais aqui. Ela vive numa função SQL só
+  // (emails_da_casa) e a RPC admin_list_all_signups já devolve `conta_da_casa`
+  // calculado por ela. Se a RPC cair e o painel usar o atalho por `profiles`,
+  // o campo vem vazio e ninguém é tirado — por isso o rótulo abaixo diz quantas
+  // contas saíram: zero ali é sinal de atalho, não de que a casa sumiu.
+  const _ehTeste = u => u.conta_da_casa === true;
+  const _nTeste = users.filter(u => _ehTeste(u) && Number(u.num_projects) > 0).length;
+  const _comProj = users.filter(u => Number(u.num_projects) > 0 && !_ehTeste(u));
+  const _voltou = _comProj.filter(u => Number(u.dias_com_projeto) > 1);
+  // 🪤 NÃO usar `_gap` (quando isto morava no loadOrigem, era o espaçamento das barras
+  // do gráfico de semanas, na mesma função). `const` repetido no mesmo escopo é
+  // SyntaxError e derruba o arquivo INTEIRO — o admin parou de abrir em 12/08
+  // por causa disso, e a página não mostra erro nenhum: só fica em branco.
+  const _intervalo = u => (u.primeiro_projeto && u.ultimo_projeto)
+    ? (Date.parse(u.ultimo_projeto) - Date.parse(u.primeiro_projeto)) / _DIA : 0;
+  const _voltou7 = _voltou.filter(u => _intervalo(u) >= 7);
+  const _multiProj = _comProj.filter(u => Number(u.num_projects) > 1);
+  const _pctVoltou = _comProj.length
+    ? Math.round(1000 * _voltou.length / _comProj.length) / 10 : 0;
+
+  const _linhasVolta = _voltou
+    .sort((a, b) => _intervalo(b) - _intervalo(a))
+    .map(u => {
+      const d = _intervalo(u);
+      const quando = d >= 1 ? `${Math.round(d)} dia${Math.round(d) === 1 ? '' : 's'} depois`
+                            : 'no mesmo dia seguinte';
+      return `<div class="flex items-center justify-between text-sm py-1.5 border-b border-gray-50 last:border-0">
+        <span class="text-gray-700 truncate">${esc(u.full_name || u.email || '?')}</span>
+        <span class="text-gray-500 tabular-nums whitespace-nowrap ml-3">
+          ${u.num_projects} proj · <b class="text-emerald-700">${quando}</b></span>
+      </div>`;
+    }).join('') || '<p class="text-gray-400 text-sm">Ninguém voltou ainda.</p>';
+  return `
+    <div class="rounded-2xl border-2 border-emerald-100 bg-white p-5">
+      <div class="flex items-baseline justify-between flex-wrap gap-2 mb-1">
+        <h3 class="font-semibold text-gray-900">Clientes que voltaram</h3>
+        <span class="text-xs text-gray-400">subiu projeto em <b>outro dia</b> — não é "mais de 1 projeto"${
+          _nTeste ? ` · <b class="text-gray-500">${_nTeste} conta(s) de teste fora</b>` : ''}</span>
+      </div>
+      <div class="grid grid-cols-3 gap-3 my-4">
+        <div><div class="text-2xl font-bold text-emerald-600">${_voltou.length}</div>
+          <div class="text-xs text-gray-500">voltaram (${_pctVoltou}% de ${_comProj.length} que usaram)</div></div>
+        <div><div class="text-2xl font-bold text-emerald-700">${_voltou7.length}</div>
+          <div class="text-xs text-gray-500">voltaram depois de <b>7+ dias</b></div></div>
+        <div><div class="text-2xl font-bold text-gray-300">${_multiProj.length}</div>
+          <div class="text-xs text-gray-400">têm +1 projeto &mdash; <b>não é retenção</b>, quase todo
+            mundo sobe vários arquivos na mesma sessão</div></div>
+      </div>
+      <div class="border-t pt-3">${_linhasVolta}</div>
+    </div>
+  `;
+}
+
+async function loadClientesQueVoltaram() {
+  const el = document.getElementById('dash-clientes-voltaram');
+  if (!el) return;
+  const users = await _ensureSignups();
+  el.innerHTML = users.length ? htmlClientesQueVoltaram(users)
+    : '<p class="text-gray-500 text-sm">Sem dados de cadastro ainda.</p>';
+}
+
 async function loadOrigem(){
   const box = document.getElementById('origem-box');
   if (box) box.innerHTML = '<p class="text-gray-500 text-sm">Carregando...</p>';
@@ -7124,75 +7209,7 @@ async function loadOrigem(){
     n, label: `<span class="font-semibold text-gray-700">${uf}</span> <span class="text-gray-400 text-xs">${UF_NOME[uf]||''}</span>`
   })).sort((a,b)=>b.n-a.n);
 
-  // ── QUEM VOLTOU (retenção) ────────────────────────────────────────────
-  //
-  // 🚨 "Voltou" = subiu projeto em OUTRO DIA. NÃO é "tem mais de 1 projeto".
-  // Medido em 12/08/2026: mais da metade dos clientes tinha >1 projeto, mas só
-  // uma fração pequena voltou noutro dia — quase todo mundo sobe 2-3 arquivos na
-  // MESMA sessão. Foi esse engano que inflou a "retenção" várias vezes.
-  // O card mostra os DOIS números de propósito, com o enganoso rotulado, pra
-  // ninguém (eu inclusive) reler errado daqui a um mês.
-  //
-  // 🪤 `dias_com_projeto` já vem do RPC ignorando is_eval — job de avaliação é
-  // nosso, contar inflaria a retenção com o nosso próprio teste.
-  const _DIA = 86400000;
-  // 🚨 CONTAS DE TESTE FORA (Pedro, 12/08: "tira cliente-38 e Pedro Zellmer").
-  // São nossas, não de cliente — o Pedro tem 18 projetos e a cliente-38 12, os
-  // dois maiores da base. Deixar dentro faria a retenção parecer o dobro do
-  // que é, que é o mesmo vício dos "57%" que na real eram 2%.
-  // 🪤 O painel MOSTRA que foram tiradas. Excluir calado é como número honesto
-  // vira mentira daqui a um mês.
-  // 🔑 02/09/2026 — a lista NÃO mora mais aqui. Ela vive numa função SQL só
-  // (emails_da_casa) e a RPC admin_list_all_signups já devolve `conta_da_casa`
-  // calculado por ela. Se a RPC cair e o painel usar o atalho por `profiles`,
-  // o campo vem vazio e ninguém é tirado — por isso o rótulo abaixo diz quantas
-  // contas saíram: zero ali é sinal de atalho, não de que a casa sumiu.
-  const _ehTeste = u => u.conta_da_casa === true;
-  const _nTeste = users.filter(u => _ehTeste(u) && Number(u.num_projects) > 0).length;
-  const _comProj = users.filter(u => Number(u.num_projects) > 0 && !_ehTeste(u));
-  const _voltou = _comProj.filter(u => Number(u.dias_com_projeto) > 1);
-  // 🪤 NÃO usar `_gap`: esse nome JÁ EXISTE nesta função (espaçamento das barras
-  // do gráfico de semanas, mais abaixo). `const` repetido no mesmo escopo é
-  // SyntaxError e derruba o arquivo INTEIRO — o admin parou de abrir em 12/08
-  // por causa disso, e a página não mostra erro nenhum: só fica em branco.
-  const _intervalo = u => (u.primeiro_projeto && u.ultimo_projeto)
-    ? (Date.parse(u.ultimo_projeto) - Date.parse(u.primeiro_projeto)) / _DIA : 0;
-  const _voltou7 = _voltou.filter(u => _intervalo(u) >= 7);
-  const _multiProj = _comProj.filter(u => Number(u.num_projects) > 1);
-  const _pctVoltou = _comProj.length
-    ? Math.round(1000 * _voltou.length / _comProj.length) / 10 : 0;
-
-  const _linhasVolta = _voltou
-    .sort((a, b) => _intervalo(b) - _intervalo(a))
-    .map(u => {
-      const d = _intervalo(u);
-      const quando = d >= 1 ? `${Math.round(d)} dia${Math.round(d) === 1 ? '' : 's'} depois`
-                            : 'no mesmo dia seguinte';
-      return `<div class="flex items-center justify-between text-sm py-1.5 border-b border-gray-50 last:border-0">
-        <span class="text-gray-700 truncate">${esc(u.full_name || u.email || '?')}</span>
-        <span class="text-gray-500 tabular-nums whitespace-nowrap ml-3">
-          ${u.num_projects} proj · <b class="text-emerald-700">${quando}</b></span>
-      </div>`;
-    }).join('') || '<p class="text-gray-400 text-sm">Ninguém voltou ainda.</p>';
-
   box.innerHTML = `
-    <div class="rounded-2xl border-2 border-emerald-100 bg-white p-5 mb-5">
-      <div class="flex items-baseline justify-between flex-wrap gap-2 mb-1">
-        <h3 class="font-semibold text-gray-900">Clientes que voltaram</h3>
-        <span class="text-xs text-gray-400">subiu projeto em <b>outro dia</b> — não é "mais de 1 projeto"${
-          _nTeste ? ` · <b class="text-gray-500">${_nTeste} conta(s) de teste fora</b>` : ''}</span>
-      </div>
-      <div class="grid grid-cols-3 gap-3 my-4">
-        <div><div class="text-2xl font-bold text-emerald-600">${_voltou.length}</div>
-          <div class="text-xs text-gray-500">voltaram (${_pctVoltou}% de ${_comProj.length} que usaram)</div></div>
-        <div><div class="text-2xl font-bold text-emerald-700">${_voltou7.length}</div>
-          <div class="text-xs text-gray-500">voltaram depois de <b>7+ dias</b></div></div>
-        <div><div class="text-2xl font-bold text-gray-300">${_multiProj.length}</div>
-          <div class="text-xs text-gray-400">têm +1 projeto &mdash; <b>não é retenção</b>, quase todo
-            mundo sobe vários arquivos na mesma sessão</div></div>
-      </div>
-      <div class="border-t pt-3">${_linhasVolta}</div>
-    </div>
     <div class="grid md:grid-cols-2 gap-5">
       <div class="rounded-2xl border bg-white p-5">
         <h3 class="font-semibold text-gray-900 mb-0.5">De onde vêm</h3>
@@ -7724,7 +7741,8 @@ window.addEventListener('hashchange', () => switchTab(_abaDoHash(), true));
   carregarBadgeMensagens();
   if (aba === 'dashboard') {
     loadDashboardStats();   // 28/09/2026: a Origem mudou pra aba Telemetria e carrega quando ela abre
-    loadCadastrosPorSemana();   // ...mas o gráfico de cadastros por semana ficou aqui (Pedro)
+    loadClientesQueVoltaram();  // ...mas quem voltou (04/10)
+    loadCadastrosPorSemana();   // ...e o gráfico de cadastros por semana ficaram aqui (Pedro)
   } else {
     // 🪤 `true`: já viemos de uma URL com hash. Sem isso, o boot reescreveria
     // o hash e criaria uma entrada de histórico logo na abertura — o primeiro
