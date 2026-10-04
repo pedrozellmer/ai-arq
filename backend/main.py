@@ -10361,6 +10361,30 @@ def _measure_unambiguous(value: float, cat: str, by_cat: dict) -> bool:
     return True
 
 
+def _xc_camadas_que_nao_provam(extraction) -> tuple:
+    """`(nao_prova, zona_cinza, secoes)` — os layers que a CHAVE DO SELO já
+    deixa de fora, pra o cross-check (DXF_CONFIRM_CROSSCHECK) deixar também.
+
+    🩸 04/10/2026 (guarda, pedido do Pedro): o cross-check montava as medidas
+    duras com TODOS os layers de parede/piso. Desligado em produção, mas, se
+    alguém o ligasse, uma linha "estimado" com o comprimento de um layer
+    MARCADO (moldura, esteira, tubo em face dupla, contorno de peça, cota
+    explodida, zona cinza do eixo, layer sem nome) voltaria a ✓ — passando por
+    cima de todas as marcas que só rebaixam. As exclusões são as MESMAS do
+    índice da chave do selo (`_indice_geom`, em process_job)."""
+    md = getattr(extraction, "metadata", None) or {}
+    try:
+        nao_prova = set(_layers_que_nao_provam(md))
+    except Exception:
+        nao_prova = set()
+    cinza = set((md.get("parede_zona_cinza") or {}).keys())
+    try:
+        secoes = set(extraction.get_layers_secao_de_parede() or ())
+    except Exception:
+        secoes = set()
+    return nao_prova, cinza, secoes
+
+
 # ─── Throttle de processamento concorrente ──────────────────────────
 # Cada upload dispara process_job() numa thread daemon. SEM limite, 2-3
 # projetos processando ao mesmo tempo somam picos de RAM (render PDF +
@@ -15974,6 +15998,9 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                     _XC_AREA_DENY = ("piscina", "pavimento", "forma", "fôrma", "forno",
                                      "parapeito", "peitoril", "soleira", "escada", "rampa",
                                      "diversos", "generico", "genérico")
+                    # 🩸 04/10/2026: o que a chave do selo não deixa provar, o
+                    # cross-check também não (`_xc_camadas_que_nao_provam`)
+                    _xc_nao_prova, _xc_cinza, _xc_secoes = _xc_camadas_que_nao_provam(extraction)
 
                     def _xc_layer_ok(_lyr, _cat):
                         """True se o layer pode virar medida DURA pro cross-check.
@@ -15982,6 +16009,11 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                           poluem (piscina/pavimento/fôrma). ATENÇÃO: a categoria LINEAR
                           'demolicao' é legítima (queremos medir demolição) — por isso o
                           barramento de 'demolir' é SÓ na área, nunca em demolicao."""
+                        if (_lyr in _xc_cinza or str(_lyr or "").strip().upper() in _xc_nao_prova
+                                or _layer_sem_nome(_lyr)):
+                            return False
+                        if _cat in _AREA_CATS and _lyr in _xc_secoes:
+                            return False
                         _low = (_lyr or "").lower()
                         if _cat in _AREA_CATS or _cat == "paredes":
                             if any(_t in _low for _t in ("exist", "remov", "retir", "a-demol", "a demol")):
@@ -17011,9 +17043,13 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                 #      (forro≈piso não promove nenhum dos dois).
                                 # Sem ressalva, sem unidade ajustada, qty>0. Conserta a "timidez"
                                 # da IA sem falso-medido. Revisão adversarial 15/07.
+                                # 🩸 04/10/2026: e a ressalva de escala/unidade que a
+                                # chave do selo respeita (`_caveat_atinge_unidade`)
                                 if (_XCHECK_ON and conf == "estimado" and not _dxf_sem_procedencia
                                         and not unit_corrected and qty > 0
-                                        and not _rebaixado_pela_fonte):
+                                        and not _rebaixado_pela_fonte
+                                        and not _caveat_atinge_unidade(
+                                            getattr(extraction, "metadata", None), normalized_unit)):
                                     _q2 = round(qty, 2)
                                     _icat = _item_geo_category(desc, discipline)
                                     _promo = False
