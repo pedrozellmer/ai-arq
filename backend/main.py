@@ -40485,7 +40485,8 @@ def metricas_tick(request: Request, dias: int = 3, so_origens: int = 0):
                    "CLOUDFLARE_API_TOKEN não está setada no Render — a série do "
                    "movimento do site não é coletada. O painel vai mostrar só o "
                    "que já foi gravado à mão.", severity="error")
-        return {"status": "sem_token", "gravados": 0}
+        # 04/10: a busca orgânica não depende do Cloudflare — roda mesmo sem ele
+        return {"status": "sem_token", "gravados": 0, "busca": _coletar_busca_organica()}
 
     # 27/09: `?so_origens=1` recolhe só as colunas de origem (ver a função)
     if so_origens:
@@ -40555,6 +40556,8 @@ def metricas_tick(request: Request, dias: int = 3, so_origens: int = 0):
                    % _erros_origens[:3], severity="warning")
     # 27/09 (item 7): a telemetria parou? (ontem teve cliente e zero evento)
     _parou = _telemetria_parou(_hoje_br() - _td(days=1))
+    # 04/10: Search Console + Bing (por qual busca a pessoa chegou)
+    _busca = _coletar_busca_organica()
     # 🪤 22/09/2026: a resposta dizia só QUANTAS falhas, nunca QUAIS. Quem
     # dispara à mão (recoleta) precisa saber que o dia não foi atualizado e por
     # quê — contador sozinho é recusa silenciosa dentro de uma rodada que
@@ -40563,7 +40566,84 @@ def metricas_tick(request: Request, dias: int = 3, so_origens: int = 0):
             "motivos": falhas[:8],
             # quem dispara à mão vê na hora se a parte "de onde chegou" mediu
             "origens_sem_medida": _erros_origens[:3],
-            "telemetria_parou": _parou}
+            "telemetria_parou": _parou,
+            "busca": _busca}
+
+
+def _coletar_busca_organica() -> dict:
+    """Search Console (D-3..D-5) e Bing (o histórico que a API devolve) → `busca_organica`, por upsert.
+
+    🔎 04/10/2026 — Pedro: "segue com o Search Console e Bing no tick". Ver o topo de `busca_organica.py`.
+    Cada fonte é independente: uma sem credencial ou com erro não derruba a outra nem o tick.
+    🪤 "sem credencial" NÃO vai pro error_log (é o estado até o Pedro configurar — viraria ruído diário);
+    erro de quem TEM credencial vai, como warning, sem a chave.
+    """
+    import busca_organica as _bo
+    from datetime import timedelta as _tdb
+    resumo, linhas = {}, []
+    try:
+        cred = _bo.credencial_google()
+        if not cred:
+            resumo["google"] = "sem credencial"
+        else:
+            tok = _bo.token_google(cred)
+            site = _bo.site_google(tok)
+            n = 0
+            for atras in _bo.DIAS_GOOGLE:
+                ls = _bo.linhas_google(tok, site, _hoje_br() - _tdb(days=atras))
+                linhas += ls
+                n += len(ls)
+            resumo["google"] = n
+    except Exception as e:
+        resumo["google"] = "erro: %s" % str(e)[:300]
+    try:
+        chave = _bo.chave_bing()
+        if not chave:
+            resumo["bing"] = "sem credencial"
+        else:
+            ls = _bo.linhas_bing(chave)
+            linhas += ls
+            resumo["bing"] = len(ls)
+    except Exception as e:
+        resumo["bing"] = "erro: %s" % str(e)[:300]
+    if linhas:
+        lote = _bo.juntar(linhas)
+        gravados = 0
+        # de 500 em 500: o histórico do Bing pode passar de mil linhas numa rodada
+        for i in range(0, len(lote), 500):
+            st, _ = _supa_rest_service("POST", "busca_organica", body=lote[i:i + 500],
+                                       params={"on_conflict": "fonte,dia,tipo,chave"},
+                                       prefer="resolution=merge-duplicates,return=minimal", timeout=30)
+            if st in (200, 201, 204):
+                gravados += len(lote[i:i + 500])
+            else:
+                resumo["gravacao"] = "erro: HTTP %s ao gravar busca_organica" % st
+                break
+        resumo["gravados"] = gravados
+    erros = ["%s %s" % (k, v) for k, v in resumo.items() if isinstance(v, str) and v.startswith("erro")]
+    if erros:
+        _log_error("busca:tick", " | ".join(erros)[:900], severity="warning")
+    return resumo
+
+
+@app.get("/api/admin/busca")
+def admin_busca(request: Request, dias: int = 28):
+    """Busca orgânica pra aba Telemetria: totais, top consultas e top páginas de cada buscador (só admin)."""
+    _require_admin(request)
+    import busca_organica as _bo
+    from datetime import timedelta as _tdb
+    dias = max(7, min(int(dias or 28), 120))
+    desde = _hoje_br() - _tdb(days=dias)
+    st, linhas = _supa_rest_tudo("busca_organica", params={
+        "select": "fonte,dia,periodo,tipo,chave,cliques,impressoes,posicao",
+        # 🪤 ordem ÚNICA (a chave primária inteira): a tabela não tem `id`, e ordem repetida pagina errado
+        "dia": "gte.%s" % desde.isoformat()}, ordem="fonte.asc,dia.asc,tipo.asc,chave.asc", teto=60000, timeout=20)
+    if st != 200:
+        raise HTTPException(502, "não consegui ler a busca orgânica agora")
+    return {"dias": dias, "desde": desde.isoformat(),
+            "configurado": {"google": bool((os.getenv("GSC_SERVICE_ACCOUNT_JSON") or "").strip()),
+                            "bing": bool(_bo.chave_bing())},
+            **_bo.resumo(linhas or [], desde)}
 
 
 def _telemetria_parou(dia):

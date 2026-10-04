@@ -1111,6 +1111,12 @@
               <p id="mov-origem-nota" class="mt-1 text-[11px] text-gray-400 leading-snug"></p>
             </div>
           </div>
+          <!-- 🔎 04/10/2026 — Search Console + Bing no tick (Pedro). A pergunta que o Cloudflare não responde:
+               POR QUAL BUSCA a pessoa chegou, e em que posição o site aparece. Credencial é do Pedro, no Render. -->
+          <div id="tele-busca" class="mt-6 pt-5 border-t">
+            <p class="text-xs font-semibold text-gray-500 mb-3">Por qual busca chegou (Google Search Console e Bing, 28 dias)</p>
+            <div id="busca-organica" class="text-sm text-gray-700">&mdash;</div>
+          </div>
           <div class="mt-6 pt-5 border-t">
             <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
               <p class="text-xs font-semibold text-gray-500">O que declararam no cadastro (&#8220;Como nos conheceu?&#8221;)</p>
@@ -1558,7 +1564,7 @@ function switchTab(tabName, interno) {
   if (tabName === 'calibracao') loadCalibrationFactors();
   if (tabName === 'agente') loadAgentData();
   if (tabName === 'nps') loadNPSData();
-  if (tabName === 'telemetria') { carregarMovimentoDoSite(); loadOrigem(); loadActivity(); }
+  if (tabName === 'telemetria') { carregarMovimentoDoSite(); loadOrigem(); loadBuscaOrganica(); loadActivity(); }
   if (tabName === 'emails') loadEmailCatalog();
   if (tabName === 'insights') loadInsights();
   if (tabName === 'mensagens') loadMessages();
@@ -6134,6 +6140,56 @@ async function carregarMovimentoDoSite() {
   }
 
   if (barras) barras.innerHTML = barrasDoMovimento(serie);
+}
+
+// 🔎 04/10/2026 — "Por qual busca chegou" (Search Console + Bing, gravados pelo tick diário em `busca_organica`).
+// Função PURA pro guarda rodar no dukpy. 🪤 Três estados por buscador, nunca dois: sem credencial (o Pedro ainda
+// não configurou), com credencial e sem dia medido (o próximo tick traz), e medido. Nenhum vira "zero busca".
+// 🔒 Consulta e página vêm de FORA (o que as pessoas digitam no buscador): esc().
+function htmlBuscaOrganica(d) {
+  if (!d || typeof d !== 'object') return '<span class="text-gray-400">sem medição — não consegui ler agora</span>';
+  const fmt = n => Number(n || 0).toLocaleString('pt-BR');
+  const pos = p => (p === null || p === undefined) ? '—' : String(p).replace('.', ',');
+  const nomePag = s => s === '/' ? 'home'
+    : String(s || '').replace('/blog/posts/', 'blog: ').replace('.html', '').replace(/^\//, '');
+  const lista = (arr, nome) => (arr && arr.length) ? arr.map(a =>
+    '<div class="flex items-baseline justify-between gap-3">' +
+    '<span class="text-gray-600 truncate" title="' + esc(a.chave) + '">' + esc(nome(a.chave)) + '</span>' +
+    '<span class="tabular-nums text-gray-500 whitespace-nowrap">' + fmt(a.cliques) + ' · ' + fmt(a.impressoes) +
+    ' · ' + pos(a.posicao) + '</span></div>').join('') : '<span class="text-gray-400">&mdash;</span>';
+  const coluna = (f, titulo) => {
+    const x = d[f] || {};
+    const conf = !!((d.configurado || {})[f]);
+    const cab = '<p class="font-semibold text-gray-800 mb-1">' + titulo + '</p>';
+    const temDado = x.dias_medidos || (x.consultas || []).length || (x.paginas || []).length;
+    if (!temDado) {
+      return '<div>' + cab + '<p class="text-xs text-gray-400">' + (conf
+        ? 'credencial configurada, ainda sem dia medido — o tick diário (06h) traz'
+        : 'aguardando a credencial no Render') + '</p></div>';
+    }
+    return '<div>' + cab +
+      '<p class="text-xs text-gray-500 mb-2"><b>' + fmt(x.cliques) + '</b> cliques · ' + fmt(x.impressoes) +
+      ' impressões · posição média ' + pos(x.posicao) +
+      ' <span class="text-gray-400">(' + (x.dias_medidos || 0) + ' dia(s) medido(s))</span></p>' +
+      '<p class="text-[11px] font-semibold text-gray-500 mt-2 mb-1">Consultas</p>' + lista(x.consultas, s => s) +
+      '<p class="text-[11px] font-semibold text-gray-500 mt-3 mb-1">Páginas</p>' + lista(x.paginas, nomePag) +
+      '</div>';
+  };
+  return '<div class="grid gap-5 sm:grid-cols-2">' + coluna('google', 'Google') + coluna('bing', 'Bing') + '</div>' +
+    '<p class="mt-2 text-[11px] text-gray-400 leading-snug">cliques · impressões · posição média (ponderada pelas ' +
+    'impressões). Google: dia fechado com ~3 dias de atraso. Bing: consultas e páginas somadas por semana. ' +
+    'É outra régua: busca não é visita, e o buscador esconde as consultas raras.</p>';
+}
+
+async function loadBuscaOrganica() {
+  const el = document.getElementById('busca-organica');
+  if (!el) return;
+  let d = null;
+  try {
+    const r = await authFetch(`${API_BASE}/api/admin/busca?dias=28`);
+    if (r.ok) d = await r.json();
+  } catch (e) { d = null; }
+  el.innerHTML = htmlBuscaOrganica(d);
 }
 
 // 🔑 27/09/2026 — "De onde chegou todo mundo (7 dias)". Função à parte pra o guarda

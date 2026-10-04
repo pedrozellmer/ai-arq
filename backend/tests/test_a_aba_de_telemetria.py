@@ -95,6 +95,7 @@ def _painel(hash_inicial="", switch_src=None):
         "function closeSidebar() {}"
         % json.dumps(hash_inicial))
     for f in ("loadDashboardStats", "loadCadastrosPorSemana", "loadClientesQueVoltaram", "loadOrigem", "loadFilhotes", "carregarBadgeMensagens", "loadActivity",
+              "loadBuscaOrganica",
               "carregarMovimentoDoSite", "loadUsers", "_filtroPadraoAoEntrar", "loadProjects",
               "loadCalibrationFactors", "loadAgentData", "loadNPSData", "loadEmailCatalog", "loadInsights",
               "loadMessages", "loadNewsletterPreview", "loadNewsletterScheduled", "loadInstagramPosts",
@@ -113,7 +114,8 @@ def _ler(js, expr):
 def test_abrir_a_telemetria_carrega_trafego_origem_e_uso_do_produto():
     js = _painel("#telemetria")
     js.evaljs("switchTab('telemetria', true); null;")
-    assert set(_ler(js, "__chamou")) == {"carregarMovimentoDoSite", "loadOrigem", "loadActivity"}
+    # 04/10: + a busca orgânica (Search Console e Bing)
+    assert set(_ler(js, "__chamou")) == {"carregarMovimentoDoSite", "loadOrigem", "loadBuscaOrganica", "loadActivity"}
     assert _ler(js, "__visivel") == ["tab-telemetria"]
 
 
@@ -146,7 +148,7 @@ def test_CONTROLE_sem_o_apelido_o_favorito_velho_caia_no_dashboard():
 
 def test_CONTROLE_sem_o_ramo_da_telemetria_a_aba_abre_vazia():
     src = funcao_js("switchTab", _ADMIN)
-    ramo = "  if (tabName === 'telemetria') { carregarMovimentoDoSite(); loadOrigem(); loadActivity(); }"
+    ramo = "  if (tabName === 'telemetria') { carregarMovimentoDoSite(); loadOrigem(); loadBuscaOrganica(); loadActivity(); }"
     assert ramo in src
     js = _painel("#telemetria", switch_src=src.replace(ramo, ""))
     js.evaljs("switchTab('telemetria', true); null;")
