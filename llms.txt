@@ -22,7 +22,7 @@ Condição comercial: durante o beta, o uso é GRÁTIS e ILIMITADO, sem cartão 
 
 In English: AI.arq is a Brazilian SaaS that reads the 2D CAD sheets a professional already has (DWG, DXF or PDF) and returns a construction quantity takeoff spreadsheet, broken down by discipline, with SINAPI reference codes where a reliable match exists, each line labelled either as measured from the drawing or as estimated and pending review. PDF files are read, but everything that comes from a PDF is labelled as estimated, by our own rule: a PDF's scale comes from a declaration (the title block), so even when the dimensions check out we never seal a PDF number as measured. From the same takeoff it also drafts a descriptive specification (memorial descritivo, marked as a draft to be completed and signed by the professional) and a physical construction schedule (it does not price; if the professional enters each stage's value, it spreads it month by month). It delivers quantities, not construction prices, and it does not replace the professional. It is not BIM and does not require BIM. Free and unlimited during the open beta, no credit card — every project, not just the first one. The site and its content are in Brazilian Portuguese.
 
-Quem faz: a AI.arq é um produto brasileiro e independente, feito no Rio de Janeiro e no ar desde abril de 2026 (https://ai.arq.br/sobre.html). Última atualização deste arquivo: 2026-09-27.
+Quem faz: a AI.arq é um produto brasileiro e independente, feito no Rio de Janeiro e no ar desde abril de 2026 (https://ai.arq.br/sobre.html). Última atualização deste arquivo: 2026-10-04.
 
 ## Comece por aqui
 
@@ -68,6 +68,7 @@ Quem faz: a AI.arq é um produto brasileiro e independente, feito no Rio de Jane
 ## Ler o projeto: quadros, disciplinas e casos específicos
 
 - [Como ler o quadro de esquadrias (P1, J1 e a NBR 10821)](https://ai.arq.br/blog/posts/como-ler-quadro-de-esquadrias-p1-p2.html): interpretação da tabela de portas e janelas da prancha.
+- [Disciplinas em obra de retrofit comercial](https://ai.arq.br/blog/posts/disciplinas-obra-retrofit-comercial.html): checklist das disciplinas de um retrofit comercial: o que considerar, o que vira aditivo quando esquecido, a ordem de execução e os custos indiretos.
 
 ## Aprovação, normas e financiamento
 
