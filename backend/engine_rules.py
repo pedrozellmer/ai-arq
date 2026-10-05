@@ -6011,7 +6011,8 @@ def _marcado_na_linha(conf, obs, unit, layers_citados, marcados,
                       grandezas=("comprimento", "area")) -> str:
     """A porta comum das travas por layer marcado — tubo/eletroduto em face
     dupla (H34/H75), contorno de peça (H76), moldura ou limite (H79), rolete/
-    travessa de esteira (H88), parede grossa pelas faces (E12): a linha
+    travessa de esteira (H88), parede grossa pelas faces (E12), grade de
+    tabela (E14): a linha
     CONFIRMADA, na grandeza da trava, que cita um layer marcado → o layer
     ('' = a trava não age).
 
@@ -6063,12 +6064,8 @@ def selo_apos_grade_de_tabela(conf, obs, unit, layers_citados, layers_tabela):
     layer não se separa com segurança. Área (m²) do layer não é tocada: o
     quadro de áreas pode estar no layer de parede, e a hachura dele é medida.
     """
-    if conf != "confirmado" or not layers_tabela:
-        return conf, obs, False
-    if not unidade_de_comprimento_na_trava(unit):
-        return conf, obs, False
-    # o leitor da observação OU o nome inteiro (ver `layer_marcado_citado`)
-    hit = layer_marcado_citado(obs, layers_citados, layers_tabela)
+    # só COMPRIMENTO (a hachura do layer é medida)
+    hit = _marcado_na_linha(conf, obs, unit, layers_citados, layers_tabela, ("comprimento",))
     if not hit:
         return conf, obs, False
     return ("estimado",

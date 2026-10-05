@@ -4,7 +4,7 @@
 🩸 04/10/2026 — revisão do E12, medido no acervo: as travas que rebaixam a
 linha ✓ de um layer marcado — tubo/eletroduto em face dupla (H34/H75),
 contorno de peça (H76), moldura ou limite (H79), rolete/travessa de esteira
-(H88) e parede grossa pelas faces (E12) — achavam o layer só pelo leitor de
+(H88), parede grossa pelas faces (E12) e grade de tabela (E14) — achavam o layer só pelo leitor de
 layers da observação, que corta o nome com espaço, acento, ponto, '$' ou que
 começa com '-' ("BORDAS ESPESSAS" vira "BORDAS") e não vê a observação sem a
 palavra "layer". Eram 53 layers do H79 em 15 jobs. Agora todas passam pela
@@ -30,6 +30,7 @@ IRMAS = [
     ("H79 moldura ou limite", er.selo_apos_moldura_ou_limite, er.MARCA_MOLDURA_OU_LIMITE, True),
     ("H88 travessa de esteira", er.selo_apos_travessa_de_esteira, er.MARCA_TRAVESSA_DE_ESTEIRA, True),
     ("E12 parede espessa", er.selo_apos_parede_espessa, er.MARCA_PAREDE_ESPESSA, False),
+    ("E14 grade de tabela", er.selo_apos_grade_de_tabela, er.MARCA_GRADE_DE_TABELA, False),
 ]
 _IDS = [i[0] for i in IRMAS]
 
