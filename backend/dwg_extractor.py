@@ -1272,9 +1272,45 @@ def _menos_intervalos(livre, tira):
     return livre
 
 
+def _funde_intervalos(iv):
+    """Ordena e junta os intervalos que se tocam ou se sobrepõem."""
+    out = []
+    for a, b in sorted(iv):
+        if out and a <= out[-1][1]:
+            if b > out[-1][1]:
+                out[-1] = (out[-1][0], b)
+        else:
+            out.append((a, b))
+    return out
+
+
+def _recorta_intervalos(iv, inicios, lo, hi):
+    """Os intervalos de `iv` (ordenados e fundidos; `inicios` = os começos) que
+    tocam (lo, hi), recortados a ele — por busca binária, sem varrer a lista."""
+    import bisect
+    j = max(0, bisect.bisect_right(inicios, lo) - 1)
+    out = []
+    while j < len(iv) and iv[j][0] < hi:
+        a, b = iv[j]
+        if b > lo:
+            out.append((max(a, lo), min(b, hi)))
+        j += 1
+    return out
+
+
 def _intersecao_intervalos(a_, b_):
-    """Os trechos comuns a duas listas de intervalos."""
-    return [(max(x0, y0), min(x1, y1)) for x0, x1 in a_ for y0, y1 in b_ if min(x1, y1) > max(x0, y0)]
+    """Os trechos comuns a duas listas de intervalos ORDENADAS e sem
+    sobreposição — dois ponteiros, O(n + m)."""
+    out, i, j = [], 0, 0
+    while i < len(a_) and j < len(b_):
+        lo, hi = max(a_[i][0], b_[j][0]), min(a_[i][1], b_[j][1])
+        if hi > lo:
+            out.append((lo, hi))
+        if a_[i][1] < b_[j][1]:
+            i += 1
+        else:
+            j += 1
+    return out
 
 
 class _EspessaGrandeDemais(Exception):
@@ -1303,11 +1339,29 @@ def _sobra_das_faces_espessas(grupos_geo, em_par, sep_max, esp_max, min_sobrep, 
     sobra sai por BAIXO do que a soma tem a mais.
     Levanta `_EspessaGrandeDemais` acima de `max_comparacoes` — quem chama
     segura (a marca não é medida; o eixo segue).
+    🐢 04/10 (2ª revisão da Projetos): o eixo grava UM intervalo por fatia entre
+    cortes (os cortes são as pontas de TODAS as paralelas do grupo), e a 1ª
+    versão cruzava as listas cruas em produto cartesiano: num layer de 5.840
+    trechos com corredores de 100 m, 54,7 s contra 0,2 s antes. Agora os
+    intervalos de cada lado são fundidos uma vez, recortados ao trecho do
+    candidato por busca binária, cruzados por dois ponteiros — e tudo entra no
+    contador do teto.
     """
     from collections import defaultdict as _dd
     sobra = _dd(float)
     teto = max_comparacoes or _PAREDE_ESPESSA_MAX_COMPARACOES
     n = 0
+    # por linha: (abaixo, começos, acima, começos), fundidos — só das linhas
+    # que entram em algum par candidato, na primeira vez que entram
+    lados = {}
+
+    def _lados(k):
+        if k not in lados:
+            ivs = em_par.get(k, ())
+            _ab = _funde_intervalos([(x, y) for x, y, lado in ivs if lado < 0])
+            _ac = _funde_intervalos([(x, y) for x, y, lado in ivs if lado > 0])
+            lados[k] = (_ab, [p[0] for p in _ab], _ac, [p[0] for p in _ac])
+        return lados[k]
     for por_d, d, t0, t1 in grupos_geo:
         cands = []
         for a_pos, a in enumerate(por_d):
@@ -1327,19 +1381,31 @@ def _sobra_das_faces_espessas(grupos_geo, em_par, sep_max, esp_max, min_sobrep, 
         usado = _dd(list)
         for _sep, a_pos, b_pos, lo, hi in sorted(cands):
             a, b = por_d[a_pos], por_d[b_pos]
-            pa, pb = em_par.get(a, ()), em_par.get(b, ())
+            ab_a, ia_a, ac_a, ic_a = _lados(a)
+            ab_b, ib_b, ac_b, ic_b = _lados(b)
             livre = [(lo, hi)]
-            livre = _menos_intervalos(livre, [(x, y) for x, y, lado in pa if lado < 0])
-            livre = _menos_intervalos(livre, [(x, y) for x, y, lado in pb if lado > 0])
-            livre = _menos_intervalos(livre, _intersecao_intervalos(
-                [(x, y) for x, y, lado in pa if lado > 0], [(x, y) for x, y, lado in pb if lado < 0]))
+            # a pareada pra BAIXO e b pareada pra CIMA: face de outra parede
+            fora = _recorta_intervalos(ab_a, ia_a, lo, hi) + _recorta_intervalos(ac_b, ic_b, lo, hi)
+            n += len(fora)
+            livre = _menos_intervalos(livre, _funde_intervalos(fora))
+            if livre:
+                # as duas pareadas pra DENTRO: duas paredes finas com um vão (shaft)
+                dentro_a = _recorta_intervalos(ac_a, ic_a, lo, hi)
+                dentro_b = _recorta_intervalos(ab_b, ib_b, lo, hi)
+                n += len(dentro_a) + len(dentro_b)
+                livre = _menos_intervalos(livre, _intersecao_intervalos(dentro_a, dentro_b))
             for k in (a, b):
-                livre = _menos_intervalos(livre, usado[k])
+                if livre:
+                    _u = [iv for iv in usado[k] if iv[1] > lo and iv[0] < hi]
+                    n += len(usado[k])
+                    livre = _menos_intervalos(livre, _u)
+            if n > teto:
+                raise _EspessaGrandeDemais("mais de %d comparações" % teto)
             tot = sum(y - x for x, y in livre)
             if tot <= 0:
                 continue
             for k in (a, b):
-                usado[k].extend(livre)
+                usado[k] = _funde_intervalos(usado[k] + livre)
                 sobra[k] += tot / 2.0
     return sobra
 

@@ -593,3 +593,137 @@ def test_CONTROLE_com_o_cross_check_ligado_sem_a_marca_promove(monkeypatch):
     monkeypatch.setenv("DXF_CONFIRM_CROSSCHECK", "1")
     it = _laco_com_o_cross_check({})
     assert it.confidence.value == "confirmado", it.observations
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  6. 🐢 04/10 (2ª revisão da Projetos): o tempo da régua e as unidades
+# ══════════════════════════════════════════════════════════════════════════
+def _sobra_quadratica(grupos_geo, em_par, sep_max, esp_max, min_sobrep):
+    """A versão de 791cc82 (listas cruas, interseção em produto cartesiano):
+    a referência de RESULTADO pra versão rápida."""
+    from collections import defaultdict as _dd
+    sobra = _dd(float)
+    for por_d, d, t0, t1 in grupos_geo:
+        cands = []
+        for a_pos, a in enumerate(por_d):
+            for b_pos in range(a_pos + 1, len(por_d)):
+                b = por_d[b_pos]
+                sep = d[b] - d[a]
+                if sep > esp_max:
+                    break
+                if sep < sep_max:
+                    continue
+                lo, hi = max(t0[a], t0[b]), min(t1[a], t1[b])
+                if hi - lo >= min_sobrep:
+                    cands.append((sep, a_pos, b_pos, lo, hi))
+        usado = _dd(list)
+        for _sep, a_pos, b_pos, lo, hi in sorted(cands):
+            a, b = por_d[a_pos], por_d[b_pos]
+            pa, pb = em_par.get(a, ()), em_par.get(b, ())
+            livre = [(lo, hi)]
+            livre = dx._menos_intervalos(livre, [(x, y) for x, y, lado in pa if lado < 0])
+            livre = dx._menos_intervalos(livre, [(x, y) for x, y, lado in pb if lado > 0])
+            inter = [(max(x0, y0), min(x1, y1)) for x0, x1 in [(x, y) for x, y, lado in pa if lado > 0]
+                     for y0, y1 in [(x, y) for x, y, lado in pb if lado < 0] if min(x1, y1) > max(x0, y0)]
+            livre = dx._menos_intervalos(livre, inter)
+            for k in (a, b):
+                livre = dx._menos_intervalos(livre, usado[k])
+            tot = sum(y - x for x, y in livre)
+            if tot <= 0:
+                continue
+            for k in (a, b):
+                usado[k].extend(livre)
+                sobra[k] += tot / 2.0
+    return sobra
+
+
+@pytest.mark.parametrize("semente", range(300))
+def test_a_versao_rapida_da_o_mesmo_resultado_da_quadratica(semente):
+    import random
+    rnd = random.Random(semente)
+    n = rnd.randint(2, 7)
+    d = {k: round(rnd.uniform(0, 2.0), 2) for k in range(n)}
+    t0, t1 = {}, {}
+    for k in range(n):
+        a = round(rnd.uniform(0, 8), 1)
+        t0[k], t1[k] = a, round(a + rnd.uniform(1, 10), 1)
+    em_par = {}
+    for k in range(n):
+        ivs = []
+        x = t0[k]
+        while x < t1[k] and rnd.random() < 0.8:        # fatias contíguas, como o eixo grava
+            y = min(t1[k], round(x + rnd.uniform(0.2, 3), 1))
+            if rnd.random() < 0.6:
+                ivs.append((x, y, rnd.choice((1, -1))))
+            x = y
+        if ivs:
+            em_par[k] = ivs
+    por_d = sorted(range(n), key=lambda k: d[k])
+    geo = [(por_d, d, t0, t1)]
+    rapida = dx._sobra_das_faces_espessas(geo, em_par, 0.40, 1.00, 1.0)
+    ref = _sobra_quadratica(geo, em_par, 0.40, 1.00, 1.0)
+    assert set(k for k, v in rapida.items() if v > 1e-9) == set(k for k, v in ref.items() if v > 1e-9)
+    for k in ref:
+        assert rapida.get(k, 0.0) == pytest.approx(ref[k], abs=1e-9), (semente, k)
+
+
+def test_corredores_longos_fatiados_nao_travam_a_regua():
+    """A sonda da 2ª revisão: corredores de 100 m (15 | 60 | 15) e paredes
+    curtas espalhadas que fatiam as linhas longas em milhares de pedaços.
+    Em 791cc82 a régua levava 18–55 s; a de 526e5e4, ~0,1 s."""
+    import random
+    import time
+    rnd = random.Random(1)
+    W = dx.WallSegment
+    ws = []
+    for c in range(10):
+        y = c * 3.0
+        for dy in (0, .15, .75, .90):
+            ws.append(W("PAREDE", 100.0, (0, y + dy), (100, y + dy)))
+    for i in range(2900):
+        x = rnd.uniform(0, 97)
+        y = 100 + i * 0.7
+        ws += [W("PAREDE", 3.0, (x, y), (x + 3, y)), W("PAREDE", 3.0, (x, y + .15), (x + 3, y + .15))]
+    tempos = []
+    orig = dx._sobra_das_faces_espessas
+
+    def cron(*a, **k):
+        t = time.perf_counter()
+        r = orig(*a, **k)
+        tempos.append(time.perf_counter() - t)
+        return r
+    dx._sobra_das_faces_espessas = cron
+    try:
+        out = []
+        dx._corrigir_parede_linha_dupla(ws, 1.0, {}, out)
+    finally:
+        dx._sobra_das_faces_espessas = orig
+    assert tempos and sum(tempos) < 2.0, tempos
+
+
+def test_a_intersecao_conta_no_teto():
+    """Duas linhas, um par só (1 comparação), mas 60 fatias pareadas pra dentro
+    de cada lado: o trabalho da interseção entra no teto."""
+    d, t0, t1 = {0: 0.0, 1: 0.5}, {0: 0.0, 1: 0.0}, {0: 60.0, 1: 60.0}
+    em_par = {0: [(x, x + 0.5, 1) for x in range(60)], 1: [(x + 0.5, x + 1.0, -1) for x in range(60)]}
+    assert sum(dx._sobra_das_faces_espessas([([0, 1], d, t0, t1)], em_par, 0.4, 1.0, 1.0).values()) > 0
+    with pytest.raises(dx._EspessaGrandeDemais):
+        dx._sobra_das_faces_espessas([([0, 1], d, t0, t1)], em_par, 0.4, 1.0, 1.0, max_comparacoes=50)
+
+
+@pytest.mark.parametrize("unit", ["m.l", "M.L", "mt", "MT", "metro linear", "Metros Lineares", "m lin",
+                                  "m lin.", "lm", "m  linear"])
+def test_as_grafias_soltas_de_metro_caem(unit):
+    conf, _o, reb = er.selo_apos_parede_espessa("confirmado", "layer A-WALL", unit, ["A-WALL"], {"A-WALL"})
+    assert reb and conf == "estimado", unit
+
+
+@pytest.mark.parametrize("unit", ["m²", "m3", "un", "kg", "vb", "l"])
+def test_CONTROLE_as_outras_grandezas_ficam(unit):
+    conf, _o, reb = er.selo_apos_parede_espessa("confirmado", "layer A-WALL", unit, ["A-WALL"], {"A-WALL"})
+    assert not reb and conf == "confirmado", unit
+
+
+def test_a_chave_do_selo_continua_so_com_a_tabela_dela():
+    """As grafias soltas são só da trava: a chave não passa a provar 'mt'."""
+    assert er.prova_da_geometria(10.0, "mt", "layer A-WALL = 10 m", {"comprimento": [("A-WALL", 10.0)]}) == ""

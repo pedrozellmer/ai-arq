@@ -5907,6 +5907,23 @@ def selo_apos_travessa_de_esteira(conf, obs, unit, layers_citados, layers_esteir
             True)
 
 
+#: grafias de metro que a IA escreve e nenhuma das duas tabelas conhece — só para
+#: a TRAVA rebaixar (a chave do selo continua só com `_PROVA_POR_UNIDADE`)
+_COMPRIMENTO_SO_NA_TRAVA = frozenset({"m.l", "mt", "metro linear", "metros lineares", "m lin",
+                                      "m. lin", "lm", "m l"})
+
+
+def unidade_de_comprimento_na_trava(unit) -> bool:
+    """A unidade da linha é metro, pra uma trava que só REBAIXA? Lê as duas
+    tabelas ("m", "ml", "m.l.", "metro", "metros", "mts", "m linear") e as
+    grafias soltas ("m.l", "mt", "metro linear", "m lin", "lm"), sem caixa,
+    espaço a mais nem ponto no fim."""
+    u = " ".join(str(unit or "").split()).lower()
+    if _PROVA_POR_UNIDADE.get(u) == "comprimento" or grandeza_da_unidade(u) == "comprimento":
+        return True
+    return u in _COMPRIMENTO_SO_NA_TRAVA or u.rstrip(".") in _COMPRIMENTO_SO_NA_TRAVA
+
+
 #: nome de layer feito SÓ de letras (e espaço): "FOLHA", "Alvenaria", "Margem Externa"
 _RE_NOME_SO_LETRAS = _re.compile(r"^[^\W\d_]+(?:\s+[^\W\d_]+)*$")
 _ASPA = "['\"“”‘’`]"
@@ -5972,9 +5989,7 @@ def selo_apos_parede_espessa(conf, obs, unit, layers_citados, layers_espessa):
     """
     if conf != "confirmado" or not layers_espessa:
         return conf, obs, False
-    # "metro", "metros", "mts", "m linear" também são comprimento
-    u = str(unit or "").strip().lower()
-    if _PROVA_POR_UNIDADE.get(u) != "comprimento" and grandeza_da_unidade(u) != "comprimento":
+    if not unidade_de_comprimento_na_trava(unit):
         return conf, obs, False
     # o leitor da observação OU o nome inteiro (ver `layer_marcado_citado`)
     hit = layer_marcado_citado(obs, layers_citados, layers_espessa)
