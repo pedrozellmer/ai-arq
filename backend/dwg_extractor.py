@@ -270,6 +270,8 @@ class DXFExtraction:
                                            "layers_moldura_ou_limite",
                                            # 02/10 (H88): idem
                                            "layers_esteira_por_travessa",
+                                           # 04/10 (E14): idem
+                                           "layers_grade_de_tabela",
                                            # 01/10 (H84): rastro; a soma já é 1×
                                            "copias_exatas",
                                            # 30/09 (H13): seção própria
@@ -681,6 +683,7 @@ class DXFExtraction:
             _ctp = (self.metadata or {}).get("layers_contorno_de_peca") or {}
             _mol = (self.metadata or {}).get("layers_moldura_ou_limite") or {}
             _est = (self.metadata or {}).get("layers_esteira_por_travessa") or {}
+            _tab = (self.metadata or {}).get("layers_grade_de_tabela") or {}
             _esp = (self.metadata or {}).get("parede_espessa_pelas_faces") or {}
             for layer, length in sorted(walls_by_layer.items()):
                 if layer in _est and not _anot(layer):
@@ -697,6 +700,13 @@ class DXFExtraction:
                                  f"deste comprimento são LADOS DE RETÂNGULOS grandes (moldura "
                                  f"da folha, limite de obra ou de lote), não rede nem elemento "
                                  f"de obra: não use como medido")
+                elif layer in _tab and not _anot(layer):
+                    # 🩸 04/10 (E14) — sem "layer <palavra>" no texto (ver abaixo)
+                    lines.append(f"  {layer}: {length:.2f} m"
+                                 f"   ⚠ GRADE DE TABELA — {int(100 * float(_tab[layer].get('fracao') or 0))}% "
+                                 f"deste comprimento são as LINHAS DE UMA TABELA desenhada "
+                                 f"(legenda, simbologia ou quadro: '{_tab[layer].get('cabecalho')}'), "
+                                 f"não rede nem elemento de obra: não use como medido")
                 elif layer in _ctp and not _anot(layer):
                     # 🩸 01/10 (H76) — sem "layer <palavra>" no texto (ver abaixo)
                     lines.append(f"  {layer}: {length:.2f} m"
@@ -2439,6 +2449,252 @@ def layers_esteira_por_travessa(msp, walls, unit_factor: float = 1.0) -> dict:
                     break
             out[ly] = {"m": round(t, 2), "fracao": round(min(f, 1.0), 2),
                        "peca_m": round(peca * uf, 2), "pecas": len(compr)}
+    return out
+
+
+#: 🩸 04/10/2026 — E14 da conferência da lista de dano. Um projeto de incêndio
+#: entregou "tubulação 1.285,22 ml ✓" (e o mesmo número em outro job do mesmo
+#: projeto): o layer da rede era, em 94–99 % do metro, a GRADE da tabela de
+#: SIMBOLOGIA — rede de verdade, 0. O H79 não pega (tabela não é moldura).
+#: Medido no acervo: 49 layers em 21 jobs; os elegíveis à chave, olhados no
+#: desenho, são todos tabela (simbologia, quadro de áreas, legenda de pisos,
+#: de portas); 0 ✓ certo perdido.
+#: 🔑 TABELA = ≥ 5 horizontais de mesmo vão, espaçadas ≥ 2 % do vão, com as
+#: bordas verticais das DUAS pontas fechando cada faixa, texto por linha
+#: (≥ (linhas − 1)/2, de qualquer layer) e um CABEÇALHO (legenda, simbologia,
+#: quadro, …). 🪤 Sem o cabeçalho há falso positivo medido: cobertura em
+#: contornos empilhados, escada com cota por degrau, elevação de rack.
+#: 🪤 DUAS leituras, a caixa vale se aparecer em qualquer uma: trecho a trecho
+#: (a tabela de horizontais sobrepostas só aparece assim) e em CORRIDAS de
+#: colineares emendados (a de linha quebrada por célula e a de retângulo por
+#: célula só aparecem assim). Cada uma sozinha perdia 4 / 35 de 59 tabelas.
+#: 🪤 A caixa PARTE onde as bordas das pontas param: tabelas empilhadas do mesmo
+#: vão são caixas separadas (numa caixa só, a borda não cobria a altura e a
+#: régua via 31 % de um layer que é 85 % tabela).
+#: 🪤 Diferente do H79, NÃO pula layer de parede: o QUADRO DE ÁREAS desenhado no
+#: layer de parede era 74 % do metro dele (medido). A trava é só de METRO — a
+#: área da hachura do layer não é tocada.
+#: 🪤 A fração é PISO: célula de linha dupla e retângulo solto com folga não são
+#: lidos (um layer que é todo tabela, de células assim, mede 26 %).
+_TABELA_MIN_LINHAS = 5        # horizontais de mesmo vão
+_TABELA_ESPACO_MIN = 0.02     # menor espaçamento ≥ 2 % do vão (o par de faces da parede não)
+_TABELA_PONTA_TOL = 0.01      # mesmo vão / borda na ponta: a ≤ 1 % do vão
+_TABELA_BORDA_COBRE = 0.8     # as bordas das 2 pontas cobrem ≥ 80 % de cada faixa
+_TABELA_RETA_TOL = 0.002      # horizontal / vertical: desvio ≤ 0,2 % do trecho
+_TABELA_FRACAO = 0.20         # ≥ 20 % do metro do layer dentro das caixas
+_TABELA_MIN_M = 20.0          # ...e ≥ 20 m
+_RE_CABECALHO_DE_TABELA = re.compile(
+    r"legenda|simbologia|quadro|tabela|notas?\b|descri[cç][aã]o|\bitem\b|quant|especifica")
+
+
+def layers_grade_de_tabela(msp, walls, texts, unit_factor: float = 1.0) -> dict:
+    """{layer: {'m', 'fracao', 'cabecalho', 'caixas'}} — layer cujo metro é, em
+    ≥ `_TABELA_FRACAO` (e ≥ `_TABELA_MIN_M`), as LINHAS DE TABELAS desenhadas
+    (legenda, simbologia, quadro): caixas de ≥ 5 horizontais de mesmo vão
+    fechadas pelas bordas das duas pontas, com texto por linha e cabeçalho.
+    Lê LINE e os lados de LWPOLYLINE e de POLYLINE (2D/3D), a cópia exata 1×;
+    o metro da grade = os trechos horizontais e verticais DENTRO das caixas.
+    Sem filtro de nome nem de parede (ver acima). SÓ MARCA (aviso + selo)."""
+    uf = float(unit_factor) if unit_factor else 1.0
+    tot: dict = {}
+    for w in walls or ():
+        ly = str(getattr(w, "layer", "") or "")
+        tot[ly] = tot.get(ly, 0.0) + float(getattr(w, "length", 0.0) or 0.0)
+    if not tot:
+        return {}
+    segs: dict = {}
+    for e in msp.query("LINE LWPOLYLINE POLYLINE"):
+        try:
+            ly = str(e.dxf.layer)
+            if ly not in tot:
+                continue
+            tipo = e.dxftype()
+            if tipo == "LINE":
+                pts = [(e.dxf.start[0], e.dxf.start[1], 0.0), (e.dxf.end[0], e.dxf.end[1], 0.0)]
+            elif tipo == "LWPOLYLINE":
+                pts = [(p[0], p[1], p[2]) for p in e.get_points("xyb")]
+                if e.closed and pts:
+                    pts.append(pts[0])
+            else:
+                if not (e.is_2d_polyline or e.is_3d_polyline):
+                    continue            # malha e polyface não são traço
+                _2d = e.is_2d_polyline
+                pts = [(v.dxf.location[0], v.dxf.location[1],
+                        float(v.dxf.get("bulge", 0) or 0) if _2d else 0.0) for v in e.vertices]
+                if e.is_closed and pts:
+                    pts.append(pts[0])
+        except Exception:
+            continue
+        ss = segs.setdefault(ly, [])
+        for (ax, ay, blg), (bx, by, _b) in zip(pts, pts[1:]):
+            if not blg and (ax != bx or ay != by):     # o lado em arco não é linha de tabela
+                ss.append((ax, ay, bx, by))
+    # o lado do desenho, por AMOSTRA COM PASSO (a lição do H79)
+    _total = sum(len(ss) for ss in segs.values())
+    _passo = max(1, _total // 20000)
+    xs, ys = [], []
+    _k = 0
+    for ss in segs.values():
+        for ax, ay, bx, by in ss:
+            if _k % _passo == 0:
+                xs.extend((ax, bx))
+                ys.extend((ay, by))
+            _k += 1
+    if len(xs) < 8:
+        return {}
+    xs.sort()
+    ys.sort()
+
+    def _p(v, q):
+        return v[min(len(v) - 1, int(len(v) * q))]
+    lado = max(_p(xs, 0.98) - _p(xs, 0.02), _p(ys, 0.98) - _p(ys, 0.02))
+    if lado <= 0:
+        return {}
+    tol_c, tol_gap = 1e-5 * lado, 1e-3 * lado
+    txt = []
+    for t in texts or ():
+        try:
+            txt.append((float(t.position[0]), float(t.position[1]), str(getattr(t, "text", "") or "")))
+        except Exception:
+            continue
+    txt.sort()
+    txs = [t[0] for t in txt]
+
+    def _corridas(itens):
+        """[(coord, ini, fim)] emendando os colineares (mesma coord ± tol_c, vão ≤ tol_gap)."""
+        por: dict = {}
+        for c, a, b in itens:
+            por.setdefault(round(c / tol_c), []).append((a, b, c))
+        out_ = []
+        for lst in por.values():
+            lst.sort()
+            ini, fim, c = lst[0]
+            for a, b, _c in lst[1:]:
+                if a <= fim + tol_gap:
+                    fim = max(fim, b)
+                else:
+                    out_.append((c, ini, fim))
+                    ini, fim = a, b
+            out_.append((c, ini, fim))
+        return out_
+
+    _tq = 0.001 / uf     # a cópia exata em pilha conta UMA vez (o walls já vem assim, H84)
+    out = {}
+    for ly, ss in segs.items():
+        t = tot.get(ly, 0.0)
+        if t < _TABELA_MIN_M:
+            continue
+        if len(ss) > _TUBO_MAX_SEG:
+            logger.warning("[grade-de-tabela] '%s' com %d trechos — acima do teto, não medido",
+                           ly, len(ss))
+            continue
+        vistos: set = set()
+        hs, vs = [], []
+        for ax, ay, bx, by in ss:
+            _ch = tuple(sorted(((round(ax / _tq), round(ay / _tq)), (round(bx / _tq), round(by / _tq)))))
+            if _ch in vistos:
+                continue
+            vistos.add(_ch)
+            dx_, dy_ = abs(bx - ax), abs(by - ay)
+            L = math.hypot(dx_, dy_)
+            if dy_ <= _TABELA_RETA_TOL * L:
+                hs.append(((ay + by) / 2.0, min(ax, bx), max(ax, bx)))
+            elif dx_ <= _TABELA_RETA_TOL * L:
+                vs.append(((ax + bx) / 2.0, min(ay, by), max(ay, by)))
+        if len(hs) < _TABELA_MIN_LINHAS or len(vs) < 2:
+            continue
+        # a borda = a UNIÃO dos trechos verticais na ponta (a quebrada por célula
+        # também cobre). 🪤 NÃO pela corrida emendada: ela emenda vão de até
+        # 1/1000 do desenho, e numa prancha grande fechava a faixa vazia entre o
+        # título e a tabela — a caixa não partia e o espaçamento de 0,17 do
+        # título derrubava a tabela de 29 linhas inteira (medido no acervo).
+        vr = sorted(vs)
+        vx = [v[0] for v in vr]
+
+        def _caixa(x0, x1, yy):
+            """A caixa (x0, x1, y0, y1, cabeçalho) das linhas `yy`, ou None."""
+            n, L = len(yy), x1 - x0
+            if n < _TABELA_MIN_LINHAS or min(b - a for a, b in zip(yy, yy[1:])) < _TABELA_ESPACO_MIN * L:
+                return None
+            y0, y1 = yy[0], yy[-1]
+            folga = max((y1 - y0) / (n - 1), 0.3 * (y1 - y0))
+            dentro = [txt[i][2] for i in range(bisect_left(txs, x0), bisect_right(txs, x1))
+                      if y0 <= txt[i][1] <= y1 + folga]
+            if len(dentro) < max(2, (n - 1) / 2.0):
+                return None
+            cab = sorted({w for s in dentro for w in _RE_CABECALHO_DE_TABELA.findall(s.lower())})
+            return (x0, x1, y0, y1, cab) if cab else None
+
+        def _caixas(hh):
+            grupos: dict = {}
+            for y, a, b in hh:
+                q = _TABELA_PONTA_TOL * (b - a)
+                if q > 0:
+                    grupos.setdefault((round(a / q), round(b / q)), []).append((y, a, b))
+            res = []
+            for g in grupos.values():
+                if len(g) < _TABELA_MIN_LINHAS:
+                    continue
+                x0 = sum(a for _, a, _ in g) / len(g)
+                x1 = sum(b for _, _, b in g) / len(g)
+                tb = _TABELA_PONTA_TOL * (x1 - x0)
+                yy = []
+                for y in sorted(y for y, _, _ in g):
+                    if not yy or y - yy[-1] > tol_c:
+                        yy.append(y)
+                if len(yy) < _TABELA_MIN_LINHAS:
+                    continue
+                bordas = []
+                for xb in (x0, x1):
+                    bd = _funde_intervalos([(vr[i][1], vr[i][2])
+                                            for i in range(bisect_left(vx, xb - tb), bisect_right(vx, xb + tb))])
+                    bordas.append((bd, [a for a, _ in bd]))
+                ini = 0
+                for i in range(len(yy)):
+                    fecha = i + 1 < len(yy) and all(
+                        sum(b - a for a, b in _recorta_intervalos(bd, ib, yy[i], yy[i + 1]))
+                        >= _TABELA_BORDA_COBRE * (yy[i + 1] - yy[i]) for bd, ib in bordas)
+                    if not fecha:
+                        cx = _caixa(x0, x1, yy[ini:i + 1])
+                        if cx:
+                            res.append(cx)
+                        ini = i + 1
+            return res
+        caixas = _caixas(hs) + _caixas(_corridas(hs))
+        if not caixas:
+            continue
+        # a mesma tabela achada pelas duas leituras (ou um pedaço dela) conta 1×
+        caixas.sort(key=lambda c: -(c[1] - c[0]) * (c[3] - c[2]))
+        kept = []
+        for c in caixas:
+            area = (c[1] - c[0]) * (c[3] - c[2])
+            if not any(max(0.0, min(c[1], k[1]) - max(c[0], k[0])) * max(0.0, min(c[3], k[3]) - max(c[2], k[2]))
+                       >= 0.5 * area for k in kept):
+                kept.append(c)
+        # o metro da grade: os trechos horizontais e verticais dentro das caixas, cada um 1×
+        hs.sort()
+        vs.sort()
+        hy, vxx = [h[0] for h in hs], [v[0] for v in vs]
+        ped_h: dict = {}
+        ped_v: dict = {}
+        for x0, x1, y0, y1, _cab in kept:
+            tb = _TABELA_PONTA_TOL * (x1 - x0)
+            for i in range(bisect_left(hy, y0 - tb), bisect_right(hy, y1 + tb)):
+                a, b = max(hs[i][1], x0 - tb), min(hs[i][2], x1 + tb)
+                if b > a:
+                    ped_h.setdefault(i, []).append((a, b))
+            for i in range(bisect_left(vxx, x0 - tb), bisect_right(vxx, x1 + tb)):
+                a, b = max(vs[i][1], y0 - tb), min(vs[i][2], y1 + tb)
+                if b > a:
+                    ped_v.setdefault(i, []).append((a, b))
+        # float(): o ponto da LWPOLYLINE vem em numpy, e isto vai pro metadata
+        m = float(sum(b - a for ped in (ped_h, ped_v) for iv in ped.values()
+                      for a, b in _funde_intervalos(iv))) * uf
+        f = m / t
+        if m >= _TABELA_MIN_M and f >= _TABELA_FRACAO:
+            cab = sorted({w for c in kept for w in c[4]})
+            out[ly] = {"m": round(float(t), 2), "fracao": round(min(f, 1.0), 2),
+                       "cabecalho": ", ".join(cab[:3]), "caixas": len(kept)}
     return out
 
 
@@ -9504,6 +9760,13 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             metadata["layers_esteira_por_travessa"] = _est
     except Exception as _eest:
         logger.warning("[esteira-por-travessa] falhou (não-fatal): %s", _eest)
+    # 🩸 04/10 (E14): metro de layer que é a grade de uma tabela desenhada
+    try:
+        _tab = layers_grade_de_tabela(msp, walls, texts, unit_factor)
+        if _tab:
+            metadata["layers_grade_de_tabela"] = _tab
+    except Exception as _etab:
+        logger.warning("[grade-de-tabela] falhou (não-fatal): %s", _etab)
     # 🩸 01/10 (H76): metro de layer de CONEXÃO que é o contorno das peças
     try:
         _ctp = layers_de_contorno_de_peca(walls, _metro_de_bloco)

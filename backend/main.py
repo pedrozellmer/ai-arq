@@ -16751,6 +16751,12 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                        ((extraction.metadata or {}).get("parede_espessa_pelas_faces") or {})}
                         except Exception:
                             _esp_ly = set()
+                        # 🩸 04/10 (E14): layers cujo metro é a grade de uma tabela desenhada
+                        try:
+                            _tab_ly = {str(_k).strip().upper() for _k in
+                                       ((extraction.metadata or {}).get("layers_grade_de_tabela") or {})}
+                        except Exception:
+                            _tab_ly = set()
                         # 🩸 30/09 (filhote evefe9af): as contagens das peças sem bloco
                         try:
                             _objetos_n = {int(_p.get("n") or 0) for _ps in
@@ -16996,6 +17002,13 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                 conf, obs_raw, _era_esp = _regra_espessa(
                                     conf, obs_raw, normalized_unit, _lys, _esp_ly)
                                 if _era_esp:
+                                    _rebaixado_pela_fonte = True
+                                # 🩸 04/10 (E14): metro que é a grade de uma tabela desenhada
+                                from engine_rules import (
+                                    selo_apos_grade_de_tabela as _regra_tabela)
+                                conf, obs_raw, _era_tab = _regra_tabela(
+                                    conf, obs_raw, normalized_unit, _lys, _tab_ly)
+                                if _era_tab:
                                     _rebaixado_pela_fonte = True
 
                                 # 🩸 29/09 (caso 18c57c3c): linha com quantidade ZERO

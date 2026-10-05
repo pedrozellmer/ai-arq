@@ -1254,9 +1254,11 @@ def layers_que_nao_provam(metadata) -> set:
     # 30/09 (H34): o tubo em face dupla — a soma é das duas paredes
     # 01/10 (H76): o layer de conexão cujo metro é o contorno das peças
     # 04/10 (E12): a parede de mais de 40 cm somada pelas duas faces
+    # 04/10 (E14): o layer cujo metro é a grade de uma tabela desenhada
     for k in ("layers_de_cota", "layers_de_borda", "tubos_em_face_dupla",
               "layers_contorno_de_peca", "layers_moldura_ou_limite",
-              "layers_esteira_por_travessa", "parede_espessa_pelas_faces"):
+              "layers_esteira_por_travessa", "parede_espessa_pelas_faces",
+              "layers_grade_de_tabela"):
         for ly in (md.get(k) or {}):
             out.add(str(ly).strip().upper())
     return out
@@ -5162,9 +5164,11 @@ MARCA_MOLDURA_OU_LIMITE = "⚠ MOLDURA OU LIMITE, NÃO REDE"
 MARCA_TRAVESSA_DE_ESTEIRA = "⚠ ROLETES/TRAVESSAS, NÃO COMPRIMENTO DA ESTEIRA"
 #: 🩸 04/10/2026 (E12) — ver `selo_apos_parede_espessa`.
 MARCA_PAREDE_ESPESSA = "⚠ PAREDE ESPESSA PELAS DUAS FACES"
+#: 🩸 04/10/2026 (E14) — ver `selo_apos_grade_de_tabela`.
+MARCA_GRADE_DE_TABELA = "⚠ GRADE DE TABELA, NÃO REDE"
 MARCAS_DE_REBAIXAMENTO = (MARCA_PECA_SEM_BLOCO, MARCA_LAYER_SEM_NOME, MARCA_TUBO_FACE_DUPLA,
                           MARCA_CONTORNO_DE_PECA, MARCA_MOLDURA_OU_LIMITE,
-                          MARCA_TRAVESSA_DE_ESTEIRA, MARCA_PAREDE_ESPESSA,
+                          MARCA_TRAVESSA_DE_ESTEIRA, MARCA_PAREDE_ESPESSA, MARCA_GRADE_DE_TABELA,
                           MARCA_PLANTA_REPETIDA, MARCA_LIDO_DE_TEXTO, MARCA_SOMA, MARCA_CARIMBO,
                           MARCA_MENOS_PAREDE, MARCA_UNIDADE_DE_CONTAGEM,
                           MARCA_EXTRACAO_COM_RESSALVA, MARCA_QUANTIDADE_RECUPERADA,
@@ -6045,6 +6049,32 @@ def selo_apos_parede_espessa(conf, obs, unit, layers_citados, layers_espessa):
             MARCA_PAREDE_ESPESSA + " ('%s') — há paredes de mais de 40 cm desenhadas pelas "
             "duas faces e a soma conta as DUAS: o comprimento das paredes é menor; confira "
             "pelo eixo. " % hit + str(obs or ""),
+            True)
+
+
+def selo_apos_grade_de_tabela(conf, obs, unit, layers_citados, layers_tabela):
+    """(conf, obs, rebaixou) — COMPRIMENTO de layer que é, em boa parte, a grade
+    de uma tabela desenhada (`dwg_extractor.layers_grade_de_tabela`) não sai
+    medido.
+
+    🩸 04/10/2026 (E14): "tubulação 1.285,22 ml ✓" (em dois jobs do mesmo
+    projeto) era, em 94–99 %, as linhas da tabela de SIMBOLOGIA desenhada no
+    layer da rede. SÓ REBAIXA e avisa: a rede de verdade que more no mesmo
+    layer não se separa com segurança. Área (m²) do layer não é tocada: o
+    quadro de áreas pode estar no layer de parede, e a hachura dele é medida.
+    """
+    if conf != "confirmado" or not layers_tabela:
+        return conf, obs, False
+    if not unidade_de_comprimento_na_trava(unit):
+        return conf, obs, False
+    # o leitor da observação OU o nome inteiro (ver `layer_marcado_citado`)
+    hit = layer_marcado_citado(obs, layers_citados, layers_tabela)
+    if not hit:
+        return conf, obs, False
+    return ("estimado",
+            MARCA_GRADE_DE_TABELA + " ('%s') — a maior parte desse comprimento são as linhas "
+            "de uma tabela desenhada (legenda, simbologia ou quadro): confira quanto é a rede "
+            "de verdade. " % hit + str(obs or ""),
             True)
 
 
