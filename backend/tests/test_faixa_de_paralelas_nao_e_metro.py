@@ -164,6 +164,26 @@ def test_a_copia_exata_conta_uma_vez():
 # ══════════════════════════════════════════════════════════════════════════
 #  2. O que NÃO marca
 # ══════════════════════════════════════════════════════════════════════════
+# 🩸 05/10 (revisão da Projetos): o FEIXE REAL em linha simples — ali a soma É a medida
+@pytest.mark.parametrize("n,comp,passo", [(6, 30.0, 0.15), (8, 40.0, 0.10), (5, 25.0, 0.20)],
+                         ids=["6-eletrodutos-15cm", "8-eletrodutos-10cm", "5-tubos-20cm"])
+def test_CONTROLE_feixe_real_em_linha_simples(n, comp, passo):
+    assert "EL-BANCO" not in _faixas(lambda m: _faixa(m, "EL-BANCO", 0.0, 0.0, comp, n, passo))
+
+
+def test_o_teto_de_passo_em_milimetro_real():
+    """O teto é em mm REAIS: 9 linhas a 60 unidades num desenho em mm (60 mm) ficam;
+    a 25 unidades (25 mm) marcam."""
+    assert "CALHA-Y" not in _faixas(lambda m: _faixa(m, "CALHA-Y", 0.0, 0.0, 30000.0, 9, 60.0), uf=0.001)
+    assert "CALHA-Y" in _faixas(lambda m: _faixa(m, "CALHA-Y", 0.0, 0.0, 30000.0, 9, 25.0), uf=0.001)
+
+
+def test_CUSTO_DOCUMENTADO_feixe_de_eletrodutos_encostados_marca():
+    """O limite que fica: 6 eletrodutos de Ø20 encostados (passo 25 mm) são,
+    na forma, o preenchimento da eletrocalha. Só rebaixa."""
+    assert "EL-BANCO" in _faixas(lambda m: _faixa(m, "EL-BANCO", 0.0, 0.0, 30.0, 6, 0.025))
+
+
 def test_CONTROLE_feixe_de_3_eletrodutos_no_mesmo_tracado():
     """3 eletrodutos lado a lado a 13 cm: ali a soma É a medida."""
     assert "ELE-T-X" not in _faixas(lambda m: _faixa(m, "ELE-T-X", 0.0, 0.0, 80.0, 3, 0.13))
@@ -178,6 +198,19 @@ def test_CONTROLE_brise_de_laminas_curtas():
     """10 lâminas de 1 m a 10 cm: largura 0,9 m (passa), mas o passo é 10 % da
     lâmina — é a peça (ali a soma das lâminas É a medida), não preenchimento."""
     assert "BRISE-X" not in _faixas(lambda m: _faixa(m, "BRISE-X", 0.0, 0.0, 1.0, 10, 0.10))
+
+
+def test_CONTROLE_grelha_de_laminas_curtas():
+    """10 lâminas de 50 cm a 30 mm (grelha de difusor): passo abaixo do teto e
+    largura 0,27 m, mas 6 % da lâmina — é a peça, não preenchimento de rota."""
+    assert "GRELHA-X" not in _faixas(lambda m: _faixa(m, "GRELHA-X", 0.0, 0.0, 0.5, 10, 0.03))
+
+
+@pytest.mark.parametrize("n,marca", [(40, True), (50, False)])
+def test_a_faixa_ate_1_m_de_largura(n, marca):
+    """Linhas de 30 m a 25 mm: 40 (0,98 m de largura) marcam; 50 (1,23 m, uma
+    hachura de área, não a rota de uma calha) não."""
+    assert ("CALHA-Z" in _faixas(lambda m: _faixa(m, "CALHA-Z", 0.0, 0.0, 30.0, n, 0.025))) is marca
 
 
 def test_a_corrente_curta_devolve_a_linha():
@@ -288,10 +321,17 @@ def test_CONTROLE_sem_faixa_o_relato_segue_como_era():
     assert r.count("JÁ pelo EIXO") == 2
 
 
+def _par_de_faces(m, layer, x0=400.0, y0=300.0, comp=50.0, sep=0.30):
+    """Um trecho de duto pelas 2 faces (30 cm): o par de faces do duto roda e
+    escreve o relato do layer (a faixa a 25 mm, sozinha, não pareia: < 5 cm)."""
+    for dy in (0.0, sep):
+        m.add_line((x0, y0 + dy), (x0 + comp, y0 + dy), dxfattribs={"layer": layer})
+
+
 def test_no_extract_o_relato_da_eletrocalha_em_faixa_nao_diz_eixo(tmp_path):
-    """Layer de eletrocalha em faixa a 60 mm (o par de faces do duto roda a
-    partir de 5 cm e escreve o relato): o relato não pode dizer eixo."""
-    ex = _ler(tmp_path, lambda m: (_rota(m, "ELE-ELETROCALHA", passo=0.06),
+    """Layer de eletrocalha em faixa (90 % do metro) com um trecho pelas 2 faces
+    (que escreve o relato): o relato não pode dizer eixo."""
+    ex = _ler(tmp_path, lambda m: (_rota(m, "ELE-ELETROCALHA"), _par_de_faces(m, "ELE-ELETROCALHA"),
                                    _rede(m, "REDE-OUTRA", n=12, comp=900.0)))
     assert "ELE-ELETROCALHA" in (ex.metadata.get("layers_em_faixa") or {})
     rel = " | ".join(str(ex.metadata.get(k) or "") for k in ("duto_linha_dupla", "parede_linha_dupla"))
@@ -306,7 +346,8 @@ def test_sem_a_leitura_por_folha_o_relato_cru_da_faixa_tambem_sai(tmp_path, monk
     reescrito mesmo assim, e o de outro duto fica cru."""
     monkeypatch.setenv("LEITURA_POR_FOLHA", "0")
     def d(m):
-        _rota(m, "ELE-ELETROCALHA", passo=0.06)
+        _rota(m, "ELE-ELETROCALHA")
+        _par_de_faces(m, "ELE-ELETROCALHA")
         for k in range(4):                                   # outro duto, pelas 2 faces (não faixa)
             m.add_line((300.0, 50.0 + k * 20.0), (340.0, 50.0 + k * 20.0), dxfattribs={"layer": "DUTO-AR"})
             m.add_line((300.0, 50.3 + k * 20.0), (340.0, 50.3 + k * 20.0), dxfattribs={"layer": "DUTO-AR"})

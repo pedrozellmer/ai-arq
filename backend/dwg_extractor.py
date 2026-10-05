@@ -2766,10 +2766,19 @@ def layers_grade_de_tabela(msp, walls, texts, unit_factor: float = 1.0) -> dict:
 #: 🪤 N = 5 é o menor que deixa de fora o feixe de 3 eletrodutos no mesmo
 #: traçado (ali a soma É a medida) e ainda pega a eletrocalha de 5 linhas. A
 #: corrente fica com ≥ 3 linhas (como foi medida) e só a de ≥ 5 conta.
-#: Medido no acervo: 8 layers / 7 jobs; os 3 elegíveis à chave são
+#: Medido no acervo: 7 layers / 6 jobs (com o teto de passo, abaixo); os 3 elegíveis à chave são
 #: preenchimento (símbolo em gota, retalho de hachura) — ✓ ali seria errado.
 #: 🪤 Escada e corrimão NÃO são isto: degrau tem passo de 24–34 cm (≫ 3 % do
 #: lance). Sem filtro de nome; anotação fica de fora.
+#: 🩸 05/10 (revisão da Projetos): o FEIXE REAL em linha simples — 6
+#: eletrodutos a 15 cm, 8 a 10 cm, 5 tubos a 20 cm — passava em tudo (passo
+#: pequeno pro comprimento, largura < 1 m) e marcava; ali a soma É a medida, e
+#: o aviso ainda mostrava o "eixo" de 30 m no lugar dos 180. O preenchimento
+#: medido no acervo tem passo de 2–4 mm (hachura, símbolo) e 25 mm (as
+#: eletrocalhas): teto de 50 mm. Sai junto a malha de perfil de terreno a 100
+#: mm (já fora da chave por ressalva de unidade; inócua). Limite que fica
+#: (teste CUSTO): feixe de eletrodutos encostados, passo ≤ 25 mm, não se separa
+#: do preenchimento.
 _FAIXA_ANG_TOL = 0.3          # graus
 _FAIXA_GAP_MAX = 0.25         # a vizinha lateral a ≤ 0,25 L
 _FAIXA_DUP = 1e-4             # mais perto que 1e-4 L é colinear, não vizinha
@@ -2781,6 +2790,7 @@ _FAIXA_CORRENTE_MIN = 3       # a corrente fica (as linhas não voltam pra outra
 _FAIXA_MIN_LINHAS = 5         # ...mas só a faixa de ≥ 5 linhas conta
 _FAIXA_PASSO_MAX = 0.03       # passo ≤ 3 % do comprimento da faixa
 _FAIXA_LARGURA_MAX = 1.0      # (n − 1)·passo ≤ 1,0 m
+_FAIXA_PASSO_MAX_MM = 50.0    # passo ≤ 50 mm: acima disso é feixe de rede, não preenchimento
 _FAIXA_FRACAO = 0.6           # ≥ 60 % do metro do layer em faixas
 
 
@@ -2901,7 +2911,7 @@ def layers_em_faixa_de_paralelas(msp, walls, unit_factor: float = 1.0) -> dict:
                     for x in cad[1:]:          # a corrente curta devolve as linhas
                         usado[x] = False
         boas = [f for f in faixas if f[0] >= _FAIXA_MIN_LINHAS and f[1] <= _FAIXA_PASSO_MAX * f[2]
-                and (f[0] - 1) * f[1] * uf <= _FAIXA_LARGURA_MAX]
+                and (f[0] - 1) * f[1] * uf <= _FAIXA_LARGURA_MAX and f[1] * uf * 1000.0 <= _FAIXA_PASSO_MAX_MM]
         f = sum(b[3] for b in boas) / tot_du
         if f < _FAIXA_FRACAO:
             continue
