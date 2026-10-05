@@ -5820,12 +5820,7 @@ def selo_apos_tubo_em_face_dupla(conf, obs, unit, layers_citados, layers_face_du
     aprovou. SÓ REBAIXA e avisa: não divide por 2 — num feixe de tubos lado a
     lado não dá pra saber, trecho a trecho, qual linha é a parede de qual tubo.
     """
-    if conf != "confirmado" or not layers_face_dupla:
-        return conf, obs, False
-    if str(unit or "").strip().lower() not in _PROVA_POR_UNIDADE:
-        return conf, obs, False
-    fd = {str(x).strip().upper() for x in layers_face_dupla}
-    hit = next((str(ly) for ly in (layers_citados or ()) if str(ly).strip().upper() in fd), "")
+    hit = _marcado_na_linha(conf, obs, unit, layers_citados, layers_face_dupla)
     if not hit:
         return conf, obs, False
     return ("estimado",
@@ -5843,12 +5838,7 @@ def selo_apos_contorno_de_peca(conf, obs, unit, layers_citados, layers_contorno)
     conduletes de 0,38 m de contorno cada, também contados em un. SÓ REBAIXA e
     avisa — a quantidade de peça é a contagem, que já existe em outra linha.
     """
-    if conf != "confirmado" or not layers_contorno:
-        return conf, obs, False
-    if str(unit or "").strip().lower() not in _PROVA_POR_UNIDADE:
-        return conf, obs, False
-    ct = {str(x).strip().upper() for x in layers_contorno}
-    hit = next((str(ly) for ly in (layers_citados or ()) if str(ly).strip().upper() in ct), "")
+    hit = _marcado_na_linha(conf, obs, unit, layers_citados, layers_contorno)
     if not hit:
         return conf, obs, False
     return ("estimado",
@@ -5866,12 +5856,7 @@ def selo_apos_moldura_ou_limite(conf, obs, unit, layers_citados, layers_moldura)
     lados do limite da obra repetido. SÓ REBAIXA e avisa — a rede de verdade
     que mora no mesmo layer não se separa trecho a trecho com segurança.
     """
-    if conf != "confirmado" or not layers_moldura:
-        return conf, obs, False
-    if str(unit or "").strip().lower() not in _PROVA_POR_UNIDADE:
-        return conf, obs, False
-    ml = {str(x).strip().upper() for x in layers_moldura}
-    hit = next((str(ly) for ly in (layers_citados or ()) if str(ly).strip().upper() in ml), "")
+    hit = _marcado_na_linha(conf, obs, unit, layers_citados, layers_moldura)
     if not hit:
         return conf, obs, False
     return ("estimado",
@@ -5892,12 +5877,7 @@ def selo_apos_travessa_de_esteira(conf, obs, unit, layers_citados, layers_esteir
     veio da IA citando o comprimento do layer. SÓ REBAIXA e avisa: o
     comprimento de verdade (bordas ou eixo) não se separa com segurança.
     """
-    if conf != "confirmado" or not layers_esteira:
-        return conf, obs, False
-    if str(unit or "").strip().lower() not in _PROVA_POR_UNIDADE:
-        return conf, obs, False
-    es = {str(x).strip().upper() for x in layers_esteira}
-    hit = next((str(ly) for ly in (layers_citados or ()) if str(ly).strip().upper() in es), "")
+    hit = _marcado_na_linha(conf, obs, unit, layers_citados, layers_esteira)
     if not hit:
         return conf, obs, False
     return ("estimado",
@@ -5919,26 +5899,63 @@ def unidade_de_comprimento_na_trava(unit) -> bool:
     grafias soltas ("m.l", "mt", "metro linear", "m lin", "lm"), sem caixa,
     espaço a mais nem ponto no fim."""
     u = " ".join(str(unit or "").split()).lower()
-    if _PROVA_POR_UNIDADE.get(u) == "comprimento" or grandeza_da_unidade(u) == "comprimento":
-        return True
-    return u in _COMPRIMENTO_SO_NA_TRAVA or u.rstrip(".") in _COMPRIMENTO_SO_NA_TRAVA
+    # 🩸 04/10 (verificação do e8fb03c): "m." e "ml." escapavam — o ponto no
+    # fim só era tirado pra lista solta, não pras duas tabelas
+    for v in (u, u.rstrip(".")):
+        if _PROVA_POR_UNIDADE.get(v) == "comprimento" or grandeza_da_unidade(v) == "comprimento":
+            return True
+        if v in _COMPRIMENTO_SO_NA_TRAVA:
+            return True
+    return False
 
 
 #: nome de layer feito SÓ de letras (e espaço): "FOLHA", "Alvenaria", "Margem Externa"
 _RE_NOME_SO_LETRAS = _re.compile(r"^[^\W\d_]+(?:\s+[^\W\d_]+)*$")
-_ASPA = "['\"“”‘’`]"
+
+
+#: o que abre o nome depois de "layer": aspas, parêntese, aspas angulares
+_ABRE_NOME = "['\"“”‘’`(«]"
+_RE_PALAVRA_LAYER = _re.compile(r"(?i)\b(?:layers?|camadas?)\b")
+_RE_SEPARADOR_DE_LISTA = _re.compile(r"\s*(?:,|/|\+|\be\b)\s*")
+#: onde a lista de layers depois de "layers" acaba: '=', ';', '.', ':' ou número
+_RE_FIM_DA_LISTA = _re.compile(r"[=;\n]|\.\s|\s\d|:\s*\d")
+_TIRA_DO_ITEM = " :'\"“”‘’`()«»"
 
 
 def _citado_como_layer(nome, obs) -> bool:
-    """O nome aparece onde a observação CITA um layer: logo depois de "layer"/
-    "camada" (com ou sem aspas) ou entre aspas."""
+    """O nome (só de letras) aparece onde a observação CITA um layer:
+    - logo depois de "layer"/"camada" — com ':' ou '=', aspas, '(' ou '«'
+      opcionais, ou "layer de <palavra> NOME" ("layer de parede ALVENARIA");
+    - como item da LISTA depois de "layers"/"camadas" ("layers PAREDE e
+      ALVENARIA", "Layers: ALVENARIA, FOLHA", "layers PAREDE/ALVENARIA");
+    - seguido de "(layer)";
+    - seguido de "= número" ou ": número" ("Fonte: ALVENARIA = 120 m").
+    🩸 04/10 (medido nas observações da produção): aspas soltas NÃO bastam
+    ("pontos em posição 'Parede'"), nem a caixa alta ("S ABERTURA NA
+    ALVENARIA", "AS PAREDES ONDE…" vêm de texto do desenho citado)."""
     palavras = str(nome or "").split()
     if not palavras:
         return False
     n = r"\s+".join(_re.escape(p) for p in palavras)
-    return bool(_re.search(
-        r"(?i)(?:\blayers?\b|\bcamadas?\b)\s*[:=]?\s*" + _ASPA + r"?\s*" + n + r"(?![\w-])"
-        r"|" + _ASPA + r"\s*" + n + r"\s*" + _ASPA, str(obs or "")))
+    texto = str(obs or "")
+    if _re.search(
+            r"(?i)(?:\blayers?\b|\bcamadas?\b)\s*(?:de\s+[^\W\d_]+\s+)?[:=]?\s*" + _ABRE_NOME + r"?\s*"
+            + n + r"(?![\w-])"
+            r"|(?<![\w-])" + n + r"\s*\(\s*(?:layer|camada)\s*\)"
+            r"|(?<![\w-])" + n + r"\s*" + _ABRE_NOME.replace("(", ")").replace("«", "»")
+            + r"?\s*[=:]\s*\d", texto):
+        return True
+    alvo = " ".join(palavras)
+    for m in _RE_PALAVRA_LAYER.finditer(texto):
+        lista = _RE_FIM_DA_LISTA.split(texto[m.end():], 1)[0]
+        itens = [" ".join(i.strip(_TIRA_DO_ITEM).split()) for i in _RE_SEPARADOR_DE_LISTA.split(lista)]
+        itens = [i for i in itens if i]
+        if not itens:
+            continue
+        # o último item pode trazer o verbo junto ("layers PAREDE e ALVENARIA somam")
+        if alvo in itens[:-1] or itens[-1] == alvo or itens[-1].startswith(alvo + " "):
+            return True
+    return False
 
 
 def layer_marcado_citado(obs, layers_citados, marcados) -> str:
@@ -5952,8 +5969,9 @@ def layer_marcado_citado(obs, layers_citados, marcados) -> str:
     - nome com hífen, sublinhado, ponto, '$' ou dígito: em qualquer lugar, com
       borda (`_rotulo_citado`, a régua da chave do selo: "A-WALL" não vale
       dentro de "A-WALL-PATT");
-    - nome SÓ de letras: só onde a observação CITA layer (depois de "layer"/
-      "camada" ou entre aspas). 🩸 Medido em linhas ✓ reais: o layer marcado
+    - nome SÓ de letras: só onde a observação CITA layer (`_citado_como_layer`:
+      depois de "layer"/"camada", item da lista de layers, "(layer)", "= número";
+      aspas soltas NÃO bastam). 🩸 Medido em linhas ✓ reais: o layer marcado
       "FOLHA" casava "conforme folha ELE-000" e derrubava 5 linhas de OUTROS
       layers; "Alvenaria" marcado faria o mesmo com qualquer "alvenaria".
     Quem usa isto só REBAIXA."""
@@ -5975,6 +5993,38 @@ def layer_marcado_citado(obs, layers_citados, marcados) -> str:
     return ""
 
 
+def _grandeza_do_selo(unit):
+    """'comprimento' / 'area' / … pra uma trava que só REBAIXA: metro em
+    qualquer grafia (`unidade_de_comprimento_na_trava`), e o resto pela tabela
+    da chave (m², m2, m^2) ou pela de grandeza (m2.)."""
+    if unidade_de_comprimento_na_trava(unit):
+        return "comprimento"
+    u = " ".join(str(unit or "").split()).lower()
+    return _PROVA_POR_UNIDADE.get(u) or grandeza_da_unidade(u)
+
+
+def _marcado_na_linha(conf, obs, unit, layers_citados, marcados,
+                      grandezas=("comprimento", "area")) -> str:
+    """A porta comum das travas por layer marcado — tubo/eletroduto em face
+    dupla (H34/H75), contorno de peça (H76), moldura ou limite (H79), rolete/
+    travessa de esteira (H88), parede grossa pelas faces (E12): a linha
+    CONFIRMADA, na grandeza da trava, que cita um layer marcado → o layer
+    ('' = a trava não age).
+
+    🩸 04/10/2026 (revisão do E12, medido no acervo): cada trava achava o
+    layer só pelo leitor da observação, que corta o nome com espaço, acento,
+    ponto, '$' ou '-' no começo — 53 layers do H79 em 15 jobs ("BORDAS
+    ESPESSAS", "Margem Externa", "…$0$…"), 2 do H76, 13 dos 47 do E12 — e só
+    conhecia m/ml/m.l. Agora o nome inteiro (`layer_marcado_citado`) e o metro
+    em qualquer grafia. Cada trava mantém a grandeza que tinha: as irmãs
+    antigas, metro e m²; o E12, só metro."""
+    if conf != "confirmado" or not marcados:
+        return ""
+    if _grandeza_do_selo(unit) not in grandezas:
+        return ""
+    return layer_marcado_citado(obs, layers_citados, marcados)
+
+
 def selo_apos_parede_espessa(conf, obs, unit, layers_citados, layers_espessa):
     """(conf, obs, rebaixou) — COMPRIMENTO de layer de parede em que paredes de
     mais de 40 cm somam as duas faces (`dwg_extractor.parede_espessa_na_soma`)
@@ -5987,12 +6037,8 @@ def selo_apos_parede_espessa(conf, obs, unit, layers_citados, layers_espessa):
     única com um vão no meio). Área (m²) do layer não é tocada: a hachura da
     parede não conta face.
     """
-    if conf != "confirmado" or not layers_espessa:
-        return conf, obs, False
-    if not unidade_de_comprimento_na_trava(unit):
-        return conf, obs, False
-    # o leitor da observação OU o nome inteiro (ver `layer_marcado_citado`)
-    hit = layer_marcado_citado(obs, layers_citados, layers_espessa)
+    # só COMPRIMENTO (a hachura da parede não conta face)
+    hit = _marcado_na_linha(conf, obs, unit, layers_citados, layers_espessa, ("comprimento",))
     if not hit:
         return conf, obs, False
     return ("estimado",
