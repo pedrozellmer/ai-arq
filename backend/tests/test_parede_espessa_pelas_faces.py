@@ -400,6 +400,35 @@ def test_CONTROLE_a_procura_direta_nao_pega_outro_layer_nem_outra_grandeza(marca
     assert not reb and conf == "confirmado", (marcado, obs)
 
 
+# 🩸 04/10 (medido em linhas ✓ reais): o layer marcado cujo nome é uma PALAVRA
+# ("FOLHA", "Alvenaria") casava a palavra solta na observação e derrubava linhas
+# de OUTROS layers. Nome só de letras vale só onde a observação cita layer.
+@pytest.mark.parametrize("marcado,obs", [
+    ("FOLHA", "Fonte: comprimento total do layer 'ELE-T-APARENTE' = 26,68 m. Bitola conforme folha ELE-000."),
+    ("Alvenaria", "Fonte: layer 'PINTURA-EXT' = 120,00 m; paredes de alvenaria rebocadas."),
+    ("Margem Externa", "Fonte: layer 'MURO' = 40 m, na margem externa do lote."),
+])
+def test_CONTROLE_nome_que_e_palavra_solta_no_texto_fica(marcado, obs):
+    from main import _layers_da_obs
+    conf, _o, reb = er.selo_apos_parede_espessa("confirmado", obs, "ml", _layers_da_obs(obs), {marcado.upper()})
+    assert not reb and conf == "confirmado", (marcado, obs)
+
+
+@pytest.mark.parametrize("marcado,obs", [
+    ("Alvenaria", "Fonte: comprimento do layer 'Alvenaria' = 3.029,80 m."),
+    ("Alvenaria", "Fonte: comprimento do layer ALVENARIA = 3.029,80 m."),
+    ("ALVENARIA", "Fonte: comprimento do layer 'alvenária' = 3.029,80 m."),        # caixa e acento
+    ("Alvenaria", "Fonte: comprimento de 'ALVENARIA' = 3.029,80 m."),              # entre aspas, sem "layer"
+    ("Alvenaria", "Fonte: camada Alvenaria = 3.029,80 m."),
+    ("Margem Externa", "Fonte: layer 'Margem  Externa' = 40 m."),                  # espaço duplo
+    ("ARQ-DIVISÓRIA", "Fonte: comprimento do ARQ-DIVISORIA = 146,0 m."),           # sem o acento
+])
+def test_o_nome_citado_como_layer_cai(marcado, obs):
+    from main import _layers_da_obs
+    conf, _o, reb = er.selo_apos_parede_espessa("confirmado", obs, "ml", _layers_da_obs(obs), {marcado.upper()})
+    assert reb and conf == "estimado", (marcado, obs)
+
+
 def test_o_laco_de_producao_rebaixa_o_layer_com_espaco_no_nome():
     from test_medicao_estava_na_observacao import _laco_de_itens_de_producao
     item = {"item_num": "1", "description": "Parede de alvenaria",

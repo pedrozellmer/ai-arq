@@ -5907,6 +5907,57 @@ def selo_apos_travessa_de_esteira(conf, obs, unit, layers_citados, layers_esteir
             True)
 
 
+#: nome de layer feito SÓ de letras (e espaço): "FOLHA", "Alvenaria", "Margem Externa"
+_RE_NOME_SO_LETRAS = _re.compile(r"^[^\W\d_]+(?:\s+[^\W\d_]+)*$")
+_ASPA = "['\"“”‘’`]"
+
+
+def _citado_como_layer(nome, obs) -> bool:
+    """O nome aparece onde a observação CITA um layer: logo depois de "layer"/
+    "camada" (com ou sem aspas) ou entre aspas."""
+    palavras = str(nome or "").split()
+    if not palavras:
+        return False
+    n = r"\s+".join(_re.escape(p) for p in palavras)
+    return bool(_re.search(
+        r"(?i)(?:\blayers?\b|\bcamadas?\b)\s*[:=]?\s*" + _ASPA + r"?\s*" + n + r"(?![\w-])"
+        r"|" + _ASPA + r"\s*" + n + r"\s*" + _ASPA, str(obs or "")))
+
+
+def layer_marcado_citado(obs, layers_citados, marcados) -> str:
+    """O layer MARCADO que a observação da linha cita ('' se nenhum).
+
+    🩸 04/10/2026 (revisão do E12, medido no acervo): o leitor de layers da
+    observação (`main._layers_da_obs`) corta o nome com espaço, acento, ponto,
+    '$' ou que começa com '-' ("ARQ_PAREDE EQUIPAMENTOS" → "ARQ_PAREDE") e não
+    vê a observação sem a palavra "layer". Se ele não achar o layer marcado,
+    procura cada layer marcado no texto, o nome mais longo primeiro:
+    - nome com hífen, sublinhado, ponto, '$' ou dígito: em qualquer lugar, com
+      borda (`_rotulo_citado`, a régua da chave do selo: "A-WALL" não vale
+      dentro de "A-WALL-PATT");
+    - nome SÓ de letras: só onde a observação CITA layer (depois de "layer"/
+      "camada" ou entre aspas). 🩸 Medido em linhas ✓ reais: o layer marcado
+      "FOLHA" casava "conforme folha ELE-000" e derrubava 5 linhas de OUTROS
+      layers; "Alvenaria" marcado faria o mesmo com qualquer "alvenaria".
+    Quem usa isto só REBAIXA."""
+    mk = {str(x).strip().upper() for x in (marcados or ())}
+    if not mk:
+        return ""
+    hit = next((str(ly) for ly in (layers_citados or ()) if str(ly).strip().upper() in mk), "")
+    if hit:
+        return hit
+    # caixa e acento não importam: "layer 'alvenária'" cita o layer "ALVENARIA"
+    texto = _minusculo_sem_acento(str(obs or ""))
+    for ly in sorted(marcados, key=lambda s: -len(str(s))):
+        nome = _minusculo_sem_acento(str(ly).strip())
+        if _RE_NOME_SO_LETRAS.match(nome):
+            if _citado_como_layer(nome, texto):
+                return str(ly)
+        elif _rotulo_citado(nome, texto):
+            return str(ly)
+    return ""
+
+
 def selo_apos_parede_espessa(conf, obs, unit, layers_citados, layers_espessa):
     """(conf, obs, rebaixou) — COMPRIMENTO de layer de parede em que paredes de
     mais de 40 cm somam as duas faces (`dwg_extractor.parede_espessa_na_soma`)
@@ -5925,16 +5976,8 @@ def selo_apos_parede_espessa(conf, obs, unit, layers_citados, layers_espessa):
     u = str(unit or "").strip().lower()
     if _PROVA_POR_UNIDADE.get(u) != "comprimento" and grandeza_da_unidade(u) != "comprimento":
         return conf, obs, False
-    es = {str(x).strip().upper() for x in layers_espessa}
-    hit = next((str(ly) for ly in (layers_citados or ()) if str(ly).strip().upper() in es), "")
-    if not hit:
-        # 🩸 04/10 (revisão da Projetos): o nome com espaço, acento, ponto, '$'
-        # ou que começa com '-' — e a observação sem a palavra "layer" — o
-        # leitor de layers da observação corta ou não vê (13 dos 47 marcados no
-        # acervo). Procura cada layer marcado DIRETO no texto, com a régua da
-        # chave do selo (`_rotulo_citado`, com borda). Só pra rebaixar.
-        hit = next((str(ly) for ly in sorted(layers_espessa, key=lambda s: -len(str(s)))
-                    if _rotulo_citado(ly, obs)), "")
+    # o leitor da observação OU o nome inteiro (ver `layer_marcado_citado`)
+    hit = layer_marcado_citado(obs, layers_citados, layers_espessa)
     if not hit:
         return conf, obs, False
     return ("estimado",
