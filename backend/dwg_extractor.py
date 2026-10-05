@@ -2476,6 +2476,28 @@ def layers_esteira_por_travessa(msp, walls, unit_factor: float = 1.0) -> dict:
 #: área da hachura do layer não é tocada.
 #: 🪤 A fração é PISO: célula de linha dupla e retângulo solto com folga não são
 #: lidos (um layer que é todo tabela, de células assim, mede 26 %).
+#: 🩸 05/10 (revisão da Projetos): a REDE EM ESCADA tem a forma da tabela —
+#: ramais paralelos de mesmo vão fechados pelos sub-gerais, um rótulo por ramal
+#: — e a palavra do cabeçalho aparecia em QUALQUER lugar da caixa ("SALA DE
+#: QUADROS", "VER NOTA 3", "QUADRO DE ALARME" logo acima): marcava 84 % de uma
+#: grade de sprinkler. Medido nas 510 caixas dos 103 layers marcados:
+#:   • a LETRA da tabela ocupa a linha: altura mediana dos textos ÷ passo
+#:     mediano das linhas ≥ 0,138 nas 13 tabelas elegíveis; o rótulo de rede é
+#:     0,1–0,3 m pra 1,5–3 m de ramal (0,07–0,17);
+#:   • o CABEÇALHO fica na faixa de cima (da penúltima linha até a folga acima
+#:     do topo) — menos na tabela COMPOSTA (seções empilhadas, cabeçalho de
+#:     seção no meio), que tem ≥ 3 textos por faixa (8,9) contra ~1 rótulo por
+#:     ramal na rede.
+#: Com as duas: 88 dos 103 seguem marcados, os 13 elegíveis todos. Saem 7
+#: tabelas de aço de poucas linhas desenhadas (letra 0,04–0,10 do passo; todas
+#: já fora da chave por ressalva de unidade ou layer sem nome), molduras de
+#: folha com notas e um layer de quadros elétricos.
+#: 🪤 Limite que fica: eletrocalhas paralelas a ≤ 2,5 m, fechadas nas pontas,
+#: cada uma com um rótulo diferente e a palavra logo acima (teste CUSTO).
+#: "Textos distintos" pegaria a de rótulo repetido, mas derruba quadro de
+#: cargas e tabela de especificação reais (números repetidos) — medido, fora.
+_TABELA_LETRA_MIN = 0.10      # altura da letra ÷ passo das linhas
+_TABELA_TEXTO_DENSO = 3.0     # textos por faixa da tabela composta (cabeçalho no meio)
 _TABELA_MIN_LINHAS = 5        # horizontais de mesmo vão
 _TABELA_ESPACO_MIN = 0.02     # menor espaçamento ≥ 2 % do vão (o par de faces da parede não)
 _TABELA_PONTA_TOL = 0.01      # mesmo vão / borda na ponta: a ≤ 1 % do vão
@@ -2554,7 +2576,8 @@ def layers_grade_de_tabela(msp, walls, texts, unit_factor: float = 1.0) -> dict:
     txt = []
     for t in texts or ():
         try:
-            txt.append((float(t.position[0]), float(t.position[1]), str(getattr(t, "text", "") or "")))
+            txt.append((float(t.position[0]), float(t.position[1]), str(getattr(t, "text", "") or ""),
+                        float(getattr(t, "height", 0) or 0)))
         except Exception:
             continue
     txt.sort()
@@ -2618,12 +2641,24 @@ def layers_grade_de_tabela(msp, walls, texts, unit_factor: float = 1.0) -> dict:
                 return None
             y0, y1 = yy[0], yy[-1]
             folga = max((y1 - y0) / (n - 1), 0.3 * (y1 - y0))
-            dentro = [txt[i][2] for i in range(bisect_left(txs, x0), bisect_right(txs, x1))
+            dentro = [txt[i] for i in range(bisect_left(txs, x0), bisect_right(txs, x1))
                       if y0 <= txt[i][1] <= y1 + folga]
             if len(dentro) < max(2, (n - 1) / 2.0):
                 return None
-            cab = sorted({w for s in dentro for w in _RE_CABECALHO_DE_TABELA.findall(s.lower())})
-            return (x0, x1, y0, y1, cab) if cab else None
+            # a letra ocupa a linha (o rótulo de rede é pequeno pro passo dos ramais)
+            alturas = [h for _x, _y, _s, h in dentro if h > 0]
+            passo = statistics.median(b - a for a, b in zip(yy, yy[1:]))
+            if not alturas or statistics.median(alturas) < _TABELA_LETRA_MIN * passo:
+                return None
+            cab, em_cima = set(), False
+            for _x, y, s, _h in dentro:
+                ws = _RE_CABECALHO_DE_TABELA.findall(s.lower())
+                cab.update(ws)
+                em_cima = em_cima or (bool(ws) and y >= yy[-2])
+            # o cabeçalho na faixa de cima — ou a tabela composta, densa de texto
+            if not cab or not (em_cima or len(dentro) >= _TABELA_TEXTO_DENSO * (n - 1)):
+                return None
+            return (x0, x1, y0, y1, sorted(cab))
 
         def _caixas(hh):
             grupos: dict = {}

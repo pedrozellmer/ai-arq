@@ -102,7 +102,8 @@ def _grade(desenha, uf=1.0):
         for a, b in _lados(e):
             tot[e.dxf.layer] = tot.get(e.dxf.layer, 0.0) + ((b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2) ** 0.5 * uf
     walls = [dx.WallSegment(layer=ly, length=v) for ly, v in tot.items()]
-    texts = [dx.TextAnnotation(layer=t.dxf.layer, text=t.dxf.text, position=(t.dxf.insert[0], t.dxf.insert[1]))
+    texts = [dx.TextAnnotation(layer=t.dxf.layer, text=t.dxf.text, position=(t.dxf.insert[0], t.dxf.insert[1]),
+                               height=t.dxf.height)
              for t in m.query("TEXT")]
     return dx.layers_grade_de_tabela(m, walls, texts, uf)
 
@@ -260,6 +261,127 @@ def test_CONTROLE_sem_cabecalho():
 
 def test_CONTROLE_sem_texto_por_linha():
     assert "TAB-X" not in _grade(lambda m: _tabela(m, "TAB-X", textos=False))
+
+
+# ── 🩸 05/10 (revisão da Projetos): a REDE EM ESCADA com a palavra do cabeçalho ──
+def _escada(m, layer, n, vao, passo, rotulos, h, extra=(), h_extra=0.3):
+    """Ramais paralelos de mesmo vão fechados pelos sub-gerais nas pontas, a
+    alimentação chegando de fora, `rotulos` (texto, dx) em cada ramal e os
+    textos `extra` ((texto, (x, y)))."""
+    at = {"layer": layer}
+    for i in range(n):
+        m.add_line((0.0, i * passo), (vao, i * passo), dxfattribs=at)
+    for x in (0.0, vao):
+        m.add_line((x, 0.0), (x, (n - 1) * passo), dxfattribs=at)
+    m.add_line((-50.0, -20.0), (0.0, 0.0), dxfattribs=at)
+    for i in range(n - 1):
+        for s, dx_ in rotulos:
+            m.add_text(s, dxfattribs={"layer": "TXT", "height": h, "insert": (dx_, i * passo + 0.2)})
+    for s, p in extra:
+        m.add_text(s, dxfattribs={"layer": "ARQ-TXT", "height": h_extra, "insert": p})
+
+
+_SPK = dict(n=8, vao=30.0, passo=3.0, rotulos=[("DN25", 15.0)], h=0.2)
+_SPK3 = dict(_SPK, rotulos=[("DN25", 15.0), ("L=30,00", 3.0), ("i=1%", 25.0)])
+_CALHA = dict(n=6, vao=40.0, passo=1.5, rotulos=[("ELETROCALHA 200x100", 20.0)], h=0.25)
+
+
+@pytest.mark.parametrize("rede,extra", [
+    (_SPK, [("SALA DE QUADROS", (10.0, 10.0))]),           # a palavra no meio (nome de sala)
+    (_SPK, [("VER NOTA 3", (10.0, 10.0))]),
+    (_SPK, [("QUADRO DE ALARME", (12.0, 22.0))]),          # logo ACIMA: a letra pequena pro passo segura
+    (_SPK3, [("VER NOTA 3", (10.0, 10.0))]),               # 3 rótulos por ramal: a letra segura
+    (_SPK3, [("QUADRO DE ALARME", (12.0, 22.0))]),
+    (_CALHA, [("QUADRO QD-1", (20.0, 3.0))]),              # letra grande pro passo: a palavra no meio segura
+], ids=["sala", "nota", "quadro-acima", "3-rotulos-nota", "3-rotulos-quadro-acima", "eletrocalha-quadro"])
+def test_CONTROLE_rede_em_escada_com_a_palavra_do_cabecalho(rede, extra):
+    tab = _grade(lambda m: _escada(m, "SPK-REDE", extra=extra, **rede))
+    assert "SPK-REDE" not in tab, tab
+
+
+def test_CONTROLE_rede_em_escada_sem_palavra():
+    assert "SPK-REDE" not in _grade(lambda m: _escada(m, "SPK-REDE", **_SPK))
+
+
+def test_CUSTO_DOCUMENTADO_eletrocalhas_com_a_palavra_logo_acima_marcam():
+    """O limite medido que fica: eletrocalhas paralelas a 1,5 m fechadas nas
+    pontas, rótulo de 0,25 m (letra ≥ 10 % do passo) e "QUADRO" logo acima do
+    topo — a forma, a letra e o cabeçalho de uma tabela. Só rebaixa."""
+    tab = _grade(lambda m: _escada(m, "SPK-REDE", extra=[("QUADRO QD-1", (20.0, 8.0))], **_CALHA))
+    assert "SPK-REDE" in tab, tab
+
+
+def test_a_tabela_composta_com_o_cabecalho_de_secao_no_meio_marca():
+    """Seções empilhadas (informações / classificação / legenda): os títulos de
+    seção ficam NO MEIO da caixa, mas a tabela é densa de texto (≥ 3 por faixa)."""
+    def d(m):
+        ys = _tabela(m, "TAB-X", linhas=9, passo=2.0, cab=None, textos=False)
+        for k, (ya, yb) in enumerate(zip(ys, ys[1:])):
+            for j, xf in enumerate((0.02, 0.2, 0.5, 0.8)):
+                s = ("LEGENDA" if (k, j) == (4, 0) else "CLASSIFICAÇÃO" if (k, j) == (2, 0) else "x%d-%d" % (k, j))
+                m.add_text(s, dxfattribs={"layer": "TXT", "height": 0.35, "insert": (xf * 97.5, (ya + yb) / 2.0)})
+    tab = _grade(d)
+    assert "TAB-X" in tab, tab
+
+
+def test_o_cabecalho_de_coluna_dentro_da_primeira_linha_marca():
+    """ITEM / DESCRIÇÃO / QUANT. escritos DENTRO da faixa de cima (entre a
+    penúltima e a última linha), sem título acima: é a faixa de cima."""
+    def d(m):
+        ys = _tabela(m, "TAB-X", cab=None)
+        for s, xf in (("ITEM", 0.02), ("DESCRIÇÃO", 0.2), ("QUANT.", 0.7)):
+            m.add_text(s, dxfattribs={"layer": "TXT", "height": 1.5, "insert": (xf * 97.5, ys[-2] + 1.5)})
+    assert "TAB-X" in _grade(d)
+
+
+def test_CONTROLE_grade_densa_de_texto_sem_palavra_de_cabecalho():
+    """Elevação de rack: 8 portas numeradas por fileira, letra grande pro passo,
+    denso de texto — mas nenhuma palavra de cabeçalho: não é tabela."""
+    def d(m):
+        ys = _tabela(m, "RACK-X", linhas=7, passo=2.0, cab=None, textos=False)
+        for k, (ya, yb) in enumerate(zip(ys, ys[1:])):
+            for j in range(8):
+                m.add_text("%02d" % (8 * k + j + 1), dxfattribs={"layer": "TXT", "height": 0.5,
+                                                                 "insert": (5.0 + 11.0 * j, (ya + yb) / 2.0)})
+    assert "RACK-X" not in _grade(d)
+
+
+def test_CONTROLE_cabecalho_no_meio_numa_caixa_rala_de_texto():
+    """A mesma caixa com UM texto por faixa e a palavra no meio: não é tabela."""
+    def d(m):
+        ys = _tabela(m, "TAB-X", linhas=9, passo=2.0, cab=None, textos=False)
+        for k, (ya, yb) in enumerate(zip(ys, ys[1:])):
+            m.add_text("LEGENDA" if k == 4 else "x%d" % k,
+                       dxfattribs={"layer": "TXT", "height": 0.35, "insert": (2.0, (ya + yb) / 2.0)})
+    assert "TAB-X" not in _grade(d)
+
+
+@pytest.mark.parametrize("h,marca", [(0.05, False), (0.3, True)])
+def test_a_letra_pequena_pro_passo_nao_e_tabela(h, marca):
+    """A mesma grade com o cabeçalho em cima: letra de 5 % do passo é rótulo de
+    planta (fica); de 30 %, é tabela (marca)."""
+    def d(m):
+        ys = _tabela(m, "TAB-X", textos=False, cab=None)
+        for ya, yb in zip(ys, ys[1:]):
+            m.add_text("Ø 25 mm", dxfattribs={"layer": "TXT", "height": h * 4.93,
+                                              "insert": (2.0, (ya + yb) / 2.0)})
+        m.add_text("SIMBOLOGIA", dxfattribs={"layer": "TXT", "height": h * 4.93, "insert": (30.0, ys[-1] + 1.5)})
+    assert ("TAB-X" in _grade(d)) is marca
+
+
+def test_CONTROLE_texto_sem_altura_nao_prova_a_tabela():
+    def d(m):
+        _tabela(m, "TAB-X")
+    doc = ezdxf.new("R2018")
+    m = doc.modelspace()
+    d(m)
+    walls = [dx.WallSegment(layer="TAB-X", length=1269.7)]
+    sem = [dx.TextAnnotation(layer="T", text=t.dxf.text, position=(t.dxf.insert[0], t.dxf.insert[1]), height=0)
+           for t in m.query("TEXT")]
+    com = [dx.TextAnnotation(layer="T", text=t.dxf.text, position=(t.dxf.insert[0], t.dxf.insert[1]),
+                             height=t.dxf.height) for t in m.query("TEXT")]
+    assert "TAB-X" not in dx.layers_grade_de_tabela(m, walls, sem, 1.0)
+    assert "TAB-X" in dx.layers_grade_de_tabela(m, walls, com, 1.0)
 
 
 def test_CONTROLE_escada_com_cota_por_degrau():
