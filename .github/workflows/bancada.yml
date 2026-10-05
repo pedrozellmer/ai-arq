@@ -216,7 +216,12 @@ jobs:
           # unidade pelo texto, blocos citados, coluna da legenda) levaram a
           # colheita a 8003 e o guarda de 75% cobrou 6002. Mesmo critério: 6900 é
           # 86% dos 8003, aguenta até ~9.200 e pega qualquer queda maior que 14%.
-          PISO: 6900
+          # 04/10/2026, 14ª vez: 6900 -> 8000. A colheita foi a 9314 com os
+          # consertos de 02–04/10 (H88, H87, H34b, H94, H95, guarda do
+          # cross-check) e o E12 — só ele trouxe 402 testes, 300 deles sementes
+          # de equivalência da régua nova contra a antiga. Mesmo critério: 8000
+          # é 86% dos 9314, aguenta até ~10.660 e pega qualquer queda maior que 14%.
+          PISO: 8000
         run: |
           N=$(python -m pytest tests/ -q --collect-only 2>/dev/null | tail -1 | grep -oE '^[0-9]+' || echo 0)
           echo "testes colhidos: $N (piso: $PISO)"
