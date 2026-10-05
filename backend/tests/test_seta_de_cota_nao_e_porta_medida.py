@@ -58,8 +58,12 @@ def test_a_familia_toda_de_pontas_de_seta_do_autocad():
                  "_CLOSEDFILLED", "_SMALL", "_NONE", "_OBLIQUE", "_BOXFILLED",
                  "_BOXBLANK", "_DATUMFILLED", "_DATUMBLANK", "_INTEGRAL",
                  "_ARCHTICK"):
-        assert _sem_ident("Elemento contado — bloco %s do desenho" % nome, "un"), (
+        # 🪤 a frase começa pelo SUBSTANTIVO: com "Elemento…" a régua antiga
+        # pegava sozinha e o teste não provava a lista (mutante vivo, 05/10)
+        assert _sem_ident("Porta de abrir — conforme bloco '%s'" % nome, "un"), (
             "ponta de seta %s não foi reconhecida como bloco de sistema" % nome)
+    # CONTROLE: a mesma frase com um nome de projetista não é pega
+    assert not _sem_ident("Porta de abrir — conforme bloco 'P90'", "un")
 
 
 def test_minuscula_e_maiuscula_dao_no_mesmo():

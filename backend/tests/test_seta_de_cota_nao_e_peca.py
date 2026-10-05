@@ -9,8 +9,10 @@ produção, 8 linhas entregues em 6 jobs, nenhuma era peça; o guarda da linha
 linhas de 15 un com selo). O que desenham, em
 tamanho de unidade: `_DOT` = o ponto (polilinha) + 1 linha, caixa 1,5 × 1,0;
 `_Open90` = 3 linhas, caixa 1 × 1. "DOT" sem o "_" é o `_DOT` renomeado na
-exportação (definição idêntica) e "TIC" é o traço de cota (barra + cruz, 3
-linhas, caixa 2 × 2) — esses dois só valem com a definição de seta.
+exportação (definição idêntica) e "TIC" é o traço de cota — esses dois só
+valem com a definição de seta. Os dois traços medidos: o do acervo é barra +
+cruz, 3 linhas, caixa 2 × 2; o que virou "118 estacas raiz" num job de
+fundação é 1 linha + 1 polilinha, caixa 5 × 5, inserido a escala 1, 2 e 10.
 """
 import os
 import sys
@@ -43,6 +45,12 @@ def _traco(b):
     b.add_line((-1.0, 0), (1.0, 0))
 
 
+def _traco_da_fundacao(b):
+    # o "TIC" das pranchas de fundação: 1 linha + 1 polilinha, caixa 5 × 5
+    b.add_line((-2.5, -2.5), (2.5, 2.5))
+    b.add_lwpolyline([(-2.5, 2.5), (2.5, -2.5)])
+
+
 def _seta_aberta(b, i=0):
     # `_Open90`: 3 linhas, caixa 1 × 1 (o i muda o desenho: a assinatura não junta dois nomes)
     b.add_line((0, 0), (-1.0, 0.5 + 0.01 * i))
@@ -56,7 +64,7 @@ def _peca(b):
     b.add_line((0, -0.05), (0, 0.05))
 
 
-def _ler(tmp_path, defs, n=6):
+def _ler(tmp_path, defs, n=6, escala=0.1):
     """defs: [(nome, desenha(bloco))]; cada um inserido n vezes."""
     doc = ezdxf.new("R2018")
     doc.header["$INSUNITS"] = 6
@@ -64,7 +72,7 @@ def _ler(tmp_path, defs, n=6):
     for k, (nome, desenha) in enumerate(defs):
         desenha(doc.blocks.new(nome))
         for i in range(n):
-            msp.add_blockref(nome, (3.0 * i, 5.0 * k), dxfattribs={"xscale": 0.1, "yscale": 0.1})
+            msp.add_blockref(nome, (30.0 * i, 50.0 * k), dxfattribs={"xscale": escala, "yscale": escala})
     p = str(tmp_path / "planta.dxf")
     doc.saveas(p)
     return dx.extract_dxf(p)
@@ -94,6 +102,23 @@ def test_dot_com_a_definicao_do_ponto_sai(tmp_path, nome):
 def test_tic_com_a_definicao_do_traco_sai(tmp_path, nome):
     ex = _ler(tmp_path, [(nome, _traco), (_PECA, _peca)])
     assert nome not in _contados(ex), _contados(ex)
+
+
+@pytest.mark.parametrize("escala", [1.0, 2.0, 10.0])
+def test_tic_da_fundacao_5x5_sai(tmp_path, escala):
+    ex = _ler(tmp_path, [("TIC", _traco_da_fundacao), (_PECA, _peca)], escala=escala)
+    assert "TIC" not in _contados(ex), _contados(ex)
+    assert _PECA in _contados(ex), _contados(ex)
+
+
+def test_tic_5x5_com_arredondamento_do_cad_sai(tmp_path):
+    # coordenada de CAD não é exata: 5 × 5 pode chegar como 5,0000004
+    def quase(b):
+        b.add_line((-2.5000002, -2.5000002), (2.5000002, 2.5000002))
+        b.add_lwpolyline([(-2.5000002, 2.5000002), (2.5000002, -2.5000002)])
+
+    ex = _ler(tmp_path, [("TIC", quase), (_PECA, _peca)])
+    assert "TIC" not in _contados(ex), _contados(ex)
 
 
 # ── UMA lista só: o guarda da linha (14/09) e a contagem leem a mesma constante ──
@@ -168,10 +193,20 @@ def test_CONTROLE_tic_com_4_linhas_continua_peca(tmp_path):
 
 def test_CONTROLE_dot_grande_continua_peca(tmp_path):
     def placa(b):
-        b.add_lwpolyline([(0, 0), (3.0, 0), (3.0, 3.0), (0, 3.0)], close=True)
+        b.add_lwpolyline([(0, 0), (6.0, 0), (6.0, 6.0), (0, 6.0)], close=True)
 
     ex = _ler(tmp_path, [("DOT", placa), (_PECA, _peca)])
     assert "DOT" in _contados(ex), _contados(ex)
+
+
+def test_CONTROLE_tic_logo_acima_do_teto_continua_peca(tmp_path):
+    # o teto é o mínimo que pega os dois traços medidos (2 × 2 e 5 × 5): 5,2 já fica
+    def maior(b):
+        b.add_line((-2.6, -2.6), (2.6, 2.6))
+        b.add_lwpolyline([(-2.6, 2.6), (2.6, -2.6)])
+
+    ex = _ler(tmp_path, [("TIC", maior), (_PECA, _peca)])
+    assert "TIC" in _contados(ex), _contados(ex)
 
 
 @pytest.mark.parametrize("nome", ["PORTA_OPEN90_80", "_DOTX", "_OPEN90A", "X_DOT", "_OPEN 90", "DOTS", "TIC2",

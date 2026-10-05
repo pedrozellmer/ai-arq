@@ -8534,13 +8534,15 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
     # uma constante só, em engine_rules.
     from engine_rules import SETAS_DE_COTA_DO_AUTOCAD as _SETAS_DE_COTA
     # "DOT" (o `_DOT` renomeado na exportação: definição idêntica nos 3 desenhos
-    # do acervo) e "TIC" (traço de cota: barra + cruz, 3 linhas, caixa 2 × 2)
-    # sem o "_" são curtos demais pra valer pelo nome — luminária "DOT" existe.
-    # Só valem com a DEFINIÇÃO de seta: até 3 entidades, só linha ou polilinha
-    # (sem texto, sem atributo, sem círculo), caixa de até 2,5 unidades.
+    # do acervo) e "TIC" (traço de cota) sem o "_" são curtos demais pra valer
+    # pelo nome — luminária "DOT" existe. Só valem com a DEFINIÇÃO de seta: até
+    # 3 entidades, só linha ou polilinha (sem texto, sem atributo, sem círculo),
+    # caixa de até 5 unidades. Os dois traços medidos: o do acervo é barra +
+    # cruz, 3 linhas, 2 × 2; o que virou "118 estacas raiz" num job de fundação
+    # é 1 linha + 1 polilinha, 5 × 5 (nas 4 pranchas). 5 é o mínimo que pega os dois.
     _SETAS_SEM_PREFIXO = {"DOT", "TIC"}
     _SETA_ENTIDADES_MAX = 3
-    _SETA_CAIXA_MAX = 2.5
+    _SETA_CAIXA_MAX = 5.0
     _seta_pela_definicao: dict[str, bool] = {}
 
     def _definicao_de_seta(name: str) -> bool:
@@ -8552,7 +8554,8 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
                 if (1 <= len(_ents) <= _SETA_ENTIDADES_MAX
                         and all(e.dxftype() in ("LINE", "LWPOLYLINE") for e in _ents)):
                     _cx = _compute_block_bbox(_blk)
-                    _ok = _cx is not None and max(_cx) <= _SETA_CAIXA_MAX
+                    # + 1e-6: o 5 × 5 medido não pode cair fora por arredondamento
+                    _ok = _cx is not None and max(_cx) <= _SETA_CAIXA_MAX + 1e-6
             except Exception:
                 _ok = False
             _seta_pela_definicao[name] = _ok
