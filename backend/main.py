@@ -8595,23 +8595,33 @@ def _origem_do_grupo(grupo, regra="todos"):
     return "dxf_geom" if origens and all(o == "dxf_geom" for o in origens) else ""
 
 
-def _resumo_do_grupo(group, teto: int = 4) -> str:
-    """"Lajes 12.72 · Vigas 0 · Pilares 0 (+1)" — o que a fusão consumiu.
+def _resumo_do_grupo(group, teto: int = 4, teto_parte: int = 200) -> str:
+    """"Concreto — Lajes 12.72 · Concreto — Vigas 0 (+1)" — o que a fusão consumiu.
 
     🩸 03/09/2026: sem isto, quando um número some entre duas rodadas não dá
     pra separar "a consolidação comeu" de "a IA não produziu". Aconteceu com o
     cliente-23 e a resposta levou uma consulta ao banco e uma leitura de código
-    pra sair — devia estar escrita na própria linha."""
+    pra sair — devia estar escrita na própria linha.
+    🩸 05/10/2026: a parte ia CORTADA — só o último trecho depois do " — ", em
+    28 caracteres ("especificação, dimensão e ma 2.0") — e a especificação de
+    cada parte sumia: "Bomba submersível … — 2 variantes" juntava duas bombas
+    de modelos diferentes, e a linha só mostrava a 1ª. Medido no banco (90
+    dias, jobs de cliente): 384 linhas consolidadas em 95 jobs, e numa amostra
+    de 40, 8–12 juntavam coisas diferentes. Agora vai a descrição INTEIRA de
+    cada parte (até `teto_parte`, a rede contra o teto da observação: p90 de
+    213 caracteres), sem as marcas que outras regras leem na observação (ver
+    `_MARCAS_QUE_NAO_VIAJAM`)."""
     partes = []
     for it in group[:teto]:
-        _d = (getattr(it, "description", "") or "").strip()
-        for sep in (" — ", " - "):
-            _d = _d.split(sep)[-1] if sep in _d else _d
+        _d = " ".join((getattr(it, "description", "") or "").split())
+        _d = _MARCAS_QUE_NAO_VIAJAM.sub("…", _d)
+        if len(_d) > teto_parte:
+            _d = _d[:teto_parte].rstrip() + "…"
         try:
             _q = round(float(getattr(it, "quantity", 0) or 0), 2)
         except (TypeError, ValueError):
             _q = 0
-        partes.append("%s %s" % (_d[:28] or "?", _q))
+        partes.append("%s %s" % (_d or "?", _q))
     if len(group) > teto:
         partes.append("(+%d)" % (len(group) - teto))
     return " · ".join(partes)
