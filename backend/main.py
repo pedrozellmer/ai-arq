@@ -14294,14 +14294,29 @@ def rebaixar_itens_sem_identidade(all_items):
     [[feedback_guarda_que_le_fonte]].
     """
     from engine_rules import item_e_bloco_sem_identidade as _sem_ident
+    from engine_rules import identidade_e_palpite_pelo_nome as _palpite
+    from engine_rules import MARCA_IDENTIDADE_PALPITE as _M_PALPITE
     from models import Confidence as _CfB
     n = 0
     for _it in (all_items or []):
-        if not _sem_ident(getattr(_it, "description", ""),
-                          getattr(_it, "unit", "")):
-            continue
         _cf = str(getattr(getattr(_it, "confidence", None), "value",
                           getattr(_it, "confidence", "")) or "")
+        if not _sem_ident(getattr(_it, "description", ""),
+                          getattr(_it, "unit", "")):
+            # 🩸 05/10: a descrição tem nome de peça, mas a OBSERVAÇÃO da própria
+            # IA diz que esse nome é palpite pelo nome do bloco — o ✓ cai
+            _ob = str(getattr(_it, "observations", "") or "")
+            if _cf == "confirmado" and _palpite(_ob, getattr(_it, "unit", "")):
+                try:
+                    _it.confidence = _CfB.ESTIMADO
+                    n += 1
+                    _it.observations = _observacao_que_cabe(
+                        _M_PALPITE + " — a contagem é do desenho, mas O QUE a peça é "
+                        "saiu do nome do bloco no CAD, não de legenda nem de texto da "
+                        "prancha: confirme antes de usar. " + _ob)
+                except Exception:
+                    pass
+            continue
         if _cf == "confirmado":
             try:
                 _it.confidence = _CfB.ESTIMADO

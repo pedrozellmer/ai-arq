@@ -3539,6 +3539,48 @@ def item_e_bloco_sem_identidade(descricao, unidade) -> bool:
     return bool(_RE_LIDERA_BLOCO.search(_d) or _RE_NAO_IDENT.search(_d))
 
 
+# 🩸 05/10/2026 — a mesma doença pelo outro lado. A DESCRIÇÃO traz nome de peça
+# ("Locação e execução de estacas raiz", "Marco topográfico de locação"), mas a
+# OBSERVAÇÃO da própria IA diz que o nome é PALPITE pelo nome do bloco ("Nome do
+# bloco sugere marco de controle topográfico", "Bloco interpretado
+# como locação de estaca tipo 1", "bloco 'XX'. Provavelmente indicador de
+# pressão"). Num job de fundação, o MESMO bloco saiu estaca ✓ numa prancha e
+# marco topográfico ✓ na outra. Medido no banco (toda a história, jobs de
+# cliente): 27 linhas ✓ de contagem por bloco assim, em 13 jobs; olhadas uma a
+# uma, 22 são palpite de verdade (selo de prancha contado como peça, o vínculo
+# do projeto inteiro como "modelo central", 3 identidades para um mesmo bloco).
+# 🪤 O palpite tem de ser sobre O QUE o bloco é. Ficam de fora (medidos):
+#   • "bloco indica 70 cm de folga" — medida, não identidade (`(?!\d)`);
+#   • "comprimento interpretado como 678 cm" — unidade (só "bloco interpretado
+#     como <palavra>");
+#   • "localizada provavelmente na cozinha", "e possivelmente lavabo" — lugar
+#     (o "provavelmente" vale logo depois da frase que cita o bloco).
+# 🪤 Custo medido e aceito (5 das 27): a identidade está no próprio nome do
+# bloco e o "provavelmente" é sobre o uso (conjunto de mesa, folha de painel,
+# banqueta), e a cubeta de laje nervurada ("nome do bloco sugere cubeta": o
+# palpite provavelmente acerta, mas no mesmo job o mesmo bloco saiu com 2
+# contagens ✓ diferentes). "Palavra da descrição no nome do bloco → fica"
+# salvaria os 3, mas também 3 palpites errados — medido, fora.
+_RE_BLOCO_ENTRE_ASPAS = _re.compile(r"bloco\s+'[^']+'", _re.I)
+_RE_IDENTIDADE_PALPITE = _re.compile(
+    r"(?:nome(?:\s+do\s+bloco)?|bloco)\s+(?:sugere|indica|remete\s+a)\s+(?!\d)"
+    r"|bloco\s+interpretado\s+como\s+[^\W\d_]"
+    r"|bloco\s+'[^']+'[^.]{0,80}\.\s*(?:provavelmente|possivelmente)\s"
+    r"|bloco\s+(?:possivelmente|provavelmente)\s+(?:representa|indica|[eé]\s)", _re.I)
+#: o aviso que a linha ganha (e que a chave do selo reconhece: não promove de volta)
+MARCA_IDENTIDADE_PALPITE = "⚠ IDENTIDADE PELO NOME DO BLOCO"
+
+
+def identidade_e_palpite_pelo_nome(observacao, unidade) -> bool:
+    """A observação da linha de CONTAGEM por bloco diz que O QUE a peça é saiu
+    de um palpite pelo NOME do bloco? Só APONTA — quem rebaixa é o chamador, e
+    só rebaixa."""
+    if str(unidade or "").strip().lower() not in _UNIDADES_DE_CONTAGEM:
+        return False
+    _o = str(observacao or "")
+    return bool(_RE_BLOCO_ENTRE_ASPAS.search(_o) and _RE_IDENTIDADE_PALPITE.search(_o))
+
+
 # ── PAREDE MENOR QUE O PERÍMETRO POSSÍVEL (regra nº1) ──────────────────────
 # 🩸 04/09/2026, no 1º projeto da cliente-22. O motor mediu
 # **17,18 m** de parede numa casa de **46,79 m²** — e daí saiu a alvenaria
@@ -5172,6 +5214,7 @@ MARCAS_DE_REBAIXAMENTO = (MARCA_PECA_SEM_BLOCO, MARCA_LAYER_SEM_NOME, MARCA_TUBO
                           MARCA_CONTORNO_DE_PECA, MARCA_MOLDURA_OU_LIMITE,
                           MARCA_TRAVESSA_DE_ESTEIRA, MARCA_PAREDE_ESPESSA, MARCA_GRADE_DE_TABELA,
                           MARCA_FAIXA_DE_PARALELAS,
+                          MARCA_IDENTIDADE_PALPITE,
                           MARCA_PLANTA_REPETIDA, MARCA_LIDO_DE_TEXTO, MARCA_SOMA, MARCA_CARIMBO,
                           MARCA_MENOS_PAREDE, MARCA_UNIDADE_DE_CONTAGEM,
                           MARCA_EXTRACAO_COM_RESSALVA, MARCA_QUANTIDADE_RECUPERADA,
