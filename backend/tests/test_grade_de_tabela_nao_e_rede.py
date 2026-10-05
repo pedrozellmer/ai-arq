@@ -284,6 +284,9 @@ def _escada(m, layer, n, vao, passo, rotulos, h, extra=(), h_extra=0.3):
 _SPK = dict(n=8, vao=30.0, passo=3.0, rotulos=[("DN25", 15.0)], h=0.2)
 _SPK3 = dict(_SPK, rotulos=[("DN25", 15.0), ("L=30,00", 3.0), ("i=1%", 25.0)])
 _CALHA = dict(n=6, vao=40.0, passo=1.5, rotulos=[("ELETROCALHA 200x100", 20.0)], h=0.25)
+# 3 marcas por trecho, letra ≥ 10 % do passo: só o ramo DENSO deixaria passar (3,1–3,2 por faixa)
+_ELETRODUTO = dict(n=6, vao=12.0, passo=1.2, rotulos=[("C1", 3.0), ("2#2,5", 6.0), ("Ø25", 9.0)], h=0.2)
+_VAGAS = dict(n=10, vao=5.0, passo=2.5, rotulos=[("V", 1.25), ("2,50x5,00", 2.5), ("PNE", 3.75)], h=0.3)
 
 
 @pytest.mark.parametrize("rede,extra", [
@@ -293,9 +296,12 @@ _CALHA = dict(n=6, vao=40.0, passo=1.5, rotulos=[("ELETROCALHA 200x100", 20.0)],
     (_SPK3, [("VER NOTA 3", (10.0, 10.0))]),               # 3 rótulos por ramal: a letra segura
     (_SPK3, [("QUADRO DE ALARME", (12.0, 22.0))]),
     (_CALHA, [("QUADRO QD-1", (20.0, 3.0))]),              # letra grande pro passo: a palavra no meio segura
-], ids=["sala", "nota", "quadro-acima", "3-rotulos-nota", "3-rotulos-quadro-acima", "eletrocalha-quadro"])
+    (_ELETRODUTO, [("QUADRO QD-1", (6.0, 3.0))]),          # 3 marcas por trecho + a palavra no meio
+    (_VAGAS, [("VER NOTA 2", (2.5, 11.0))]),               # 3 textos por vaga + a palavra no meio
+], ids=["sala", "nota", "quadro-acima", "3-rotulos-nota", "3-rotulos-quadro-acima", "eletrocalha-quadro",
+        "eletroduto-3-marcas", "vagas-3-textos"])
 def test_CONTROLE_rede_em_escada_com_a_palavra_do_cabecalho(rede, extra):
-    tab = _grade(lambda m: _escada(m, "SPK-REDE", extra=extra, **rede))
+    tab = _grade(lambda m: _escada(m, "SPK-REDE", extra=extra, h_extra=rede["h"], **rede))
     assert "SPK-REDE" not in tab, tab
 
 
@@ -311,17 +317,21 @@ def test_CUSTO_DOCUMENTADO_eletrocalhas_com_a_palavra_logo_acima_marcam():
     assert "SPK-REDE" in tab, tab
 
 
-def test_a_tabela_composta_com_o_cabecalho_de_secao_no_meio_marca():
+@pytest.mark.parametrize("por_faixa,marca", [(6, True), (4, False)])
+def test_a_tabela_composta_com_o_cabecalho_de_secao_no_meio(por_faixa, marca):
     """Seções empilhadas (informações / classificação / legenda): os títulos de
-    seção ficam NO MEIO da caixa, mas a tabela é densa de texto (≥ 3 por faixa)."""
+    seção ficam NO MEIO da caixa, mas a tabela é densa de texto — ≥ 5 por faixa
+    (a de incêndio medida tem 8,9). Com 4 por faixa e a palavra no meio, não
+    se distingue da rede com 3 marcas por trecho: fica."""
     def d(m):
         ys = _tabela(m, "TAB-X", linhas=9, passo=2.0, cab=None, textos=False)
         for k, (ya, yb) in enumerate(zip(ys, ys[1:])):
-            for j, xf in enumerate((0.02, 0.2, 0.5, 0.8)):
+            for j in range(por_faixa):
                 s = ("LEGENDA" if (k, j) == (4, 0) else "CLASSIFICAÇÃO" if (k, j) == (2, 0) else "x%d-%d" % (k, j))
-                m.add_text(s, dxfattribs={"layer": "TXT", "height": 0.35, "insert": (xf * 97.5, (ya + yb) / 2.0)})
+                m.add_text(s, dxfattribs={"layer": "TXT", "height": 0.35,
+                                          "insert": ((0.02 + 0.16 * j) * 97.5, (ya + yb) / 2.0)})
     tab = _grade(d)
-    assert "TAB-X" in tab, tab
+    assert ("TAB-X" in tab) is marca, tab
 
 
 def test_o_cabecalho_de_coluna_dentro_da_primeira_linha_marca():

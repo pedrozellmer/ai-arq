@@ -2486,18 +2486,23 @@ def layers_esteira_por_travessa(msp, walls, unit_factor: float = 1.0) -> dict:
 #:     0,1–0,3 m pra 1,5–3 m de ramal (0,07–0,17);
 #:   • o CABEÇALHO fica na faixa de cima (da penúltima linha até a folga acima
 #:     do topo) — menos na tabela COMPOSTA (seções empilhadas, cabeçalho de
-#:     seção no meio), que tem ≥ 3 textos por faixa (8,9) contra ~1 rótulo por
-#:     ramal na rede.
-#: Com as duas: 88 dos 103 seguem marcados, os 13 elegíveis todos. Saem 7
+#:     seção no meio), que tem ≥ 5 textos por faixa (8,9; as outras que só
+#:     passam por aqui, 5,8–22) contra ~1 rótulo por ramal na rede.
+#:     🪤 Com 3 passavam eletrodutos com 3 marcas por trecho (circuito,
+#:     fiação, bitola) e vagas com 3 textos por vaga, com a palavra no meio
+#:     (3,1–3,2 por faixa); os únicos layers medidos entre 3 e 5 eram de
+#:     anotação (3,9 e 4,2), que já levam o rótulo de anotação.
+#: Com as duas: 85 dos 103 seguem marcados, os 13 elegíveis todos. Saem 7
 #: tabelas de aço de poucas linhas desenhadas (letra 0,04–0,10 do passo; todas
 #: já fora da chave por ressalva de unidade ou layer sem nome), molduras de
-#: folha com notas e um layer de quadros elétricos.
+#: folha com notas, um layer de quadros elétricos, 2 layers de anotação e um
+#: "0" com ressalva de unidade que ficava em 21 % e cai abaixo do piso.
 #: 🪤 Limite que fica: eletrocalhas paralelas a ≤ 2,5 m, fechadas nas pontas,
 #: cada uma com um rótulo diferente e a palavra logo acima (teste CUSTO).
 #: "Textos distintos" pegaria a de rótulo repetido, mas derruba quadro de
 #: cargas e tabela de especificação reais (números repetidos) — medido, fora.
 _TABELA_LETRA_MIN = 0.10      # altura da letra ÷ passo das linhas
-_TABELA_TEXTO_DENSO = 3.0     # textos por faixa da tabela composta (cabeçalho no meio)
+_TABELA_TEXTO_DENSO = 5.0     # textos por faixa da tabela composta (cabeçalho no meio)
 _TABELA_MIN_LINHAS = 5        # horizontais de mesmo vão
 _TABELA_ESPACO_MIN = 0.02     # menor espaçamento ≥ 2 % do vão (o par de faces da parede não)
 _TABELA_PONTA_TOL = 0.01      # mesmo vão / borda na ponta: a ≤ 1 % do vão
