@@ -272,6 +272,8 @@ class DXFExtraction:
                                            "layers_esteira_por_travessa",
                                            # 04/10 (E14): idem
                                            "layers_grade_de_tabela",
+                                           # 05/10 (E07): idem
+                                           "layers_em_faixa",
                                            # 01/10 (H84): rastro; a soma já é 1×
                                            "copias_exatas",
                                            # 30/09 (H13): seção própria
@@ -684,6 +686,7 @@ class DXFExtraction:
             _mol = (self.metadata or {}).get("layers_moldura_ou_limite") or {}
             _est = (self.metadata or {}).get("layers_esteira_por_travessa") or {}
             _tab = (self.metadata or {}).get("layers_grade_de_tabela") or {}
+            _fx = (self.metadata or {}).get("layers_em_faixa") or {}
             _esp = (self.metadata or {}).get("parede_espessa_pelas_faces") or {}
             for layer, length in sorted(walls_by_layer.items()):
                 if layer in _est and not _anot(layer):
@@ -707,6 +710,14 @@ class DXFExtraction:
                                  f"deste comprimento são as LINHAS DE UMA TABELA desenhada "
                                  f"(legenda, simbologia ou quadro: '{_tab[layer].get('cabecalho')}'), "
                                  f"não rede nem elemento de obra: não use como medido")
+                elif layer in _fx and not _anot(layer):
+                    # 🩸 05/10 (E07) — sem "layer <palavra>" no texto (ver abaixo)
+                    lines.append(f"  {layer}: {length:.2f} m"
+                                 f"   ⚠ FAIXA DE ~{_fx[layer].get('linhas')} LINHAS PARALELAS a "
+                                 f"{_fx[layer].get('passo_mm')} mm (preenchimento) — "
+                                 f"{int(100 * float(_fx[layer].get('fracao') or 0))}% deste comprimento: "
+                                 f"a soma conta cada linha da faixa (~{_fx[layer].get('linhas')}× o "
+                                 f"trecho), não é medida: trate como ESTIMADO")
                 elif layer in _ctp and not _anot(layer):
                     # 🩸 01/10 (H76) — sem "layer <palavra>" no texto (ver abaixo)
                     lines.append(f"  {layer}: {length:.2f} m"
@@ -2738,6 +2749,179 @@ def layers_grade_de_tabela(msp, walls, texts, unit_factor: float = 1.0) -> dict:
     return out
 
 
+#: 🩸 05/10/2026 — E07 da conferência da lista de dano. Uma eletrocalha
+#: desenhada como FAIXA de 9 e 17 linhas paralelas a 25 mm (o preenchimento da
+#: rota) somava 1.058,79 m contra ~111 m de eixo (9,5×); outra, de 13 linhas,
+#: 13×. Com a unidade provada, a chave do selo promovia as duas a ✓ (medido no
+#: main de 04/10) — e o relato do eixo dizia "JÁ pelo EIXO" sem ter reduzido nada.
+#: 🔑 FAIXA = linhas paralelas (≤ 0,3°), de comprimento parecido (≥ 0,7),
+#: sobrepostas (≥ 80 % da menor), ao lado umas das outras a passo CONSTANTE
+#: (± 5 % do 1º), encadeadas uma a uma pela distância lateral (a próxima ainda
+#: livre). Conta a faixa com ≥ 5 linhas, passo ≤ 3 % do comprimento e largura
+#: (n − 1)·passo ≤ 1,0 m; marca o layer com ≥ 60 % do comprimento em faixas.
+#: 🪤 Numerador e denominador da MESMA população: os trechos do msp (LINE e
+#: lados retos de LWPOLYLINE, a cópia exata 1×). Contra o walls (com o peso da
+#: folha, e sem os lados de LWPOLYLINE fora de duto/parede/tubo), um layer de
+#: detalhe dava 355 % (medido na verificação).
+#: 🪤 N = 5 é o menor que deixa de fora o feixe de 3 eletrodutos no mesmo
+#: traçado (ali a soma É a medida) e ainda pega a eletrocalha de 5 linhas. A
+#: corrente fica com ≥ 3 linhas (como foi medida) e só a de ≥ 5 conta.
+#: Medido no acervo: 8 layers / 7 jobs; os 3 elegíveis à chave são
+#: preenchimento (símbolo em gota, retalho de hachura) — ✓ ali seria errado.
+#: 🪤 Escada e corrimão NÃO são isto: degrau tem passo de 24–34 cm (≫ 3 % do
+#: lance). Sem filtro de nome; anotação fica de fora.
+_FAIXA_ANG_TOL = 0.3          # graus
+_FAIXA_GAP_MAX = 0.25         # a vizinha lateral a ≤ 0,25 L
+_FAIXA_DUP = 1e-4             # mais perto que 1e-4 L é colinear, não vizinha
+_FAIXA_SOBREPOE = 0.8         # sobreposição ≥ 80 % da menor
+_FAIXA_RAZAO_L = 0.7          # comprimentos parecidos: menor/maior ≥ 0,7
+_FAIXA_PASSO_TOL = 0.05       # passo constante: ± 5 % do 1º passo da corrente
+_FAIXA_OLHA = 400             # candidatas olhadas a cada passo da corrente
+_FAIXA_CORRENTE_MIN = 3       # a corrente fica (as linhas não voltam pra outra)
+_FAIXA_MIN_LINHAS = 5         # ...mas só a faixa de ≥ 5 linhas conta
+_FAIXA_PASSO_MAX = 0.03       # passo ≤ 3 % do comprimento da faixa
+_FAIXA_LARGURA_MAX = 1.0      # (n − 1)·passo ≤ 1,0 m
+_FAIXA_FRACAO = 0.6           # ≥ 60 % do metro do layer em faixas
+
+
+def layers_em_faixa_de_paralelas(msp, walls, unit_factor: float = 1.0) -> dict:
+    """{layer: {'m', 'fracao', 'faixas', 'linhas', 'passo_mm', 'eixo_m'}} —
+    layer cujo metro é, em ≥ `_FAIXA_FRACAO`, FAIXAS de ≥ 5 linhas paralelas a
+    passo constante e curto (preenchimento: a soma conta cada linha da faixa).
+    `linhas` e `passo_mm` são as medianas pelo metro; `eixo_m`, a soma do
+    comprimento das faixas (uma vez cada). Fora anotação. SÓ MARCA (aviso + selo)."""
+    from engine_rules import layer_is_anotacao
+    uf = float(unit_factor) if unit_factor else 1.0
+    tot: dict = {}
+    for w in walls or ():
+        ly = str(getattr(w, "layer", "") or "")
+        tot[ly] = tot.get(ly, 0.0) + float(getattr(w, "length", 0.0) or 0.0)
+    camadas = {ly for ly, t in tot.items() if t > 0 and not layer_is_anotacao(ly)}
+    if not camadas:
+        return {}
+    segs: dict = {}
+    for e in msp.query("LINE LWPOLYLINE"):
+        try:
+            ly = str(e.dxf.layer)
+            if ly not in camadas:
+                continue
+            if e.dxftype() == "LINE":
+                pts = [(e.dxf.start[0], e.dxf.start[1], 0.0), (e.dxf.end[0], e.dxf.end[1], 0.0)]
+            else:
+                pts = [(p[0], p[1], p[2]) for p in e.get_points("xyb")]
+                if e.closed and pts:
+                    pts.append(pts[0])
+        except Exception:
+            continue
+        ss = segs.setdefault(ly, [])
+        for (ax, ay, blg), (bx, by, _b) in zip(pts, pts[1:]):
+            if not blg and (ax != bx or ay != by):     # o lado em arco não é linha reta
+                ss.append((float(ax), float(ay), float(bx), float(by)))
+    _tq = 0.001 / uf     # a cópia exata em pilha conta UMA vez (H84)
+    out = {}
+    for ly, ss in segs.items():
+        if len(ss) > _TUBO_MAX_SEG:
+            logger.warning("[faixa-de-paralelas] '%s' com %d trechos — acima do teto, não medido",
+                           ly, len(ss))
+            continue
+        vistos: set = set()
+        itens = []
+        tot_du = 0.0
+        for ax, ay, bx, by in ss:
+            ch = tuple(sorted(((round(ax / _tq), round(ay / _tq)), (round(bx / _tq), round(by / _tq)))))
+            if ch in vistos:
+                continue
+            vistos.add(ch)
+            tot_du += math.hypot(bx - ax, by - ay)
+            itens.append((math.degrees(math.atan2(by - ay, bx - ax)) % 180.0, ax, ay, bx, by))
+        if len(itens) < _FAIXA_MIN_LINHAS or tot_du <= 0:
+            continue
+        # direções: grupos de ângulo a ≤ 0,3° (o 179,9° encosta no 0°)
+        itens.sort()
+        grupos, atual = [], [itens[0]]
+        for it in itens[1:]:
+            if it[0] - atual[-1][0] <= _FAIXA_ANG_TOL:
+                atual.append(it)
+            else:
+                grupos.append(atual)
+                atual = [it]
+        grupos.append(atual)
+        if len(grupos) > 1 and grupos[0][0][0] + 180.0 - grupos[-1][-1][0] <= _FAIXA_ANG_TOL:
+            grupos[0] = grupos.pop() + grupos[0]
+        faixas = []      # (linhas, passo, comprimento médio, soma) — unidade do desenho
+        for g in grupos:
+            if len(g) < _FAIXA_MIN_LINHAS:
+                continue
+            th = math.radians(g[0][0])
+            ux, uy = math.cos(th), math.sin(th)
+            nx, ny = -uy, ux
+            rec = sorted((((ax + bx) / 2.0) * nx + ((ay + by) / 2.0) * ny,
+                          *sorted((ax * ux + ay * uy, bx * ux + by * uy)))
+                         for _a, ax, ay, bx, by in g)
+            n = len(rec)
+            usado = [False] * n
+            for i in range(n):
+                if usado[i]:
+                    continue
+                cad, usado[i], g0 = [i], True, None
+                while True:
+                    r0 = rec[cad[-1]]
+                    L0 = r0[2] - r0[1]
+                    achou, k = None, 0
+                    for j in range(cad[-1] + 1, n):
+                        r = rec[j]
+                        d = r[0] - r0[0]
+                        if d > _FAIXA_GAP_MAX * L0:
+                            break
+                        k += 1
+                        if k > _FAIXA_OLHA:
+                            break
+                        if usado[j] or d <= _FAIXA_DUP * L0:
+                            continue
+                        L1 = r[2] - r[1]
+                        if min(L0, L1) < _FAIXA_RAZAO_L * max(L0, L1):
+                            continue
+                        if min(r[2], r0[2]) - max(r[1], r0[1]) < _FAIXA_SOBREPOE * min(L0, L1):
+                            continue
+                        achou = (d, j)
+                        break
+                    if achou is None:
+                        break
+                    if g0 is None:
+                        g0 = achou[0]
+                    elif abs(achou[0] - g0) > _FAIXA_PASSO_TOL * g0:
+                        break
+                    cad.append(achou[1])
+                    usado[achou[1]] = True
+                if len(cad) >= _FAIXA_CORRENTE_MIN:
+                    Ls = [rec[x][2] - rec[x][1] for x in cad]
+                    faixas.append((len(cad), (rec[cad[-1]][0] - rec[cad[0]][0]) / (len(cad) - 1),
+                                   sum(Ls) / len(cad), sum(Ls)))
+                else:
+                    for x in cad[1:]:          # a corrente curta devolve as linhas
+                        usado[x] = False
+        boas = [f for f in faixas if f[0] >= _FAIXA_MIN_LINHAS and f[1] <= _FAIXA_PASSO_MAX * f[2]
+                and (f[0] - 1) * f[1] * uf <= _FAIXA_LARGURA_MAX]
+        f = sum(b[3] for b in boas) / tot_du
+        if f < _FAIXA_FRACAO:
+            continue
+
+        def _mediana(chave):
+            """A mediana pelo METRO das faixas boas."""
+            pares = sorted((chave(b), b[3]) for b in boas)
+            meio, acum = sum(p for _, p in pares) / 2.0, 0.0
+            for v, p in pares:
+                acum += p
+                if acum >= meio:
+                    return v
+            return pares[-1][0]
+        out[ly] = {"m": round(float(tot.get(ly, 0.0)), 2), "fracao": round(min(f, 1.0), 2), "faixas": len(boas),
+                   "linhas": int(_mediana(lambda b: b[0])),
+                   "passo_mm": round(float(_mediana(lambda b: b[1])) * uf * 1000.0, 1),
+                   "eixo_m": round(float(sum(b[2] for b in boas)) * uf, 2)}
+    return out
+
+
 def _corrigir_parede_linha_dupla(walls, unit_factor: float = 1.0, zona_cinza=None,
                                  faces_espessas=None):
     """Parede desenhada pelas DUAS FACES mede pelo EIXO. Devolve (walls, relato).
@@ -2805,7 +2989,8 @@ def parede_espessa_na_soma(walls, faces_espessas) -> dict:
 _RE_RELATO_EIXO = re.compile(r"^(.*): [\d.]+m de face -> [\d.]+m de eixo \(\d+ par\(es\)\)$")
 
 
-def _relato_do_eixo_na_soma(relato: str, walls, espessas=None, corte_fora=True) -> str:
+def _relato_do_eixo_na_soma(relato: str, walls, espessas=None, corte_fora=True, faixas=None,
+                            so_faixas=False) -> str:
     """Reescreve o relato do eixo com o que FICOU na soma (depois da folha).
 
     Sem número de antes: número que não está na soma vira quantidade na mão
@@ -2816,12 +3001,15 @@ def _relato_do_eixo_na_soma(relato: str, walls, espessas=None, corte_fora=True) 
     somava as duas faces e o corte não tinha sido reconhecido. Agora:
     `espessas` (layers de `parede_espessa_na_soma`) diz que parte da soma NÃO é
     eixo; "corte e detalhe já fora" só com `corte_fora` (a leitura por folha
-    rodou e reconheceu corte ou detalhe)."""
+    rodou e reconheceu corte ou detalhe).
+    🩸 05/10 (E07): o layer em `faixas` (`layers_em_faixa_de_paralelas`) é
+    preenchimento — nem "JÁ pelo EIXO" nem "de eixo". `so_faixas` reescreve SÓ
+    esses (quando a folha não rodou, os outros ficam como vieram)."""
     try:
         novos = []
         for trecho in (relato or "").split(" | "):
             m = _RE_RELATO_EIXO.match(trecho.strip())
-            if not m:
+            if not m or (so_faixas and m.group(1) not in (faixas or ())):
                 novos.append(trecho)
                 continue
             lay = m.group(1)
@@ -2830,6 +3018,10 @@ def _relato_do_eixo_na_soma(relato: str, walls, espessas=None, corte_fora=True) 
                 novos.append(f"{lay}: desenhado em 2 linhas, mas todo o traçado desta prancha "
                              f"está em corte/detalhe/planta-chave — NADA deste layer entra "
                              f"na soma desta prancha")
+            elif lay in (faixas or ()):
+                novos.append(f"{lay}: {atual:.1f}m na soma — desenhado como FAIXA de linhas "
+                             f"paralelas (preenchimento), cada linha somada: este número NÃO é "
+                             f"o comprimento — trate como ESTIMADO")
             elif lay in (espessas or ()):
                 novos.append(f"{lay}: {atual:.1f}m na soma — as paredes de até 40 cm pelo "
                              f"EIXO, mas parte da soma são paredes de MAIS de 40 cm contadas "
@@ -9660,6 +9852,15 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
     # isso"). O esquema/detalhe sai da medição; a planta-tipo vale por N
     # andares. Ver `mapa_de_folhas`. Chave: LEITURA_POR_FOLHA=0 desliga sem
     # deploy. Qualquer falha aqui deixa a medição como estava.
+    # 🩸 05/10 (E07): layer cujo metro é FAIXA de linhas paralelas (preenchimento).
+    # Antes da folha: o relato do eixo, reescrito lá, não chama a faixa de eixo.
+    _faixas = {}
+    try:
+        _faixas = layers_em_faixa_de_paralelas(msp, walls, unit_factor)
+        if _faixas:
+            metadata["layers_em_faixa"] = _faixas
+    except Exception as _efx:
+        logger.warning("[faixa-de-paralelas] falhou (não-fatal): %s", _efx)
     _folhas = {}
     _parede_espessa = None
     if os.environ.get("LEITURA_POR_FOLHA", "1") != "0":
@@ -9700,10 +9901,17 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
                 if metadata.get(_chave_eixo):
                     metadata[_chave_eixo] = _relato_do_eixo_na_soma(
                         metadata[_chave_eixo], walls, espessas=_parede_espessa,
-                        corte_fora=_corte_fora)
+                        corte_fora=_corte_fora, faixas=_faixas)
         except Exception as _efl:
             logger.warning("[leitura-por-folha] falhou (não-fatal): %s", _efl)
             _folhas = {"aplicada": False, "motivo": "erro: %s" % str(_efl)[:120]}
+    # (E07) sem a folha, o relato fica cru ("de face -> de eixo"): o da faixa sai
+    # aqui; o trecho já reescrito não casa o formato cru e fica como está
+    if _faixas:
+        for _chave_eixo in ("duto_linha_dupla", "parede_linha_dupla"):
+            if metadata.get(_chave_eixo):
+                metadata[_chave_eixo] = _relato_do_eixo_na_soma(
+                    metadata[_chave_eixo], walls, faixas=_faixas, so_faixas=True)
     # 🩸 04/10 (E12): a parede de mais de 40 cm somada pelas duas faces — ressalva
     # do layer (fora da chave do selo e do resgate; ⚠ no prompt)
     if _parede_espessa is None:

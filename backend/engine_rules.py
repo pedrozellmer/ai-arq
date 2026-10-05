@@ -1258,7 +1258,7 @@ def layers_que_nao_provam(metadata) -> set:
     for k in ("layers_de_cota", "layers_de_borda", "tubos_em_face_dupla",
               "layers_contorno_de_peca", "layers_moldura_ou_limite",
               "layers_esteira_por_travessa", "parede_espessa_pelas_faces",
-              "layers_grade_de_tabela"):
+              "layers_grade_de_tabela", "layers_em_faixa"):
         for ly in (md.get(k) or {}):
             out.add(str(ly).strip().upper())
     return out
@@ -5166,9 +5166,12 @@ MARCA_TRAVESSA_DE_ESTEIRA = "⚠ ROLETES/TRAVESSAS, NÃO COMPRIMENTO DA ESTEIRA"
 MARCA_PAREDE_ESPESSA = "⚠ PAREDE ESPESSA PELAS DUAS FACES"
 #: 🩸 04/10/2026 (E14) — ver `selo_apos_grade_de_tabela`.
 MARCA_GRADE_DE_TABELA = "⚠ GRADE DE TABELA, NÃO REDE"
+#: 🩸 05/10/2026 (E07) — ver `selo_apos_faixa_de_paralelas`.
+MARCA_FAIXA_DE_PARALELAS = "⚠ FAIXA DE PARALELAS, NÃO METRO"
 MARCAS_DE_REBAIXAMENTO = (MARCA_PECA_SEM_BLOCO, MARCA_LAYER_SEM_NOME, MARCA_TUBO_FACE_DUPLA,
                           MARCA_CONTORNO_DE_PECA, MARCA_MOLDURA_OU_LIMITE,
                           MARCA_TRAVESSA_DE_ESTEIRA, MARCA_PAREDE_ESPESSA, MARCA_GRADE_DE_TABELA,
+                          MARCA_FAIXA_DE_PARALELAS,
                           MARCA_PLANTA_REPETIDA, MARCA_LIDO_DE_TEXTO, MARCA_SOMA, MARCA_CARIMBO,
                           MARCA_MENOS_PAREDE, MARCA_UNIDADE_DE_CONTAGEM,
                           MARCA_EXTRACAO_COM_RESSALVA, MARCA_QUANTIDADE_RECUPERADA,
@@ -6012,7 +6015,7 @@ def _marcado_na_linha(conf, obs, unit, layers_citados, marcados,
     """A porta comum das travas por layer marcado — tubo/eletroduto em face
     dupla (H34/H75), contorno de peça (H76), moldura ou limite (H79), rolete/
     travessa de esteira (H88), parede grossa pelas faces (E12), grade de
-    tabela (E14): a linha
+    tabela (E14), faixa de paralelas (E07): a linha
     CONFIRMADA, na grandeza da trava, que cita um layer marcado → o layer
     ('' = a trava não age).
 
@@ -6072,6 +6075,26 @@ def selo_apos_grade_de_tabela(conf, obs, unit, layers_citados, layers_tabela):
             MARCA_GRADE_DE_TABELA + " ('%s') — a maior parte desse comprimento são as linhas "
             "de uma tabela desenhada (legenda, simbologia ou quadro): confira quanto é a rede "
             "de verdade. " % hit + str(obs or ""),
+            True)
+
+
+def selo_apos_faixa_de_paralelas(conf, obs, unit, layers_citados, layers_faixa):
+    """(conf, obs, rebaixou) — COMPRIMENTO de layer desenhado como FAIXA de
+    linhas paralelas (`dwg_extractor.layers_em_faixa_de_paralelas`) não sai
+    medido.
+
+    🩸 05/10/2026 (E07): uma eletrocalha em faixas de 9 e 17 linhas a 25 mm
+    somava 1.058,79 m contra ~111 m de eixo; com a unidade provada, a chave
+    promovia a ✓. SÓ REBAIXA e avisa: o comprimento de verdade (a faixa uma
+    vez) não se separa com segurança. Área (m²) do layer não é tocada.
+    """
+    hit = _marcado_na_linha(conf, obs, unit, layers_citados, layers_faixa, ("comprimento",))
+    if not hit:
+        return conf, obs, False
+    return ("estimado",
+            MARCA_FAIXA_DE_PARALELAS + " ('%s') — desenhado como faixa de linhas paralelas "
+            "(preenchimento): a soma conta cada linha da faixa, o comprimento não foi medido. "
+            % hit + str(obs or ""),
             True)
 
 

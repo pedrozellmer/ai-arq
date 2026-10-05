@@ -16757,6 +16757,12 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                        ((extraction.metadata or {}).get("layers_grade_de_tabela") or {})}
                         except Exception:
                             _tab_ly = set()
+                        # 🩸 05/10 (E07): layers cujo metro é faixa de linhas paralelas
+                        try:
+                            _fx_ly = {str(_k).strip().upper() for _k in
+                                      ((extraction.metadata or {}).get("layers_em_faixa") or {})}
+                        except Exception:
+                            _fx_ly = set()
                         # 🩸 30/09 (filhote evefe9af): as contagens das peças sem bloco
                         try:
                             _objetos_n = {int(_p.get("n") or 0) for _ps in
@@ -17009,6 +17015,13 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                 conf, obs_raw, _era_tab = _regra_tabela(
                                     conf, obs_raw, normalized_unit, _lys, _tab_ly)
                                 if _era_tab:
+                                    _rebaixado_pela_fonte = True
+                                # 🩸 05/10 (E07): metro que é faixa de linhas paralelas
+                                from engine_rules import (
+                                    selo_apos_faixa_de_paralelas as _regra_faixa)
+                                conf, obs_raw, _era_fx = _regra_faixa(
+                                    conf, obs_raw, normalized_unit, _lys, _fx_ly)
+                                if _era_fx:
                                     _rebaixado_pela_fonte = True
 
                                 # 🩸 29/09 (caso 18c57c3c): linha com quantidade ZERO

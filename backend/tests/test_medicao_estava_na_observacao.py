@@ -189,6 +189,8 @@ def _laco_de_itens_de_producao(items, areas=None, compr=None, extra=None):
         "_esp_ly": set(),
         # 04/10 (E14): layers cujo metro é a grade de uma tabela desenhada
         "_tab_ly": set(),
+        # 05/10 (E07): layers cujo metro é faixa de linhas paralelas
+        "_fx_ly": set(),
         # 30/09 (H13): as contagens e os nomes das peças de dentro do vínculo
         "_vinc_n": set(), "_vinc_nomes": set(),
         # 29/09 (caso 18c57c3c): blocos de anotação e as linhas que o laço tira

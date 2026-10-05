@@ -31,6 +31,7 @@ IRMAS = [
     ("H88 travessa de esteira", er.selo_apos_travessa_de_esteira, er.MARCA_TRAVESSA_DE_ESTEIRA, True),
     ("E12 parede espessa", er.selo_apos_parede_espessa, er.MARCA_PAREDE_ESPESSA, False),
     ("E14 grade de tabela", er.selo_apos_grade_de_tabela, er.MARCA_GRADE_DE_TABELA, False),
+    ("E07 faixa de paralelas", er.selo_apos_faixa_de_paralelas, er.MARCA_FAIXA_DE_PARALELAS, False),
 ]
 _IDS = [i[0] for i in IRMAS]
 
