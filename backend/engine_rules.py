@@ -5921,10 +5921,20 @@ def selo_apos_parede_espessa(conf, obs, unit, layers_citados, layers_espessa):
     """
     if conf != "confirmado" or not layers_espessa:
         return conf, obs, False
-    if _PROVA_POR_UNIDADE.get(str(unit or "").strip().lower()) != "comprimento":
+    # "metro", "metros", "mts", "m linear" também são comprimento
+    u = str(unit or "").strip().lower()
+    if _PROVA_POR_UNIDADE.get(u) != "comprimento" and grandeza_da_unidade(u) != "comprimento":
         return conf, obs, False
     es = {str(x).strip().upper() for x in layers_espessa}
     hit = next((str(ly) for ly in (layers_citados or ()) if str(ly).strip().upper() in es), "")
+    if not hit:
+        # 🩸 04/10 (revisão da Projetos): o nome com espaço, acento, ponto, '$'
+        # ou que começa com '-' — e a observação sem a palavra "layer" — o
+        # leitor de layers da observação corta ou não vê (13 dos 47 marcados no
+        # acervo). Procura cada layer marcado DIRETO no texto, com a régua da
+        # chave do selo (`_rotulo_citado`, com borda). Só pra rebaixar.
+        hit = next((str(ly) for ly in sorted(layers_espessa, key=lambda s: -len(str(s)))
+                    if _rotulo_citado(ly, obs)), "")
     if not hit:
         return conf, obs, False
     return ("estimado",

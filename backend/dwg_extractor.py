@@ -1272,25 +1272,49 @@ def _menos_intervalos(livre, tira):
     return livre
 
 
-def _sobra_das_faces_espessas(grupos_geo, em_par, sep_max, esp_max, min_sobrep):
-    """{trecho: comprimento CRU que sobra na soma} — as duas faces SEM PAR de uma
-    parede mais grossa que a seção da régua (ver `_PAREDE_ESPESSA_MAX_M`).
+def _intersecao_intervalos(a_, b_):
+    """Os trechos comuns a duas listas de intervalos."""
+    return [(max(x0, y0), min(x1, y1)) for x0, x1 in a_ for y0, y1 in b_ if min(x1, y1) > max(x0, y0)]
+
+
+class _EspessaGrandeDemais(Exception):
+    """O layer passou do teto de comparações da régua da parede grossa."""
+
+
+def _sobra_das_faces_espessas(grupos_geo, em_par, sep_max, esp_max, min_sobrep, max_comparacoes=None):
+    """{trecho: comprimento CRU que sobra na soma} — as duas faces de uma parede
+    mais grossa que a seção da régua (ver `_PAREDE_ESPESSA_MAX_M`).
 
     Par = duas paralelas do mesmo grupo de direção a `sep_max`–`esp_max` uma da
     outra e sobrepostas em pelo menos `min_sobrep` (pilarete e ponta não
-    entram). Conta só o trecho em que nenhuma das duas está em par (`em_par`)
-    nem tem outra linha do layer no meio (aí são duas paredes). Cada face
-    entra em um par só, o mais estreito primeiro. A sobra de um par é o trecho
-    sobreposto (as duas faces somam 2×, o eixo seria 1×), metade em cada linha.
-    🪤 O reboco da parede grossa (linha a ≤ 5 cm da face) também fica na soma e
-    não entra aqui: a sobra sai por BAIXO do que a soma tem a mais.
+    entram). `em_par`: {trecho: [(início, fim, lado)]} de onde o eixo pareou a
+    linha — lado +1, o par dela está ACIMA (d maior); −1, ABAIXO. Do par (a
+    embaixo, b em cima) conta o trecho sobreposto em que:
+    - nenhuma das duas está pareada com linha de FORA da faixa (a pra baixo, b
+      pra cima): aí ela é face de outra parede;
+    - as duas não estão pareadas pra DENTRO ao mesmo tempo: são duas paredes
+      finas com um vão entre elas (o shaft).
+    🩸 04/10 (revisão da Projetos): a linha paralela DENTRO da faixa —
+    revestimento, isolamento — não desarma mais. Antes ela pareava com a face
+    (a 5–25 cm) ou cortava o par "no meio", e o perímetro de 50 cm escapava.
+    Cada face entra em um par só, o mais estreito primeiro. A sobra de um par é
+    o trecho sobreposto (as duas faces somam 2×, o eixo seria 1×), metade em
+    cada linha. 🪤 A linha de dentro também fica na soma e não entra aqui: a
+    sobra sai por BAIXO do que a soma tem a mais.
+    Levanta `_EspessaGrandeDemais` acima de `max_comparacoes` — quem chama
+    segura (a marca não é medida; o eixo segue).
     """
     from collections import defaultdict as _dd
     sobra = _dd(float)
+    teto = max_comparacoes or _PAREDE_ESPESSA_MAX_COMPARACOES
+    n = 0
     for por_d, d, t0, t1 in grupos_geo:
         cands = []
         for a_pos, a in enumerate(por_d):
             for b_pos in range(a_pos + 1, len(por_d)):
+                n += 1
+                if n > teto:
+                    raise _EspessaGrandeDemais("mais de %d comparações" % teto)
                 b = por_d[b_pos]
                 sep = d[b] - d[a]
                 if sep > esp_max:
@@ -1303,13 +1327,14 @@ def _sobra_das_faces_espessas(grupos_geo, em_par, sep_max, esp_max, min_sobrep):
         usado = _dd(list)
         for _sep, a_pos, b_pos, lo, hi in sorted(cands):
             a, b = por_d[a_pos], por_d[b_pos]
+            pa, pb = em_par.get(a, ()), em_par.get(b, ())
             livre = [(lo, hi)]
+            livre = _menos_intervalos(livre, [(x, y) for x, y, lado in pa if lado < 0])
+            livre = _menos_intervalos(livre, [(x, y) for x, y, lado in pb if lado > 0])
+            livre = _menos_intervalos(livre, _intersecao_intervalos(
+                [(x, y) for x, y, lado in pa if lado > 0], [(x, y) for x, y, lado in pb if lado < 0]))
             for k in (a, b):
-                livre = _menos_intervalos(livre, em_par.get(k, ()))
                 livre = _menos_intervalos(livre, usado[k])
-            for m in por_d[a_pos + 1:b_pos]:
-                if livre and t0[m] < hi and t1[m] > lo:
-                    livre = _menos_intervalos(livre, [(t0[m], t1[m])])
             tot = sum(y - x for x, y in livre)
             if tot <= 0:
                 continue
@@ -1503,19 +1528,28 @@ def _corrigir_duto_linha_dupla(walls, unit_factor: float = 1.0, layers_extra=Non
                                     pareado[x] += tb - ta
                                     perda[x] += (1.0 - 0.5 / len(f_)) * (tb - ta)
                                     if em_par is not None:
-                                        em_par[x].append((ta, tb))
+                                        # lado do par: +1 acima (x é da face de baixo)
+                                        em_par[x].append((ta, tb, 1 if f_ is fa else -1))
                             pares.add((min(fa[0], fb[0]), max(fa[0], fb[0])))
                             k += 2
                         else:
                             k += 1
             if em_par is not None:
                 # 🩸 E12 — antes do `if not pares`: o muro SÓ de parede grossa não
-                # tem par nenhum e é justamente o que não pode passar calado
-                _sob = _sobra_das_faces_espessas(
-                    grupos_geo, em_par, sep_max, _PAREDE_ESPESSA_MAX_M / uf,
-                    _PAREDE_ESPESSA_SOBREP_MIN_M / uf)
-                for k, s in _sob.items():
-                    faces_espessas[sub[k][0]] = faces_espessas.get(sub[k][0], 0.0) + s * uf
+                # tem par nenhum e é justamente o que não pode passar calado.
+                # 🔒 04/10 (revisão da Projetos): try PRÓPRIO. Uma falha aqui
+                # (memória, o teto de comparações) caía no `except` geral desta
+                # função, que devolve os walls SEM o eixo de NENHUM layer — as
+                # somas voltavam pelas duas faces. Agora só a marca deste layer
+                # fica sem medir; o eixo segue.
+                try:
+                    _sob = _sobra_das_faces_espessas(
+                        grupos_geo, em_par, sep_max, _PAREDE_ESPESSA_MAX_M / uf,
+                        _PAREDE_ESPESSA_SOBREP_MIN_M / uf)
+                    for k, s in _sob.items():
+                        faces_espessas[sub[k][0]] = faces_espessas.get(sub[k][0], 0.0) + s * uf
+                except Exception as _e12:
+                    logger.warning("[parede-espessa] %s: sem a marca (%s)", layer, _e12)
             if not pares:
                 continue
             if min_fracao_par:
@@ -1664,6 +1698,10 @@ _PAREDE_ESPESSA_SOBREP_MIN_M = 1.0
 #: de parede composta ficam abaixo)
 _PAREDE_ESPESSA_SOBRA_MIN_M = 5.0
 _PAREDE_ESPESSA_FRACAO_MIN = 0.05
+#: teto de comparações por layer (o pareamento já pula layer acima de 6.000
+#: trechos; isto segura o pior caso de muitas paralelas na mesma faixa de 1 m).
+#: Acima dele a marca do layer não é medida e o log diz — o eixo segue.
+_PAREDE_ESPESSA_MAX_COMPARACOES = 3_000_000
 
 
 # ---------------------------------------------------------------------------

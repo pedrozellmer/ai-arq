@@ -189,16 +189,95 @@ def test_CONTROLE_shaft_entre_duas_paredes_de_linha_dupla(tmp_path):
     assert not _ler(tmp_path, d).metadata.get("parede_espessa_pelas_faces")
 
 
-def test_CONTROLE_linhas_soltas_com_parede_fina_no_meio(tmp_path):
-    """Linha solta, parede de 15 cm e outra linha solta a 95 cm: o que está no
-    meio separa — não são as duas faces de uma parede."""
+def test_CUSTO_DOCUMENTADO_linhas_soltas_com_parede_fina_no_meio_marcam(tmp_path):
+    """Linha solta, parede de 15 cm e outra linha solta a 95 cm. 🩸 04/10
+    (revisão da Projetos): a linha DENTRO da faixa não desarma mais — senão o
+    revestimento ou o isolamento da parede grossa a escondiam. Este desenho
+    não se separa de uma parede de 95 cm com linhas dentro: marca. Custa só o
+    ✓ (o número não muda)."""
     def d(m):
         for i in range(3):
             y = i * 4.0
             _linha(m, "A-WALL", (0, y), (10, y))
             _par(m, "A-WALL", 0, 10, y + 0.45, 0.15)
             _linha(m, "A-WALL", (0, y + 0.95), (10, y + 0.95))
-    assert not _ler(tmp_path, d).metadata.get("parede_espessa_pelas_faces")
+    ex = _ler(tmp_path, d)
+    assert "A-WALL" in (ex.metadata.get("parede_espessa_pelas_faces") or {})
+    assert ex.get_walls_by_layer()["A-WALL"] == pytest.approx(90.0, abs=0.5)
+
+
+@pytest.mark.parametrize("dentro", [0.08, 0.10, 0.15, 0.25])
+def test_linha_de_revestimento_dentro_da_parede_grossa_nao_desarma(tmp_path, dentro):
+    """🩸 04/10 (revisão da Projetos): o perímetro de 50 cm com uma linha a
+    `dentro` da face (revestimento, isolamento). A face pareava com ela como
+    parede fina e o perímetro escapava — o relato voltava a "JÁ pelo EIXO"."""
+    def d(m):
+        _estacionamento()(m)
+        _ret(m, "A-WALL", dentro, dentro, 30 - dentro, 20 - dentro)
+    ex = _ler(tmp_path, d)
+    esp = (ex.metadata.get("parede_espessa_pelas_faces") or {}).get("A-WALL")
+    assert esp and esp["sobra_m"] == pytest.approx(96.0, abs=1.0), ex.metadata.get("parede_espessa_pelas_faces")
+    assert "JÁ pelo EIXO" not in (ex.metadata.get("parede_linha_dupla") or "")
+
+
+def _sobra_um_par(par_a, par_b):
+    """Duas faces a 50 cm, 10 m sobrepostas; `par_a`/`par_b` = de que lado cada
+    uma ficou em par no eixo (+1 acima, −1 abaixo, 0 sem par)."""
+    d, t0, t1 = {0: 0.0, 1: 0.5}, {0: 0.0, 1: 0.0}, {0: 10.0, 1: 10.0}
+    em_par = {k: [(0.0, 10.0, lado)] for k, lado in ((0, par_a), (1, par_b)) if lado}
+    return sum(dx._sobra_das_faces_espessas([([0, 1], d, t0, t1)], em_par, 0.40, 1.00, 1.0).values())
+
+
+@pytest.mark.parametrize("par_a,par_b,esperado", [
+    (0, 0, 10.0),      # as duas sem par: a parede grossa
+    (+1, 0, 10.0),     # a de baixo pareou pra DENTRO (revestimento): ainda é ela
+    (0, -1, 10.0),     # a de cima pareou pra dentro: idem
+    (-1, 0, 0.0),      # a de baixo pareou pra FORA: é face de outra parede
+    (0, +1, 0.0),      # a de cima pareou pra fora: idem
+    (+1, -1, 0.0),     # as duas pra dentro: duas paredes finas com um vão (shaft)
+])
+def test_o_lado_do_par_decide(par_a, par_b, esperado):
+    assert _sobra_um_par(par_a, par_b) == pytest.approx(esperado)
+
+
+# ── 🔒 04/10 (revisão da Projetos): a régua da parede grossa nunca derruba o eixo ──
+def _paredes_finas_e_muro():
+    W = dx.WallSegment
+    ws = []
+    for i in range(10):                       # 10 paredes de 15 cm em par: o eixo roda
+        ws += [W("PAREDE", 8, (0, i * 3), (8, i * 3)), W("PAREDE", 8, (0, i * 3 + 0.15), (8, i * 3 + 0.15))]
+    ws += [W("PAREDE", 30, (0, 40), (30, 40)), W("PAREDE", 30, (0, 40.5), (30, 40.5))]   # muro de 50 cm
+    return ws
+
+
+def test_se_a_regua_falha_o_eixo_continua(monkeypatch):
+    ws = _paredes_finas_e_muro()
+    sem, _ = dx._corrigir_parede_linha_dupla(list(ws), 1.0, {})
+
+    def _falha(*a, **k):
+        raise MemoryError("sonda")
+    monkeypatch.setattr(dx, "_sobra_das_faces_espessas", _falha)
+    out = []
+    com, rel = dx._corrigir_parede_linha_dupla(list(ws), 1.0, {}, out)
+    assert sum(w.length for w in com) == pytest.approx(sum(w.length for w in sem)) == pytest.approx(140.0)
+    assert out == [] and "PAREDE" in rel
+
+
+def test_CONTROLE_sem_falha_a_mesma_soma_e_a_marca(monkeypatch):
+    out = []
+    com, _ = dx._corrigir_parede_linha_dupla(_paredes_finas_e_muro(), 1.0, {}, out)
+    assert sum(w.length for w in com) == pytest.approx(140.0)
+    assert sum(s for _w, s in out) == pytest.approx(30.0)
+
+
+def test_acima_do_teto_de_comparacoes_a_marca_nao_e_medida_e_o_eixo_segue(monkeypatch):
+    with pytest.raises(dx._EspessaGrandeDemais):
+        d, t0, t1 = {0: 0.0, 1: 0.5, 2: 1.0}, {0: 0, 1: 0, 2: 0}, {0: 10.0, 1: 10.0, 2: 10.0}
+        dx._sobra_das_faces_espessas([([0, 1, 2], d, t0, t1)], {}, 0.40, 1.00, 1.0, max_comparacoes=1)
+    monkeypatch.setattr(dx, "_PAREDE_ESPESSA_MAX_COMPARACOES", 1)
+    out = []
+    com, _ = dx._corrigir_parede_linha_dupla(_paredes_finas_e_muro(), 1.0, {}, out)
+    assert out == [] and sum(w.length for w in com) == pytest.approx(140.0)
 
 
 @pytest.mark.parametrize("n_finas,grossa", [
@@ -281,6 +360,55 @@ def test_a_linha_confirmada_em_metro_cai():
 def test_CONTROLE_area_contagem_ou_outro_layer_seguem(unit, citado):
     conf, obs, reb = er.selo_apos_parede_espessa("confirmado", "x", unit, citado, {"A-WALL": {}})
     assert not reb and conf == "confirmado"
+
+
+# 🩸 04/10 (revisão da Projetos): nomes que o leitor de layers da observação corta
+# (espaço, acento, ponto, '$', começa com '-') e a observação sem a palavra "layer"
+@pytest.mark.parametrize("layer,obs", [
+    ("ARQ_PAREDE EQUIPAMENTOS", "Fonte: layer 'ARQ_PAREDE EQUIPAMENTOS' = 300,00 m."),
+    ("EQUIPAMENTO PAREDE", "Fonte: layer EQUIPAMENTO PAREDE = 37,70 m."),
+    ("1_PLANTA BAIXA_1_ARQ-ALV.Soco de Alvenaria",
+     "Fonte: layer '1_PLANTA BAIXA_1_ARQ-ALV.Soco de Alvenaria' = 141,7 m."),
+    ("ARQ-DIVISÓRIA", "Fonte: layer 'ARQ-DIVISÓRIA' = 146,0 m."),
+    ("- ARQ - ALVENARIA", "Fonte: layer '- ARQ - ALVENARIA' = 5880 m."),
+    ("Intermediário$0$ARQ-ALV-ALT", "Fonte: layer 'Intermediário$0$ARQ-ALV-ALT' = 1532 m."),
+    ("A-WALL", "Fonte: comprimento do A-WALL = 347,90 m."),
+])
+def test_a_trava_acha_o_layer_que_o_leitor_da_observacao_corta(layer, obs):
+    from main import _layers_da_obs
+    conf, o, reb = er.selo_apos_parede_espessa("confirmado", obs, "m", _layers_da_obs(obs),
+                                               {layer.strip().upper()})
+    assert reb and conf == "estimado" and er.MARCA_PAREDE_ESPESSA in o, (layer, _layers_da_obs(obs))
+
+
+@pytest.mark.parametrize("unit", ["metro", "metros", "mts", "m linear", "M", "ML", "m.l."])
+def test_a_trava_vale_pra_toda_unidade_de_comprimento(unit):
+    conf, _o, reb = er.selo_apos_parede_espessa("confirmado", "layer A-WALL", unit, ["A-WALL"], {"A-WALL"})
+    assert reb and conf == "estimado", unit
+
+
+@pytest.mark.parametrize("marcado,obs,unit", [
+    ("ARQ_PAREDE EQUIPAMENTOS", "Fonte: layer 'ARQ_PAREDE' = 300,00 m.", "m"),       # outro layer, sem marca
+    ("A-WALL", "Fonte: layer 'A-WALL-PATT' = 63,23 m.", "m"),                         # borda do nome
+    ("A-WALL", "Fonte: área hachurada do layer 'A-WALL' = 63,23 m².", "m²"),         # área não é tocada
+    ("A-WALL", "Fonte: layer 'A-WALL' = 12 un.", "un"),
+])
+def test_CONTROLE_a_procura_direta_nao_pega_outro_layer_nem_outra_grandeza(marcado, obs, unit):
+    from main import _layers_da_obs
+    conf, _o, reb = er.selo_apos_parede_espessa("confirmado", obs, unit, _layers_da_obs(obs),
+                                                {marcado.upper()})
+    assert not reb and conf == "confirmado", (marcado, obs)
+
+
+def test_o_laco_de_producao_rebaixa_o_layer_com_espaco_no_nome():
+    from test_medicao_estava_na_observacao import _laco_de_itens_de_producao
+    item = {"item_num": "1", "description": "Parede de alvenaria",
+            "unit": "ml", "quantity": 327.96, "confidence": "confirmado",
+            "observations": "Fonte: comprimento do layer 'ARQ_PAREDE EQUIPAMENTOS' = 327.96 m."}
+    itens, _e, _ = _laco_de_itens_de_producao(
+        [item], areas={}, compr={"ARQ_PAREDE EQUIPAMENTOS": 327.96},
+        extra={"_esp_ly": {"ARQ_PAREDE EQUIPAMENTOS"}})
+    assert itens[0].confidence.value == "estimado" and "PAREDE ESPESSA" in itens[0].observations
 
 
 def test_o_laco_de_producao_rebaixa_a_linha():
