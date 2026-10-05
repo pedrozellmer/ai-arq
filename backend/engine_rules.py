@@ -3512,12 +3512,17 @@ _UNIDADES_DE_CONTAGEM = ("un", "pç", "pc", "und", "unid")
 # 'j3'" tem item real e só falta o tipo. Aqui o item NÃO é real. Lista FECHADA
 # de nomes de sistema, com fronteira dos dois lados: um bloco de projetista
 # chamado `PORTA_OPEN90` ou `DOT-01` não pode ser pego junto.
+# 🔑 05/10/2026 (E15): UMA lista só. Este guarda (a linha já escrita) e a
+# contagem do motor (`dwg_extractor`: a seta nem chega à leitura) leem ESTA
+# constante — duas listas iam divergir.
+SETAS_DE_COTA_DO_AUTOCAD = frozenset({
+    "_ARCHTICK", "_BOXBLANK", "_BOXFILLED", "_CLOSED", "_CLOSEDBLANK", "_CLOSEDFILLED", "_DATUMBLANK",
+    "_DATUMFILLED", "_DOT", "_DOTBLANK", "_DOTSMALL", "_INTEGRAL", "_NONE", "_OBLIQUE", "_OPEN", "_OPEN30",
+    "_OPEN90", "_ORIGIN", "_ORIGIN2", "_SMALL"})
 _RE_BLOCO_DE_SISTEMA = _re.compile(
-    r"(?<![A-Za-z0-9_])_("
-    r"archtick|box(?:blank|filled)|closed(?:blank|filled)?|"
-    r"datum(?:blank|filled)|dot(?:blank|small)?|integral|none|oblique|"
-    r"open(?:30|90)?|origin2?|small"
-    r")(?![A-Za-z0-9_])", _re.I)
+    r"(?<![A-Za-z0-9_])("
+    + "|".join(sorted(map(_re.escape, SETAS_DE_COTA_DO_AUTOCAD), key=len, reverse=True))
+    + r")(?![A-Za-z0-9_])", _re.I)
 
 
 def item_e_bloco_sem_identidade(descricao, unidade) -> bool:

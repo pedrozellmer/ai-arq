@@ -8520,6 +8520,43 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         _nomes_def = set()
     _arquivo_tqs = bool(_nomes_def & _TQS_SIMBOLOS) or any(
         _TQS_CORTE_RE.match(n) or n.startswith("_VAONER") for n in _nomes_def)
+    # 🩸 05/10/2026 (E15 do estudo): a PONTA DE COTA padrão do AutoCAD contada
+    # como peça. Cota ou chamada explodida deixa a seta solta como INSERT, e a
+    # leitura lê o nome: `_Open90` virou "porta de abrir 90°" (13 un com selo),
+    # `_DOT` virou "sprinklers" (17 un com selo). Na produção, 8 linhas
+    # entregues em 6 jobs, e nenhuma era peça; o guarda da linha (14/09) só
+    # rebaixava 6 depois de escritas e não conhecia o "DOT" sem "_" (2 linhas
+    # de 15 un com selo). Aqui a seta nem chega à leitura. O que desenham, em
+    # tamanho de unidade (a escala da inserção dá o tamanho real): `_DOT` = o
+    # ponto (polilinha) + 1 linha, caixa 1,5 × 1,0; `_Open90` = 3 linhas, 1 × 1.
+    # 🪤 Só o nome INTEIRO: "PORTA_OPEN90_80" é porta.
+    # 🔑 A lista é a MESMA do guarda da linha (14/09, `item_e_bloco_sem_identidade`):
+    # uma constante só, em engine_rules.
+    from engine_rules import SETAS_DE_COTA_DO_AUTOCAD as _SETAS_DE_COTA
+    # "DOT" (o `_DOT` renomeado na exportação: definição idêntica nos 3 desenhos
+    # do acervo) e "TIC" (traço de cota: barra + cruz, 3 linhas, caixa 2 × 2)
+    # sem o "_" são curtos demais pra valer pelo nome — luminária "DOT" existe.
+    # Só valem com a DEFINIÇÃO de seta: até 3 entidades, só linha ou polilinha
+    # (sem texto, sem atributo, sem círculo), caixa de até 2,5 unidades.
+    _SETAS_SEM_PREFIXO = {"DOT", "TIC"}
+    _SETA_ENTIDADES_MAX = 3
+    _SETA_CAIXA_MAX = 2.5
+    _seta_pela_definicao: dict[str, bool] = {}
+
+    def _definicao_de_seta(name: str) -> bool:
+        if name not in _seta_pela_definicao:
+            _ok = False
+            try:
+                _blk = doc.blocks.get(name)
+                _ents = list(_blk) if _blk is not None else []
+                if (1 <= len(_ents) <= _SETA_ENTIDADES_MAX
+                        and all(e.dxftype() in ("LINE", "LWPOLYLINE") for e in _ents)):
+                    _cx = _compute_block_bbox(_blk)
+                    _ok = _cx is not None and max(_cx) <= _SETA_CAIXA_MAX
+            except Exception:
+                _ok = False
+            _seta_pela_definicao[name] = _ok
+        return _seta_pela_definicao[name]
 
     def _is_annotation_block(name: str) -> bool:
         if not name:
@@ -8533,6 +8570,10 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         if name.upper() in _TQS_SIMBOLOS or _TQS_CORTE_RE.match(name):
             return True
         if _arquivo_tqs and name.upper() == "SN":
+            return True
+        if name.upper() in _SETAS_DE_COTA:
+            return True
+        if name.upper() in _SETAS_SEM_PREFIXO and _definicao_de_seta(name):
             return True
         return False
 
