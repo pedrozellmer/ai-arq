@@ -12835,15 +12835,32 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
     # número que a própria linha cita). Aqui só se monta a entrada, com a
     # prancha da linha resolvida como a do quadro.
     from engine_rules import (numero_escrito_da_linha as _num_escrito,
-                              registros_escritos_da_prancha as _regs_escritos)
+                              registros_escritos_da_prancha as _regs_escritos,
+                              duplicados_do_numero_escrito as _dup_escrito)
     _vesc = {}
+    #: id -> (descrição, prancha) da 1ª linha que ficou com o MESMO valor escrito
+    #: (trava do duplicado entre pranchas): esta continua zerada, com a nota
+    _vesc_dup = {}
     if numeros_com_material_por_prancha:
+        _achados_e = []
         for _it, _l in zip(_elegiveis_q, _linhas_q):
-            _tr_e = _num_escrito(_l["descricao"], _l["unidade"], _l["quantidade"],
-                                 _regs_escritos(numeros_com_material_por_prancha,
-                                                _l["arquivo"], _l["pagina"]))
-            if _tr_e:
-                _vesc[id(_it)] = _tr_e
+            _r_e = _num_escrito(_l["descricao"], _l["unidade"], _l["quantidade"],
+                                _regs_escritos(numeros_com_material_por_prancha,
+                                               _l["arquivo"], _l["pagina"]))
+            if _r_e:
+                _vesc[id(_it)] = _r_e[0]
+                # a prancha da linha: sem página no `ref_sheet`, a única página
+                # do arquivo com registro (é a que `_regs_escritos` usou)
+                _pg_e = _l["pagina"]
+                if _pg_e is None:
+                    _pgs_e = [_p for (_a, _p) in numeros_com_material_por_prancha
+                              if str(_a or "").strip().lower() == _l["arquivo"]]
+                    _pg_e = _pgs_e[0] if len(_pgs_e) == 1 else None
+                _achados_e.append((id(_it), (_l["arquivo"], _pg_e), _r_e[1],
+                                   str(_l["descricao"] or "")))
+        _vesc_dup = _dup_escrito(_achados_e)
+        for _k_dup in _vesc_dup:
+            _vesc.pop(_k_dup, None)
     # 🚨 24/08: `apenas_preencher` é pra quem REIDRATA itens do banco (/inform-area).
     # Ali o motor já decidiu, lá atrás, com a geometria em mãos; reavaliar depois,
     # a partir de linhas que perderam metade do contexto, é decidir com MENOS
@@ -13439,6 +13456,23 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
         print(f"[honestidade-m2] {zerados_sem_prancha} item(ns) zerado(s) porque a "
               f"PRÓPRIA prancha deles não mediu o bastante — a frase 'Medido da "
               f"GEOMETRIA' não sai mais com a medição de outra prancha")
+    # 🔑 05/10 — a trava do DUPLICADO: a linha barrada saiu zerada pelo caminho
+    # de sempre; a frase diz por quê e onde o número ficou. NA FRENTE.
+    escritos_duplicados = 0
+    for it in items:
+        _d_e = _vesc_dup.get(id(it))
+        if not _d_e or float(getattr(it, "quantity", 0) or 0):
+            continue
+        escritos_duplicados += 1
+        _arq_d, _pg_d = _d_e[1]
+        _nota_d = ("O mesmo valor escrito na prancha já está na linha '%s' (%s%s) — esta "
+                   "fica em branco pra não contar duas vezes; se for outro trecho da obra, "
+                   "preencha." % (_d_e[0][:70], _arq_d,
+                                  "" if _pg_d is None else " p%d" % (int(_pg_d) + 1)))
+        _obs_d = it.observations or ""
+        if "O mesmo valor escrito na prancha" not in _obs_d:
+            it.observations = _nota_d + ((" | " + _obs_d) if _obs_d else "")
+    _apply_area_honesty.ultimo_escritos_duplicados = escritos_duplicados
     _apply_area_honesty.ultimo_zerados_sem_prancha = zerados_sem_prancha
     _apply_area_honesty.ultimo_apertou_teto = apertou_teto
     _apply_area_honesty.ultimo_teto_m2 = float(_teto_m2)
@@ -20205,7 +20239,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
                            f"quadro_sem_prova={getattr(_apply_area_honesty, 'ultimo_quadro_sem_prova', 0)} "
                            f"quadro_totais={getattr(_apply_area_honesty, 'ultimo_quadro_totais', 0)} "
                            # 05/10: número escrito ao lado do material (não zerado)
-                           f"escritos={_escritos_log}",
+                           f"escritos={_escritos_log} "
+                           f"escritos_dup={getattr(_apply_area_honesty, 'ultimo_escritos_duplicados', 0)}",
                            job_id)
         except Exception:
             pass

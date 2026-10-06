@@ -4814,10 +4814,12 @@ def registros_escritos_da_prancha(mapa, arquivo, pagina):
 
 def numero_escrito_da_linha(descricao, unidade, quantidade, registros):
     """A quantidade desta linha está ESCRITA na prancha, colada a um material que
-    a própria linha cita? Devolve o trecho (pra frase) ou None.
+    a própria linha cita? Devolve (trecho, chave) ou None.
 
     Tudo junto: a mesma família de unidade (m² com m², m³ com m³), o mesmo
-    número (± 0,01) e um dos materiais de antes do número na DESCRIÇÃO da linha."""
+    número (± 0,01) e um dos materiais de antes do número na DESCRIÇÃO da linha.
+    A `chave` — (centésimos, família, materiais que casaram) — é o que a trava
+    do duplicado compara entre pranchas (`duplicados_do_numero_escrito`)."""
     u = str(unidade or "").strip().lower()
     fam = "m3" if u in ("m³", "m3") else ("m2" if u in FLOOR_M2_UNITS else None)
     if fam is None or not registros:
@@ -4832,9 +4834,37 @@ def numero_escrito_da_linha(descricao, unidade, quantidade, registros):
     for cent, f, mats, trecho in registros:
         if f != fam or abs(int(cent) - c) > 1:
             continue
-        if any(_re.search(r"(?<![a-z])" + _re.escape(s), d) for s in mats):
-            return trecho
+        casou = tuple(s for s in mats if _re.search(r"(?<![a-z])" + _re.escape(s), d))
+        if casou:
+            return trecho, (int(cent), f, casou)
     return None
+
+
+def duplicados_do_numero_escrito(achados):
+    """A trava do DUPLICADO: o mesmo valor escrito não preenche a mesma coisa duas
+    vezes vindo de pranchas diferentes.
+
+    🩸 05/10/2026 (revisão): o carimbo "Área de Cobertura …: 183,98 m²" se repete
+    em cada prancha do caderno, e a telha lida em duas folhas virava duas linhas
+    com 183,98. Hoje as duas saem zeradas e nada soma em dobro — sem trava, quem
+    somasse a coluna contaria a telha 2×. Regressão.
+    `achados`: [(id_da_linha, prancha, chave, descrição)] na ordem das linhas, com
+    a `chave` de `numero_escrito_da_linha`. Devolve {id: (descrição, prancha)} das
+    linhas BARRADAS, cada uma com a 1ª que ficou com o número.
+    🪤 Só barra a mesma chave (mesmo número, mesma família, mesmos materiais que
+    casaram) em OUTRA prancha. Fica: a mesma prancha (forro e pintura do forro na
+    mesma folha — a área da pintura do forro É a do forro) e materiais diferentes
+    (legenda "TELHA … SOBRE ESTRUTURA DE MADEIRA": a telha casa por telha, o
+    madeiramento por madeira). 🪤 Com o carimbo que só diz "cobertura", telha e
+    madeiramento casam pela MESMA palavra — e o de outra prancha fica barrado."""
+    dono = {}
+    barradas = {}
+    for i, prancha, chave, desc in achados:
+        if chave not in dono:
+            dono[chave] = (prancha, desc)
+        elif dono[chave][0] != prancha:
+            barradas[i] = (dono[chave][1], dono[chave][0])
+    return barradas
 
 
 # ─────────────────────────────────────────────────────────────────────────────

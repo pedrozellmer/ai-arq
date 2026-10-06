@@ -219,6 +219,88 @@ def test_rodar_de_novo_nao_empilha_a_frase():
 
 
 # ══════════════════════════════════════════════════════════════════════════
+#  A trava do DUPLICADO: o mesmo valor escrito, em pranchas diferentes
+# ══════════════════════════════════════════════════════════════════════════
+# 🩸 05/10 (revisão): o carimbo "Área de Cobertura …: 183,98 m²" se repete em
+# cada folha, e a telha lida em duas folhas virava duas linhas com 183,98. Hoje
+# as duas saem zeradas; sem a trava, quem somasse a coluna contaria 2×.
+CARIMBO = "QUADRO DE ÁREAS\nÁrea de Cobertura Guarita + Lixeira: 183,98 m²\n"
+LEGENDA_COBERTURA = "COBERTURA EM TELHA CERÂMICA SOBRE ESTRUTURA DE MADEIRA 183,98 m²\n"
+
+
+def _duas_pranchas(desc_a, desc_b, texto, qty=183.98):
+    a = _Item(desc_a, "m²", qty, ref_sheet=ARQ + " (PLANTA DE COBERTURA)")
+    b = _Item(desc_b, "m²", qty, ref_sheet=ARQ_B + " (CORTES)")
+    _roda([a, b], _mapa((ARQ, 0, texto), (ARQ_B, 0, texto)))
+    return a, b
+
+
+def test_a_mesma_telha_lida_em_duas_pranchas_so_a_1a_fica_com_o_numero():
+    a, b = _duas_pranchas("Telha cerâmica — cobertura da guarita", "Cobertura em telha cerâmica — i=35%",
+                          CARIMBO)
+    assert (a.quantity, b.quantity) == (183.98, 0), "a mesma telha contada duas vezes"
+    assert b.observations.startswith("O mesmo valor escrito na prancha já está na linha "
+                                     "'Telha cerâmica — cobertura da guarita' (prancha-a.pdf"), (
+        b.observations[:160])
+    assert main._apply_area_honesty.ultimo_escritos_duplicados == 1
+
+
+def test_a_trava_nao_empilha_a_nota_ao_rodar_de_novo():
+    a = _Item("Telha cerâmica — cobertura", "m²", 183.98, ref_sheet=ARQ + " (A)")
+    b = _Item("Cobertura em telha cerâmica", "m²", 183.98, ref_sheet=ARQ_B + " (B)")
+    mapa = _mapa((ARQ, 0, CARIMBO), (ARQ_B, 0, CARIMBO))
+    _roda([a, b], mapa)
+    b.quantity = 183.98            # a leitura de novo, como num reprocesso
+    _roda([a, b], mapa)
+    assert b.observations.count("O mesmo valor escrito na prancha") == 1
+
+
+def test_FICA_a_mesma_prancha_forro_e_pintura_do_forro():
+    """A área da pintura do forro É a do forro, na mesma folha."""
+    forro = _Item("Forro em gesso placa", "m²", 39.8)
+    pintura = _Item("Pintura em PVA do forro de gesso", "m²", 39.8)
+    _roda([forro, pintura], _mapa((ARQ, 0, FORRO)))
+    assert (forro.quantity, pintura.quantity) == (39.8, 39.8)
+
+
+def test_FICA_a_mesma_prancha_mesmo_com_os_mesmos_materiais():
+    sala = _Item("Forro em gesso placa — sala", "m²", 39.8)
+    hall = _Item("Forro em gesso placa — hall", "m²", 39.8)
+    _roda([sala, hall], _mapa((ARQ, 0, FORRO)))
+    assert (sala.quantity, hall.quantity) == (39.8, 39.8)
+
+
+def test_FICA_a_mesma_prancha_com_e_sem_pagina_no_ref_sheet():
+    """Arquivo de uma página: "(p1 · …)" e sem página são a MESMA prancha."""
+    sala = _Item("Forro em gesso placa — sala", "m²", 39.8, ref_sheet=ARQ + " (p1 · FORRO)")
+    hall = _Item("Forro em gesso placa — hall", "m²", 39.8, ref_sheet=ARQ + " (FORRO)")
+    _roda([sala, hall], _mapa((ARQ, 0, FORRO)))
+    assert (sala.quantity, hall.quantity) == (39.8, 39.8)
+
+
+def test_FICA_telha_e_madeiramento_que_casam_por_palavras_diferentes():
+    telha, madeira = _duas_pranchas("Telha cerâmica tipo romana", "Estrutura de madeira — tesouras e caibros",
+                                     LEGENDA_COBERTURA)
+    assert (telha.quantity, madeira.quantity) == (183.98, 183.98)
+
+
+def test_CUSTO_DOCUMENTADO_com_o_carimbo_que_so_diz_cobertura_o_madeiramento_de_outra_prancha_fica_barrado():
+    """O carimbo real só escreve "Área de Cobertura": telha e madeiramento casam
+    pela MESMA palavra. Em pranchas diferentes, o 2º fica em branco com a nota
+    (como hoje) — erra pra menos, nunca soma em dobro."""
+    telha, madeira = _duas_pranchas("Telha cerâmica — cobertura", "Estrutura de madeira para cobertura",
+                                    CARIMBO)
+    assert (telha.quantity, madeira.quantity) == (183.98, 0)
+
+
+def test_FICA_numeros_diferentes_em_pranchas_diferentes():
+    a = _Item("Forro em gesso placa", "m²", 39.8, ref_sheet=ARQ + " (FORRO SALA)")
+    b = _Item("Forro em gesso placa", "m²", 35.6, ref_sheet=ARQ_B + " (FORRO HALL)")
+    _roda([a, b], _mapa((ARQ, 0, FORRO), (ARQ_B, 0, FORRO.replace("39,80", "35,60"))))
+    assert (a.quantity, b.quantity) == (39.8, 35.6)
+
+
+# ══════════════════════════════════════════════════════════════════════════
 #  Com a régua do quadro (22/09): quem tem PROVA vence, o TOTAL fica em branco
 # ══════════════════════════════════════════════════════════════════════════
 _QUADRO_LIDO = "Valor lido diretamente do quadro de quantitativos da prancha."
