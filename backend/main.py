@@ -12324,7 +12324,8 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
                         pdfvec_m2: float = 0,
                         pdfvec_por_prancha: dict = None,
                         medicao_incompleta: bool = False,
-                        numeros_do_texto_por_prancha: dict = None) -> tuple[int, int]:
+                        numeros_do_texto_por_prancha: dict = None,
+                        numeros_com_material_por_prancha: dict = None) -> tuple[int, int]:
     """Aplica a regra dura nº1 aos itens de ÁREA que NÃO vieram da geometria do CAD:
 
     - Se o cliente INFORMOU a área (total_area_source='informado') e o item é uma
@@ -12387,6 +12388,8 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
     #: 22/09: número de QUADRO DE QUANTITATIVOS impresso — preservado com prova,
     #: zerado sem prova, e a linha de TOTAL que só repetia a soma
     quadro_preservados = quadro_sem_prova = quadro_totais = 0
+    #: 05/10: número ESCRITO na prancha ao lado do material — não zerado
+    escritos_preservados = 0
     # 🩸 31/08 (caso cliente-14): quantas vezes a área informada já foi
     # atribuída, por família de superfície. A soma das superfícies
     # horizontais não pode passar do total declarado — 6 itens com 400 m²
@@ -12825,6 +12828,22 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
             "descricao": getattr(_it, "description", "")})
     _vq = {id(_it): _v for _it, _v in zip(
         _elegiveis_q, _veredito_quadro(_linhas_q, numeros_do_texto_por_prancha)) if _v}
+    # ── 🔑 05/10/2026 — O NÚMERO ESCRITO NA PRANCHA, AO LADO DO MATERIAL ────
+    # "PISO EM GRANITINA … 66,00 m²" na legenda, e a linha do piso de granitina
+    # com 66,00: a decisão mora em `engine_rules.numero_escrito_da_linha` (o
+    # mesmo número, a mesma família de unidade, e um material escrito ANTES do
+    # número que a própria linha cita). Aqui só se monta a entrada, com a
+    # prancha da linha resolvida como a do quadro.
+    from engine_rules import (numero_escrito_da_linha as _num_escrito,
+                              registros_escritos_da_prancha as _regs_escritos)
+    _vesc = {}
+    if numeros_com_material_por_prancha:
+        for _it, _l in zip(_elegiveis_q, _linhas_q):
+            _tr_e = _num_escrito(_l["descricao"], _l["unidade"], _l["quantidade"],
+                                 _regs_escritos(numeros_com_material_por_prancha,
+                                                _l["arquivo"], _l["pagina"]))
+            if _tr_e:
+                _vesc[id(_it)] = _tr_e
     # 🚨 24/08: `apenas_preencher` é pra quem REIDRATA itens do banco (/inform-area).
     # Ali o motor já decidiu, lá atrás, com a geometria em mãos; reavaliar depois,
     # a partir de linhas que perderam metade do contexto, é decidir com MENOS
@@ -13089,6 +13108,30 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
                     "(o número já estava citado nesta linha) — estimativa, confira."
                 ).strip(" |")
             resgatados += 1
+        elif (q > 0 and id(it) in _vesc
+              and (_vq.get(id(it)) or ("",))[0] not in ("texto", "total", "e_o_total")):
+            # 🔑 05/10/2026 — o número desta linha está ESCRITO na prancha, colado
+            # a um material que a linha cita (ver o pré-passo acima). Não é chute
+            # da IA: fica, ESTIMADO (ninguém mediu o desenho), e a frase diz o
+            # trecho de onde veio. Só deixa de zerar.
+            # 🪤 O quadro com PROVA sai ✓ pelo ramo de baixo, e a linha de TOTAL
+            # do quadro fica em branco (não conta em dobro): os dois vencem este.
+            # O quadro SEM prova cai aqui quando o número está ao lado do material.
+            from engine_rules import MARCA_VALOR_ESCRITO as _marca_esc
+            try:
+                it.confidence = Confidence("estimado")
+            except Exception:
+                pass
+            _obs_e = _limpa_aviso_nao_medida(
+                _limpa_afirmacao_de_medida(it.observations or ""))
+            if _marca_esc not in _obs_e:
+                # NA FRENTE: a revisão mostra os primeiros 110 caracteres
+                _frase_e = ("%s: '%s' — está no texto do PDF, ao lado do material desta "
+                            "linha; não medimos o desenho. Confira antes de orçar."
+                            % (_marca_esc, _vesc[id(it)]))
+                _obs_e = _frase_e + ((" | " + _obs_e) if _obs_e else "")
+            it.observations = _obs_e
+            escritos_preservados += 1
         elif q > 0 and id(it) in _vq:
             # 🩸 22/09/2026 — o número é de QUADRO DE QUANTITATIVOS impresso na
             # prancha (ver o pré-passo acima). Com prova, fica — ESTIMADO, nunca
@@ -13410,6 +13453,7 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
     _apply_area_honesty.ultimo_quadro_preservados = quadro_preservados
     _apply_area_honesty.ultimo_quadro_sem_prova = quadro_sem_prova
     _apply_area_honesty.ultimo_quadro_totais = quadro_totais
+    _apply_area_honesty.ultimo_escritos_preservados = escritos_preservados
     return filled, blanked
 
 
@@ -13617,8 +13661,12 @@ def _chave_dos_numeros(filename, page_index):
     return (str(filename or "").strip().lower(), int(page_index or 0))
 
 
-def _guarda_numeros_do_texto(mapa, filename, page_index, texto) -> None:
+def _guarda_numeros_do_texto(mapa, filename, page_index, texto, mapa_material=None) -> None:
     """Guarda os números decimais do texto desta página (22/09, prova do quadro).
+
+    🔑 05/10: com `mapa_material`, guarda também os números com unidade que têm
+    MATERIAL escrito antes (`engine_rules.numeros_escritos_com_material`) — o
+    número da legenda ao lado do material, que a honestidade deixa de zerar.
 
     Best-effort: falhar aqui só tira a prova por texto — o quadro cai no
     caminho "sem prova" (zerado, com o número na frase), que é o de antes."""
@@ -13632,21 +13680,44 @@ def _guarda_numeros_do_texto(mapa, filename, page_index, texto) -> None:
             mapa[_chave_dos_numeros(filename, page_index)] = _ns
     except Exception as _e:
         print(f"[quadro] {filename} p{page_index}: números do texto falharam ({_e})")
+    if mapa_material is None:
+        return
+    try:
+        from engine_rules import numeros_escritos_com_material
+        _regs = numeros_escritos_com_material(t)
+        if _regs:
+            mapa_material[_chave_dos_numeros(filename, page_index)] = _regs
+    except Exception as _e:
+        print(f"[escrito] {filename} p{page_index}: números com material falharam ({_e})")
 
 
-def _anexa_numeros_do_texto(mapa, filename, page_index, result) -> None:
+def _anexa_numeros_do_texto(mapa, filename, page_index, result, mapa_material=None) -> None:
     """Põe os números desta página no checkpoint (lista, que JSON aceita)."""
     try:
         _ns = mapa.get(_chave_dos_numeros(filename, page_index))
         if _ns and isinstance(result, dict):
             result["_numeros_do_texto"] = sorted(_ns)
+        _regs = (mapa_material or {}).get(_chave_dos_numeros(filename, page_index))
+        if _regs and isinstance(result, dict):
+            result["_numeros_com_material"] = [list(r) for r in _regs]
     except Exception as _e:
         print(f"[ckpt] {filename}: nao consegui anexar os numeros do texto ({_e})")
 
 
-def _restaura_numeros_do_texto(mapa, filename, page_index, result) -> None:
+def _restaura_numeros_do_texto(mapa, filename, page_index, result, mapa_material=None) -> None:
     """Na retomada, os números voltam do checkpoint (o texto não é relido)."""
-    _ns = (result or {}).get("_numeros_do_texto") if isinstance(result, dict) else None
+    if not isinstance(result, dict):
+        return
+    # 🪤 05/10: as duas listas voltam INDEPENDENTES — página com material e sem
+    # nenhum outro decimal não pode perder o registro na retomada.
+    _regs = result.get("_numeros_com_material")
+    if _regs and mapa_material is not None:
+        try:
+            mapa_material[_chave_dos_numeros(filename, page_index)] = [
+                (int(r[0]), str(r[1]), tuple(r[2]), str(r[3])) for r in _regs]
+        except (TypeError, ValueError, IndexError):
+            pass
+    _ns = result.get("_numeros_do_texto")
     if not _ns:
         return
     try:
@@ -17501,6 +17572,9 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # `engine_rules.veredito_do_quadro_impresso`). Só centésimos, nunca o
         # texto: o texto some no `del` do fim do laço.
         _numeros_do_texto_por_prancha = {}
+        # 🔑 05/10/2026 — e os números com MATERIAL escrito antes (a legenda
+        # "PISO EM GRANITINA … 66,00 m²"): `engine_rules.numeros_escritos_com_material`.
+        _numeros_com_material_por_prancha = {}
         for i, (pdf_path, filename, sheet_type, page_index, page_count) in enumerate(page_units):
             # 🛡️ Freio de MEMÓRIA (idem loop DXF): aborta limpo antes do OOM,
             # mantendo o servidor de pé pros outros clientes.
@@ -17604,7 +17678,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     _pdfvec_falhas.append(dict(result["_pdfvec_falhou"]))
                 # 22/09: a prova do quadro de quantitativos também volta
                 _restaura_numeros_do_texto(_numeros_do_texto_por_prancha, filename,
-                                           page_index, result)
+                                           page_index, result,
+                                           mapa_material=_numeros_com_material_por_prancha)
             else:
                 # 1. Extrair texto (só da página desta unidade — leve, bounded)
                 # 🩸 22/09: o texto INTEIRO da página vira os números da prova do
@@ -17614,7 +17689,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                               char_budget=_TETO_TEXTO_DA_PROVA)
                 text = _texto_inteiro[:6000]
                 _guarda_numeros_do_texto(_numeros_do_texto_por_prancha, filename,
-                                         page_index, _texto_inteiro)
+                                         page_index, _texto_inteiro,
+                                         mapa_material=_numeros_com_material_por_prancha)
                 # 🔑 23/09/2026 — A RÉGUA DA INVERSÃO, AGORA TAMBÉM NO PDF.
                 # O quadro de áreas do autor só era lido do CAD, e a geometria
                 # recorta ambiente em 73 projetos por PDF contra 16 por CAD: os
@@ -18084,7 +18160,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     # 22/09: os números do texto viajam junto — a retomada não
                     # extrai texto de novo, e sem eles o quadro perde a prova
                     _anexa_numeros_do_texto(_numeros_do_texto_por_prancha, filename,
-                                            page_index, result)
+                                            page_index, result,
+                                            mapa_material=_numeros_com_material_por_prancha)
                     _ckpt_save(job_id, _stem, result)
 
             # 3b. Capturar falha de IA nesta prancha (não interrompe o loop —
@@ -19867,6 +19944,10 @@ bloco — só cite os que estão no inventário deste arquivo."""
             _nums_texto_map = dict(_numeros_do_texto_por_prancha)
         except NameError:
             _nums_texto_map = {}  # job sem PDF: o laço nem existiu
+        try:
+            _nums_material_map = dict(_numeros_com_material_por_prancha)
+        except NameError:
+            _nums_material_map = {}
         _n_fill, _blanked = _apply_area_honesty(
             all_items, project_data.total_area,
             getattr(project_data, "total_area_source", ""),
@@ -19878,6 +19959,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
             # 🪤 ANTES do `medicao_incompleta`: a linha que fecha a chamada é
             # âncora do guarda de call site (test_area_medida_do_pdf...).
             numeros_do_texto_por_prancha=_nums_texto_map,
+            # 🔑 05/10 — o número da legenda ao lado do material (não zera)
+            numeros_com_material_por_prancha=_nums_material_map,
             # 🩸 02/09 — prancha que não deu pra medir (tempo, OOM, filho morto)
             # significa que a nossa medição NÃO cobre o imóvel. Nesse caso o teto
             # por prancha aperta em cima do que a gente não viu, e foi assim que
@@ -20091,7 +20174,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 _n_resgate_pdf_log = 0      # job sem PDF: o laço nem existiu
             _resg_log = int(getattr(_apply_area_honesty, "ultimo_resgatados", 0) or 0)
             _quadro_log = int(getattr(_apply_area_honesty, "ultimo_quadro_preservados", 0) or 0)
-            if _pres or _n_fill or _blanked or _resg_log or _quadro_log:
+            _escritos_log = int(getattr(_apply_area_honesty, "ultimo_escritos_preservados", 0) or 0)
+            if _pres or _n_fill or _blanked or _resg_log or _quadro_log or _escritos_log:
                 # 🪤 `preservados_por_pe_direito` virou nome errado quando a
                 # preservação por medição do PDF entrou no mesmo contador
                 # (26/08). Na avaliação `eve9afae` ele imprimiu
@@ -20119,7 +20203,9 @@ bloco — só cite os que estão no inventário deste arquivo."""
                            # a linha de TOTAL que só repetia a soma
                            f"quadro_preservados={_quadro_log} "
                            f"quadro_sem_prova={getattr(_apply_area_honesty, 'ultimo_quadro_sem_prova', 0)} "
-                           f"quadro_totais={getattr(_apply_area_honesty, 'ultimo_quadro_totais', 0)}",
+                           f"quadro_totais={getattr(_apply_area_honesty, 'ultimo_quadro_totais', 0)} "
+                           # 05/10: número escrito ao lado do material (não zerado)
+                           f"escritos={_escritos_log}",
                            job_id)
         except Exception:
             pass

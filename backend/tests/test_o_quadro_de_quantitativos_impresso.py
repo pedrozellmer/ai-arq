@@ -622,7 +622,10 @@ def test_o_laco_de_paginas_EXECUTADO_guarda_anexa_salva_e_restaura(tmp_path):
            "quadro_de_areas_do_texto_do_pdf": main.quadro_de_areas_do_texto_do_pdf,
            "_log_error": lambda stage, msg, *a, **k: _regua_log.append(str(stage)),
            "job_id": "teste",
-           "_numeros_do_texto_por_prancha": {}}
+           "_numeros_do_texto_por_prancha": {},
+           # 05/10: o laço também guarda o número com material (o teste dele
+           # mora em test_numero_escrito_ao_lado_do_material.py)
+           "_numeros_com_material_por_prancha": {}}
     exec(compile(_codigo(linhas, ck.orelse[:k + 1]), "pagina", "exec"), ns1)
     mapa = ns1["_numeros_do_texto_por_prancha"]
     assert len(ns1["text"]) <= 6000, "a IA passou a receber mais que 6000 caracteres"
@@ -644,6 +647,7 @@ def test_o_laco_de_paginas_EXECUTADO_guarda_anexa_salva_e_restaura(tmp_path):
            "_pdfvec_por_prancha": {}, "_pdfvec_falhas": [], "filename": ARQ,
            "page_index": 0, "job_id": "ee801b82", "print": lambda *a, **k: None,
            "_numeros_do_texto_por_prancha": mapa,
+           "_numeros_com_material_por_prancha": ns1["_numeros_com_material_por_prancha"],
            "_anexa_numeros_do_texto": main._anexa_numeros_do_texto,
            # o checkpoint é JSON: guarda o que o save RECEBEU, na hora
            "_ckpt_save": lambda job, stem, res, **k: salvos.append(json.loads(json.dumps(res)))}
@@ -663,7 +667,8 @@ def test_o_laco_de_paginas_EXECUTADO_guarda_anexa_salva_e_restaura(tmp_path):
            "_pdfvec_por_prancha": {}, "_pdfvec_area_m2": 0.0, "_pdfvec_compr_m": 0.0,
            "pdf_path": pdf, "filename": ARQ, "page_index": 0, "job_id": "ee801b82",
            "_restaura_numeros_do_texto": main._restaura_numeros_do_texto,
-           "_numeros_do_texto_por_prancha": {}}
+           "_numeros_do_texto_por_prancha": {},
+           "_numeros_com_material_por_prancha": {}}
     exec(compile(_codigo(linhas, ck.body), "retomada", "exec"), ns3)
     volta = ns3["_numeros_do_texto_por_prancha"]
     assert volta == mapa, "a retomada não trouxe os números de volta: %r" % sorted(volta)

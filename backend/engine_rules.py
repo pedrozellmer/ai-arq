@@ -4705,6 +4705,139 @@ def veredito_do_quadro_impresso(linhas, numeros_por_prancha=None):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+#  NÚMERO ESCRITO NA PRANCHA, AO LADO DO MATERIAL (05/10/2026)
+# ─────────────────────────────────────────────────────────────────────────────
+# 🩸 05/10/2026 — job de 16 PDFs (reforma de portaria): a legenda escreve
+# "PISO EM GRANITINA … 66,00 m²", a leitura copiou o 66,00 e a honestidade de
+# área zerou, como zera todo m² de PDF. Idem forro 39,80 e 35,60, lamato
+# 12,31, revitalização 40,00 — e a cliente preenchia à mão o que zeramos.
+# Noutro job, "Volume de concreto (C-25) = 6.16 m³" e "Área de forma = 77.80
+# m²" do quadro impresso, zerados: a régua do quadro (acima) só vale quando a
+# leitura AFIRMA "quadro de quantitativos", e ali ela escreveu "quadro desta
+# prancha".
+# 🔑 Decisão (05/10, delegada pelo Pedro): número com unidade ESCRITO no texto
+# do PDF, colado ao material da linha, não é chute da IA. Fica como ESTIMADO
+# (nunca ✓: ninguém mediu o desenho), com a frase "valor escrito na prancha:
+# '…' — confira". Só deixa de zerar.
+# 📏 Medido no acervo (41 jobs com PDF, texto pelo pypdfium2 como a produção):
+# a maioria dos números que as linhas zeradas citam é área de AMBIENTE ("Bho 01
+# A=2,53m²"), de terreno, índice do lote ou parcela de uma soma da IA — esses
+# seguem zerando. Colados ao material: ~19 linhas em 9 jobs, de 2 a 69
+# caracteres ANTES do número.
+# 🪤 Só ANTES: a legenda põe o material antes do número; depois dele vem o
+# próximo item ("…A=69,68 m² ESQUADRIA EM ALUMÍNIO…"). Olhando pros dois
+# lados, a ÁREA DA EDIFICAÇÃO virou área de telha (3 linhas).
+# 🪤 Não atravessa outro número com unidade: o material de antes dele é dele.
+# 🪤 QUALQUER material da janela, não só o mais perto: o item da legenda tem
+# vários ("FORRO EM GESSO PLACA COM PINTURA EM PVA… 35,60 m²") e a linha do
+# forro pode dizer só forro. E não a LINHA de texto inteira: numa vista, o
+# pdfium junta "DIVISÓRIAS EM GRANITO … PAREDE REVESTIDA COM PORCELANATO …
+# A=11,27 m²" numa linha só, e o 11,27 é do porcelanato (o granito fica 106
+# antes) — a divisória de granito continua zerando.
+# 🪤 Só m² e m³. Em metro, o número ao lado do material é quase sempre ALTURA
+# ("guarda-corpo H=1,10", "bancada h=0,93").
+# 🪤 Nome de AMBIENTE não entra na lista ("SALA 15,77 m²" não vira pintura). O
+# custo aceito, medido: "Vidro 1,79 m²" é o cesto de coleta — o número é o que
+# está escrito, e a frase manda conferir.
+MATERIAIS_DA_LEGENDA = (
+    "piso", "porcelanato", "ceramic", "granitina", "granilite", "granito", "marmore",
+    "terrazzo", "quartzo", "forro", "gesso", "drywall", "pintura", "tinta", "lamato",
+    "textura", "revestiment", "azulejo", "pastilha", "ladrilho", "deck", "madeira", "grama",
+    "carpete", "vinilic", "laminado", "concreto", "forma", "alvenaria", "telha", "cobertura",
+    "manta", "impermeabiliz", "pergolado", "vidro", "rodape", "soleira", "bancada", "emboco",
+    "reboco", "contrapiso", "calcada", "paver", "pedra", "asfalt", "escavac", "aterro",
+    "armadura", "divisori", "painel", "ripado", "sanca", "tabica", "acm", "aluminio",
+    "papel de parede", "epox", "cimento", "laje", "gradil", "guarda-corpo", "corrimao", "muro",
+    "paisagismo", "demolic", "regulariz", "massa")
+_RE_MATERIAL_DA_LEGENDA = _re.compile(
+    r"(?<![a-z])(" + "|".join(_re.escape(m) for m in MATERIAIS_DA_LEGENDA) + r")[a-z]*")
+#: número com unidade: vírgula OU ponto ("10.28 m³" do quadro exportado do CAD),
+#: milhar pt-BR ("1.447,65 m²") e unidade colada ou com um espaço
+_RE_NUMERO_COM_UNIDADE_ESCRITO = _re.compile(
+    r"(?<![\d.,])(\d{1,3}(?:\.\d{3})+|\d{1,6})[,.](\d{2})(?!\d)[ \t]?"
+    r"(m²|m2|m³|m3|ml|m)(?![A-Za-z0-9²³])", _re.IGNORECASE)
+#: quantos caracteres ANTES do número o material pode estar (o maior acerto
+#: medido: 69, numa tabela de revestimentos de descrição longa)
+_JANELA_DO_MATERIAL = 70
+MARCA_VALOR_ESCRITO = "📝 Valor escrito na prancha"
+
+
+def _minusculo_mesmo_tamanho(s):
+    """Minúsculo sem acento, CARACTERE A CARACTERE: o índice continua valendo no
+    texto original (o trecho da frase sai de lá, com a caixa e o acento)."""
+    return "".join((_ud.normalize("NFD", c)[0].lower() or " ")[0] for c in str(s or ""))
+
+
+def numeros_escritos_com_material(texto) -> list:
+    """Cada "N,NN m²" / "N,NN m³" do texto de uma prancha que tem MATERIAL antes.
+
+    Devolve [(centésimos, "m2" | "m3", (radicais do material…), trecho)], só pro
+    número com alguma palavra de `MATERIAIS_DA_LEGENDA` terminando a até
+    `_JANELA_DO_MATERIAL` caracteres antes dele, sem outro número com unidade no
+    meio. O trecho (do 1º material até a unidade) vai na frase da linha. É o que
+    viaja do laço de páginas, onde o texto existe, até a honestidade de área."""
+    t = str(texto or "")
+    baixo = _minusculo_mesmo_tamanho(t)
+    out = []
+    fim_anterior = 0
+    for m in _RE_NUMERO_COM_UNIDADE_ESCRITO.finditer(t):
+        un = m.group(3).lower()
+        comeco = max(m.start() - 3 * _JANELA_DO_MATERIAL, fim_anterior)
+        fim_anterior = m.end()
+        if un in ("m", "ml"):
+            continue
+        mats = [w for w in _RE_MATERIAL_DA_LEGENDA.finditer(baixo, comeco, m.start())
+                if m.start() - w.end() <= _JANELA_DO_MATERIAL]
+        if not mats:
+            continue
+        cent = int(m.group(1).replace(".", "")) * 100 + int(m.group(2))
+        trecho = " ".join(t[mats[0].start():m.end()].split())[:140]
+        out.append((cent, "m3" if un in ("m³", "m3") else "m2",
+                    tuple(sorted({w.group(1) for w in mats})), trecho))
+    return out
+
+
+def registros_escritos_da_prancha(mapa, arquivo, pagina):
+    """O que `numeros_escritos_com_material` achou na prancha (arquivo, página).
+
+    Mesma régua da prova do quadro: sem página no `ref_sheet`, só vale se o
+    arquivo tem UMA página com registro — senão não se sabe de qual."""
+    regs = {(str(a or "").strip().lower(), p): v for (a, p), v in dict(mapa or {}).items()}
+    arq = str(arquivo or "").strip().lower()
+    if not arq:
+        return []
+    if pagina is not None:
+        return list(regs.get((arq, int(pagina))) or [])
+    cands = [v for (a, _p), v in regs.items() if a == arq]
+    return list(cands[0]) if len(cands) == 1 else []
+
+
+def numero_escrito_da_linha(descricao, unidade, quantidade, registros):
+    """A quantidade desta linha está ESCRITA na prancha, colada a um material que
+    a própria linha cita? Devolve o trecho (pra frase) ou None.
+
+    Tudo junto: a mesma família de unidade (m² com m², m³ com m³), o mesmo
+    número (± 0,01) e um dos materiais de antes do número na DESCRIÇÃO da linha."""
+    u = str(unidade or "").strip().lower()
+    fam = "m3" if u in ("m³", "m3") else ("m2" if u in FLOOR_M2_UNITS else None)
+    if fam is None or not registros:
+        return None
+    try:
+        c = int(round(float(quantidade or 0) * 100))
+    except (TypeError, ValueError):
+        return None
+    if c <= 0:
+        return None
+    d = _minusculo_mesmo_tamanho(descricao)
+    for cent, f, mats, trecho in registros:
+        if f != fam or abs(int(cent) - c) > 1:
+            continue
+        if any(_re.search(r"(?<![a-z])" + _re.escape(s), d) for s in mats):
+            return trecho
+    return None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 #  AÇO POR TAXA não vira número (22/09/2026)
 # ─────────────────────────────────────────────────────────────────────────────
 # 🩸 22/09/2026 — job ee801b82: 294 + 215 + 485 + 751 = 1.745 kg de aço
