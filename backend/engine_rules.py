@@ -7194,10 +7194,33 @@ def layer_de_hachura_de_parede(nome) -> bool:
         t in _TOKENS_HACHURA_DE_PAREDE or t.startswith(("alv", "tijolo")) for t in toks)
 
 
+#: 🩸 06/10/2026 — reforma de escritório: "demolir" e "a construir" eram a
+#: parede a demolir e a nova, em duas faces, e o nome não dizia "parede": a
+#: correção face → eixo não rodava ("Demolição de paredes = 91,95 ml" contra
+#: ~48 pelo eixo). É a convenção mais comum de projeto de reforma. Por TOKEN:
+#: todo pedaço do nome é o ESTADO da obra ou um prefixo genérico ("ARQ-DEMOLIR",
+#: "PDF_Arq Construir", "ARQ_À REMOVER"). 🪤 Com objeto no nome não é parede: o
+#: Archicad põe "Novo_" em TODO layer (portas, pergolado, laje — 90–99 % em
+#: duas linhas), e há "BRISE_EXECUTAR", "MOBILIÁRIO NOVO", "PISO A DEMOLIR".
+#: Só os estados vistos no acervo; número solto também não ("Novo_0").
+_RE_ESTADO_DA_REFORMA = _re.compile(
+    r"^(?:constru\w*|demol\w*|executar|remov\w*|retirar|reforma|novos?|novas?)$")
+_PREFIXOS_GENERICOS_DE_LAYER = {"a", "ar", "arq", "arquitetura", "lb", "l", "pdf", "pdf2", "layer",
+                                "de", "da", "do", "em", "e"}
+
+
+def _layer_so_do_estado_da_reforma(n) -> bool:
+    toks = [t for t in _re.split(r"[^a-z0-9]+", n) if t]
+    return (any(_RE_ESTADO_DA_REFORMA.match(t) for t in toks)
+            and all(_RE_ESTADO_DA_REFORMA.match(t) or t in _PREFIXOS_GENERICOS_DE_LAYER for t in toks))
+
+
 def layer_e_parede(nome) -> bool:
-    """O LAYER é o traço da parede? (ver `_RE_LAYER_PAREDE`)"""
+    """O LAYER é o traço da parede? (ver `_RE_LAYER_PAREDE` e o layer que é só o
+    estado da reforma, `_RE_ESTADO_DA_REFORMA`)"""
     n = _minusculo_sem_acento(str(nome or ""))
-    return bool(_RE_LAYER_PAREDE.search(n)) and not _RE_LAYER_NAO_PAREDE.search(n)
+    return (bool(_RE_LAYER_PAREDE.search(n) or _layer_so_do_estado_da_reforma(n))
+            and not _RE_LAYER_NAO_PAREDE.search(n))
 
 
 #: H95 (04/10/2026) — o layer genérico de ARQUITETURA (a palavra inteira:
