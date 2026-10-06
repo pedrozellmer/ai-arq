@@ -182,6 +182,24 @@ def test_o_grafico_de_cadastros_por_semana_conta_semana_fixa_e_tira_a_em_curso_d
     assert "(1 em 3 de 7 dias)" in h and "em curso" in h
 
 
+def test_com_mais_de_26_semanas_o_numero_continua_em_cima_de_cada_barra():
+    """🩸 06/10/2026 — print do Pedro: os números sumiram. O desenho tinha TODAS as semanas desde o 1º cadastro
+    e o número só sai com até 26 colunas; a 27ª começou em 05/10. Agora o desenho fica nas últimas 26 e o
+    texto de cima segue contando a história inteira."""
+    import datetime as _dt
+    agora = _dt.datetime(2026, 10, 7, 12, 0, 0)                          # quarta-feira
+    users = []
+    for semana in range(30):                                            # 30 semanas, de 1 a 3 cadastros cada
+        d = agora - _dt.timedelta(weeks=semana)
+        users += [{"auth_created_at": d.strftime("%Y-%m-%dT12:00:00")}] * (1 + semana % 3)
+    h = _grafico(users, agora.strftime("%Y-%m-%dT12:00:00"))
+    assert h.count("cadastros em 30 semanas") == 1, "o texto de cima tem que contar a história inteira"
+    assert "o gr&aacute;fico mostra as &uacute;ltimas 26" in h
+    barras = h.count('cadastro">') + h.count('cadastros">')            # o title de cada coluna termina assim
+    numeros = h.count("font-variant-numeric:tabular-nums;color:")     # só o número em cima da barra usa
+    assert barras == 26 and numeros == 26, (barras, numeros)
+
+
 def test_CONTROLE_o_grafico_mudaria_com_outra_contagem():
     users = [{"auth_created_at": "2026-09-15T12:00:00"}, {"auth_created_at": "2026-09-29T12:00:00"}]
     h = _grafico(users, "2026-09-30T12:00:00")

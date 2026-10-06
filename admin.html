@@ -7049,17 +7049,29 @@ function htmlCadastrosPorSemana(users, agora) {
   const _fechadas = weeks.slice(0,-1);                    // sem a semana em curso
   const _mediaF = _fechadas.length ? _fechadas.reduce((s,w)=>s+w.n,0)/_fechadas.length : 0;
   const _diasCorridos = Math.min(7, Math.floor((_agora-semAtual)/DAY)+1);
+  // 🩸 06/10/2026 — os números em cima das barras SUMIRAM sozinhos (print do Pedro no celular). O gráfico
+  // desenhava TODAS as semanas desde o 1º cadastro, e o número só aparece com até 26 colunas — com mais, no
+  // celular, eles se atropelam. A 27ª semana começou em 05/10. Agora o DESENHO mostra as últimas 26 semanas
+  // (~6 meses) e o texto de cima segue contando a história inteira: o número volta e não some de novo na 28ª.
+  const _MAX_BARRAS = 26;
+  const _barras = weeks.slice(-_MAX_BARRAS);
+  const _iAtualB = _barras.length - 1;
+  const _maxB = _barras.reduce((m,w)=>Math.max(m,w.n),0) || 1;
   // Com muitas semanas os rótulos colidem: mostra 1 a cada N (e sempre o atual).
-  const _passo = Math.max(1, Math.ceil(weeks.length/9));
-  const _gap = weeks.length>20 ? 2 : 3;
-  const _cabeNum = weeks.length<=26;                      // número em cima da barra
+  const _passo = Math.max(1, Math.ceil(_barras.length/9));
+  const _gap = _barras.length>20 ? 2 : 3;
+  const _cabeNum = _barras.length<=_MAX_BARRAS;           // número em cima da barra
+  // 📏 06/10 (medido no celular, 375 px): com 26 colunas cada uma tem ~10 px e "35" em 11 px ocupa 14 — os
+  // números vizinhos encostavam (10 px ainda deixava 11 pares se tocando). Com mais de 20 barras a fonte acompanha
+  // a tela: 11 px no computador, ~9 px no celular (dois dígitos ~11 px, cabe no passo de ~11,6).
+  const _fsNum = _barras.length > 20 ? 'clamp(8px,2.4vw,11px)' : '11px';
   return `
     <div class="rounded-2xl border bg-white p-5">
       <div class="flex items-baseline justify-between mb-1 flex-wrap gap-2">
         <h3 class="font-semibold text-gray-900">Cadastros por semana</h3>
         <span class="text-xs text-gray-400">semana fixa do calendário (seg&rarr;dom) &middot; pico ${maxW}</span>
       </div>
-      <p class="text-xs text-gray-400 mb-4">${_somaW} cadastros em ${weeks.length} semanas, desde ${_lblIni(semIni)} &middot; m&eacute;dia <b>${_mediaF.toFixed(1)}</b>/semana nas ${_fechadas.length} semanas fechadas &middot; a semana em curso (${weeks[iAtual].n} em ${_diasCorridos} de 7 dias) fica <b>fora</b> da m&eacute;dia</p>
+      <p class="text-xs text-gray-400 mb-4">${_somaW} cadastros em ${weeks.length} semanas, desde ${_lblIni(semIni)} &middot; m&eacute;dia <b>${_mediaF.toFixed(1)}</b>/semana nas ${_fechadas.length} semanas fechadas &middot; a semana em curso (${weeks[iAtual].n} em ${_diasCorridos} de 7 dias) fica <b>fora</b> da m&eacute;dia${weeks.length > _MAX_BARRAS ? ' &middot; o gr&aacute;fico mostra as &uacute;ltimas ' + _MAX_BARRAS : ''}</p>
       <!-- 🪤 03/08: a versão anterior punha barra + número + rótulo DENTRO da mesma
            caixa de 150px com justify-end. A barra tinha height em % dessa caixa, mas
            dividia o espaço com ~56px de texto — então o flex ENCOLHIA a barra e a
@@ -7079,7 +7091,7 @@ function htmlCadastrosPorSemana(users, agora) {
         <div style="position:absolute;left:0;right:0;top:0;border-top:1px dashed #E5E7EB"></div>
         <div style="position:absolute;left:0;right:0;bottom:0;border-top:1px solid #D1D5DB"></div>
         <div style="position:absolute;inset:0;display:flex;gap:${_gap}px;align-items:stretch">
-          ${weeks.map((w,i)=>{ const atual=(i===iAtual);
+          ${_barras.map((w,i)=>{ const atual=(i===_iAtualB);
             // Barra e número saem do FLUXO (absolute): enquanto os dois eram
             // irmãos num flex-col, o número disputava altura com a barra e o
             // flex encolhia a barra — dois valores diferentes acabavam do mesmo
@@ -7087,7 +7099,7 @@ function htmlCadastrosPorSemana(users, agora) {
             // altura só depende do valor.
             // Teto em 82%: sobra a faixa de cima pro número da barra mais alta
             // não vazar do quadro. Proporção entre as barras não muda.
-            const h = maxW ? (w.n*82/maxW) : 0;
+            const h = _maxB ? (w.n*82/_maxB) : 0;
             const col = atual ? '#4F46E5' : '#A5B4FC';
             const cNum = atual ? '#4338CA' : (w.n ? '#6B7280' : '#D1D5DB');
             // min-width:0 é obrigatório: sem ele um item flex nunca encolhe abaixo
@@ -7101,7 +7113,7 @@ function htmlCadastrosPorSemana(users, agora) {
                           ${w.n?'min-height:3px;':''}background:${col};border-radius:4px 4px 0 0
                           ${atual?';opacity:.92;box-shadow:inset 0 2px 0 #C7D2FE':''}"></div>
               ${_cabeNum?`<span style="position:absolute;left:0;right:0;bottom:calc(${h}% + 5px);
-                           text-align:center;font-size:11px;font-weight:600;line-height:1;
+                           text-align:center;font-size:${_fsNum};font-weight:600;line-height:1;letter-spacing:-0.3px;white-space:nowrap;
                            font-variant-numeric:tabular-nums;color:${cNum}">${w.n}</span>`:''}
             </div>`; }).join('')}
         </div>
@@ -7110,7 +7122,7 @@ function htmlCadastrosPorSemana(users, agora) {
            Com 18+ semanas eles colidem, então só 1 a cada _passo aparece (o da
            semana em curso aparece sempre). A faixa completa fica no title. -->
       <div style="display:flex;gap:${_gap}px;margin-top:8px">
-        ${weeks.map((w,i)=>{ const atual=(i===iAtual); const most=atual||(i%_passo===0); return `
+        ${_barras.map((w,i)=>{ const atual=(i===_iAtualB); const most=atual||(i%_passo===0); return `
           <div style="flex:1 1 0;min-width:0;text-align:center;line-height:1.15">
             <div style="font-size:10px;white-space:nowrap;color:${atual?'#4338CA':'#9CA3AF'};${atual?'font-weight:600;':''}">${most?w.lbl:'&nbsp;'}</div>
             ${atual?`<div style="font-size:9px;color:#6366F1;font-weight:500;white-space:nowrap">em curso &middot; ${_diasCorridos}/7</div>`:''}
