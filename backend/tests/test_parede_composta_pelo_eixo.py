@@ -84,14 +84,17 @@ def test_CONTROLE_duas_paredes_vizinhas_continuam_duas(tmp_path):
     assert ex.get_walls_by_layer()["PAREDE"] == pytest.approx(20.0, abs=0.05)
 
 
-def test_CONTROLE_linha_fina_sem_par_nao_e_tocada(tmp_path):
-    """Duas linhas a 3 cm, sem parceira: não há par, então não há face a juntar
-    — fica como era (as duas contam). Só a parede de duas faces vira eixo."""
+def test_linha_fina_sem_par_e_uma_parede_fina(tmp_path):
+    """Duas linhas a 3 cm, sem parceira. Até 06/10 este controle dizia "fica como
+    era (as duas contam)". 🩸 06/10/2026: medido no acervo, a dupla a 2–5 cm sem
+    vizinho é UM elemento em 2 linhas (divisória, platibanda, peitoril) — e somar
+    as duas era o dobro. Agora é a parede fina (ver
+    test_parede_fina_em_duas_linhas.py): 10 m da parede + 5 m da fina."""
     def d(m):
         _linhas(m, "PAREDE", 0, 10, (0, 0.15))
         _linhas(m, "PAREDE", 0, 5, (5, 5.03))
     ex = _ler(tmp_path, d)
-    assert ex.get_walls_by_layer()["PAREDE"] == pytest.approx(20.0, abs=0.05)
+    assert ex.get_walls_by_layer()["PAREDE"] == pytest.approx(15.0, abs=0.05)
 
 
 def test_CONTROLE_linha_que_so_encosta_na_ponta_nao_e_reboco(tmp_path):

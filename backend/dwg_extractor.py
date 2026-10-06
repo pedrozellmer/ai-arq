@@ -1590,7 +1590,7 @@ def _corrigir_duto_linha_dupla(walls, unit_factor: float = 1.0, layers_extra=Non
                         if olha:
                             viz[a].add(b)
                             viz[b].add(a)
-                if not viz:
+                if not viz and not fino:
                     continue
                 cand = set(viz) | set(fino)
                 cortes = sorted({t for i in cand for t in (t0[i], t1[i])})
@@ -1614,6 +1614,22 @@ def _corrigir_duto_linha_dupla(walls, unit_factor: float = 1.0, layers_extra=Non
                             faces[-1].append(i)
                         else:
                             faces.append([i])
+                    # 🩸 06/10/2026 — reforma de escritório: "a construir" e
+                    # "REFORMA" com as faces a 4 cm, ~100 % em duas linhas, e a
+                    # planilha fez 643 m² de alvenaria contra ~360 pelo eixo.
+                    # A face de DUAS linhas a 2–5 cm sem par no trecho é a
+                    # parede fina inteira. Com 3+ linhas (a composta) ou com
+                    # vizinho a 5–40 cm (a face de outra parede), fica como era.
+                    # 🔒 Não entra em `em_par`: a face + reboco da parede de mais
+                    # de 40 cm segue sem par pro E12 e a marca não desarma.
+                    _ativos = set(ativos)
+                    for f_ in faces:
+                        if (len(f_) == 2 and d[f_[1]] - d[f_[0]] >= _PAREDE_FINA_SEP_MIN / uf
+                                and not any(viz[a] & _ativos for a in f_)):
+                            for x in f_:
+                                pareado[x] += tb - ta
+                                perda[x] += 0.5 * (tb - ta)
+                            pares.add((min(f_), max(f_)))
                     k = 0
                     while k + 1 < len(faces):
                         fa, fb = faces[k], faces[k + 1]
@@ -1765,6 +1781,11 @@ _PAREDE_SEP_MAX = 0.40
 #: 🪤 O lado mínimo do duto (25 cm) deixava a PONTA da parede (7–25 cm) e o
 #: batente do vão sempre somados: nunca viravam tampa. Na parede, 3 cm.
 _PAREDE_MIN_SEG = 0.03
+#: 🩸 06/10/2026 — parede FINA em duas linhas (divisória de 35–50 mm): as duas
+#: linhas a 2–5 cm, SEM outra paralela a 5–40 cm, são as duas faces de UMA
+#: parede. Abaixo de `_DUTO_SEP_MIN` elas eram "a mesma face" (o reboco da
+#: composta, H73) e, sem par, somavam as duas. Abaixo de 2 cm é linha repetida.
+_PAREDE_FINA_SEP_MIN = 0.02
 #: A convenção do LAYER decide: com menos da metade do comprimento em par, o
 #: layer é de linha ÚNICA e o par que aparece é coincidência (duas paredes
 #: vizinhas). Medido no acervo (26/09): os layers de linha dupla têm 52–96% em
