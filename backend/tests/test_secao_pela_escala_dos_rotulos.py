@@ -118,6 +118,40 @@ def test_k_quase_iguais_de_rotulos_diferentes_somam_apoio():
     assert p.get("escala_apoio") == 12 and p.get("rot_a_cm") == 25.0, p
 
 
+def test_no_empate_de_apoio_vence_o_par_mais_justo():
+    """🩸 06/10 (A/B no quadro do job): ao lado de cada seção 1,0 × 9,6, "25",
+    "240" E "234". Os pares 25/240 (k 25) e 25/234 (k 24,69, a 2,5 %) empatam em
+    apoio; ficava o 1º k em ordem crescente e a IA lia 24,7 × 237,1."""
+    msp = _quadro(lados=(1.0, 9.6), rotulos=("25", "240"))
+    for i in range(11):
+        msp.add_text("234", dxfattribs={"height": 0.25, "layer": "TEXTO", "insert": (10.0 * i + 1.6, 52.0)})
+    p = _peca(msp)
+    assert (p.get("rot_a_cm"), p.get("rot_b_cm"), p.get("escala_k")) == (25.0, 240.0, 25.0), p
+
+
+def test_a_secao_e_o_rotulo_como_esta_escrito():
+    """🩸 06/10 (A/B no quadro do job): o estribo 0,74 × 4,54 cotado "19" e "114"
+    (19 ÷ 0,74 = 25,7 e 114 ÷ 4,54 = 25,1, dentro dos 3 %). Lado × k dava
+    18,8 × 115,3; a IA recebe 19 × 114."""
+    p = _peca(_quadro(lados=(0.74, 4.54), rotulos=("19", "114")))
+    assert (p.get("rot_a_cm"), p.get("rot_b_cm")) == (19.0, 114.0), p
+
+
+def test_a_secao_e_o_par_mais_comum_do_k():
+    """8 retângulos cotados 25/121 e 4 cotados 24,6/118 (o mesmo k a 3 %): a seção
+    é a dos 8 — mesmo o outro par vindo antes em ordem e sendo mais justo."""
+    d = ezdxf.new("R2018")
+    msp = d.modelspace()
+    for i, (r1, r2) in enumerate([("24,6", "118")] * 4 + [("25", "121")] * 8):
+        x, y = 10.0 * i, 50.0
+        msp.add_lwpolyline([(x, y), (x + 1.0, y), (x + 1.0, y + 4.8), (x, y + 4.8)], close=True,
+                           dxfattribs={"layer": "2"})
+        msp.add_text(r1, dxfattribs={"height": 0.25, "layer": "TEXTO", "insert": (x + 0.2, y - 0.5)})
+        msp.add_text(r2, dxfattribs={"height": 0.25, "layer": "TEXTO", "insert": (x - 1.2, y + 2.4)})
+    p = _peca(msp)
+    assert (p.get("rot_a_cm"), p.get("rot_b_cm"), p.get("escala_apoio")) == (25.0, 121.0, 12), p
+
+
 def test_metade_dos_retangulos_com_rotulo_basta():
     p = _peca(_quadro(n=12, rotulados=6))
     assert p.get("rot_a_cm") == 25.0, p
@@ -173,7 +207,7 @@ def test_CONTROLE_cinco_retangulos_no_minimo_mesmo_com_metade():
     rot = sorted([(10.0 * i, 47.0, 25.0) for i in range(4)] + [(10.0 * i - 1.2, 50.0, 120.0) for i in range(4)])
     assert dx.escala_da_vista_pelos_rotulos(centros, 1.0, 4.8, rot, 100.0, cantos) is None      # 4 de 8
     rot5 = sorted(rot + [(40.0, 47.0, 25.0), (38.8, 50.0, 120.0)])
-    assert dx.escala_da_vista_pelos_rotulos(centros, 1.0, 4.8, rot5, 100.0, cantos) == (25.0, 5)  # 5 de 8
+    assert dx.escala_da_vista_pelos_rotulos(centros, 1.0, 4.8, rot5, 100.0, cantos) == (25.0, 5, 25.0, 120.0)  # 5/8
 
 
 def test_CONTROLE_um_rotulo_so_vale_pro_retangulo_mais_perto():
@@ -204,9 +238,9 @@ def test_CONTROLE_rotulo_DENTRO_da_peca_nao_e_a_cota_dela():
         msp.add_text("16", dxfattribs={"height": 0.25, "layer": "TEXTO", "insert": (cx + 0.2, cy + 0.3)})
         msp.add_text("20", dxfattribs={"height": 0.25, "layer": "TEXTO", "insert": (cx - 0.5, cy - 1.0)})
     assert _sem_rotulo(_peca(msp))
-    # o mesmo par, FORA (abaixo e à esquerda de cada peça), é a cota (k 3,34 → 16,1 × 20)
+    # o mesmo par, FORA (abaixo e à esquerda de cada peça), é a cota: 16 × 20
     p = _peca(_quadro(lados=(4.81, 5.98), rotulos=("16", "20")))
-    assert (p.get("rot_a_cm"), p.get("rot_b_cm")) == (16.1, 20.0), p
+    assert (p.get("rot_a_cm"), p.get("rot_b_cm")) == (16.0, 20.0), p
 
 
 def test_CONTROLE_so_um_lado_ou_lados_que_nao_concordam():

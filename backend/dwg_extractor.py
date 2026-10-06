@@ -3687,16 +3687,19 @@ def _rotulo_dentro_da_peca(x, y, cantos) -> bool:
 
 
 def escala_da_vista_pelos_rotulos(centros, s1, s2, rotulos, cm_por_unidade, cantos):
-    """(k, apoio) quando os rótulos colados nos retângulos de um grupo dizem uma
-    escala que DISCORDA da do motor; senão None.
+    """(k, apoio, rótulo do lado menor, rótulo do lado maior) quando os rótulos
+    colados nos retângulos de um grupo dizem uma escala que DISCORDA da do
+    motor; senão None.
 
     `centros`: [(x, y)] dos retângulos e `cantos` os 4 cantos de cada um, na
     mesma ordem; `s1` ≤ `s2`: os lados em unidade do desenho; `rotulos`: de
     `_rotulos_numericos_da_vista`; `cm_por_unidade`: o que o motor assumiu
     (fator × 100). Cada rótulo é do retângulo de centro mais perto, e só vale
     FORA dele. k = rótulo ÷ lado, com os DOIS lados de um retângulo dando o mesmo
-    k (± 3 %); vale o k mais comum, em ≥ 5 retângulos e em ≥ 50 % dos olhados. Discorda quando não confere lido em cm, m nem mm, e o
-    motor lê MAIOR (k < cm por unidade)."""
+    k (± 3 %); vale o k mais comum (no empate, o de pares mais justos), em ≥ 5
+    retângulos e em ≥ 50 % dos olhados. Discorda quando não confere lido em cm,
+    m nem mm, e o motor lê MAIOR (k < cm por unidade). A seção é o par de
+    rótulos mais comum desse k, como está escrito."""
     if not rotulos or s1 <= 0 or s2 <= 0 or cm_por_unidade <= 0 or abs(s1 - s2) <= 1e-9 * s2:
         return None
     raio = 1.5 * s2 + s1
@@ -3724,37 +3727,50 @@ def escala_da_vista_pelos_rotulos(centros, s1, s2, rotulos, cm_por_unidade, cant
             # grupos estruturais do acervo, o par fica a ≥ 0,24 × lado menor FORA.
             if v > 0 and d <= raio and _e_deste(x, y, d) and not _rotulo_dentro_da_peca(x, y, cn):
                 perto.append(v)
-        # 🪤 TODOS os k que este retângulo sustenta — o 1º par achado dependia da
-        # ordem dos rótulos e espalhava o apoio do k certo
-        ks = set()
+        # 🪤 TODOS os pares que este retângulo sustenta — o 1º par achado dependia
+        # da ordem dos rótulos e espalhava o apoio do k certo. Par = (k, folga
+        # |k1 − k2| relativa, rótulo do lado menor, rótulo do lado maior).
+        pares = set()
         for v1 in perto:
             for v2 in perto:
                 k1, k2 = v1 / s1, v2 / s2
                 if abs(k1 - k2) <= _ESCALA_DA_VISTA_TOL * max(k1, k2):
-                    ks.add((k1 + k2) / 2)
-        if ks:
-            por_ret.append(sorted(ks))
+                    pares.add(((k1 + k2) / 2, abs(k1 - k2) / max(k1, k2), v1, v2))
+        if pares:
+            por_ret.append(sorted(pares))
     if not por_ret:
         return None
     # O apoio de um k é quantos retângulos têm ALGUM k a ± 3 % dele (a mesma
     # tolerância do par), não o k idêntico: "25"/"120" e "25,4"/"122" são a mesma
     # escala. O k é a mediana de quem o sustenta, com 3 algarismos (1 casa
     # decimal zerava o k = 0,01 do metro).
-    apoio, sust = 0, []
-    for c in sorted({k_r for ks in por_ret for k_r in ks}):
-        mais_perto = [min(ks, key=lambda k_r: abs(k_r - c)) for ks in por_ret]
-        s_c = [k_r for k_r in mais_perto if abs(k_r - c) <= _ESCALA_DA_VISTA_TOL * c]
-        if len(s_c) > apoio:
-            apoio, sust = len(s_c), s_c
+    # 🪤 06/10 (A/B no quadro do job): ao lado de cada seção 1,0 × 9,6 estavam
+    # "25", "240" E "234"; os pares 25/240 (k 25, exato) e 25/234 (k 24,69, a
+    # 2,5 %) empatavam em apoio, e ficava o 1º k em ordem crescente: 24,7 × 237,1.
+    # No empate vence o k de pares mais JUSTOS (menor folga média).
+    melhor, sust = (0, 0.0), []
+    for c in sorted({p[0] for ps in por_ret for p in ps}):
+        mais_perto = [min(ps, key=lambda p: abs(p[0] - c)) for ps in por_ret]
+        s_c = [p for p in mais_perto if abs(p[0] - c) <= _ESCALA_DA_VISTA_TOL * c]
+        chave = (len(s_c), -sum(p[1] for p in s_c) / len(s_c)) if s_c else (0, 0.0)
+        if chave > melhor:
+            melhor, sust = chave, s_c
+    apoio = melhor[0]
     if apoio < _ESCALA_DA_VISTA_APOIO or apoio < _ESCALA_DA_VISTA_FRACAO * len(olhados):
         return None
-    k = float("%.3g" % statistics.median(sust))
+    k = float("%.3g" % statistics.median(p[0] for p in sust))
     r = k / cm_por_unidade
     if any(abs(v - 1) <= _ESCALA_DA_VISTA_CONCORDA for v in (r, r * 100, r / 10)):
         return None                       # o rótulo confere com o motor (em cm, m ou mm)
     if r >= 1 or s1 * k < _ESCALA_DA_VISTA_LADO_MIN_CM:
         return None
-    return k, apoio
+    # A seção é o par de rótulos mais comum desse k, COMO ESTÁ ESCRITO: o lado ×
+    # k dava 18,8 × 115,3 num estribo cotado 19 × 114 (os dois lados não fecham
+    # o mesmo k exato). No empate de contagem, o par mais justo.
+    conta = Counter((p[2], p[3]) for p in sust)
+    folga = {(p[2], p[3]): p[1] for p in sust}
+    v1, v2 = min(conta, key=lambda vv: (-conta[vv], folga[vv], vv))
+    return k, apoio, v1, v2
 
 
 def objetos_repetidos_sem_bloco(msp, unit_factor) -> dict:
@@ -3830,7 +3846,7 @@ def objetos_repetidos_sem_bloco(msp, unit_factor) -> dict:
                     _esc = escala_da_vista_pelos_rotulos(cs, _s1, _s2, _rot_vista, uf * 100,
                                                          cantos_ret[(ly, a, b)])
                     if _esc:
-                        _peca.update({"rot_a_cm": round(_s1 * _esc[0], 1), "rot_b_cm": round(_s2 * _esc[0], 1),
+                        _peca.update({"rot_a_cm": _esc[2], "rot_b_cm": _esc[3],
                                       "escala_k": _esc[0], "escala_apoio": _esc[1]})
                 except Exception as _e_esc:
                     logger.warning("[escala-da-vista] falhou (não-fatal): %s", _e_esc)
