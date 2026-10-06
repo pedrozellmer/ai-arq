@@ -619,6 +619,14 @@ class DXFExtraction:
                 for _p in _pecas[:6]:
                     if _p.get("forma") == "círculo":
                         _d1 = "%d círculos de raio %s cm" % (_p["n"], ("%g" % _p["r_cm"]).replace(".", ","))
+                    elif _p.get("rot_a_cm"):
+                        # 🩸 06/10: a vista está em OUTRA escala — os rótulos colados
+                        # dizem a seção (ver `escala_da_vista_pelos_rotulos`)
+                        _d1 = ("%d retângulos de %s × %s cm PELOS RÓTULOS da vista (o desenho mede "
+                               "%s × %s cm: a vista está em outra escala) — use o rótulo" % (
+                                   _p["n"], ("%g" % _p["rot_a_cm"]).replace(".", ","),
+                                   ("%g" % _p["rot_b_cm"]).replace(".", ","),
+                                   ("%g" % _p["a_cm"]).replace(".", ","), ("%g" % _p["b_cm"]).replace(".", ",")))
                     else:
                         _d1 = "%d retângulos de %s × %s cm" % (
                             _p["n"], ("%g" % _p["a_cm"]).replace(".", ","), ("%g" % _p["b_cm"]).replace(".", ","))
@@ -3604,6 +3612,151 @@ def _fracao_com_texto_dentro(circulos, pontos) -> float:
     return com / len(circulos)
 
 
+# ─── 🩸 06/10/2026 — A ESCALA DA VISTA PELOS RÓTULOS ──────────────────────────
+# Job de estrutura (30 DWG): o quadro "FORMA E ARM. DOS PILARES" desenha as
+# seções a 1:25 numa folha em cm de papel (sem unidade no arquivo), e o motor
+# leu 1 unidade = 1 m. O retângulo 1,0 × 4,8 virou "pilar-parede 100 × 480 cm",
+# e a IA fez 142,56 m³ (× 11 pavimentos × 2,70 m); no mesmo job em modo
+# arquitetura, 1.425,6 m³. Ao lado de cada retângulo estão os rótulos "25" e
+# "120": a seção é 25 × 120 cm, ~16× menos concreto.
+# 🔑 O rótulo colado nos DOIS lados diz a escala da vista: k = rótulo ÷ lado
+# (cm por unidade do desenho), o MESMO nos dois lados. Quando esse k discorda do
+# que o motor assumiu — lido em cm, em m e em mm —, a IA recebe a seção PELOS
+# RÓTULOS (a medida do desenho vai junto, pra ela ver as duas).
+# 📏 Acervo (A/B em 17 DXF): só grupos estruturais, com apoio quase total —
+# pilares 50 × 133 → 30 × 80 (20/20), 75 × 125 → 15 × 25 (31/31), vigas
+# 75 × 150 → 15 × 30 (60/69), 28 × 118 → 14 × 59. No quadro do job: os 6
+# grupos, k = 25.
+# 🪤 Só "motor MAIOR que o rótulo": o outro sentido só apareceu em arquitetura,
+# marcado como legenda, e não é o defeito dos pilares.
+# 🪤 Rótulo em layer de TÍTULO/CARIMBO não vale: a data e o número da folha
+# ("22", "04") casavam com os retângulos do formato.
+# 🪤 O lado menor pelos rótulos tem ≥ 5 cm: número de item ("1", "4") casa por acaso.
+_RE_ROTULO_SO_NUMERO = re.compile(r"^\s*(\d{1,4}(?:[.,]\d{1,2})?)\s*$")
+_RE_LAYER_DO_CARIMBO_DO_ROTULO = re.compile(r"TITUL|TITLE|CARIMB|SELO|FORMATO")
+_ESCALA_DA_VISTA_TOL = 0.03            # os dois lados com o mesmo k
+_ESCALA_DA_VISTA_CONCORDA = 0.05       # k que confere com o motor (em cm, m ou mm)
+_ESCALA_DA_VISTA_APOIO = 5             # retângulos com o mesmo k, no mínimo…
+_ESCALA_DA_VISTA_FRACAO = 0.5          # …e metade dos olhados
+_ESCALA_DA_VISTA_OLHADOS = 60
+_ESCALA_DA_VISTA_LADO_MIN_CM = 5.0
+
+
+def _layer_de_carimbo_do_rotulo(ly) -> bool:
+    n = "".join(c for c in unicodedata.normalize("NFD", str(ly or ""))
+                if unicodedata.category(c) != "Mn").upper()
+    return bool(_RE_LAYER_DO_CARIMBO_DO_ROTULO.search(n))
+
+
+def _rotulos_numericos_da_vista(msp) -> list:
+    """[(x, y, valor)] ordenada por x: o TEXT/MTEXT que é SÓ um número e o texto (ou
+    a medida) das DIMENSION — fora de layer de título/carimbo."""
+    out = []
+    for t in msp.query("TEXT MTEXT"):
+        try:
+            if _layer_de_carimbo_do_rotulo(t.dxf.layer):
+                continue
+            s = t.dxf.text if t.dxftype() == "TEXT" else t.plain_text()
+            m = _RE_ROTULO_SO_NUMERO.match(s or "")
+            if m:
+                out.append((float(t.dxf.insert.x), float(t.dxf.insert.y), float(m.group(1).replace(",", "."))))
+        except Exception:
+            continue
+    for d in msp.query("DIMENSION"):
+        try:
+            if _layer_de_carimbo_do_rotulo(d.dxf.layer):
+                continue
+            s = d.dxf.get("text", "") or ""
+            m = _RE_ROTULO_SO_NUMERO.match(s) if s and s != "<>" else None
+            v = float(m.group(1).replace(",", ".")) if m else float(d.get_measurement())
+            p = d.dxf.get("text_midpoint") or d.dxf.get("defpoint")
+            out.append((float(p.x), float(p.y), v))
+        except Exception:
+            continue
+    out.sort()
+    return out
+
+
+def _rotulo_dentro_da_peca(x, y, cantos) -> bool:
+    dentro = False
+    for i in range(len(cantos)):
+        (x1, y1), (x2, y2) = cantos[i], cantos[(i + 1) % len(cantos)]
+        if (y1 > y) != (y2 > y) and x < x1 + (y - y1) * (x2 - x1) / (y2 - y1):
+            dentro = not dentro
+    return dentro
+
+
+def escala_da_vista_pelos_rotulos(centros, s1, s2, rotulos, cm_por_unidade, cantos):
+    """(k, apoio) quando os rótulos colados nos retângulos de um grupo dizem uma
+    escala que DISCORDA da do motor; senão None.
+
+    `centros`: [(x, y)] dos retângulos e `cantos` os 4 cantos de cada um, na
+    mesma ordem; `s1` ≤ `s2`: os lados em unidade do desenho; `rotulos`: de
+    `_rotulos_numericos_da_vista`; `cm_por_unidade`: o que o motor assumiu
+    (fator × 100). Cada rótulo é do retângulo de centro mais perto, e só vale
+    FORA dele. k = rótulo ÷ lado, com os DOIS lados de um retângulo dando o mesmo
+    k (± 3 %); vale o k mais comum, em ≥ 5 retângulos e em ≥ 50 % dos olhados. Discorda quando não confere lido em cm, m nem mm, e o
+    motor lê MAIOR (k < cm por unidade)."""
+    if not rotulos or s1 <= 0 or s2 <= 0 or cm_por_unidade <= 0 or abs(s1 - s2) <= 1e-9 * s2:
+        return None
+    raio = 1.5 * s2 + s1
+    xs = [r[0] for r in rotulos]
+    todos = sorted(centros)
+    txs = [c[0] for c in todos]
+
+    def _e_deste(x, y, d):
+        # 🪤 06/10 (A/B): o rótulo é de UM retângulo — o de centro mais perto.
+        # Numa paginação de fachada, UM "15" e UM "78,5" (a cota da meia placa)
+        # sustentavam 18 faixas empilhadas de 157 × 820, e a régua dizia 15 × 78.
+        for ox, oy in todos[bisect.bisect_left(txs, x - d):bisect.bisect_right(txs, x + d)]:
+            if math.hypot(ox - x, oy - y) < d * (1 - 1e-9):
+                return False
+        return True
+    olhados = centros[:_ESCALA_DA_VISTA_OLHADOS]
+    por_ret = []
+    for (cx, cy), cn in zip(olhados, cantos):
+        perto = []
+        for x, y, v in rotulos[bisect.bisect_left(xs, cx - raio):bisect.bisect_right(xs, cx + raio)]:
+            d = math.hypot(x - cx, y - cy)
+            # 🪤 06/10 (A/B): a cota da seção fica FORA da peça. Na moldura de
+            # 4,81 × 5,98 de cada detalhe de viga, "16" e "20" no FUNDO dela davam
+            # 16 × 20 por acaso (21 detalhes iguais = 21 acasos). Medido: nos 37
+            # grupos estruturais do acervo, o par fica a ≥ 0,24 × lado menor FORA.
+            if v > 0 and d <= raio and _e_deste(x, y, d) and not _rotulo_dentro_da_peca(x, y, cn):
+                perto.append(v)
+        # 🪤 TODOS os k que este retângulo sustenta — o 1º par achado dependia da
+        # ordem dos rótulos e espalhava o apoio do k certo
+        ks = set()
+        for v1 in perto:
+            for v2 in perto:
+                k1, k2 = v1 / s1, v2 / s2
+                if abs(k1 - k2) <= _ESCALA_DA_VISTA_TOL * max(k1, k2):
+                    ks.add((k1 + k2) / 2)
+        if ks:
+            por_ret.append(sorted(ks))
+    if not por_ret:
+        return None
+    # O apoio de um k é quantos retângulos têm ALGUM k a ± 3 % dele (a mesma
+    # tolerância do par), não o k idêntico: "25"/"120" e "25,4"/"122" são a mesma
+    # escala. O k é a mediana de quem o sustenta, com 3 algarismos (1 casa
+    # decimal zerava o k = 0,01 do metro).
+    apoio, sust = 0, []
+    for c in sorted({k_r for ks in por_ret for k_r in ks}):
+        mais_perto = [min(ks, key=lambda k_r: abs(k_r - c)) for ks in por_ret]
+        s_c = [k_r for k_r in mais_perto if abs(k_r - c) <= _ESCALA_DA_VISTA_TOL * c]
+        if len(s_c) > apoio:
+            apoio, sust = len(s_c), s_c
+    if apoio < _ESCALA_DA_VISTA_APOIO or apoio < _ESCALA_DA_VISTA_FRACAO * len(olhados):
+        return None
+    k = float("%.3g" % statistics.median(sust))
+    r = k / cm_por_unidade
+    if any(abs(v - 1) <= _ESCALA_DA_VISTA_CONCORDA for v in (r, r * 100, r / 10)):
+        return None                       # o rótulo confere com o motor (em cm, m ou mm)
+    if r >= 1 or s1 * k < _ESCALA_DA_VISTA_LADO_MIN_CM:
+        return None
+    return k, apoio
+
+
 def objetos_repetidos_sem_bloco(msp, unit_factor) -> dict:
     """{layer: [peça, ...]} — o objeto desenhado PEÇA POR PEÇA, sem bloco:
     retângulo (polilinha fechada de 4 lados) ou círculo do MESMO tamanho,
@@ -3631,6 +3784,7 @@ def objetos_repetidos_sem_bloco(msp, unit_factor) -> dict:
                 _fora[ly] = bool(layer_is_anotacao(ly) or layer_is_carimbo(ly))
             return not _fora[ly]
         ret: dict = {}
+        cantos_ret: dict = {}
         for e in msp.query("LWPOLYLINE"):
             try:
                 crus = [(p[0], p[1]) for p in e.get_points("xy")]
@@ -3657,14 +3811,30 @@ def objetos_repetidos_sem_bloco(msp, unit_factor) -> dict:
                 continue
             k = (e.dxf.layer, round(a * 1000), round(b * 1000))       # mm
             ret.setdefault(k, []).append((sum(p[0] for p in pts) / 4, sum(p[1] for p in pts) / 4))
+            cantos_ret.setdefault(k, []).append(pts)
         diag_des = _diagonal_do_desenho(msp)
         pts_leg = _pontos_de_legenda(msp) if diag_des > 0 else []
+        _rot_vista = None
         for (ly, a, b), cs in ret.items():
             n = len(cs)
             if n >= _OBJETOS_SEM_BLOCO_MIN:
-                out.setdefault(ly, []).append({"forma": "retângulo", "a_cm": a / 10, "b_cm": b / 10,
-                                               "n": n, "borda_m": round(n * 2 * (a + b) / 1000, 2),
-                                               "concentrada": _na_legenda(cs, pts_leg, diag_des)})
+                _peca = {"forma": "retângulo", "a_cm": a / 10, "b_cm": b / 10,
+                         "n": n, "borda_m": round(n * 2 * (a + b) / 1000, 2),
+                         "concentrada": _na_legenda(cs, pts_leg, diag_des)}
+                # 06/10: a escala da vista pelos rótulos colados (ver acima).
+                # Falhar aqui só deixa a seção como o desenho mede.
+                try:
+                    if _rot_vista is None:
+                        _rot_vista = _rotulos_numericos_da_vista(msp)
+                    _s1, _s2 = a / 1000 / uf, b / 1000 / uf
+                    _esc = escala_da_vista_pelos_rotulos(cs, _s1, _s2, _rot_vista, uf * 100,
+                                                         cantos_ret[(ly, a, b)])
+                    if _esc:
+                        _peca.update({"rot_a_cm": round(_s1 * _esc[0], 1), "rot_b_cm": round(_s2 * _esc[0], 1),
+                                      "escala_k": _esc[0], "escala_apoio": _esc[1]})
+                except Exception as _e_esc:
+                    logger.warning("[escala-da-vista] falhou (não-fatal): %s", _e_esc)
+                out.setdefault(ly, []).append(_peca)
         cir: dict = {}
         for e in msp.query("CIRCLE"):
             r = float(e.dxf.radius) * uf
