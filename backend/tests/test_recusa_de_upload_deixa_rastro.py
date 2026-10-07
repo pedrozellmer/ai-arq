@@ -145,6 +145,8 @@ _PORTAS_POR_ARQUIVO = [
     ("envio-incompleto", "prancha-que-caiu.pdf"),
     ("dwg-pequeno-demais", "planta-truncada.dwg"),
     ("dwg-sem-assinatura", "planta-corrompida.dwg"),
+    # 🩸 07/10/2026: o DXF de incêndio de uma cliente chegou com 0 bytes e passou
+    ("arquivo-vazio", "incendio-vazio.dxf"),
 ]
 
 
@@ -152,6 +154,8 @@ def _arquivo_ruim(motivo, nome):
     if motivo == "envio-incompleto":
         # a conexão caiu: chegaram 10 bytes de 999.999 prometidos
         return _ArquivoFalso(nome, b"1234567890", size=999999)
+    if motivo == "arquivo-vazio":
+        return _ArquivoFalso(nome, b"")
     if motivo == "dwg-pequeno-demais":
         return _ArquivoFalso(nome, b"AC1032")
     if motivo == "dwg-sem-assinatura":
@@ -187,6 +191,8 @@ def _abre_a_porta(motivo, monkeypatch):
         return lambda: _sobe([_ArquivoFalso("planta.dwg", b"AC1032")])
     if motivo == "dwg-sem-assinatura":
         return lambda: _sobe([_ArquivoFalso("planta.dwg", b"PK" + b"z" * 300)])
+    if motivo == "arquivo-vazio":
+        return lambda: _sobe([_ArquivoFalso("incendio.dxf", b"")])
     pytest.fail("porta desconhecida: %s" % motivo)
 
 
@@ -195,6 +201,7 @@ PORTAS = [
     ("request-grande", 413), ("sem-arquivo", 400), ("formato-nao-aceito", 400),
     ("muitos-arquivos", 400), ("envio-incompleto", 400),
     ("dwg-pequeno-demais", 400), ("dwg-sem-assinatura", 400),
+    ("arquivo-vazio", 400),
 ]
 
 

@@ -22846,6 +22846,20 @@ async def process_files(
                 detalhe="%s: %d de %d bytes" % (upload_file.filename, n_written,
                                                 upload_file.size),
                 quem=jwt_user.get("id") or user_id)
+        # 🩸 07/10/2026 — uma cliente subiu 3 DXF e o de incêndio chegou com
+        # 0 bytes (exportação que falhou do lado dela). O DWG pequeno já era
+        # recusado; o DXF/PDF vazio passava, e a planilha saiu sem a disciplina
+        # inteira, sem aviso nenhum. Vazio é vazio em qualquer formato.
+        if n_written == 0:
+            try: os.remove(file_path)
+            except OSError: pass
+            _recusa_no_upload(
+                400,
+                f"Arquivo '{upload_file.filename}' chegou vazio (0 bytes). "
+                f"Exporte de novo do seu programa e envie outra vez.",
+                "arquivo-vazio",
+                detalhe="%s: 0 bytes" % upload_file.filename,
+                quem=jwt_user.get("id") or user_id)
         ext = upload_file.filename.lower().rsplit('.', 1)[-1]
         if ext == "dwg":
             if n_written < 100:
