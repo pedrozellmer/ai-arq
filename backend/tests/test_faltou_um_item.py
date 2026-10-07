@@ -31,6 +31,16 @@ import main  # noqa: E402
 JOB = "job-faltou-1"
 
 
+@pytest.fixture(autouse=True)
+def campainha(monkeypatch):
+    """🔒 Toda chamada da rota passa por este dublê: sem ele, a campainha de
+    verdade sairia numa thread e tentaria mandar e-mail (a bancada não zera o
+    ambiente). Devolve o que teria tocado."""
+    tocou = []
+    monkeypatch.setattr(main, "_alerta_recado", lambda *a, **k: tocou.append(a))
+    return tocou
+
+
 def _prep(monkeypatch, insert_ok=True):
     gravados, logs = [], []
     monkeypatch.setattr(main, "_supabase_insert",
@@ -108,6 +118,26 @@ def test_se_a_gravacao_FALHA_o_texto_vai_pro_log_critico(monkeypatch):
     assert "bancada da cozinha" in criticos[0][1], (
         "o log crítico não guarda o TEXTO do cliente — sem ele o registro não "
         "serve pra nada")
+
+
+def test_o_recado_TOCA_a_campainha(monkeypatch, campainha):
+    """🩸 07/10/2026 — um cliente pediu pelo "faltou" que dimensionássemos o
+    painel de LED do auditório, e o recado ficou um dia sem ninguém ver: a rota
+    gravava e só deixava um log de nível info. A campainha do recado digitado
+    na revisão existia desde 06/09 — só não estava ligada aqui."""
+    _chamar("dimensionar o painel de LED do auditório", monkeypatch)
+    assert len(campainha) == 1, "o recado do 'faltou' não tocou campainha nenhuma"
+    job, _item, texto = campainha[0][:3]
+    assert job == JOB
+    assert "painel de LED" in texto, "a campainha tocou sem o texto do cliente"
+
+
+def test_CONTROLE_a_campainha_NAO_toca_se_a_gravacao_falhou(monkeypatch, campainha):
+    """Avisar de um recado que o banco recusou manda o dono procurar no painel
+    uma coisa que não está lá (o texto já vai pro log crítico)."""
+    with pytest.raises(main.HTTPException):
+        _chamar("faltou a bancada da cozinha", monkeypatch, insert_ok=False)
+    assert not campainha, "avisou sobre um recado que não gravou"
 
 
 # ══════════════════════════════════════════════════════════════════════════

@@ -33649,6 +33649,15 @@ def registrar_item_faltando(job_id: str, payload: FaltouPayload, request: Reques
     _log_error("revisao:faltou-item",
                f"o cliente apontou item faltando: {texto[:300]}",
                job_id, severity="info")
+    # 🔔 07/10/2026 — o "faltou" não tocava a campainha. Um cliente pediu um
+    # SERVIÇO por ele (dimensionar o painel de LED de um auditório) e o recado
+    # ficou um dia sem ninguém ver: só a linha no banco e um log de nível info.
+    # Mesma campainha do recado digitado na revisão (`_alerta_recado`), e só
+    # aqui, depois de a gravação pegar.
+    _recado = recado_digitado(texto)
+    if _recado:
+        _alerta_recado(job_id, '(recado no botão "faltou")', _recado,
+                       payload.reviewed_by or "")
     return {"status": "ok"}
 
 
