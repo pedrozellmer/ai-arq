@@ -3794,6 +3794,78 @@ def escala_da_vista_pelos_rotulos(centros, s1, s2, rotulos, cm_por_unidade, cant
     return k, apoio, v1, v2
 
 
+# ─── 🩸 07/10/2026 — O ESTRIBO NÃO É OUTRO PILAR ─────────────────────────────
+# Filhote do job de estrutura de 30 DWG, já com a escala da vista pelos rótulos:
+# a prancha de pilares saiu certa (25 × 120 e 25 × 240), mas com uma 3ª linha,
+# "pilar 19 × 114 cm, 11 un" (+6,4 m³ e +79 m² de fôrma). Era o ESTRIBO: o
+# retângulo desenhado DENTRO de cada seção, com a mesma folga nos dois lados
+# (o cobrimento: 25 − 2 × 3 = 19, 120 − 2 × 3 = 114). Na prancha vizinha, o
+# mesmo: 25 × 80 e "19 × 74". Cada estribo é uma peça repetida do mesmo
+# tamanho, então virava um grupo próprio, com a mesma contagem do pilar.
+# 🔑 Estribo = grupo cujos retângulos estão quase todos DENTRO de um retângulo
+# de outro grupo, CONCÊNTRICOS, com folga igual nos dois lados — e essa folga,
+# na escala dos rótulos do de fora, é um cobrimento (1,5–6 cm).
+# 🪤 Sem a escala pelos rótulos a régua NÃO vale: a geometria sozinha marcou 28
+# arquivos do acervo de 342 DXF — caixilho dentro da janela, vidro dentro da
+# esquadria, veneziana, móvel, luminária. Com a escala: 0 no acervo (37 grupos
+# rotulados em 7 arquivos), só o estribo da prancha de pilares.
+_ESTRIBO_FRACAO = 0.8                  # dos retângulos de dentro que estão aninhados
+_ESTRIBO_FOLGA_IGUAL = 0.15            # |folga_x − folga_y| ≤ 15 % da maior
+_ESTRIBO_COBRIMENTO_CM = (1.5, 6.0)    # a folga, na escala dos rótulos do de fora
+
+
+def _grupos_de_estribo(pecas: dict, cantos: dict, unit_factor) -> dict:
+    """{chave de dentro: chave de fora} — o grupo de retângulos que é o ESTRIBO de outro.
+
+    `pecas`: {(layer, a_mm, b_mm): peça} só dos grupos que viraram peça (a de fora
+    precisa de `escala_k`, em cm de obra por unidade do desenho); `cantos`: os 4
+    pontos (unidade do desenho) de cada retângulo de cada grupo."""
+    uf = float(unit_factor or 0)
+    if uf <= 0:
+        return {}
+
+    def _caixas(k):
+        out = []
+        for c in cantos.get(k) or ():
+            xs = [p[0] for p in c]
+            ys = [p[1] for p in c]
+            out.append((min(xs), min(ys), max(xs), max(ys)))
+        return out
+
+    est = {}
+    for kf, pf in pecas.items():
+        k = pf.get("escala_k")
+        if not k:
+            continue
+        af, bf = kf[1] / 1000.0 / uf, kf[2] / 1000.0 / uf          # unidade do desenho
+        caixas_f = None
+        for kd in pecas:
+            if kd == kf or kd in est:
+                continue
+            ad, bd = kd[1] / 1000.0 / uf, kd[2] / 1000.0 / uf
+            fa, fb = (af - ad) / 2.0, (bf - bd) / 2.0
+            if fa <= 0 or fb <= 0 or abs(fa - fb) > _ESTRIBO_FOLGA_IGUAL * max(fa, fb):
+                continue
+            cobrimento = (fa + fb) / 2.0 * float(k)
+            if not (_ESTRIBO_COBRIMENTO_CM[0] <= cobrimento <= _ESTRIBO_COBRIMENTO_CM[1]):
+                continue
+            if caixas_f is None:
+                caixas_f = _caixas(kf)
+            tol = 0.25 * min(fa, fb)
+            caixas_d = _caixas(kd)
+            dentro = 0
+            for (x0, y0, x1, y1) in caixas_d:
+                cx, cy = (x0 + x1) / 2.0, (y0 + y1) / 2.0
+                for (X0, Y0, X1, Y1) in caixas_f:
+                    if (abs((X0 + X1) / 2.0 - cx) <= tol and abs((Y0 + Y1) / 2.0 - cy) <= tol
+                            and X0 < x0 and Y0 < y0 and X1 > x1 and Y1 > y1):
+                        dentro += 1
+                        break
+            if caixas_d and dentro >= _ESTRIBO_FRACAO * len(caixas_d):
+                est[kd] = kf
+    return est
+
+
 def objetos_repetidos_sem_bloco(msp, unit_factor) -> dict:
     """{layer: [peça, ...]} — o objeto desenhado PEÇA POR PEÇA, sem bloco:
     retângulo (polilinha fechada de 4 lados) ou círculo do MESMO tamanho,
@@ -3852,6 +3924,7 @@ def objetos_repetidos_sem_bloco(msp, unit_factor) -> dict:
         diag_des = _diagonal_do_desenho(msp)
         pts_leg = _pontos_de_legenda(msp) if diag_des > 0 else []
         _rot_vista = None
+        _pecas_ret: dict = {}
         for (ly, a, b), cs in ret.items():
             n = len(cs)
             if n >= _OBJETOS_SEM_BLOCO_MIN:
@@ -3872,6 +3945,19 @@ def objetos_repetidos_sem_bloco(msp, unit_factor) -> dict:
                 except Exception as _e_esc:
                     logger.warning("[escala-da-vista] falhou (não-fatal): %s", _e_esc)
                 out.setdefault(ly, []).append(_peca)
+                _pecas_ret[(ly, a, b)] = _peca
+        # 07/10: o estribo desenhado dentro da seção não é outro pilar (ver
+        # `_grupos_de_estribo`). Falhar aqui só deixa os grupos como estavam.
+        try:
+            for _kd, _kf in _grupos_de_estribo(_pecas_ret, cantos_ret, uf).items():
+                _pd = _pecas_ret[_kd]
+                out[_kd[0]] = [x for x in out.get(_kd[0], []) if x is not _pd]
+                if not out[_kd[0]]:
+                    del out[_kd[0]]
+                logger.info("[estribo] %s: %d retângulos de %s × %s dentro de %s × %s — fora da contagem",
+                            _kd[0], _pd["n"], _pd["a_cm"], _pd["b_cm"], _kf[1] / 10, _kf[2] / 10)
+        except Exception as _e_est:
+            logger.warning("[estribo] falhou (não-fatal): %s", _e_est)
         cir: dict = {}
         for e in msp.query("CIRCLE"):
             r = float(e.dxf.radius) * uf
