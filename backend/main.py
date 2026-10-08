@@ -2677,6 +2677,19 @@ def _fundir_revisoes_do_cliente(items: list, parent_job_id: str):
             alvo.spec_origem = _orig
 
         _obs = (c["observations"] or "").strip()
+        # 🩸 07/10/2026 — a observação vem da linha do PAI, e o endpoint de
+        # revisão já gravou nela o selo "QUANTIDADE CORRIGIDA" quando o cliente
+        # digitou o número. Antepor o selo de novo saía DOBRADO na planilha da
+        # cliente (job eve20161, liberado): "✏️ QUANTIDADE CORRIGIDA POR VOCÊ —
+        # não é medida do CAD. Mantido da sua revisão anterior; ... ✏️
+        # QUANTIDADE CORRIGIDA POR VOCÊ — não é medida do CAD. Juntei aqui...".
+        # E a cada releitura do filhote somava mais um. Os selos são NOSSOS
+        # (nunca texto do cliente): tira os herdados e o de baixo decide sozinho
+        # qual vale — inclusive quando o `_digitou` mudou de lado.
+        for _velho in ("✏️ QUANTIDADE CORRIGIDA POR VOCÊ — não é medida do CAD.",
+                       "Mantido da sua revisão anterior; a leitura nova não vale por cima.",
+                       "✏️ REVISADO POR VOCÊ —"):
+            _obs = _obs.replace(_velho + " ", "").replace(_velho, "").strip()
         _sel = ("✏️ QUANTIDADE CORRIGIDA POR VOCÊ — não é medida do CAD. "
                 if _digitou else "✏️ REVISADO POR VOCÊ — ")
         alvo.observations = _observacao_que_cabe(

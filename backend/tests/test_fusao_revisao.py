@@ -683,3 +683,77 @@ def test_linha_ressuscitada_nao_perde_a_unidade():
     assert nova.unit == "kg", (
         "unidade %r — 1.850 de nada; quem cota devolve a planilha" % nova.unit)
     assert nova.quantity == 1850.0
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  O SELO HERDADO (07/10/2026)
+# ══════════════════════════════════════════════════════════════════════════
+_QTD = "✏️ QUANTIDADE CORRIGIDA POR VOCÊ — não é medida do CAD. "
+_MANTIDO = "Mantido da sua revisão anterior; a leitura nova não vale por cima. "
+_VERBA = "Serviços preliminares e administração da obra — verba a definir"
+_PROCEDENCIA = "Juntei aqui 4 verba(s) geral(is) de obra que a leitura sugeriu."
+
+
+def _verba_nova():
+    from models import BudgetItem, Confidence
+    return BudgetItem(item_num="2", description=_VERBA, unit="vb", quantity=0.0,
+                      confidence=Confidence.ESTIMADO,
+                      observations="texto da leitura nova")
+
+
+def test_o_selo_que_o_pai_ja_tem_nao_sai_DOBRADO():
+    """🩸 Payload do job liberado em 07/10: a cliente digitou 1 numa verba que
+    veio 0. O endpoint de revisão gravou o selo na observação do PAI; a fusão lê
+    essa observação e antepunha o selo outra vez."""
+    f, _, _ = _carrega(
+        revs=[_rev_antes("id-v", _VERBA, "vb", 0.0, unit_ed="vb", qtd_ed=1.0)],
+        itens_do_pai=[_linha_pai("id-v", _VERBA, "vb", 1.0, obs=_QTD + _PROCEDENCIA)])
+    novo = _verba_nova()
+    f([novo], "pai123")
+    obs = novo.observations
+    assert obs.count("QUANTIDADE CORRIGIDA") == 1, "selo dobrado:\n" + obs
+    assert obs.startswith(_QTD), "o selo tem de abrir a observação:\n" + obs
+    assert _PROCEDENCIA in obs, "a procedência do pai sumiu:\n" + obs
+    assert novo.quantity == 1.0
+
+
+def test_releitura_de_releitura_nao_acumula_selo():
+    """O pai já é um filhote liberado: a observação dele traz o selo E o
+    "Mantido..." da fusão anterior. A 3ª leitura não pode empilhar mais um."""
+    obs_pai = _QTD + _MANTIDO + _QTD + _PROCEDENCIA
+    f, _, _ = _carrega(
+        revs=[_rev_antes("id-v", _VERBA, "vb", 0.0, unit_ed="vb", qtd_ed=1.0)],
+        itens_do_pai=[_linha_pai("id-v", _VERBA, "vb", 1.0, obs=obs_pai)])
+    novo = _verba_nova()
+    f([novo], "pai123")
+    obs = novo.observations
+    assert obs.count("QUANTIDADE CORRIGIDA") == 1, obs
+    assert obs.count("Mantido da sua revisão anterior") == 1, obs
+    assert obs == _QTD + _MANTIDO + _PROCEDENCIA, obs
+
+
+def test_selo_velho_de_quantidade_nao_sobrevive_quando_ele_NAO_digitou():
+    """O selo de baixo decide: se `_antes` == pai (ele só mexeu no texto), a
+    linha diz REVISADO e não "quantidade corrigida" — mesmo que a observação
+    herdada traga o selo de uma edição antiga."""
+    f, _, _ = _carrega(
+        revs=[_rev_antes("id-v", _VERBA, "vb", 1.0, unit_ed="vb", qtd_ed=1.0)],
+        itens_do_pai=[_linha_pai("id-v", _VERBA, "vb", 1.0, obs=_QTD + _PROCEDENCIA)])
+    novo = _verba_nova()
+    f([novo], "pai123")
+    obs = novo.observations
+    assert "QUANTIDADE CORRIGIDA" not in obs, obs
+    assert obs.startswith("✏️ REVISADO POR VOCÊ — "), obs
+    assert _PROCEDENCIA in obs
+
+
+def test_CONTROLE_o_texto_do_cliente_fica_inteiro():
+    """Controle: o que sai são só os NOSSOS selos. Uma observação do cliente
+    que fala "corrigida por você" com outras palavras chega intacta."""
+    texto = "Quantidade corrigida por você na visita de 02/10 — conferir in loco."
+    f, _, _ = _carrega(
+        revs=[_rev_antes("id-v", _VERBA, "vb", 0.0, unit_ed="vb", qtd_ed=1.0)],
+        itens_do_pai=[_linha_pai("id-v", _VERBA, "vb", 1.0, obs=_QTD + texto)])
+    novo = _verba_nova()
+    f([novo], "pai123")
+    assert novo.observations == _QTD + _MANTIDO + texto, novo.observations
