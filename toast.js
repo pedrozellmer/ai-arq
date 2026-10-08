@@ -46,6 +46,14 @@
   .toast-check { display: flex; align-items: flex-start; gap: 8px;
                  margin: 8px 0 0; font-weight: 400; cursor: pointer; }
   .toast-check input { margin-top: 3px; }
+  /* 08/10/2026 — o display: flex acima VENCE o atributo hidden (a regra do
+     navegador pra [hidden] perde pra qualquer display do autor). Desde 23/09
+     todo diálogo SEM caixa de ciência mostrava uma caixinha vazia, sem rótulo e
+     sem função: "Informar agora / Enviar assim mesmo", o anexo ao projeto
+     anterior, todos. Visto na prévia da pergunta do tipo antes do envio.
+     🪤 Este CSS mora numa template string do JS: crase aqui dentro fecha a
+     string e derruba o toast do site inteiro (aconteceu na 1ª versão disto). */
+  .toast-check[hidden] { display: none; }
   .toast-actions button[disabled] { opacity: .5; cursor: not-allowed; }
   .toast-icon {
     flex-shrink: 0; font-size: 18px; line-height: 1; padding-top: 1px;
