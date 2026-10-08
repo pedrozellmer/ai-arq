@@ -63,7 +63,9 @@ _FUNCOES = ("startProcessing", "_acharProjetoIrmao", "_assinaturaLocalDXF",
             "_premissasEmBranco", "_confirmarPremissasVazias",
             "_soPdfNoEnvio", "_confirmarSoPdf",
             # 29/09: o login de AGORA no envio (test_o_envio_usa_o_login_de_agora.py)
-            "_tokenDoEnvio")
+            "_tokenDoEnvio",
+            # 07/10: a pergunta do tipo antes do envio (test_o_tipo_estrutural_e_perguntado_antes.py)
+            "_arquivosComCaraDeEstrutura", "_confirmarTipoEstrutural")
 
 
 def _padrao_do_select(site):
@@ -173,6 +175,11 @@ __els['project-pe-direito'].value = '2,80';
 // mesma régua — e com DWG na lista, pra o aviso de só-PDF não abrir aqui:
 // o assunto deste arquivo é o anexo recusado, não o formato.
 var _ehPdf = function (f) { return /[.]pdf$/i.test((f && f.name) || ''); };
+// 🪤 07/10: `_confirmarTipoEstrutural` lê o que a ESTIMATIVA respondeu por
+// arquivo. Mapa vazio = o servidor não disse que algum nome é de estrutura, e a
+// pergunta do tipo não abre: o assunto deste arquivo é o anexo recusado.
+var _nomeEstrutural = new Map();
+var _efKey = function (f) { return f.name + ':' + f.size + ':' + f.lastModified; };
 var document = {
   getElementById: function (id) { return __els[id] || null; },
   querySelectorAll: function () { return []; }

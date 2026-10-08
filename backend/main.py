@@ -30205,7 +30205,20 @@ async def estimate_price(request: Request,
         except Exception as _pe:
             print(f"[estimate] precheck falhou (não crítico): {_pe}")
             warnings = []
-        return {"status": "ok", **result, "warnings": warnings}
+        # 🎯 07/10/2026 — O AVISO DE "PARECE ESTRUTURAL" CHEGAVA DEPOIS DO ENVIO.
+        # 📏 Desde o conserto do regex (03/09) ele disparou 6 vezes e as 6 eram
+        # estrutura de verdade; em 1 só a pessoa reenviou no tipo Estrutura
+        # (job c5922baa, 30 DWG). Os outros saíram lidos como arquitetura —
+        # concreto, aço e fôrma perdidos —, porque o aviso aparece com o projeto
+        # já criado e rodando. A tela pergunta ANTES, e para isso precisa saber
+        # quais nomes têm cara de estrutura enquanto a pessoa ainda escolhe os
+        # arquivos. 🔑 A régua NÃO é copiada pro JS: ela já foi consertada 4
+        # vezes aqui (SEM ESTRUTURAL, ESTRUTURADO, PILAR singular, código EST) e
+        # uma 2ª cópia na tela erraria calada no próximo conserto. Um booleano
+        # por arquivo, na ordem em que vieram — a mesma em que a tela os mandou.
+        _nomes_est = [bool(_nome_parece_estrutural(f.filename or "")) for f in files]
+        return {"status": "ok", **result, "warnings": warnings,
+                "nomes_estruturais": _nomes_est}
     finally:
         # Limpa
         for p in saved_paths:
@@ -34484,6 +34497,10 @@ _TRACK_ALLOWED = {
     # evento que elas disparam por esta rota de verdade.
     "aviso-envio:estrutural", "aviso-envio:aec", "aviso-envio:repetido", "aviso-envio:area",
     "aviso-topo:parece-arquitetura", "aviso-topo:estrutura-sem-medida",
+    # 07/10/2026 — a pergunta do tipo ANTES do envio (`_confirmarTipoEstrutural`,
+    # dashboard). `type` diz o que a pessoa escolheu: é o placar que faltava
+    # pra saber se perguntar antes converte mais que avisar depois (1 em 6).
+    "aviso-pre-envio:estrutural",
 }
 _TRACK_CLIQUE_RX = _re.compile(r"^clique:[a-z0-9][a-z0-9-]{0,39}$")
 

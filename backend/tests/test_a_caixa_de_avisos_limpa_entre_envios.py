@@ -101,6 +101,12 @@ def _cena(respostas, sem_limpeza=False):
           "var _ehPdf = function (f) { return /[.]pdf$/i.test((f && f.name) || ''); };",
           bloco_a_partir_de(site, "function _soPdfNoEnvio(", "dashboard.html", fecho=""),
           bloco_a_partir_de(site, "function _confirmarSoPdf(", "dashboard.html", fecho=""),
+          # 07/10: a pergunta do tipo antes do envio. Mapa vazio = nenhum nome
+          # de estrutura, a pergunta não abre (o assunto aqui é a caixa).
+          "var _nomeEstrutural = new Map();",
+          "var _efKey = function (f) { return f.name + ':' + f.size + ':' + f.lastModified; };",
+          bloco_a_partir_de(site, "function _arquivosComCaraDeEstrutura(", "dashboard.html", fecho=""),
+          bloco_a_partir_de(site, "function _confirmarTipoEstrutural(", "dashboard.html", fecho=""),
           "function startProcessing__real() {}",
           iniciar,
           "function _enviar(dados) { DADOS = dados; (function () { %s })(); }" % despacho]

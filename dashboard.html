@@ -2510,6 +2510,11 @@
   // contados viram `known_pranchas`, e a rota é a direta do Render (450 MB).
   const estimateFileCache = new Map();  // "nome:tamanho:mtime" -> {pranchas, warnings}
   const _efKey = f => `${f.name}:${f.size}:${f.lastModified}`;
+  // 07/10/2026 — "este NOME tem cara de projeto estrutural?", POR ARQUIVO, do
+  // jeito que o servidor respondeu na estimativa (a régua mora lá, uma só).
+  // Fora do `estimateFileCache` de propósito: aquele só guarda quem casou com o
+  // `breakdown`, e o booleano vem numa lista à parte.
+  const _nomeEstrutural = new Map();     // _efKey -> true/false
   let estimateDebounce = null;
 
   function estimatePriceForFiles(files) {
@@ -2551,6 +2556,11 @@
       // o casamento certo é por POSIÇÃO (breakdown sai na ordem do envio); por
       // nome fica de reserva. Arquivo que não casar só perde o cache (re-conta
       // na próxima) — nunca inventa contagem.
+      // a lista vem na ORDEM do envio; tamanho diferente = não casa, não guarda
+      const _ne = Array.isArray(data.nomes_estruturais) ? data.nomes_estruturais : [];
+      if (_ne.length === novos.length) {
+        novos.forEach((f, i) => _nomeEstrutural.set(_efKey(f), _ne[i] === true));
+      }
       const bd = data.breakdown || [];
       novos.forEach((f, i) => {
         const b = (bd.length === novos.length) ? bd[i] : bd.find(x => x.filename === f.name);
@@ -3690,6 +3700,69 @@
     });
   }
 
+  //: 🎯 07/10/2026 — O TIPO DO PROJETO, PERGUNTADO ANTES DO ENVIO.
+  //: 📏 O aviso "esses arquivos parecem de projeto ESTRUTURAL" existe desde
+  //: 01/08, mas vinha na RESPOSTA do envio, com o projeto já rodando como
+  //: arquitetura. Desde o conserto do regex (03/09) disparou 6 vezes, as 6
+  //: eram estrutura de verdade, e só 1 pessoa reenviou no tipo certo (30 DWG
+  //: de pilares, 05/10). A semana de 05/10 teve duas: uma orçamentista com 6
+  //: DWG de fundação lidos como arquitetura e esse dos pilares.
+  //: 🔑 Quem decide o que é "nome estrutural" é o SERVIDOR (`nomes_estruturais`
+  //: na estimativa) — a régua já levou 4 consertos lá e não ganha cópia aqui.
+  //: Sem a resposta (estimativa falhou ou ainda não voltou) a tela não opina e
+  //: o aviso depois do envio continua valendo, como antes.
+  //: 🔑 Só pergunta quando a MAIORIA dos arquivos tem cara de estrutura: um
+  //: "sapatas.pdf" no meio de 27 pranchas de arquitetura é apoio, não engano
+  //: de tipo — esse continua só com o aviso informativo de depois.
+  //: 🪤 Nunca bloqueia e nunca cai no confirm() nativo (trava a aba, 19/09).
+  function _arquivosComCaraDeEstrutura() {
+    if (!selectedFiles || !selectedFiles.length) return [];
+    return selectedFiles.filter(f => _nomeEstrutural.get(_efKey(f)) === true);
+  }
+
+  function _confirmarTipoEstrutural() {
+    const sel = document.getElementById('project-type');
+    if (!sel || sel.value === 'estrutura') return Promise.resolve('seguir');
+    const est = _arquivosComCaraDeEstrutura();
+    const total = (selectedFiles || []).length;
+    if (!est.length || est.length * 2 < total) return Promise.resolve('seguir');
+    const _curto = n => (n.length > 48 ? n.slice(0, 45) + '...' : n);
+    const exemplos = est.slice(0, 2).map(f => `"${_curto(f.name)}"`).join(', ')
+                   + (est.length > 2 ? '...' : '');
+    const quem = est.length === total
+      ? (total === 1 ? 'O arquivo parece' : `Os ${total} arquivos parecem`)
+      : `${est.length} dos ${total} arquivos parecem`;
+    const msg = `${quem} de projeto ESTRUTURAL, pelo nome (${exemplos}). `
+              + 'O tipo escolhido é Arquitetura, que não mede aço, pilares nem lajes. '
+              + 'No tipo Estrutura (concreto armado, beta) a gente mede o aço pela '
+              + 'tabela, os pilares e as lajes. Quer ler como Estrutura?';
+    return new Promise(resolve => {
+      try {
+        if (window.toast && window.toast.confirm) {
+          window.toast.confirm(msg, { ok: 'Ler como Estrutura',
+                                      cancel: 'Manter Arquitetura' })
+            .then(v => {
+              if (v) {
+                sel.value = 'estrutura';
+                // a escolha foi da pessoa, no botão: vale como "à mão"
+                if (sel.dataset) sel.dataset.escolhidoAMao = '1';
+                try { aplicarTextoDoPeDireito(); } catch (_) {}
+              }
+              try {
+                // `type` = o que a pessoa escolheu; `n` = quantos arquivos com
+                // cara de estrutura. Só chaves que o /api/track aceita.
+                trackEvent('aviso-pre-envio:estrutural',
+                           { type: v ? 'estrutura' : 'arquitetura', n: est.length, tela: 'envio' });
+              } catch (_) {}
+              resolve(v ? 'trocou' : 'seguir');
+            }, () => resolve('seguir'));
+          return;
+        }
+        resolve('seguir');
+      } catch (_) { resolve('seguir'); }
+    });
+  }
+
   function _premissasEmBranco() {
     const pd = (document.getElementById('project-pe-direito')?.value || '').trim();
     const area = (document.getElementById('project-area')?.value || '').trim();
@@ -3808,6 +3881,11 @@
         return;
       }
     }
+
+    // 🔑 O TIPO antes de tudo: com o tipo errado, nem o formato nem os campos
+    // salvam a leitura (ver `_confirmarTipoEstrutural`). Qualquer resposta
+    // segue o envio — trocar o tipo é a única coisa que ele faz.
+    await _confirmarTipoEstrutural();
 
     // 🔑 Aviso do formato ANTES do aviso dos campos: qual arquivo veio decide
     // mais o resultado do que qualquer campo do formulário.
