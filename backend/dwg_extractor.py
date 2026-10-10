@@ -8456,6 +8456,47 @@ def _nome_do_bloco_dinamico(doc, nome: str):
     return None
 
 
+def _ler_dxf_pelos_encodings(filepath):
+    """(doc ou None, erro de ESTRUTURA ou None) — abre o DXF na ordem: utf-8
+    ESTRITO, a detecção do próprio ezdxf (versão + página de código do
+    cabeçalho) e, por último, latin-1.
+
+    🩸 10/10/2026 — ACENTO PERDIDO. O laço antigo tentava "utf-8" e esperava um
+    UnicodeDecodeError pra cair no latin-1. Mas o padrão do `ezdxf.readfile` é
+    errors="surrogateescape": byte inválido NÃO levanta erro, o utf-8 "passava"
+    e o DXF antigo em cp1252 (o que o cliente envia direto: R2004, R12) saía sem
+    acento — "TELHA METÁLICA TERMOACÚSTICA" virava 'MET\\udcc1LICA…', um
+    surrogate solto que a limpeza antes da IA apaga. Toda régua por palavra
+    acentuada ("área", "circulação", "demolição") falhava nesses arquivos.
+    Medido no acervo: 33 de 342 DXF em 9 jobs; dos enviados pelo cliente, 22 de
+    65. Num deles, 130 de 403 textos.
+
+    Por que nesta ordem: o utf-8 estrito primeiro mantém certo o arquivo utf-8
+    que não declara; a detecção vem antes do latin-1 porque a página do
+    cabeçalho costuma ser cp1252, e o latin-1 erra a faixa 0x80–0x9F (travessão,
+    aspas curvas, reticências).
+    Erro de ESTRUTURA (o que não é de encoding) fica guardado — o último — pra
+    quem chamou decidir o `ezdxf.recover`, e a leitura segue pro próximo
+    encoding, como o laço antigo fazia: o arquivo que abria antes continua
+    abrindo (o latin-1, como o utf-8 tolerante de antes, nunca falha ao
+    decodificar)."""
+    doc, erro = None, None
+    for encoding in ("utf-8", None, "latin-1"):
+        try:
+            if encoding == "utf-8":
+                doc = ezdxf.readfile(filepath, encoding="utf-8", errors="strict")
+            elif encoding is None:
+                doc = ezdxf.readfile(filepath)
+            else:
+                doc = ezdxf.readfile(filepath, encoding=encoding)
+            break
+        except UnicodeDecodeError:
+            continue
+        except Exception as exc:
+            erro = f"{type(exc).__name__}: {exc}"
+    return doc, erro
+
+
 def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> DXFExtraction:
     """Main extraction function — reads a .dxf file and returns structured data.
 
@@ -8507,33 +8548,10 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             f"Exporte só a prancha necessária ou divida o arquivo em partes."
         )
 
-    # Try UTF-8 first, then latin-1 (common in Brazilian CAD files)
-    doc = None
-    _erro_estrutura = None
-    for encoding in ("utf-8", "latin-1", None):
-        try:
-            kwargs = {}
-            if encoding is not None:
-                kwargs["encoding"] = encoding
-            doc = ezdxf.readfile(filepath, **kwargs)
-            break
-        except UnicodeDecodeError:
-            continue
-        except Exception as exc:
-            # 🚨 24/08: erro de ESTRUTURA (não de encoding) subia direto e
-            # matava a prancha. Agora ele é guardado pra o `ezdxf.recover`
-            # abaixo ter a chance de consertar o arquivo. Trocar troca de
-            # encoding não resolve KeyError de layout.
-            _erro_estrutura = f"{type(exc).__name__}: {exc}"
-            if encoding is None:
-                break
-            if encoding == "latin-1":
-                try:
-                    doc = ezdxf.readfile(filepath)
-                    break
-                except Exception:
-                    break
-            continue
+    # utf-8 ESTRITO, depois a detecção do ezdxf, depois latin-1 (ver a função).
+    # 🚨 24/08: o erro de ESTRUTURA (não de encoding) é guardado pra o
+    # `ezdxf.recover` abaixo ter a chance de consertar o arquivo.
+    doc, _erro_estrutura = _ler_dxf_pelos_encodings(filepath)
 
     if doc is None or _erro_estrutura is not None:
         # 🚨 24/08/2026 (caso cliente-19, job e1c48ed7): o readfile normal morre em
@@ -10595,18 +10613,8 @@ def probe_unit(filepath: str) -> Optional[float]:
             return None
         if os.path.getsize(filepath) > 150 * 1024 * 1024:
             return None
-        doc = None
-        _erro = None
-        for enc in ("utf-8", "latin-1", None):
-            try:
-                doc = ezdxf.readfile(filepath, **({"encoding": enc} if enc else {}))
-                break
-            except UnicodeDecodeError:
-                continue
-            except Exception as _e:
-                _erro = f"{type(_e).__name__}: {_e}"
-                if enc is None:
-                    break
+        # a mesma porta do extract_dxf: o texto da cota lido sem acento é outro texto
+        doc, _erro = _ler_dxf_pelos_encodings(filepath)
         if doc is None:
             # 24/08: erro de ESTRUTURA (KeyError de layout, caso cliente-19) devolvia
             # None calado e esta leitura sumia do consenso de area sem deixar

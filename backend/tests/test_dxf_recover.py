@@ -100,13 +100,21 @@ def test_quando_nem_o_recover_abre_a_mensagem_diz_as_DUAS_causas(tmp_path):
     assert "recover" in txt or "dxf" in txt
 
 
-def test_erro_de_estrutura_nao_e_mais_relancado_direto():
-    """Guarda estrutural: antes, erro que não fosse de encoding subia na hora e
-    matava a prancha sem dar chance ao recover."""
+def test_erro_de_estrutura_nao_e_mais_relancado_direto(monkeypatch):
+    """Guarda: antes, erro que não fosse de encoding subia na hora e matava a
+    prancha sem dar chance ao recover.
+
+    10/10/2026: a leitura passou a morar em `_ler_dxf_pelos_encodings`. O guarda
+    lia o FONTE atrás do comentário do laço antigo; agora pergunta à função — o
+    erro de estrutura não sobe, volta GUARDADO pra quem chamou."""
     import io
-    src = io.open(os.path.join(_BACKEND, "dwg_extractor.py"), encoding="utf-8").read()
-    i = src.index("# Try UTF-8 first, then latin-1")
-    trecho = src[i:i + 1600]
-    assert "_erro_estrutura = f" in trecho, (
+    import dwg_extractor as dx
+
+    def _quebra(*a, **k):
+        raise KeyError("LAYOUT")
+    monkeypatch.setattr(dx.ezdxf, "readfile", _quebra)
+    doc, erro = dx._ler_dxf_pelos_encodings("qualquer.dxf")
+    assert doc is None and erro and "KeyError" in erro, (
         "o erro de estrutura voltou a ser descartado — o recover nunca roda")
+    src = io.open(os.path.join(_BACKEND, "dwg_extractor.py"), encoding="utf-8").read()
     assert "ezdxf.recover" in src or "import ezdxf.recover" in src
