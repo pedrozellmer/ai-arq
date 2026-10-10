@@ -14109,6 +14109,72 @@ def _linhas_escala_projeto(arqs: list, n_medidos: int = -1,
     return out
 
 
+# 🩸 09–10/10/2026: o que ficou na conta e nenhuma janela das pranchas mostra.
+# A faixa é a medida, não um palpite: abaixo de 20 % é sobra comum de desenho;
+# de 90 % pra cima as janelas não cobrem o desenho (o projetista plota do
+# modelo) e avisar seria alarme falso. Em 15 dias de produção, 10 projetos com
+# CAD caem na faixa pelo metro e mais um só pela área.
+_FORA_PRANCHA_FAIXA = (0.20, 0.90)
+_FORA_PRANCHA_MIN = 50.0        # m (ou m²) fora E dentro: menos que isso é ruído
+
+
+def _linhas_fora_das_pranchas(arqs: list) -> list:
+    """Uma linha de atenção por projeto: quanto do que entrou na conta está no
+    modelo FORA de toda janela das pranchas (`fora_das_pranchas` do extrator).
+
+    Só AVISA — não tira nada da soma: em muito arquivo o que está fora é
+    desenho legítimo que o projetista não levou pra prancha. O número vai junto
+    pra pessoa decidir.
+    """
+    def _n(v):
+        return f"{float(v):,.0f}".replace(",", ".")
+
+    def _pct(fora, total):
+        """Percentual do que está fora, ou None fora da faixa. Sai de fora/total
+        (a fração gravada no metadata vem arredondada: 0,805 virava "80 %")."""
+        if total <= 0:
+            return None
+        fracao = fora / total
+        if not (_FORA_PRANCHA_FAIXA[0] <= fracao < _FORA_PRANCHA_FAIXA[1]
+                and fora >= _FORA_PRANCHA_MIN and (total - fora) >= _FORA_PRANCHA_MIN):
+            return None
+        return int(round(100 * fracao))
+
+    partes, sem_leitura = [], 0
+    for a in arqs or []:
+        f = a.get("fora_das_pranchas") if isinstance(a, dict) else None
+        if not isinstance(f, dict):
+            continue
+        try:
+            ps = []
+            pm = _pct(float(f.get("m") or 0), float(f.get("total_m") or 0))
+            if pm is not None:
+                ps.append("%d %% do comprimento (%s m de %s m)" % (pm, _n(f["m"]), _n(f["total_m"])))
+            pa = _pct(float(f.get("m2") or 0), float(f.get("total_m2") or 0))
+            if pa is not None:
+                ps.append("%d %% da área de hachura (%s m² de %s m²)" % (pa, _n(f["m2"]), _n(f["total_m2"])))
+        except (TypeError, ValueError, KeyError):
+            continue
+        if ps:
+            partes.append("%s: %s" % (a.get("nome") or "prancha", " e ".join(ps)))
+            try:
+                sem_leitura += int(f.get("janelas_sem_leitura") or 0)
+            except (TypeError, ValueError):
+                pass
+    if not partes:
+        return []
+    _lista = "; ".join(partes[:4]) + ("; e mais %d" % (len(partes) - 4) if len(partes) > 4 else "")
+    _linha = ("⚠ Parte do desenho está FORA das pranchas — %s. Esse trecho entrou na conta e "
+              "está no modelo, mas não aparece em nenhuma janela de desenho das pranchas. Se for "
+              "cópia de trabalho, versão antiga, base de outro desenho ou resto, as quantidades "
+              "somam esse trecho a mais. Pra medir só o que vale, deixe no modelo só o que vai "
+              "pras pranchas e envie de novo." % _lista)
+    if sem_leitura:
+        _linha += (" (%d janela(s) girada(s) ou em 3D a gente não consegue ler — o trecho "
+                   "pode estar nela(s).)" % sem_leitura)
+    return [_linha]
+
+
 def _regua_da_sombra(user_total_area, total_area_ia):
     """Escolhe a régua do veredito da sombra do DXF e DIZ de onde ela veio.
 
@@ -15970,7 +16036,11 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                             f"lfac={_md_u.get('lfac_por_cota') or '-'}",
                             job_id)
                         try:
-                            _escala_arqs.append(_resumo_escala_arquivo(dxf_path, _md_u))
+                            _res_esc = _resumo_escala_arquivo(dxf_path, _md_u)
+                            # 10/10: o que nenhuma janela das pranchas mostra
+                            if _md_u.get("fora_das_pranchas"):
+                                _res_esc["fora_das_pranchas"] = _md_u["fora_das_pranchas"]
+                            _escala_arqs.append(_res_esc)
                         except Exception as _eea:
                             print(f"[escala-resumo] nao-fatal: {_eea}")
                         # 🩸 01/10 (job e3b8ddce): CONSENSO TARDIO. O pré-passe
@@ -19704,6 +19774,10 @@ bloco — só cite os que estão no inventário deste arquivo."""
             _, _frase_esc = _origem_das_quantidades(all_items)
             _linhas_esc = _linhas_escala_projeto(_escala_arqs, n_medidos=_n_med_esc,
                                                  frase_origem=_frase_esc)
+            try:                        # o aviso novo nunca derruba as linhas de escala
+                _linhas_esc += _linhas_fora_das_pranchas(_escala_arqs)
+            except Exception as _efp:
+                print(f"[fora-das-pranchas] nao-fatal: {_efp}")
         except NameError:
             _linhas_esc = []            # job sem CAD (só PDF): nada a dizer
         except Exception as _ele:

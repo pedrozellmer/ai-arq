@@ -8222,6 +8222,60 @@ def medir_por_folha(walls, hatches, polygon_areas, blocks, mapa) -> dict:
     return med
 
 
+def fora_das_pranchas(walls, hatches, polygon_areas, medida, mapa) -> dict:
+    """Quanto do que FICOU na conta está no modelo fora de toda janela das pranchas — SÓ MEDE.
+
+    🩸 09/10/2026 (DWG de reforma com 27 janelas no layout). As três plantas das
+    pranchas somavam 2.554 m; fora de todas as janelas havia mais 5.611 m — as
+    plantas do projeto de gesso e outra fileira de plantas, cópias de trabalho
+    que nenhuma prancha mostra. A leitura por folha pesa cada trecho pela
+    POSIÇÃO, e o que não toca desenho nenhum conta 1: a alvenaria saiu ~3×.
+    O log já guardava isso (`medida.sem_folha`); o cliente não lia em lugar nenhum.
+    🩸 10/10 (o arquivo limpo do mesmo projeto): em metro sobraram 5 %, em ÁREA
+    844 de 1.048 m² — hachuras esquecidas ao lado das plantas, que viraram uma
+    linha de piso de 850 m². Por isso metro E área.
+    📏 Acervo (342 DXF): de 96 jobs com desenhos no mapa, 40 têm arquivo com mais
+    de 20 % do comprimento fora de toda janela — e em 17 as janelas não cobrem
+    quase nada (o projetista plota do modelo), então TIRAR o de fora zeraria
+    esses. Por isso aqui só se MEDE; quem decide o que dizer é quem monta o aviso.
+    A régua "cópia provada por `copias_em_sombra` com um lado dentro das pranchas"
+    foi medida e pega 4 jobs do acervo: não entrou.
+
+    `medida` = `medir_por_folha` (antes da leitura por folha); as listas = depois
+    dela (com `peso`). O que não tem posição (trecho explodido de bloco, hachura
+    sem caixa) fica fora da conta, como lá. Só vale quando os desenhos do mapa
+    são JANELAS do papel: com `origem` "modelo" eles foram achados pelo título
+    dentro do modelspace, e "fora deles" não quer dizer fora das pranchas.
+    Devolve {'m', 'total_m', 'fracao', 'm2', 'total_m2', 'fracao_m2',
+    'janelas_sem_leitura'}; {} quando não se aplica ou nada está fora.
+    """
+    try:
+        if not (mapa or {}).get("folhas") or (mapa or {}).get("origem"):
+            return {}
+        sem = (medida or {}).get("sem_folha") or {}
+        fora_m, fora_m2 = float(sem.get("m") or 0.0), float(sem.get("m2") or 0.0)
+        if fora_m <= 0 and fora_m2 <= 0:
+            return {}
+        total_m = 0.0
+        for w in walls or ():
+            if tuple(w.start) == (0, 0) and tuple(w.end) == (0, 0):
+                continue
+            total_m += float(w.length) * float(getattr(w, "peso", 1.0))
+        total_m2 = 0.0
+        for lista in (hatches, polygon_areas):
+            for h in lista or ():
+                if len(getattr(h, "bbox", ()) or ()) != 4:
+                    continue
+                total_m2 += float(h.area) * float(getattr(h, "peso", 1.0))
+        return {"m": round(fora_m, 1), "total_m": round(total_m, 1),
+                "fracao": round(min(fora_m / total_m, 1.0), 3) if total_m > 0 else 0.0,
+                "m2": round(fora_m2, 1), "total_m2": round(total_m2, 1),
+                "fracao_m2": round(min(fora_m2 / total_m2, 1.0), 3) if total_m2 > 0 else 0.0,
+                "janelas_sem_leitura": int((mapa or {}).get("sem_janela") or 0)}
+    except Exception:
+        return {}
+
+
 # ══════════════════════════════════════════════════════════════════════
 #  FOLHA DE PAPEL DESENHADA NO MODELO — cada vista numa escala
 # ══════════════════════════════════════════════════════════════════════
@@ -10223,6 +10277,10 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             if _n_txt:
                 _folhas["textos_fora_da_contagem"] = _n_txt
             _folhas["medida"] = _medida
+            # 09/10: o que ficou na conta e nenhuma prancha mostra (ver `fora_das_pranchas`)
+            _fdp = fora_das_pranchas(walls, hatches, polygon_areas, _medida, _mapa)
+            if _fdp:
+                metadata["fora_das_pranchas"] = _fdp
             _folhas["desenhos_lista"] = [
                 {"folha": f["folha"][:40], "titulo": f.get("titulo", "")[:90],
                  "tipo": f.get("tipo", ""), "andares": f.get("andares", 1),
