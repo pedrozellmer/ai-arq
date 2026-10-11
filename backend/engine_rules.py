@@ -3122,6 +3122,266 @@ def unidade_provada_por_rotulo(pares, tol: float = _AREA_TOL, leitor=None) -> di
 
 
 # ══════════════════════════════════════════════════════════════════════════
+#  AMBIENTE ↔ ÁREA ESCRITA NA ETIQUETA
+# ══════════════════════════════════════════════════════════════════════════
+#
+# 📏 10/10/2026 — estudo do acervo (342 DXF, 127 jobs). 56 jobs (44 %) têm
+# etiqueta de área de cômodo; são 4.223 etiquetas. O prompt levava o NOME e a
+# ÁREA em listas separadas de texto, com ×N: "CIRCULAÇÃO ×4" e "49,82 m² ×3" —
+# e quem lia tinha de adivinhar qual área é de qual ambiente. Aqui sai o PAR.
+#
+# Anatomia MEDIDA da etiqueta (não a imaginada):
+# - o formato mais comum traz o nome NO MESMO texto: "BANHO ÁREA=16,35m2",
+#   "COZINHA Ar = 13.80 m²", "SALA 21 A=38,56 m²" (1.015 das 4.223);
+# - nos outros o NOME é um texto e a ÁREA outro, mais abaixo; EMBAIXO da área
+#   vem outro atributo ("PD 2.69M", "P=28,30m", "Piso Cerâmico") — por isso só
+#   se olha pra CIMA da área;
+# - entre o nome e a área cabem até 3 linhas que não são nome (código de
+#   acabamento, "+1.00", "P.A."): o nome fica de 1,5 a 5 alturas acima;
+# - o nome pode estar em OUTRO layer e ter de 0,88 a 2,2× a letra da área (os
+#   atributos têm 0,53–0,67): a régua é a MAIOR das duas letras;
+# - o nome pode vir em DUAS linhas ("SANITÁRIO" / "MASCULINO");
+# - em cômodo estreito a etiqueta vem GIRADA 90°: "acima" se mede no eixo do
+#   PRÓPRIO texto (175 das 2.695 casadas pela posição). 🪤 Adivinhar o giro
+#   pela posição trocava um erro por outro; o ângulo vem do arquivo.
+# Resultado no acervo: 1.015 pelo mesmo texto + 2.695 pela posição; 513 ficam
+# SEM nome (e ficam mesmo: a área não pega o nome do vizinho).
+_AMB_DY_MAX = 6.0           # alturas de texto acima da área
+#: folga lateral fixa, em alturas… PERTO (4) é a janela medida da etiqueta comum:
+#: nome em cima da área. Até 7 entra o nome escrito AO LADO da área (10 alturas
+#: ao longo, meia a uma e meia acima) — mas só se nenhuma OUTRA etiqueta de área
+#: estiver mais perto daquele nome. 🩸 medido no acervo: numa tabela "valor |
+#: nome" com as linhas a 2,5 alturas, sem essa condição o valor casava com o nome
+#: da linha de CIMA (20 pares errados em 2 arquivos). Tabela não é etiqueta.
+#: E o nome ao lado tem de estar de fato ACIMA da linha da área (o caso medido:
+#: meia a uma e meia alturas). O nome NA MESMA LINHA é linha de tabela — no
+#: arquivo real ele casava ou não conforme o ruído da 3ª casa da coordenada.
+_AMB_DX_PERTO = 4.0
+_AMB_DX_BASE = 7.0
+_AMB_AO_LADO_DY_MIN = 0.4
+_AMB_DX_POR_LETRA = 0.5     # …mais meia altura por letra
+_AMB_ALTURA_MIN = 0.8       # o nome não é bem menor que a área (atributo: 0,53–0,67)
+_AMB_LETRA_MAX = 3.0        # …nem mais de 3× maior (título de prancha é bem mais)
+_AMB_LINHA2_MAX = 2.2       # a 1ª linha de um nome em duas, em alturas do nome
+#: letra da 1ª linha sobre a da 2ª: "REUNIÃO" (1,39×) em cima de "10 lugares",
+#: "FUNCION." (1,18×) em cima de "(UNISSEX)". Acima de 1,6× é título de setor.
+_AMB_LINHA1_LETRA_MAX = 1.6
+_AMB_ANGULO_TOL = 15.0      # nome e área da mesma etiqueta têm o mesmo ângulo
+_AMB_NOME_MAX = 60
+
+_RE_AMB_LETRA = _re.compile(r"[A-Za-zÀ-ÿ]")
+_RE_AMB_SO_NUMERO = _re.compile(r"^[\s\d.,;:xX×*/+\-=()%°ºª'\"]+$")
+#: o pedaço da ÁREA no fim do texto: "… A = 12,3 m²", "… ÁREA: 12,3m2", "… Ar = 12.3 m²".
+#: "AF=" e "AP=" (área de forro, área de piso) também: medido em 2 pranchas do
+#: acervo, 162 etiquetas "SECRETARIA AF= 13.93m²" — o nome não leva o "AF".
+_RE_AMB_CAUDA_DA_AREA = _re.compile(
+    r"\s*(?:\b(?:a|á|ar|af|ap|area|área)\b\.?)?\s*[=:]\s*\d[\d.,]*\s*(?:m²|m2|M²|M2)\s*$",
+    _re.IGNORECASE)
+#: nome que é TOTAL/RESUMO, não cômodo — sai em lista à parte (somado aos
+#: cômodos, conta duas vezes). 🪤 "ÁREA DE TRABALHO", "ÁREA SERV.", "ÁREA
+#: TÉCNICA" são cômodos: começar com "área" não basta. Lido sem acento, minúsculo.
+_RE_AMB_RESUMO = _re.compile(
+    r"\btotal\b|\bcomum\b|privativ|permeav|construid|construc|edifica|\bterreno\b|\blote\b|"
+    r"ocupac|computav|"
+    r"\b(?:area|areas)\s+(?:util|bruta|liquida|destinada|coberta|descoberta|real|do\s+pavimento)\b|"
+    r"superficie|\bpavimento\b|\bterreo\b|\bmezanino\b|\bglobal\b|\breal\b|\bcorte\b|\baterro\b|"
+    r"\bquadro\b|\btabela\b|\bresumo\b|"
+    r"residenc|apartament|\bapto\b|\bunidade\b|\btorre\b|utilizad")
+#: atributo da etiqueta, não nome: "PD 2.69M", "P.D. 3,00", "H 2,10", "Pé-direito 2,70".
+#: 🪤 "VAGA 2,50x5,00m" é nome — não se barra todo texto com decimal.
+_RE_AMB_ATRIBUTO = _re.compile(
+    r"^(?:p\.?\s?d\.?|p\.?\s?a\.?|h|pe[- ]?direito|perimetro)\s*[.:]?\s*[+\-]?\d")
+
+
+def _amb_limpo(s) -> str:
+    return " ".join(str(s or "").replace("\\U+00B2", "²").replace("%%178", "²").split())
+
+
+def nome_do_ambiente_no_rotulo(texto):
+    """"BANHO ÁREA=16,35m2" → "BANHO"; "05 A=42,70 m²" → "05"; "A= 12,3 m²" → None."""
+    s = _amb_limpo(texto)
+    m = _RE_AMB_CAUDA_DA_AREA.search(s)
+    if not m:
+        return None
+    nome = s[:m.start()].strip(" -–—:/")
+    return nome if _re.search(r"[0-9A-Za-zÀ-ÿ]", nome) else None
+
+
+def nome_de_ambiente_e_resumo(nome) -> bool:
+    """O nome é de TOTAL/RESUMO ("ÁREA TOTAL", "ÁREA PRIVATIVA", "PAVIMENTO
+    TÉRREO"), não de cômodo? Também o CABEÇALHO DE QUADRO sozinho ("ÁREA",
+    "QUANTIDADE"): medido no acervo, o valor "399,89 m²" embaixo da coluna
+    "ÁREA" de um quadro saía como um cômodo chamado ÁREA. O cabeçalho continua
+    candidato a nome (senão a área pegaria o texto seguinte, mais longe); só
+    não é listado como ambiente."""
+    s = _sem_acento(nome).lower()
+    return bool(_RE_AMB_RESUMO.search(s)) or s.strip(" .:;-–—()[]") in _CABECALHO_DE_QUADRO
+
+
+def _amb_cara_de_nome(texto) -> bool:
+    s = _amb_limpo(texto)
+    return (3 <= len(s) <= 40 and len(_RE_AMB_LETRA.findall(s)) >= 3 and "=" not in s
+            and not _RE_AMB_ATRIBUTO.match(_sem_acento(s).lower())
+            and not _RE_AMB_SO_NUMERO.match(s) and rotulo_area_de_comodo(s) is None)
+
+
+def ambientes_com_area_escrita(textos) -> tuple:
+    """Os pares NOME DO AMBIENTE ↔ ÁREA ESCRITA de um desenho → (pares, sem_nome).
+
+    `textos`: itens com `.text`, `.position` (x, y), `.height`, `.layer` e
+    `.rotation` (graus; sem ele vale 0). Só lê — não muta nada.
+    pares    = [{"nome", "m2", "como": "mesmo"|"acima"|"girada", "resumo", "x", "y"}]
+               (x, y = a posição da etiqueta de ÁREA);
+    sem_nome = [{"m2", "texto", "x", "y"}] — a etiqueta de área sem nome por perto.
+
+    A área é a de `rotulo_area_de_comodo` (traz o "m²" escrito; a de lote/terreno
+    e a menor que 1 m² ficam de fora). O nome vem do mesmo texto ou do texto
+    logo ACIMA, no eixo do próprio texto. Cada área propõe SÓ o nome mais perto
+    dela; se esse nome já é de uma área mais perto, ela fica SEM nome.
+    """
+    import bisect
+    import math
+
+    def _xy(t):
+        return float(t.position[0]), float(t.position[1])
+
+    def _h(t):
+        return float(getattr(t, "height", 0) or 0)
+
+    def _ang(t):
+        return float(getattr(t, "rotation", 0) or 0) % 360.0
+
+    def _mesmo_angulo(a, b):
+        d = abs(_ang(a) - _ang(b)) % 360.0
+        return min(d, 360.0 - d) <= _AMB_ANGULO_TOL
+
+    def _letras(t):
+        return len(_RE_AMB_LETRA.findall(str(t.text)))
+
+    def _no_eixo_de(ref, x, y):
+        # (ao longo do texto, acima da linha) do ponto, no eixo do texto `ref`
+        rx, ry = _xy(ref)
+        th = math.radians(_ang(ref))
+        c, s = math.cos(th), math.sin(th)
+        vx, vy = x - rx, y - ry
+        return vx * c + vy * s, -vx * s + vy * c
+
+    def _vizinhos(xs, x, alc):
+        return range(bisect.bisect_left(xs, x - alc), bisect.bisect_right(xs, x + alc))
+
+    txs = []
+    for t in (textos or []):
+        try:
+            if _amb_limpo(getattr(t, "text", "")) and len(t.position) >= 2:
+                _xy(t)
+                txs.append(t)
+        except Exception:
+            continue
+    hs = sorted(_h(t) for t in txs if _h(t) > 0)
+    hmed = hs[len(hs) // 2] if hs else 0.0
+    pares, pendentes = [], {}
+    areas = []                          # todas as etiquetas de área: (x, y, altura)
+    for t in txs:
+        v = rotulo_area_de_comodo(t.text)
+        if v is None:
+            continue
+        x, y = _xy(t)
+        areas.append((x, y, _h(t)))
+        nome = nome_do_ambiente_no_rotulo(t.text)
+        if nome:
+            pares.append({"nome": nome[:_AMB_NOME_MAX], "m2": v, "como": "mesmo",
+                          "resumo": nome_de_ambiente_e_resumo(nome), "x": x, "y": y})
+        else:
+            pendentes[len(pendentes)] = (t, v, x, y)
+    nomes = sorted((t for t in txs if _amb_cara_de_nome(t.text)), key=lambda t: _xy(t)[0])
+    xs = [_xy(t)[0] for t in nomes]
+    cands = []
+    for i, (a, _v, ax, _ay) in pendentes.items():
+        h = _h(a) or hmed
+        if h <= 0:
+            continue
+        alc = (_AMB_DX_BASE + _AMB_DX_POR_LETRA * 40 + _AMB_DY_MAX) * h * _AMB_LETRA_MAX
+        for j in _vizinhos(xs, ax, alc):
+            n = nomes[j]
+            hn = _h(n)
+            if hn and (hn < _AMB_ALTURA_MIN * h or hn > _AMB_LETRA_MAX * h):
+                continue
+            if not _mesmo_angulo(a, n):
+                continue
+            # a régua é a MAIOR das duas letras (área miúda + nome 2,2× maior
+            # ficava a 7 "alturas da área")
+            hr = max(h, hn)
+            lx, ly = _no_eixo_de(a, *_xy(n))
+            lx, ly = lx / hr, ly / hr
+            # ACIMA da área, até _AMB_DY_MAX; o nome pode COMEÇAR bem antes da
+            # área (nome comprido), mas não muito depois dela
+            antes = _AMB_DX_POR_LETRA * _letras(n)
+            depois = _AMB_DX_POR_LETRA * len(_amb_limpo(a.text))
+            if not (0 < ly <= _AMB_DY_MAX
+                    and -(_AMB_DX_BASE + antes) <= lx <= _AMB_DX_BASE + depois):
+                continue
+            d = math.hypot(lx, ly)
+            if not -(_AMB_DX_PERTO + antes) <= lx <= _AMB_DX_PERTO + depois:
+                # o nome AO LADO: acima da linha, e só se esta é a etiqueta de
+                # área mais perto dele
+                if ly < _AMB_AO_LADO_DY_MIN:
+                    continue
+                nx, ny = _xy(n)
+                if any((ox, oy) != (ax, _ay)
+                       and math.hypot(ox - nx, oy - ny) / max(oh or h, hn or h) < d
+                       for ox, oy, oh in areas):
+                    continue
+            cands.append((d, i, j))
+    cands.sort()
+    proposta = {}
+    for d, i, j in cands:
+        if i not in proposta:
+            proposta[i] = (d, j)
+    # o texto que é o nome mais perto de ALGUMA área é nome dela, não a 1ª linha
+    # do nome do vizinho. 🩸 medido no acervo (3 arquivos): com a 1ª linha
+    # aceitando letra maior, "COPA TERCEIROS" (nome da etiqueta ao lado) virava a
+    # 1ª linha de "COPA", e a etiqueta ao lado ficava sem nome.
+    nome_de_alguem = {j for _d, j in proposta.values()}
+    usado = set()
+    for i, (_d, j) in sorted(proposta.items(), key=lambda kv: kv[1][0]):
+        if j in usado:
+            continue                    # o nome já é de uma área mais perto
+        usado.add(j)
+        a, v, ax, ay = pendentes.pop(i)
+        n = nomes[j]
+        nome = _amb_limpo(n.text)
+        # a 1ª linha de um nome em duas: mesmo layer, mesma letra, mesmo ângulo,
+        # logo acima do nome
+        hn = _h(n)
+        if hn > 0:
+            melhor = None
+            for k in _vizinhos(xs, _xy(n)[0],
+                               (_AMB_DX_PERTO + _AMB_DX_POR_LETRA * 40 + _AMB_LINHA2_MAX) * hn):
+                u = nomes[k]
+                if (k == j or k in usado or k in nome_de_alguem
+                        or str(u.layer) != str(n.layer) or not _h(u)
+                        or not (0.9 * hn <= _h(u) <= _AMB_LINHA1_LETRA_MAX * hn)):
+                    continue
+                if not _mesmo_angulo(n, u):
+                    continue
+                lx, ly = _no_eixo_de(n, *_xy(u))
+                lx, ly = lx / hn, ly / hn
+                if (0 < ly <= _AMB_LINHA2_MAX
+                        and abs(lx) <= _AMB_DX_PERTO + _AMB_DX_POR_LETRA * max(_letras(u), _letras(n))):
+                    if melhor is None or ly < melhor[0]:
+                        melhor = (ly, k)
+            if melhor:
+                usado.add(melhor[1])
+                nome = _amb_limpo(nomes[melhor[1]].text) + " " + nome
+        girada = min(_ang(a) % 180.0, 180.0 - _ang(a) % 180.0) > _AMB_ANGULO_TOL
+        pares.append({"nome": nome[:_AMB_NOME_MAX], "m2": v, "como": "girada" if girada else "acima",
+                      "resumo": nome_de_ambiente_e_resumo(nome), "x": ax, "y": ay})
+    sem_nome = [{"m2": v, "texto": _amb_limpo(a.text)[:40], "x": ax, "y": ay}
+                for a, v, ax, ay in pendentes.values()]
+    return pares, sem_nome
+
+
+# ══════════════════════════════════════════════════════════════════════════
 #  🧬 MERGE DE LEITURAS — a melhor prancha de cada
 # ══════════════════════════════════════════════════════════════════════════
 #

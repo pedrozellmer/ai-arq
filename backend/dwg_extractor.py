@@ -160,6 +160,9 @@ class TextAnnotation:
     text: str
     position: tuple = (0, 0)
     height: float = 0
+    #: ângulo do texto, em graus (0 = horizontal). A etiqueta de cômodo estreito
+    #: vem girada 90°, e "acima" só faz sentido no eixo do próprio texto.
+    rotation: float = 0.0
 
 
 @dataclass
@@ -288,7 +291,10 @@ class DXFExtraction:
                                            # em `unidade_provada_por_rotulo`
                                            "prova_por_rotulo_de_comodo",
                                            # 04/10 (E12): dito na linha do layer
-                                           "parede_espessa_pelas_faces"})
+                                           "parede_espessa_pelas_faces",
+                                           # 10/10: seção própria (AMBIENTE ↔
+                                           # ÁREA ESCRITA NA ETIQUETA)
+                                           "ambientes_area_escrita"})
 
     def to_structured_prompt(self) -> str:
         """Converts extraction to a structured text prompt for Claude."""
@@ -966,6 +972,13 @@ class DXFExtraction:
             if len(_pares) > 60:
                 lines.append(f"  (+{len(_pares) - 60} par(es) não listado(s))")
             lines.append("")
+
+        # 10/10: NOME DO AMBIENTE ↔ ÁREA ESCRITA, por desenho (ver
+        # `ambientes_por_desenho`) — o nome e a área chegavam em listas separadas
+        try:
+            lines.extend(_linhas_dos_ambientes((self.metadata or {}).get("ambientes_area_escrita")))
+        except Exception as _e_amb:                # nunca derruba o prompt
+            logger.warning("[ambiente-area] seção do prompt falhou: %s", _e_amb)
 
         # Medições ESTRUTURAIS determinísticas (tabela de aço lida dos textos,
         # pilares contados na geometria, vigas/lajes por layer). Auto-limitada:
@@ -5752,6 +5765,21 @@ def _texto_do_text(e) -> str:
         return (e.dxf.get("text", "") or "").strip()
 
 
+def _angulo_do_texto(e) -> float:
+    """O ângulo de um TEXT/MTEXT, em graus de 0 a 360 (0 = horizontal). No MTEXT
+    vale a direção do texto (`text_direction`) quando ela existe — é o que o
+    `get_rotation()` do ezdxf devolve. Sem ângulo legível: 0. Nunca levanta."""
+    try:
+        if e.dxftype() == "MTEXT":
+            a = e.get_rotation()
+        else:
+            a = e.dxf.get("rotation", 0.0)
+        a = float(a or 0.0)
+        return a % 360.0 if a == a and abs(a) != float("inf") else 0.0
+    except Exception:
+        return 0.0
+
+
 def _strip_mtext_codes(raw: str) -> str:
     """Remove códigos de formatação de MTEXT deixando só o texto legível.
     Fallback pra quando mtext.plain_text() não está disponível."""
@@ -8406,6 +8434,176 @@ def fora_das_pranchas(walls, hatches, polygon_areas, medida, mapa) -> dict:
         return {}
 
 
+def ambientes_por_desenho(texts, mapa) -> dict:
+    """A tabela NOME DO AMBIENTE ↔ ÁREA ESCRITA (`ambientes_com_area_escrita`),
+    repartida pelos DESENHOS das pranchas — SÓ LÊ.
+
+    🩸 10/10/2026 (reforma com a mesma planta em 3 pranchas + 1 cópia no modelo).
+    Numa lista só, "CIRCULAÇÃO = 49,82 m² ×3" e "CIRCULAÇÃO = 46,60 m²" pareciam
+    quatro circulações: era o MESMO ambiente em 3 pranchas e numa cópia de
+    trabalho fora das janelas — e a prancha de layout trazia área DIFERENTE da
+    planta baixa em 3 ambientes (outra versão da planta). "×N" entre desenhos
+    mistura pranchas; dentro de UM desenho, N etiquetas iguais são N cômodos.
+    - Mapa com janelas do PAPEL (`origem` vazia): um grupo por desenho, pelo
+      ponto da etiqueta de ÁREA dentro da caixa (o critério do
+      `medir_por_folha`); a etiqueta que duas janelas mostram é UM texto e sai
+      UMA vez, no grupo dos dois desenhos (`desenhos` = 2); a que não cai em
+      desenho nenhum vai pro grupo "fora das pranchas".
+    - Sem mapa, ou com os desenhos achados pelo título dentro do modelo
+      (`origem` preenchida: "fora deles" não quer dizer fora das pranchas): um
+      grupo só.
+    🪤 "Fora das janelas" não é "fora das pranchas" com certeza: a janela GERAL
+    (a que mostra o desenho todo) e a que não deu pra ler ficam fora do mapa —
+    `janelas_nao_usadas` conta as duas, e a seção diz isso. E dois desenhos
+    podem ser pavimentos DIFERENTES com os mesmos nomes de cômodo: quem diz se
+    soma é o título, não o motor.
+    Devolve {} sem etiqueta de área; senão {"por_desenho", "etiquetas", "pares",
+    "sem_nome", "janelas_nao_usadas", "grupos": [{"desenho", "desenhos", "tipo",
+    "fora", "ambientes": [[nome, m2, n]], "totais": [[nome, m2, n]], "sem_nome":
+    [m2, …]}]} — `totais` são os nomes de TOTAL/RESUMO, que não são cômodo.
+    Cada etiqueta está em UM grupo só. Nunca levanta.
+    """
+    try:
+        from engine_rules import ambientes_com_area_escrita
+        pares, soltas = ambientes_com_area_escrita(texts)
+        if not pares and not soltas:
+            return {}
+        folhas = (mapa or {}).get("folhas") or []
+        por_desenho = bool(folhas) and not (mapa or {}).get("origem")
+
+        # os desenhos, na ordem do mapa: duas janelas do MESMO desenho (mesma
+        # folha, título e tipo) são um desenho só
+        desenhos = list(dict.fromkeys(
+            (str(f.get("folha", ""))[:40], str(f.get("titulo", ""))[:90], str(f.get("tipo", "")))
+            for f in folhas)) if por_desenho else []
+        indice = {d: i for i, d in enumerate(desenhos)}
+        grupos = {}
+
+        def _grupo_de(x, y):
+            # 🩸 medido no acervo: 3 pranchas mostrando a MESMA região do modelo
+            # repetiam as 95 etiquetas 3 vezes. A etiqueta é UM texto: sai uma vez,
+            # no grupo dos desenhos que a mostram (chave = os índices deles).
+            if not por_desenho:
+                ch = None
+            else:
+                ch = tuple(sorted({
+                    indice[(str(f.get("folha", ""))[:40], str(f.get("titulo", ""))[:90],
+                            str(f.get("tipo", "")))]
+                    for f in folhas if _dentro((x, y), f["caixa"])}))
+            if ch not in grupos:
+                nomes = [" — ".join(z for z in (desenhos[i][1], desenhos[i][0] and "folha " + desenhos[i][0])
+                                    if z) for i in (ch or ())]
+                tipos = {desenhos[i][2] for i in (ch or ())}
+                grupos[ch] = {
+                    "desenho": " + ".join(nomes[:4]) + (" (+%d)" % (len(nomes) - 4) if len(nomes) > 4 else ""),
+                    "desenhos": len(ch or ()), "tipo": tipos.pop() if len(tipos) == 1 else "",
+                    "fora": ch == (),                 # fora de toda janela
+                    "_amb": Counter(), "_tot": Counter(), "sem_nome": []}
+            return grupos[ch]
+
+        for p in pares:
+            _grupo_de(p["x"], p["y"])["_tot" if p.get("resumo") else "_amb"][
+                (p["nome"], round(float(p["m2"]), 2))] += 1
+        for s in soltas:
+            _grupo_de(s["x"], s["y"])["sem_nome"].append(round(float(s["m2"]), 2))
+        lista = []
+        # na ordem dos desenhos do mapa; "fora das pranchas" por último
+        for ch in sorted(grupos, key=lambda c: (c == (), c or ())):
+            g = grupos[ch]
+            g["ambientes"] = [[n, v, k] for (n, v), k in sorted(g.pop("_amb").items())]
+            g["totais"] = [[n, v, k] for (n, v), k in sorted(g.pop("_tot").items())]
+            g["sem_nome"] = sorted(g["sem_nome"])
+            lista.append(g)
+        return {"por_desenho": por_desenho, "etiquetas": len(pares) + len(soltas),
+                "pares": len(pares), "sem_nome": len(soltas),
+                # janela GERAL (mostra o desenho todo) ou que não deu pra ler: o
+                # que está "fora" pode estar numa delas
+                "janelas_nao_usadas": (int((mapa or {}).get("gerais") or 0)
+                                       + int((mapa or {}).get("sem_janela") or 0)) if por_desenho else 0,
+                "grupos": lista}
+    except Exception as e:                       # nunca derruba a extração
+        logger.warning("ambientes_por_desenho: %s", e)
+        return {}
+
+
+#: pares distintos listados por arquivo (acervo: 6 de 80 arquivos com etiqueta
+#: passam de 200 etiquetas — galeria de lojas, pavimento-tipo de hotel)
+_AMB_LISTA_MAX = 200
+_AMB_SEM_NOME_MAX = 12
+_AMB_TIPO_DO_DESENHO = {"planta": "planta", "vista": "corte/elevação",
+                        "fora": "detalhe/esquema"}
+
+
+def _linhas_dos_ambientes(amb, limite: int = _AMB_LISTA_MAX) -> list:
+    """As linhas da seção AMBIENTE ↔ ÁREA ESCRITA do prompt, a partir do registro
+    de `ambientes_por_desenho`. Lista até `limite` pares distintos e DIZ quantos
+    ficaram de fora (lista cortada calada vira "não existe")."""
+    grupos = [g for g in (amb or {}).get("grupos") or []
+              if g.get("ambientes") or g.get("totais") or g.get("sem_nome")]
+    if not grupos:
+        return []
+    por_desenho = bool(amb.get("por_desenho"))
+    ls = ["AMBIENTE ↔ ÁREA ESCRITA NA ETIQUETA (lido do arquivo, não é chute):",
+          "  (o projetista escreveu a área de cada ambiente; o motor juntou o NOME à ÁREA pela",
+          "   posição dos dois textos da etiqueta — o nome no mesmo texto ou logo acima. É o",
+          "   número do PROJETISTA, não medição na geometria: use como a área de piso/forro",
+          "   DAQUELE ambiente e marque 'estimado'."]
+    if por_desenho:
+        ls += ["   ⚠ Vem POR DESENHO das pranchas. O mesmo pavimento costuma ser desenhado várias",
+               "   vezes (planta baixa, layout, forro, piso…): o ambiente que se repete nesses",
+               "   desenhos é UM só — NÃO some um desenho com o outro. Pelo TÍTULO veja se os",
+               "   desenhos mostram o MESMO lugar; só lugares diferentes (outro pavimento, outro",
+               "   bloco, outra unidade) somam. Área DIFERENTE do mesmo ambiente no mesmo lugar",
+               "   é outra versão da planta, não outro ambiente.",
+               "   ×N = N etiquetas iguais no MESMO desenho.)"]
+    else:
+        ls += ["   ⚠ ×N = a mesma etiqueta N vezes no ARQUIVO: pode ser o MESMO pavimento desenhado",
+               "   N vezes (planta baixa, layout, forro…), não N cômodos — não multiplique a",
+               "   área por N sem ver que são cômodos diferentes.)"]
+    resta = max(int(limite), 0)
+
+    def _par(n, v, k):
+        return "%s = %.2f m²%s" % (n, v, "   ×%d" % k if k > 1 else "")
+
+    for g in grupos:
+        rec = "  "
+        if por_desenho:
+            rec = "    "
+            if g.get("fora"):
+                _nu = int(amb.get("janelas_nao_usadas") or 0)
+                ls.append("  [FORA DAS PRANCHAS — no modelo, fora de toda janela de desenho lida nas pranchas:")
+                ls.append("   cópia de trabalho ou versão antiga de um desenho acima (aí NÃO soma) ou desenho")
+                ls.append("   que nenhuma janela lida mostra%s. Compare nome e área com os de cima]" % (
+                    " (%d janela(s) geral(is) ou sem leitura ficou(aram) de fora)" % _nu if _nu else ""))
+            else:
+                tipo = _AMB_TIPO_DO_DESENHO.get(g.get("tipo") or "", "")
+                _nd = int(g.get("desenhos") or 1)
+                ls.append("  [%s]%s%s" % (
+                    g.get("desenho") or "desenho sem título", "  (%s)" % tipo if tipo else "",
+                    "  — as MESMAS etiquetas, mostradas nos %d desenhos: é o mesmo lugar, conte UMA vez"
+                    % _nd if _nd > 1 else ""))
+        amb_g = g.get("ambientes") or []
+        mostra = amb_g[:resta]
+        resta -= len(mostra)
+        for n, v, k in mostra:
+            ls.append(rec + _par(n, v, k))
+        if len(amb_g) > len(mostra):
+            ls.append(rec + "(+%d par(es) deste grupo não listado(s))" % (len(amb_g) - len(mostra)))
+        tot = g.get("totais") or []
+        if tot:
+            ls.append(rec + "totais/resumos escritos (NÃO são ambiente — não some com os ambientes): "
+                      + "; ".join(_par(n, v, k) for n, v, k in tot[:10])
+                      + (" (+%d)" % (len(tot) - 10) if len(tot) > 10 else ""))
+        sem = g.get("sem_nome") or []
+        if sem:
+            ls.append(rec + "+ %d etiqueta(s) de área SEM nome por perto: " % len(sem)
+                      + " · ".join("%.2f" % v for v in sem[:_AMB_SEM_NOME_MAX])
+                      + (" (+%d)" % (len(sem) - _AMB_SEM_NOME_MAX) if len(sem) > _AMB_SEM_NOME_MAX else "")
+                      + " m²")
+    ls.append("")
+    return ls
+
+
 # ══════════════════════════════════════════════════════════════════════
 #  FOLHA DE PAPEL DESENHADA NO MODELO — cada vista numa escala
 # ══════════════════════════════════════════════════════════════════════
@@ -10145,6 +10343,7 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
                     text=content,
                     position=pos,
                     height=height,
+                    rotation=_angulo_do_texto(text),
                 ))
         except Exception:
             continue
@@ -10164,6 +10363,7 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
                     text=content,
                     position=pos,
                     height=height,
+                    rotation=_angulo_do_texto(mtext),
                 ))
         except Exception:
             continue
@@ -10440,9 +10640,11 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         logger.warning("[faixa-de-paralelas] falhou (não-fatal): %s", _efx)
     _folhas = {}
     _parede_espessa = None
+    _mapa_amb = {}
     if os.environ.get("LEITURA_POR_FOLHA", "1") != "0":
         try:
             _mapa = mapa_de_folhas(doc)
+            _mapa_amb = _mapa
             _medida = medir_por_folha(walls, hatches, polygon_areas, blocks, _mapa)
             _folhas = aplicar_leitura_por_folha(walls, hatches, polygon_areas, blocks, _mapa)
             _n_txt = _marcar_textos_repetidos_da_planta(texts, _mapa)
@@ -10493,6 +10695,17 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             if metadata.get(_chave_eixo):
                 metadata[_chave_eixo] = _relato_do_eixo_na_soma(
                     metadata[_chave_eixo], walls, faixas=_faixas, so_faixas=True)
+    # 10/10: o par NOME DO AMBIENTE ↔ ÁREA ESCRITA, por desenho das pranchas (ver
+    # `ambientes_por_desenho`). Só lê os textos; sem mapa de folhas sai numa
+    # lista só. Chave: AMBIENTE_AREA_ESCRITA=0 desliga sem deploy.
+    if os.environ.get("AMBIENTE_AREA_ESCRITA", "1") != "0":
+        _amb = ambientes_por_desenho(texts, _mapa_amb)
+        if _amb:
+            metadata["ambientes_area_escrita"] = _amb
+            logger.info("[ambiente-area] %s: %d etiqueta(s) de área, %d com nome, %d sem; "
+                        "%d grupo(s)%s", os.path.basename(filepath), _amb["etiquetas"],
+                        _amb["pares"], _amb["sem_nome"], len(_amb["grupos"]),
+                        " por desenho" if _amb["por_desenho"] else "")
     # 🩸 04/10 (E12): a parede de mais de 40 cm somada pelas duas faces — ressalva
     # do layer (fora da chave do selo e do resgate; ⚠ no prompt)
     if _parede_espessa is None:
