@@ -435,7 +435,8 @@ let commentingItem = null;
 // ═══════════════════════════════════════════════
 (async function init() {
   const { data: { session } } = await sb.auth.getSession();
-  if (!session) { window.location.href = 'login.html'; return; }
+  // 11/10 (auditoria NAV-6): sem sessão, o login devolve pra ESTA revisão (antes caía no painel)
+  if (!session) { window.location.href = 'login.html?redirect=' + encodeURIComponent('revisao.html' + location.search + location.hash); return; }
   currentUser = session.user;
   // 🩸 26/09 (auditoria PORTA-1): a EQUIPE do Escritório não revisa (é do dono) — aqui ela via aprovar, editar,
   // excluir e "Concluir revisão", e cada ação levava 403. Volta pro quantitativo, que ela vê só leitura.

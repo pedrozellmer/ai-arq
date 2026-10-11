@@ -392,7 +392,7 @@ const stT = (k) => (ST.find((s) => s.k === k) || {}).t || k;
 
 const COLS_MEMBRO = 'id,projeto_id,user_id,nome,papel,funcao,status,convidado_em,aceito_em,removido_em,pode_baixar,drive_pasta_nome';
 // ── estado ──
-let NO_PILOTO = false;
+let NO_PILOTO = false, TEM_PAINEL = true;
 let EU = null, PROJETOS = [], PROJ = null, MEMBROS = [], PAPEL = null, TAR = [], PESSOAS_T = [], ATAS = [], NOTAS = {};
 // 26/09: checklist e etiquetas do cartão (tabelas da seção 24). TEM_CHK = as tabelas existem e leram bem.
 let CHK = [], ETQ = [], TETQ = [], TEM_CHK = false;
@@ -589,12 +589,14 @@ const IC = {
   emi: '<path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4z"/>',
   foto: '<path d="M3 8a2 2 0 012-2h2l1.5-2h7L17 6h2a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><circle cx="12" cy="13" r="3.5"/>',
   forn: '<path d="M14.7 6.3a4 4 0 00-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 005.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z"/>',
+  proc: '<path d="M21 12a9 9 0 11-2.6-6.4L21 8M21 3v5h-5"/>',
 };
 // a cor de cada ferramenta (forte, clara, fundo) — a mesma no cartão da página do projeto e na faixa da tela dela
 const COR = { tar: ['#4F46E5', '#818CF8', '#EEF2FF'], arq: ['#D97706', '#F59E0B', '#FFFBEB'], atas: ['#059669', '#34D399', '#ECFDF5'], eq: ['#7C3AED', '#A78BFA', '#F5F3FF'],
   plan: ['#0891B2', '#22D3EE', '#ECFEFF'], crono: ['#EA580C', '#FB923C', '#FFF7ED'], memo: ['#2563EB', '#60A5FA', '#EFF6FF'], rev: ['#E11D48', '#FB7185', '#FFF1F2'],
   cot: ['#0D9488', '#2DD4BF', '#F0FDFA'], fin: ['#16A34A', '#4ADE80', '#F0FDF4'], emi: ['#0284C7', '#38BDF8', '#F0F9FF'],
-  foto: ['#BE185D', '#F472B6', '#FDF2F8'], cli: ['#0369A1', '#38BDF8', '#F0F9FF'], forn: ['#C2410C', '#FB923C', '#FFF7ED'] };
+  foto: ['#BE185D', '#F472B6', '#FDF2F8'], cli: ['#0369A1', '#38BDF8', '#F0F9FF'], forn: ['#C2410C', '#FB923C', '#FFF7ED'],
+  proc: ['#475569', '#94A3B8', '#F8FAFC'] };
 // faixa colorida no topo de cada tela (ícone, título, uma linha e os botões da tela)
 // 27/09 (maquete aprovada): pra quem é DE FORA (cliente, fornecedor), a faixa de toda tela usa a cor do escritório
 const corDaFaixa = (ic) => (PROJ && PAPEL && !souEquipe() && MARCA && MARCA.cor ? [MARCA.cor, MARCA.clara] : [COR[ic][0], COR[ic][1]]);
@@ -617,13 +619,15 @@ window.addEventListener('hashchange', () => navegar());
 
 // ── dados ──
 async function carregarProjetos() {
-  const [r, pil, fora] = await Promise.all([
+  const [r, pil, fora, meus] = await Promise.all([
     sb.from('escritorio_projetos').select('*').order('criado_em', { ascending: false }),
     // 🔒 A1: criar projeto é só pra quem está no piloto — o BANCO decide (tabela escritorio_piloto)
     sb.rpc('escritorio_no_piloto'),
     // 26/09 (perfis): cliente e fornecedor não leem a linha do projeto (tem a pasta e o projeto medido) — o banco
     // devolve só o resumo dos projetos em que a pessoa entrou como cliente/fornecedor
     sb.rpc('escritorio_resumo_externo'),
+    // 11/10 (auditoria FORA-3): a pessoa tem projeto MEDIDO próprio? Então o painel do AI.arq é um lugar pra ela
+    sb.from('projects').select('job_id', { count: 'exact', head: true }).eq('user_id', EU.id),
   ]);
   if (r.error) throw r.error;
   const doResumo = (!fora.error && fora.data) || [];
@@ -632,6 +636,10 @@ async function carregarProjetos() {
     proxima_entrega: x.proxima_entrega, proxima_entrega_data: x.proxima_entrega_data, escritorio: x.escritorio || '',
     externo: true, papel_externo: x.papel }))];
   NO_PILOTO = !pil.error && pil.data === true;
+  // o painel do AI.arq só é saída pra quem tem o que fazer lá: está no piloto, é equipe/admin de algum projeto ou
+  // tem projeto medido próprio. Pro cliente e o fornecedor "só de fora", o painel é o do quantitativo (vazio).
+  // Leitura que falha conta como "tem" (mostrar a saída a mais é melhor que prender a pessoa).
+  TEM_PAINEL = NO_PILOTO || PROJETOS.some((p) => !p.externo) || !!meus.error || (meus.count || 0) > 0;
 }
 // 🩸 26/09 (auditoria TELA-13): o PROJ trocava ANTES das leituras — uma falha no meio deixava o projeto novo com
 // as tarefas, a equipe e o PAPEL do anterior. Agora tudo é lido em variáveis locais e trocado junto, no fim.
@@ -700,18 +708,22 @@ function renderMoldura() {
   // 27/09 (maquete aprovada): dentro de um projeto, o alto do menu é do ESCRITÓRIO (logo, nome, cor do Meu cadastro de
   // quem administra); quem é de fora vê "via AI.arq" no lugar do selo do piloto. Fora de um projeto, o AI.arq.
   const mk = PROJ && VIEW !== 'lista' ? MARCA : null, sm = document.querySelector('.s-marca');
+  // 11/10 (auditoria FORA-3): pra quem é de fora com UM projeto, "#/" voltava pra mesma Visão (nada acontecia)
+  const casaDeFora = PROJ && PROJETOS.length <= 1 ? `#/p/${PROJ.id}/capa` : '#/';
   if (sm) {
-    sm.setAttribute('href', mk && !souEquipe() ? '#/' : 'dashboard.html');
+    sm.setAttribute('href', mk && !souEquipe() ? casaDeFora : TEM_PAINEL ? 'dashboard.html' : '#/');
     sm.innerHTML = mk ? `${mk.logo ? `<img class="s-logo-img" src="${esc(mk.logo)}" alt="">` : `<span class="s-logo"${mk.cor ? ` style="background:${mk.cor}"` : ''}>${esc(iniciaisDe(mk.nome))}</span>`}<span class="s-nome">${esc(mk.nome)}</span>`
       : '<span class="s-logo">AI</span><span class="s-nome">AI.arq</span>';
   }
   const selo = document.querySelector('.cab .beta');
   if (selo) selo.textContent = mk && !souEquipe() ? 'via AI.arq' : 'Piloto';
   if (VIEW === 'lista' || !PROJ) {
-    $('side-c').innerHTML = `<a class="s-it" href="dashboard.html">← Painel do AI.arq</a>
-      <div class="s-grp" style="margin-top:12px"><div class="s-grp-t">Projetos do escritório</div>
-      ${PROJETOS.map((p) => `<a class="s-it" href="#/p/${p.id}/capa">${svg('pastas')}${esc(p.nome)}</a>`).join('') || '<p class="vazio" style="padding:0 10px">Nenhum ainda.</p>'}</div>`;
-    $('trilha').innerHTML = '<a href="dashboard.html">Início</a><span>›</span><span>Escritório</span>';
+    // 11/10 (auditoria NAV-9): o cliente/fornecedor "só de fora" não tem painel: a saída dele é o "Sair"
+    $('side-c').innerHTML = `${TEM_PAINEL ? '<a class="s-it" href="dashboard.html">← Painel do AI.arq</a>' : ''}
+      <div class="s-grp" style="margin-top:12px"><div class="s-grp-t">${PROJETOS.length && PROJETOS.every((p) => p.externo) ? 'Seus projetos' : 'Projetos do escritório'}</div>
+      ${PROJETOS.map((p) => `<a class="s-it" href="#/p/${p.id}/capa">${svg('pastas')}${esc(p.nome)}</a>`).join('') || '<p class="vazio" style="padding:0 10px">Nenhum ainda.</p>'}</div>
+      ${TEM_PAINEL ? '' : '<div class="s-grp"><button type="button" class="s-it" onclick="sairDaConta()">Sair</button></div>'}`;
+    $('trilha').innerHTML = TEM_PAINEL ? '<a href="dashboard.html">Início</a><span>›</span><span>Escritório</span>' : '<span>Escritório</span>';
     $('titulo').textContent = 'Escritório';
     return;
   }
@@ -721,7 +733,11 @@ function renderMoldura() {
   if (!souEquipe()) {
     const eu = meuMembro() || {}, cli = souCliente();
     const pra = EMI.filter(esperaResposta).length, abertasFora = TAR.filter(aberta).length;
-    $('side-c').innerHTML = `<a class="s-it" href="#/" style="font-size:12px;color:#64748B">← ${PROJETOS.length > 1 ? 'Seus projetos' : 'Escritório'}</a>
+    // 11/10 (auditoria FORA-3): com UM projeto, o "← Escritório" recarregava a mesma Visão — sai; quem tem painel
+    // próprio (ex.: o fornecedor que também mede os projetos dele) ganha o caminho de volta pra lá
+    const voltaDeFora = PROJETOS.length > 1 ? '<a class="s-it" href="#/" style="font-size:12px;color:#64748B">← Seus projetos</a>'
+      : TEM_PAINEL ? '<a class="s-it" href="dashboard.html" style="font-size:12px;color:#64748B">← Painel do AI.arq</a>' : '';
+    $('side-c').innerHTML = `${voltaDeFora}
       <div class="s-fix"><span class="tag">${cli ? 'Seu projeto' : 'Fornecedor no projeto'}</span><b>${esc(PROJ.nome)}</b><span>${esc(cli ? (PROJ.escritorio ? 'com ' + PROJ.escritorio : '') : (eu.drive_pasta_nome || eu.funcao || ''))}</span></div>
       <div class="s-grp">
         ${it('capa', 'capa', cli ? 'Visão do projeto' : 'Visão geral')}
@@ -733,7 +749,7 @@ function renderMoldura() {
       </div>
       <div class="s-grp"><button type="button" class="s-it" onclick="sairDaConta()">Sair</button></div>`;
     const nomesF = { capa: cli ? 'Visão do projeto' : 'Visão geral', tarefas: cli ? 'Suas pendências' : 'Suas tarefas', arquivos: 'Arquivos', emissoes: 'Emissões', fotos: 'Fotos', cronograma: 'Cronograma da obra' };
-    $('trilha').innerHTML = `<a href="#/">${esc(nomeEscritorio())}</a><span>›</span><a href="#/p/${PROJ.id}/capa">${esc(PROJ.nome)}</a>`;
+    $('trilha').innerHTML = `<a href="${casaDeFora}">${esc(nomeEscritorio())}</a><span>›</span><a href="#/p/${PROJ.id}/capa">${esc(PROJ.nome)}</a>`;
     $('titulo').textContent = nomesF[VIEW] || PROJ.nome;
     return;
   }
@@ -751,6 +767,7 @@ function renderMoldura() {
       ${souAdmin() ? fora(`financeiro.html?job_id=${J}`, 'fin', 'Financeiro') : ''}
       ${fora(`memorial.html?job_id=${J}`, 'memo', 'Memorial')}
       ${souAdmin() ? fora(`projeto.html?job_id=${J}#cotacoes`, 'cot', 'Comparativo') : ''}
+      ${souAdmin() ? fora(`projeto.html?job_id=${J}#processamento`, 'proc', 'Processamento') : ''}
     </div>` : '';
   $('side-c').innerHTML = `<a class="s-it" href="#/" style="font-size:12px;color:#64748B">← ${souAdmin() && MARCA ? 'Projetos do ' + esc(MARCA.nome) : 'Projetos do Escritório'}</a>
     <div class="s-fix"><span class="tag">${esc(nomeEscritorio())} · projeto aberto</span><b>${esc(PROJ.nome)}</b><span>${esc(PROJ.etapa_atual || '')} · ${nAtivos} pessoa${nAtivos === 1 ? '' : 's'}</span></div>
@@ -996,6 +1013,7 @@ function telaCapa() {
       ${souAdmin() ? tool(`revisao.html?job_id=${J}`, 'rev', 'Revisão', 'Conferir as linhas', true) : ''}
       ${souAdmin() ? tool(`projeto.html?job_id=${J}#cotacoes`, 'cot', 'Comparativo', 'Cotações de fornecedor', true) : ''}
       ${souAdmin() ? tool(`financeiro.html?job_id=${J}`, 'fin', 'Financeiro', 'Pagamentos da obra', true) : ''}
+      ${souAdmin() ? tool(`projeto.html?job_id=${J}#processamento`, 'proc', 'Processamento', 'Reprocessar ou reportar problema', true) : ''}
     </div>`
       : `<p class="sub" style="margin-top:14px">Este projeto nasceu sem prancha. Pra trabalhar um projeto que você já mediu, use <b>Trazer projeto medido</b> na lista do Escritório.</p>`}
   </section>
@@ -2463,7 +2481,8 @@ async function confirmarTirar(id) {
 (async function () {
   let sessao = null;
   try { sessao = (await sb.auth.getSession()).data.session; } catch (_) {}
-  if (!sessao) { location.href = 'login.html?redirect=escritorio.html'; return; }
+  // 11/10 (auditoria NAV-6): o destino vai INTEIRO (o "Ver e responder" do e-mail leva às Emissões, não à lista)
+  if (!sessao) { location.href = 'login.html?redirect=' + encodeURIComponent('escritorio.html' + location.hash); return; }
   EU = { id: sessao.user.id, email: sessao.user.email };
   if (window.trackEvent) trackEvent('view_escritorio');
   // voltou do Google (conectar o Drive): diz o que houve e limpa o endereço

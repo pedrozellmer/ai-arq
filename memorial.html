@@ -145,7 +145,8 @@ let salvando = false;
 
 (async function init() {
   const { data: { session } } = await sb.auth.getSession();
-  if (!session) { window.location.href = 'login.html'; return; }
+  // 11/10 (auditoria NAV-6): sem sessão, o login devolve pra ESTE memorial (antes caía no painel)
+  if (!session) { window.location.href = 'login.html?redirect=' + encodeURIComponent('memorial.html' + location.search + location.hash); return; }
   document.getElementById('link-voltar').href = `projeto.html?job_id=${jobId}`;
 if (window.trackEvent) trackEvent('view_memorial', { job_id: jobId });
   try {
