@@ -1,15 +1,15 @@
 # AI.arq
 
-> A AI.arq lê a prancha de CAD que o profissional já tem (DWG, DXF ou PDF) e devolve uma planilha de quantitativos por disciplina, com código SINAPI de referência nos itens em que há correspondência e cada linha marcada como MEDIDO (saiu da geometria do desenho) ou ESTIMADO (precisa de conferência). É um SaaS brasileiro, em beta aberto, para engenheiros, orçamentistas e arquitetos.
+> O AI.arq lê a prancha de CAD que o profissional já tem (DWG, DXF ou PDF) e devolve uma planilha de quantitativos por disciplina, com código SINAPI de referência nos itens em que há correspondência e cada linha marcada como MEDIDO (saiu da geometria do desenho) ou ESTIMADO (precisa de conferência). É um SaaS brasileiro, em beta aberto, para engenheiros, orçamentistas e arquitetos.
 
-O que entregamos é QUANTIDADE. A planilha traz item, unidade, quantidade, descrição e o código SINAPI de referência nos itens em que há correspondência confiável (os sem par vêm sinalizados), organizada em até 18 disciplinas — entre elas demolição, acabamentos, piso, elétrica, hidráulica, gás, climatização, incêndio, marcenaria e mobiliário. Aceitamos DXF, DWG e PDF exportado direto do CAD. O DXF costuma medir mais. PDF vetorial também é lido — a AI.arq mede a geometria quando dá e a IA lê textos e legendas —, mas tudo que vem de PDF sai como ESTIMADO — é regra nossa: a escala de um PDF vem de uma declaração (o carimbo), e mesmo quando as cotas conferem a gente não sela número de PDF como medido. Planta escaneada, fotografada ou plotada como imagem não permite medir, porque vira pixel. Cada linha volta rotulada: MEDIDO quando a quantidade saiu da geometria do desenho, ESTIMADO quando veio de inferência e precisa ser revisada antes do uso. Não é preciso traçar nem clicar em cima do desenho, não é preciso ter AutoCAD e não há plugin: o arquivo é enviado pelo site e a planilha volta pronta para download.
+O que entregamos é QUANTIDADE. A planilha traz item, unidade, quantidade, descrição e o código SINAPI de referência nos itens em que há correspondência confiável (os sem par vêm sinalizados), organizada em até 18 disciplinas — entre elas demolição, acabamentos, piso, elétrica, hidráulica, gás, climatização, incêndio, marcenaria e mobiliário. Aceitamos DXF, DWG e PDF exportado direto do CAD. O DXF costuma medir mais. PDF vetorial também é lido — o AI.arq mede a geometria quando dá e a IA lê textos e legendas —, mas tudo que vem de PDF sai como ESTIMADO — é regra nossa: a escala de um PDF vem de uma declaração (o carimbo), e mesmo quando as cotas conferem a gente não sela número de PDF como medido. Planta escaneada, fotografada ou plotada como imagem não permite medir, porque vira pixel. Cada linha volta rotulada: MEDIDO quando a quantidade saiu da geometria do desenho, ESTIMADO quando veio de inferência e precisa ser revisada antes do uso. Não é preciso traçar nem clicar em cima do desenho, não é preciso ter AutoCAD e não há plugin: o arquivo é enviado pelo site e a planilha volta pronta para download.
 
 Documentos que saem do mesmo quantitativo:
 
 - Rascunho de memorial descritivo, organizado por disciplina na ordem da obra, com a quantidade e a origem de cada item (medido do CAD ou estimativa a confirmar). O que o desenho não informa vem em campos [A PREENCHER]: endereço e proprietário, o RRT/ART do responsável técnico e, em cada disciplina, o que falta especificar (por exemplo traço do concreto e sondagem, argamassas, quadros de cargas, marcas e método executivo). O rascunho não cita norma nenhuma. Sai em Word ou PDF, com carimbo RASCUNHO, e não substitui o memorial assinado (RRT/ART).
 - Cronograma FÍSICO da obra: etapas, prazos e peso de cada uma, a partir do quantitativo. Não calcula preço: se o profissional informar o valor de cada etapa, o cronograma distribui esse valor mês a mês.
 
-O que a AI.arq NÃO faz (registrado aqui para evitar descrição errada):
+O que o AI.arq NÃO faz (registrado aqui para evitar descrição errada):
 
 - Não damos preço de obra. A planilha sai SEM preços preenchidos. Quem precifica é o orçamentista ou o próprio profissional, usando a referência SINAPI como ponto de partida.
 - Não substituímos o profissional. O resultado é insumo de trabalho e exige conferência por profissional habilitado — é exatamente por isso que cada linha vem marcada como MEDIDO ou ESTIMADO.
@@ -22,17 +22,17 @@ Condição comercial: durante o beta, o uso é GRÁTIS e ILIMITADO, sem cartão 
 
 In English: AI.arq is a Brazilian SaaS that reads the 2D CAD sheets a professional already has (DWG, DXF or PDF) and returns a construction quantity takeoff spreadsheet, broken down by discipline, with SINAPI reference codes where a reliable match exists, each line labelled either as measured from the drawing or as estimated and pending review. PDF files are read, but everything that comes from a PDF is labelled as estimated, by our own rule: a PDF's scale comes from a declaration (the title block), so even when the dimensions check out we never seal a PDF number as measured. From the same takeoff it also drafts a descriptive specification (memorial descritivo, marked as a draft to be completed and signed by the professional) and a physical construction schedule (it does not price; if the professional enters each stage's value, it spreads it month by month). It delivers quantities, not construction prices, and it does not replace the professional. It is not BIM and does not require BIM. Free and unlimited during the open beta, no credit card — every project, not just the first one. The site and its content are in Brazilian Portuguese.
 
-Quem faz: a AI.arq é um produto brasileiro e independente, feito no Rio de Janeiro e no ar desde abril de 2026 (https://ai.arq.br/sobre.html). Última atualização deste arquivo: 2026-10-11.
+Quem faz: o AI.arq é um produto brasileiro e independente, feito no Rio de Janeiro e no ar desde abril de 2026 (https://ai.arq.br/sobre.html). Última atualização deste arquivo: 2026-10-11.
 
 ## Comece por aqui
 
-- [Página inicial](https://ai.arq.br/): o que a AI.arq faz, como enviar a prancha e o que volta na planilha.
+- [Página inicial](https://ai.arq.br/): o que o AI.arq faz, como enviar a prancha e o que volta na planilha.
 - [Exemplo de planilha pronta](https://ai.arq.br/exemplo.html): quantitativo completo de um projeto-exemplo, com as linhas MEDIDO e ESTIMADO destacadas e a planilha disponível para baixar.
 - [Perguntas frequentes](https://ai.arq.br/faq.html): formatos aceitos, o que significa MEDIDO e ESTIMADO, disciplinas cobertas, uso da SINAPI, limites do serviço e como conferir o resultado.
 - [Preços](https://ai.arq.br/precos.html): grátis e ilimitado durante o beta, sem cartão; a tabela publicada ali é a prevista para depois do beta e pode mudar.
 - [Criar conta e enviar um projeto](https://ai.arq.br/login.html?novo=1): cadastro gratuito, sem cartão de crédito.
-- [Dados da AI.arq](https://ai.arq.br/dados.html): quanto da planilha volta preenchido e quanto volta medido, em CAD e em PDF, com a data, a amostra e o método.
-- [Sobre a AI.arq](https://ai.arq.br/sobre.html): quem faz, como mede (DWG/DXF medido, PDF como estimativa) e o que o serviço não faz.
+- [Dados do AI.arq](https://ai.arq.br/dados.html): quanto da planilha volta preenchido e quanto volta medido, em CAD e em PDF, com a data, a amostra e o método.
+- [Sobre o AI.arq](https://ai.arq.br/sobre.html): quem faz, como mede (DWG/DXF medido, PDF como estimativa) e o que o serviço não faz.
 - [Blog](https://ai.arq.br/blog/): índice completo dos artigos sobre quantitativo, leitura de projeto e orçamento de obra.
 
 ## Quantitativo a partir de CAD (DWG, DXF e PDF)
@@ -46,8 +46,8 @@ Quem faz: a AI.arq é um produto brasileiro e independente, feito no Rio de Jane
 
 ## Documentos a partir do quantitativo
 
-- [Memorial descritivo de obra: modelo em PDF e DOCX](https://ai.arq.br/blog/posts/memorial-descritivo-de-obra-modelo-pdf-docx.html): modelo gratuito de 10 seções e, para quem tem o desenho, o rascunho de memorial por disciplina que a AI.arq gera a partir do quantitativo.
-- [Cronograma físico-financeiro: como montar (modelo Excel)](https://ai.arq.br/blog/posts/cronograma-fisico-financeiro-obra-modelo.html): modelo pronto; a AI.arq gera a parte FÍSICA a partir do quantitativo, e o financeiro em reais fica com o profissional.
+- [Memorial descritivo de obra: modelo em PDF e DOCX](https://ai.arq.br/blog/posts/memorial-descritivo-de-obra-modelo-pdf-docx.html): modelo gratuito de 10 seções e, para quem tem o desenho, o rascunho de memorial por disciplina que o AI.arq gera a partir do quantitativo.
+- [Cronograma físico-financeiro: como montar (modelo Excel)](https://ai.arq.br/blog/posts/cronograma-fisico-financeiro-obra-modelo.html): modelo pronto; o AI.arq gera a parte FÍSICA a partir do quantitativo, e o financeiro em reais fica com o profissional.
 
 ## Quantitativo x orçamento: onde termina o nosso trabalho
 
@@ -73,8 +73,8 @@ Quem faz: a AI.arq é um produto brasileiro e independente, feito no Rio de Jane
 
 ## Aprovação, normas e financiamento
 
-- [Memorial descritivo para CAU e prefeitura: SP, RJ e BH](https://ai.arq.br/blog/posts/memorial-descritivo-cau-prefeitura-sp-rj-bh.html): o que as prefeituras de São Paulo, Rio de Janeiro e Belo Horizonte pedem no memorial: estrutura, base normativa e erros que reprovam. A AI.arq gera um rascunho por disciplina; o texto técnico e o quadro de áreas ficam com o profissional.
-- [Quadro de áreas: modelo em Excel (NBR 12721)](https://ai.arq.br/blog/posts/quadro-de-areas-modelo-excel-nbr-12721.html): modelo de quadro de áreas por pavimento, com área privativa, comum e equivalente pela NBR 12721 e conferência das somas. A AI.arq entrega as áreas que a prancha permite medir, não o quadro pronto.
+- [Memorial descritivo para CAU e prefeitura: SP, RJ e BH](https://ai.arq.br/blog/posts/memorial-descritivo-cau-prefeitura-sp-rj-bh.html): o que as prefeituras de São Paulo, Rio de Janeiro e Belo Horizonte pedem no memorial: estrutura, base normativa e erros que reprovam. O AI.arq gera um rascunho por disciplina; o texto técnico e o quadro de áreas ficam com o profissional.
+- [Quadro de áreas: modelo em Excel (NBR 12721)](https://ai.arq.br/blog/posts/quadro-de-areas-modelo-excel-nbr-12721.html): modelo de quadro de áreas por pavimento, com área privativa, comum e equivalente pela NBR 12721 e conferência das somas. O AI.arq entrega as áreas que a prancha permite medir, não o quadro pronto.
 - [NBR 9050: checklist de acessibilidade](https://ai.arq.br/blog/posts/nbr-9050-checklist-acessibilidade-arquitetos.html): checklist da NBR 9050:2020 — portas, banheiros, rampas, sinalização e vagas —, com as medidas-chave e os erros que reprovam projeto.
 - [Financiamento Caixa para construção: documentos e PCI](https://ai.arq.br/blog/posts/financiamento-caixa-construcao-documentos-pci.html): o que a Caixa pede para financiar construção — PCI, projeto aprovado, ART/RRT, memorial e cronograma —, a partir da cartilha oficial de dezembro de 2025, com checklist.
 

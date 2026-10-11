@@ -7,12 +7,12 @@
       "keywords": "memorial descritivo de obra, modelo memorial descritivo, memorial descritivo pdf, memorial descritivo word, memorial descritivo arquitetura, NBR 15575, NBR 13532, PCI Caixa",
       "category": "Documentação",
       "publish_date": "2026-04-26",
-      "update_date": "2026-09-26",
+      "update_date": "2026-10-11",
       "intro": "Todo arquiteto entrega memorial descritivo em algum momento — pra anexar no contrato com o cliente, pra mandar pro orçamentista cotar a obra, ou pra quem vai financiar o imóvel pelo banco. O problema é o tempo: redigir um memorial bem feito costuma tomar boa parte de um dia, e quase ninguém usa modelo padronizado. Resultado: cada projeto começa do zero, copy-paste de algum memorial antigo que pode estar desatualizado. Esse guia traz a estrutura completa, orientada pela NBR 15575 e pela tradição consolidada da antiga NBR 13.532, hoje substituída pela NBR 16636-2, exemplos práticos de redação por ambiente, e libera um modelo editável em PDF e DOCX pra você baixar agora — sem cadastro.",
       "sections": [
         {
           "h2": "Baixe o modelo agora (PDF + DOCX)",
-          "body": "Antes de qualquer coisa, segue o modelo completo pronto pra editar. São duas versões do mesmo conteúdo: PDF pra visualização rápida e impressão, DOCX pra você editar no Word/Google Docs/LibreOffice. Sem cadastro, sem captura de email, sem pegadinha.\n\n<DOWNLOAD_BUTTONS>\n\nO modelo inclui capa formatada, instruções de uso, 10 seções pré-estruturadas, campos a preencher entre colchetes [assim], blocos repetíveis por ambiente (sala, cozinha, banheiros, quartos, áreas externas) e seção de assinatura. Foi montado pra atender a maioria dos casos típicos de obra residencial e comercial pequena/média no Brasil — adapte pra realidade do seu projeto.\n\n**E o memorial do seu projeto?** Se você tem o desenho em DWG, DXF ou PDF, o AI.arq gera um rascunho de memorial a partir dele: primeiro sai a planilha de quantitativos e, dela, o memorial organizado por disciplina, na ordem da obra — não no formato de 10 seções deste modelo. Cada item traz a quantidade e diz de onde ela veio (medido do CAD ou estimativa a confirmar); de PDF, as quantidades saem como estimativa. O que o desenho não informa vem em campos [A PREENCHER]: endereço e proprietário, o RRT/ART do responsável técnico e, em cada disciplina, o que falta especificar (por exemplo traço do concreto e sondagem, argamassas, quadros de cargas, marcas e método executivo). O rascunho não cita norma nenhuma — isso fica com você. O arquivo sai com o carimbo RASCUNHO, em Word ou PDF, e não substitui o memorial assinado com RRT/ART. No beta é grátis. <a href=\"/exemplo.html\" data-track=\"memorial-ponte-exemplo\">Veja um quantitativo real, sem cadastro</a> ou <a href=\"/login.html?novo=1\" data-track=\"memorial-ponte-cadastro\">gere o do seu projeto</a>."
+          "body": "Antes de qualquer coisa, segue o modelo completo pronto pra editar. São duas versões do mesmo conteúdo: PDF pra visualização rápida e impressão, DOCX pra você editar no Word/Google Docs/LibreOffice. Sem cadastro, sem captura de email, sem pegadinha.\n\n<DOWNLOAD_BUTTONS>\n\nO modelo inclui capa formatada, instruções de uso, 10 seções pré-estruturadas, campos a preencher entre colchetes [assim], blocos repetíveis por ambiente (sala, cozinha, banheiros, quartos, áreas externas) e seção de assinatura. Foi montado pra atender a maioria dos casos típicos de obra residencial e comercial pequena/média no Brasil — adapte pra realidade do seu projeto.\n\n**E o memorial do seu projeto?** Se você tem o desenho em DWG, DXF ou PDF, o AI.arq gera um rascunho de memorial a partir dele: <a href=\"/exemplo.html\" data-track=\"memorial-ponte-exemplo\">veja um quantitativo de exemplo, sem cadastro</a>, ou <a href=\"/login.html?novo=1\" data-track=\"memorial-ponte-cadastro\">gere o do seu projeto</a>. Primeiro sai a planilha de quantitativos e, dela, o memorial organizado por disciplina, na ordem da obra — não no formato de 10 seções deste modelo. Cada item traz a quantidade e diz de onde ela veio (medido do CAD ou estimativa a confirmar); de PDF, as quantidades saem como estimativa. O que o desenho não informa vem em campos [A PREENCHER]: endereço e proprietário, o RRT/ART do responsável técnico e, em cada disciplina, o que falta especificar (por exemplo traço do concreto e sondagem, argamassas, quadros de cargas, marcas e método executivo). O rascunho não cita norma nenhuma — isso fica com você. O arquivo sai com o carimbo RASCUNHO, em Word ou PDF, e não substitui o memorial assinado com RRT/ART. No beta é grátis."
         },
         {
           "h2": "O que é o memorial descritivo, juridicamente",
@@ -130,7 +130,7 @@
           "hint": "Pra editar no Word/Docs · 40 KB"
         }
       ],
-      "download_nota": "Do seu CAD, o AI.arq gera um rascunho de memorial organizado por disciplina, com a origem de cada quantidade — não este modelo de 10 seções, que é pra preencher à mão."
+      "download_nota": "Tem o desenho em DWG, DXF ou PDF? O AI.arq gera um rascunho de memorial a partir dele, organizado por disciplina e com a origem de cada quantidade — não este modelo de 10 seções, que é pra preencher à mão. <a href=\"/exemplo.html\" data-track=\"memorial-nota-exemplo\">Veja um quantitativo de exemplo</a> ou <a href=\"/login.html?novo=1\" data-track=\"memorial-nota-cadastro\">gere o do seu projeto</a>."
     },
     {
       "slug": "quadro-de-areas-modelo-excel-nbr-12721",
@@ -556,8 +556,8 @@
       "keywords": "sinapi vs tcpo, diferença sinapi tcpo sicro, qual usar sinapi tcpo, base sinapi 2026, base tcpo bim, composições obra públicas privadas",
       "category": "Referências Técnicas",
       "publish_date": "2026-05-10",
-      "update_date": "2026-09-26",
-      "intro": "Se você trabalha com orçamento ou quantitativo de obra no Brasil, em algum momento esbarra nessa pergunta: SINAPI, TCPO ou SICRO? Cada uma cobre uma fatia do mercado, e usar a errada pode gerar problema — desde rejeição de proposta em obra pública até orçamento subdimensionado em obra privada. Esse guia explica o que cada uma faz, quando aplicar cada uma, e como o AI.arq integra as três pra você não ter que escolher.",
+      "update_date": "2026-10-11",
+      "intro": "Se você trabalha com orçamento ou quantitativo de obra no Brasil, em algum momento esbarra nessa pergunta: SINAPI, TCPO ou SICRO? Cada uma cobre uma fatia do mercado, e usar a errada pode gerar problema — desde rejeição de proposta em obra pública até orçamento subdimensionado em obra privada. Esse guia explica o que cada uma faz, quando aplicar cada uma, e qual delas o AI.arq usa como referência.",
       "sections": [
         {
           "h2": "O que é SINAPI",
@@ -2311,7 +2311,7 @@
       "slug": "memorial-a-partir-do-quantitativo-caminho-inverso",
       "title": "Memorial a partir do quantitativo: o caminho inverso",
       "description": "A faculdade ensina escrever o memorial e depois extrair a planilha. Na prática o inverso funciona melhor: levante o quantitativo e escreva em cima dele.",
-      "keywords": "memorial descritivo quantitativo, como escrever memorial descritivo, memorial descritivo arquitetura, memorial descritivo obra residencial, NBR 13531, NBR 13532, NBR 15575",
+      "keywords": "memorial descritivo quantitativo, como escrever memorial descritivo, memorial descritivo arquitetura, memorial descritivo obra residencial, NBR 15575",
       "category": "Documentação",
       "publish_date": "2026-10-25",
       "intro": "Na faculdade, o roteiro é claro: primeiro o arquiteto escreve o memorial descritivo, depois o orçamentista extrai a planilha de quantitativos a partir dele. Faz sentido na cabeça do professor, porque o texto vem antes do número. Só que, no canteiro real, esse fluxo cria um problema crônico: memorial e planilha sempre brigam. O memorial fala em piso porcelanato sem citar metragem, a planilha lista a metragem sem citar marca, e o analista do banco devolve o projeto pedindo coerência. Esse texto defende o caminho inverso, que muitos arquitetos experientes já fazem na prática: levantar o quantitativo da planta primeiro, e só depois redigir o memorial em cima da planilha. A norma ABNT NBR 16636-1:2017 não fixa essa ordem — é convenção de ensino, não regra técnica.",
@@ -2764,8 +2764,8 @@
     },
     {
       "slug": "ia-conta-melhor-do-que-mede-planta",
-      "title": "A IA conta melhor do que mede: o que descobrimos em 8.984 linhas de quantitativo",
-      "description": "Levantamos 8.984 linhas geradas por IA a partir de plantas reais e separamos por unidade. Em projeto com CAD, contagem sai medida do desenho em 41,7% dos casos; área, em 2,1%. Por que essa diferença existe e o que o seu desenho precisa ter.",
+      "title": "A IA conta melhor do que mede: 8.984 linhas de quantitativo",
+      "description": "Separamos por unidade 8.984 linhas de quantitativo geradas por IA. Com CAD, a contagem sai medida do desenho em 41,7% dos casos; a área, em 2,1%. Por quê.",
       "keywords": "ia le planta, ia mede planta, quantitativo por ia confiavel, ia quantitativo obra, extrair quantitativo do cad, ia arquitetura limites, quantitativo automatico precisao",
       "category": "Quantitativos",
       "intro": "A pergunta que mais chega aqui é alguma versão de “dá pra confiar?”. Resposta honesta: depende do que você está pedindo pra IA fazer. Contar e medir são tarefas diferentes, e a distância entre as duas é maior do que a gente imaginava antes de olhar os próprios dados. Levantamos 8.984 linhas de quantitativo geradas a partir de plantas reais de clientes e separamos por unidade. O resultado está abaixo, incluindo a parte que não nos favorece.",
