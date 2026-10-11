@@ -1200,6 +1200,9 @@ def test_controle_revisao_nova_que_nao_foi_pra_ele_nao_fecha_a_antiga():
     b, _, _ = montar(CLI, "cliente")
     membro(b, M_CLI, "cliente", CLI)
     _duas_revisoes(b, r01_pra_mim=False)
+    # a R01 foi só pro FORNECEDOR: pra este cliente, a que vale ainda é a R00
+    b.t["escritorio_emissao_destinos"].append(
+        {"emissao_id": E2, "projeto_id": PROJ, "membro_id": M_FORN, "permission_id": "p-forn"})
     assert esc.responder_emissao(E1, REQ, {"tipo": "aprovado"})["ok"] is True
     # a R01 foi mandada e depois RETIRADA dele (permission_id nulo): também não conta
     b.t["escritorio_emissao_destinos"].append(
