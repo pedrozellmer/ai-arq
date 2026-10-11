@@ -724,6 +724,8 @@ _STAGES_DIAGNOSTICO = frozenset({
     "motor:verbas-preliminares",
     # 24/09: esquema/detalhe fora da medição, planta-tipo × andares
     "motor:leitura-por-folha",
+    # 11/10: a seção AMBIENTE ↔ ÁREA ESCRITA deste arquivo, em números
+    "motor:ambiente-area",
     # 26/09: o mesmo arquivo 2× no envio, lido uma vez
     "motor:arquivo-repetido",
     "motor:pe-direito", "motor:escala-aviso", "motor:concordancia-rotulo",
@@ -1175,6 +1177,36 @@ def _blocos_colados_abertos(extraction) -> str:
     return " colados=[" + " ".join(f"{k}={d[k]}" for k in
                                    ("abertos", "entidades", "niveis", "falhas", "teto")
                                    if k in d) + "]"
+
+
+def _ambientes_resumo(extraction) -> str:
+    """Uma linha pro log: a seção AMBIENTE ↔ ÁREA ESCRITA deste arquivo, em números.
+
+    🔑 11/10/2026: a seção nasceu medida no acervo (88 arquivos de 59 jobs), e
+    sem esta linha o que ela faz em produção só se saberia baixando o arquivo do
+    cliente: quantas etiquetas de área foram lidas, quantas ganharam nome,
+    quantas são total/resumo, quantas estão fora das pranchas e se a lista foi
+    cortada no teto. "" quando o arquivo não tem etiqueta (não loga nada)."""
+    a = (getattr(extraction, "metadata", None) or {}).get("ambientes_area_escrita") or {}
+    gs = a.get("grupos") or []
+    if not a or not gs:
+        return ""
+
+    def _n(g, chave):
+        return sum(int(x[2]) for x in g.get(chave) or [])
+
+    distintos = sum(len(g.get("ambientes") or []) for g in gs)
+    try:
+        from dwg_extractor import _AMB_LISTA_MAX as _teto
+    except Exception:
+        _teto = 200
+    fora = sum(_n(g, "ambientes") + _n(g, "totais") + len(g.get("sem_nome") or [])
+               for g in gs if g.get("fora"))
+    return ("etiquetas=%d com_nome=%d sem_nome=%d totais=%d grupos=%d por_desenho=%s "
+            "fora_das_pranchas=%d pares_distintos=%d nao_listados=%d janelas_nao_usadas=%d" % (
+                int(a.get("etiquetas") or 0), int(a.get("pares") or 0), int(a.get("sem_nome") or 0),
+                sum(_n(g, "totais") for g in gs), len(gs), "sim" if a.get("por_desenho") else "nao",
+                fora, distintos, max(distintos - int(_teto), 0), int(a.get("janelas_nao_usadas") or 0)))
 
 
 def _leitura_por_folha_resumo(extraction) -> str:
@@ -16201,6 +16233,16 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                                            job_id)
                         except Exception as _elf:
                             print(f"[leitura-por-folha] log falhou (nao-fatal): {_elf}")
+                        # 11/10: a seção AMBIENTE ↔ ÁREA ESCRITA, em números. Try
+                        # próprio, como os vizinhos.
+                        try:
+                            _ab = _ambientes_resumo(extraction)
+                            if _ab:
+                                _log_error("motor:ambiente-area",
+                                           f"arq={os.path.basename(dxf_path)} {_ab}",
+                                           job_id, severity="info")
+                        except Exception as _eab:
+                            print(f"[ambiente-area] log falhou (nao-fatal): {_eab}")
                         try:
                             _vt = _textos_de_vista(extraction)
                             if _vt:
