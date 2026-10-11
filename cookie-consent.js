@@ -100,7 +100,7 @@
 
   function renderModeSimples() {
     return [
-      '<div style="max-width:1100px;margin:0 auto;display:flex;flex-wrap:wrap;align-items:center;gap:16px;">',
+      '<div class="aiarq-cc-linha" style="max-width:1100px;margin:0 auto;display:flex;flex-wrap:wrap;align-items:center;gap:16px;">',
         '<div style="display:flex;align-items:flex-start;gap:12px;flex:1 1 320px;min-width:240px;">',
           '<div style="color:#475569;flex-shrink:0;margin-top:2px;">', ICON_COOKIE, '</div>',
           '<div>',
@@ -108,8 +108,19 @@
             '<p id="aiarq-cc-desc" style="margin:0;font-size:13px;line-height:1.5;color:#475569;">',
               // 28/09 (parecer jurídico): dizer o que roda sem o sim (segurança e contagem sem cookie) e que o sim
               // cobre também as páginas abertas antes da resposta (a fila do sessionStorage, aiarq-utils.js)
+              '<span class="aiarq-cc-longo">',
               'Usamos cookies <strong>essenciais</strong> (sessão e proteção contra robôs) e uma contagem de visitas sem cookie, que não identifica você. ',
               'Com seu sim, coletamos <strong>telemetria de uso</strong> pra melhorar a plataforma: sem seu nome nas páginas públicas e vinculada à sua conta quando você está logado, incluindo as páginas que você abriu antes de responder. ',
+              '</span>',
+              // 11/10/2026 — no celular o aviso tinha ~263 px (38% da tela) e ficava em cima do botão principal
+              // da home. Em tela estreita aparece esta versão curta (frase aprovada pelo Pedro); o texto completo
+              // de cima segue a um toque, em "Saber mais", e é o único que aparece no computador. A frase curta
+              // mantém o que roda sem o sim e o alcance do sim sobre as páginas abertas antes da resposta.
+              '<span class="aiarq-cc-curto">',
+              'Usamos cookies <strong>essenciais</strong> e uma contagem de visitas sem cookie. ',
+              'Com seu sim, coletamos <strong>telemetria de uso</strong>, inclusive das páginas que você abriu antes de responder. ',
+              '<button type="button" id="aiarq-cc-mais" aria-expanded="false" style="font:inherit;color:#4f46e5;text-decoration:underline;font-weight:500;background:none;border:0;padding:0;cursor:pointer;">Saber mais</button> · ',
+              '</span>',
               '<a href="', POLICY_URL, '" style="color:#4f46e5;text-decoration:underline;font-weight:500;">Política de Privacidade</a>.',
             '</p>',
           '</div>',
@@ -212,6 +223,12 @@
     if ($only) $only.addEventListener('click', function () { decide({ analytics: false }); });
     if ($custom) $custom.addEventListener('click', applyModePersonalizar);
 
+    // "Saber mais" (só aparece em tela estreita): troca a frase curta pelo texto completo
+    var $mais = document.getElementById('aiarq-cc-mais');
+    if ($mais) $mais.addEventListener('click', function () {
+      if (bannerEl) bannerEl.classList.add('aiarq-cc-aberto');
+    });
+
     addHoverFx([$accept, $only, $custom]);
   }
 
@@ -261,7 +278,15 @@
     st.textContent = [
       '@keyframes aiarqCcSlide { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }',
       '@media (prefers-reduced-motion: reduce) { #aiarq-cookie-consent { animation: none !important; } }',
-      '#aiarq-cookie-consent *:focus-visible { outline: 2px solid #4f46e5; outline-offset: 2px; }'
+      '#aiarq-cookie-consent *:focus-visible { outline: 2px solid #4f46e5; outline-offset: 2px; }',
+      // tela larga: só o texto completo. Tela estreita: a frase curta, até a pessoa pedir o completo.
+      '#aiarq-cookie-consent .aiarq-cc-curto { display: none; }',
+      '@media (max-width: 640px) {',
+      '  #aiarq-cookie-consent { padding: 12px !important; }',
+      '  #aiarq-cookie-consent .aiarq-cc-linha { gap: 10px !important; }',
+      '  #aiarq-cookie-consent:not(.aiarq-cc-aberto) .aiarq-cc-longo { display: none; }',
+      '  #aiarq-cookie-consent:not(.aiarq-cc-aberto) .aiarq-cc-curto { display: inline; }',
+      '}'
     ].join('\n');
     document.head.appendChild(st);
   }

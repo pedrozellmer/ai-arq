@@ -31,6 +31,9 @@ APOSENTADAS = (
     "exporte suas pranchas em DXF antes de subir", "O DXF costuma medir mais", "DXF costuma resolver",
     "(DXF de preferência)", "DXF é o formato que dá o melhor resultado", "formato que a gente mede melhor",
     "formato que a gente lê melhor", "DXF quando der; DWG também serve", "exportar o DXF muda o jogo",
+    # 11/10/2026: o hero da home dizia "Sobe DXF, DWG ou PDF" com só o DXF em negrito — não é frase de
+    # preferência, mas dá o mesmo recado; passou pela 1ª varredura por isso
+    "Sobe <strong>DXF</strong>",
 )
 ONDE = ("index.html", "dashboard.html", "faq.html", "precos.html", "llms.txt", "aiarq-utils.js",
         os.path.join("blog", "gerar_llms.py"), os.path.join("blog", "posts.json"), os.path.join("backend", "main.py"))
