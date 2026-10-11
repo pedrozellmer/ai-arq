@@ -42,9 +42,21 @@ SITE = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 # nos últimos 30 dias é 47,0% contra 77,2% do CAD. Não é ruído de recorte.
 #
 # ⏭️ ESTES NÚMEROS ENVELHECEM. Remedir junto com o post de 18/10.
-PREENCHIDO_CAD = "68,4%"
-PREENCHIDO_PDF = "52,3%"
-MEDIDO_CAD = "25,0%"
+#
+# 🔄 REMEDIDO EM 11/10/2026 (base até 10/10), com a MESMA régua — reproduzi 18/09 antes de medir de novo
+# (PDF idêntico: 5.222 linhas, 52,3%; CAD a 0,2 ponto):
+#     CAD  165 projetos · 12.910 linhas · 69,4% preenchidas · 21,0% medidas
+#     PDF   75 projetos ·  8.966 linhas · 51,6% preenchidas ·     3 medidas
+# A parcela medida em CAD caiu 4 pontos (25,0% → 21,0%). Causa APURADA (Pedro pediu antes de publicar): a conta
+# é por LINHA e projeto grande pesa — de 19/09 a 10/10 entraram 8 projetos com 200+ linhas (antes 3 na base
+# inteira) e três saíram com quase nada medido (995/29, 311/0, 204/1); sem eles, 23,5%. Os projetos antigos
+# seguem em 24,8%. 🪤 NÃO foi o selo mais rígido (minha 1ª hipótese): no período as regras rebaixaram ~190 linhas
+# e promoveram 724 (soma dos registros `motor:selo-*` do error_log). Na mesma remedição: DWG chega ao fim em 9 de 10 envios (era 4 de 10 em 01/08),
+# e a recomendação pública deixou de ser "prefira DXF" (Pedro, 11/10: caminho A).
+# ⏭️ Próxima: novembro/2026.
+PREENCHIDO_CAD = "69,4%"
+PREENCHIDO_PDF = "51,6%"
+MEDIDO_CAD = "21,0%"
 
 # páginas que falam de cobertura → o que cada uma TEM que dizer
 ESPERADO = {
@@ -71,7 +83,9 @@ _TELA_DE_DECISAO = "dashboard.html"
 # números que a gente APOSENTOU — não podem reaparecer em copy viva
 APOSENTADOS = ("21,6%", "4,7%", "25,5%", "2,0%", "4,6&times;", "4,6×",
                # aposentados em 18/09/2026 — eram a medição de agosto
-               "73,8%", "70,0%", "23,9%")
+               "73,8%", "70,0%", "23,9%",
+               # aposentados em 11/10/2026 — eram a medição de 18/09
+               "68,4%", "52,3%", "25,0%")
 
 
 def _texto(nome):

@@ -26,7 +26,7 @@ def test_quem_cita_os_numeros_aponta_pro_dados():
 def test_a_pagina_diz_data_amostra_e_metodo():
     t = _ler("dados.html")
     assert re.search(r"Medição de \d{1,2} de \w+ de 20\d\d", t), "o /dados perdeu a data da medição"
-    for trecho in ("154 projetos", "5.682", "5.222", "Como a gente mediu"):
+    for trecho in ("240 projetos", "12.910", "8.966", "Como a gente mediu"):
         assert trecho in t, "o /dados perdeu %r" % trecho
 
 

@@ -136,10 +136,14 @@ def test_a_nota_de_atualizacao_mora_na_fonte():
     html = io.open(os.path.join(_BLOG, "posts",
                                 "dwg-ou-pdf-quantitativo-o-que-os-dados-mostram.html"),
                    encoding="utf-8").read()
-    assert "Atualizado em 23/08/2026" in html
-    assert "4,6" in html and "21,6%" in html, (
-        "a nota tem que carregar o número novo, senão não resolve a divergência "
-        "com a home")
+    # 11/10/2026: o post foi reescrito com a remedição de 10/10. As três notas empilhadas (23/08, 31/08, 26/09)
+    # viraram UMA nota no topo + a seção "Histórico" no fim. O que este teste cobra continua igual: a nota datada
+    # sai do posts.json e chega ao HTML, e o número antigo não some — fica no histórico.
+    nota = [p for p in json.loads(fonte)["posts"]
+            if p["slug"] == "dwg-ou-pdf-quantitativo-o-que-os-dados-mostram"][0]["update_note"]
+    assert "Atualizado em 11/10/2026" in nota and "Atualizado em 11/10/2026" in html
+    assert "Histórico: o que este post já disse" in html and "21,6%" in html and "23/08/2026" in html, (
+        "o histórico das medições antigas tem que continuar na página")
 
 
 def test_o_gerador_ignora_update_note_ausente():

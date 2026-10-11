@@ -68,7 +68,7 @@
         Todo número que o site cita sobre o que o AI.arq mede vem daqui. Esta página diz quando foi
         medido, sobre quais projetos e como.
       </p>
-      <p class="mt-2 text-sm text-gray-500">Medição de 18 de setembro de 2026</p>
+      <p class="mt-2 text-sm text-gray-500">Medição de 10 de outubro de 2026</p>
     </div>
 
     <div class="space-y-8">
@@ -90,16 +90,16 @@
               <tbody>
                 <tr class="border-t">
                   <td class="px-3 py-2">DWG ou DXF</td>
-                  <td class="text-right px-3 py-2">101</td>
-                  <td class="text-right px-3 py-2">5.682</td>
-                  <td class="text-right px-3 py-2">68,4%</td>
-                  <td class="text-right px-3 py-2">25,0%</td>
+                  <td class="text-right px-3 py-2">165</td>
+                  <td class="text-right px-3 py-2">12.910</td>
+                  <td class="text-right px-3 py-2">69,4%</td>
+                  <td class="text-right px-3 py-2">21,0%</td>
                 </tr>
                 <tr class="border-t">
                   <td class="px-3 py-2">Só PDF</td>
-                  <td class="text-right px-3 py-2">53</td>
-                  <td class="text-right px-3 py-2">5.222</td>
-                  <td class="text-right px-3 py-2">52,3%</td>
+                  <td class="text-right px-3 py-2">75</td>
+                  <td class="text-right px-3 py-2">8.966</td>
+                  <td class="text-right px-3 py-2">51,6%</td>
                   <td class="text-right px-3 py-2">3 linhas</td>
                 </tr>
               </tbody>
@@ -115,6 +115,61 @@
             Em PDF, as 3 linhas medidas s&atilde;o de maio de 2026, anteriores &agrave; regra atual. Desde ent&atilde;o,
             nada que vem de PDF sai carimbado como medido.
           </p>
+          <p>
+            Desde a medição anterior, de 18/09/2026 (154 projetos), a parcela medida em CAD caiu 4 pontos, e a
+            gente foi ver por quê. A conta é por linha, então projeto grande pesa mais: de 19/09 a 10/10 entraram 8
+            projetos com 200 linhas ou mais (antes eram 3 em toda a base), e três deles saíram com quase nada
+            medido — um, sozinho, tem 995 linhas e 29 medidas. Sem esses três a parcela seria 23,5%. Os projetos
+            que já estavam na base seguem onde estavam (24,8%). Os números antigos ficam no histórico do
+            <a href="/blog/posts/dwg-ou-pdf-quantitativo-o-que-os-dados-mostram.html" class="text-indigo-600 underline">post sobre DWG, DXF e PDF</a>.
+          </p>
+        </div>
+      </section>
+
+      <section>
+        <h2 class="text-xl font-bold text-gray-900 mb-3">Quantos envios chegam ao fim, por formato</h2>
+        <div class="rounded-xl bg-white border p-6 shadow-sm text-gray-600 leading-relaxed space-y-4">
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm border-collapse">
+              <thead>
+                <tr class="bg-gray-100 text-gray-700">
+                  <th class="text-left px-3 py-2 font-semibold">Formato enviado</th>
+                  <th class="text-right px-3 py-2 font-semibold">Envios</th>
+                  <th class="text-right px-3 py-2 font-semibold">Terminaram em erro</th>
+                  <th class="text-right px-3 py-2 font-semibold">Linhas medidas</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="border-t">
+                  <td class="px-3 py-2">Só DWG</td>
+                  <td class="text-right px-3 py-2">70</td>
+                  <td class="text-right px-3 py-2">7 (10,0%)</td>
+                  <td class="text-right px-3 py-2">21,4%</td>
+                </tr>
+                <tr class="border-t">
+                  <td class="px-3 py-2">Só DXF</td>
+                  <td class="text-right px-3 py-2">8</td>
+                  <td class="text-right px-3 py-2">0</td>
+                  <td class="text-right px-3 py-2">14,0%</td>
+                </tr>
+                <tr class="border-t">
+                  <td class="px-3 py-2">Só PDF</td>
+                  <td class="text-right px-3 py-2">28</td>
+                  <td class="text-right px-3 py-2">1 (3,6%)</td>
+                  <td class="text-right px-3 py-2">nenhuma</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            Envios de clientes de 11/09 a 10/10/2026 (30 dias). Ficam fora da tabela 4 envios que traziam DWG e DXF
+            juntos (1 terminou em erro). <strong>Terminou em erro</strong> é o estado final do projeto: o que falhou e
+            depois foi reprocessado com sucesso conta como concluído. A amostra de DXF é pequena (8 envios).
+          </p>
+          <p>
+            Em 01/08/2026 a mesma conta dava 61,7% dos DWG sem chegar ao fim (29 de 47), e por isso a gente pedia
+            DXF. Com os consertos na leitura de DWG, isso mudou: hoje o DWG chega ao fim em 9 de cada 10 envios.
+          </p>
         </div>
       </section>
 
@@ -122,8 +177,8 @@
         <h2 class="text-xl font-bold text-gray-900 mb-3">Como a gente mediu</h2>
         <div class="rounded-xl bg-white border p-6 shadow-sm text-gray-600 leading-relaxed">
           <ul class="space-y-3">
-            <li><strong>Amostra:</strong> todos os projetos de clientes conclu&iacute;dos at&eacute; 18/09/2026 &mdash;
-              154 projetos, 10.904 linhas de planilha. Os projetos da pr&oacute;pria equipe ficam de fora.</li>
+            <li><strong>Amostra:</strong> todos os projetos de clientes conclu&iacute;dos at&eacute; 10/10/2026 &mdash;
+              240 projetos, 21.876 linhas de planilha. Os projetos da pr&oacute;pria equipe ficam de fora.</li>
             <li><strong>Separa&ccedil;&atilde;o por formato:</strong> o projeto conta como &ldquo;DWG ou DXF&rdquo; quando
               veio com pelo menos um arquivo de CAD, e como &ldquo;s&oacute; PDF&rdquo; quando todos os arquivos eram PDF.
               As duas popula&ccedil;&otilde;es s&atilde;o contadas separadas: juntar as duas mediria quantos clientes
@@ -139,7 +194,8 @@
             PDF vetorial tamb&eacute;m &eacute; lido &mdash; a gente mede a geometria quando d&aacute; e a IA l&ecirc;
             textos e legendas &mdash;, mas tudo que vem de PDF sai como estimativa: &eacute; regra nossa n&atilde;o selar
             n&uacute;mero de PDF como medido, porque a escala dele vem de uma declara&ccedil;&atilde;o (o carimbo).
-            Planta escaneada n&atilde;o mede. Por isso a gente pede DXF sempre que der.
+            Planta escaneada n&atilde;o mede. Por isso a gente pede o arquivo de CAD (DWG ou DXF) sempre que der; se o
+            DWG n&atilde;o abrir, o caminho &eacute; salvar em DXF e enviar de novo.
           </p>
         </div>
       </section>
@@ -151,7 +207,7 @@
             <li><strong>N&atilde;o s&atilde;o taxa de acerto.</strong> &ldquo;Com quantidade&rdquo; quer dizer que a linha
               voltou com n&uacute;mero, n&atilde;o que o n&uacute;mero foi conferido.</li>
             <li><strong>Mudam com a amostra.</strong> A base cresce toda semana; a pr&oacute;xima remedi&ccedil;&atilde;o
-              est&aacute; prevista pra outubro de 2026, e quando ela sair os n&uacute;meros mudam aqui e em todas as
+              est&aacute; prevista pra novembro de 2026, e quando ela sair os n&uacute;meros mudam aqui e em todas as
               p&aacute;ginas que os citam.</li>
             <li><strong>N&atilde;o dispensam o profissional.</strong> Toda planilha deve ser revisada por arquiteto ou
               engenheiro habilitado.</li>
