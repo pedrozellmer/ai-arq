@@ -181,6 +181,12 @@ class DXFExtraction:
     poly_recusa: dict = field(default_factory=dict)
     poly_layers_recusados: dict = field(default_factory=dict)
     struct_rects: list = field(default_factory=list)  # retângulos/círculos FECHADOS em layer de PILAR (StructRect) — contagem de pilar medida
+    #: 🩸 11/10/2026 — o retângulo do tamanho de pilar em layer que NÃO nomeia
+    #: pilar (o desenho que numera os layers: '3', '12', '241'). Sozinho não é
+    #: nada; quem decide se é pilar é `count_pillars`, pelo rótulo (o "P12"
+    #: dentro dele ou a seção "45x100" escrita ao lado). Antes ele era jogado
+    #: fora aqui, e o atalho do rótulo de 05/08 nunca recebia o que filtrar.
+    struct_rects_sem_nome: list = field(default_factory=list)
     # Atributos de bloco (ATTRIB): dado ESTRUTURADO que o projetista escreveu
     # com nome de campo — quadro de áreas, etiqueta de ambiente, carimbo.
     # [{bloco, layer, campos:{tag: valor}}]
@@ -9850,67 +9856,95 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
     _desc_pil = {"nome_do_layer": 0, "nao_e_4_lados": 0, "nao_e_retangulo": 0,
                  "fora_de_escala": 0, "ilegivel": 0}
     _amostra_layers = {}          # {layer: quantos} dos recusados POR NOME
+    # 🩸 11/10/2026 — planta de fôrma exportada de software de estrutura (DXF
+    # R12, 200 layers com NÚMERO no nome): 56 pilares com a seção escrita ao
+    # lado e `pilares=0`. Duas travas em série, e o contador de descarte acima
+    # saía TODO ZERADO porque nenhum retângulo chegava nele:
+    #   1. o retângulo vinha FECHADO PELO 1º PONTO REPETIDO, sem a marca de
+    #      fechada (206 de 206 no arquivo) — o laço só chamava a função com a
+    #      marca; a função até sabe tirar o ponto repetido, nunca era chamada;
+    #   2. layer '3' não nomeia pilar — o retângulo era contado em
+    #      `nome_do_layer` e jogado fora. O atalho de 05/08 ("quando o layer é
+    #      número, o RÓTULO vira o filtro", em `count_pillars`) nunca recebeu
+    #      nada pra filtrar: o teste dele entrega os retângulos prontos.
+    # Agora o fechamento vale pelas duas formas e o retângulo do tamanho de
+    # pilar em layer sem nome fica guardado À PARTE, como candidato. No layer
+    # que nomeia pilar nada muda além do fechamento.
+    _cand_sem_nome: list = []
     if StructRect is not None:
+        def _fecha_no_inicio(pts, minimo=2):
+            return (len(pts) >= minimo and abs(pts[0][0] - pts[-1][0]) < 1e-9
+                    and abs(pts[0][1] - pts[-1][1]) < 1e-9)
+
+        def _retangulo_de_pilar(layer_name, pts):
+            """(StructRect, None) do contorno de 4 pontos no tamanho de pilar,
+            ou (None, motivo do descarte)."""
+            d = [_line_length(pts[i], pts[(i + 1) % 4]) for i in range(4)]
+            if min(d) <= 0:
+                return None, "nao_e_retangulo"
+            # lados opostos ~iguais (retângulo/paralelogramo, tolerância 15%)
+            if abs(d[0] - d[2]) > 0.15 * max(d[0], d[2]):
+                return None, "nao_e_retangulo"
+            if abs(d[1] - d[3]) > 0.15 * max(d[1], d[3]):
+                return None, "nao_e_retangulo"
+            w_raw = (d[0] + d[2]) / 2.0
+            h_raw = (d[1] + d[3]) / 2.0
+            w_m, h_m = w_raw * unit_factor, h_raw * unit_factor
+            if not (0.08 <= min(w_m, h_m) and max(w_m, h_m) <= 2.5
+                    and w_m * h_m <= 3.0):
+                # 🪤 É AQUI que pilar some quando a UNIDADE está errada: com
+                # fator de polegada, 36 pilares viram 0,34 mm e caem todos
+                # neste filtro (ver nota na linha ~1133).
+                return None, "fora_de_escala"
+            cx = sum(p[0] for p in pts) / 4.0
+            cy = sum(p[1] for p in pts) / 4.0
+            return StructRect(layer=layer_name, w_m=w_m, h_m=h_m,
+                              w_raw=w_raw, h_raw=h_raw, cx=cx, cy=cy), None
+
         def _consider_pilar_poly(layer_name, pts):
             try:
                 if not layer_is_pilar(layer_name):
                     # só conta o que TEM cara de pilar (contorno fechado de 4
                     # lados) — senão todo traço solto entraria e a amostra
                     # viraria ruído
-                    _pp = pts[:-1] if (len(pts) >= 2
-                                       and abs(pts[0][0] - pts[-1][0]) < 1e-9
-                                       and abs(pts[0][1] - pts[-1][1]) < 1e-9) else pts
+                    _pp = pts[:-1] if _fecha_no_inicio(pts) else pts
                     if len(_pp) == 4:
                         _desc_pil["nome_do_layer"] += 1
                         _k = str(layer_name)[:40]
                         _amostra_layers[_k] = _amostra_layers.get(_k, 0) + 1
+                        if len(_cand_sem_nome) < 5000:
+                            _r_sn, _ = _retangulo_de_pilar(layer_name, _pp)
+                            if _r_sn is not None:
+                                _cand_sem_nome.append(_r_sn)
                     return
                 # remove ponto final repetido (polilinha fechada com 1º=último)
-                if len(pts) >= 2 and abs(pts[0][0] - pts[-1][0]) < 1e-9 \
-                        and abs(pts[0][1] - pts[-1][1]) < 1e-9:
+                if _fecha_no_inicio(pts):
                     pts = pts[:-1]
                 if len(pts) != 4:
                     _desc_pil["nao_e_4_lados"] += 1
                     return
-                d = [_line_length(pts[i], pts[(i + 1) % 4]) for i in range(4)]
-                if min(d) <= 0:
-                    _desc_pil["nao_e_retangulo"] += 1
+                _r_p, _motivo = _retangulo_de_pilar(layer_name, pts)
+                if _r_p is None:
+                    _desc_pil[_motivo] += 1
                     return
-                # lados opostos ~iguais (retângulo/paralelogramo, tolerância 15%)
-                if abs(d[0] - d[2]) > 0.15 * max(d[0], d[2]):
-                    _desc_pil["nao_e_retangulo"] += 1
-                    return
-                if abs(d[1] - d[3]) > 0.15 * max(d[1], d[3]):
-                    _desc_pil["nao_e_retangulo"] += 1
-                    return
-                w_raw = (d[0] + d[2]) / 2.0
-                h_raw = (d[1] + d[3]) / 2.0
-                w_m, h_m = w_raw * unit_factor, h_raw * unit_factor
-                if not (0.08 <= min(w_m, h_m) and max(w_m, h_m) <= 2.5
-                        and w_m * h_m <= 3.0):
-                    # 🪤 É AQUI que pilar some quando a UNIDADE está errada: com
-                    # fator de polegada, 36 pilares viram 0,34 mm e caem todos
-                    # neste filtro (ver nota na linha ~1133).
-                    _desc_pil["fora_de_escala"] += 1
-                    return
-                cx = sum(p[0] for p in pts) / 4.0
-                cy = sum(p[1] for p in pts) / 4.0
-                struct_rects.append(StructRect(layer=layer_name, w_m=w_m, h_m=h_m,
-                                               w_raw=w_raw, h_raw=h_raw, cx=cx, cy=cy))
+                struct_rects.append(_r_p)
             except Exception:
                 return
 
         for _lw in msp.query("LWPOLYLINE"):
             try:
-                if getattr(_lw, "closed", False):
-                    _consider_pilar_poly(_lw.dxf.layer, list(_lw.get_points(format="xy")))
+                _pts_lw = list(_lw.get_points(format="xy"))
+                # 4 = três pontos distintos + o 1º repetido: o menor contorno fechado
+                if getattr(_lw, "closed", False) or _fecha_no_inicio(_pts_lw, 4):
+                    _consider_pilar_poly(_lw.dxf.layer, _pts_lw)
             except Exception:
                 continue
         for _pl in msp.query("POLYLINE"):
             try:
-                if getattr(_pl, "is_closed", False):
-                    _consider_pilar_poly(_pl.dxf.layer,
-                                         [(v.dxf.location.x, v.dxf.location.y) for v in _pl.vertices])
+                _pts_pl = [(v.dxf.location.x, v.dxf.location.y) for v in _pl.vertices]
+                if getattr(_pl, "is_closed", False) or (
+                        getattr(_pl, "is_2d_polyline", False) and _fecha_no_inicio(_pts_pl, 4)):
+                    _consider_pilar_poly(_pl.dxf.layer, _pts_pl)
             except Exception:
                 continue
         for _ci in msp.query("CIRCLE"):
@@ -10469,6 +10503,7 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         poly_layers_recusados=dict(
             sorted(_poly_layers_recusados.items(), key=lambda kv: -kv[1])[:8]),
         struct_rects=struct_rects,
+        struct_rects_sem_nome=_cand_sem_nome,
         block_attributes=block_attributes,
         blocos_descartados=dict(_desc, amostra_anonimo=list(_amostra_anonimo)),
         blocos_colados=dict(_colados or {}),

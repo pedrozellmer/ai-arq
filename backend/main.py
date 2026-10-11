@@ -1264,6 +1264,34 @@ def _descarte_de_pilares(extraction) -> str:
     return txt
 
 
+#: 🩸 11/10/2026 — com tantos pilares CONTADOS na geometria o arquivo é de
+#: estrutura, e dizer ao cliente que ele "parece ser de ARQUITETURA" (porque as
+#: linhas saíram zeradas) ou que "não traz planta de fôrma" é acusar o arquivo
+#: certo. O mínimo é o mesmo da contagem pela seção escrita (`count_pillars`).
+_PILARES_QUE_PROVAM_ESTRUTURA = 3
+
+
+def _pilares_contados(extraction) -> int:
+    """Quantos pilares a contagem geométrica achou neste arquivo (layer que
+    nomeia pilar, ou retângulo provado pelo rótulo). 0 quando não achou ou se
+    a contagem falhar — quem lê isto só deixa de acusar o arquivo, nunca mede."""
+    try:
+        from structural_extractor import count_pillars as _cp
+        return int((_cp(extraction) or {}).get("total") or 0)
+    except Exception:
+        return 0
+
+
+def _arquivo_de_estrutura_pelos_pilares(arqs) -> bool:
+    """Algum CAD do job teve pilares contados na geometria (`pilares_contados`
+    no resumo de cada prancha) em número que não é acaso?"""
+    try:
+        return any(int((a or {}).get("pilares_contados") or 0) >= _PILARES_QUE_PROVAM_ESTRUTURA
+                   for a in (arqs or []) if isinstance(a, dict))
+    except Exception:
+        return False
+
+
 def _descarte_de_poligonos(extraction) -> str:
     """Sufixo do log de geometria: QUAIS layers a allowlist de área recusou.
 
@@ -16040,6 +16068,8 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                             # 10/10: o que nenhuma janela das pranchas mostra
                             if _md_u.get("fora_das_pranchas"):
                                 _res_esc["fora_das_pranchas"] = _md_u["fora_das_pranchas"]
+                            # 11/10: pilar contado na geometria = arquivo de estrutura
+                            _res_esc["pilares_contados"] = _pilares_contados(extraction)
                             _escala_arqs.append(_res_esc)
                         except Exception as _eea:
                             print(f"[escala-resumo] nao-fatal: {_eea}")
@@ -16141,6 +16171,10 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                                 # devolvia `pilares=0` sem dizer se o desenho
                                 # não tem pilar ou se o NOME do layer não bateu.
                                 f"{_descarte_de_pilares(extraction)}"
+                                # 11/10: `pilares=` são os retângulos em layer de
+                                # pilar; isto é o que a contagem entrega, inclusive
+                                # os provados pela seção escrita em layer sem nome
+                                f" pilares_contados={_pilares_contados(extraction)}"
                                 # 🩸 26/09: BLOCOS cujo símbolo da legenda foi contado (job 32a27efc)
                                 f"{(' blocos_da_legenda=' + str((getattr(extraction, 'metadata', None) or {}).get('blocos_da_legenda'))[:300]) if (getattr(extraction, 'metadata', None) or {}).get('blocos_da_legenda') else ''}"
                                 # 🩸 14/09: QUAIS layers a allowlist de área
@@ -18549,7 +18583,23 @@ bloco — só cite os que estão no inventário deste arquivo."""
 
             # Guardrail (caso cliente-90): estrutural com quase tudo zerado provavelmente
             # é arquitetura marcada errada no upload. Avisa em vez de entregar lixo.
-            if _is_likely_wrong_type([getattr(_it, "quantity", 0) for _it in all_items]):
+            # 🩸 11/10/2026 (job f588da0e): o guardrail só CONTA linha zerada — e uma
+            # planta de fôrma de verdade que a gente não conseguiu medir sai zerada
+            # do mesmo jeito. O engenheiro que enviou o arquivo certo, marcando o
+            # tipo certo, leu que ele "parece ser de ARQUITETURA". Com pilares
+            # contados na geometria o arquivo é de estrutura: o aviso cala.
+            try:
+                _estrut_pelos_pilares = _arquivo_de_estrutura_pelos_pilares(_escala_arqs)
+            except NameError:
+                _estrut_pelos_pilares = False       # job sem CAD (só PDF)
+            if _estrut_pelos_pilares and _is_likely_wrong_type(
+                    [getattr(_it, "quantity", 0) for _it in all_items]):
+                _log_error("motor:tipo-nao-acusado",
+                           "linhas quase todas zeradas, mas há pilares contados na "
+                           "geometria — o aviso 'parece ser de ARQUITETURA' não saiu",
+                           job_id, severity="info")
+            if (not _estrut_pelos_pilares) and _is_likely_wrong_type(
+                    [getattr(_it, "quantity", 0) for _it in all_items]):
                 _warn_tipo = ("⚠ Este arquivo parece ser de ARQUITETURA, não de estrutura — "
                               "quase nenhum item estrutural pôde ser medido. Reenvie marcando "
                               "\"Arquitetura\" no tipo de projeto (ou responda o e-mail do "
@@ -19922,7 +19972,13 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     if _pd_destrava else "")
                 # Resumo de aço lido = a prancha de estrutura veio e foi lida: o
                 # ramo que diz "o arquivo não traz quadro de ferros" seria mentira.
-                if (_leu_estrutura and _falta_altura) or _n_aco_resumo:
+                # 🩸 11/10/2026 (job f588da0e): pilar contado na geometria também —
+                # a planta de fôrma veio; o outro ramo diz que ela não veio.
+                try:
+                    _pilares_na_geometria = _arquivo_de_estrutura_pelos_pilares(_escala_arqs)
+                except NameError:
+                    _pilares_na_geometria = False   # job sem CAD (só PDF)
+                if (_leu_estrutura and _falta_altura) or _n_aco_resumo or _pilares_na_geometria:
                     _aviso_estrut = (
                         "⚠ ESTRUTURA: o desenho foi lido — a IA identificou os "
                         "elementos estruturais —, mas nenhum número foi MEDIDO do "
@@ -19967,7 +20023,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                            # 22/09: o que decide cada frase, pra medir depois
                            f"sem_altura={_n_sem_altura} aco_do_resumo={_n_aco_resumo} "
                            f"pilar_contado={_tem_pilar_contado} pd_destrava={_pd_destrava} "
-                           f"ramo={'falta-altura' if (_leu_estrutura and _falta_altura) else ('resumo-de-aco' if _n_aco_resumo else 'falta-prancha')}"
+                           f"ramo={'falta-altura' if (_leu_estrutura and _falta_altura) else ('resumo-de-aco' if _n_aco_resumo else ('pilares-na-geometria' if _pilares_na_geometria else 'falta-prancha'))}"
                            " — aviso de pré-dimensionamento emitido", job_id,
                            severity="info")
 

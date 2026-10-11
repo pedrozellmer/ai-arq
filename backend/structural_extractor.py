@@ -1133,6 +1133,108 @@ def parse_quadro_consumo(texts) -> list:
 
 _PNAME_RE = re.compile(r"^\s*P\s?\d{1,3}\s*$", re.IGNORECASE)
 
+# ── A SEÇÃO ESCRITA AO LADO PROVA O PILAR (11/10/2026) ──────────────────────
+# 🩸 Planta de fôrma exportada de software de estrutura: 200 layers com NÚMERO
+# no nome, 56 pilares, cada um com a seção ("45x100") e o nome ("P12C")
+# escritos AO LADO — não dentro, que era o que o atalho de 05/08 pedia. Saiu
+# `pilares=0`, 20 linhas zeradas, e o topo dizendo ao engenheiro que o arquivo
+# "parece ser de ARQUITETURA" e "não traz planta de fôrma".
+# 📏 Anatomia medida nesse arquivo: os 56 rótulos casam com um retângulo do
+# MESMO tamanho (k = 1,000) a 0,42–2,73 lados maiores (mediana 1,32), e os 56
+# têm o nome a ≤ 9,5 lados (mediana 1,43). 59 retângulos do tamanho de pilar
+# NÃO têm rótulo (furos, escada): não entram.
+# 📏 Contra-exemplo medido no acervo (60 DXF com rótulo "AxB"): a prancha de
+# detalhe de esquadrias tem 14 vãos desenhados no tamanho escrito ("60x150") —
+# nenhum com nome "P<n>" perto. Por isso as DUAS exigências.
+# 🪤 E no próprio arquivo do caso: dois FUROS de laje ("100x15", "50x15") têm o
+# retângulo do tamanho escrito e pilares por perto. O que os separa é que
+# nenhum nome é DELES — cada "P<n>" está mais perto do seu pilar. Por isso o
+# nome tem de ser do retângulo (o mais perto dele entre os provados), não só
+# estar na vizinhança.
+# 🪤 Só "AxB". Nesse arquivo "A/B" é seção de VIGA (37 rótulos, sem retângulo),
+# e um deles ("19/60") casava com um retângulo que não é pilar. Pilar com
+# seção escrita com barra existe em outros desenhos — não medido, não entra.
+_SECAO_ROTULO_RE = re.compile(
+    r"^\s*(\d{2,3}(?:[.,]\d)?)\s*[xX]\s*(\d{2,3}(?:[.,]\d)?)\s*(?:cm)?\s*$")
+#: nome de pilar com o sufixo que o software de estrutura põe ("P12C", "P341C")
+_PNAME_SUFIXO_RE = re.compile(r"^\s*P\s?\d{1,4}[A-Z]?\s*$")
+_SECAO_TOL = 0.03          # o lado do retângulo bate com o número escrito
+#: 🪤 Porta em vista: "P1" + "80x210" ao lado de um retângulo de 80 × 210 é o
+#: mesmo desenho de um pilar com nome e seção. O que separa é a altura da
+#: porta: seção com lado de 2 m ou mais não entra por esta prova (no arquivo
+#: medido o maior lado é 130 cm). Pilar-parede comprido fica sem a prova.
+_SECAO_LADO_MAX_CM = 200.0
+_SECAO_DIST_LADOS = 4.0    # rótulo a até 4 lados maiores do centro (medido: 2,73)
+_NOME_DIST_LADOS = 12.0    # nome "P<n>" a até 12 lados maiores (medido: 9,5)
+_PILAR_POR_SECAO_MIN = 3   # menos que isso é acaso, não planta de fôrma
+
+
+def pilares_provados_pela_secao(rects, texts) -> list:
+    """Os retângulos de `rects` que são PILAR pela prova escrita: uma seção
+    "AxB" (cm) cujos dois números batem com os lados do retângulo, a poucos
+    lados de distância, e um nome "P<n>" que é DELE (o retângulo é o mais perto
+    desse nome entre os que a seção provou). Cada rótulo prova UM retângulo (o
+    mais perto). Só lê — não muda nada em `rects`."""
+    secoes, nomes = [], []
+    for t in texts or []:
+        s = (getattr(t, "text", "") or "").strip()
+        p = getattr(t, "position", None)
+        if not s or not p:
+            continue
+        m = _SECAO_ROTULO_RE.match(s)
+        if m:
+            try:
+                a, b = sorted((float(m.group(1).replace(",", ".")),
+                               float(m.group(2).replace(",", "."))))
+            except ValueError:
+                continue
+            if b >= _SECAO_LADO_MAX_CM:
+                continue                        # altura de porta, não seção de pilar
+            secoes.append((a, b, float(p[0]), float(p[1])))
+        elif _PNAME_SUFIXO_RE.match(s):
+            nomes.append((float(p[0]), float(p[1])))
+    if len(secoes) < _PILAR_POR_SECAO_MIN or not nomes:
+        return []
+    cand = []
+    for i, r in enumerate(rects or []):
+        if getattr(r, "circular", False):
+            continue
+        menor, maior = sorted((r.w_m * 100.0, r.h_m * 100.0))
+        if menor <= 0:
+            continue
+        cand.append((i, r, menor, maior, max(r.w_raw, r.h_raw)))
+    pares = []
+    for j, (a, b, x, y) in enumerate(secoes):
+        for i, r, menor, maior, lado in cand:
+            if abs(menor - a) > _SECAO_TOL * a or abs(maior - b) > _SECAO_TOL * b:
+                continue
+            d = math.hypot(r.cx - x, r.cy - y)
+            if d <= _SECAO_DIST_LADOS * lado:
+                pares.append((d / lado, j, i))
+    pares.sort()
+    usados_r, usados_s = set(), set()
+    por_i = {c[0]: c for c in cand}
+    for _d, j, i in pares:
+        if j in usados_s or i in usados_r:
+            continue
+        usados_s.add(j)
+        usados_r.add(i)
+    casados = [por_i[i] for i in sorted(usados_r)]
+    if len(casados) < _PILAR_POR_SECAO_MIN:
+        return []
+    # o nome é de UM retângulo: o mais perto dele entre os que a seção casou
+    com_nome = set()
+    for nx, ny in nomes:
+        melhor, melhor_d = None, math.inf
+        for i, r, _menor, _maior, lado in casados:
+            d = math.hypot(nx - r.cx, ny - r.cy)
+            if d < melhor_d:
+                melhor, melhor_d = (i, lado), d
+        if melhor is not None and melhor_d <= _NOME_DIST_LADOS * melhor[1]:
+            com_nome.add(melhor[0])
+    provados = [r for i, r, _menor, _maior, _lado in casados if i in com_nome]
+    return provados if len(provados) >= _PILAR_POR_SECAO_MIN else []
+
 
 def count_pillars(extraction) -> dict | None:
     """Conta pilares medidos na geometria. Fontes (sem dupla contagem — blocos
@@ -1187,6 +1289,24 @@ def count_pillars(extraction) -> dict | None:
                 rects = _achados
                 rotulo_foi_o_filtro = True
 
+    # 🩸 11/10/2026: sem layer que nomeie pilar e sem "P12" DENTRO do retângulo,
+    # a SEÇÃO escrita ao lado prova (ver `pilares_provados_pela_secao`). Recebe
+    # também os retângulos de layer sem nome, que o extrator passou a guardar.
+    # 🪤 O atalho de cima ("P12" dentro) segue vendo SÓ `struct_rects`: na
+    # extração real eles vêm só de layer que nomeia pilar, então ele nunca
+    # disparou em produção. Abrir os de layer sem nome pra ele traria a
+    # etiqueta de porta ("P1" dentro de um quadrinho) — não medido, não entra.
+    secao_foi_a_prova = False
+    if not rects:
+        _prov = pilares_provados_pela_secao(
+            _rects_todos + list(getattr(extraction, "struct_rects_sem_nome", None) or []),
+            getattr(extraction, "texts", None) or [])
+        if _prov:
+            rects = _prov
+            rotulo_foi_o_filtro = True
+            secao_foi_a_prova = True
+    _re_nome = _PNAME_SUFIXO_RE if secao_foi_a_prova else _PNAME_RE
+
     # dedupe por centro: contorno duplo/repetido do mesmo pilar conta 1
     kept: list = []
     for r in sorted(rects, key=lambda r: -(r.w_m * r.h_m)):
@@ -1204,7 +1324,7 @@ def count_pillars(extraction) -> dict | None:
     if kept:
         for t in getattr(extraction, "texts", None) or []:
             txt = (getattr(t, "text", "") or "").strip()
-            if not _PNAME_RE.match(txt):
+            if not _re_nome.match(txt):
                 continue
             pos = getattr(t, "position", None)
             if not pos:
@@ -1275,6 +1395,8 @@ def count_pillars(extraction) -> dict | None:
         # do rótulo, não do nome do layer — a contagem é geométrica igual, mas
         # a procedência muda e o cliente tem direito de saber.
         "por_rotulo": rotulo_foi_o_filtro,
+        # 11/10: a prova foi a seção escrita ao lado (não o "P12" dentro)
+        "por_secao_escrita": secao_foi_a_prova,
     }
 
 
@@ -1453,7 +1575,12 @@ def structural_prompt_section(struct: dict) -> str:
     if pil:
         if pil.get("rects_qtd"):
             lyr = ", ".join(pil.get("layers", []))
-            L.append(f"PILARES (contagem geométrica — retângulos/círculos fechados no layer {lyr}):")
+            if pil.get("por_secao_escrita"):
+                # 11/10: layer sem nome de pilar — a prova é a seção escrita ao lado
+                L.append("PILARES (contagem geométrica — retângulos fechados cujos lados batem com a "
+                         f"SEÇÃO ESCRITA ao lado, com o nome do pilar perto; layer {lyr}):")
+            else:
+                L.append(f"PILARES (contagem geométrica — retângulos/círculos fechados no layer {lyr}):")
             _rep = any(s.get("repetidos") for s in pil.get("por_secao", []))
             # 🔑 Em folha de papel a SEÇÃO é o tamanho do desenho, não o do pilar.
             # A contagem segue a de antes — mas não é imune: o filtro de tamanho
