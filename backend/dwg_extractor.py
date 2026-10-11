@@ -8547,7 +8547,10 @@ def _linhas_dos_ambientes(amb, limite: int = _AMB_LISTA_MAX) -> list:
           "  (o projetista escreveu a área de cada ambiente; o motor juntou o NOME à ÁREA pela",
           "   posição dos dois textos da etiqueta — o nome no mesmo texto ou logo acima. É o",
           "   número do PROJETISTA, não medição na geometria: use como a área de piso/forro",
-          "   DAQUELE ambiente e marque 'estimado'."]
+          "   DAQUELE ambiente e marque 'estimado'.",
+          "   ⚠ Se o MESMO ambiente tem área MEDIDA neste arquivo (hachura, contorno fechado ou",
+          "   o par RÓTULO ↔ ÁREA DA REGIÃO), a quantidade é a MEDIDA; a área escrita serve pra",
+          "   conferir — se as duas divergirem, diga a diferença na observação."]
     if por_desenho:
         ls += ["   ⚠ Vem POR DESENHO das pranchas. O mesmo pavimento costuma ser desenhado várias",
                "   vezes (planta baixa, layout, forro, piso…): o ambiente que se repete nesses",

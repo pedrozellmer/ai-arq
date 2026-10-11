@@ -291,6 +291,9 @@ def test_duas_etiquetas_lado_a_lado_cada_uma_com_o_seu_nome():
     ("ÁREA TOTAL", True), ("ÁREA ÚTIL", True), ("ÁREA PRIVATIVA", True), ("ÁREA CONSTRUÍDA", True),
     ("PAVIMENTO TÉRREO", True), ("ÁREA UTILIZADA", True), ("APARTAMENTO TIPO", True),
     ("QUADRO DE ÁREAS", True), ("TABELA DE ÁREAS", True),
+    ("ÁREA COMUM", True), ("ÁREAS COMUNS", True), ("NÍVEL DESTINADO A ÁREA DE USO COMUM", True),
+    # 🪤 "comum" no meio do nome é cômodo (medido no acervo: 9 etiquetas iam pros totais)
+    ("HALL ÁREA COMUM ESCADA E ELEVADOR", False), ("RESÍDUOS COMUM", False), ("WC COMUM", False),
     ("ÁREA DE SERVIÇO", False), ("ÁREA TÉCNICA", False), ("ÁREA DE TRABALHO", False),
     ("SALA DE ESTAR", False), ("COZINHA", False),
 ])
@@ -475,6 +478,8 @@ def test_a_secao_por_desenho_diz_que_nao_soma():
     assert ls[0].startswith("AMBIENTE ↔ ÁREA ESCRITA NA ETIQUETA")
     assert "NÃO some um desenho com o outro" in txt and "outra versão da planta" in txt
     assert "só lugares diferentes (outro pavimento" in txt, "dois desenhos podem ser dois andares com os mesmos cômodos"
+    assert "a quantidade é a MEDIDA" in txt and "a área escrita serve pra" in txt, (
+        "sem a precedência, a linha medida do ambiente vira linha estimada pela etiqueta")
     assert "  [PLANTA BAIXA TÉRREO — folha A1 PLANTA]  (planta)" in ls
     assert "    CIRCULAÇÃO = 49.82 m²" in ls and "    SALA DE REUNIÃO = 26.75 m²" in ls
     assert "    CIRCULAÇÃO = 46.60 m²" in ls
@@ -539,6 +544,44 @@ def test_as_areas_sem_nome_alem_do_teto_viram_contagem():
 def test_sem_registro_nao_ha_secao():
     assert dx._linhas_dos_ambientes(None) == [] and dx._linhas_dos_ambientes({}) == []
     assert dx._linhas_dos_ambientes({"grupos": [{"ambientes": [], "totais": [], "sem_nome": []}]}) == []
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  REGRA DURA Nº1 — área escrita não leva selo de medido
+# ══════════════════════════════════════════════════════════════════════════
+def _item(obs, conf="confirmado"):
+    return {"description": "Piso da sala", "unit": "m²", "quantity": 12.3, "confidence": conf,
+            "observations": obs, "origem": "dxf_geom"}
+
+
+@pytest.mark.parametrize("obs", [
+    "Fonte: AMBIENTE ↔ ÁREA ESCRITA NA ETIQUETA — SALA = 12,30 m².",
+    "Área escrita na etiqueta do ambiente: SALA = 12,30 m².",
+    "Fonte: secao AMBIENTE - AREA ESCRITA NA ETIQUETA (SALA = 12.30 m2).",
+])
+def test_linha_que_cita_a_secao_nao_passa_com_selo_de_medido(obs):
+    """A seção entrega o número que o PROJETISTA escreveu. Se a IA der selo de
+    medido citando a seção, o guarda do selo tem de acusar."""
+    achados = er.selos_sem_geometria([_item(obs)])
+    assert [a["indice"] for a in achados] == [0], obs
+
+
+def test_CONTROLE_a_mesma_linha_como_estimado_nao_e_acusada():
+    assert er.selos_sem_geometria([_item("Fonte: AMBIENTE ↔ ÁREA ESCRITA NA ETIQUETA — SALA = 12,30 m².",
+                                         conf="estimado")]) == []
+
+
+def test_CONTROLE_etiqueta_sozinha_nao_e_procedencia_de_texto():
+    """🪤 "etiqueta" SOZINHA não entra na lista: 4 linhas confirmadas de
+    comprimento de layer citam "diâmetros pelas etiquetas" e são medição."""
+    assert er.selos_sem_geometria([_item("Diâmetros conferidos pelas etiquetas do desenho.")]) == []
+    assert "etiqueta" not in er._PROCEDENCIA_TEXTO
+
+
+def test_CONTROLE_area_medida_que_tambem_cita_a_etiqueta_fica_com_o_selo():
+    """A área veio da hachura; a etiqueta só confere. É medição."""
+    obs = "Fonte: área hachurada no layer 'PISO' = 12,31 m²; confere com a área escrita na etiqueta (12,30 m²)."
+    assert er.selos_sem_geometria([_item(obs)]) == []
 
 
 # ══════════════════════════════════════════════════════════════════════════

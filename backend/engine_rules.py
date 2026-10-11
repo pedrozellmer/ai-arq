@@ -1914,8 +1914,14 @@ _PROVA_CONTADO_NO_DESENHO = _re.compile(
 
 # Procedências que são LEITURA DE TEXTO — legítimas como estimativa, nunca como
 # medição. O projetista escreveu um número na prancha; a gente não mediu nada.
+#: 11/10/2026 — "área escrita": o título da seção AMBIENTE ↔ ÁREA ESCRITA NA
+#: ETIQUETA do prompt. A linha que cita "área escrita na etiqueta: SALA = 12,30
+#: m²" não tinha nenhuma das palavras de antes e passaria com selo de medido.
+#: 🪤 "etiqueta" SOZINHA não entra: medido em 120 dias, 4 linhas confirmadas de
+#: comprimento de layer ("… Diâmetros pelas etiquetas…") passariam a ser acusadas.
 _PROCEDENCIA_TEXTO = (
     "texto", "carimbo", "legenda", "rótulo", "rotulo", "tabela", "quadro",
+    "área escrita", "area escrita",
 )
 
 # 🚨 29/08/2026 — A EXCEÇÃO DO QUADRO DE AÇO, e por que ela NÃO é um furo.
@@ -3180,8 +3186,12 @@ _RE_AMB_CAUDA_DA_AREA = _re.compile(
 #: nome que é TOTAL/RESUMO, não cômodo — sai em lista à parte (somado aos
 #: cômodos, conta duas vezes). 🪤 "ÁREA DE TRABALHO", "ÁREA SERV.", "ÁREA
 #: TÉCNICA" são cômodos: começar com "área" não basta. Lido sem acento, minúsculo.
+#: 🪤 "comum" sozinho também não: medido no acervo, "HALL ÁREA COMUM ESCADA E
+#: ELEVADOR" (×6) e "RESÍDUOS COMUM" (×3) são cômodos; total é o nome que COMEÇA
+#: por "área comum" ou fala em "uso comum".
 _RE_AMB_RESUMO = _re.compile(
-    r"\btotal\b|\bcomum\b|privativ|permeav|construid|construc|edifica|\bterreno\b|\blote\b|"
+    r"\btotal\b|^(?:area|areas)\s+comu(?:m|ns)\b|\buso\s+comum\b|"
+    r"privativ|permeav|construid|construc|edifica|\bterreno\b|\blote\b|"
     r"ocupac|computav|"
     r"\b(?:area|areas)\s+(?:util|bruta|liquida|destinada|coberta|descoberta|real|do\s+pavimento)\b|"
     r"superficie|\bpavimento\b|\bterreo\b|\bmezanino\b|\bglobal\b|\breal\b|\bcorte\b|\baterro\b|"
