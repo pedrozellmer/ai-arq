@@ -209,6 +209,7 @@
     duvida: '<circle cx="12" cy="12" r="9"/><path d="M9.6 9.4a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.7"/><path d="M12 17.2h.01"/>',
     sair: '<path d="M15 17l5-5-5-5M20 12H9M12 20H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h6"/>',
     equipe: '<circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.6c2.7.2 5 2 5 4.9"/>',
+    foto: '<path d="M3 8a2 2 0 012-2h2l1.5-2h7L17 6h2a2 2 0 012 2v10a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><circle cx="12" cy="13" r="3.5"/>',
     quadro: '<rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="11" rx="1.5"/><rect x="17" y="4" width="4" height="7" rx="1.5"/>',
     enviar: '<path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4z"/>',
     engrenagem: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>'
@@ -285,7 +286,9 @@
         // 🪤 A vista se chama 'processamento'. Ela já se chamou 'dados', e o
         // menu ficou apontando pro nome velho: o item caía calado na visão
         // geral. Nome de vista e link nascem no mesmo lugar, de propósito.
-        { href: url('projeto.html') + '#processamento', rotulo: 'Processamento', ic: 'duvida', track: 'menu-processamento' }
+        // 11/10 (auditoria NAV-5): com `chave` ele fica também no menu do Escritório (Reprocessar e "Reportar problema"
+        // moram nesta vista); pra equipe quem tira continua sendo o tirarItensDoDono (pelo data-track)
+        { href: url('projeto.html') + '#processamento', rotulo: 'Processamento', ic: 'duvida', chave: 'processamento', track: 'menu-processamento' }
       ]},
       // Próximas entregas do ciclo, já no roadmap. Não são links: item de menu
       // que não leva a lugar nenhum vira reclamação. Aqui está escrito que
@@ -346,7 +349,7 @@
   })();
 
   // O menu do Escritório: as telas dele em cima e as do projeto medido embaixo (as mesmas de gruposProjeto,
-  // menos Visão geral — quem faz esse papel é a Página do projeto — e Processamento).
+  // menos Visão geral — quem faz esse papel é a Página do projeto). 11/10: Fotos entrou (o escritorio.html já tinha).
   function gruposEscritorio() {
     var e = 'escritorio.html#/p/' + ESC.id + '/';
     return [
@@ -355,6 +358,7 @@
         { href: e + 'tarefas',  rotulo: 'Tarefas',           ic: 'quadro',   track: 'menu-esc-tarefas' },
         { href: e + 'arquivos', rotulo: 'Arquivos',          ic: 'pasta',    track: 'menu-esc-arquivos' },
         { href: e + 'emissoes', rotulo: 'Emissões',          ic: 'enviar',   track: 'menu-esc-emissoes' },
+        { href: e + 'fotos',    rotulo: 'Fotos',             ic: 'foto',     track: 'menu-esc-fotos' },
         { href: e + 'atas',     rotulo: 'Atas',              ic: 'memorial', track: 'menu-esc-atas' },
         { href: e + 'equipe',   rotulo: 'Equipe',            ic: 'equipe',   track: 'menu-esc-equipe' }
       ]},
@@ -1050,6 +1054,26 @@
     marcarAtivo();
   }
 
+  // 🏢 11/10 (Pedro, 27/09: "quando entro num projeto que já tá no escritório ele ainda abre na página antiga"): a
+  // Visão geral de um projeto medido LIGADO ao Escritório é a Página do projeto de lá (o menu do Escritório nem tem
+  // "Visão geral"). Vale pra toda porta que cai em projeto.html sem vista (painel, e-mail, favorito, "voltar").
+  // Só com as DUAS confirmações: o BANCO diz que está ligado (não a lembrança do navegador) e a página diz que o
+  // projeto está pronto (processando ou com erro, a Visão geral é onde se acompanha e reprocessa).
+  // (a marca desta aba, gravada pela escritorio.html depois de ler o banco, vale como confirmação; a lembrança, não)
+  var ESC_CONFIRMADO = '';
+  function talvezIrProEscritorio() {
+    var id = ESC_CONFIRMADO || (ESC && !ESC_DO_MAPA ? ESC.id : '');
+    if (!id || !UUID_RE.test(id) || window.aiarqProjetoPronto !== true) return;
+    if (!/^projeto(\.html)?$/.test(ARQ)) return;
+    var h = (location.hash || '').replace(/^#/, '');
+    if (h && h !== 'visao') return;
+    location.replace('escritorio.html#/p/' + id + '/capa');
+  }
+  function confirmouEscritorio(id) {
+    ESC_CONFIRMADO = String(id || '');
+    talvezIrProEscritorio();
+  }
+
   // dono do projeto medido: ele está ligado a um projeto do Escritório? (o banco responde pela RLS)
   function descobrirEscritorio() {
     // o menu que nasceu da lembrança do navegador também é conferido (o banco é quem sabe)
@@ -1059,6 +1083,7 @@
         if (!r || r.error) return;                       // falha de leitura não é "não tem": não mexe
         if (!r.data) { if (ESC_DO_MAPA) gravarMapa(JOB, null); return; }   // saiu do Escritório
         var c = { id: r.data.id, nome: r.data.nome, sub: r.data.etapa_atual || '' };
+        confirmouEscritorio(c.id);
         if (!ESC) return aplicarEscritorio(c);
         gravarMapa(JOB, c);                              // já está no menu certo: só atualiza nome/etapa
         var nm = document.getElementById('aiarq-proj-nome');
@@ -1091,7 +1116,10 @@
       if (sub) sub.textContent = ESC ? 'equipe · só leitura' : 'equipe · só leitura · ' + (a.itens || 0) + ' itens';
       tirarItensDoDono();
       // a equipe entra no Escritório pelo projeto dela: o menu vira o do Escritório
-      if (a.escritorio_id) aplicarEscritorio({ id: a.escritorio_id, nome: (window.tituloProjeto || String)(a.nome || 'Projeto') });
+      if (a.escritorio_id) {
+        aplicarEscritorio({ id: a.escritorio_id, nome: (window.tituloProjeto || String)(a.nome || 'Projeto') });
+        confirmouEscritorio(a.escritorio_id);
+      }
     }, function () {});
   }
 
@@ -1233,6 +1261,8 @@
   // API pública, usada pelo dashboard (switchTab chama marcarAtivo/fechar).
   window.aiarqMenu = {
     abrir: abrir, fechar: fechar, marcarAtivo: marcarAtivo,
-    atualizarSelo: atualizarSelo
+    atualizarSelo: atualizarSelo,
+    // a projeto.html chama quando descobre que o projeto está pronto (window.aiarqProjetoPronto)
+    talvezIrProEscritorio: talvezIrProEscritorio
   };
 })();

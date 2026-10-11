@@ -1208,7 +1208,8 @@ async function carregarStatsEntregas(itensJaLidos) {
 
 (async function init() {
   const { data: { session } } = await sb.auth.getSession();
-  if (!session) { window.location.href = 'login.html'; return; }
+  // 11/10 (auditoria NAV-6): sem sessão, o login devolve pra ESTE projeto (antes caía no painel)
+  if (!session) { window.location.href = 'login.html?redirect=' + encodeURIComponent('projeto.html' + location.search + location.hash); return; }
   document.getElementById('gate').classList.add('hidden');
   // 🏢 equipe do Escritório: só leitura (Parte 2, 24/09) — não espera: marca quando a resposta chegar
   try { window.aiarqMarcarSoLeitura && window.aiarqMarcarSoLeitura(jobId); } catch (_) {}
@@ -1455,6 +1456,20 @@ async function carregarStatsEntregas(itensJaLidos) {
   _completarTipo(proj, pmeta);
 
   if (!proj) {
+    // 11/10 (auditoria NAV-12): o servidor RECUSOU (não é da conta nem da equipe) — ex.: o cliente de um escritório
+    // que recebeu este link. Não é "conexão": a saída é o Escritório, onde está o projeto dele.
+    let negado = false;
+    try { const a = window.aiarqAcesso ? await window.aiarqAcesso(jobId) : null; negado = !!(a && a.negado); } catch (_) {}
+    if (negado) {
+      document.querySelector('main').innerHTML = `
+        <div class="text-center py-12">
+          <p class="text-gray-700 font-medium mb-2">Sua conta não tem acesso a esta página do projeto.</p>
+          <p class="text-gray-500 text-sm mb-4">Se um escritório te convidou para acompanhar um projeto, ele está no Escritório.</p>
+          <a href="escritorio.html" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg font-medium no-underline">Abrir o Escritório</a>
+          <a href="dashboard.html" class="ml-2 px-4 py-2 text-sm text-gray-600 hover:text-gray-900 no-underline">Voltar ao painel</a>
+        </div>`;
+      return;
+    }
     document.querySelector('main').innerHTML = `
       <div class="text-center py-12">
         <p class="text-gray-700 font-medium mb-2">Não consegui carregar este projeto.</p>
@@ -1472,6 +1487,11 @@ async function carregarStatsEntregas(itensJaLidos) {
   const statusEfetivo = String(proj.status || '').toLowerCase();
   const emProcesso = (statusEfetivo === 'queued' || statusEfetivo === 'processing');
   const emErro = (statusEfetivo === 'error' || statusEfetivo === 'failed');
+  // 🏢 11/10 (Pedro, 27/09: "quando entro num projeto que já tá no escritório ele ainda abre na página antiga"):
+  // pronto, o menu-lateral.js leva a Visão geral de projeto LIGADO ao Escritório pra Página do projeto de lá (ele
+  // confere a ligação no banco). Processando ou com erro, fica aqui: é onde se acompanha e reprocessa.
+  window.aiarqProjetoPronto = !emProcesso && !emErro;
+  try { if (window.aiarqMenu && window.aiarqMenu.talvezIrProEscritorio) window.aiarqMenu.talvezIrProEscritorio(); } catch (_) {}
 
   // Entregas (Revisar/XLSX/Cronograma/PDF/PPT) só ligam com projeto pronto.
   if (!emProcesso && !emErro) habilitarEntregas();
@@ -2184,6 +2204,8 @@ document.addEventListener('DOMContentLoaded', function () {
 // Voltar/avançar do navegador troca a vista, não recarrega.
 window.addEventListener('hashchange', function () {
   mostrarVista((location.hash || '').replace(/^#/, '') || 'visao');
+  // voltou pra Visão geral (o voltar do navegador): projeto ligado ao Escritório vai pra Página do projeto
+  try { if (window.aiarqMenu && window.aiarqMenu.talvezIrProEscritorio) window.aiarqMenu.talvezIrProEscritorio(); } catch (_) {}
 });
 
 function switchUploadTab(name) {
