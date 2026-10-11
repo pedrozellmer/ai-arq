@@ -221,7 +221,12 @@ jobs:
           # cross-check) e o E12 — só ele trouxe 402 testes, 300 deles sementes
           # de equivalência da régua nova contra a antiga. Mesmo critério: 8000
           # é 86% dos 9314, aguenta até ~10.660 e pega qualquer queda maior que 14%.
-          PISO: 8000
+          # 11/10/2026, 15ª vez: 8000 -> 9200. A colheita foi a 10723 com os
+          # consertos de 08–11/10 (alerta fora das pranchas, acento, pilar pela
+          # seção escrita, selo de contagem, corte do Revit) e a seção AMBIENTE ↔
+          # ÁREA ESCRITA, e o guarda de 75% cobrou 8043. Mesmo critério: 9200 é
+          # 86% dos 10723, aguenta até ~12.260 e pega qualquer queda maior que 14%.
+          PISO: 9200
         run: |
           N=$(python -m pytest tests/ -q --collect-only 2>/dev/null | tail -1 | grep -oE '^[0-9]+' || echo 0)
           echo "testes colhidos: $N (piso: $PISO)"
