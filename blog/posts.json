@@ -196,7 +196,7 @@
           "description": "A observação sobre totais que não fecham com as parcelas vem da leitura diária de pranchas pelo AI.arq, que rebaixa total divergente pra 'estimado' por regra."
         }
       ],
-      "cta": "Pra montar o quadro sem medir ambiente por ambiente na mão: sobe seu CAD (DXF de preferência) no AI.arq e receba a planilha de quantitativos com as áreas que a prancha permite medir, separadas entre medido e estimado. Grátis durante o beta, quantos projetos quiser, sem cartão."
+      "cta": "Pra montar o quadro sem medir ambiente por ambiente na mão: sobe seu CAD (DWG ou DXF) no AI.arq e receba a planilha de quantitativos com as áreas que a prancha permite medir, separadas entre medido e estimado. Grátis durante o beta, quantos projetos quiser, sem cartão."
     },
     {
       "slug": "medir-area-e-contar-blocos-no-autocad",
@@ -311,7 +311,7 @@
           "description": "Recurso introduzido no AutoCAD 2022; paleta Contagem e COUNTTABLE."
         }
       ],
-      "cta": "Sabe medir na mão — agora deixa a prancha inteira com a gente. Sobe seu projeto (DXF de preferência) no AI.arq e receba a planilha de quantitativos por disciplina, com o que veio MEDIDO da geometria separado do que é estimativa. Grátis durante o beta, quantos projetos quiser, sem cartão."
+      "cta": "Sabe medir na mão — agora deixa a prancha inteira com a gente. Sobe seu projeto (DWG ou DXF) no AI.arq e receba a planilha de quantitativos por disciplina, com o que veio MEDIDO da geometria separado do que é estimativa. Grátis durante o beta, quantos projetos quiser, sem cartão."
     },
     {
       "slug": "boletim-de-medicao-de-obra-modelo-excel",
@@ -389,7 +389,7 @@
           "publisher": "PROAD — Instituto Federal Catarinense"
         }
       ],
-      "cta": "A coluna \"prevista\" do boletim é o quantitativo da obra — e essa parte você não precisa montar na mão. Sobe seu projeto (DXF de preferência) no AI.arq e receba a planilha de quantitativos por disciplina, com memória de origem em cada item medido: o que veio do CAD chega separado do que é estimativa. Grátis durante o beta, quantos projetos quiser, sem cartão."
+      "cta": "A coluna \"prevista\" do boletim é o quantitativo da obra — e essa parte você não precisa montar na mão. Sobe seu projeto (DWG ou DXF) no AI.arq e receba a planilha de quantitativos por disciplina, com memória de origem em cada item medido: o que veio do CAD chega separado do que é estimativa. Grátis durante o beta, quantos projetos quiser, sem cartão."
     },
     {
       "slug": "financiamento-caixa-construcao-documentos-pci",
@@ -458,7 +458,7 @@
           "description": "Formulários PCI/PRM/PLS pra download e a documentação necessária."
         }
       ],
-      "cta": "A PLS pede o que todo financiamento pede: saber as quantidades da obra antes de assinar. Sobe seu CAD (DXF de preferência) no AI.arq e receba a planilha de quantitativos por disciplina, separando o que foi medido do que é estimativa. Grátis durante o beta, quantos projetos quiser, sem cartão."
+      "cta": "A PLS pede o que todo financiamento pede: saber as quantidades da obra antes de assinar. Sobe seu CAD (DWG ou DXF) no AI.arq e receba a planilha de quantitativos por disciplina, separando o que foi medido do que é estimativa. Grátis durante o beta, quantos projetos quiser, sem cartão."
     },
     {
       "slug": "como-fazer-planilha-de-quantitativos-de-obra",
@@ -2491,7 +2491,7 @@
       "description": "Áreas, comprimentos e contagens vêm da própria geometria: como extrair quantitativo do DWG sem BIM, o que fica só estimado e qual formato mandar.",
       "keywords": "extrair quantitativo do dwg, quantitativo automático dwg sem bim, levantamento de quantitativos do dxf, quantitativo dwg, medir área dxf, quantitativo sem revit, extrair quantitativo cad",
       "category": "Quantitativos",
-      "intro": "Você tem o DWG na mão. O projeto está desenhado, cotado, com layers organizados e blocos de esquadria espalhados pela planta. Mas na hora de levantar o quantitativo, a rotina ainda é a de sempre: abrir o CAD, medir polilinha por polilinha, contar bloco por bloco, anotar numa planilha e torcer para não pular nada. Modelar tudo de novo em BIM para \"extrair automático\" não é opção — dá um trabalho que muitas vezes não cabe no prazo do orçamento.\n\nA boa notícia é que o DWG já guarda quase tudo que você precisa medir. Ele não é uma imagem: é um banco de dados de geometria. Cada parede é uma linha com coordenadas reais, cada ambiente é um polígono com área calculável, cada porta é um bloco que dá para contar. O que falta não é o dado — é ler esse dado sem abrir o desenho no braço.\n\nEste post é sobre exatamente isso: como o quantitativo pode sair do DWG/DXF de forma automática, sem BIM e sem Revit. Vamos separar com honestidade o que a geometria permite medir de verdade do que continua sendo estimativa, explicar por que exportar o DXF muda o jogo e mostrar onde entra a SINAPI como vocabulário. Nada de mágica: só o que o arquivo realmente carrega.",
+      "intro": "Você tem o DWG na mão. O projeto está desenhado, cotado, com layers organizados e blocos de esquadria espalhados pela planta. Mas na hora de levantar o quantitativo, a rotina ainda é a de sempre: abrir o CAD, medir polilinha por polilinha, contar bloco por bloco, anotar numa planilha e torcer para não pular nada. Modelar tudo de novo em BIM para \"extrair automático\" não é opção — dá um trabalho que muitas vezes não cabe no prazo do orçamento.\n\nA boa notícia é que o DWG já guarda quase tudo que você precisa medir. Ele não é uma imagem: é um banco de dados de geometria. Cada parede é uma linha com coordenadas reais, cada ambiente é um polígono com área calculável, cada porta é um bloco que dá para contar. O que falta não é o dado — é ler esse dado sem abrir o desenho no braço.\n\nEste post é sobre exatamente isso: como o quantitativo pode sair do DWG/DXF de forma automática, sem BIM e sem Revit. Vamos separar com honestidade o que a geometria permite medir de verdade do que continua sendo estimativa, explicar quando vale exportar o DXF e mostrar onde entra a SINAPI como vocabulário. Nada de mágica: só o que o arquivo realmente carrega.",
       "sections": [
         {
           "h2": "Por que o DWG guarda a geometria que dá para medir",
@@ -2523,7 +2523,7 @@
         },
         {
           "h2": "Juntando tudo: do DWG à planilha, sem modelar em BIM",
-          "body": "Recapitulando o caminho, sem BIM e sem Revit no meio: o DWG já é geometria, não imagem; layers, blocos e contornos guardam áreas, comprimentos e contagens; um processamento automático lê esses dados e soma o que você somaria à mão, com a vantagem de manter o vínculo com o desenho; exportar um DXF ajuda a leitura a ficar mais completa; e a SINAPI dá nome padronizado aos itens em que há correspondência.\n\nO ganho concreto não é \"substituir o orçamentista\" — é tirar do profissional as horas de trabalho braçal e de baixo valor (clicar em cada parede, contar bloco a bloco) e devolver um levantamento já organizado, onde o que foi medido está separado do que foi estimado. O julgamento técnico, a revisão das premissas e a precificação continuam sendo humanos. O que muda é o ponto de partida: em vez de uma folha em branco, você começa de uma planilha já preenchida a partir do desenho, com cada número rastreável até o elemento que o originou.\n\nÉ exatamente essa a ideia por trás do **AI.arq**. Você sobe o CAD — PDF, DWG ou DXF —, a IA lê as pranchas em minutos e devolve uma planilha de quantitativos por disciplina, com referência SINAPI nos itens em que há correspondência, distinguindo claramente o que foi **medido** da geometria do que ficou como **estimativa**. Sem modelar em BIM, sem Revit: parte do desenho que você já tem. No beta, é grátis — quantos projetos quiser — em ai.arq.br. Vale subir uma planta que você conheça bem e conferir os números contra o seu próprio levantamento."
+          "body": "Recapitulando o caminho, sem BIM e sem Revit no meio: o DWG já é geometria, não imagem; layers, blocos e contornos guardam áreas, comprimentos e contagens; um processamento automático lê esses dados e soma o que você somaria à mão, com a vantagem de manter o vínculo com o desenho; exportar um DXF é a saída quando o DWG não abre; e a SINAPI dá nome padronizado aos itens em que há correspondência.\n\nO ganho concreto não é \"substituir o orçamentista\" — é tirar do profissional as horas de trabalho braçal e de baixo valor (clicar em cada parede, contar bloco a bloco) e devolver um levantamento já organizado, onde o que foi medido está separado do que foi estimado. O julgamento técnico, a revisão das premissas e a precificação continuam sendo humanos. O que muda é o ponto de partida: em vez de uma folha em branco, você começa de uma planilha já preenchida a partir do desenho, com cada número rastreável até o elemento que o originou.\n\nÉ exatamente essa a ideia por trás do **AI.arq**. Você sobe o CAD — PDF, DWG ou DXF —, a IA lê as pranchas em minutos e devolve uma planilha de quantitativos por disciplina, com referência SINAPI nos itens em que há correspondência, distinguindo claramente o que foi **medido** da geometria do que ficou como **estimativa**. Sem modelar em BIM, sem Revit: parte do desenho que você já tem. No beta, é grátis — quantos projetos quiser — em ai.arq.br. Vale subir uma planta que você conheça bem e conferir os números contra o seu próprio levantamento."
         }
       ],
       "cta": "Tem um DWG ou DXF na mão e quer ver o quantitativo sair do desenho, sem modelar nada em BIM? Suba o arquivo no AI.arq: a IA lê as pranchas e devolve uma planilha por disciplina com referência SINAPI nos itens em que há correspondência, separando o que foi medido do que foi estimado. No beta, é grátis — quantos projetos quiser — em ai.arq.br. Teste com uma planta que você já conhece e compare com o seu levantamento.",
@@ -2827,7 +2827,7 @@
       "sections": [
         {
           "h2": "Por que o jeito de exportar muda o quantitativo",
-          "body": "Na nossa base, o motivo mais comum de DWG que não converte são os \"objetos inteligentes\" do AutoCAD Architecture e do MEP, que nenhum conversor abre direto — os números por formato estão em <a href=\"/blog/posts/dwg-ou-pdf-quantitativo-o-que-os-dados-mostram.html\">DWG, DXF ou PDF: o que os nossos dados mostram</a>.\n\nE um arquivo que abre pode trazer junto o que não é planta: vista 3D, isométrico, vínculos em arquivos separados. Daí a regra geral deste guia: exporte só o que você quer quantificar, em 2D, num arquivo só — e, se puder, em DXF."
+          "body": "Na nossa base, o motivo mais comum de DWG que não converte são os \"objetos inteligentes\" do AutoCAD Architecture e do MEP, que nenhum conversor abre direto — os números por formato estão em <a href=\"/blog/posts/dwg-ou-pdf-quantitativo-o-que-os-dados-mostram.html\">DWG, DXF ou PDF: o que os nossos dados mostram</a>.\n\nE um arquivo que abre pode trazer junto o que não é planta: vista 3D, isométrico, vínculos em arquivos separados. Daí a regra geral deste guia: exporte só o que você quer quantificar, em 2D, num arquivo só."
         },
         {
           "h2": "Revit: exportar a vista certa",
@@ -2843,14 +2843,14 @@
         },
         {
           "h2": "Checklist antes de enviar",
-          "body": "- Só as vistas 2D que você quer quantificar, sem 3D nem isométrico.\n- Um arquivo só, com os vínculos dentro.\n- Objetos inteligentes desfeitos (EXPORTTOAUTOCAD), se o desenho veio do AutoCAD Architecture ou MEP.\n- Esquadrias, peças e equipamentos desenhados como blocos, não como linhas soltas — é assim que dá pra contar quantos são.\n- DXF quando der; DWG também serve."
+          "body": "- Só as vistas 2D que você quer quantificar, sem 3D nem isométrico.\n- Um arquivo só, com os vínculos dentro.\n- Objetos inteligentes desfeitos (EXPORTTOAUTOCAD), se o desenho veio do AutoCAD Architecture ou MEP.\n- Esquadrias, peças e equipamentos desenhados como blocos, não como linhas soltas — é assim que dá pra contar quantos são.\n- DWG ou DXF, os dois servem; DXF se o DWG voltar com erro."
         },
         {
           "h2": "E se só tiver o PDF?",
           "body": "PDF vetorial também é lido — a gente mede a geometria quando dá e a IA lê textos e legendas —, mas tudo que vem de PDF sai como estimativa: é regra nossa não selar número de PDF como medido, porque a escala dele vem de uma declaração (o carimbo). Planta escaneada não mede. Se der, peça o DWG ou o DXF a quem fez o projeto; pra ler o PDF enquanto isso, veja <a href=\"/blog/posts/como-ler-pdf-planta-arquitetonica.html\">como ler um PDF de planta arquitetônica</a>."
         }
       ],
-      "cta": "Exportou? Sobe o DXF no AI.arq e receba a planilha de quantitativos por disciplina, com o que veio MEDIDO da geometria separado do que é estimativa. Grátis durante o beta, quantos projetos quiser, sem cartão.",
+      "cta": "Exportou? Sobe o arquivo no AI.arq e receba a planilha de quantitativos por disciplina, com o que veio MEDIDO da geometria separado do que é estimativa. Grátis durante o beta, quantos projetos quiser, sem cartão.",
       "sources": [
         {
           "type": "official",

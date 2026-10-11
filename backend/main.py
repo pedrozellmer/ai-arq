@@ -6535,8 +6535,8 @@ def _build_welcome_email(name: str = "", falta_cadastro: bool = False,
         '<b style="color:#0F172A;font-size:15px;">Como funciona</b>'
         '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin-top:6px;">'
         + _passo(1, "Envie o projeto",
-                 "DXF é o formato que dá o melhor resultado (medimos a geometria exata). "
-                 "DWG e PDF também funcionam.")
+                 "DWG e DXF dão o melhor resultado (medimos a geometria exata). "
+                 "PDF também funciona, e sai como estimativa.")
         + _passo(2, "A IA mede e monta a planilha",
                  "Itens por disciplina, com referências SINAPI onde há correspondência.")
         + _passo(3, "Revise e baixe",
@@ -15461,7 +15461,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                             f"1. Abra o arquivo no seu CAD\n"
                             f"2. Salvar Como → DXF (versão 2013)\n"
                             f"3. Suba o DXF aqui\n\n"
-                            f"O DXF é o formato que a gente mede melhor. Se preferir, o PDF "
+                            f"O DXF é o formato de troca do CAD: costuma abrir quando o DWG não abre. Se preferir, o PDF "
                             f"vetorial da prancha também serve — mas aí sai como estimativa."
                         )
                     # COMPLEMENTO (/add-file) que falha NÃO pode derrubar o projeto que

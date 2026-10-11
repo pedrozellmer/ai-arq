@@ -642,7 +642,7 @@
       'Envie o DXF aqui',
     ],
     botao: 'Enviar o DXF',
-    acao: 'DXF é o formato que a gente lê melhor — nele a medição sai do desenho, não de estimativa.',
+    acao: 'O DXF é o formato de troca do CAD: costuma abrir quando o DWG não abre.',
   },
 ];
   window.aiArqReceitaPara = function (txt) {
