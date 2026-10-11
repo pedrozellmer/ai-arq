@@ -172,6 +172,10 @@ class TextAnnotation:
     ancora_dx: float = 0.0
     #: a largura da caixa do MTEXT (0 = sem caixa): o texto não passa dela
     largura_da_caixa: float = 0.0
+    #: veio de um ATTDEF solto no modelo (definição de atributo FORA de bloco: o
+    #: CAD desenha o TAG na tela). Marca a origem, pra quem consome poder separar
+    #: sem reler o arquivo. Ver `_tag_do_attdef_solto`.
+    de_attdef: bool = False
 
 
 @dataclass
@@ -966,7 +970,11 @@ class DXFExtraction:
             # 🪤 Não duplica: cada região aceita 1 rótulo e cada rótulo casa com
             # UMA região (a menor que o contém) — se a mesma área existe como
             # hachura E como contorno, o texto vai pra uma só.
-            _pares = _casar(self.texts, list(self.polygon_areas) + list(self.hatches))
+            # 🩸 11/10, A/B no acervo: a ETIQUETA solta (ATTDEF: "PA7", "B01") não é
+            # rótulo de região — caía dentro da hachura do próprio símbolo ("PA7" →
+            # 0,26 m²) ou do cômodo onde a porta está (507 linhas novas em 12 arquivos).
+            _pares = _casar([_t for _t in self.texts if not getattr(_t, "de_attdef", False)],
+                            list(self.polygon_areas) + list(self.hatches))
         except Exception:
             _pares = []
         if _pares:
@@ -1020,24 +1028,31 @@ class DXFExtraction:
             lines.append("")
         # 25/09: SIGLA → NOME pela legenda da própria prancha (ver
         # `siglas_da_legenda`) — antes a IA adivinhava e trocava TH/CH/CZ
-        _sig = siglas_da_legenda(self.texts)
+        # 🩸 11/10, A/B no acervo: com a etiqueta solta entre os textos, o código da
+        # coluna "Ref." do quadro virava sigla e pegava a descrição da linha vizinha
+        # ("PM = JANELAS DE ALUMÍNIO NATURAL"; 40 linhas em 9 arquivos). A etiqueta
+        # não é sigla de legenda.
+        _sig = siglas_da_legenda([_t for _t in self.texts if not getattr(_t, "de_attdef", False)])
         if _sig:
             lines.append("SIGLAS DA LEGENDA DESTA PRANCHA (o projetista escreveu o nome de cada")
             lines.append("  sigla — use ESTE nome na descrição do item; não traduza a sigla por conta):")
             for _k, _v in _sig.items():
                 lines.append(f"  {_k} = {_v}")
             lines.append("")
-        texts_by_layer = self.get_texts_by_layer()
         # 25/09: texto só de corte/detalhe sai do ×N (ver
-        # `_marcar_textos_repetidos_da_planta`) e vem listado à parte, no fim
+        # `_marcar_textos_repetidos_da_planta`) e vem listado à parte, no fim.
+        # 11/10: a ETIQUETA solta (ATTDEF fora de bloco) vem num bloco só dela —
+        # 🩸 A/B no acervo: misturada à camada, ela disputava o teto de 50 e 4
+        # textos que a IA lia deixaram de ser listados em 2 arquivos.
         _txt_vista: dict[str, list] = defaultdict(list)
-        if any(getattr(_t, "fora_da_contagem", False) for _t in self.texts):
-            texts_by_layer = defaultdict(list)
-            for _t in self.texts:
-                (_txt_vista if getattr(_t, "fora_da_contagem", False)
-                 else texts_by_layer)[_t.layer].append(_t.text)
-            texts_by_layer = dict(texts_by_layer)
-        if texts_by_layer or _txt_vista:
+        _tags_soltas: dict[str, list] = defaultdict(list)
+        texts_by_layer = defaultdict(list)
+        for _t in self.texts:
+            (_txt_vista if getattr(_t, "fora_da_contagem", False)
+             else _tags_soltas if getattr(_t, "de_attdef", False)
+             else texts_by_layer)[_t.layer].append(_t.text)
+        texts_by_layer = dict(texts_by_layer)
+        if texts_by_layer or _txt_vista or _tags_soltas:
             try:
                 from engine_rules import (contar_textos_repetidos as _contar,
                                           texto_conta_objeto as _conta_obj)
@@ -1071,6 +1086,24 @@ class DXFExtraction:
                 if len(contagem) > 50:
                     # honestidade: a IA precisa saber que a lista foi cortada
                     lines.append(f"    (+{len(contagem) - 50} texto(s) desta camada não listado(s))")
+            if _tags_soltas and _contar is not None:
+                _linhas_tags = []
+                for layer, _tg in sorted(_tags_soltas.items()):
+                    # o código de porta e janela tem 2 letras ("P1", "J3"): aqui valem
+                    _ct = _contar(_tg, min_len=2)
+                    if _ct:
+                        _linhas_tags.append(
+                            f"  [{layer}]: " + "; ".join(
+                                t + (f" ×{n}" if (n > 1 and _conta_obj(t)) else "")
+                                for t, n in _ct[:_TAGS_SOLTAS_MAX])
+                            + (f" (+{len(_ct) - _TAGS_SOLTAS_MAX} não listada(s))"
+                               if len(_ct) > _TAGS_SOLTAS_MAX else ""))
+                if _linhas_tags:
+                    lines.append("  ETIQUETAS SOLTAS NO DESENHO (o código que o CAD mostra onde o bloco da")
+                    lines.append("   etiqueta foi explodido — porta, janela, eixo, nível. Lido do arquivo como")
+                    lines.append("   os textos acima, e o ×N tem a MESMA ressalva: conta a etiqueta, não a")
+                    lines.append("   peça — o quadro de esquadrias e o desenho de detalhe repetem o código):")
+                    lines.extend(_linhas_tags)
             if _txt_vista:
                 lines.append("  TEXTOS QUE ESTÃO SÓ EM CORTE/ELEVAÇÃO/DETALHE (a MESMA peça da planta")
                 lines.append("   vista de novo — servem de ESPECIFICAÇÃO; NÃO conte nem some com a")
@@ -5774,6 +5807,33 @@ def _texto_do_text(e) -> str:
         return (e.dxf.get("text", "") or "").strip()
 
 
+#: etiquetas soltas distintas listadas por camada no prompt (acervo: o arquivo
+#: com mais tem 46 distintas)
+_TAGS_SOLTAS_MAX = 80
+
+
+def _tag_do_attdef_solto(e) -> str:
+    """O que o CAD DESENHA pra um ATTDEF de 1º nível (fora de bloco): o TAG.
+    "" quando o atributo é invisível (bit 1 do grupo 70) ou não tem tag.
+
+    🩸 11/10/2026, medido no acervo — a etiqueta de porta e janela ("PA6",
+    "JA-09") de 4 jobs era ATTDEF solto no modelo: o que sobra quando o bloco
+    da etiqueta é explodido. O CAD mostra o tag como um texto; o motor só lia
+    TEXT e MTEXT, e a coluna "Ref." do quadro de esquadrias chegava vazia. Num
+    arquivo, lendo os tags, as 29 linhas do quadro fecham com a contagem das
+    etiquetas desenhadas (quantidade escrita = etiquetas fora do quadro − 1,
+    a do desenho de detalhe de cada tipo). No acervo: 1.740 ATTDEF soltos em
+    44 arquivos de 19 jobs, 1 invisível.
+    ATTDEF DENTRO de definição de bloco é molde, não desenho: quem aparece na
+    folha é o ATTRIB do INSERT, lido à parte. Nunca levanta."""
+    try:
+        if int(e.dxf.get("flags", 0) or 0) & 1:
+            return ""
+        return " ".join(str(e.dxf.get("tag", "") or "").split())
+    except Exception:
+        return ""
+
+
 def _angulo_do_texto(e) -> float:
     """O ângulo de um TEXT/MTEXT, em graus de 0 a 360 (0 = horizontal). No MTEXT
     vale a direção do texto (`text_direction`) quando ela existe — é o que o
@@ -10467,6 +10527,24 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
                 ))
         except Exception:
             continue
+
+    # O ATTDEF solto no modelo é texto na folha: o tag (ver `_tag_do_attdef_solto`).
+    # Chave: ATTDEF_SOLTO_E_TEXTO=0 desliga sem deploy.
+    if os.environ.get("ATTDEF_SOLTO_E_TEXTO", "1") != "0":
+        for attdef in msp.query("ATTDEF"):
+            try:
+                content = _tag_do_attdef_solto(attdef)
+                if content:
+                    texts.append(TextAnnotation(
+                        layer=attdef.dxf.layer,
+                        text=content,
+                        position=(attdef.dxf.insert.x, attdef.dxf.insert.y),
+                        height=attdef.dxf.get("height", 0) or 0,
+                        rotation=_angulo_do_texto(attdef),
+                        de_attdef=True,
+                    ))
+            except Exception:
+                continue
 
     # 🩸 26/09/2026, job 32a27efc: o símbolo desenhado na LEGENDA (ver
     # `amostras_de_legenda`). Calcula aqui, com as posições de ANTES da leitura
