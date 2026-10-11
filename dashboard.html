@@ -1952,7 +1952,7 @@
             _badge = '<span class="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800">⏳ Processando</span>';
           }
           return `
-            <a href="projeto.html?job_id=${p.job_id}" class="flex items-center gap-3 px-5 py-3 hover:bg-gray-50 no-underline">
+            <a href="${escapeH(destinoDoProjeto(p.job_id, _st === 'done'))}" data-abrir="${escapeH(p.job_id)}" data-pronto="${_st === 'done' ? 1 : 0}" class="flex items-center gap-3 px-5 py-3 hover:bg-gray-50 no-underline">
               <span class="ico-tile p" style="--c1:${_ti[0]};--c2:${_ti[1]}" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 21V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v16M15 9h4a1 1 0 0 1 1 1v11M3 21h18M8 8h3M8 12h3M8 16h3"/></svg></span>
               <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2 min-w-0">
@@ -2354,6 +2354,18 @@
           const soDeFora = !fora.error && (fora.data || []).length > 0 && !meus.error && (meus.count || 0) === 0 && !equipe.error && (equipe.count || 0) === 0;
           if (soDeFora) { sessionStorage.setItem('aiarq_escritorio_levou', '1'); location.replace('escritorio.html'); }
         }
+      } catch (_) {}
+    })();
+    // 🏢 11/10 (Pedro, 27/09: "quando entro num projeto que já tá no escritório ele ainda abre na página antiga"):
+    // quais projetos medidos DESTA conta estão ligados a um projeto do Escritório — o clique vai pra Página do
+    // projeto de lá. Acessório: falhou, os cliques seguem pra página do projeto medido (que também leva, depois de
+    // o menu-lateral.js confirmar a ligação no banco).
+    (async () => {
+      try {
+        const r = await sbClient.from('escritorio_projetos').select('id,job_id').eq('dono', currentUser.id).not('job_id', 'is', null);
+        if (r.error || !Array.isArray(r.data)) return;
+        r.data.forEach((x) => { if (x.job_id && /^[0-9a-f-]{36}$/i.test(String(x.id || ''))) ESC_POR_JOB[x.job_id] = x.id; });
+        ligarPortasDoEscritorio();
       } catch (_) {}
     })();
 
@@ -5520,6 +5532,20 @@
     }
   }
 
+  // 🏢 11/10: projeto medido PRONTO e ligado ao Escritório abre a Página do projeto de lá (o mapa é lido do banco
+  // no checkAuth). Em erro, processando ou fora do Escritório, a página do projeto medido, como sempre.
+  var ESC_POR_JOB = {};
+  function destinoDoProjeto(job, pronto) {
+    const id = ESC_POR_JOB[job];
+    return id && pronto ? 'escritorio.html#/p/' + id + '/capa' : 'projeto.html?job_id=' + encodeURIComponent(job);
+  }
+  // o mapa pode chegar depois da lista desenhada: acerta os links que já estão na tela
+  function ligarPortasDoEscritorio() {
+    document.querySelectorAll('a[data-abrir]').forEach((a) => {
+      a.setAttribute('href', destinoDoProjeto(a.getAttribute('data-abrir'), a.getAttribute('data-pronto') === '1'));
+    });
+  }
+
   function renderProjectCard(p) {
     const created = p.created_at ? window.fmtBR(p.created_at,
       { day:'2-digit', month:'2-digit', year:'numeric',
@@ -5561,7 +5587,7 @@
       ? 'pj-linha group cursor-pointer rounded-xl border border-gray-200 bg-white hover:border-indigo-300 hover:shadow-sm transition'
       : 'pj-linha rounded-xl border border-gray-200 bg-white opacity-90';
     const onclickAttr = openable
-      ? `onclick="if(!event.target.closest('a,button')){window.location.href='projeto.html?job_id=${escProj(p.job_id)}'}"`
+      ? `onclick="if(!event.target.closest('a,button')){window.location.href=destinoDoProjeto('${escProj(p.job_id)}',${done})}"`
       : '';
 
     // Subtítulo: cliente (se houver) OU tipologia OU código.
@@ -5571,7 +5597,7 @@
 
     // Ações à direita: Abrir (destaque) sempre que abrível; Revisar/XLSX só p/ pronto.
     const actions = openable ? `
-        <a href="projeto.html?job_id=${escProj(p.job_id)}" onclick="event.stopPropagation()"
+        <a href="${escProj(destinoDoProjeto(p.job_id, done))}" data-abrir="${escProj(p.job_id)}" data-pronto="${done ? 1 : 0}" onclick="event.stopPropagation()"
            class="inline-flex items-center px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold no-underline transition shrink-0">Abrir</a>
         ${done ? `<a href="revisao.html?job_id=${escProj(p.job_id)}" onclick="event.stopPropagation()"
            class="hidden sm:inline text-xs font-semibold text-amber-600 hover:text-amber-800 no-underline shrink-0">Revisar</a>
