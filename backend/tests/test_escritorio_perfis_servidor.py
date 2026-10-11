@@ -78,6 +78,8 @@ class BancoFiel:
                 ok = atual is not None
             elif v.startswith("gte."):
                 ok = str(atual or "") >= v[4:]
+            elif v.startswith("gt."):
+                ok = float(atual or 0) > float(v[3:])
             else:
                 raise AssertionError("filtro não previsto: %s=%s" % (k, v))
             if not ok:
@@ -242,11 +244,37 @@ def test_convite_de_cliente_grava_o_papel_sem_pasta_sem_baixar_e_com_o_texto_del
     assert "acompanhar o projeto" in enviados[0]["html"] and "trabalhar" not in enviados[0]["html"]
 
 
-def test_controle_convite_sem_perfil_continua_sendo_da_equipe():
+def test_controle_convite_de_equipe_com_o_perfil_escrito():
     b, enviados, _ = montar(DONA, "dono")
-    r = esc.convidar(PROJ, REQ, {"email": "equipe@exemplo.com"})
+    r = esc.convidar(PROJ, REQ, {"email": "equipe@exemplo.com", "perfil": "equipe"})
     novo = [m for m in b.t["escritorio_membros"] if m.get("email") == "equipe@exemplo.com"][0]
     assert r["perfil"] == "equipe" and novo["papel"] == "freela" and "trabalhar" in enviados[0]["html"]
+
+
+def test_convite_novo_sem_perfil_e_recusado_e_nada_e_gravado():
+    """🩸 11/10 (auditoria ADM-1): convite NOVO sem perfil virava EQUIPE. A tela tirava o perfil no "Reenviar" e, com o
+    e-mail corrigido (endereço novo), o cliente entrava como equipe: tarefas, atas, quantitativo e edição na pasta."""
+    b, enviados, _ = montar(DONA, "dono")
+    antes = len(b.t["escritorio_membros"])
+    with pytest.raises(HTTPException) as e:
+        esc.convidar(PROJ, REQ, {"email": "cliente-corrigido@exemplo.com", "nome": "Cliente"})
+    assert e.value.status_code == 400 and "perfil" in e.value.detail
+    assert len(b.t["escritorio_membros"]) == antes and not enviados
+
+
+def test_o_cenario_do_reenvio_com_email_corrigido_nao_cria_equipe():
+    """O caminho inteiro do ADM-1: a cliente foi convidada com o e-mail errado; "reenviar" pro e-mail CERTO sem o
+    perfil (o que a tela mandava) não cria ninguém — e o convite errado segue cliente, pra admin cancelar."""
+    b, enviados, _ = montar(DONA, "dono")
+    esc.convidar(PROJ, REQ, {"email": "errado@exemplo.com", "perfil": "cliente"})
+    with pytest.raises(HTTPException):
+        esc.convidar(PROJ, REQ, {"email": "certo@exemplo.com"})
+    papeis = {m.get("email"): m.get("papel") for m in b.t["escritorio_membros"]}
+    assert papeis.get("errado@exemplo.com") == "cliente" and "certo@exemplo.com" not in papeis
+    assert "freela" not in [m.get("papel") for m in b.t["escritorio_membros"] if m.get("email") != EQUIPE["email"]]
+    # controle: o reenvio de verdade (MESMO e-mail, sem perfil) continua valendo e mantém o perfil
+    esc.convidar(PROJ, REQ, {"email": "errado@exemplo.com"})
+    assert {m.get("email"): m.get("papel") for m in b.t["escritorio_membros"]}["errado@exemplo.com"] == "cliente"
 
 
 def test_convite_de_fornecedor_guarda_a_subpasta_conferida_no_drive():
@@ -864,12 +892,31 @@ def test_404_so_vale_como_ja_saiu_se_a_conta_enxerga_a_pasta(enxerga):
     g = _pastas()
     g.tirar["PASTA_PROJ"] = 404
     if not enxerga:
+        # 11/10 (auditoria SERV-1): pasta que o Google diz que não existe pra esta conta — o projeto continua NÃO
+        # sendo apagado calado, mas deixou de ser "tente de novo" pra sempre: a admin é avisada (428) e confirma
         del g.pastas["PASTA_PROJ"]
         with pytest.raises(HTTPException) as e:
             ed.projeto_apagar(PROJ, REQ)
-        assert e.value.status_code == 502 and b.t["escritorio_projetos"]
+        assert e.value.status_code == 428 and "excluída de vez" in e.value.detail and b.t["escritorio_projetos"]
+        assert ed.projeto_apagar(PROJ, REQ, pasta_sumiu=1)["apagado"] is True and not b.t["escritorio_projetos"]
     else:
         assert ed.projeto_apagar(PROJ, REQ)["apagado"] is True and not b.t["escritorio_projetos"]
+
+
+def test_soluco_do_google_ao_olhar_a_pasta_nao_vira_pasta_sumida():
+    """SERV-1, o outro lado: 404 ao tirar + o Google FORA DO AR ao olhar a pasta = não sei. Continua 502 (tentar de
+    novo), e nem a confirmação da admin apaga — só o 404 da própria pasta diz que ela não existe."""
+    b, _, _ = montar(DONA, "dono")
+    b.t["escritorio_drive_permissoes"].append({"id": "dp-1", "projeto_id": PROJ, "membro_id": M_EQ,
+                                               "email": EQUIPE["email"], "pasta_id": "PASTA_PROJ",
+                                               "permission_id": "perm-eq", "ja_existia": False})
+    g = _pastas()
+    g.tirar["PASTA_PROJ"] = 404
+    g.erro.add("PASTA_PROJ")
+    for confirmou in (0, 1):
+        with pytest.raises(HTTPException) as e:
+            ed.projeto_apagar(PROJ, REQ, pasta_sumiu=confirmou)
+        assert e.value.status_code == 502 and b.t["escritorio_projetos"]
 
 
 def test_sem_conexao_com_o_drive_e_acesso_a_tirar_pede_pra_reconectar_e_nao_apaga():
@@ -1117,3 +1164,183 @@ def test_dois_clientes_cada_resposta_avisa_a_admin():
     esc._USUARIO = lambda r: cli2
     r = esc.responder_emissao(E1, REQ, {"tipo": "revisao", "nota": "falta a tomada da ilha"})
     assert r["aviso_enviado"] is True and len(enviados) == 2 and enviados[1]["assunto"].startswith("Cliente pediu revisão")
+
+
+# ══ 11/10 — 2ª auditoria do Escritório (27/09): os médios do SERVIDOR ══
+E2 = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeee2"
+
+
+def _duas_revisoes(b, r01_pra_mim=True):
+    """O mesmo arquivo emitido duas vezes: R00 mandada pro cliente e, se pedido, a R01 também."""
+    b.t["escritorio_emissoes"] += [
+        {"id": E1, "projeto_id": PROJ, "arquivo_id": "ARQ_PLANTA", "copia_id": "COPIA0", "arquivo_nome": "Planta.pdf",
+         "copia_nome": "Planta_R00.pdf", "revisao": 0},
+        {"id": E2, "projeto_id": PROJ, "arquivo_id": "ARQ_PLANTA", "copia_id": "COPIA1", "arquivo_nome": "Planta.pdf",
+         "copia_nome": "Planta_R01.pdf", "revisao": 1}]
+    b.t["escritorio_emissao_destinos"].append(
+        {"emissao_id": E1, "projeto_id": PROJ, "membro_id": M_CLI, "permission_id": "p0"})
+    if r01_pra_mim:
+        b.t["escritorio_emissao_destinos"].append(
+            {"emissao_id": E2, "projeto_id": PROJ, "membro_id": M_CLI, "permission_id": "p1"})
+
+
+def test_revisao_substituida_nao_aceita_resposta_e_a_nova_aceita():
+    """BANCO-3: o cliente aprovava a R00 com a R01 na mão, e a admin recebia "aprovado" da versão errada."""
+    b, enviados, _ = montar(CLI, "cliente")
+    membro(b, M_CLI, "cliente", CLI)
+    _duas_revisoes(b)
+    with pytest.raises(HTTPException) as e:
+        esc.responder_emissao(E1, REQ, {"tipo": "aprovado"})
+    assert e.value.status_code == 409 and "R01" in e.value.detail
+    assert b.t["escritorio_emissao_eventos"] == [] and not enviados          # nada gravado, ninguém avisado
+    assert esc.responder_emissao(E2, REQ, {"tipo": "aprovado"})["ok"] is True  # controle: a mais nova responde
+
+
+def test_controle_revisao_nova_que_nao_foi_pra_ele_nao_fecha_a_antiga():
+    b, _, _ = montar(CLI, "cliente")
+    membro(b, M_CLI, "cliente", CLI)
+    _duas_revisoes(b, r01_pra_mim=False)
+    assert esc.responder_emissao(E1, REQ, {"tipo": "aprovado"})["ok"] is True
+    # a R01 foi mandada e depois RETIRADA dele (permission_id nulo): também não conta
+    b.t["escritorio_emissao_destinos"].append(
+        {"emissao_id": E2, "projeto_id": PROJ, "membro_id": M_CLI, "permission_id": None})
+    assert esc.responder_emissao(E1, REQ, {"tipo": "revisao", "nota": "a porta"})["ok"] is True
+
+
+def test_controle_a_revisao_de_outro_arquivo_nao_substitui():
+    b, _, _ = montar(CLI, "cliente")
+    membro(b, M_CLI, "cliente", CLI)
+    _duas_revisoes(b)
+    b.t["escritorio_emissoes"][1]["arquivo_id"] = "ARQ_CORTES"
+    assert esc.responder_emissao(E1, REQ, {"tipo": "aprovado"})["ok"] is True
+
+
+def test_sem_conseguir_conferir_a_substituicao_a_resposta_segue():
+    """A conferência é uma trava a mais; o banco fora do ar nessa leitura não pode calar o cliente."""
+    b, _, _ = montar(CLI, "cliente")
+    membro(b, M_CLI, "cliente", CLI)
+    _duas_revisoes(b)
+    b.falhar.add(("GET", "escritorio_emissao_destinos"))
+    assert esc.responder_emissao(E1, REQ, {"tipo": "aprovado"})["ok"] is True
+
+
+def _ja_enviada(b, ultimo):
+    b.t["escritorio_emissao_eventos"] += [
+        {"id": "ev-a", "emissao_id": E1, "projeto_id": PROJ, "tipo": "enviado", "pelo_cliente": False}]
+    if ultimo:
+        b.t["escritorio_emissao_eventos"].append({"id": "ev-b", "emissao_id": E1, "projeto_id": PROJ, **ultimo})
+
+
+@pytest.mark.parametrize("tipo", ["aprovado", "revisao"])
+def test_emissao_com_resposta_anotada_a_mao_nao_pede_aprovacao_por_email_a_quem_recebe_depois(tipo):
+    """FORA-5: a admin registrou "o cliente aprovou por telefone" e depois mandou pra esposa. Ela recebia "Pra você
+    aprovar", abria, e a tela não tinha botão nenhum."""
+    b, enviados, _ = montar(DONA, "dono")
+    membro(b, M_CLI, "cliente", CLI)
+    _emissao(b)
+    g = _pastas()
+    _ja_enviada(b, {"tipo": tipo, "pelo_cliente": False})
+    r = ed.projeto_mandar_emissao(PROJ, E1, REQ, {"para": [M_CLI]})
+    assert r["mandados"] == 1 and r["ja_respondida"] is True and r["avisados"] == 0 and not enviados
+    assert g.permissoes_dadas() == [("COPIA1", "reader", CLI["email"])]       # o arquivo ela recebe do mesmo jeito
+
+
+@pytest.mark.parametrize("ultimo", [None, {"tipo": "aprovado", "pelo_cliente": True}])
+def test_controle_emissao_que_ainda_espera_por_ele_avisa_por_email(ultimo):
+    """Só "enviado", ou a resposta de OUTRO cliente pelo sistema (um casal): quem recebe agora ainda responde."""
+    b, enviados, _ = montar(DONA, "dono")
+    membro(b, M_CLI, "cliente", CLI)
+    _emissao(b)
+    _pastas()
+    _ja_enviada(b, ultimo)
+    r = ed.projeto_mandar_emissao(PROJ, E1, REQ, {"para": [M_CLI]})
+    assert r["ja_respondida"] is False and r["avisados"] == 1 and len(enviados) == 1
+    assert len([x for x in b.t["escritorio_emissao_eventos"] if x["tipo"] == "enviado"]) == 1     # não duplica
+
+
+def test_duas_sincronizacoes_do_mesmo_projeto_nao_rodam_juntas(monkeypatch):
+    """ADM-3: o clique duplo em "Usar esta pasta" rodava duas, e a 2ª desfazia no Drive o acesso dado pela 1ª."""
+    import threading
+    import time
+    dentro, pico, feitas = [0], [0], []
+
+    def lenta(pid):
+        dentro[0] += 1
+        pico[0] = max(pico[0], dentro[0])
+        time.sleep(0.05)
+        dentro[0] -= 1
+        feitas.append(pid)
+        return {"ok": True}
+    monkeypatch.setattr(ed, "_sincronizar", lenta)
+    ts = [threading.Thread(target=ed.sincronizar, args=(PROJ,)) for _ in range(4)]
+    for t in ts:
+        t.start()
+    for t in ts:
+        t.join(10)
+    assert pico[0] == 1 and feitas == [PROJ] * 4
+
+
+def test_controle_projetos_diferentes_nao_esperam_um_pelo_outro(monkeypatch):
+    import threading
+    juntos, erros = threading.Barrier(2, timeout=5), []
+
+    def encontra(pid):
+        try:
+            juntos.wait()                 # só passa se os DOIS estiverem aqui dentro ao mesmo tempo
+        except threading.BrokenBarrierError:
+            erros.append(pid)
+        return {}
+    monkeypatch.setattr(ed, "_sincronizar", encontra)
+    ts = [threading.Thread(target=ed.sincronizar, args=(p,)) for p in (PROJ, OUTRO_PROJ)]
+    for t in ts:
+        t.start()
+    for t in ts:
+        t.join(10)
+    assert erros == []
+
+
+def test_trava_do_projeto_solta_mesmo_quando_a_sincronizacao_levanta(monkeypatch):
+    def quebra(pid):
+        raise RuntimeError("drive fora")
+    monkeypatch.setattr(ed, "_sincronizar", quebra)
+    with pytest.raises(RuntimeError):
+        ed.sincronizar(PROJ)
+    monkeypatch.setattr(ed, "_sincronizar", lambda pid: {"ok": True})
+    assert ed.sincronizar(PROJ) == {"ok": True}          # não ficou presa
+
+
+def _com_indice_unico(b, outra_volta_registra):
+    """O banco com o índice único de (projeto, pessoa, pasta): o POST do registro bate em 409. Com
+    `outra_volta_registra`, o registro nasce por fora antes (a outra sincronização chegou primeiro)."""
+    real = esc._SERVICO
+
+    def servico(method, path, body=None, params=None, prefer=None, **k):
+        if method == "POST" and path.lstrip("/") == "escritorio_drive_permissoes":
+            if outra_volta_registra:
+                b.t["escritorio_drive_permissoes"].append({"id": "da-outra-volta", **body})
+            return 409, None
+        return real(method, path, body=body, params=params, prefer=prefer, **k)
+    esc._SERVICO = servico
+
+
+def test_registro_que_outra_volta_ja_gravou_nao_desfaz_o_acesso_no_drive():
+    """ADM-3, a 2ª defesa: o Google devolve a MESMA permissão pra mesma pessoa; "desfazer" por causa do conflito
+    tirava o acesso que ela acabou de ganhar — e o registro ficava, então nenhuma volta consertava."""
+    b, _, _ = montar(DONA, "dono")
+    membro(b, M_EQ, "freela", EQUIPE)
+    g = _pastas()
+    _com_indice_unico(b, outra_volta_registra=True)
+    r = ed.sincronizar(PROJ)
+    assert g.permissoes_dadas() == [("PASTA_PROJ", "writer", EQUIPE["email"])]
+    assert not g.permissoes_tiradas() and r["falhas_dar"] == []
+
+
+def test_controle_conflito_sem_registro_nenhum_continua_desfazendo():
+    """O 409 sem o registro lá é falha de verdade: sem registro ninguém tiraria esse acesso depois — desfaz."""
+    b, _, _ = montar(DONA, "dono")
+    membro(b, M_EQ, "freela", EQUIPE)
+    g = _pastas()
+    _com_indice_unico(b, outra_volta_registra=False)
+    r = ed.sincronizar(PROJ)
+    assert [t.split("/permissions/")[0] for t in g.permissoes_tiradas()] == ["PASTA_PROJ"]
+    assert r["falhas_dar"] == [EQUIPE["email"]]

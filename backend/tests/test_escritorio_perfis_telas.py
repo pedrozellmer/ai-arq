@@ -72,7 +72,10 @@ def test_apagar_projeto_so_a_admin_e_so_com_o_nome_digitado():
     assert a.strip().split(NL)[1].strip() == "if (!souAdmin()) return;"
     ok = a[a.index("$('ap-ok').onclick"):]
     assert ok.index("if ($('ap-nome').value.trim() !== String(PROJ.nome).trim()) return toast(") < ok.index("apiEsc(")
-    assert "apiEsc(`projetos/${PROJ.id}`, 'DELETE')" in ok
+    # 11/10 (SERV-1): o mesmo DELETE; a confirmação da pasta sumida só vai depois de o servidor pedir (428)
+    assert "apiEsc(`projetos/${PROJ.id}` + (pastaSumiu ? '?pasta_sumiu=1' : ''), 'DELETE')" in ok
+    assert ok.index("if (r.status === 428 && !pastaSumiu") < ok.index("pastaSumiu = true;")
+    assert "let pastaSumiu = false;" in a
     # quem apaga é o SERVIDOR (tira os acessos do Drive antes); a tela nunca apaga direto no banco
     assert "sb.from('escritorio_projetos').delete(" not in H
     # só some da lista depois que o servidor disse ok
@@ -130,7 +133,9 @@ def test_nome_de_etapa_nas_fotos_vai_em_data_e_nao_em_onclick():
 
 def test_reenviar_o_convite_do_fornecedor_nao_apaga_a_subpasta_dele():
     e = _fn("enviarConvite")
-    assert "if (CV_PRE.perfil && corpo.perfil === CV_PRE.perfil && !corpo.pasta) delete corpo.perfil;" in e
+    # 11/10 (ADM-1): só no MESMO e-mail — com o e-mail trocado o convite é novo e o perfil tem que ir
+    assert "if (mesmoEmail && CV_PRE.perfil && corpo.perfil === CV_PRE.perfil && !corpo.pasta) delete corpo.perfil;" in e
+    assert "const mesmoEmail = !!CV_PRE.email && corpo.email.toLowerCase() === String(CV_PRE.email).trim().toLowerCase();" in e
     assert "perfil: { freela: 'equipe', fornecedor: 'fornecedor', cliente: 'cliente' }[m.papel]" in H
 
 
@@ -167,7 +172,8 @@ def test_com_dois_clientes_cada_um_responde_a_sua():
     """SEG-3/TELA-6: o 2º cliente lia "Você aprovou" pela aprovação do outro e perdia os botões."""
     i = H.index("const esperaResposta = (e) => {")
     espera = H[i:H.index("};", i)]
-    assert "if (souCliente()) return !respondeuEu(e) && (u.tipo === 'enviado' || !!u.pelo_cliente);" in espera
+    # 11/10 (BANCO-3): e a revisão substituída por uma mais nova, mandada pra ele, não espera mais
+    assert "if (souCliente()) return !substituidaPor(e) && !respondeuEu(e) && (u.tipo === 'enviado' || !!u.pelo_cliente);" in espera
     assert "const respondeuEu = (e) => evDa(e).some((x) => x.pelo_cliente && x.registrado_por === EU.id);" in H
     assert "'Você aprovou'" not in H and "esc(quemRespondeu(x)) + (x.tipo === 'aprovado' ? ' aprovou'" in H
     assert "if (x.registrado_por === EU.id) return 'Você';" in H

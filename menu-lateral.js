@@ -1116,10 +1116,8 @@
       if (sub) sub.textContent = ESC ? 'equipe · só leitura' : 'equipe · só leitura · ' + (a.itens || 0) + ' itens';
       tirarItensDoDono();
       // a equipe entra no Escritório pelo projeto dela: o menu vira o do Escritório
-      if (a.escritorio_id) {
-        aplicarEscritorio({ id: a.escritorio_id, nome: (window.tituloProjeto || String)(a.nome || 'Projeto') });
-        confirmouEscritorio(a.escritorio_id);
-      }
+      if (a.escritorio_id) aplicarEscritorio({ id: a.escritorio_id, nome: (window.tituloProjeto || String)(a.nome || 'Projeto') });
+      if (a.escritorio_id) confirmouEscritorio(a.escritorio_id);     // 11/10: a Visão geral vai pra Página do projeto
     }, function () {});
   }
 

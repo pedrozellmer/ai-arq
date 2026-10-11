@@ -61,7 +61,7 @@ def test_etapa_do_filtro_que_nao_existe_no_projeto_nao_filtra_nem_vai_pro_cartao
     h = _h()
     assert "const etapaDoFiltro = () => ((PROJ && PROJ.etapas) || []).includes(FILTRO_E) ? FILTRO_E : '';" in h
     assert "const visivel = (t) => FILT[FILTRO](t) && (!etapaDoFiltro() || t.etapa === FILTRO_E);" in h
-    assert "etapa: etapaDoFiltro() || PROJ.etapa_atual || null" in _corpo(h, "async function criarCartao(st, txt) {")
+    assert "etapa: etapaDoFiltro() || PROJ.etapa_atual || null" in _corpo(h, "async function criarCartao(st, txt, confirmado) {")
 
 
 def test_resposta_velha_do_drive_nao_pinta_a_tela_e_subpasta_alheia_volta_pra_raiz():

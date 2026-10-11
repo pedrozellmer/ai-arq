@@ -127,7 +127,8 @@ def test_expirado():
 def test_convite_novo_grava_so_o_hash_e_manda_o_token_por_email():
     banco = _Banco([_PROJETO, _ADMIN, _CRIADO])
     enviados = _montar(banco)
-    r = esc.convidar(PROJ, REQ, {"email": " Equipe@Exemplo.com ", "nome": "Pessoa Equipe", "telefone": "(11) 9 0000-0002"})
+    r = esc.convidar(PROJ, REQ, {"email": " Equipe@Exemplo.com ", "nome": "Pessoa Equipe", "telefone": "(11) 9 0000-0002",
+                                 "perfil": "equipe"})        # 11/10 (ADM-1): convite NOVO exige o perfil escrito
     assert r["ok"] and r["email_enviado"] and r["membro_id"] == "m-novo"
     token = r["link"].split("#t=")[1]
     post = [c for c in banco.escritas() if c["m"] == "POST"][0]
@@ -347,7 +348,7 @@ def test_A1_nao_saber_se_esta_no_piloto_e_502_e_nao_libera():
 def test_A3_cada_envio_fica_registrado_com_hash_do_destino():
     banco = _Banco([_PROJETO, _ADMIN, _CRIADO])
     _montar(banco)
-    esc.convidar(PROJ, REQ, {"email": "equipe@exemplo.com"})
+    esc.convidar(PROJ, REQ, {"email": "equipe@exemplo.com", "perfil": "equipe"})
     reg = [c for c in banco.escritas() if "escritorio_convites_enviados" in c["path"]]
     assert len(reg) == 1
     assert reg[0]["body"]["destino_hash"] == esc.hash_do_token("equipe@exemplo.com")
@@ -363,7 +364,7 @@ def test_A3_envio_que_falha_tambem_conta():
         raise RuntimeError("smtp fora")
     esc.configurar(servico=banco, como_usuario=lambda *a, **k: (200, "dono"), usuario=lambda r: ADMIN,
                    enviar=enviar_quebra, moldura=lambda *a, **k: "", registrar=None)
-    r = esc.convidar(PROJ, REQ, {"email": "equipe@exemplo.com"})
+    r = esc.convidar(PROJ, REQ, {"email": "equipe@exemplo.com", "perfil": "equipe"})
     # SMTP caiu: o convite nasce, o link volta pra admin, e a tentativa CONTA pro teto (reserva não desfeita)
     assert r["ok"] and r["email_enviado"] is False and r["motivo_sem_email"] == "email_falhou" and r["link"]
     assert [c for c in banco.escritas() if c["m"] == "POST" and "escritorio_convites_enviados" in c["path"]], enviados

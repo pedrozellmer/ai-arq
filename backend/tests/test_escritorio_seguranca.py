@@ -118,7 +118,7 @@ REQ = types.SimpleNamespace(headers={"Authorization": "Bearer x"})
 def test_no_teto_do_dia_o_convite_nasce_mas_o_email_nao_sai():
     banco = _Banco(esc.CONVITES_POR_DIA + 1)
     _montar(banco)
-    r = esc.convidar("p1", REQ, {"email": "nova@exemplo.com"})
+    r = esc.convidar("p1", REQ, {"email": "nova@exemplo.com", "perfil": "equipe"})
     assert r["ok"] and r["email_enviado"] is False and r["motivo_sem_email"] == "teto_conta" and r["link"]
     assert ENVIADOS == []
     assert "escritorio_convites_enviados" in banco.escritas            # reservou…
@@ -128,14 +128,14 @@ def test_no_teto_do_dia_o_convite_nasce_mas_o_email_nao_sai():
 def test_no_teto_exato_ainda_sai():
     banco = _Banco(esc.CONVITES_POR_DIA)
     _montar(banco)
-    assert esc.convidar("p1", REQ, {"email": "nova@exemplo.com"})["email_enviado"] is True
+    assert esc.convidar("p1", REQ, {"email": "nova@exemplo.com", "perfil": "equipe"})["email_enviado"] is True
     assert ENVIADOS == ["nova@exemplo.com"]
 
 
 def test_nao_conseguir_contar_nao_manda_email_mas_entrega_o_link():
     banco = _Banco(0, falha=True)
     _montar(banco)
-    r = esc.convidar("p1", REQ, {"email": "nova@exemplo.com"})
+    r = esc.convidar("p1", REQ, {"email": "nova@exemplo.com", "perfil": "equipe"})
     assert r["email_enviado"] is False and r["motivo_sem_email"] == "nao_contou" and r["link"]
     assert ENVIADOS == []
 
@@ -143,14 +143,14 @@ def test_nao_conseguir_contar_nao_manda_email_mas_entrega_o_link():
 def test_A3_o_mesmo_destinatario_tem_teto_proprio_por_projeto():
     banco = _Banco(1, n_destino=esc.CONVITES_POR_DESTINO_DIA + 1)
     _montar(banco)
-    r = esc.convidar("p1", REQ, {"email": "nova@exemplo.com"})
+    r = esc.convidar("p1", REQ, {"email": "nova@exemplo.com", "perfil": "equipe"})
     assert r["email_enviado"] is False and r["motivo_sem_email"] == "teto_destino" and ENVIADOS == []
 
 
 def test_A3_abaixo_dos_dois_tetos_passa_e_registra_o_envio():
     banco = _Banco(esc.CONVITES_POR_DIA, n_destino=esc.CONVITES_POR_DESTINO_DIA)
     _montar(banco)
-    assert esc.convidar("p1", REQ, {"email": "nova@exemplo.com"})["ok"] is True
+    assert esc.convidar("p1", REQ, {"email": "nova@exemplo.com", "perfil": "equipe"})["ok"] is True
     assert "escritorio_convites_enviados" in banco.escritas
 
 
