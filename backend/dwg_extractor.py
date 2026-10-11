@@ -8606,7 +8606,23 @@ def _linhas_dos_ambientes(amb, limite: int = _AMB_LISTA_MAX) -> list:
           "  (o projetista escreveu a área de cada ambiente; o motor juntou o NOME à ÁREA pela",
           "   posição dos dois textos da etiqueta — o nome no mesmo texto ou logo acima. É o",
           "   número do PROJETISTA, não medição na geometria: use como a área de piso/forro",
-          "   DAQUELE ambiente e marque 'estimado'.",
+          "   DAQUELE ambiente e marque 'estimado'."]
+    # 🩸 11/10/2026, a 1ª planilha em produção com a seção: a IA trocou 18 linhas de piso
+    # por ambiente por UMA de 491 m², tirada do "TOTAL = 491,00 m²" da lista de totais do
+    # grupo fora das pranchas (a soma dos ambientes da planta dava ~345). A seção dizia
+    # que total "não é ambiente"; não dizia o que FAZER, nem que total não é área de piso.
+    if por_desenho:
+        ls += ["   → COMO USAR, quando houver item de piso, forro ou outro acabamento por área: UMA",
+               "   linha POR AMBIENTE, com a área escrita dele, tirando os ambientes de UM desenho só",
+               "   (o de planta baixa, quando houver). Acabamento sem especificação continua sendo uma",
+               "   linha por ambiente; se juntar ambientes numa linha, a quantidade é a SOMA das áreas",
+               "   deles naquele desenho — NUNCA um total escrito."]
+    else:
+        ls += ["   → COMO USAR, quando houver item de piso, forro ou outro acabamento por área: UMA",
+               "   linha POR AMBIENTE, com a área escrita dele. Acabamento sem especificação continua",
+               "   sendo uma linha por ambiente; se juntar ambientes numa linha, a quantidade é a",
+               "   SOMA das áreas deles — NUNCA um total escrito."]
+    ls += [
           # 🩸 11/10/2026, medido no acervo: 203 ambientes com o mesmo nome aqui e no par
           # RÓTULO ↔ ÁREA DA REGIÃO; 102 batem ±2 %, 101 divergem — só 15 dentro de
           # ±10 %, 53 por mais de 2×. Num arquivo conferido à mão (12 divergentes) a
@@ -8632,6 +8648,8 @@ def _linhas_dos_ambientes(amb, limite: int = _AMB_LISTA_MAX) -> list:
                "   N vezes (planta baixa, layout, forro…), não N cômodos — não multiplique a",
                "   área por N sem ver que são cômodos diferentes.)"]
     resta = max(int(limite), 0)
+    # há desenho das pranchas com etiqueta? (sem nenhum, o grupo de fora é tudo o que existe)
+    tem_desenho = por_desenho and any(not g.get("fora") for g in grupos)
 
     def _par(n, v, k):
         return "%s = %.2f m²%s" % (n, v, "   ×%d" % k if k > 1 else "")
@@ -8661,8 +8679,15 @@ def _linhas_dos_ambientes(amb, limite: int = _AMB_LISTA_MAX) -> list:
         if len(amb_g) > len(mostra):
             ls.append(rec + "(+%d par(es) deste grupo não listado(s))" % (len(amb_g) - len(mostra)))
         tot = g.get("totais") or []
-        if tot:
-            ls.append(rec + "totais/resumos escritos (NÃO são ambiente — não some com os ambientes): "
+        if tot and g.get("fora") and tem_desenho:
+            # o total escrito FORA das pranchas é de cópia de trabalho ou de quadro solto:
+            # foi dele que saiu o "piso = 491 m²". Diz que existe, não põe o número na frente.
+            ls.append(rec + "(%d total(is)/resumo(s) escrito(s) aqui fora não listado(s): não são"
+                      " área de piso nem de forro)" % sum(k for _n, _v, k in tot))
+        elif tot:
+            ls.append(rec + "totais/resumos escritos (NÃO são ambiente e NÃO são área de piso nem de"
+                      " forro — total costuma ser área construída ou do lote, com parede e área"
+                      " externa; servem só pra conferir a soma dos ambientes): "
                       + "; ".join(_par(n, v, k) for n, v, k in tot[:10])
                       + (" (+%d)" % (len(tot) - 10) if len(tot) > 10 else ""))
         sem = g.get("sem_nome") or []
