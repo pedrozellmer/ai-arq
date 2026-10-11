@@ -832,7 +832,135 @@ def test_o_extrator_guarda_a_ancora_do_mtext(tmp_path):
     assert al == {"NOME 1": 0, "NOME 2": 1, "NOME 3": 2, "NOME 5": 1, "NOME 7": 0, "NOME 9": 2,
                   "TEXTO À DIREITA": 0}
     assert dx.TextAnnotation(layer="X", text="Y").alinhamento == 0
-    assert dx._alinhamento_do_texto(object()) == 0
+    assert dx._ancora_do_texto(object()) == (0, 0.0, 0.0)
+
+
+def _ancoras(tmp_path, monta):
+    ex = dx.extract_dxf(_so_textos(tmp_path, monta))
+    return {t.text: (t.alinhamento, t.ancora_dx, t.largura_da_caixa) for t in ex.texts}
+
+
+def test_o_paragrafo_do_mtext_diz_onde_o_texto_comeca_dentro_da_caixa(tmp_path):
+    """A coluna do attachment_point só prende a CAIXA ao ponto; dentro dela o
+    texto se alinha pelo código de parágrafo. (alinhamento, do ponto gravado
+    até o ponto de referência, largura da caixa)."""
+    def monta(msp):
+        def mt(txt, ap, caixa):
+            msp.add_mtext(txt, dxfattribs={"char_height": H, "layer": "AMB-NOME", "insert": (5, 5),
+                                           "attachment_point": ap, "width": caixa})
+        mt("\\pxql;ESQUERDA NO CENTRO", 8, 4.0)
+        mt("\\pxqc;CENTRO NA DIREITA", 3, 4.0)
+        mt("\\pxqc;CENTRO NA ESQUERDA", 1, 4.0)
+        mt("\\pxqr;DIREITA NA ESQUERDA", 7, 4.0)
+        mt("\\pxsm0.75,qc;DEPOIS DA VIRGULA", 1, 4.0)        # o `q` vem depois de outros parâmetros
+        mt("\\pxqj;JUSTIFICADO", 2, 4.0)                     # justificado e distribuído começam na borda esquerda
+        mt("\\pxqd;DISTRIBUIDO", 9, 4.0)
+        mt("\\pt53.24,66.55;SO TABULACAO", 2, 4.0)           # código de parágrafo sem alinhamento: vale a coluna
+        mt("\\pxql;SEM CAIXA", 2, 0.0)                       # sem caixa não há dentro de quê alinhar
+        mt("SEM CODIGO", 3, 4.0)
+        mt("\\pxqr;O MESMO DA COLUNA", 3, 4.0)
+    assert _ancoras(tmp_path, monta) == {
+        "ESQUERDA NO CENTRO": (0, -2.0, 4.0),
+        "CENTRO NA DIREITA": (1, -2.0, 4.0),
+        "CENTRO NA ESQUERDA": (1, 2.0, 4.0),
+        "DIREITA NA ESQUERDA": (2, 4.0, 4.0),
+        "DEPOIS DA VIRGULA": (1, 2.0, 4.0),
+        "JUSTIFICADO": (0, -2.0, 4.0),
+        "DISTRIBUIDO": (0, -4.0, 4.0),
+        "SO TABULACAO": (1, 0.0, 4.0),
+        "SEM CAIXA": (1, 0.0, 0.0),
+        "SEM CODIGO": (2, 0.0, 4.0),
+        "O MESMO DA COLUNA": (2, 0.0, 4.0),
+    }
+
+
+def _ambientes_do_arquivo(tmp_path, monta):
+    amb = dx.extract_dxf(_so_textos(tmp_path, monta)).metadata["ambientes_area_escrita"]
+    return [g["ambientes"] for g in amb["grupos"]], amb["sem_nome"]
+
+
+def test_do_arquivo_ao_par_com_o_paragrafo_a_esquerda_na_caixa_presa_pelo_centro(tmp_path, monkeypatch):
+    """📏 Acervo, com as proporções do arquivo: uma fileira de salas a 16,5
+    alturas uma da outra. O nome é MTEXT preso pelo centro embaixo (8) numa caixa
+    de 24,4 alturas com o parágrafo à ESQUERDA; a área (letra 0,8) é MTEXT preso
+    pela direita (9) e termina 5,6 alturas antes do ponto do nome — os dois
+    começam juntos. Pela coluna sozinha o nome ficava 9 alturas à direita e cada
+    área ia pro nome da sala vizinha."""
+    monkeypatch.delenv("AMBIENTE_AREA_ESCRITA", raising=False)
+    salas = [("12", "10,00"), ("13", "11,50"), ("14", "12,25")]
+
+    def monta(msp):
+        for i, (n, a) in enumerate(salas):
+            x = 20 + i * 16.5 * H
+            msp.add_mtext("\\pxql;SALA DE \\PEXAME %s" % n,
+                          dxfattribs={"char_height": H, "layer": "AMB-NOME", "attachment_point": 8,
+                                      "width": 24.4 * H, "insert": (x, 5)})
+            msp.add_mtext("\\pxt7.26216;A= %s m²" % a,
+                          dxfattribs={"char_height": 0.8 * H, "layer": "AMB-AREA", "attachment_point": 9,
+                                      "width": 99.5 * H, "insert": (x - 5.6 * H, 5 - 1.2 * H)})
+    grupos, sem = _ambientes_do_arquivo(tmp_path, monta)
+    assert grupos == [[["SALA DE EXAME 12", 10.0, 1], ["SALA DE EXAME 13", 11.5, 1], ["SALA DE EXAME 14", 12.25, 1]]]
+    assert sem == 0
+
+
+def test_do_arquivo_ao_par_com_o_paragrafo_centrado_na_caixa_presa_pela_esquerda(tmp_path, monkeypatch):
+    """A forma mais comum no acervo (2.294 MTEXT): caixa presa pela ESQUERDA,
+    parágrafo centrado. "COPA" no meio de uma caixa de 30 alturas começa 13,6
+    alturas depois do ponto gravado; a área está centrada embaixo dele."""
+    monkeypatch.delenv("AMBIENTE_AREA_ESCRITA", raising=False)
+
+    def monta(msp):
+        msp.add_mtext("\\pxqc;COPA", dxfattribs={"char_height": H, "layer": "AMB-NOME", "attachment_point": 1,
+                                                 "width": 30 * H, "insert": (5, 5)})
+        msp.add_text("A=9,50m²", dxfattribs={"height": H, "layer": "AMB-AREA", "insert": (5 + 12 * H, 5 - 2.6 * H)})
+    assert _ambientes_do_arquivo(tmp_path, monta) == ([[["COPA", 9.5, 1]]], 0)
+
+
+def test_do_arquivo_ao_par_com_o_nome_girado_e_o_paragrafo_a_esquerda(tmp_path, monkeypatch):
+    """A caixa acompanha o giro do texto: no nome a 90° ela sobe, e a borda
+    esquerda dela fica 15 alturas ABAIXO do ponto gravado."""
+    monkeypatch.delenv("AMBIENTE_AREA_ESCRITA", raising=False)
+
+    def monta(msp):
+        mt = msp.add_mtext("\\pxql;SHAFT TÉCNICO",
+                           dxfattribs={"char_height": H, "layer": "AMB-NOME", "attachment_point": 8,
+                                       "width": 30 * H, "insert": (20 - 1.6 * H, 5 + 15 * H)})
+        mt.dxf.text_direction = (0, 1, 0)
+        msp.add_text("A=2,40m²", dxfattribs={"height": H, "layer": "AMB-AREA", "insert": (20, 5), "rotation": 90})
+    assert _ambientes_do_arquivo(tmp_path, monta) == ([[["SHAFT TÉCNICO", 2.4, 1]]], 0)
+
+
+def test_o_texto_mais_largo_que_a_caixa_e_quebrado_e_nao_passa_dela(tmp_path, monkeypatch):
+    """O nome comprido numa caixa estreita o CAD quebra em linhas: centrado, ele
+    começa no máximo meia CAIXA antes do ponto — não meio texto antes. Sem esse
+    teto o nome ficava 10,9 alturas à esquerda, a área preferia o "COPA" ao
+    lado (6,7 alturas) e, como o "COPA" já é da área dele, ficava sem nome."""
+    monkeypatch.delenv("AMBIENTE_AREA_ESCRITA", raising=False)
+
+    def monta(msp):
+        msp.add_mtext("DEPÓSITO DE MATERIAL DE LIMPEZA",
+                      dxfattribs={"char_height": H, "layer": "AMB-NOME", "attachment_point": 8,
+                                  "width": 8 * H, "insert": (20, 5)})
+        msp.add_text("A=9,50m²", dxfattribs={"height": H, "layer": "AMB-AREA", "insert": (20 - 3 * H, 5 - 1.6 * H)})
+        msp.add_text("COPA", dxfattribs={"height": H, "layer": "AMB-NOME", "insert": (20 + 3.5 * H, 5)})
+        msp.add_text("A=4,20m²", dxfattribs={"height": H, "layer": "AMB-AREA", "insert": (20 + 3.5 * H, 5 - 1.6 * H)})
+    assert _ambientes_do_arquivo(tmp_path, monta) == (
+        [[["COPA", 4.2, 1], ["DEPÓSITO DE MATERIAL DE LIMPEZA", 9.5, 1]]], 0)
+
+
+def test_CONTROLE_sem_caixa_o_paragrafo_nao_move_o_texto(tmp_path, monkeypatch):
+    """Sem caixa (largura 0) o texto fica preso ao ponto pela coluna: o nome
+    centrado no ponto continua centrado, com ou sem "\\pxql;" — e casa com a
+    área centrada embaixo dele. (Quem reprova o contrário é o teste da âncora:
+    "SEM CAIXA" = (1, 0, 0).)"""
+    monkeypatch.delenv("AMBIENTE_AREA_ESCRITA", raising=False)
+
+    def monta(msp):
+        msp.add_mtext("\\pxql;ALMOXARIFADO DE MATERIAIS", dxfattribs={
+            "char_height": H, "layer": "AMB-NOME", "attachment_point": 8, "width": 0.0, "insert": (20, 5)})
+        msp.add_text("A=9,50m²", dxfattribs={"height": H, "layer": "AMB-AREA",
+                                             "insert": (20 - 4 * LARG * H, 5 - 1.6 * H)})
+    assert _ambientes_do_arquivo(tmp_path, monta) == ([[["ALMOXARIFADO DE MATERIAIS", 9.5, 1]]], 0)
 
 
 def test_do_arquivo_ao_par_com_o_nome_ancorado_a_direita(tmp_path, monkeypatch):

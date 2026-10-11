@@ -3174,8 +3174,10 @@ _AMB_LINHA2_MAX = 2.2       # a 1ª linha de um nome em duas, em alturas do nome
 _AMB_LINHA1_LETRA_MAX = 1.6
 _AMB_ANGULO_TOL = 15.0      # nome e área da mesma etiqueta têm o mesmo ângulo
 #: largura de uma letra, em alturas — só pra achar o INÍCIO do texto alinhado ao
-#: centro ou à direita. No acervo o resultado é o mesmo com 0,6, 0,7 e 0,85.
-_AMB_LARGURA_DA_LETRA = 0.7
+#: centro ou à direita. É ESTIMATIVA (a fonte muda a largura), mas medida: o TEXT
+#: alinhado guarda o início e o fim, e em 10.297 textos de 109 arquivos do acervo
+#: largura ÷ (caracteres × altura) tem mediana 0,85 (metade entre 0,74 e 0,93).
+_AMB_LARGURA_DA_LETRA = 0.85
 #: texto que já traz a própria área ("PROFESSORES 13,83M²") é uma etiqueta
 #: inteira, não o nome de outra
 _RE_AMB_M2_NO_TEXTO = _re.compile(r"\d[\d.,]*\s*m[²2]", _re.IGNORECASE)
@@ -3334,17 +3336,24 @@ def ambientes_com_area_escrita(textos) -> tuple:
         return float(getattr(t, "rotation", 0) or 0) % 360.0
 
     def _xy(t):
-        # o INÍCIO do texto. No texto alinhado ao centro (1) ou à direita (2) a
-        # posição gravada é o meio ou o FIM dele: recua pela largura estimada.
+        # o INÍCIO do texto. `ancora_dx` leva do ponto gravado ao ponto de
+        # referência (a caixa do MTEXT e o alinhamento do parágrafo); no texto
+        # alinhado ao centro (1) ou à direita (2) esse ponto é o meio ou o FIM
+        # dele: recua pela largura ESTIMADA, que não passa da caixa.
         x, y = _cru(t)
         al = int(getattr(t, "alinhamento", 0) or 0)
-        if al not in (1, 2):
+        d = float(getattr(t, "ancora_dx", 0.0) or 0.0)
+        if al in (1, 2):
+            larg = (max((len(ln) for ln in str(t.text).split("\n")), default=0)
+                    * (_h(t) or hmed) * _AMB_LARGURA_DA_LETRA)
+            caixa = float(getattr(t, "largura_da_caixa", 0.0) or 0.0)
+            if caixa > 0:
+                larg = min(larg, caixa)
+            d -= (0.5 if al == 1 else 1.0) * larg
+        if not d:
             return x, y
-        larg = (max((len(ln) for ln in str(t.text).split("\n")), default=0)
-                * (_h(t) or hmed) * _AMB_LARGURA_DA_LETRA)
         th = math.radians(_ang(t))
-        f = 0.5 if al == 1 else 1.0
-        return x - f * larg * math.cos(th), y - f * larg * math.sin(th)
+        return x + d * math.cos(th), y + d * math.sin(th)
 
     def _mesmo_angulo(a, b):
         d = abs(_ang(a) - _ang(b)) % 360.0

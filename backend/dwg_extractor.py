@@ -163,9 +163,15 @@ class TextAnnotation:
     #: ângulo do texto, em graus (0 = horizontal). A etiqueta de cômodo estreito
     #: vem girada 90°, e "acima" só faz sentido no eixo do próprio texto.
     rotation: float = 0.0
-    #: o que a `position` é no texto: 0 = o INÍCIO (o normal), 1 = o meio,
-    #: 2 = o FIM. No MTEXT ancorado à direita o ponto gravado é a ponta direita.
+    #: o que o ponto de referência é no texto: 0 = o INÍCIO (o normal), 1 = o
+    #: meio, 2 = o FIM. No MTEXT ancorado à direita o ponto gravado é a ponta
+    #: direita. Ver `_ancora_do_texto`.
     alinhamento: int = 0
+    #: do `position` até o ponto de referência, no eixo do texto (o MTEXT com o
+    #: parágrafo alinhado diferente da coluna por onde a caixa está presa)
+    ancora_dx: float = 0.0
+    #: a largura da caixa do MTEXT (0 = sem caixa): o texto não passa dela
+    largura_da_caixa: float = 0.0
 
 
 @dataclass
@@ -5783,23 +5789,54 @@ def _angulo_do_texto(e) -> float:
         return 0.0
 
 
-def _alinhamento_do_texto(e) -> int:
-    """O que o ponto de inserção é no texto: 0 = o início, 1 = o meio, 2 = o fim.
+#: o código de parágrafo do MTEXT — "\pxql;", "\pxsm0.75,qc;", "\pt53.24;". O
+#: `q` diz como o texto se alinha DENTRO da caixa: l esquerda, c centro,
+#: r direita (j justificado e d distribuído começam na borda esquerda).
+_RE_PARAGRAFO_DO_MTEXT = re.compile(r"\\p([^;\\]{0,80});")
+_RE_ALINHAMENTO_DO_PARAGRAFO = re.compile(r"q([lcrjd])")
+_COLUNA_DO_PARAGRAFO = {"l": 0, "c": 1, "r": 2, "j": 0, "d": 0}
+
+
+def _ancora_do_texto(e) -> tuple:
+    """(alinhamento, ancora_dx, largura_da_caixa): onde o texto COMEÇA em
+    relação ao ponto de inserção.
+
+    `alinhamento` — o que o ponto de referência é no texto: 0 = o início, 1 = o
+    meio, 2 = o fim. `ancora_dx` — quanto andar, no eixo do texto, do ponto de
+    inserção até esse ponto de referência. `largura_da_caixa` — a largura da
+    caixa do MTEXT (0 = sem caixa): texto mais largo que ela o CAD quebra.
 
     🩸 11/10/2026 — num arquivo de cliente os nomes dos cômodos eram MTEXT
     ancorado no topo-DIREITA (`attachment_point` 3): o ponto gravado é a ponta
-    direita do texto, a régua do ambiente o tratava como início e o nome
-    aparecia 14 alturas à direita de onde está.
-    MTEXT: a coluna do `attachment_point` (1/4/7 esquerda, 2/5/8 centro, 3/6/9
-    direita). TEXT: sempre 0 — o `insert` do TEXT alinhado é mantido pelo CAD
-    como o início do texto (medido no acervo: nenhum TEXT com o `insert` velho).
+    direita, a régua do ambiente o tratava como início e o nome aparecia 14
+    alturas à direita de onde está.
+    🩸 11/10/2026, no acervo — a coluna do `attachment_point` (1/4/7 esquerda,
+    2/5/8 centro, 3/6/9 direita) só diz por onde a CAIXA está presa ao ponto.
+    Dentro dela o texto se alinha pelo código de parágrafo: "\\pxql;SALA DE
+    EXAME" numa caixa de 419 presa pelo CENTRO começa na borda esquerda da
+    caixa (ponto − 209,5), exatamente onde começa a etiqueta de área logo
+    abaixo; pela coluna sozinha o nome ficava 9 alturas à direita e a área ia
+    pro cômodo vizinho. Medido: 4.514 MTEXT com o código diferente da coluna,
+    em 137 arquivos de 54 jobs. Sem código vale a coluna, e sem caixa
+    (largura 0) também — não há dentro de quê alinhar.
+    TEXT: sempre (0, 0, 0) — o `insert` do TEXT alinhado é mantido pelo CAD
+    como o início do texto (medido no acervo: nenhum com o `insert` velho).
     Nunca levanta."""
     try:
         if e.dxftype() != "MTEXT":
-            return 0
-        return (int(e.dxf.get("attachment_point", 1) or 1) - 1) % 3
+            return 0, 0.0, 0.0
+        col = (int(e.dxf.get("attachment_point", 1) or 1) - 1) % 3
+        caixa = float(e.dxf.get("width", 0.0) or 0.0)
+        if not (0.0 < caixa < float("inf")):
+            return col, 0.0, 0.0
+        par = col
+        m = _RE_PARAGRAFO_DO_MTEXT.search(e.text or "")
+        q = _RE_ALINHAMENTO_DO_PARAGRAFO.search(m.group(1)) if m else None
+        if q:
+            par = _COLUNA_DO_PARAGRAFO[q.group(1)]
+        return par, (par - col) * caixa / 2.0, caixa
     except Exception:
-        return 0
+        return 0, 0.0, 0.0
 
 
 def _strip_mtext_codes(raw: str) -> str:
@@ -10383,13 +10420,16 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             if content:
                 pos = (mtext.dxf.insert.x, mtext.dxf.insert.y)
                 height = mtext.dxf.char_height if hasattr(mtext.dxf, "char_height") else 0
+                _al, _dx, _caixa = _ancora_do_texto(mtext)
                 texts.append(TextAnnotation(
                     layer=mtext.dxf.layer,
                     text=content,
                     position=pos,
                     height=height,
                     rotation=_angulo_do_texto(mtext),
-                    alinhamento=_alinhamento_do_texto(mtext),
+                    alinhamento=_al,
+                    ancora_dx=_dx,
+                    largura_da_caixa=_caixa,
                 ))
         except Exception:
             continue
