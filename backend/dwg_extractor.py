@@ -7565,6 +7565,77 @@ def _marcar_textos_repetidos_da_planta(texts, mapa) -> int:
         return 0
 
 
+# 🩸 11/10/2026 — O REVIT ESCREVE A VISTA NO NOME DO BLOCO. Cada vista exportada
+# ganha os SEUS blocos: "<família - tipo>-<id>-<vista>", "…-V<n>-<vista>" ou
+# "…-<id>-V<n>-<vista>". A geladeira da planta é "…-3878392-LAYOUT TERREO" e a
+# do corte "…-3878392-Corte 3": pra regra "o bloco da vista sai se o MESMO bloco
+# é contado fora dela" os dois NUNCA eram o mesmo, e a peça do corte ficava na
+# conta. Medido no caso: 533 inserções, 239 com "Corte N" no nome, 0 saíam —
+# e 91 dessas 239 estavam em região que a leitura por folha não deu como vista
+# (corte sem título lido como planta, ou fora de todo desenho).
+# 📏 A anatomia medida, e o que ela decide:
+# - o id NÃO é um por peça: o mesmo id vem 6× no layout e 2× em cada corte (é
+#   do bloco, não do elemento) — não dá pra contar "cada elemento uma vez";
+# - a variante V<n> NÃO se repete entre a planta e o corte (0 de 2 famílias);
+# - o que é igual dos dois lados é a FAMÍLIA - TIPO. É ela que se compara: a
+#   mesma régua de sempre ("o mesmo bloco fora da vista"), lida no nome.
+# Quem só aparece no corte (as terças do telhado: 118 inserções) FICA — é o
+# único registro, como a papeleira que só a elevação mostra.
+# 🪤 "Vista 1"/"Perspectiva" no nome NÃO entram: no Revit "vista" também é o
+# nome de vista de planta. Só corte, seção, elevação e fachada.
+# 🩸 A 1ª versão (mesmo dia) caiu no A/B do acervo (28 arquivos de 18 jobs com
+# corte no nome), por três motivos — e cada um virou uma trava:
+# 1. UMA CONTAGEM SUBIA (3 → 17): ela dava todo bloco "de corte pelo nome" como
+#    vista e, com isso, desligava a regra antiga no bloco em que era a antiga
+#    que tirava (parte das inserções fora de região de vista). → A régua nova
+#    só ACRESCENTA saída; quem ela não tira segue exatamente a regra de antes.
+# 2. A PLANTA ESTÁ EM OUTRO ARQUIVO: numa prancha a elevação "FACHADA FRONTAL"
+#    mostra, de perfil na linha do chão, 123 vagas de estacionamento; a planta
+#    delas é outro DXF do job, e neste só há 4 fora da elevação. A elevação
+#    é o único registro das outras. → A vista de corte só "mostra
+#    de novo" a família se mostra NO MÁXIMO o que é contado fora de corte.
+# 3. PRÉDIO DE VÁRIOS ANDARES: as fachadas e os cortes mostram todos os andares
+#    (193 pilares) e a planta é o tipo desenhado uma vez. → O "contado fora" é
+#    o que a planta VALE (com o peso dos andares do título): a fachada que
+#    mostra mais que isso não mexe em nada; se o título disser 7 andares, 10
+#    pilares × 7 = 70 e a fachada de até 70 sai.
+# 4. A QUANTIDADE QUE CABE E É OUTRO TRECHO. A conta do item 2 não distingue "o
+#    mesmo trecho visto de lado" de "outro trecho com quase a mesma quantidade".
+#    → O corte é a planta vista de lado: o VÃO que as peças ocupam nele não
+#    passa do ALCANCE delas numa vista de fora (a diagonal da caixa das
+#    inserções). Passou, é outro trecho, e nada muda. Medido no A/B (58
+#    arquivos): ela segura sozinha 5 vistas, 12 inserções — a maior, 4 janelas
+#    espalhadas por 66 m de fachada contra 4 inserções num canto de 0,95 fora
+#    (um detalhe, não a planta delas). E onde é a mesma coisa as duas medidas
+#    fecham: 133 pisos táteis numa faixa de 37,93 na elevação, 149 numa caixa
+#    de 8,36 × 36,99 na planta (diagonal 37,92) — a mesma calçada, e sai.
+# 🪤 "Contado fora de corte" é o que a leitura CONTA fora de vista de corte, seja
+# planta, layout ou perspectiva: numa prancha sem planta (perspectiva + cortes
+# + fachadas) cada peça fica contada uma vez, pela perspectiva. E duas plantas
+# do mesmo andar (layout e planta baixa) somam nesse "fora" — a conta fica mais
+# frouxa nesses arquivos; quem aperta é o vão.
+#: folga do vão sobre o alcance — o ponto de inserção do símbolo em corte e em
+#: planta não é o mesmo ponto da peça
+_CORTE_VAO_FOLGA = 1.05
+_RE_BLOCO_DO_REVIT = re.compile(r"^(?P<base>.*?)-(?:\d{5,}|V\d{1,3})-(?P<vista>.+)$")
+_RE_VARIANTE_ANTES_DA_VISTA = re.compile(r"^V\d{1,3}-")
+_RE_CORTE_NO_NOME_DA_VISTA = re.compile(
+    r"\b(?:cortes?|secao|secoes|sections?|elevacao|elevacoes|elev|fachadas?)\b")
+
+
+def _peca_do_revit(nome) -> tuple:
+    """("família - tipo", "vista", é_de_corte) do nome de um bloco exportado
+    pelo Revit; ("", "", False) quando o nome não tem a forma dele. A vista vem
+    minúscula e sem acento; `é_de_corte`: ela é corte, seção, elevação ou
+    fachada."""
+    m = _RE_BLOCO_DO_REVIT.match(str(nome or ""))
+    if not m or not m.group("base").strip():
+        return "", "", False
+    from engine_rules import _minusculo_sem_acento
+    vista = _minusculo_sem_acento(_RE_VARIANTE_ANTES_DA_VISTA.sub("", m.group("vista").strip())).strip()
+    return m.group("base").strip(), vista, bool(_RE_CORTE_NO_NOME_DA_VISTA.search(vista))
+
+
 def aplicar_leitura_por_folha(walls, hatches, polygon_areas, blocks, mapa) -> dict:
     """Tira da medição o que está em desenho 'fora' e dá peso N à planta de N andares.
 
@@ -7603,12 +7674,21 @@ def aplicar_leitura_por_folha(walls, hatches, polygon_areas, blocks, mapa) -> di
     if _rep["m"] or _rep["m2"] or _rep["blocos"]:
         res["repetidas"] = _rep
     tem_vista = any(f["tipo"] == "vista" for f in regs)
-    if not tem_vista and not any(f["tipo"] == "fora" or f.get("andares", 1) > 1 for f in regs):
+    # 11/10: o bloco que o NOME diz ser de corte (export do Revit) pode sair mesmo
+    # sem região de vista — a régua dele está no fim, junto da dos blocos
+    corte_no_nome = any(_peca_do_revit(b.name)[2] for b in blocks)
+    so_plantas_de_um_andar = (not tem_vista and not any(
+        f["tipo"] == "fora" or f.get("andares", 1) > 1 for f in regs))
+
+    def _nada_muda():
         if "repetidas" in res:
             res.update(aplicada=True, antes=antes, depois=_totais())
         else:
             res["motivo"] = "só plantas de um andar — nada muda"
         return res
+
+    if so_plantas_de_um_andar and not corte_no_nome:
+        return _nada_muda()
     from engine_rules import vista_e_corte
     corte = {id(f): vista_e_corte(f.get("titulo", "")) for f in regs if f["tipo"] == "vista"}
     _NA_VISTA = -1                  # bloco: decide depois, pelo resto do arquivo
@@ -7688,21 +7768,63 @@ def aplicar_leitura_por_folha(walls, hatches, polygon_areas, blocks, mapa) -> di
             novas.append(h)
         lista[:] = novas
     # Bloco na vista: sai se o MESMO bloco é contado fora de vista no arquivo.
+    # 🩸 11/10: no export do Revit o "mesmo bloco" é a mesma FAMÍLIA - TIPO (o nome
+    # traz a vista no fim — ver `_peca_do_revit`). A vista de corte sai inteira,
+    # pra uma família, quando mostra NO MÁXIMO o que ela vale fora de corte e
+    # num VÃO que cabe no alcance dela numa vista de fora; o resto segue a regra
+    # de antes, sem tirar nem pôr.
     pesos_de, fora_da_vista = {}, set()
+    fora_de_corte, no_corte = {}, {}    # família → o que ela vale fora de corte; (família, vista) → inserções
+    caixa_no_corte, caixa_fora = {}, {}  # (família, vista) → caixa das inserções contadas
+
+    def _estica(caixas, chave, p):
+        c = caixas.get(chave)
+        x, y = float(p[0]), float(p[1])
+        caixas[chave] = (x, y, x, y) if c is None else (min(c[0], x), min(c[1], y), max(c[2], x), max(c[3], y))
+
     for b in blocks:
+        peca, vista, de_corte = _peca_do_revit(b.name)
         pos = list(getattr(b, "positions", None) or [])
         if len(pos) != b.count:
             fora_da_vista.add(b.name)                # posições incompletas: conta
+            if peca and not de_corte:
+                fora_de_corte[peca] = fora_de_corte.get(peca, 0) + b.count
             continue
         pesos_de[id(b)] = [peso(p, "bl") for p in pos]
         if any(k > 0 for k in pesos_de[id(b)]):
             fora_da_vista.add(b.name)
+        if peca and de_corte:
+            no_corte[(peca, vista)] = no_corte.get((peca, vista), 0) + sum(
+                1 for k in pesos_de[id(b)] if k != 0)            # o que o detalhe já tirou não conta
+            for p, k in zip(pos, pesos_de[id(b)]):
+                if k != 0:
+                    _estica(caixa_no_corte, (peca, vista), p)
+        elif peca:
+            fora_de_corte[peca] = fora_de_corte.get(peca, 0) + sum(k for k in pesos_de[id(b)] if k > 0)
+            for p, k in zip(pos, pesos_de[id(b)]):
+                if k > 0:
+                    _estica(caixa_fora, (peca, vista), p)
+
+    def _corte_que_repete_a_planta(nome):
+        peca, vista, de_corte = _peca_do_revit(nome)
+        vale_fora = fora_de_corte.get(peca, 0) if de_corte else 0
+        if not (vale_fora > 0 and no_corte.get((peca, vista), 0) <= vale_fora):
+            return False
+        c = caixa_no_corte.get((peca, vista))
+        vao = max(c[2] - c[0], c[3] - c[1]) if c else 0.0
+        alcance = max((math.hypot(q[2] - q[0], q[3] - q[1])
+                       for (p2, _v), q in caixa_fora.items() if p2 == peca), default=0.0)
+        return vao <= alcance * _CORTE_VAO_FOLGA
+
     novos = []
     for b in blocks:
         if id(b) not in pesos_de:
             novos.append(b)                          # posições incompletas: neutro
             continue
         pos = list(b.positions)
+        if _corte_que_repete_a_planta(b.name):
+            tirou["blocos"] += sum(1 for k in pesos_de[id(b)] if k != 0)
+            continue
         na_vista = 0 if b.name in fora_da_vista else 1
         pesos = [na_vista if k == _NA_VISTA else k for k in pesos_de[id(b)]]
         tirou["blocos"] += sum(1 for k in pesos_de[id(b)] if k == _NA_VISTA) * (1 - na_vista)
@@ -7711,7 +7833,9 @@ def aplicar_leitura_por_folha(walls, hatches, polygon_areas, blocks, mapa) -> di
         if b.count > 0:
             novos.append(b)
     blocks[:] = novos
-    if tem_vista:
+    if so_plantas_de_um_andar and not tirou["blocos"]:
+        return _nada_muda()             # havia bloco de corte no nome, e nenhum saiu
+    if tem_vista or tirou["blocos"]:
         res["vista"] = {"m": round(float(tirou["m"]), 1), "m2": round(float(tirou["m2"]), 1),
                         "blocos": tirou["blocos"]}
     depois = {"comprimento": round(sum(w.length * getattr(w, "peso", 1.0) for w in walls), 2),
