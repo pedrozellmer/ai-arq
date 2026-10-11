@@ -553,6 +553,7 @@
       "slug": "sinapi-vs-tcpo-qual-usar",
       "title": "SINAPI vs TCPO vs SICRO: Qual Usar no Seu Projeto (Guia 2026)",
       "description": "Diferenças entre SINAPI, TCPO e SICRO em 2026. Quando cada base se aplica, comparação técnica, exemplos práticos pra arquitetos e engenheiros.",
+      "resposta_curta": "SINAPI é a base gratuita e mensal da Caixa e do IBGE, referência obrigatória em obra com recurso federal. TCPO é a base paga da PINI, com composições mais detalhadas. SICRO é a do DNIT, pra infraestrutura de transportes. Na dúvida, em edificação, comece pelo SINAPI. É a base que o AI.arq usa como referência de código, descrição e unidade, sem preço.",
       "keywords": "sinapi vs tcpo, diferença sinapi tcpo sicro, qual usar sinapi tcpo, base sinapi 2026, base tcpo bim, composições obra públicas privadas",
       "category": "Referências Técnicas",
       "publish_date": "2026-05-10",
@@ -573,7 +574,7 @@
         },
         {
           "h2": "Comparação direta",
-          "body": "SINAPI:\n- Foco: custo realista atualizado\n- Atualização: mensal\n- Custo: grátis\n- Cobertura: edificações + infraestrutura urbana\n- Obras públicas: referência obrigatória (federal)\n\nTCPO:\n- Foco: detalhamento técnico de composição\n- Atualização: por edições, em ciclos mais longos\n- Custo: pago\n- Cobertura: edificações\n- Obras públicas: não é a referência obrigatória\n\nSICRO:\n- Foco: infraestrutura de transportes\n- Atualização: periódica\n- Custo: grátis\n- Cobertura: rodovias, ferrovias, pontes\n- Obras públicas: referência obrigatória (transportes)\n- Não cobre edificações"
+          "body": "| | SINAPI | TCPO | SICRO |\n| Foco | custo realista atualizado | detalhamento técnico de composição | infraestrutura de transportes |\n| Atualização | mensal | por edições, em ciclos mais longos | periódica |\n| Custo | grátis | pago | grátis |\n| Cobertura | edificações + infraestrutura urbana | edificações | rodovias, ferrovias, pontes (não cobre edificações) |\n| Obras públicas | referência obrigatória (federal) | não é a referência obrigatória | referência obrigatória (transportes) |"
         },
         {
           "h2": "Quando usar SINAPI",
@@ -650,6 +651,10 @@
       "publish_date": "2026-05-17",
       "update_date": "2026-09-26",
       "intro": "Toda obra que estoura orçamento costuma ter origem em quantitativo mal feito. Não é mistério: orçamento é quantidade vezes preço unitário. Se a quantidade está errada, o resto cai junto. O levantamento de quantitativos é a primeira etapa do processo orçamentário descrito pelo TCU nas suas orientações sobre planilhas de obras públicas — e erro nessa etapa contamina tudo que vem depois. No setor privado o impacto é o mesmo, só sem auditor pra apontar. Esse post lista os 7 erros mais frequentes que aparecem em planilhas de quantitativos, com exemplo de cada um e como evitar.",
+      "ponte": {
+        "frase": "Boa parte desses erros nasce de medir e contar na mão. O AI.arq lê o DWG, DXF ou PDF e devolve a planilha com cada linha marcada como medida ou estimativa, pra você saber onde conferir.",
+        "track": "ponte-7-erros"
+      },
       "sections": [
         {
           "h2": "Erro 1: Esquecer disciplinas inteiras",
@@ -732,6 +737,10 @@
       "category": "Como Ler Projetos",
       "publish_date": "2026-05-24",
       "intro": "Se você é arquiteto, engenheiro, orçamentista ou está começando, em algum momento precisa ler um quadro de esquadrias. Aqueles códigos misteriosos — P1, P2, J1, J2 — confundem quem nunca foi apresentado à convenção. Pior: as esquadrias são reguladas pela ABNT NBR 10821, dividida em várias partes que tratam de terminologia, requisitos, ensaios, instalação e manutenção. Esse guia explica a convenção brasileira, como ler cada coluna do quadro, como contar pra orçamento, e como a norma técnica entra na equação.",
+      "ponte": {
+        "frase": "O AI.arq lê o quadro de esquadrias quando a prancha traz um. Quando não traz, conta portas e janelas na planta e marca o item como estimativa.",
+        "track": "ponte-esquadrias"
+      },
       "sections": [
         {
           "h2": "O que é o quadro de esquadrias",
@@ -822,6 +831,10 @@
       "category": "Mercado",
       "publish_date": "2026-05-31",
       "intro": "Quanto vale o trabalho de fazer uma planilha de quantitativos profissional em 2026? Essa pergunta vive em grupos de arquitetos e orçamentistas. A resposta não é única — depende do porte do projeto, da complexidade, da região, e da sua experiência. Esse guia reúne a referência oficial (Tabela de Honorários do CAU/BR), faixas praticadas no mercado, e como pensar a cobrança pelas 4 modalidades mais comuns: por porte, por prancha, por m² e por hora. No fim, comento como a IA está mudando a conta de custo do levantamento.\n\nAntes de tudo, um aviso que muda como você deve ler o que vem abaixo: **as faixas de valores deste guia não saem de pesquisa de mercado nem de tabela oficial.** São ordens de grandeza que usamos pra dar estrutura ao raciocínio — servem pra você enxergar as 4 formas de cobrar e a proporção entre elas, não pra citar como referência a um cliente.\n\nA única referência que você pode defender numa proposta é a **Tabela de Honorários do CAU/BR**, que é oficial, calculável e explicada na próxima seção. Os números deste guia são apoio pra você chegar no SEU preço, medindo o SEU tempo.",
+      "ponte": {
+        "frase": "Se o levantamento é o que mais pesa nas suas horas: o AI.arq lê o projeto e devolve a planilha de quantitativos pra você revisar. Grátis durante o beta.",
+        "track": "ponte-quanto-cobrar"
+      },
       "sections": [
         {
           "h2": "A referência oficial: Tabela de Honorários CAU/BR",
@@ -1404,10 +1417,14 @@
       "publish_date": "2026-07-19",
       "update_date": "2026-09-26",
       "intro": "Estourar a verba é a dor número um de quem entrega projeto de arquitetura. Em geral, quando isso acontece, o culpado não é o preço de mercado — é o quantitativo errado lá atrás. Item esquecido, área medida na planta errada, BDI aplicado por cima de tudo sem critério: a obra começa com o número torto e o atraso vira consequência. Este guia destrincha os 5 erros clássicos de levantamento de quantitativos que viram atraso de obra no Brasil, com exemplo concreto de cada, como evitar, e referência técnica das normas e da literatura de orçamento. Lembrando desde já: arquiteto levanta quantidade, orçamentista precifica. Quem fecha o preço de mão de obra e BDI é o profissional de orçamento ou a construtora.",
+      "ponte": {
+        "frase": "O AI.arq levanta o quantitativo direto do arquivo do projeto e separa o que foi medido do desenho do que é estimativa. É nas estimativas que vale gastar a conferência.",
+        "track": "ponte-5-erros"
+      },
       "sections": [
         {
           "h2": "Por que o quantitativo errado vira atraso de obra",
-          "body": "Quantitativo é a lista numérica de tudo que a obra vai consumir: metros quadrados de revestimento, unidades de luminária, metros lineares de tubulação, sacos de cimento. É a base sobre a qual o orçamentista aplica preço unitário e BDI pra chegar no custo final.\n\nQuando o quantitativo erra, três coisas acontecem em sequência:\n\n1. O cliente aprova orçamento subdimensionado, achando que vai pagar X.\n2. Na obra, aparece item faltando ou quantidade maior que a prevista.\n3. Aditivo de contrato, briga com cliente, fornecedor esperando material que não chegou, pedreiro parado. Atraso.\n\nA ABNT NBR 12721:2006 (Avaliação de custos unitários de construção para incorporação imobiliária) e a NBR 16636-1:2017 (Elaboração e desenvolvimento de serviços técnicos especializados de projetos arquitetônicos e urbanísticos), que substituiu a antiga NBR 13531:1995, tratam o levantamento de quantitativos como etapa formal do projeto, não improviso de canteiro. Aldo Dórea Mattos, na referência clássica \"Como Preparar Orçamentos de Obras\" (Oficina de Textos, 3ª ed., 2019), dedica o livro inteiro a mostrar que o erro de orçamento nasce cedo, no levantamento, e se propaga até o custo final.\n\nOs 5 erros abaixo são os que mais aparecem em obra residencial e comercial de pequeno e médio porte no Brasil."
+          "body": "Quantitativo é a lista numérica de tudo que a obra vai consumir: metros quadrados de revestimento, unidades de luminária, metros lineares de tubulação, sacos de cimento. É a base sobre a qual o orçamentista aplica preço unitário e BDI pra chegar no custo final.\n\nQuando o quantitativo erra, três coisas acontecem em sequência:\n\n1. O cliente aprova orçamento subdimensionado, achando que vai pagar X.\n2. Na obra, aparece item faltando ou quantidade maior que a prevista.\n3. Aditivo de contrato, briga com cliente, fornecedor esperando material que não chegou, pedreiro parado. Atraso.\n\nA ABNT NBR 12721:2006 (Avaliação de custos unitários de construção para incorporação imobiliária) e a NBR 16636-1:2017 (Elaboração e desenvolvimento de serviços técnicos especializados de projetos arquitetônicos e urbanísticos), que substituiu a antiga NBR 13531:1995, tratam o levantamento de quantitativos como etapa formal do projeto, não improviso de canteiro. Aldo Dórea Mattos, na referência clássica \"Como Preparar Orçamentos de Obras\" (Oficina de Textos, 3ª ed., 2019), dedica o livro inteiro a mostrar que o erro de orçamento nasce cedo, no levantamento, e se propaga até o custo final.\n\nOs erros de levantamento em si (disciplina esquecida, área bruta no lugar da líquida, unidade trocada) estão em <a href=\"/blog/posts/7-erros-comuns-levantamento-quantitativos.html\">7 erros comuns no levantamento de quantitativos</a>; aqui o foco é o que eles custam em prazo.\n\nOs 5 erros abaixo são os que mais aparecem em obra residencial e comercial de pequeno e médio porte no Brasil."
         },
         {
           "h2": "Erro 1: Confiar em planta antiga sem revisar",
@@ -1527,6 +1544,7 @@
       "slug": "dwg-ou-pdf-quantitativo-o-que-os-dados-mostram",
       "title": "DWG, DXF ou PDF: o que os nossos dados mostram sobre qual formato medir",
       "description": "Qual arquivo enviar pro quantitativo — DWG, DXF ou PDF — e o que os nossos dados mostram: por que só o CAD sai medido e o que mudou na leitura de DWG.",
+      "resposta_curta": "Mande o arquivo de CAD, DWG ou DXF. Na nossa base, 21,0% das linhas de projetos em CAD saem medidas da geometria; em PDF, tudo sai como estimativa, porque a escala vem do carimbo da prancha. Se o DWG voltar com erro, salve em DXF e envie de novo.",
       "keywords": "dwg ou pdf quantitativo, planilha de quantitativos dwg, exportar prancha cad, levantamento de quantitativos automatico, dxf quantitativo",
       "category": "IA e Confiança",
       "publish_date": "2026-07-22",
@@ -1534,11 +1552,11 @@
       "sections": [
         {
           "h2": "O que os dados mostram: 240 projetos, dois formatos",
-          "body": "Medição de 10 de outubro de 2026, sobre todos os projetos de clientes concluídos na plataforma: 240 projetos e 21.876 linhas de planilha. Separamos por formato de origem: 165 vieram com pelo menos um arquivo de CAD (DWG ou DXF) e 75 vieram só em PDF.\n\nSão duas perguntas diferentes, e a gente responde as duas:\n\n• Quanto da planilha volta **com quantidade**: 69,4% das linhas em CAD e 51,6% só com PDF.\n• Quanto volta **carimbado como medido**, com a quantidade calculada da geometria do desenho: 21,0% das linhas em CAD (2.709 de 12.910) e 3 linhas em 8.966 no PDF.\n\nAs 3 linhas medidas de PDF são de maio, anteriores à regra atual: hoje nada que vem de PDF sai carimbado como medido. O selo diz de onde veio o número, não que ele foi conferido — a conferência final continua sendo sua. O método e a amostra estão em <a href=\"/dados.html\">Dados do AI.arq</a>, a página que é a fonte de todo número citado no site."
+          "body": "Medição de 10 de outubro de 2026, sobre todos os projetos de clientes concluídos na plataforma: 240 projetos e 21.876 linhas de planilha. Separamos por formato de origem: 165 vieram com pelo menos um arquivo de CAD (DWG ou DXF) e 75 vieram só em PDF.\n\nSão duas perguntas diferentes, e a gente responde as duas: quanto da planilha volta **com quantidade** e quanto volta **carimbado como medido**, com a quantidade calculada da geometria do desenho.\n\n| Origem do projeto | Projetos | Linhas | Com quantidade | Medidas da geometria |\n| CAD (DWG ou DXF) | 165 | 12.910 | 69,4% | 21,0% (2.709 de 12.910) |\n| Só PDF | 75 | 8.966 | 51,6% | 3 linhas em 8.966 |\n\nAs 3 linhas medidas de PDF são de maio, anteriores à regra atual: hoje nada que vem de PDF sai carimbado como medido. O selo diz de onde veio o número, não que ele foi conferido — a conferência final continua sendo sua. O método e a amostra estão em <a href=\"/dados.html\">Dados do AI.arq</a>, a página que é a fonte de todo número citado no site."
         },
         {
           "h2": "DWG ou DXF? A resposta mudou",
-          "body": "Até agosto a gente pedia DXF, e tinha motivo: na base de 01/08/2026, 61,7% dos DWG enviados (29 de 47) não chegavam ao fim — quase sempre na conversão do arquivo. De lá pra cá a leitura de DWG foi consertada em várias frentes, e a conta mudou.\n\nEnvios de clientes de 11/09 a 10/10/2026 (30 dias):\n\n• Só DWG: 70 envios, 7 terminaram em erro — 10,0%\n• Só DXF: 8 envios, nenhum terminou em erro\n• Só PDF: 28 envios, 1 terminou em erro — 3,6%\n\nE entre os que concluíram, o DWG saiu com mais linhas medidas: 21,4% (1.397 de 6.540), contra 14,0% no DXF (67 de 478).\n\nTrês ressalvas antes de tirar conclusão. A amostra de DXF é pequena: 8 envios não sustentam dizer que o DXF mede menos. “Terminou em erro” é o estado final do projeto: o que falhou e depois foi reprocessado com sucesso conta como concluído. E ficaram fora da lista 4 envios que traziam DWG e DXF juntos (1 terminou em erro).\n\nO que dá pra afirmar: **hoje o DWG chega ao fim em 9 de cada 10 envios**. Não precisa mais converter pra DXF antes de mandar. O DXF continua sendo a saída quando o DWG não abre — é o caso típico dos arquivos com objetos do AutoCAD Architecture/MEP, que nenhum conversor abre direto."
+          "body": "Até agosto a gente pedia DXF, e tinha motivo: na base de 01/08/2026, 61,7% dos DWG enviados (29 de 47) não chegavam ao fim — quase sempre na conversão do arquivo. De lá pra cá a leitura de DWG foi consertada em várias frentes, e a conta mudou.\n\nEnvios de clientes de 11/09 a 10/10/2026 (30 dias):\n\n| Formato enviado | Envios | Terminaram em erro |\n| Só DWG | 70 | 7 (10,0%) |\n| Só DXF | 8 | nenhum |\n| Só PDF | 28 | 1 (3,6%) |\n\nE entre os que concluíram, o DWG saiu com mais linhas medidas: 21,4% (1.397 de 6.540), contra 14,0% no DXF (67 de 478).\n\nTrês ressalvas antes de tirar conclusão. A amostra de DXF é pequena: 8 envios não sustentam dizer que o DXF mede menos. “Terminou em erro” é o estado final do projeto: o que falhou e depois foi reprocessado com sucesso conta como concluído. E ficaram fora da lista 4 envios que traziam DWG e DXF juntos (1 terminou em erro).\n\nO que dá pra afirmar: **hoje o DWG chega ao fim em 9 de cada 10 envios**. Não precisa mais converter pra DXF antes de mandar. O DXF continua sendo a saída quando o DWG não abre — é o caso típico dos arquivos com objetos do AutoCAD Architecture/MEP, que nenhum conversor abre direto."
         },
         {
           "h2": "Por que o formato muda tanto: a escala do PDF é declarada, não medida",
@@ -1581,15 +1599,16 @@
       "slug": "bdi-arquiteto-br-2026-tabela",
       "title": "BDI do arquiteto em 2026: tabela completa por porte de obra",
       "description": "Tabela de BDI pra arquiteto: faixas do Acórdão TCU 2622/2013, os 6 componentes e exemplos de cálculo em obras de R$300 mil, R$1 mi e R$3 mi.",
+      "resposta_curta": "BDI (Benefícios e Despesas Indiretas) é o percentual aplicado sobre o custo direto da obra pra chegar ao preço final: cobre administração, despesas financeiras, tributos, riscos e lucro. Pra edificações, o Acórdão TCU 2622/2013 dá como referência de 20,34% a 25,00%, com média de 22,12%. O AI.arq não calcula BDI nem preço: entrega o quantitativo, que vem antes.",
       "keywords": "BDI arquitetura, BDI tabela TCU 2026, BDI Acórdão 2622, BDI obra residencial, BDI obra comercial, componentes BDI, BDI tabela referencial, BDI obras públicas, fórmula BDI, BDI honorário arquiteto",
       "category": "BDI/Orçamento",
       "publish_date": "2026-08-16",
-      "update_date": "2026-09-26",
+      "update_date": "2026-10-11",
       "intro": "O arquiteto não precisa virar orçamentista pra entender BDI, mas precisa entender BDI o suficiente pra não passar vergonha em reunião com o cliente. Quando alguém pergunta \"quanto vai sair a obra?\" e olha pro custo direto da planilha, está olhando pra metade da resposta. A outra metade é o BDI — Benefícios e Despesas Indiretas — o percentual que cobre tudo que não está embutido na composição de cada item. Esse guia explica BDI especificamente pra arquiteto brasileiro em 2026: o que cada componente significa, quais as faixas referenciais do Acórdão TCU 2622/2013 (ainda canônico), exemplos de cálculo em três portes de obra (R$300 mil, R$1 milhão e R$3 milhões) e o erro mais comum que arquiteto comete misturando BDI da obra com honorário do projeto.",
       "sections": [
         {
           "h2": "BDI em uma frase: o que é, antes de qualquer fórmula",
-          "body": "BDI é a sigla pra \"Benefícios e Despesas Indiretas\". É o percentual aplicado sobre o custo direto da obra pra chegar ao preço final que o construtor vai cobrar do cliente. Custo direto é o que está na planilha de quantitativos vezes os preços de mão de obra, material e equipamento. BDI é tudo o resto: administração da empresa, financiamento da obra, tributos, imprevistos e o lucro do construtor.\n\nA fórmula mais usada no mercado brasileiro é a multiplicativa, oficializada pelo Acórdão TCU 2622/2013:\n\nBDI = [(1+AC+S+R+G) × (1+DF) × (1+L) / (1-I)] - 1\n\nOnde:\n- AC = Administração Central\n- S = Seguros\n- R = Riscos\n- G = Garantias\n- DF = Despesas Financeiras\n- L = Lucro\n- I = Tributos (PIS, COFINS, ISS, CPRB se aplicável)\n\nNa prática, o resultado costuma ficar em torno de 20% a 35% pra obras brasileiras típicas. Isso significa: se o custo direto da obra é R$1 milhão, o preço final pro cliente vira algo entre R$1,2 milhão e R$1,35 milhão. A diferença não é golpe — é o que mantém a construtora funcionando."
+          "body": "BDI é a sigla pra \"Benefícios e Despesas Indiretas\". É o percentual aplicado sobre o custo direto da obra pra chegar ao preço final que o construtor vai cobrar do cliente. Custo direto é o que está na planilha de quantitativos vezes os preços de mão de obra, material e equipamento. BDI é tudo o resto: administração da empresa, financiamento da obra, tributos, imprevistos e o lucro do construtor.\n\nA fórmula mais usada no mercado brasileiro é a multiplicativa, oficializada pelo Acórdão TCU 2622/2013:\n\nBDI = [(1+AC+S+R+G) × (1+DF) × (1+L) / (1-I)] - 1\n\nOnde:\n- AC = Administração Central\n- S = Seguros\n- R = Riscos\n- G = Garantias\n- DF = Despesas Financeiras\n- L = Lucro\n- I = Tributos (PIS, COFINS, ISS, CPRB se aplicável)\n\nNa prática, o resultado costuma ficar em torno de 20% a 35% pra obras brasileiras típicas. Isso significa: se o custo direto da obra é R$1 milhão, o preço final pro cliente vira algo entre R$1,2 milhão e R$1,35 milhão. A diferença não é golpe — é o que mantém a construtora funcionando.\n\nA fórmula passo a passo, com um exemplo numérico completo, está em <a href=\"/blog/posts/bdi-em-obra-o-que-e-como-calcular.html\">BDI em obra: o que é e como calcular</a>."
         },
         {
           "h2": "Por que o arquiteto precisa entender BDI (mesmo não cobrando)",
@@ -1601,7 +1620,7 @@
         },
         {
           "h2": "Tabela de faixas referenciais do Acórdão TCU 2622/2013",
-          "body": "O Acórdão TCU 2622/2013 estabeleceu, com base em estudo de obras públicas, faixas referenciais de BDI por tipo de obra. Pra cada tipo, o acórdão traz três valores: o 1º quartil (tratado como mínimo de referência), o valor médio e o 3º quartil (máximo de referência). Essas faixas continuam sendo referência pra obras públicas em 2026 e também servem de balizamento pro mercado privado.\n\nEdificações (construção e reforma de prédios)\n- 1º quartil (mínimo): 20,34%\n- Médio: 22,12%\n- 3º quartil (máximo): 25,00%\n\nConstrução de rodovias e ferrovias\n- 1º quartil (mínimo): 19,60%\n- Médio: 20,97%\n- 3º quartil (máximo): 24,23%\n\nConstrução de redes de abastecimento de água e coleta de esgoto\n- 1º quartil (mínimo): 20,76%\n- Médio: 24,18%\n- 3º quartil (máximo): 26,44%\n\nFornecimento de materiais e equipamentos relevantes\n- 1º quartil (mínimo): 11,10%\n- Médio: 14,02%\n- 3º quartil (máximo): 16,80%\n\nObservação importante: o regime tributário muda o tributo I da fórmula. No lucro real, PIS e COFINS sobem (1,65% e 7,6%), o que tende a deslocar pra cima o BDI aceitável. O próprio Acórdão TCU 2622/2013 admite BDI fora da faixa referencial desde que justificado tecnicamente."
+          "body": "O Acórdão TCU 2622/2013 estabeleceu, com base em estudo de obras públicas, faixas referenciais de BDI por tipo de obra. Pra cada tipo, o acórdão traz três valores: o 1º quartil (tratado como mínimo de referência), o valor médio e o 3º quartil (máximo de referência). Essas faixas continuam sendo referência pra obras públicas em 2026 e também servem de balizamento pro mercado privado.\n\n| Tipo de obra | 1º quartil (mínimo) | Médio | 3º quartil (máximo) |\n| Edificações (construção e reforma de prédios) | 20,34% | 22,12% | 25,00% |\n| Construção de rodovias e ferrovias | 19,60% | 20,97% | 24,23% |\n| Construção de redes de abastecimento de água e coleta de esgoto | 20,76% | 24,18% | 26,44% |\n| Fornecimento de materiais e equipamentos relevantes | 11,10% | 14,02% | 16,80% |\n\nObservação importante: o regime tributário muda o tributo I da fórmula. No lucro real, PIS e COFINS sobem (1,65% e 7,6%), o que tende a deslocar pra cima o BDI aceitável. O próprio Acórdão TCU 2622/2013 admite BDI fora da faixa referencial desde que justificado tecnicamente."
         },
         {
           "h2": "Exemplo 1 — Obra residencial pequena (custo direto R$300 mil)",
@@ -2099,7 +2118,7 @@
       "sections": [
         {
           "h2": "Baixe o modelo XLSX agora",
-          "body": "Antes de explicar a teoria, segue o modelo pronto pra editar. É um XLSX com as 18 disciplinas separadas por aba, cabeçalho padronizado (código SINAPI, descrição, unidade, quantidade, colunas em branco pra preço unitário e total), célula de totalização por disciplina e aba final de consolidação. Sem cadastro, sem captura de email.\n\n<DOWNLOAD_BUTTONS>\n\nO modelo já vem com exemplos de códigos SINAPI mais usados em cada disciplina (alvenaria, contrapiso, revestimento cerâmico, pintura, instalações). Substitua pelos códigos correspondentes ao seu projeto e preencha as quantidades extraídas da planta. As colunas de preço ficam em branco de propósito — quem precifica é o orçamentista, não a planilha."
+          "body": "Antes de explicar a teoria, segue o modelo pronto pra editar. É um XLSX com as 18 disciplinas separadas por aba, cabeçalho padronizado (código SINAPI, descrição, unidade, quantidade, colunas em branco pra preço unitário e total), célula de totalização por disciplina e aba final de consolidação. Sem cadastro, sem captura de email.\n\n<DOWNLOAD_BUTTONS>\n\nO modelo já vem com exemplos de códigos SINAPI mais usados em cada disciplina (alvenaria, contrapiso, revestimento cerâmico, pintura, instalações). Substitua pelos códigos correspondentes ao seu projeto e preencha as quantidades extraídas da planta. As colunas de preço ficam em branco de propósito — quem precifica é o orçamentista, não a planilha.\n\nPra montar a planilha do zero, o passo a passo está em <a href=\"/blog/posts/como-fazer-planilha-de-quantitativos-de-obra.html\">Como fazer planilha de quantitativos de obra</a>."
         },
         {
           "h2": "O que é o SINAPI, em uma página",
@@ -2408,6 +2427,10 @@
       "category": "Tipologias",
       "publish_date": "2026-10-04",
       "intro": "Retrofit comercial parece obra simples até o canteiro começar a revelar surpresas: a parede que era estrutural, o esgoto que não tem caimento pra nova copa, o sistema de incêndio que o Corpo de Bombeiros vai exigir. O problema quase nunca é a disciplina difícil — é a disciplina esquecida, aquela que ninguém colocou no escopo e vira aditivo.\n\nEste guia organiza as 18 disciplinas típicas de uma obra de retrofit comercial em ordem de execução comum, mostra as 5 que mais geram aditivo, e separa o que muda no quantitativo com as tendências de 2026. Cada afirmação técnica vem com a norma ou a referência correspondente. A ideia é simples: levantar tudo antes, pra não descobrir depois.",
+      "ponte": {
+        "frase": "O AI.arq organiza o quantitativo por disciplina, até 18, a partir do DWG, DXF ou PDF do projeto.",
+        "track": "ponte-retrofit"
+      },
       "sections": [
         {
           "h2": "O que é retrofit comercial",
@@ -2627,9 +2650,14 @@
       "slug": "quantitativo-manual-automatico-ou-bim-comparativo",
       "title": "Quantitativo manual, automático (IA lê o CAD) ou BIM: comparativo honesto por cenário",
       "description": "Quantitativo manual ou automático? 2D vs BIM? Comparamos as três abordagens por precisão, tempo, curva de aprendizado e o que cada uma realmente mede.",
+      "resposta_curta": "Depende do que você tem na mão. Com modelo BIM completo, o quantitativo sai do modelo. Com o CAD (DWG, DXF ou PDF vetorial) e sem modelo, o automático costuma ser o melhor custo-benefício. Em projeto minúsculo ou trecho pontual, o manual ainda ganha. O AI.arq faz o caminho automático: lê o CAD e devolve a planilha com cada linha marcada como medida ou estimativa.",
       "keywords": "quantitativo manual ou automático, quantitativo 2d vs bim, como escolher ferramenta de quantitativo, levantamento de quantitativos, quantitativo automático a partir do CAD, quantitativo sem BIM, medição de projeto DWG",
       "category": "Quantitativos e Orçamento",
       "intro": "Todo orçamento de obra começa no mesmo lugar: alguém precisa contar. Contar metros de parede, área de piso, número de portas, comprimento de eletroduto, volume de concreto. Esse levantamento de quantitativos é a base numérica de tudo o que vem depois — o preço, o cronograma, a compra de material. E, na prática, existem três caminhos para chegar até ele: fazer na mão sobre a prancha, deixar uma ferramenta ler o CAD e medir a geometria, ou extrair as quantidades de um modelo BIM.\n\nA pergunta que trava muita gente é: qual dos três usar? A resposta honesta é que depende do projeto que está na sua frente hoje — não do que seria ideal num mundo perfeito. Uma reforma de 80 m² sem modelo nenhum não pede a mesma abordagem de um hospital com projeto BIM completo e coordenado. Este post compara as três formas de levantar quantitativo por cenário: quanto tempo custam, quão precisas são, o que cada uma mede de verdade e quanto tempo você leva para aprender a usá-las. Sem torcida por nenhum lado — cada abordagem tem o terreno onde ganha.",
+      "ponte": {
+        "frase": "Quer ver como sai um levantamento automático? O exemplo mostra a planilha de um projeto, com as linhas medidas e as estimadas lado a lado.",
+        "track": "ponte-comparativo"
+      },
       "sections": [
         {
           "h2": "Primeiro, o que é 'quantitativo' e por que ele não é orçamento",
@@ -2649,7 +2677,7 @@
         },
         {
           "h2": "Comparativo direto: tempo, precisão, curva e o que cada um mede",
-          "body": "Colocando lado a lado, sem torcida:\n\n- Tempo por projeto: o manual é o mais lento (horas a dias); o automático é o mais rápido para levantar (minutos); o BIM é lentíssimo se você precisa modelar do zero só para o quantitativo, mas praticamente instantâneo se o modelo já existe.\n\n- Precisão: as três podem ser precisas. O manual é preciso se a pessoa não cansar; o automático é preciso na medida em que o desenho tem geometria real e limpa; o BIM é preciso na medida em que o modelo está completo e bem parametrizado. Em todos os casos, a precisão é herdada da qualidade da fonte, não garantida pela ferramenta.\n\n- Curva de aprendizado: baixa no manual, baixa no automático (subir arquivo e ler planilha), alta no BIM (modelagem é uma competência).\n\n- O que mede: o manual mede o que você tiver paciência; o automático mede a geometria desenhada no CAD; o BIM mede geometria + dados dos elementos modelados.\n\n- Pré-requisito de entrada: o manual precisa só do desenho; o automático precisa de um CAD com geometria (idealmente vetorial/DWG/DXF); o BIM precisa de um modelo — e essa é a barreira que exclui a maioria das obras pequenas e reformas.\n\nA leitura prática: não existe abordagem melhor no absoluto. Existe a abordagem certa para o projeto que está na sua mesa e para o prazo que você tem."
+          "body": "Colocando lado a lado, sem torcida:\n\n| | Manual | Automático (IA lê o CAD) | BIM |\n| Tempo por projeto | o mais lento (horas a dias) | o mais rápido para levantar (minutos) | lentíssimo se você precisa modelar do zero só para o quantitativo; praticamente instantâneo se o modelo já existe |\n| Precisão | preciso se a pessoa não cansar | preciso na medida em que o desenho tem geometria real e limpa | preciso na medida em que o modelo está completo e bem parametrizado |\n| Curva de aprendizado | baixa | baixa (subir arquivo e ler planilha) | alta (modelagem é uma competência) |\n| O que mede | o que você tiver paciência | a geometria desenhada no CAD | geometria + dados dos elementos modelados |\n| Pré-requisito de entrada | só o desenho | um CAD com geometria (idealmente vetorial/DWG/DXF) | um modelo — a barreira que exclui a maioria das obras pequenas e reformas |\n\nAs três podem ser precisas: em todos os casos, a precisão é herdada da qualidade da fonte, não garantida pela ferramenta.\n\nA leitura prática: não existe abordagem melhor no absoluto. Existe a abordagem certa para o projeto que está na sua mesa e para o prazo que você tem."
         },
         {
           "h2": "'Quantitativo 2D vs BIM' é a pergunta errada — o pré-requisito decide",
@@ -2692,7 +2720,8 @@
           "description": "Norma técnica que padroniza a avaliação de custos unitários de construção e o cálculo de áreas na incorporação imobiliária. Referência para a fronteira entre medição de quantidades e avaliação de custo."
         }
       ],
-      "publish_date": "2026-08-09"
+      "publish_date": "2026-08-09",
+      "update_date": "2026-10-11"
     },
     {
       "slug": "quantitativo-de-duto-climatizacao-armadilhas",
@@ -2701,6 +2730,10 @@
       "keywords": "quantitativo duto climatizacao, levantamento hvac, orcamento ar condicionado, duto chapa galvanizada m2, sinapi climatizacao, avac quantitativo, medir duto planta",
       "category": "Quantitativos",
       "intro": "Levantar duto parece o mais simples de um projeto de climatização: é linha na planta, mede e pronto. Na prática é onde o número mais erra — e erra grande, às vezes pelo dobro. Este post reúne quatro armadilhas concretas, todas encontradas em arquivos reais, e o que cada uma exige de quem levanta. Cada afirmação técnica tem a fonte aberta, e o que é medição nossa está declarado como tal.",
+      "ponte": {
+        "frase": "O AI.arq lê o DWG ou DXF de climatização e devolve a planilha com o que saiu medido da geometria separado do que é estimativa.",
+        "track": "ponte-duto"
+      },
       "sections": [
         {
           "h2": "Armadilha 1 — O duto é desenhado com duas linhas, e somar as duas dobra o comprimento",

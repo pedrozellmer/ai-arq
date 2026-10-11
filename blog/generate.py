@@ -72,6 +72,23 @@ COMMON_STYLES = '''
   /* Cards de download: tira sublinhado e força cor do gray-900 */
   .prose-aiarq .aiarq-dl-btn { text-decoration: none !important; color: #111827 !important; }
   .prose-aiarq .aiarq-dl-btn:hover { text-decoration: none !important; }
+  /* 11/10/2026 — tabela, resposta curta e ponte. CSS próprio de propósito: o tailwind.min.css é um
+     build fechado, e classe nova que ele não tem sairia sem estilo nenhum, calada. */
+  .prose-aiarq .aiarq-tabela { overflow-x: auto; margin: 1.5rem 0; }
+  .prose-aiarq table { width: 100%; border-collapse: collapse; font-size: .95rem; }
+  .prose-aiarq th, .prose-aiarq td { border: 1px solid #e2e8f0; padding: .55rem .75rem; text-align: left;
+    vertical-align: top; line-height: 1.5; color: #334155; }
+  .prose-aiarq thead th { background: #f1f5f9; color: #0f172a; font-weight: 600; }
+  .prose-aiarq tbody td:first-child { font-weight: 600; color: #0f172a; }
+  .prose-aiarq .aiarq-ponte { margin: 2rem 0; padding: 1rem 1.25rem; border: 1px solid #c7d2fe;
+    background: #eef2ff; border-radius: .75rem; }
+  .prose-aiarq .aiarq-ponte p { margin: 0; font-size: 1rem; line-height: 1.6; color: #312e81; }
+  .prose-aiarq .aiarq-ponte a { font-weight: 600; color: #4338ca; white-space: nowrap; }
+  .aiarq-resposta { margin-bottom: 2rem; padding: 1rem 1.25rem; border: 1px solid #e2e8f0;
+    background: #f8fafc; border-radius: .75rem; }
+  .aiarq-resposta .aiarq-resposta-rotulo { font-size: .75rem; font-weight: 600; letter-spacing: .05em;
+    text-transform: uppercase; color: #64748b; margin-bottom: .35rem; }
+  .aiarq-resposta p { font-size: 1.0625rem; line-height: 1.7; color: #1e293b; margin: 0; }
   /* Bloco de fontes: lista mais densa, sem disc */
   .aiarq-sources ul li { list-style: none; line-height: 1.5; padding: 0; margin: 0; }
   .aiarq-sources ul { margin: 0; padding: 0; }
@@ -289,6 +306,36 @@ _DOWNLOAD_BUTTONS_LEGADO = '''
 '''
 
 
+_SEPARADOR_DE_TABELA = re.compile(r'^\|[\s:|-]+\|$')
+
+
+def _eh_tabela(linhas):
+    return len(linhas) >= 2 and all(l.strip().startswith("|") and l.strip().endswith("|") for l in linhas)
+
+
+def tabela_html(linhas):
+    """Tabela escrita no posts.json como linhas `| a | b |` (a 1ª é o cabeçalho; a linha `|---|---|`
+    é aceita e ignorada).
+
+    11/10/2026 (plano de SEO): nenhum dos 32 posts tinha <table> — o post que promete "tabela" no
+    título entregava parágrafo + lista por tipo de obra. Linha com número de colunas diferente do
+    cabeçalho QUEBRA a geração: tabela torta no ar é pior que deploy parado.
+    """
+    linhas = [l.strip() for l in linhas if not _SEPARADOR_DE_TABELA.match(l.strip())]
+    celulas = [[c.strip() for c in l[1:-1].split("|")] for l in linhas]
+    if len(celulas) < 2:
+        raise ValueError("tabela sem linha de dados: %r" % linhas[:1])
+    n = len(celulas[0])
+    tortas = [l for l, c in zip(linhas, celulas) if len(c) != n]
+    if tortas:
+        raise ValueError("tabela com linha de %d colunas fora do padrão: %r" % (n, tortas[0]))
+    cab = "".join('<th scope="col">%s</th>' % _inline_md(c) for c in celulas[0])
+    corpo = "".join("<tr>" + "".join("<td>%s</td>" % _inline_md(c) for c in linha) + "</tr>"
+                    for linha in celulas[1:])
+    return ('<div class="aiarq-tabela"><table><thead><tr>' + cab + '</tr></thead><tbody>'
+            + corpo + '</tbody></table></div>')
+
+
 def _flush_buffer(buf, kind, body_html):
     """Empurra o buffer atual como p/ul/ol e zera."""
     if not buf:
@@ -323,6 +370,9 @@ def render_section(s, downloads=None, download_nota=None):
             continue
         lines = [l for l in p.strip().split("\n") if l.strip()]
         if not lines:
+            continue
+        if _eh_tabela(lines):
+            blocks.append(("table", lines))
             continue
 
         # Classifica cada linha do parágrafo
@@ -362,6 +412,8 @@ def render_section(s, downloads=None, download_nota=None):
     for kind, items in merged:
         if kind == "download":
             body_html += download_buttons_html(downloads, download_nota)
+        elif kind == "table":
+            body_html += tabela_html(items)
         elif kind == "numbered":
             body_html += "<ol>" + "".join(f"<li>{_inline_md(t)}</li>" for t in items) + "</ol>"
         elif kind == "bullet":
@@ -590,6 +642,39 @@ def render_related_posts(post):
     '''
 
 
+def resposta_curta_html(post):
+    """A resposta do título em 2 a 4 frases, logo abaixo do H1 (campo `resposta_curta`).
+
+    11/10/2026 (plano de SEO): a mediana era de ~920 palavras entre o H1 e a primeira menção ao
+    produto, e nenhum post respondia a própria pergunta antes da 2ª tela."""
+    texto = (post.get("resposta_curta") or "").strip()
+    if not texto:
+        return ""
+    return ('<div class="aiarq-resposta">\n    <div class="aiarq-resposta-rotulo">Resposta curta</div>\n'
+            '    <p>' + _inline_md(texto) + '</p>\n  </div>\n')
+
+
+_RE_TRACK_DA_PONTE = re.compile(r'^[a-z0-9][a-z0-9-]{0,39}$')
+
+
+def ponte_html(post):
+    """A ponte pro produto no MEIO do post (campo `ponte`: {"frase", "track"}).
+
+    11/10/2026 (plano de SEO): 22 dos 26 posts publicados não tinham link de produto no corpo — só o
+    bloco do fim. A frase é do post; o link e o rótulo são sempre os mesmos, pro clique ser comparável.
+    🪤 `track` segue a regra do /api/track ([a-z0-9-], até 40): nome fora dela é descartado com 200 e
+    sem aviso, então aqui ele quebra a geração."""
+    ponte = post.get("ponte")
+    if not ponte:
+        return ""
+    frase, track = (ponte.get("frase") or "").strip(), ponte.get("track") or ""
+    if not frase or not _RE_TRACK_DA_PONTE.match(track):
+        raise ValueError("ponte do post %s sem frase ou com track inválido: %r" % (post["slug"], track))
+    return ('<aside class="aiarq-ponte"><p>' + _inline_md(frase)
+            + ' <a href="/exemplo.html" data-track="' + track + '">Ver um quantitativo de exemplo →</a>'
+            '</p></aside>')
+
+
 def data_de_atualizacao(post):
     """A data (AAAA-MM-DD) em que o TEXTO do post mudou por último, ou None.
 
@@ -629,8 +714,14 @@ def render_post_html(post):
         '<div class="' + _cls + '">' + _nota + '</div>') if _nota else ""
 
     """Gera HTML completo de um post."""
-    sections_html = "".join(render_section(s, post.get("downloads"), post.get("download_nota"))
-                            for s in post["sections"])
+    # A ponte entra depois da 2ª seção: longe o bastante pra não atropelar a abertura, cedo o bastante
+    # pra ser vista (o bloco do fim fica a mais de dez telas no celular).
+    _secoes = [render_section(s, post.get("downloads"), post.get("download_nota")) for s in post["sections"]]
+    _ponte = ponte_html(post)
+    if _ponte:
+        _secoes.insert(min(2, len(_secoes)), _ponte)
+    sections_html = "".join(_secoes)
+    resposta_html = resposta_curta_html(post)
 
     # Adiciona bloco de fontes no fim, se houver
     _atualizado = data_de_atualizacao(post)
@@ -792,7 +883,7 @@ def render_post_html(post):
     <span>⏱️ {post["estimated_read_min"]} min de leitura</span>
   </div>
 
-  {update_note_html}
+  {resposta_html}{update_note_html}
   <!-- Intro destacada -->
   <p class="text-xl text-gray-700 leading-relaxed mb-8 italic">{_inline_md(post["intro"])}</p>
 

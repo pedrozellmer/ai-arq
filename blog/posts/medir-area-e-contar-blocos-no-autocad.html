@@ -58,6 +58,23 @@
   /* Cards de download: tira sublinhado e força cor do gray-900 */
   .prose-aiarq .aiarq-dl-btn { text-decoration: none !important; color: #111827 !important; }
   .prose-aiarq .aiarq-dl-btn:hover { text-decoration: none !important; }
+  /* 11/10/2026 — tabela, resposta curta e ponte. CSS próprio de propósito: o tailwind.min.css é um
+     build fechado, e classe nova que ele não tem sairia sem estilo nenhum, calada. */
+  .prose-aiarq .aiarq-tabela { overflow-x: auto; margin: 1.5rem 0; }
+  .prose-aiarq table { width: 100%; border-collapse: collapse; font-size: .95rem; }
+  .prose-aiarq th, .prose-aiarq td { border: 1px solid #e2e8f0; padding: .55rem .75rem; text-align: left;
+    vertical-align: top; line-height: 1.5; color: #334155; }
+  .prose-aiarq thead th { background: #f1f5f9; color: #0f172a; font-weight: 600; }
+  .prose-aiarq tbody td:first-child { font-weight: 600; color: #0f172a; }
+  .prose-aiarq .aiarq-ponte { margin: 2rem 0; padding: 1rem 1.25rem; border: 1px solid #c7d2fe;
+    background: #eef2ff; border-radius: .75rem; }
+  .prose-aiarq .aiarq-ponte p { margin: 0; font-size: 1rem; line-height: 1.6; color: #312e81; }
+  .prose-aiarq .aiarq-ponte a { font-weight: 600; color: #4338ca; white-space: nowrap; }
+  .aiarq-resposta { margin-bottom: 2rem; padding: 1rem 1.25rem; border: 1px solid #e2e8f0;
+    background: #f8fafc; border-radius: .75rem; }
+  .aiarq-resposta .aiarq-resposta-rotulo { font-size: .75rem; font-weight: 600; letter-spacing: .05em;
+    text-transform: uppercase; color: #64748b; margin-bottom: .35rem; }
+  .aiarq-resposta p { font-size: 1.0625rem; line-height: 1.7; color: #1e293b; margin: 0; }
   /* Bloco de fontes: lista mais densa, sem disc */
   .aiarq-sources ul li { list-style: none; line-height: 1.5; padding: 0; margin: 0; }
   .aiarq-sources ul { margin: 0; padding: 0; }
