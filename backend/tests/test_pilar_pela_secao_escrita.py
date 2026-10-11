@@ -100,10 +100,49 @@ def test_o_caso_pilares_em_layer_numerado_fechados_pelo_ponto_repetido(tmp_path)
     assert pil["por_rotulo"] is True and pil["por_secao_escrita"] is True
     por = {s["secao_cm"]: s for s in pil["por_secao"]}
     assert por["45x100 cm"]["qtd"] == 2 and por["45x100 cm"]["nomes"] == ["P1C", "P2C"]
-    assert por["25x52 cm"]["qtd"] == 1 or por.get("25x53 cm", {}).get("qtd") == 1    # 52,5 arredonda
+    assert por["25x52.5 cm"]["qtd"] == 1 and por["25x52.5 cm"]["nomes"] == ["P5C"]
+    assert sorted(por) == ["100x100 cm", "25x52.5 cm", "45x100 cm", "50x100 cm"]
     txt = ex.to_structured_prompt()
     assert "SEÇÃO ESCRITA ao lado" in txt and "[MEDIDO] 5 pilares contados" in txt
+    assert "seção 25x52.5 cm" in txt
     assert main._pilares_contados(ex) == 5
+
+
+# ── a seção da linha é a ESCRITA quando ela é a prova ────────────────────────
+def test_a_secao_da_linha_e_a_que_o_projetista_escreveu(tmp_path):
+    """🩸 11/10/2026 — na planilha real o pilar de rótulo "25x52.5" saiu "25×52":
+    a chave vinha de `round()` do desenho. O desenho só precisa BATER (±3 %) com
+    o rótulo; quem diz a seção é o rótulo."""
+    def monta(m):
+        _pilar(m, 0, 46.3, 100, secao="45x100")        # desenhado 2,9 % maior
+        _pilar(m, 1, 45, 100, secao="100x45")          # escrito na outra ordem
+        _pilar(m, 2, 45, 100, secao="45 x 100 cm")
+        _pilar(m, 3, 25, 52.5, secao="25x52,5")        # vírgula decimal
+    pil = count_pillars(_planta(tmp_path, monta))
+    assert {s["secao_cm"]: s["qtd"] for s in pil["por_secao"]} == {"45x100 cm": 3, "25x52.5 cm": 1}, pil
+
+
+def test_CONTROLE_no_layer_que_nomeia_pilar_a_secao_segue_sendo_a_do_desenho(tmp_path):
+    """Ali não há rótulo provando nada: a seção é a medida, arredondada ao centímetro,
+    mesmo com um "30x60" escrito ao lado."""
+    def monta(m):
+        for i in range(3):
+            _pilar(m, i, 20.4, 40, layer="EST-PILAR", secao="30x60", marca=True, repete=False)
+    pil = count_pillars(_planta(tmp_path, monta))
+    assert pil["por_secao_escrita"] is False
+    assert [s["secao_cm"] for s in pil["por_secao"]] == ["20x40 cm"], pil
+
+
+def test_a_prova_devolve_a_secao_escrita_de_cada_retangulo():
+    rects = [_r(0, 45.0, 100.0), _r(1, 50.0, 100.0), _r(2, 25.0, 52.5)]
+    texts = []
+    for i, s in enumerate(["45x100", "100x50", "25x52.5"]):
+        texts.append(T(s, 1000.0 * i, 130.0))
+        texts.append(T("P%dC" % (i + 1), 1000.0 * i - 140.0, 0.0))
+    com = se._pilares_com_a_secao_escrita(rects, texts)
+    assert [(r is rects[i], a, b) for i, (r, a, b) in enumerate(com)] == [
+        (True, 45.0, 100.0), (True, 50.0, 100.0), (True, 25.0, 52.5)]
+    assert pilares_provados_pela_secao(rects, texts) == rects
 
 
 def test_o_caso_tambem_em_lwpolyline_sem_a_marca(tmp_path):

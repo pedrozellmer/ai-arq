@@ -1175,6 +1175,12 @@ def pilares_provados_pela_secao(rects, texts) -> list:
     lados de distância, e um nome "P<n>" que é DELE (o retângulo é o mais perto
     desse nome entre os que a seção provou). Cada rótulo prova UM retângulo (o
     mais perto). Só lê — não muda nada em `rects`."""
+    return [r for r, _a, _b in _pilares_com_a_secao_escrita(rects, texts)]
+
+
+def _pilares_com_a_secao_escrita(rects, texts) -> list:
+    """O miolo de `pilares_provados_pela_secao`: [(retângulo, a, b)], com a seção
+    (cm, a ≤ b) como o projetista ESCREVEU no rótulo que provou o retângulo."""
     secoes, nomes = [], []
     for t in texts or []:
         s = (getattr(t, "text", "") or "").strip()
@@ -1213,12 +1219,14 @@ def pilares_provados_pela_secao(rects, texts) -> list:
                 pares.append((d / lado, j, i))
     pares.sort()
     usados_r, usados_s = set(), set()
+    rotulo_de = {}
     por_i = {c[0]: c for c in cand}
     for _d, j, i in pares:
         if j in usados_s or i in usados_r:
             continue
         usados_s.add(j)
         usados_r.add(i)
+        rotulo_de[i] = j
     casados = [por_i[i] for i in sorted(usados_r)]
     if len(casados) < _PILAR_POR_SECAO_MIN:
         return []
@@ -1232,7 +1240,8 @@ def pilares_provados_pela_secao(rects, texts) -> list:
                 melhor, melhor_d = (i, lado), d
         if melhor is not None and melhor_d <= _NOME_DIST_LADOS * melhor[1]:
             com_nome.add(melhor[0])
-    provados = [r for i, r, _menor, _maior, _lado in casados if i in com_nome]
+    provados = [(r, secoes[rotulo_de[i]][0], secoes[rotulo_de[i]][1])
+                for i, r, _menor, _maior, _lado in casados if i in com_nome]
     return provados if len(provados) >= _PILAR_POR_SECAO_MIN else []
 
 
@@ -1297,12 +1306,17 @@ def count_pillars(extraction) -> dict | None:
     # disparou em produção. Abrir os de layer sem nome pra ele traria a
     # etiqueta de porta ("P1" dentro de um quadrinho) — não medido, não entra.
     secao_foi_a_prova = False
+    # 🩸 11/10/2026 (planilha real): o pilar de rótulo "25x52.5" saiu descrito
+    # como "25x52" — `round(52.5)` dá 52. Quando a seção ESCRITA é a prova, a
+    # seção da linha é a escrita; o desenho só precisou bater com ela.
+    _secao_escrita: dict = {}
     if not rects:
-        _prov = pilares_provados_pela_secao(
+        _prov = _pilares_com_a_secao_escrita(
             _rects_todos + list(getattr(extraction, "struct_rects_sem_nome", None) or []),
             getattr(extraction, "texts", None) or [])
         if _prov:
-            rects = _prov
+            rects = [_r for _r, _a, _b in _prov]
+            _secao_escrita = {id(_r): (_a, _b) for _r, _a, _b in _prov}
             rotulo_foi_o_filtro = True
             secao_foi_a_prova = True
     _re_nome = _PNAME_SUFIXO_RE if secao_foi_a_prova else _PNAME_RE
@@ -1341,6 +1355,9 @@ def count_pillars(extraction) -> dict | None:
     for idx, r in enumerate(kept):
         if r.circular:
             key = f"Ø{round(r.w_m * 100)} cm"
+        elif id(r) in _secao_escrita:
+            a, b = _secao_escrita[id(r)]
+            key = f"{a:g}x{b:g} cm"
         else:
             a, b = sorted((round(r.w_m * 100), round(r.h_m * 100)))
             key = f"{a}x{b} cm"
