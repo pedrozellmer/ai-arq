@@ -101,6 +101,120 @@ def _check_site(name: str, url: str, marcador: bytes) -> bool:
     return _check(name, status == 200 and marcador in body.lower(), f"HTTP {status}")
 
 
+# ═══════════════════════════════════════════════════════════════════
+#  RASTREADORES DE IA (11/10/2026)
+# ═══════════════════════════════════════════════════════════════════
+# 🔎 Estudo de SEO de 11/10: em 30 dias, 41 cadastros disseram ter vindo por IA (Google IA,
+# Gemini, ChatGPT…) contra 39 da busca comum. Regra da casa: rastreador de IA NUNCA é
+# bloqueado. Só que isso vivia de uma conferência à mão — e um botão no Cloudflare ("Block AI
+# bots", ou o robots.txt gerenciado) desliga o canal inteiro sem ninguém ver.
+# Duas medidas, porque nenhuma basta sozinha:
+#   1. o robots.txt QUE ESTÁ NO AR (o Cloudflare pode servir outro, por cima do nosso) não
+#      pode ter `Disallow: /` pra nenhum desses robôs — conteúdo, não depende do IP;
+#   2. cada robô pede três páginas e tem que levar 200.
+# 🪤 O runner do GitHub é IP de datacenter, e o Cloudflare às vezes barra TODO MUNDO que vem
+# dele (25/08, ver `_e_bloqueio_do_cloudflare`). Por isso a medida 2 compara com o navegador
+# na MESMA rodada: navegador 200 + robô 403 = o bloqueio é do robô (FALHA); os dois barrados
+# = o IP do runner, não medido (INCONCLUSIVO). Sem a comparação isto viraria alarme falso.
+ROBOS_DE_IA = {
+    "GPTBot": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; GPTBot/1.2; +https://openai.com/gptbot",
+    "OAI-SearchBot": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; OAI-SearchBot/1.0; +https://openai.com/searchbot",
+    "ClaudeBot": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; ClaudeBot/1.0; +claudebot@anthropic.com)",
+    "PerplexityBot": "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; PerplexityBot/1.0; +https://perplexity.ai/perplexitybot)",
+}
+PAGINAS_DOS_ROBOS = ("/", "/faq.html", "/llms.txt")
+# nomes que o robots.txt usa (inclui os que não são um User-Agent de requisição, como Google-Extended)
+ROBOS_NO_ROBOTS = ("GPTBot", "OAI-SearchBot", "ChatGPT-User", "ClaudeBot", "Claude-User", "Claude-SearchBot",
+                   "PerplexityBot", "Perplexity-User", "Google-Extended", "Applebot-Extended", "CCBot",
+                   "Googlebot", "bingbot")
+
+
+def robos_barrados_no_robots(texto: str, robos=ROBOS_NO_ROBOTS) -> list:
+    """Quais robôs o robots.txt manda embora do site inteiro (`Disallow: /`).
+
+    Lê por grupo, como os rastreadores: vale o grupo com o nome do robô; sem grupo próprio,
+    vale o `*`. `Disallow: /blog` ou `Disallow: /_*` não contam — só o site inteiro.
+    """
+    grupos, agentes, regras, lendo_regras = [], [], [], False
+    for linha in (texto or "").splitlines():
+        linha = linha.split("#", 1)[0].strip()
+        if ":" not in linha:
+            continue
+        campo, valor = [p.strip() for p in linha.split(":", 1)]
+        campo = campo.lower()
+        if campo == "user-agent":
+            if lendo_regras:                      # começou outro grupo
+                grupos.append((agentes, regras))
+                agentes, regras, lendo_regras = [], [], False
+            agentes.append(valor.lower())
+        elif campo in ("disallow", "allow"):
+            lendo_regras = True
+            regras.append((campo, valor))
+    if agentes:
+        grupos.append((agentes, regras))
+
+    def _barra_tudo(regras_do_grupo):
+        return any(c == "disallow" and v == "/" for c, v in regras_do_grupo) and \
+            not any(c == "allow" and v == "/" for c, v in regras_do_grupo)
+
+    barrados = []
+    for robo in robos:
+        proprios = [r for a, r in grupos if robo.lower() in a]
+        gerais = [r for a, r in grupos if "*" in a]
+        vale = proprios or gerais
+        if any(_barra_tudo(r) for r in vale):
+            barrados.append(robo)
+    return barrados
+
+
+def veredito_do_robo(status_navegador: int, status_robo: int, robo_barrado_pelo_cloudflare: bool) -> str:
+    """'ok' | 'falha' | 'inconclusivo' — ver o comentário de ROBOS_DE_IA."""
+    if status_robo == 200:
+        return "ok"
+    if robo_barrado_pelo_cloudflare and status_navegador != 200:
+        return "inconclusivo"                     # o IP do runner está barrado pra todo mundo
+    return "falha"
+
+
+def _check_robos_de_ia() -> None:
+    # 1. o robots.txt que está no ar
+    status, body, headers = _get(f"{SITE_BASE}/robots.txt")
+    if _e_bloqueio_do_cloudflare(status, headers, body):
+        print(f"  {YELLOW}?{RESET} robots.txt libera os robôs de IA  (HTTP 403 do Cloudflare — NAO MEDIDO)")
+        inconclusivos.append("robots.txt (robôs de IA): Cloudflare barrou o IP do runner (403)")
+    elif status != 200:
+        _check("robots.txt libera os robôs de IA", False, f"HTTP {status} ao ler o robots.txt")
+    else:
+        barrados = robos_barrados_no_robots(body.decode("utf-8", "replace"))
+        _check("robots.txt libera os robôs de IA", not barrados,
+               ("no ar ele barra: " + ", ".join(barrados) + " — o Cloudflare pode estar servindo um "
+                "robots.txt por cima do nosso (AI Crawl Control)") if barrados else "")
+
+    # 2. cada robô pede as páginas; o navegador pede junto, pra comparar
+    for nome, ua in ROBOS_DE_IA.items():
+        piores = {"ok": 0, "inconclusivo": 0, "falha": 0}
+        detalhe = ""
+        for pagina in PAGINAS_DOS_ROBOS:
+            url = f"{SITE_BASE}{pagina}"
+            st_robo, body_r, head_r = _get(url, headers={"User-Agent": ua}, tentativas=1)
+            if st_robo == 200:
+                piores["ok"] += 1
+                continue
+            st_nav, _, _ = _get(url, tentativas=1)
+            v = veredito_do_robo(st_nav, st_robo, _e_bloqueio_do_cloudflare(st_robo, head_r, body_r))
+            piores[v] += 1
+            detalhe = f"{pagina}: robô HTTP {st_robo}, navegador HTTP {st_nav}"
+        rotulo = f"{nome} recebe o site"
+        if piores["falha"]:
+            _check(rotulo, False, detalhe + " — o robô está barrado e o navegador não: olhe o AI Crawl "
+                   "Control / 'Block AI bots' no Cloudflare")
+        elif piores["inconclusivo"]:
+            print(f"  {YELLOW}?{RESET} {rotulo}  ({detalhe} — NAO MEDIDO)")
+            inconclusivos.append(f"{rotulo}: Cloudflare barrou o IP do runner ({detalhe})")
+        else:
+            _check(rotulo, True, f"{piores['ok']} páginas, HTTP 200")
+
+
 def _check(name: str, ok: bool, detail: str = "") -> bool:
     mark = f"{GREEN}✓{RESET}" if ok else f"{RED}✗{RESET}"
     print(f"  {mark} {name}" + (f"  ({detail})" if detail else ""))
@@ -214,6 +328,9 @@ def nivel_1():
     _check_site("GET ai.arq.br/", f"{SITE_BASE}/", b"<html")
     _check_site("GET sitemap.xml", f"{SITE_BASE}/sitemap.xml", b"<urlset")
     _check_site("GET faq.html", f"{SITE_BASE}/faq.html", b"<title>")
+
+    # 11/10: os rastreadores de IA continuam entrando? (o canal de 41 cadastros em 30 dias)
+    _check_robos_de_ia()
 
     # Instagram: a rota FICOU FECHADA em 28/07/2026 (antes qualquer um lia a
     # fila e as DMs). O teste agora confirma o oposto do que confirmava: sem

@@ -9,6 +9,9 @@ está em `ai.arq.br` (GitHub Pages); o conector aponta pro backend, e nem
 `ai-arq.onrender.com` nem `api.ai.arq.br` servem favicon (404 nos dois,
 medido). Pior: a zona `ai.arq.br` responde **403 pra ClaudeBot**, então
 apontar o ícone pra lá seria construir em cima de um bloqueio conhecido.
+(📌 11/10/2026: esse bloqueio CAIU — ClaudeBot e GPTBot recebem 200 no site — e o
+smoke diário passou a vigiar isso; ver `test_smoke_vigia_os_robos_de_ia`. O
+ícone segue embutido: não depende de nada disso.)
 
 ✅ O caminho certo é o da spec: em 2025-11-25 (a versão que o claude.ai fala
 de verdade, medida na prova) `Implementation extends BaseMetadata, Icons`,

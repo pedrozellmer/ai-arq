@@ -467,12 +467,21 @@
       "keywords": "planilha de quantitativos, como fazer planilha de quantitativos, quantitativo de obra, levantamento de quantitativos, SINAPI 2026, ORSE, memória de cálculo",
       "category": "Tutorial",
       "publish_date": "2026-05-03",
-      "update_date": "2026-09-26",
+      "update_date": "2026-10-11",
+      "downloads": [
+        {
+          "file": "quantitativo-sinapi-planilha-modelo.xlsx",
+          "kind": "XLSX",
+          "label": "Planilha modelo por disciplina",
+          "hint": "18 abas + consolidação · 34 KB"
+        }
+      ],
+      "download_nota": "O modelo é o mesmo do post <a href=\"/blog/posts/quantitativo-arquitetura-sinapi-planilha-modelo.html\">Quantitativo SINAPI: planilha modelo XLSX por disciplina</a>, que explica como usar. Já tem o projeto em DWG ou DXF? O AI.arq monta essa planilha a partir do desenho: veja um <a href=\"/exemplo.html\" data-track=\"post-planilha-exemplo\">quantitativo de exemplo</a>.",
       "intro": "Fazer planilha de quantitativos do jeito certo evita prejuízo grande lá na frente. Quantitativo errado leva a orçamento errado, e orçamento errado faz a obra estourar cronograma e bolso. Esse guia mostra passo a passo: como classificar serviços por disciplina, como obter e usar a tabela SINAPI 2026, como estruturar memória de cálculo, quais colunas são obrigatórias, e os erros que aparecem mais em auditoria. No fim, mostro como acelerar todo esse trabalho com IA — de horas de medição manual para poucos minutos.",
       "sections": [
         {
           "h2": "O que é planilha de quantitativos (e o que NÃO é)",
-          "body": "Planilha de quantitativos lista todos os itens da obra com suas respectivas quantidades — sem preços. Por exemplo: piso porcelanato 60x60cm: 142 m², porta de madeira 0,80x2,10m: 8 unidades, luminária LED 60x60cm: 24 unidades.\n\nNão confunda com:\n- Planilha de orçamento — já tem preços (quantidade × valor unitário).\n- Memorial descritivo — descreve em texto, não conta.\n- Lista de materiais — geralmente formato comercial pra compra, não pra levantamento técnico.\n\nO quantitativo é o insumo pro orçamentista trabalhar. Sem ele, qualquer preço é chute. Em obras públicas é o que alimenta o orçamento estimado da contratação conforme a Lei 14.133/2021. Em obras privadas é a base do contrato com a construtora."
+          "body": "Planilha de quantitativos lista todos os itens da obra com suas respectivas quantidades — sem preços. Por exemplo: piso porcelanato 60x60cm: 142 m², porta de madeira 0,80x2,10m: 8 unidades, luminária LED 60x60cm: 24 unidades.\n\nQuer partir de uma estrutura pronta? Baixe a planilha modelo: um XLSX com as 18 disciplinas separadas por aba e uma aba final de consolidação. Sem cadastro.\n\n<DOWNLOAD_BUTTONS>\n\nNão confunda com:\n- Planilha de orçamento — já tem preços (quantidade × valor unitário).\n- Memorial descritivo — descreve em texto, não conta.\n- Lista de materiais — geralmente formato comercial pra compra, não pra levantamento técnico.\n\nO quantitativo é o insumo pro orçamentista trabalhar. Sem ele, qualquer preço é chute. Em obras públicas é o que alimenta o orçamento estimado da contratação conforme a Lei 14.133/2021. Em obras privadas é a base do contrato com a construtora."
         },
         {
           "h2": "Passo 1: Revisar e compatibilizar todos os projetos",
@@ -2189,7 +2198,7 @@
           "hint": "18 abas + consolidação · 34 KB"
         }
       ],
-      "download_nota": "O AI.arq gera essa planilha a partir do seu CAD, com código SINAPI de referência nos itens em que há correspondência. O modelo é pra quem prefere montar à mão."
+      "download_nota": "O AI.arq gera essa planilha a partir do seu CAD, com código SINAPI de referência nos itens em que há correspondência. O modelo é pra quem prefere montar à mão. Pra montar do zero, passo a passo: <a href=\"/blog/posts/como-fazer-planilha-de-quantitativos-de-obra.html\">Como fazer planilha de quantitativos de obra</a>."
     },
     {
       "slug": "quantitativo-vs-orcamento-arquiteto-nao-precisa-virar-orcamentista",
