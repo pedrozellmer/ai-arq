@@ -22,7 +22,7 @@ Condição comercial: durante o beta, o uso é GRÁTIS e ILIMITADO, sem cartão 
 
 In English: AI.arq is a Brazilian SaaS that reads the 2D CAD sheets a professional already has (DWG, DXF or PDF) and returns a construction quantity takeoff spreadsheet, broken down by discipline, with SINAPI reference codes where a reliable match exists, each line labelled either as measured from the drawing or as estimated and pending review. PDF files are read, but everything that comes from a PDF is labelled as estimated, by our own rule: a PDF's scale comes from a declaration (the title block), so even when the dimensions check out we never seal a PDF number as measured. From the same takeoff it also drafts a descriptive specification (memorial descritivo, marked as a draft to be completed and signed by the professional) and a physical construction schedule (it does not price; if the professional enters each stage's value, it spreads it month by month). It delivers quantities, not construction prices, and it does not replace the professional. It is not BIM and does not require BIM. Free and unlimited during the open beta, no credit card — every project, not just the first one. The site and its content are in Brazilian Portuguese.
 
-Quem faz: a AI.arq é um produto brasileiro e independente, feito no Rio de Janeiro e no ar desde abril de 2026 (https://ai.arq.br/sobre.html). Última atualização deste arquivo: 2026-10-04.
+Quem faz: a AI.arq é um produto brasileiro e independente, feito no Rio de Janeiro e no ar desde abril de 2026 (https://ai.arq.br/sobre.html). Última atualização deste arquivo: 2026-10-11.
 
 ## Comece por aqui
 
@@ -42,6 +42,7 @@ Quem faz: a AI.arq é um produto brasileiro e independente, feito no Rio de Jane
 - [DWG, DXF ou PDF: o que os nossos dados mostram sobre qual formato medir](https://ai.arq.br/blog/posts/dwg-ou-pdf-quantitativo-o-que-os-dados-mostram.html): por que o DWG/DXF sai medido e o PDF sai como estimativa, e o que muda no resultado.
 - [Quantitativo manual, automático ou BIM: comparativo honesto por cenário](https://ai.arq.br/blog/posts/quantitativo-manual-automatico-ou-bim-comparativo.html): quando cada abordagem compensa, incluindo os casos em que a automação não é a melhor escolha.
 - [Como ler um PDF de planta arquitetônica](https://ai.arq.br/blog/posts/como-ler-pdf-planta-arquitetonica.html): guia visual de escala, cotas e legendas para quem só tem o PDF do projeto.
+- [Quantitativo de duto: 4 armadilhas que erram o número](https://ai.arq.br/blog/posts/quantitativo-de-duto-climatizacao-armadilhas.html): por que a metragem de duto quase nunca bate: linha dupla que dobra o comprimento, desenho sem unidade, metro linear que o orçamento não usa e a referência SINAPI.
 
 ## Documentos a partir do quantitativo
 
