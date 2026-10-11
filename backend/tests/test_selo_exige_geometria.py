@@ -624,6 +624,86 @@ def test_CONTROLE_POSITIVO_o_guarda_ainda_acusa_o_que_deve():
             "deixou de acusar, o guarda virou peneira: %r" % obs[:60])
 
 
+# ── 11/10/2026: contagem de pilar, de bloco e comprimento de layer não são "texto" ──
+# Medido em 120 dias: 50 das 155 linhas com quantidade que a rede marcou como
+# "LIDO de um texto" eram contagem ou comprimento do desenho; a observação só
+# citava um texto que CONFIRMAVA a seção ou o tipo. As formas abaixo são as que
+# apareceram (nomes de bloco e de layer fictícios).
+CONTADO_NO_DESENHO = [
+    "Fonte: contagem geométrica determinística — 11 retângulos 50×100 cm identificados nos "
+    "layers 3/5 com nomes no layer 9. Seção confirmada pelo layer 12 (texto '100x50' ×11).",
+    "Fonte: contagem geométrica MEDIDA no layer 'EST-PIL' = 32 pilares. Seção confirmada "
+    "pelos textos do projetista: '(30x19)' ×32.",
+    "Fonte: medição geométrica determinística — 2 pilares contados no layer FO-Textos dos "
+    "pilares, seção 14×16 cm.",
+    "16 pilares contados geometricamente no layer PIL_CONC. Referências nos textos: P13, P14.",
+    "Fonte: bloco 'PORTA-PADRAO-01' = 1 un (bbox ~1,60×1,60 m). Confirmar dimensão real no "
+    "quadro de esquadrias.",
+    "Fonte: ESQUADRIAS — bloco 'PORTA 72': 23 un. Denominação confirmada por rótulo "
+    "'PM-72x210 ×22' no layer TX1.",
+    "Fonte: etiqueta J02 × 7 ocorrências no layer A-GLAZ-IDEN; 7 inserções do bloco "
+    "'JNL_026' contadas. Confirmar quadro de esquadrias.",
+    "Fonte: etiqueta P04 × 1 ocorrência no layer A-DOOR-IDEN; 1 inserção do bloco "
+    "'PORTA DE ABRIR' (PP04). Confirmar quadro de esquadrias.",
+    "Fonte: soma de todos os tipos do bloco CX-4x2-R04 (tipos 1 a 3): 106+74+32 = 212 un. "
+    "Cada caixa é um ponto da legenda.",
+    "Fonte: seção ESQUADRIAS do DXF — 'PORTA 122: 1 un | ~2,88m × 1,64m = 4,72 m²'. "
+    "Confirmar no quadro de esquadrias.",
+    "Fonte: seção ESQUADRIAS — '16 un | ~5.04m × 1.65m = 8.32 m²'. Confirmar material no "
+    "quadro de esquadrias.",
+    "Fonte: seção 'ESQUADRIAS' — 9 inserções individuais do bloco J1. Confirmar com o quadro.",
+    "Fonte: comprimento layer FOR-LUM = 15,03 m. Texto FOR-TXT: 'LM1' × 5.",
+    "Fonte: comprimento calculado do layer HID-ESS-ENTREFORRO = 174.39 m. Diâmetros "
+    "identificados nos textos do layer HID-TXT.",
+]
+
+#: Vizinhos das formas acima que CONTINUAM sendo leitura de texto.
+PARECE_MAS_E_TEXTO = [
+    "Fonte: texto 'L-2P ×5' no layer E-LITE. Possivelmente correlacionada com blocos "
+    "'POSTE 2 PETALAS'.",
+    "Conforme legenda — ver seção ESQUADRIAS do memorial.",
+    "Fonte: texto 'JANELA FIXA 580cm (1 UNID.)' — seção ESQUADRIAS da prancha.",
+    "Fonte: quadro de esquadrias — 'P3: 6 un'.",
+    "Fonte: tabela de blocos da prancha: bloco P1 — 12 unidades.",
+    "Fonte: texto layer 'TXT': 'COMPRIMENTO = 4,90 m'.",
+    "Fonte: texto 'comprimento da rampa no layer de anotações: 4,90 m'.",
+    "Fonte: texto 'comprimento total da rampa = 4,90 m' na legenda.",
+    "Fonte: texto 'L-2P ×5' no layer E-LITE; o tipo é o do bloco 'POSTE 2 PETALAS'.",
+    "Fonte: legenda — contagem conforme tabela: 8 un.",
+]
+
+
+@pytest.mark.parametrize("obs", CONTADO_NO_DESENHO)
+def test_contagem_e_comprimento_do_desenho_nao_sao_LIDOS_de_texto(obs):
+    assert not selos_sem_geometria([_it(obs, unit="un", origem="dxf_geom")]), obs[:90]
+
+
+@pytest.mark.parametrize("obs", CONTADO_NO_DESENHO)
+def test_CONTROLE_sem_a_prova_nova_cada_um_deles_era_acusado(obs, monkeypatch):
+    """🧪 Cada frase acima cita um texto: sem a prova nova a rede acusa. Se alguma
+    não fosse acusada, o teste de cima passaria sem provar nada."""
+    import re
+    import engine_rules
+    monkeypatch.setattr(engine_rules, "_PROVA_CONTADO_NO_DESENHO", re.compile(r"(?!x)x"))
+    assert selos_sem_geometria([_it(obs, unit="un", origem="dxf_geom")]), obs[:90]
+
+
+@pytest.mark.parametrize("obs", PARECE_MAS_E_TEXTO)
+def test_vizinho_da_forma_nova_que_e_TEXTO_continua_acusado(obs):
+    assert selos_sem_geometria([_it(obs, unit="un", origem="dxf_geom")]), obs[:90]
+
+
+def test_as_duas_contagens_usam_a_mesma_regua_da_rede():
+    """`quantidades_da_geometria` (o que o e-mail diz que veio do desenho) e o
+    retrato do selo perguntam a MESMA coisa que a rede — duas réguas divergem."""
+    from engine_rules import quantidades_da_geometria, _tem_prova_de_geometria
+    itens = [_it(o, unit="un", q=3) for o in CONTADO_NO_DESENHO]
+    assert quantidades_da_geometria(itens) == len(CONTADO_NO_DESENHO)
+    assert all(_tem_prova_de_geometria(o) for o in CONTADO_NO_DESENHO)
+    assert quantidades_da_geometria([_it(o, unit="un", q=3) for o in PARECE_MAS_E_TEXTO]) == 0
+    assert not any(_tem_prova_de_geometria(o) for o in PARECE_MAS_E_TEXTO)
+
+
 # ══════════════════════════════════════════════════════════════════════════
 #  A PORTA ÚNICA DA PROMOÇÃO (22/09/2026)
 # ══════════════════════════════════════════════════════════════════════════

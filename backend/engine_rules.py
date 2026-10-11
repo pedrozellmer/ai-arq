@@ -1887,6 +1887,31 @@ _PROVA_LAYER_MEDIDO = _re.compile(
     r"(?<!texto\s)layer\s*['\"‘’][^'\"‘’]{1,60}['\"‘’]\s*=\s*[\d.,]+\s*(m²|m2|m³|m3|ml|m\b|un\b)",
     _re.IGNORECASE)
 
+# 🩸 11/10/2026 — A QUARTA VEZ, e desta vez MEDIDA antes de alargar. Em 120 dias
+# a rede escreveu "este número foi LIDO de um texto da prancha" em 155 linhas
+# com quantidade; 50 delas (15 projetos de 12 clientes, todas `dxf_geom`, só
+# `un` e `ml`) eram contagem de pilar, contagem de bloco ou comprimento de
+# layer — a observação citava um texto que só CONFIRMAVA a seção ou o tipo
+# ("Seção confirmada pelo layer 12 (texto '100x50' ×11)", "confirmar no quadro
+# de esquadrias"). As formas abaixo são as que apareceram nessas 50, e saem dos
+# títulos que o próprio motor escreve no prompt:
+#   • "PILARES (contagem geométrica — …)"      → contagem/medição geométrica
+#   • "CONTAGEM DE BLOCOS" / "ESQUADRIAS"      → bloco 'X' = 6 un · bloco 'X': 6 un
+#                                                · 7 inserções do bloco · seção
+#                                                ESQUADRIAS … 16 un
+#   • "COMPRIMENTOS POR LAYER"                 → comprimento [calculado do] layer
+#                                                X = 174.39 m (sem aspas)
+# 🪤 Toda forma de bloco e de layer exige o NÚMERO colado: "conforme blocos de
+# luminária" e "seção ESQUADRIAS" sozinhos não provam nada.
+_PROVA_CONTADO_NO_DESENHO = _re.compile(
+    r"contagem\s+geom[ée]trica|medi[çc][ãa]o\s+geom[ée]trica|contad[oa]s?\s+geometricamente"
+    r"|bloco\s*['\"‘’][^'\"‘’]{1,90}['\"‘’]\s*[=:]\s*\d{1,5}\s*un\b"
+    r"|\d{1,5}\s+inser[çc](?:ão|ões|ao|oes)\s+do\s+bloco"
+    r"|soma\s+de\s+todos\s+os\s+tipos\s+do\s+bloco"
+    r"|se[çc][ãa]o\s+['\"‘’]?esquadrias['\"‘’]?[^|]{0,120}?\d{1,5}\s*(?:un\b|inser)"
+    r"|comprimento\s+(?:calculado\s+do\s+)?layer\s+[^=|;]{1,60}?=\s*[\d.,]+\s*m\b",
+    _re.IGNORECASE)
+
 # Procedências que são LEITURA DE TEXTO — legítimas como estimativa, nunca como
 # medição. O projetista escreveu um número na prancha; a gente não mediu nada.
 _PROCEDENCIA_TEXTO = (
@@ -1989,7 +2014,8 @@ def quantidades_da_geometria(items):
             if q <= 0:
                 continue
             obs = str(_campo_do_item(it, "observations", "") or "").lower()
-            if any(p in obs for p in _PROVA_GEOMETRIA) or _PROVA_LAYER_MEDIDO.search(obs):
+            if (any(p in obs for p in _PROVA_GEOMETRIA) or _PROVA_LAYER_MEDIDO.search(obs)
+                    or _PROVA_CONTADO_NO_DESENHO.search(obs)):
                 n += 1
         return n
     except Exception:
@@ -2042,6 +2068,8 @@ def selos_sem_geometria(items):
             continue                     # mediu de verdade
         if _PROVA_LAYER_MEDIDO.search(obs):
             continue                     # "layer 'X' = 9,92 m" é medição
+        if _PROVA_CONTADO_NO_DESENHO.search(obs):
+            continue                     # pilar, bloco ou layer contado/medido
         # ⚖️ Quadro de aço: tabela com colunas rotuladas, conferida contra a NBR
         # e contra o total da prancha. Ver o comentário longo em _QUADRO_DE_ACO.
         if _cita_o_quadro_de_aco(obs, _campo_do_item(it, "unit", "")):
@@ -3780,7 +3808,7 @@ def _tem_prova_de_geometria(observacao):
         return False
     if any(p in _obs for p in _PROVA_GEOMETRIA):
         return True
-    return bool(_PROVA_LAYER_MEDIDO.search(_obs))
+    return bool(_PROVA_LAYER_MEDIDO.search(_obs) or _PROVA_CONTADO_NO_DESENHO.search(_obs))
 
 
 def retrato_do_selo(items):
