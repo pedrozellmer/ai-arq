@@ -60,6 +60,28 @@ def test_o_nome_no_mesmo_texto(texto, nome, m2):
     assert _pares([_t(texto, 0, 0)]) == ([(nome, m2, "mesmo")], [])
 
 
+@pytest.mark.parametrize("texto, m2", [
+    ("A:426,98m²x6 = 2.561,88m²", 2561.88),     # área × pavimentos: depois da outra área só sobra o multiplicador
+    ("429,00 m² x 2 = 858,00 m²", 858.00),
+    ("894,89x7 = 6.264,23 m²", 6264.23),        # número × número
+    ("A: 894,89x7 = 6.264,23 m²", 6264.23),
+    ("2x4 = 8,00 m²", 8.00),
+])
+def test_conta_antes_do_igual_nao_e_nome_de_ambiente(texto, m2):
+    """📏 Acervo (2 pranchas de aprovação): a linha de conta saía como um
+    ambiente chamado "x6" ou "894,89x7". Continua etiqueta de área — sem nome."""
+    assert er.rotulo_area_de_comodo(texto) == pytest.approx(m2)
+    assert er.nome_do_ambiente_no_rotulo(texto) is None
+    assert _pares([_t(texto, 0, 0)]) == ([], [m2])
+
+
+def test_CONTROLE_nome_com_x_ou_numero_que_nao_e_conta_fica():
+    assert er.nome_do_ambiente_no_rotulo("X1 A=12,30 m²") == "X1"          # sem número na frente nem outra área
+    assert er.nome_do_ambiente_no_rotulo("05 A=42,70 m²") == "05"
+    assert er.nome_do_ambiente_no_rotulo("BOX 2 A=3,10 m²") == "BOX 2"
+    assert er.nome_do_ambiente_no_rotulo("SALA 2x4 A=8,00 m²") == "SALA 2x4"
+
+
 def test_area_sozinha_nao_tem_nome_no_mesmo_texto():
     assert er.nome_do_ambiente_no_rotulo("A= 12,30 m²") is None
     assert er.nome_do_ambiente_no_rotulo("ÁREA=12,30m²") is None
@@ -450,6 +472,9 @@ def test_duas_etiquetas_lado_a_lado_cada_uma_com_o_seu_nome():
     ("QUADRO DE ÁREAS", True), ("TABELA DE ÁREAS", True),
     ("ÁREA COMUM", True), ("ÁREAS COMUNS", True), ("NÍVEL DESTINADO A ÁREA DE USO COMUM", True),
     # 🪤 "comum" no meio do nome é cômodo (medido no acervo: 9 etiquetas iam pros totais)
+    # 📏 acervo (prancha de aprovação): o título da planta com a área do andar saía como cômodo
+    ("Planta Baixa - 1º Pavto", True), ("Planta Baixa Tipo 2x", True), ("2º PAVTO", True), ("TIPO (5º e 9º Pavtos)", True),
+    ("PLANTÃO MÉDICO", False), ("SALA DE PLANTAS", False),
     ("HALL ÁREA COMUM ESCADA E ELEVADOR", False), ("RESÍDUOS COMUM", False), ("WC COMUM", False),
     ("ÁREA DE SERVIÇO", False), ("ÁREA TÉCNICA", False), ("ÁREA DE TRABALHO", False),
     ("SALA DE ESTAR", False), ("COZINHA", False),

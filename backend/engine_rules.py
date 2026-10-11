@@ -3194,6 +3194,9 @@ _AMB_PREFIXO_DA_AREA = frozenset({"a", "ar", "af", "ap", "area"})
 _AMB_NOME_MAX = 60
 
 _RE_AMB_LETRA = _re.compile(r"[A-Za-zÀ-ÿ]")
+#: o que sobra antes do "=" é só um número e/ou um multiplicador — "x6",
+#: "894,89x7", "A: 894,89 x 7": conta, não nome. O grupo é o número da frente.
+_RE_AMB_CONTA = _re.compile(r"^(?:[A-Za-zÀ-ÿ]{1,5}\s*[:=]\s*)?([\d.,]+)?\s*[xX×*]\s*\d[\d.,]*$")
 _RE_AMB_SO_NUMERO = _re.compile(r"^[\s\d.,;:xX×*/+\-=()%°ºª'\"]+$")
 #: o pedaço da ÁREA no fim do texto: "… A = 12,3 m²", "… ÁREA: 12,3m2", "… Ar = 12.3 m²".
 #: "AF=" e "AP=" (área de forro, área de piso) também: medido em 2 pranchas do
@@ -3213,6 +3216,8 @@ _RE_AMB_RESUMO = _re.compile(
     r"ocupac|computav|"
     r"\b(?:area|areas)\s+(?:util|bruta|liquida|destinada|coberta|descoberta|real|do\s+pavimento)\b|"
     r"superficie|\bpavimento\b|\bterreo\b|\bmezanino\b|\bglobal\b|\breal\b|\bcorte\b|\baterro\b|"
+    # o TÍTULO da planta com a área do andar: "Planta Baixa - 1º Pavto = 1.218,90 m²"
+    r"^planta\s+baixa\b|\bpavtos?\b|"
     r"\bquadro\b|\btabela\b|\bresumo\b|"
     r"residenc|apartament|\bapto\b|\bunidade\b|\btorre\b|utilizad")
 #: atributo da etiqueta, não nome: "PD 2.69M", "P.D. 3,00", "H 2,10", "Pé-direito 2,70".
@@ -3238,6 +3243,12 @@ def nome_do_ambiente_no_rotulo(texto):
     if outras:
         nome = nome[outras[-1].end():]
     nome = nome.strip(" -–—:/")
+    # 🩸 medido no acervo (2 pranchas de aprovação): "A:426,98m²x6 = 2.561,88m²" saía
+    # como um ambiente chamado "x6", e "894,89x7 = 6.264,23 m²" como "894,89x7".
+    # É CONTA (área × pavimentos), não nome: a etiqueta fica sem nome no texto.
+    conta = _RE_AMB_CONTA.match(nome)
+    if conta and (outras or conta.group(1)):
+        return None
     return nome if _re.search(r"[0-9A-Za-zÀ-ÿ]", nome) else None
 
 
