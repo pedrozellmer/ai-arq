@@ -81,6 +81,28 @@ def test_sem_post_hoje_nao_avisa_nada():
     assert IX.urls_do_dia([_p("ontem", "2026-09-26")], "2026-09-27") == []
 
 
+def _atualizado(slug, publicado, atualizado):
+    return {"slug": slug, "publish_date": publicado, "update_date": atualizado}
+
+
+def test_post_reescrito_hoje_ou_ontem_tambem_e_avisado():
+    """11/10/2026: o post de DWG × PDF foi reescrito com a remedição e o aviso só olhava post novo."""
+    posts = [_atualizado("hoje", "2026-08-01", "2026-10-11"), _atualizado("ontem", "2026-08-01", "2026-10-10"),
+             _atualizado("anteontem", "2026-08-01", "2026-10-09"), _p("intocado", "2026-08-01")]
+    assert IX.urls_do_dia(posts, "2026-10-11") == [
+        "https://ai.arq.br/blog/posts/hoje.html", "https://ai.arq.br/blog/posts/ontem.html"]
+
+
+def test_post_agendado_nao_e_avisado_nem_com_data_de_atualizacao():
+    """A regra de data não pode furar o calendário por outro campo."""
+    assert IX.urls_do_dia([_atualizado("futuro", "2026-11-22", "2026-10-11")], "2026-10-11") == []
+
+
+def test_o_post_que_publica_hoje_nao_sai_duas_vezes():
+    urls = IX.urls_do_dia([_atualizado("novo", "2026-10-11", "2026-10-11")], "2026-10-11")
+    assert urls == ["https://ai.arq.br/blog/posts/novo.html", "https://ai.arq.br/blog/"]
+
+
 class _Resposta:
     def __init__(self, status):
         self.status = status

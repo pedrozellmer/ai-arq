@@ -614,7 +614,7 @@
     side.setAttribute('aria-label', 'Menu principal');
     side.innerHTML =
       '<div class="aiarq-topo">'
-      + '<a class="aiarq-marca" href="index.html" title="Ir pra página inicial do site">'
+      + '<a class="aiarq-marca" href="/" title="Ir pra página inicial do site">'
       + '<span class="aiarq-logo">AI</span><span class="aiarq-nome">AI.arq</span></a>'
       + '<button id="aiarq-fechar" aria-label="Fechar menu">'
       + '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#64748B" stroke-width="1.9" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>'

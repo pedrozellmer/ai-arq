@@ -312,8 +312,18 @@
     if (/instagram|l\.instagram|ig\./.test(host)) return 'instagram';
     if (/wa\.me|whatsapp/.test(host)) return 'whatsapp';
     if (/t\.me|telegram/.test(host)) return 'telegram';
+    // 11/10/2026: IA ANTES do Google. `gemini.google.com` casava com /google\./ e a visita que veio
+    // do Gemini entrava como busca no Google; Bing, Yahoo e DuckDuckGo caíam juntos em 'busca'.
+    // Os rótulos de IA são os que o painel já agrupa como "IA (marca no link)".
+    if (/gemini\.google|bard\.google/.test(host)) return 'gemini';
+    if (/chatgpt\.com|chat\.openai\.com/.test(host)) return 'chatgpt';
+    if (/copilot\.microsoft|copilot\.com/.test(host)) return 'copilot';
+    if (/perplexity\./.test(host)) return 'perplexity';
+    if (/claude\.ai/.test(host)) return 'claude';
     if (/google\./.test(host)) return 'google';
-    if (/bing\.|duckduckgo|search\.yahoo/.test(host)) return 'busca';
+    if (/bing\./.test(host)) return 'bing';
+    if (/duckduckgo/.test(host)) return 'duckduckgo';
+    if (/search\.yahoo/.test(host)) return 'yahoo';
     if (/facebook|fb\.me|\bfb\./.test(host)) return 'facebook';
     if (/linkedin|lnkd\.in/.test(host)) return 'linkedin';
     if (/youtube|youtu\.be/.test(host)) return 'youtube';

@@ -493,6 +493,8 @@
   }
 
   /* Search */
+  /* a barra do topo é fixa: sem isto a pergunta aberta pelo endereço fica atrás dela */
+  .faq-item { scroll-margin-top: 5.5rem; }
   .faq-item.hidden-by-search {
     display: none;
   }
@@ -574,7 +576,7 @@
 
       <div class="space-y-3">
         <!-- Q1 -->
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="o que plataforma inteligencia artificial pranchas projetos arquitetura pdfs planilha orcamento quantitativos upload minutos">
+        <div id="o-que-e-o-ai-arq" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="o que plataforma inteligencia artificial pranchas projetos arquitetura pdfs planilha orcamento quantitativos upload minutos">
           <button data-track="faq-o-que-e-o-ai-arq" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">O que &eacute; o AI.arq?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -592,7 +594,7 @@
         </div>
 
         <!-- Q1b — a pergunta como ela chega na busca e nas IAs -->
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="qual ia faz levantamento quantitativo planta automatico inteligencia artificial ferramenta software medir dwg dxf pdf">
+        <div id="qual-ia-faz-levantamento-de-quantita" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="qual ia faz levantamento quantitativo planta automatico inteligencia artificial ferramenta software medir dwg dxf pdf">
           <button data-track="faq-qual-ia-faz-levantamento-de-quantita" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">Qual IA faz levantamento de quantitativo a partir da planta?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -607,7 +609,7 @@
         </div>
 
         <!-- Q2 -->
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="para quem arquitetos engenheiros orcamentistas construtoras incorporadoras escritorios engenharia quantitativos concorrencia orcamento obras">
+        <div id="para-quem-e-o-ai-arq" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="para quem arquitetos engenheiros orcamentistas construtoras incorporadoras escritorios engenharia quantitativos concorrencia orcamento obras">
           <button data-track="faq-para-quem-e-o-ai-arq" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">Para quem &eacute; o AI.arq?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -620,7 +622,7 @@
         </div>
 
         <!-- Q3 -->
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="substitui orcamentista profissional ferramenta apoio levantamento inicial revisada habilitado laranja verificacao">
+        <div id="o-ai-arq-substitui-um-orcamentista-p" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="substitui orcamentista profissional ferramenta apoio levantamento inicial revisada habilitado laranja verificacao">
           <button data-track="faq-o-ai-arq-substitui-um-orcamentista-p" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">O AI.arq substitui um or&ccedil;amentista profissional?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -633,7 +635,7 @@
         </div>
 
         <!-- Q4 -->
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="obras novas reformas compara automaticamente layout atual novo identifica sai entra permanece">
+        <div id="o-ai-arq-funciona-para-obras-novas-o" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="obras novas reformas compara automaticamente layout atual novo identifica sai entra permanece">
           <button data-track="faq-o-ai-arq-funciona-para-obras-novas-o" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">O AI.arq funciona para obras novas ou s&oacute; reformas?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -660,7 +662,7 @@
 
       <div class="space-y-3">
         <!-- Q5 -->
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="tipos pranchas sistema analisa demolicao layout mobiliario marcenaria arquitetura portas revestimentos divisorias pontos eletricos dados pisos forro iluminacao detalhamento">
+        <div id="quais-tipos-de-pranchas-o-ai-arq-le" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="tipos pranchas sistema analisa demolicao layout mobiliario marcenaria arquitetura portas revestimentos divisorias pontos eletricos dados pisos forro iluminacao detalhamento">
           <button data-track="faq-quais-tipos-de-pranchas-o-ai-arq-le" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">Quais tipos de pranchas o AI.arq l&ecirc;?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -684,7 +686,7 @@
         </div>
 
         <!-- Q6 -->
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="formato arquivo aceito pdf dwg autocad rvt revit exportar bim ifc cad resolucao dpi">
+        <div id="o-ai-arq-funciona-com-projetos-em-bi" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="formato arquivo aceito pdf dwg autocad rvt revit exportar bim ifc cad resolucao dpi">
           <button data-track="faq-o-ai-arq-funciona-com-projetos-em-bi" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">O AI.arq funciona com projetos em BIM/Revit/AutoCAD?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -699,7 +701,7 @@
         </div>
 
         <!-- Q6b: como exportar pra melhor resultado -->
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="como exportar dwg dxf melhor resultado versao bloco esquadria converter pdf imagem cotas medido estimado preparar arquivo salvar autocad">
+        <div id="como-exporto-meu-projeto-pra-ter-o-m" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="como exportar dwg dxf melhor resultado versao bloco esquadria converter pdf imagem cotas medido estimado preparar arquivo salvar autocad">
           <button data-track="faq-como-exporto-meu-projeto-pra-ter-o-m" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">Como exporto meu projeto pra ter o melhor resultado?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -768,7 +770,7 @@
         </div>
 
         <!-- Q7 -->
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="quantas pranchas enviar projeto limite 20 multiplos pdfs varios arquivos">
+        <div id="quantas-pranchas-posso-enviar-por-pr" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="quantas pranchas enviar projeto limite 20 multiplos pdfs varios arquivos">
           <button data-track="faq-quantas-pranchas-posso-enviar-por-pr" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">Quantas pranchas posso enviar por projeto?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -782,7 +784,7 @@
         </div>
 
         <!-- Q8 -->
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="quanto tempo leva processamento minutos pranchas rapido demora">
+        <div id="quanto-tempo-leva-o-processamento" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="quanto tempo leva processamento minutos pranchas rapido demora">
           <button data-track="faq-quanto-tempo-leva-o-processamento" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">Quanto tempo leva o processamento?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -795,7 +797,7 @@
         </div>
 
         <!-- Q9 -->
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="planilha gerada contem resumo comparativo orcamento disciplinas ref prancha laranja estimada formulas subtotal bdi preco fornecedor xlsx excel">
+        <div id="o-que-a-planilha-gerada-contem" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="planilha gerada contem resumo comparativo orcamento disciplinas ref prancha laranja estimada formulas subtotal bdi preco fornecedor xlsx excel">
           <button data-track="faq-o-que-a-planilha-gerada-contem" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">O que a planilha gerada cont&eacute;m?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -823,7 +825,7 @@
         </div>
 
         <!-- Q10 -->
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="como funciona etapas passo texto imagens recortadas ia claude api analise gera planilha">
+        <div id="quais-sao-as-etapas-do-processamento" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="como funciona etapas passo texto imagens recortadas ia claude api analise gera planilha">
           <button data-track="faq-quais-sao-as-etapas-do-processamento" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">Quais s&atilde;o as etapas do processamento?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -859,7 +861,7 @@
 
       <div class="space-y-3">
         <!-- Q11 -->
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="precisao acuracia leitura legendas especificacoes materiais identificacao portas revestimentos pisos contagem simbolos luminarias eletricos estimativa areas pintura forro carpete benchmark">
+        <div id="qual-a-precisao-do-ai-arq" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="precisao acuracia leitura legendas especificacoes materiais identificacao portas revestimentos pisos contagem simbolos luminarias eletricos estimativa areas pintura forro carpete benchmark">
           <button data-track="faq-qual-a-precisao-do-ai-arq" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">Qual a precis&atilde;o do AI.arq?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -875,7 +877,7 @@
         </div>
 
         <!-- Q12 -->
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="itens laranja estimadas formulas perimetro pe direito legenda conferidos projeto executivo quantidade verificar">
+        <div id="por-que-alguns-itens-ficam-em-laranj" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="itens laranja estimadas formulas perimetro pe direito legenda conferidos projeto executivo quantidade verificar">
           <button data-track="faq-por-que-alguns-itens-ficam-em-laranj" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">Por que alguns itens ficam em laranja?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -895,7 +897,7 @@
         </div>
 
         <!-- Q13 -->
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="calcula quantidades medido estimado geometria comprimento area contagem blocos pe-direito perda cotas escala sinapi">
+        <div id="como-a-ia-calcula-as-quantidades" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="calcula quantidades medido estimado geometria comprimento area contagem blocos pe-direito perda cotas escala sinapi">
           <button data-track="faq-como-a-ia-calcula-as-quantidades" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">Como a IA calcula as quantidades?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -917,7 +919,7 @@
         </div>
 
         <!-- Q14 -->
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="melhorar qualidade resultado dicas resolucao nome arquivo legenda clara">
+        <div id="como-obter-melhores-resultados" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="melhorar qualidade resultado dicas resolucao nome arquivo legenda clara">
           <button data-track="faq-como-obter-melhores-resultados" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">Como obter melhores resultados?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -934,7 +936,7 @@
             </div>
           </div>
         </div>
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="erro arquivo nao consegue ler planilha vazia zero itens escaneado incompleto reprocessar pdf vetorial cad dwg nao abriu mep eletrica hidraulica objetos inteligentes proxy aec architecture exporttoautocad converter">
+        <div id="e-se-o-sistema-nao-conseguir-ler-meu" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="erro arquivo nao consegue ler planilha vazia zero itens escaneado incompleto reprocessar pdf vetorial cad dwg nao abriu mep eletrica hidraulica objetos inteligentes proxy aec architecture exporttoautocad converter">
           <button data-track="faq-e-se-o-sistema-nao-conseguir-ler-meu" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">E se o sistema n&atilde;o conseguir ler meu arquivo? (inclui DWG de el&eacute;trica/MEP que n&atilde;o abriu)</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -971,7 +973,7 @@
 
       <div class="space-y-3">
         <!-- Q15 -->
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="quanto custa preco valor beta gratis projeto pequeno medio grande pranchas reais primeiro uso">
+        <div id="quanto-custa-usar-o-ai-arq" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="quanto custa preco valor beta gratis projeto pequeno medio grande pranchas reais primeiro uso">
           <button data-track="faq-quanto-custa-usar-o-ai-arq" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">Quanto custa usar o AI.arq?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -1008,7 +1010,7 @@
         </div>
 
         <!-- Q16 -->
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="formas pagamento cartao credito debito stripe seguro">
+        <div id="quais-formas-de-pagamento-sao-aceita" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="formas pagamento cartao credito debito stripe seguro">
           <button data-track="faq-quais-formas-de-pagamento-sao-aceita" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">Quais formas de pagamento s&atilde;o aceitas?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -1021,7 +1023,7 @@
         </div>
 
         <!-- Q18 -->
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="programa revisar corrigir quantitativos upload versao corrigida calibrar melhorar precisao planilha cotacao fornecedor">
+        <div id="o-que-muda-quando-envio-planilha-rev" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="programa revisar corrigir quantitativos upload versao corrigida calibrar melhorar precisao planilha cotacao fornecedor">
           <button data-track="faq-o-que-muda-quando-envio-planilha-rev" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">O que muda quando envio planilha revisada e cota&ccedil;&otilde;es?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -1034,7 +1036,7 @@
         </div>
 
         <!-- Q19 -->
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="mensalidade assinatura paga projeto sem cobrado uma vez">
+        <div id="tem-mensalidade-ou-assinatura" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="mensalidade assinatura paga projeto sem cobrado uma vez">
           <button data-track="faq-tem-mensalidade-ou-assinatura" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">Tem mensalidade ou assinatura?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -1060,7 +1062,7 @@
       </div>
 
       <div class="space-y-3">
-        <div class="faq-item rounded-xl border-2 border-emerald-100 bg-emerald-50/30 shadow-sm overflow-hidden" data-keywords="independente opcional obrigatorio venda casada so quantitativo apenas gerador paga etapa modular separado">
+        <div id="preciso-usar-todas-as-features-e-obr" class="faq-item rounded-xl border-2 border-emerald-100 bg-emerald-50/30 shadow-sm overflow-hidden" data-keywords="independente opcional obrigatorio venda casada so quantitativo apenas gerador paga etapa modular separado">
           <button data-track="faq-preciso-usar-todas-as-features-e-obr" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">Preciso usar todas as features? É obrigatório?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -1082,7 +1084,7 @@
         <!-- 28/07/2026: a home anuncia "cronograma físico" e o FAQ não tinha uma
              linha sequer sobre isso. Quem via na home e vinha procurar aqui não
              achava nada. -->
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="cronograma fisico financeiro obra etapas prazo planejamento pdf apresentacao gantt">
+        <div id="o-ai-arq-faz-cronograma-de-obra" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="cronograma fisico financeiro obra etapas prazo planejamento pdf apresentacao gantt">
           <button data-track="faq-o-ai-arq-faz-cronograma-de-obra" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">O AI.arq faz cronograma de obra?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -1098,7 +1100,7 @@
         </div>
 
         <!-- 01/08/2026: memorial descritivo (rascunho .docx) entrou como entregável. -->
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="memorial descritivo obra word docx rascunho especificacao caixa financiamento prefeitura alvara incorporacao rt">
+        <div id="o-ai-arq-gera-memorial-descritivo" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="memorial descritivo obra word docx rascunho especificacao caixa financiamento prefeitura alvara incorporacao rt">
           <button data-track="faq-o-ai-arq-gera-memorial-descritivo" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">O AI.arq gera memorial descritivo?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -1114,7 +1116,7 @@
           </div>
         </div>
 
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="comparativo fornecedor cotacao orcamento upload planilha excel varios fornecedores comparar analisar ppt apresentacao">
+        <div id="como-funciona-o-comparativo-de-forne" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="comparativo fornecedor cotacao orcamento upload planilha excel varios fornecedores comparar analisar ppt apresentacao">
           <button data-track="faq-como-funciona-o-comparativo-de-forne" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">Como funciona o comparativo de fornecedores?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -1134,7 +1136,7 @@
           </div>
         </div>
 
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="fornecedor template diferente planilha formato cada um upload automatico fuzzy match parser">
+        <div id="e-se-cada-fornecedor-usar-um-templat" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="fornecedor template diferente planilha formato cada um upload automatico fuzzy match parser">
           <button data-track="faq-e-se-cada-fornecedor-usar-um-templat" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">E se cada fornecedor usar um template diferente?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -1146,7 +1148,7 @@
           </div>
         </div>
 
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="logo escritorio marca ppt apresentacao cor personalizada identidade visual co-branding">
+        <div id="posso-usar-a-logo-do-meu-escritorio" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="logo escritorio marca ppt apresentacao cor personalizada identidade visual co-branding">
           <button data-track="faq-posso-usar-a-logo-do-meu-escritorio" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">Posso usar a logo do meu escritório nos PPTs gerados?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -1164,7 +1166,7 @@
           </div>
         </div>
 
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="dados cliente final nome endereco whatsapp enviar pra quem cadastro projeto">
+        <div id="como-cadastro-dados-do-meu-cliente-f" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="dados cliente final nome endereco whatsapp enviar pra quem cadastro projeto">
           <button data-track="faq-como-cadastro-dados-do-meu-cliente-f" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">Como cadastro dados do meu cliente final?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -1182,7 +1184,7 @@
           </div>
         </div>
 
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="acao granular revisao inline upload planilha corrigida cotacao fornecedor nps contribuicao melhora ia comparativo">
+        <div id="o-que-cada-contribuicao-faz-pela-ia" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="acao granular revisao inline upload planilha corrigida cotacao fornecedor nps contribuicao melhora ia comparativo">
           <button data-track="faq-o-que-cada-contribuicao-faz-pela-ia" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">O que cada contribuição faz pela IA?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -1200,7 +1202,7 @@
           </div>
         </div>
 
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="referencias sinapi tcpo bim composicao insumo justificar quantidade codigo oficial memoria tecnica">
+        <div id="o-que-e-a-aba-referencias-sinapi-na" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="referencias sinapi tcpo bim composicao insumo justificar quantidade codigo oficial memoria tecnica">
           <button data-track="faq-o-que-e-a-aba-referencias-sinapi-na" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">O que é a aba "Referências SINAPI" na planilha?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -1219,7 +1221,7 @@
           </div>
         </div>
 
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="motor heuristicas alertas anonimizado dados privacidade fornecedor lgpd outras pessoas ver projeto">
+        <div id="meus-fornecedores-e-clientes-aparece" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="motor heuristicas alertas anonimizado dados privacidade fornecedor lgpd outras pessoas ver projeto">
           <button data-track="faq-meus-fornecedores-e-clientes-aparece" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">Meus fornecedores e clientes aparecem pros outros usuários do AI.arq?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -1253,7 +1255,7 @@
 
       <div class="space-y-3">
         <!-- Q20 -->
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="meus projetos seguros confidenciais dados protegidos armazenamento">
+        <div id="meus-projetos-estao-seguros" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="meus projetos seguros confidenciais dados protegidos armazenamento">
           <button data-track="faq-meus-projetos-estao-seguros" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">Meus projetos est&atilde;o seguros?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -1272,7 +1274,7 @@
         </div>
 
         <!-- Q21 -->
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="quanto tempo planilha disponivel download 90 dias excluida automaticamente reprocessar">
+        <div id="por-quanto-tempo-planilha-e-arquivos" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="quanto tempo planilha disponivel download 90 dias excluida automaticamente reprocessar">
           <button data-track="faq-por-quanto-tempo-planilha-e-arquivos" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">Por quanto tempo planilha e arquivos ficam dispon&iacute;veis?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -1285,7 +1287,7 @@
         </div>
 
         <!-- Q22 -->
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="quem acesso dados terceiros anthropic claude stripe supabase google compartilha vende treinar ia">
+        <div id="quem-tem-acesso-aos-meus-dados" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="quem acesso dados terceiros anthropic claude stripe supabase google compartilha vende treinar ia">
           <button data-track="faq-quem-tem-acesso-aos-meus-dados" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">Quem tem acesso aos meus dados?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -1305,7 +1307,7 @@
         </div>
 
         <!-- Q23 -->
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="lgpd direitos excluir conta dados acesso correcao portabilidade privacidade">
+        <div id="quais-sao-meus-direitos-sobre-meus-d" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="lgpd direitos excluir conta dados acesso correcao portabilidade privacidade">
           <button data-track="faq-quais-sao-meus-direitos-sobre-meus-d" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">Quais s&atilde;o meus direitos sobre meus dados (LGPD)?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -1326,7 +1328,7 @@
         </div>
 
         <!-- Q24 -->
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="dados coletados cadastro informacoes pessoais whatsapp cpf cnpj empresa cargo">
+        <div id="quais-dados-pessoais-sao-coletados" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="dados coletados cadastro informacoes pessoais whatsapp cpf cnpj empresa cargo">
           <button data-track="faq-quais-dados-pessoais-sao-coletados" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">Quais dados pessoais s&atilde;o coletados?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -1345,7 +1347,7 @@
         </div>
 
         <!-- Q24b — Por que CPF só antes do pagamento? -->
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="cpf cnpj cadastro pedir antes pagamento opcional gratis teste recibo nota fiscal">
+        <div id="por-que-voces-nao-pedem-cpf-no-cadas" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="cpf cnpj cadastro pedir antes pagamento opcional gratis teste recibo nota fiscal">
           <button data-track="faq-por-que-voces-nao-pedem-cpf-no-cadas" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">Por que voc&ecirc;s n&atilde;o pedem CPF no cadastro?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -1373,7 +1375,7 @@
 
       <div class="space-y-3">
         <!-- Q25 -->
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="erro problema processamento falhou travou nao funcionou o que fazer">
+        <div id="o-processamento-falhou-o-que-faco" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="erro problema processamento falhou travou nao funcionou o que fazer">
           <button data-track="faq-o-processamento-falhou-o-que-faco" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">O processamento falhou. O que fa&ccedil;o?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -1393,7 +1395,7 @@
         </div>
 
         <!-- Q26 -->
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="contato suporte ajuda email duvidas problemas reclamacoes chat ia">
+        <div id="como-tirar-duvidas-ou-entrar-em-cont" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="contato suporte ajuda email duvidas problemas reclamacoes chat ia">
           <button data-track="faq-como-tirar-duvidas-ou-entrar-em-cont" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">Como tirar d&uacute;vidas ou entrar em contato?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -1407,7 +1409,7 @@
         </div>
 
         <!-- Q27 -->
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="excluir conta apagar deletar cancelar remover dados sair">
+        <div id="como-excluir-minha-conta" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="excluir conta apagar deletar cancelar remover dados sair">
           <button data-track="faq-como-excluir-minha-conta" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">Como excluir minha conta?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -1420,7 +1422,7 @@
         </div>
 
         <!-- N1 (31/08/2026 — perguntas que o cliente faz a uma IA) -->
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="preciso bim revit pra usar arq">
+        <div id="preciso-de-bim-ou-de-revit-pra-usar" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="preciso bim revit pra usar arq">
           <button data-track="faq-preciso-de-bim-ou-de-revit-pra-usar" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">Preciso de BIM ou de Revit pra usar o AI.arq?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -1433,7 +1435,7 @@
         </div>
 
         <!-- N2 (31/08/2026 — perguntas que o cliente faz a uma IA) -->
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="qual diferenca entre arq programas que importo planta vou clicando pra medir">
+        <div id="qual-a-diferenca-entre-o-ai-arq-e-os" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="qual diferenca entre arq programas que importo planta vou clicando pra medir">
           <button data-track="faq-qual-a-diferenca-entre-o-ai-arq-e-os" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">Qual a diferença entre o AI.arq e os programas em que eu importo a planta e vou clicando pra medir?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -1446,7 +1448,7 @@
         </div>
 
         <!-- N3 (31/08/2026 — perguntas que o cliente faz a uma IA) -->
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="funciona com planta escaneada fotografada impressa">
+        <div id="funciona-com-planta-escaneada-fotogr" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="funciona com planta escaneada fotografada impressa">
           <button data-track="faq-funciona-com-planta-escaneada-fotogr" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">Funciona com planta escaneada, fotografada ou impressa?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -1459,7 +1461,7 @@
         </div>
 
         <!-- N4 (31/08/2026 — perguntas que o cliente faz a uma IA) -->
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="prancha nao tiver cota">
+        <div id="e-se-a-prancha-nao-tiver-cota" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="prancha nao tiver cota">
           <button data-track="faq-e-se-a-prancha-nao-tiver-cota" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">E se a prancha não tiver cota?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -1472,7 +1474,7 @@
         </div>
 
         <!-- N5 (31/08/2026 — perguntas que o cliente faz a uma IA) -->
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="arq preco minha obra">
+        <div id="o-ai-arq-da-o-preco-da-minha-obra" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="arq preco minha obra">
           <button data-track="faq-o-ai-arq-da-o-preco-da-minha-obra" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">O AI.arq dá o preço da minha obra?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -1485,7 +1487,7 @@
         </div>
 
         <!-- N6 (31/08/2026 — perguntas que o cliente faz a uma IA) -->
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="preciso cartao credito pra testar arq">
+        <div id="preciso-de-cartao-de-credito-pra-tes" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="preciso cartao credito pra testar arq">
           <button data-track="faq-preciso-de-cartao-de-credito-pra-tes" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">Preciso de cartão de crédito pra testar o AI.arq?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -1498,7 +1500,7 @@
         </div>
 
         <!-- N7 (31/08/2026 — perguntas que o cliente faz a uma IA) -->
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="quanto meu projeto volta como medido estimado">
+        <div id="quanto-do-meu-projeto-volta-como-med" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="quanto meu projeto volta como medido estimado">
           <button data-track="faq-quanto-do-meu-projeto-volta-como-med" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">Quanto do meu projeto volta como MEDIDO e quanto volta como ESTIMADO?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -1511,7 +1513,7 @@
         </div>
 
         <!-- N8 (31/08/2026 — perguntas que o cliente faz a uma IA) -->
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="meu desenho nao informa direito muda alguma coisa">
+        <div id="meu-desenho-nao-informa-o-pe-direito" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="meu desenho nao informa direito muda alguma coisa">
           <button data-track="faq-meu-desenho-nao-informa-o-pe-direito" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">Meu desenho não informa o pé-direito. Muda alguma coisa?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -1524,7 +1526,7 @@
         </div>
 
         <!-- N9 (31/08/2026 — perguntas que o cliente faz a uma IA) -->
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="serve pra projeto estrutural concreto armado fundacao">
+        <div id="serve-pra-projeto-estrutural-concret" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="serve pra projeto estrutural concreto armado fundacao">
           <button data-track="faq-serve-pra-projeto-estrutural-concret" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">Serve pra projeto estrutural (concreto armado, fundação)?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -1537,7 +1539,7 @@
         </div>
 
         <!-- N10 (31/08/2026 — perguntas que o cliente faz a uma IA) -->
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="planilha arq serve pra licitacao obra publica">
+        <div id="a-planilha-do-ai-arq-serve-pra-licit" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="planilha arq serve pra licitacao obra publica">
           <button data-track="faq-a-planilha-do-ai-arq-serve-pra-licit" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">A planilha do AI.arq serve pra licitação ou obra pública?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -1550,7 +1552,7 @@
         </div>
 
         <!-- N11 (31/08/2026 — perguntas que o cliente faz a uma IA) -->
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="arq arquivo rvt revit ifc">
+        <div id="o-ai-arq-le-arquivo-rvt-revit-ou-ifc" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="arq arquivo rvt revit ifc">
           <button data-track="faq-o-ai-arq-le-arquivo-rvt-revit-ou-ifc" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">O AI.arq lê arquivo .rvt (Revit) ou .ifc?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -1563,7 +1565,7 @@
         </div>
 
         <!-- N12 (31/08/2026 — perguntas que o cliente faz a uma IA) -->
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="arq erra quando que faco">
+        <div id="o-ai-arq-erra-e-quando-erra-o-que-eu" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="arq erra quando que faco">
           <button data-track="faq-o-ai-arq-erra-e-quando-erra-o-que-eu" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">O AI.arq erra? E quando erra, o que eu faço?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -1576,7 +1578,7 @@
         </div>
 
         <!-- N13 (31/08/2026 — perguntas que o cliente faz a uma IA) -->
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="por que arq mede geometria vez olhar imagem planta">
+        <div id="por-que-o-ai-arq-mede-a-geometria-em" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="por que arq mede geometria vez olhar imagem planta">
           <button data-track="faq-por-que-o-ai-arq-mede-a-geometria-em" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">Por que o AI.arq mede a geometria em vez de a IA só olhar a imagem da planta?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -1589,7 +1591,7 @@
         </div>
 
         <!-- N14 (31/08/2026 — perguntas que o cliente faz a uma IA) -->
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="arq funciona com projeto fora brasil">
+        <div id="o-ai-arq-funciona-com-projeto-de-for" class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="arq funciona com projeto fora brasil">
           <button data-track="faq-o-ai-arq-funciona-com-projeto-de-for" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">O AI.arq funciona com projeto de fora do Brasil?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -1722,6 +1724,9 @@
     if (!isOpen) {
       answer.classList.add('open');
       chevron.classList.add('rotated');
+      // 11/10/2026: abrir uma pergunta põe o endereço dela na barra (faq.html#pergunta) — é o
+      // que deixa copiar o link de UMA resposta. replaceState: não empilha histórico nem rola.
+      try { if (item.id) history.replaceState(null, '', '#' + item.id); } catch (e) {}
     }
     // 28/07/2026: sem aria-expanded, quem usa leitor de tela ouvia 37 botões
     // iguais, sem saber quais estavam abertos. A seta é sinal só visual.
@@ -1732,6 +1737,24 @@
   document.querySelectorAll('.faq-toggle').forEach(b => {
     b.setAttribute('aria-expanded', 'false');
   });
+
+  // 11/10/2026: quem chega por faq.html#pergunta já encontra a resposta aberta e na tela.
+  function perguntaDoEndereco(hash) {
+    let id = '';
+    try { id = decodeURIComponent(String(hash || '').replace(/^#/, '')); } catch (e) { return null; }
+    const item = id ? document.getElementById(id) : null;
+    return item && item.classList.contains('faq-item') ? item : null;
+  }
+  function abrirPerguntaDoEndereco() {
+    const item = perguntaDoEndereco(location.hash);
+    if (!item) return;
+    const btn = item.querySelector('.faq-toggle');
+    const answer = item.querySelector('.faq-answer');
+    if (btn && answer && !answer.classList.contains('open')) toggleFaq(btn);
+    item.scrollIntoView({ block: 'start' });
+  }
+  abrirPerguntaDoEndereco();
+  window.addEventListener('hashchange', abrirPerguntaDoEndereco);
 
   // ══════════════════════════════════════════════
   //  SEARCH

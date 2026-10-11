@@ -14,12 +14,17 @@ Como funciona aqui:
   (e no disparo manual) — nunca a cada push, pra não repetir a mesma URL no dia.
 - Só avisa se algum post tem `publish_date` == hoje (relógio de Brasília,
   `hoje_editorial()` do blog). Vai a URL do post e a do índice do blog.
+- 11/10/2026: avisa também o post JÁ PUBLICADO cujo texto mudou — `update_date`
+  de hoje ou de ontem. Ontem entra porque a rotina roda às 06:00: a correção que
+  sobe durante o dia leva a data do dia e só encontra a rotina na manhã seguinte.
+  Antes, post reescrito (o de DWG × PDF, com a remedição) esperava o robô voltar.
 - NUNCA derruba o deploy: falha de rede ou recusa vira aviso no log e sai 0
   (o passo também tem continue-on-error). O site já está no ar a essa altura.
 
 Uso manual:  python scripts/indexnow.py            (avisa, se houver post hoje)
              python scripts/indexnow.py --simular  (só mostra o que mandaria)
 """
+import datetime
 import importlib.util
 import json
 import os
@@ -42,12 +47,18 @@ def _blog():
     return mod
 
 
+def _atualizado_em(post):
+    return post.get("update_date") or post.get("updated") or ""
+
+
 def urls_do_dia(posts, hoje, site=SITE):
-    """URLs a avisar: os posts que publicam HOJE e, se houver algum, o índice."""
+    """URLs a avisar: os posts que publicam HOJE (e, se houver algum, o índice) mais os
+    posts já publicados que foram atualizados hoje ou ontem."""
+    ontem = (datetime.date.fromisoformat(hoje) - datetime.timedelta(days=1)).isoformat()
     novos = [p for p in posts if p["publish_date"] == hoje]
-    if not novos:
-        return []
-    return ["%s/blog/posts/%s.html" % (site, p["slug"]) for p in novos] + [site + "/blog/"]
+    mexidos = [p for p in posts if p["publish_date"] < hoje and _atualizado_em(p) in (hoje, ontem)]
+    urls = ["%s/blog/posts/%s.html" % (site, p["slug"]) for p in novos + mexidos]
+    return urls + ([site + "/blog/"] if novos else [])
 
 
 def corpo(urls):
@@ -68,7 +79,7 @@ def main(argv, abrir=urllib.request.urlopen):
     hoje = blog.hoje_editorial().isoformat()
     urls = urls_do_dia(blog.POSTS, hoje)
     if not urls:
-        print("IndexNow: nenhum post publica hoje (%s) — nada a avisar" % hoje)
+        print("IndexNow: nenhum post publica nem foi atualizado (%s) — nada a avisar" % hoje)
         return 0
     print("IndexNow: %d URL(s) de %s: %s" % (len(urls), hoje, ", ".join(urls)))
     if "--simular" in argv:

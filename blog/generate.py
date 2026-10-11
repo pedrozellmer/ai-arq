@@ -615,6 +615,14 @@ def render_post_html(post):
     # numero envelheceu. Mora aqui (na fonte) e nao no HTML gerado: o deploy
     # regenera os posts, e uma edicao a mao no HTML e apagada antes de chegar
     # ao ar. Foi exatamente o que aconteceu com a nota de 23/08 deste post.
+    # 11/10/2026: a data em que o TEXTO mudou só aparecia no rodapé das fontes. Quem chega num post
+    # reescrito via "📅 23/08/2026" no topo e lia número de outubro. Só entra quando difere da
+    # publicação — é a mesma data do dateModified (data_de_atualizacao), nunca a de hoje.
+    _mexido = data_de_atualizacao(post)
+    atualizado_topo_html = ""
+    if _mexido and _mexido != post["publish_date"]:
+        atualizado_topo_html = ("\n    <span>·</span>\n    <span>Atualizado em %s</span>"
+                                % datetime.fromisoformat(_mexido).strftime("%d/%m/%Y"))
     _nota = (post.get("update_note") or "").strip()
     _cls = "mb-8 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-900"
     update_note_html = (
@@ -778,8 +786,8 @@ def render_post_html(post):
   <h1 class="text-3xl md:text-4xl font-bold text-gray-900 leading-tight mb-4">{post["title"]}</h1>
 
   <!-- Meta -->
-  <div class="flex items-center gap-4 text-sm text-gray-500 mb-10 pb-6 border-b">
-    <span>📅 {publish_date_br}</span>
+  <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-500 mb-10 pb-6 border-b">
+    <span>📅 {publish_date_br}</span>{atualizado_topo_html}
     <span>·</span>
     <span>⏱️ {post["estimated_read_min"]} min de leitura</span>
   </div>
