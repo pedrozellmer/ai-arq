@@ -1100,14 +1100,24 @@ function apagarProjeto() {
   abrirModal('Apagar o projeto?', `<p style="margin:0;font-size:14px;line-height:1.5">Somem do AI.arq as tarefas, as atas, a equipe, as emissões e as fotos de <b>${esc(PROJ.nome)}</b>, e quem você convidou perde o acesso (inclusive o que o AI.arq compartilhou no Drive). <b>Não dá pra desfazer.</b></p>
     <p class="sub" style="margin:0">A pasta e os arquivos no seu Google Drive continuam lá: são seus.${PROJ.job_id ? ' O projeto medido (quantitativo) também continua no seu painel.' : ''}</p>
     <div><label class="lbl" for="ap-nome">Pra confirmar, digite o nome do projeto</label><input id="ap-nome" class="in" autocomplete="off" placeholder="${esc(PROJ.nome)}"></div>
+    <div class="aviso" id="ap-aviso" hidden style="font-size:13px"></div>
     <div class="rodape"><button class="btn" onclick="editarProjeto()">Voltar</button><button class="btn btn-r" id="ap-ok">Apagar de vez</button></div>`);
+  let pastaSumiu = false;
   $('ap-ok').onclick = async () => {
     if ($('ap-nome').value.trim() !== String(PROJ.nome).trim()) return toast('O nome não confere.', true);
     $('ap-ok').disabled = true; $('ap-ok').textContent = 'Apagando…';
     EMITINDO = true;   // enquanto apaga, o modal não fecha
     let r;
-    try { r = await apiEsc(`projetos/${PROJ.id}`, 'DELETE'); } finally { EMITINDO = false; }
-    if (!r.ok) { $('ap-ok').disabled = false; $('ap-ok').textContent = 'Apagar de vez'; return toast(typeof r.dados.detail === 'string' ? r.dados.detail : 'Não consegui apagar agora.', true); }
+    try { r = await apiEsc(`projetos/${PROJ.id}` + (pastaSumiu ? '?pasta_sumiu=1' : ''), 'DELETE'); } finally { EMITINDO = false; }
+    // 11/10 (auditoria SERV-1): a pasta do projeto não existe mais no Drive (ou a conta conectada é outra) — antes era
+    // "tente de novo" pra sempre. O servidor explica (428) e a admin decide apagar mesmo assim.
+    if (r.status === 428 && !pastaSumiu && $('ap-aviso')) {
+      $('ap-aviso').textContent = typeof r.dados.detail === 'string' ? r.dados.detail : 'Não achei a pasta deste projeto no Google Drive.';
+      $('ap-aviso').hidden = false; pastaSumiu = true;
+      $('ap-ok').disabled = false; $('ap-ok').textContent = 'Apagar mesmo assim';
+      return;
+    }
+    if (!r.ok) { $('ap-ok').disabled = false; $('ap-ok').textContent = pastaSumiu ? 'Apagar mesmo assim' : 'Apagar de vez'; return toast(typeof r.dados.detail === 'string' ? r.dados.detail : 'Não consegui apagar agora.', true); }
     const id = PROJ.id;
     fecharModal(); PROJETOS = PROJETOS.filter((x) => x.id !== id); PROJ = null; MEMBROS = [];
     location.hash = '#/'; toast('Projeto apagado');
@@ -1297,11 +1307,18 @@ async function mover(id, st, i, mostrarAoCliente) {
   const velho = { status: t.status, posicao: t.posicao, do_cliente: t.do_cliente };
   const mud = { status: st, posicao: pos };
   if (mostrarAoCliente) mud.do_cliente = true;
+  // 🩸 11/10 (auditoria ADM-5): o caminho de VOLTA não existia — o cartão que saía de "Aguardando cliente" pra uma
+  // coluna do escritório continuava pra sempre em "O que depende de você" do cliente (e contando em "Com o cliente"
+  // na capa), com a bola já de volta no escritório. Agora sai da lista dele; Aprovado e Concluído continuam com ele
+  // ("Já resolvidas"). Quem quiser manter, marca "Pendência do cliente" no cartão.
+  const saiDoCliente = saiDaListaDoCliente(velho, st);
+  if (saiDoCliente) mud.do_cliente = false;
   Object.assign(t, mud); render();                                                // otimista
   const { error } = await sb.from('escritorio_tarefas').update(mud).eq('id', id);
   if (error) { Object.assign(t, velho); render(); return falhou(error, 'Não movi'); }
-  if (velho.status !== st) toast('Movido para ' + stT(st) + (mostrarAoCliente ? ' · o cliente vê este cartão' : ''));
+  if (velho.status !== st) toast('Movido para ' + stT(st) + (mostrarAoCliente ? ' · o cliente vê este cartão' : saiDoCliente ? ' · saiu da lista do cliente' : ''));
 }
+const saiDaListaDoCliente = (antes, st) => antes.status === 'cliente' && !!antes.do_cliente && ['afazer', 'dev', 'revdtz', 'revsol'].includes(st);
 
 function addCartao(st, btn) {
   if (!souAdmin() && !ST_EQUIPE.includes(st)) return toast('Nesta coluna quem cria é a admin do projeto.', true);
@@ -1311,10 +1328,16 @@ function addCartao(st, btn) {
   slot.querySelector('textarea').focus();
 }
 function novaTarefa() { const b = document.querySelector('.col[data-st="afazer"] .add'); if (b) addCartao('afazer', b); }
-async function criarCartao(st, txt) {
+async function criarCartao(st, txt, confirmado) {
   txt = String(txt || '').trim(); if (!txt) return render();
+  // 🩸 11/10 (auditoria FORA-1/ADM-4): criar direto em "Aguardando cliente" ligava a pendência do cliente SEM o aviso
+  // que o arrastar e o salvar mostram; e, sem cliente no projeto, os cartões ficavam marcados à espera do convite e
+  // apareciam todos de uma vez pra ele no dia em que entrasse. Agora é igual ao arrastar: sem cliente ativo o cartão
+  // nasce sem a pendência; com cliente, a tela diz o que ele vai ver e pede ok.
+  const mostrar = st === 'cliente' && clientesAtivos().length > 0;
+  if (mostrar && !confirmado) return confirmarDeFora([avisoCliente({})], 'Criar e mostrar', () => criarCartao(st, txt, true));
   const max = Math.max(0, ...TAR.filter((x) => x.status === st).map((x) => x.posicao));
-  const { data, error } = await sb.from('escritorio_tarefas').insert({ projeto_id: PROJ.id, titulo: txt, status: st, posicao: max + 1, etapa: etapaDoFiltro() || PROJ.etapa_atual || null, do_cliente: st === 'cliente', criado_por: EU.id }).select().single();
+  const { data, error } = await sb.from('escritorio_tarefas').insert({ projeto_id: PROJ.id, titulo: txt, status: st, posicao: max + 1, etapa: etapaDoFiltro() || PROJ.etapa_atual || null, do_cliente: mostrar, criado_por: EU.id }).select().single();
   if (error) return falhou(error, 'Não criei o cartão');
   TAR.push(data);
   const eu = meuMembro();
@@ -1786,9 +1809,15 @@ const deForaAtivos = () => MEMBROS.filter((m) => m.status === 'ativo' && deFora(
 // ele lia "Você aprovou" e perdia os botões. Pro CLIENTE, a emissão espera por ELE enquanto ELE não respondeu (a
 // resposta registrada à mão pelo escritório fecha pra todos, como antes). Pro escritório, o de sempre.
 const respondeuEu = (e) => evDa(e).some((x) => x.pelo_cliente && x.registrado_por === EU.id);
+// 🩸 11/10 (auditoria BANCO-3): a revisão antiga continuava "Aguardando a sua aprovação" depois de a nova do MESMO
+// arquivo chegar — o cliente via R00 e R01 com Aprovar, aprovava a R00 e o escritório recebia "aprovado" da versão
+// errada. Pro cliente, a revisão mais nova que foi mandada PRA ELE substitui as anteriores (o servidor também recusa).
+const mandadaPraMim = (e) => { const eu = meuMembro(); return !!eu && DEST.some((d) => d.emissao_id === e.id && d.membro_id === eu.id && d.permission_id); };
+const substituidaPor = (e) => EMI.filter((x) => x.arquivo_id === e.arquivo_id && Number(x.revisao) > Number(e.revisao) && mandadaPraMim(x))
+  .sort((a, b) => Number(b.revisao) - Number(a.revisao))[0] || null;
 const esperaResposta = (e) => {
   const u = ultimoEv(e); if (!u) return false;
-  if (souCliente()) return !respondeuEu(e) && (u.tipo === 'enviado' || !!u.pelo_cliente);
+  if (souCliente()) return !substituidaPor(e) && !respondeuEu(e) && (u.tipo === 'enviado' || !!u.pelo_cliente);
   return u.tipo === 'enviado';
 };
 const quemRespondeu = (x) => { if (x.registrado_por === EU.id) return 'Você'; const m = MEMBROS.find((y) => y.user_id === x.registrado_por); return m ? curto(m) : 'Outra pessoa do lado do cliente'; };
@@ -1812,7 +1841,10 @@ function mandarDepois(id) {
     if (!r.ok) { $('md-ok').disabled = false; return toast(r.dados.detail || 'Não consegui mandar agora.', true); }
     fecharModal();
     const f = (r.dados.falhas || []).length;
-    toast(`Mandado pra ${r.dados.mandados || 0} pessoa(s)` + (f ? ` · ${f} não deu (a pessoa entrou sem e-mail confirmado?)` : ''), !!f);
+    // 11/10 (auditoria FORA-5): a emissão já tem resposta registrada por você — quem recebe agora vê o arquivo, sem
+    // os botões de aprovar (e o e-mail "pra você aprovar" não sai)
+    toast(`Mandado pra ${r.dados.mandados || 0} pessoa(s)` + (f ? ` · ${f} não deu (a pessoa entrou sem e-mail confirmado?)` : '')
+      + (r.dados.ja_respondida ? ' · esta emissão já tem resposta registrada: quem recebeu agora só vê o arquivo' : ''), !!f);
     await recarregar();
   };
 }
@@ -1860,13 +1892,15 @@ function telaEmissoesDeFora() {
   return topo + `<section class="card rise">${grupos.map((g) => `<div class="emi-g"><h3>${svg('arq', 16)}${esc(g[0].arquivo_nome)}</h3>
     <ul class="emi-l">${g.map((e) => {
       const lk = linkCopia(e), evs = evDa(e), espera = cli && esperaResposta(e);
+      // BANCO-3: a revisão que ESTAVA esperando por ele e ganhou uma mais nova diz por qual foi substituída
+      const nova = cli && !espera && (ultimoEv(e) || {}).tipo === 'enviado' ? substituidaPor(e) : null;
       return `<li${espera ? ' style="background:#FFFBEB;border:1px solid #FDE68A"' : ''}><span class="rev-tag" style="margin:2px 0 0">${revTxt(e.revisao)}</span>
         <div class="emi-n">${lk ? `<a href="${esc(lk)}" target="_blank" rel="noopener">${esc(e.copia_nome || e.arquivo_nome)}</a>` : esc(e.copia_nome || e.arquivo_nome)}
           <small>emitida em ${esc(quandoArq(e.emitido_em))}</small>
           ${e.nota ? `<p class="emi-nota">“${esc(e.nota)}”</p>` : ''}
-          ${cli && evs.length ? `<ul class="emi-hist">${evs.filter((x) => x.tipo !== 'enviado').map((x) => `<li><b>${x.pelo_cliente ? esc(quemRespondeu(x)) + (x.tipo === 'aprovado' ? ' aprovou' : ' pediu revisão') : (x.tipo === 'aprovado' ? 'O escritório registrou a sua aprovação' : 'O escritório registrou um pedido de revisão')}</b> · ${esc(dBR(x.em))}${x.nota ? ' — ' + esc(x.nota) : ''}</li>`).join('')}</ul>` : ''}
+          ${cli && evs.length ? `<ul class="emi-hist">${evs.filter((x) => x.tipo !== 'enviado').map((x) => `<li><b>${x.pelo_cliente ? esc(quemRespondeu(x)) + (x.tipo === 'aprovado' ? ' aprovou' : ' pediu revisão') : (x.tipo === 'aprovado' ? 'O escritório registrou uma aprovação' : 'O escritório registrou um pedido de revisão')}</b> · ${esc(dBR(x.em))}${x.nota ? ' — ' + esc(x.nota) : ''}</li>`).join('')}</ul>` : ''}
         </div>
-        <div class="emi-st">${cli ? (espera ? `<span class="pill p-warn"><i></i>Aguardando você</span><div class="linha" style="gap:6px"><button type="button" class="btn btn-s btn-r" onclick="responderEmissao('${e.id}','revisao')">Pedir revisão</button><button type="button" class="btn btn-s btn-d" onclick="responderEmissao('${e.id}','aprovado')">Aprovar</button></div>` : pillEmissao(e)) : ''}${lk ? `<a class="btn btn-s" href="${esc(lk)}" target="_blank" rel="noopener">Abrir</a>` : ''}</div></li>`;
+        <div class="emi-st">${cli ? (espera ? `<span class="pill p-warn"><i></i>Aguardando você</span><div class="linha" style="gap:6px"><button type="button" class="btn btn-s btn-r" onclick="responderEmissao('${e.id}','revisao')">Pedir revisão</button><button type="button" class="btn btn-s btn-d" onclick="responderEmissao('${e.id}','aprovado')">Aprovar</button></div>` : nova ? `<span class="pill p-neu"><i></i>Substituída pela ${revTxt(nova.revisao)}</span>` : pillEmissao(e)) : ''}${lk ? `<a class="btn btn-s" href="${esc(lk)}" target="_blank" rel="noopener">Abrir</a>` : ''}</div></li>`;
     }).join('')}</ul></div>`).join('')}
     <p class="sub" style="margin-top:12px">Pra abrir o arquivo, use a conta Google do e-mail em que você recebeu o aviso do Google Drive.</p></section>`;
 }
@@ -2231,11 +2265,25 @@ function apagarAta(id) {
     await recarregar(); toast('Ata apagada');
   };
 }
+// 11/10 (auditoria ADM-4/BANCO-4): o "Quem?" listava cliente e fornecedor só pelo primeiro nome, igual à equipe — um
+// homônimo de fora ficava marcado numa tarefa interna sem ninguém perceber. Agora o perfil vai escrito, a equipe vem
+// primeiro, e a linha diz o que quem é de fora passa a ver.
+const PERFIL_CURTO = { cliente: 'cliente', fornecedor: 'fornecedor' };
+function avisoDaLinhaDaAta(sel) {
+  const m = MEMBROS.find((x) => x.id === sel.value), nota = sel.closest('[data-l]').querySelector('[data-c=aviso]');
+  if (!nota) return;
+  nota.textContent = sel.value === 'cliente' ? 'Vira pendência do cliente: ele vê esta tarefa em “O que depende de você”.'
+    : m && m.papel === 'fornecedor' ? 'É fornecedor: ele vai ver esta tarefa e os comentários dela.'
+    : m && m.papel === 'cliente' ? 'É cliente: ele vai ver esta tarefa.' : '';
+  nota.hidden = !nota.textContent;
+}
 function linhaTarefaAta(i) {
-  const gente = MEMBROS.filter((m) => m.status === 'ativo');
+  const ativos = MEMBROS.filter((m) => m.status === 'ativo');
+  const gente = [...ativos.filter((m) => !deFora(m)), ...ativos.filter(deFora)];
   return `<div class="grade g3" data-l="${i}" style="align-items:end"><div><input class="in" data-c="t" maxlength="300" placeholder="O que ficou de ser feito"></div>
-    <div><select class="in" data-c="q"><option value="">Quem?</option>${gente.map((m) => `<option value="${m.id}">${esc(curto(m))}</option>`).join('')}<option value="cliente">O cliente</option></select></div>
-    <div><input class="in" data-c="p" type="date" aria-label="Prazo"></div></div>`;
+    <div><select class="in" data-c="q" onchange="avisoDaLinhaDaAta(this)"><option value="">Quem?</option>${gente.map((m) => `<option value="${m.id}">${esc(curto(m))}${PERFIL_CURTO[m.papel] ? ' (' + PERFIL_CURTO[m.papel] + ')' : ''}</option>`).join('')}<option value="cliente">O cliente</option></select></div>
+    <div><input class="in" data-c="p" type="date" aria-label="Prazo"></div>
+    <span class="sub" data-c="aviso" hidden style="grid-column:1/-1;margin:0;color:#92400E"></span></div>`;
 }
 function novaAta() {
   abrirModal('Nova ata', `
@@ -2345,7 +2393,7 @@ function convidar(pre) {
     <div><p class="lbl">Perfil neste projeto</p><div class="grade g3" role="radiogroup" aria-label="Perfil neste projeto">${PERFIS_CONVITE.map(([k, t, d]) => `<label class="perfil-op"><span class="linha" style="gap:6px;flex-wrap:nowrap"><input type="radio" name="cv-perfil" value="${k}" ${k === (pre.perfil || 'equipe') ? 'checked' : ''}><b>${t}</b></span><span>${d}</span></label>`).join('')}</div></div>
     <div id="cv-pasta-box" ${pre.perfil === 'fornecedor' ? '' : 'hidden'}><label class="lbl" for="cv-pasta">Pasta do Drive que ele vê (opcional)</label><select id="cv-pasta" class="in"><option value="">Nenhuma por enquanto</option></select>
       <span class="sub" style="display:block" id="cv-pasta-sub">Uma subpasta da pasta do projeto. Ele só lê.</span></div>
-    <div class="aviso" style="font-size:12.5px" id="cv-aviso">${AVISO_PERFIL[pre.perfil || 'equipe']}</div>
+    <div class="aviso" style="font-size:12.5px" id="cv-aviso">${avisoDoPerfil(pre.perfil || 'equipe')}</div>
     <div class="rodape"><button class="btn" onclick="fecharModal()">Cancelar</button><button class="btn btn-d" id="cv-ok" onclick="enviarConvite()">Enviar convite</button></div>`);
   document.querySelectorAll('input[name="cv-perfil"]').forEach((r) => { r.onchange = perfilDoConvite; });
   if (pre.perfil === 'fornecedor') carregarPastasDoFornecedor();
@@ -2361,10 +2409,18 @@ const AVISO_PERFIL = {
   fornecedor: 'Ele vai ver: <b>as tarefas marcadas pra ele</b>, <b>a pasta que você escolher</b> (só leitura), <b>as emissões que você mandar pra ele</b> e <b>as fotos</b> (e pode subir foto). Não vê atas, equipe, quantitativo nem financeiro.',
   cliente: 'Ele vai ver: <b>a etapa do projeto</b>, <b>as emissões que você mandar pra ele</b> (e aprova ou pede revisão), <b>as tarefas do cliente</b> e <b>as fotos que você marcar pro cliente</b>. O cadastro dele é curto: nome e telefone.',
 };
+// 11/10 (auditoria FORA-1): quem entra como cliente passa a ver, de uma vez, os cartões JÁ marcados como pendência do
+// cliente (inclusive os resolvidos) — o convite diz quantos e quais, pra admin conferir antes de mandar
+const avisoDoPerfil = (p) => {
+  if (p !== 'cliente') return AVISO_PERFIL[p];
+  const ja = TAR.filter((t) => t.do_cliente);
+  if (!ja.length) return AVISO_PERFIL.cliente;
+  return AVISO_PERFIL.cliente + ` <b>Atenção:</b> ${ja.length === 1 ? 'já existe 1 cartão marcado' : 'já existem ' + ja.length + ' cartões marcados'} como pendência do cliente (${ja.slice(0, 3).map((t) => '“' + esc(t.titulo) + '”').join(', ')}${ja.length > 3 ? '…' : ''}). Ele vai ver assim que entrar: confira no quadro antes de convidar.`;
+};
 const perfilMarcado = () => (document.querySelector('input[name="cv-perfil"]:checked') || {}).value || 'equipe';
 function perfilDoConvite() {
   const p = perfilMarcado();
-  $('cv-pasta-box').hidden = p !== 'fornecedor'; $('cv-aviso').innerHTML = AVISO_PERFIL[p];
+  $('cv-pasta-box').hidden = p !== 'fornecedor'; $('cv-aviso').innerHTML = avisoDoPerfil(p);
   if (p === 'fornecedor') carregarPastasDoFornecedor();
 }
 // as subpastas de 1º nível da pasta do projeto (Emitidos e Fotos são do sistema: ficam de fora)

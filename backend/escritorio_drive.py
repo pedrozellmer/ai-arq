@@ -844,14 +844,23 @@ def _mandar(projeto_id: str, emissao: dict, para, quem: str, tok: str) -> dict:
         if m.get("papel") == "cliente":
             pro_cliente = True
             avisar.append(email)
+    ja_respondida = False
     if pro_cliente:
         st_e, ev = esc._SERVICO("GET", "escritorio_emissao_eventos", params={
-            "emissao_id": f"eq.{emissao['id']}", "tipo": "eq.enviado", "select": "id"})
-        if st_e < 300 and st_e != 0 and ev == []:
-            esc._SERVICO("POST", "escritorio_emissao_eventos", body={
-                "emissao_id": emissao["id"], "projeto_id": projeto_id, "tipo": "enviado",
-                "em": _hoje_no_brasil(), "registrado_por": quem})
-    return {"mandados": mandados, "falhas": falhas, "avisados": _avisar_clientes(projeto_id, emissao, avisar)}
+            "emissao_id": f"eq.{emissao['id']}", "select": "id,tipo,pelo_cliente", "order": "em.asc,criado_em.asc"})
+        if st_e < 300 and st_e != 0 and ev is not None:
+            if not [x for x in ev if x.get("tipo") == "enviado"]:
+                esc._SERVICO("POST", "escritorio_emissao_eventos", body={
+                    "emissao_id": emissao["id"], "projeto_id": projeto_id, "tipo": "enviado",
+                    "em": _hoje_no_brasil(), "registrado_por": quem})
+            else:
+                # 🩸 11/10 (auditoria FORA-5): a emissão já foi enviada e o ÚLTIMO registro é uma resposta anotada à
+                # mão pelo escritório ("o cliente aprovou por telefone"): pra quem recebe agora ela está fechada — a
+                # tela não mostra Aprovar nem Pedir revisão. O e-mail "Pra você aprovar" prometia o que não havia.
+                ultimo = ev[-1]
+                ja_respondida = ultimo.get("tipo") in ("aprovado", "revisao") and not ultimo.get("pelo_cliente")
+    avisados = 0 if ja_respondida else _avisar_clientes(projeto_id, emissao, avisar)
+    return {"mandados": mandados, "falhas": falhas, "avisados": avisados, "ja_respondida": ja_respondida}
 
 
 def _avisar_clientes(projeto_id: str, emissao: dict, emails: list) -> int:
@@ -1323,8 +1332,13 @@ def faxina(limite: int = 20) -> dict:
     return feito
 
 
+_PASTA_SUMIU = ("Não achei no Google Drive a pasta deste projeto: ou ela foi excluída de vez, ou a conta Google conectada "
+                "agora não é a que ligou a pasta. Se você excluiu a pasta, pode apagar o projeto mesmo assim. Se trocou "
+                "de conta Google, quem tinha acesso à pasta antiga continua com ele: tire lá no Drive antes.")
+
+
 @router.delete("/projetos/{projeto_id}")
-def projeto_apagar(projeto_id: str, request: Request):
+def projeto_apagar(projeto_id: str, request: Request, pasta_sumiu: int = 0):
     """27/09 (auditoria DRV-8: "apagar projeto precisa de uma rota que revogue ANTES"): a admin apaga o projeto do
     Escritório. Antes de apagar o registro — a cascata leva do banco tarefas, atas, equipe, emissões e fotos — tira no
     Google os acessos que o AI.arq deu: à pasta (equipe e fornecedor) e a cada arquivo emitido (clientes). Se algum não
@@ -1345,7 +1359,7 @@ def projeto_apagar(projeto_id: str, request: Request):
             raise HTTPException(409, "Pra apagar, conecte o Google Drive de novo: antes, o AI.arq tira no Drive os "
                                      "acessos que deu (à pasta e aos arquivos emitidos).")
         tok = _acesso(p["dono"])
-        pendentes, enxerga = 0, {}
+        pendentes, enxerga, sumidas = 0, {}, 0
         for f in nossos:
             # quem segue noutro projeto com a MESMA pasta mantém o acesso — a mesma regra do sincronizar
             st_o, outros = esc._SERVICO("GET", "escritorio_drive_permissoes", params={
@@ -1360,15 +1374,25 @@ def projeto_apagar(projeto_id: str, request: Request):
                              params={"supportsAllDrives": "true"})
             if st_x == 404 and f["pasta_id"] not in enxerga:
                 st_v, _ = _drive("GET", f"files/{f['pasta_id']}", tok, params={"fields": "id", "supportsAllDrives": "true"})
-                enxerga[f["pasta_id"]] = st_v == 200
+                # True = enxerga · False = o Google disse 404 (não existe pra esta conta) · None = não sei (soluço)
+                enxerga[f["pasta_id"]] = True if st_v == 200 else (False if st_v == 404 else None)
             # 404 só vale como "já saiu" se a conta enxerga a pasta (senão é "não consigo ver")
-            if not (st_x in (200, 204) or (st_x == 404 and enxerga.get(f["pasta_id"]))):
+            if st_x in (200, 204) or (st_x == 404 and enxerga.get(f["pasta_id"])):
+                continue
+            # 🩸 11/10 (auditoria SERV-1): pasta que a conta NÃO enxerga (404 nela também) — excluída de vez, ou a conta
+            # conectada é outra. Antes isto era "tente de novo em instantes" pra sempre: obra entregue, pasta excluída,
+            # e o projeto nunca mais apagava. Agora a admin é avisada do que é e confirma (`pasta_sumiu=1`).
+            if st_x == 404 and enxerga.get(f["pasta_id"]) is False:
+                sumidas += 1
+            else:
                 pendentes += 1
         _, falhas = _tirar_emissoes_de_quem_saiu(projeto_id, tok, set())
         pendentes += len(falhas)
         if pendentes:
             raise HTTPException(502, f"O Google não tirou {pendentes} acesso(s) agora. O projeto NÃO foi apagado: "
                                      "tente de novo em instantes.")
+        if sumidas and not pasta_sumiu:
+            raise HTTPException(428, _PASTA_SUMIU)
     st, apagados = esc._SERVICO("DELETE", "escritorio_projetos", params={
         "id": f"eq.{projeto_id}", "dono": f"eq.{eu['id']}"}, prefer="return=representation")
     if st >= 300 or st == 0:

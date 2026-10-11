@@ -754,6 +754,34 @@ def _avisar_admin(e: dict, tipo: str, nota, eu: dict, evento_id) -> bool:
     return bool(_ENVIAR(para, assunto, html, texto, log_kind="escritorio_resposta_cliente"))
 
 
+def _revisao_mais_nova_pra_mim(e: dict, user_id: str):
+    """A maior revisão do MESMO arquivo, mais nova que `e`, que foi mandada pra esta pessoa. None = não há — ou não
+    consegui conferir (aí não barro: o banco continua decidindo o resto)."""
+    try:
+        if not e.get("arquivo_id"):
+            return None
+        atual = int(e.get("revisao") or 0)
+        eu_m = _um(_SERVICO("GET", "escritorio_membros", params={
+            "projeto_id": f"eq.{e['projeto_id']}", "user_id": f"eq.{user_id}", "status": "eq.ativo", "select": "id"}))
+        if not eu_m:
+            return None
+        st, irmas = _SERVICO("GET", "escritorio_emissoes", params={
+            "projeto_id": f"eq.{e['projeto_id']}", "arquivo_id": f"eq.{e['arquivo_id']}",
+            "revisao": f"gt.{atual}", "select": "id,revisao"})
+        if st >= 300 or st == 0 or not irmas:
+            return None
+        st_d, dest = _SERVICO("GET", "escritorio_emissao_destinos", params={
+            "emissao_id": "in.(" + ",".join(str(x["id"]) for x in irmas) + ")",
+            "membro_id": f"eq.{eu_m['id']}", "permission_id": "not.is.null", "select": "emissao_id"})
+        if st_d >= 300 or st_d == 0 or not dest:
+            return None
+        minhas = {str(d["emissao_id"]) for d in dest}
+        revs = [int(x.get("revisao") or 0) for x in irmas if str(x["id"]) in minhas]
+        return max(revs) if revs else None
+    except Exception:
+        return None
+
+
 @router.post("/emissoes/{emissao_id}/responder")
 def responder_emissao(emissao_id: str, request: Request, corpo: dict):
     """O CLIENTE aprova ou pede revisão de uma emissão mandada pra ele. Grava COM O LOGIN DELE: quem decide é o
@@ -769,9 +797,15 @@ def responder_emissao(emissao_id: str, request: Request, corpo: dict):
     if tipo == "revisao" and not nota:
         raise HTTPException(400, "Conte o que precisa mudar.")
     e = _um(_SERVICO("GET", "escritorio_emissoes", params={
-        "id": f"eq.{emissao_id}", "select": "id,projeto_id,arquivo_nome,copia_nome,revisao"}))
+        "id": f"eq.{emissao_id}", "select": "id,projeto_id,arquivo_id,arquivo_nome,copia_nome,revisao"}))
     if not e:
         raise HTTPException(404, "Emissão não encontrada.")
+    # 🩸 11/10 (auditoria BANCO-3): a revisão antiga seguia aceitando resposta depois de a nova do MESMO arquivo ser
+    # mandada pra mesma pessoa — o cliente aprovava a R00 com a R01 na mão, e a admin recebia "aprovado" da versão
+    # errada. Revisão substituída não se responde.
+    nova = _revisao_mais_nova_pra_mim(e, eu["id"])
+    if nova is not None:
+        raise HTTPException(409, f"Esta revisão foi substituída pela R{nova:02d}. Abra a mais nova e responda por ela.")
     st, dados = _COMO_USUARIO(request, "POST", "escritorio_emissao_eventos", body={
         "emissao_id": e["id"], "projeto_id": e["projeto_id"], "tipo": tipo, "em": _hoje_no_brasil(),
         "nota": nota, "registrado_por": eu["id"]}, prefer="return=representation")
