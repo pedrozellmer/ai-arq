@@ -163,6 +163,9 @@ class TextAnnotation:
     #: ângulo do texto, em graus (0 = horizontal). A etiqueta de cômodo estreito
     #: vem girada 90°, e "acima" só faz sentido no eixo do próprio texto.
     rotation: float = 0.0
+    #: o que a `position` é no texto: 0 = o INÍCIO (o normal), 1 = o meio,
+    #: 2 = o FIM. No MTEXT ancorado à direita o ponto gravado é a ponta direita.
+    alinhamento: int = 0
 
 
 @dataclass
@@ -5780,6 +5783,25 @@ def _angulo_do_texto(e) -> float:
         return 0.0
 
 
+def _alinhamento_do_texto(e) -> int:
+    """O que o ponto de inserção é no texto: 0 = o início, 1 = o meio, 2 = o fim.
+
+    🩸 11/10/2026 — num arquivo de cliente os nomes dos cômodos eram MTEXT
+    ancorado no topo-DIREITA (`attachment_point` 3): o ponto gravado é a ponta
+    direita do texto, a régua do ambiente o tratava como início e o nome
+    aparecia 14 alturas à direita de onde está.
+    MTEXT: a coluna do `attachment_point` (1/4/7 esquerda, 2/5/8 centro, 3/6/9
+    direita). TEXT: sempre 0 — o `insert` do TEXT alinhado é mantido pelo CAD
+    como o início do texto (medido no acervo: nenhum TEXT com o `insert` velho).
+    Nunca levanta."""
+    try:
+        if e.dxftype() != "MTEXT":
+            return 0
+        return (int(e.dxf.get("attachment_point", 1) or 1) - 1) % 3
+    except Exception:
+        return 0
+
+
 def _strip_mtext_codes(raw: str) -> str:
     """Remove códigos de formatação de MTEXT deixando só o texto legível.
     Fallback pra quando mtext.plain_text() não está disponível."""
@@ -10367,6 +10389,7 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
                     position=pos,
                     height=height,
                     rotation=_angulo_do_texto(mtext),
+                    alinhamento=_alinhamento_do_texto(mtext),
                 ))
         except Exception:
             continue

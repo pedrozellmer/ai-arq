@@ -50,6 +50,8 @@ def _pares(textos):
     ("05 A=42,70 m²", "05", 42.70),
     ("DEPÓSITO - ÁREA: 7,20 m²", "DEPÓSITO", 7.20),
     ("COPA A=12,00m%%178", "COPA", 12.00),
+    # duas áreas no mesmo texto: o nome é o que vem depois da primeira (medido: 24 pares do acervo)
+    ("ÁREA DE CORTE= 46,72m² ÁREA DE ATERRO= 2,50m²", "ÁREA DE ATERRO", 2.50),
     ("SECRETARIA AF= 13.93m²", "SECRETARIA", 13.93),        # área de FORRO
     ("CIRCULAÇÃO AP= 187.42m²", "CIRCULAÇÃO", 187.42),      # área de PISO
     ("AP 101 A=52,30m²", "AP 101", 52.30),                  # "AP" no meio do nome fica
@@ -176,6 +178,161 @@ def test_o_nome_ao_lado_e_da_area_mais_perto_dele():
     tx = [_t("ARQUIVO MORTO", 10 + 10 * H, 10 + 1 * H), _t("A=11,00m²", 10, 10),
           _t("A=6,00m²", 10 + 10 * H, 10 - 2 * H)]            # esta está logo ABAIXO do nome
     assert _pares(tx) == ([("ARQUIVO MORTO", 6.0, "acima")], [11.0])
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  A ÂNCORA do texto — a régua mede pelo INÍCIO dele
+# ══════════════════════════════════════════════════════════════════════════
+LARG = er._AMB_LARGURA_DA_LETRA
+
+
+def _ta(texto, x, y, al, h=H, layer="AMB-TEXTO", rot=0.0):
+    return dx.TextAnnotation(layer=layer, text=texto, position=(x, y), height=h, rotation=rot, alinhamento=al)
+
+
+def test_o_nome_ancorado_a_direita_e_medido_pelo_inicio():
+    """🩸 Arquivo de cliente: os nomes eram MTEXT ancorado no topo-DIREITA. O ponto
+    gravado é a ponta direita; lido como início, o nome ficava 14 alturas à
+    direita de onde está e a área pegava o nome do cômodo vizinho."""
+    nome = "DEFENSORIA PÚBLICA 01"
+    fim = 10 + len(nome) * H * LARG
+    assert _pares([_ta(nome, fim, 10 + 2 * H, 2), _t("A=8,37m²", 10, 10)]) == ([(nome, 8.37, "acima")], [])
+    # CONTROLE: o mesmo ponto como INÍCIO fica 14,7 alturas à direita da área — fora
+    assert _pares([_ta(nome, fim, 10 + 2 * H, 0), _t("A=8,37m²", 10, 10)]) == ([], [8.37])
+
+
+@pytest.mark.parametrize("al, passo", [(2, 8.0), (1, 4.5)])
+def test_comodos_lado_a_lado_com_o_nome_ancorado_no_fim_ou_no_meio(al, passo):
+    """Lido como início, o nome de cada cômodo cai em cima da área do cômodo
+    SEGUINTE — e todo par sai deslocado de um."""
+    nomes, areas = ["DEFENSOR 01", "DEFENSOR 02", "DEFENSOR 03"], ["8,37", "8,40", "8,73"]
+    tx = []
+    for i, (n, a) in enumerate(zip(nomes, areas)):
+        x = 10 + i * passo * H
+        ancora = x + (1.0 if al == 2 else 0.5) * len(n) * H * LARG
+        tx += [_ta(n, ancora, 10 + 2 * H, al), _t("A=%sm²" % a, x, 10)]
+    assert _pares(tx) == ([("DEFENSOR 01", 8.37, "acima"), ("DEFENSOR 02", 8.4, "acima"),
+                           ("DEFENSOR 03", 8.73, "acima")], [])
+
+
+def test_a_ancora_segue_o_giro_do_texto():
+    """Girada 90°, o texto corre pra cima: o FIM dele está acima do início."""
+    nome = "CORREDOR DE SERVIÇO"
+    larg = len(nome) * H * LARG
+    tx = [_ta(nome, 10 - 2 * H, 10 + larg, 2, rot=90.0), _t("A=8,10m²", 10, 10, rot=90.0)]
+    assert _pares(tx) == ([(nome, 8.1, "girada")], [])
+
+
+def test_a_area_ancorada_a_direita_tambem_e_medida_pelo_inicio_e_guarda_a_posicao_gravada():
+    area = "A=8,37m²"
+    fim = 10 + len(area) * H * LARG
+    pares, sem = er.ambientes_com_area_escrita([_t("COPA", 10, 10 + 2 * H), _ta(area, fim, 10, 2)])
+    assert [(p["nome"], p["m2"]) for p in pares] == [("COPA", 8.37)] and sem == []
+    assert (pares[0]["x"], pares[0]["y"]) == (fim, 10), "o par guarda o ponto gravado, não o início calculado"
+    _p, sem = er.ambientes_com_area_escrita([_ta("A=3,00m²", 40, 40, 2)])
+    assert (sem[0]["x"], sem[0]["y"]) == (40, 40)
+
+
+def test_texto_de_varias_linhas_a_largura_e_a_da_maior():
+    """Somar as letras das duas linhas recuaria o início 5,6 alturas além da
+    conta — pra cima da etiqueta do cômodo à ESQUERDA, que levaria o nome."""
+    nome = "SALA DE\nREUNIÕES DA DIRETORIA"
+    fim = 10 + len("REUNIÕES DA DIRETORIA") * H * LARG
+    tx = [_ta(nome, fim, 10 + 2 * H, 2), _t("A=30,00m²", 10, 10), _t("A=9,00m²", 10 - 6 * H, 10)]
+    assert _pares(tx) == ([("SALA DE REUNIÕES DA DIRETORIA", 30.0, "acima")], [9.0])
+
+
+def test_o_par_pelo_mesmo_texto_tambem_guarda_o_ponto_gravado():
+    pares, _sem = er.ambientes_com_area_escrita([_ta("COPA A=8,37m²", 40, 40, 2)])
+    assert (pares[0]["nome"], pares[0]["x"], pares[0]["y"]) == ("COPA", 40, 40)
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  A etiqueta inteira num texto só, sem "="
+# ══════════════════════════════════════════════════════════════════════════
+@pytest.mark.parametrize("texto, esperado", [
+    ("COPA 2,00 m²", ("COPA", 2.0)),
+    ("SUÍTE 01\n14,44m²", ("SUÍTE 01", 14.44)),
+    ("PROFESSORES 13,83M²", ("PROFESSORES", 13.83)),
+    ("ÁREA TOTAL 1.234,56 m²", ("ÁREA TOTAL", 1234.56)),
+    ("VAGA 2,50x5,00 12,50 m²", ("VAGA 2,50x5,00", 12.5)),
+    ("137 und ou 8,56 m²", None),                    # nota de quantidade: não começa por letra
+    ("12,30 m²", None), ("B 12,30 m²", None), ("P1 12,30 m²", None),     # nome curto demais
+    # a palavra que só anuncia a área: a etiqueta vale, SEM nome (o nome está no texto de cima)
+    ("Área 35,00 m²", (None, 35.0)), ("ÁREA 7,28 m²", (None, 7.28)), ("A 12,30 m²", (None, 12.3)),
+    ("CANTEIRO AJARDINADO COM PLANTIO DE ÁRVORE PORTE MÉDIO ÁREA MÍNIMA 1m²", None),
+    ("ÁREA DE CORTE 46,72m² ÁREA DE ATERRO 2,50m²", None),      # duas áreas no mesmo texto
+    ("TERRENO 300,00 m²", None), ("COPA 0,80 m²", None),
+    ("SALA A=12,00m²", None), ("COPA: 2,00 m²", None),           # com "=" ou ":" é a outra régua
+    ("COMPRIMENTO 12,30 m", None),
+])
+def test_nome_e_area_no_mesmo_texto(texto, esperado):
+    assert er.nome_e_area_no_mesmo_texto(texto) == esperado
+
+
+def test_a_etiqueta_sem_igual_vira_par_pelo_mesmo_texto():
+    """📏 Acervo: uma casa inteira com as 33 etiquetas nesta forma."""
+    tx = [_t("GARAGEM\n47,55m²", 0, 0), _t("COZINHA 13,57m²", 30, 0), _t("SUÍTE 01 14,44m²", 60, 0)]
+    assert _pares(tx) == ([("COZINHA", 13.57, "mesmo"), ("GARAGEM", 47.55, "mesmo"),
+                           ("SUÍTE 01", 14.44, "mesmo")], [])
+
+
+def test_area_anunciada_sem_igual_procura_o_nome_em_cima():
+    """📏 Acervo: 36 etiquetas "Área 35,00 m²" em 2 pranchas, com o nome do cômodo
+    no texto de cima. "Área" é o prefixo, não o nome — nem um total chamado ÁREA."""
+    pares, sem = er.ambientes_com_area_escrita([_t("COPA", 10, 10 + 2 * H), _t("Área 35,00 m²", 10, 10)])
+    assert [(p["nome"], p["m2"], p["como"], p["resumo"]) for p in pares] == [("COPA", 35.0, "acima", False)]
+    assert sem == []
+    assert _pares([_t("Área 35,00 m²", 10, 10)]) == ([], [35.0])
+
+
+def test_texto_que_ja_traz_a_propria_area_nao_e_nome_de_outra():
+    """🩸 Arquivo de cliente: saía "PROFESSORES 13,83M² = 2,50 m²"."""
+    pares, sem = _pares([_t("PROFESSORES 13,83M²", 10, 10 + 2 * H), _t("A=2,50m²", 10, 10)])
+    assert pares == [("PROFESSORES", 13.83, "mesmo")] and sem == [2.5]
+    # e o texto com m² que NÃO é etiqueta inteira também não serve de nome
+    assert _pares([_t("137 und ou 8,56 m²", 10, 10 + 2 * H), _t("A=2,50m²", 10, 10)]) == ([], [2.5])
+    # CONTROLE: medida sem m² no nome continua valendo
+    assert _pares([_t("VAGA 2,50x5,00m", 10, 10 + 2 * H), _t("A=12,50m²", 10, 10)])[0] == [
+        ("VAGA 2,50x5,00m", 12.5, "acima")]
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  A sigla de 2 letras
+# ══════════════════════════════════════════════════════════════════════════
+@pytest.mark.parametrize("sigla", ["A.S", "WC", "W.C.", "TI"])
+def test_a_sigla_colada_a_etiqueta_e_o_nome(sigla):
+    """🩸 Arquivo de cliente: "A.S" (área de serviço) logo acima de 10 etiquetas,
+    todas sem nome porque a sigla tem 2 letras."""
+    tx = [_t(sigla, 10, 10 + 1.8 * H), _t("A=3,34m²", 10, 10)]
+    assert _pares(tx) == ([(sigla, 3.34, "acima")], [])
+
+
+def test_a_sigla_so_vale_no_mesmo_layer_e_com_a_mesma_letra_da_area():
+    area = _t("A=3,34m²", 10, 10)
+    assert _pares([_t("WC", 10, 10 + 1.8 * H, layer="OUTRO"), area]) == ([], [3.34])
+    assert _pares([_t("WC", 10, 10 + 1.8 * H, h=1.3 * H), area]) == ([], [3.34])
+    assert _pares([_t("WC", 10, 10 + 1.8 * H, h=1.08 * H), area]) == ([("WC", 3.34, "acima")], [])
+
+
+def test_a_sigla_nao_vale_ao_lado_nem_como_primeira_linha():
+    assert _pares([_t("WC", 10 + 10 * H, 10 + 1 * H), _t("A=3,34m²", 10, 10)]) == ([], [3.34])
+    tx = [_t("WC", 10, 10 + 3.5 * H), _t("MASCULINO", 10, 10 + 2 * H), _t("A=3,34m²", 10, 10)]
+    assert _pares(tx) == ([("MASCULINO", 3.34, "acima")], [])
+
+
+def test_o_nome_inteiro_ganha_da_sigla_mais_longe():
+    tx = [_t("COZINHA", 10, 10 + 2 * H), _t("TI", 10, 10 + 4 * H), _t("A=12,00m²", 10, 10)]
+    assert _pares(tx) == ([("COZINHA", 12.0, "acima")], [])
+
+
+@pytest.mark.parametrize("codigo", ["P.A.", "PA", "PD", "P.D."])
+def test_codigo_de_atributo_nao_e_sigla_de_comodo(codigo):
+    """ "P.A." e "PD" são a linha de código entre o nome e a área (piso acabado,
+    pé-direito) — mesmo com a letra da área, nunca são o nome."""
+    assert _pares([_t(codigo, 10, 10 + 1.8 * H), _t("A=12,00m²", 10, 10)]) == ([], [12.0])
+    tx = [_t("COZINHA", 10, 10 + 4 * H), _t(codigo, 10, 10 + 1.8 * H), _t("A=12,00m²", 10, 10)]
+    assert _pares(tx) == ([("COZINHA", 12.0, "acima")], [])
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -646,6 +803,53 @@ def test_o_extrator_guarda_o_angulo_do_texto(tmp_path):
 def test_o_texto_sem_angulo_e_horizontal():
     assert dx.TextAnnotation(layer="X", text="Y").rotation == 0.0
     assert dx._angulo_do_texto(object()) == 0.0
+
+
+def _so_textos(tmp_path, monta):
+    doc = ezdxf.new("R2018")
+    doc.header["$INSUNITS"] = 6
+    msp = doc.modelspace()
+    msp.add_line((0, 0), (10, 0), dxfattribs={"layer": "ARQ-PAREDE"})
+    monta(msp)
+    p = str(tmp_path / "textos.dxf")
+    doc.saveas(p)
+    return p
+
+
+def test_o_extrator_guarda_a_ancora_do_mtext(tmp_path):
+    """A coluna do attachment_point: 1/4/7 = início, 2/5/8 = meio, 3/6/9 = fim.
+    O TEXT alinhado fica 0: o `insert` dele já é o início."""
+    from ezdxf.enums import TextEntityAlignment
+
+    def monta(msp):
+        for i, ap in enumerate((1, 2, 3, 5, 7, 9)):
+            msp.add_mtext("NOME %d" % ap, dxfattribs={"char_height": H, "layer": "AMB-NOME", "insert": (i * 5, 5),
+                                                      "attachment_point": ap})
+        msp.add_text("TEXTO À DIREITA", dxfattribs={"height": H, "layer": "AMB-NOME"}).set_placement(
+            (40, 5), align=TextEntityAlignment.RIGHT)
+    ex = dx.extract_dxf(_so_textos(tmp_path, monta))
+    al = {t.text: t.alinhamento for t in ex.texts}
+    assert al == {"NOME 1": 0, "NOME 2": 1, "NOME 3": 2, "NOME 5": 1, "NOME 7": 0, "NOME 9": 2,
+                  "TEXTO À DIREITA": 0}
+    assert dx.TextAnnotation(layer="X", text="Y").alinhamento == 0
+    assert dx._alinhamento_do_texto(object()) == 0
+
+
+def test_do_arquivo_ao_par_com_o_nome_ancorado_a_direita(tmp_path, monkeypatch):
+    """O caso do arquivo de cliente, do DXF até o registro: três cômodos lado a
+    lado, o nome em MTEXT ancorado no topo-direita."""
+    monkeypatch.delenv("AMBIENTE_AREA_ESCRITA", raising=False)
+    comodos = [("DEFENSOR 01", "8,37"), ("DEFENSOR 02", "8,40"), ("DEFENSOR 03", "8,73")]
+
+    def monta(msp):
+        for i, (n, a) in enumerate(comodos):
+            x = 2 + i * 8 * H
+            msp.add_mtext(n, dxfattribs={"char_height": H, "layer": "AMB-NOME", "attachment_point": 3,
+                                         "insert": (x + len(n) * H * LARG, 5 + 2 * H)})
+            msp.add_text("A=%sm²" % a, dxfattribs={"height": H, "layer": "AMB-AREA", "insert": (x, 5)})
+    amb = dx.extract_dxf(_so_textos(tmp_path, monta)).metadata["ambientes_area_escrita"]
+    assert [g["ambientes"] for g in amb["grupos"]] == [
+        [["DEFENSOR 01", 8.37, 1], ["DEFENSOR 02", 8.4, 1], ["DEFENSOR 03", 8.73, 1]]]
 
 
 def test_do_arquivo_ao_prompt_por_desenho(tmp_path, monkeypatch):

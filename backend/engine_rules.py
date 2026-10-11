@@ -3173,6 +3173,22 @@ _AMB_LINHA2_MAX = 2.2       # a 1ª linha de um nome em duas, em alturas do nome
 #: "FUNCION." (1,18×) em cima de "(UNISSEX)". Acima de 1,6× é título de setor.
 _AMB_LINHA1_LETRA_MAX = 1.6
 _AMB_ANGULO_TOL = 15.0      # nome e área da mesma etiqueta têm o mesmo ângulo
+#: largura de uma letra, em alturas — só pra achar o INÍCIO do texto alinhado ao
+#: centro ou à direita. No acervo o resultado é o mesmo com 0,6, 0,7 e 0,85.
+_AMB_LARGURA_DA_LETRA = 0.7
+#: texto que já traz a própria área ("PROFESSORES 13,83M²") é uma etiqueta
+#: inteira, não o nome de outra
+_RE_AMB_M2_NO_TEXTO = _re.compile(r"\d[\d.,]*\s*m[²2]", _re.IGNORECASE)
+#: a etiqueta inteira num texto, sem "=": o nome (começa por letra), espaço, a
+#: área e o "m²" no fim
+_RE_AMB_NOME_E_AREA = _re.compile(
+    r"^([A-Za-zÀ-ÿ].*?)\s+(\d{1,3}(?:\.\d{3})+,\d{1,2}|\d{1,5}(?:[.,]\d{1,2})?)\s*m[²2]\.?$",
+    _re.IGNORECASE)
+_RE_AMB_SIGLA = _re.compile(r"^[A-Za-zÀ-ÿ]\.?\s?[A-Za-zÀ-ÿ]\.?$")
+_AMB_SIGLA_LETRA_TOL = 0.10   # a sigla tem a MESMA letra da área (±10 %)
+_AMB_SIGLA_E_ATRIBUTO = frozenset({"pa", "pd"})
+#: as palavras que só anunciam a área (as mesmas da cauda "… A = 12,3 m²")
+_AMB_PREFIXO_DA_AREA = frozenset({"a", "ar", "af", "ap", "area"})
 _AMB_NOME_MAX = 60
 
 _RE_AMB_LETRA = _re.compile(r"[A-Za-zÀ-ÿ]")
@@ -3213,7 +3229,13 @@ def nome_do_ambiente_no_rotulo(texto):
     m = _RE_AMB_CAUDA_DA_AREA.search(s)
     if not m:
         return None
-    nome = s[:m.start()].strip(" -–—:/")
+    nome = s[:m.start()]
+    # duas áreas no mesmo texto ("ÁREA DE CORTE= 46,72m² ÁREA DE ATERRO= 2,50m²"):
+    # o nome desta área é o que vem DEPOIS da outra
+    outras = list(_RE_AMB_M2_NO_TEXTO.finditer(nome))
+    if outras:
+        nome = nome[outras[-1].end():]
+    nome = nome.strip(" -–—:/")
     return nome if _re.search(r"[0-9A-Za-zÀ-ÿ]", nome) else None
 
 
@@ -3232,7 +3254,55 @@ def _amb_cara_de_nome(texto) -> bool:
     s = _amb_limpo(texto)
     return (3 <= len(s) <= 40 and len(_RE_AMB_LETRA.findall(s)) >= 3 and "=" not in s
             and not _RE_AMB_ATRIBUTO.match(_sem_acento(s).lower())
-            and not _RE_AMB_SO_NUMERO.match(s) and rotulo_area_de_comodo(s) is None)
+            and not _RE_AMB_SO_NUMERO.match(s) and rotulo_area_de_comodo(s) is None
+            and not _RE_AMB_M2_NO_TEXTO.search(s))
+
+
+def _amb_e_sigla(texto) -> bool:
+    """Sigla de 2 letras: "A.S", "WC", "W.C.", "TI". Só vale como nome colada à
+    etiqueta — mesmo layer e mesma letra da área (ver `ambientes_com_area_escrita`).
+    🪤 "P.A." e "PD" são ATRIBUTO da etiqueta (piso acabado, pé-direito), a
+    linha de código que fica entre o nome e a área: nunca são o nome."""
+    s = _amb_limpo(texto)
+    return bool(_RE_AMB_SIGLA.match(s)) and "".join(_RE_AMB_LETRA.findall(s)).lower() not in _AMB_SIGLA_E_ATRIBUTO
+
+
+def nome_e_area_no_mesmo_texto(texto):
+    """A etiqueta inteira num texto só, SEM "=": "COPA 2,00 m²", "SUÍTE 01
+    14,44m²" (o MTEXT com o nome numa linha e a área na outra) → ("COPA", 2.0).
+    "Área 35,00 m²" → (None, 35.0): etiqueta de área sem nome no próprio texto.
+    None quando não é isso.
+
+    📏 11/10/2026 — medido no acervo: 5 arquivos de 5 jobs, ~60 etiquetas (uma
+    casa inteira com as 33 etiquetas nesta forma). Sem isto elas não eram lidas
+    e, pior, viravam NOME da etiqueta vizinha ("PROFESSORES 13,83M² = 2,50 m²").
+    🪤 O nome começa por LETRA ("137 und ou 8,56 m²" é nota de quantidade), tem
+    de 3 a 40 caracteres, não traz outra área dentro e não é de lote/terreno.
+    """
+    s = _amb_limpo(texto)
+    if "=" in s or ":" in s:
+        return None                     # esses são da `rotulo_area_de_comodo`
+    m = _RE_AMB_NOME_E_AREA.match(s)
+    if not m:
+        return None
+    nome = m.group(1).strip(" -–—/")
+    if _RE_AREA_DE_LOTE.search(_sem_acento(s).lower()):
+        return None
+    if _sem_acento(nome).lower().strip(" .") in _AMB_PREFIXO_DA_AREA:
+        # "Área 35,00 m²": a palavra é o prefixo da área, não o nome — a etiqueta
+        # vale, e o nome está no texto de cima (medido: 36 assim em 2 pranchas)
+        nome = None
+    elif not (3 <= len(nome) <= 40 and len(_RE_AMB_LETRA.findall(nome)) >= 3) \
+            or _RE_AMB_M2_NO_TEXTO.search(nome):
+        return None
+    n = m.group(2)
+    if _re.match(r"^\d{1,3}(?:\.\d{3})+,", n):
+        n = n.replace(".", "")
+    try:
+        v = float(n.replace(",", "."))
+    except ValueError:
+        return None
+    return (nome, v) if v >= _AREA_MIN_M2 else None
 
 
 def ambientes_com_area_escrita(textos) -> tuple:
@@ -3252,7 +3322,9 @@ def ambientes_com_area_escrita(textos) -> tuple:
     import bisect
     import math
 
-    def _xy(t):
+    hmed = 0.0
+
+    def _cru(t):
         return float(t.position[0]), float(t.position[1])
 
     def _h(t):
@@ -3260,6 +3332,19 @@ def ambientes_com_area_escrita(textos) -> tuple:
 
     def _ang(t):
         return float(getattr(t, "rotation", 0) or 0) % 360.0
+
+    def _xy(t):
+        # o INÍCIO do texto. No texto alinhado ao centro (1) ou à direita (2) a
+        # posição gravada é o meio ou o FIM dele: recua pela largura estimada.
+        x, y = _cru(t)
+        al = int(getattr(t, "alinhamento", 0) or 0)
+        if al not in (1, 2):
+            return x, y
+        larg = (max((len(ln) for ln in str(t.text).split("\n")), default=0)
+                * (_h(t) or hmed) * _AMB_LARGURA_DA_LETRA)
+        th = math.radians(_ang(t))
+        f = 0.5 if al == 1 else 1.0
+        return x - f * larg * math.cos(th), y - f * larg * math.sin(th)
 
     def _mesmo_angulo(a, b):
         d = abs(_ang(a) - _ang(b)) % 360.0
@@ -3283,7 +3368,8 @@ def ambientes_com_area_escrita(textos) -> tuple:
     for t in (textos or []):
         try:
             if _amb_limpo(getattr(t, "text", "")) and len(t.position) >= 2:
-                _xy(t)
+                _cru(t)
+                _ang(t)
                 txs.append(t)
         except Exception:
             continue
@@ -3293,20 +3379,30 @@ def ambientes_com_area_escrita(textos) -> tuple:
     areas = []                          # todas as etiquetas de área: (x, y, altura)
     for t in txs:
         v = rotulo_area_de_comodo(t.text)
-        if v is None:
-            continue
-        x, y = _xy(t)
+        if v is not None:
+            nome = nome_do_ambiente_no_rotulo(t.text)
+        else:
+            na = nome_e_area_no_mesmo_texto(t.text)     # "COPA 2,00 m²", sem "="
+            if na is None:
+                continue
+            nome, v = na
+        x, y = _xy(t)                   # a régua mede pelo INÍCIO do texto…
+        cx, cy = _cru(t)                # …e o par guarda a posição gravada
         areas.append((x, y, _h(t)))
-        nome = nome_do_ambiente_no_rotulo(t.text)
         if nome:
             pares.append({"nome": nome[:_AMB_NOME_MAX], "m2": v, "como": "mesmo",
-                          "resumo": nome_de_ambiente_e_resumo(nome), "x": x, "y": y})
+                          "resumo": nome_de_ambiente_e_resumo(nome), "x": cx, "y": cy})
         else:
-            pendentes[len(pendentes)] = (t, v, x, y)
-    nomes = sorted((t for t in txs if _amb_cara_de_nome(t.text)), key=lambda t: _xy(t)[0])
+            pendentes[len(pendentes)] = (t, v, x, y, cx, cy)
+    nomes = sorted((t for t in txs if _amb_cara_de_nome(t.text) or _amb_e_sigla(t.text)),
+                   key=lambda t: _xy(t)[0])
     xs = [_xy(t)[0] for t in nomes]
+    # 🩸 medido em arquivo de cliente: "A.S" (área de serviço) logo acima de 10
+    # etiquetas, que ficavam sem nome por a sigla ter 2 letras. A sigla só vale
+    # COLADA à etiqueta: mesmo layer e mesma letra da área, na janela de perto.
+    sigla = [not _amb_cara_de_nome(t.text) for t in nomes]
     cands = []
-    for i, (a, _v, ax, _ay) in pendentes.items():
+    for i, (a, _v, ax, _ay, _cx, _cy) in pendentes.items():
         h = _h(a) or hmed
         if h <= 0:
             continue
@@ -3317,6 +3413,9 @@ def ambientes_com_area_escrita(textos) -> tuple:
             if hn and (hn < _AMB_ALTURA_MIN * h or hn > _AMB_LETRA_MAX * h):
                 continue
             if not _mesmo_angulo(a, n):
+                continue
+            if sigla[j] and not (str(n.layer) == str(a.layer) and hn
+                                 and abs(hn - h) <= _AMB_SIGLA_LETRA_TOL * h):
                 continue
             # a régua é a MAIOR das duas letras (área miúda + nome 2,2× maior
             # ficava a 7 "alturas da área")
@@ -3333,8 +3432,8 @@ def ambientes_com_area_escrita(textos) -> tuple:
             d = math.hypot(lx, ly)
             if not -(_AMB_DX_PERTO + antes) <= lx <= _AMB_DX_PERTO + depois:
                 # o nome AO LADO: acima da linha, e só se esta é a etiqueta de
-                # área mais perto dele
-                if ly < _AMB_AO_LADO_DY_MIN:
+                # área mais perto dele (a sigla nunca vale ao lado)
+                if ly < _AMB_AO_LADO_DY_MIN or sigla[j]:
                     continue
                 nx, ny = _xy(n)
                 if any((ox, oy) != (ax, _ay)
@@ -3357,7 +3456,7 @@ def ambientes_com_area_escrita(textos) -> tuple:
         if j in usado:
             continue                    # o nome já é de uma área mais perto
         usado.add(j)
-        a, v, ax, ay = pendentes.pop(i)
+        a, v, _ax, _ay, ax, ay = pendentes.pop(i)
         n = nomes[j]
         nome = _amb_limpo(n.text)
         # a 1ª linha de um nome em duas: mesmo layer, mesma letra, mesmo ângulo,
@@ -3368,7 +3467,7 @@ def ambientes_com_area_escrita(textos) -> tuple:
             for k in _vizinhos(xs, _xy(n)[0],
                                (_AMB_DX_PERTO + _AMB_DX_POR_LETRA * 40 + _AMB_LINHA2_MAX) * hn):
                 u = nomes[k]
-                if (k == j or k in usado or k in nome_de_alguem
+                if (k == j or k in usado or k in nome_de_alguem or sigla[k] or sigla[j]
                         or str(u.layer) != str(n.layer) or not _h(u)
                         or not (0.9 * hn <= _h(u) <= _AMB_LINHA1_LETRA_MAX * hn)):
                     continue
@@ -3387,7 +3486,7 @@ def ambientes_com_area_escrita(textos) -> tuple:
         pares.append({"nome": nome[:_AMB_NOME_MAX], "m2": v, "como": "girada" if girada else "acima",
                       "resumo": nome_de_ambiente_e_resumo(nome), "x": ax, "y": ay})
     sem_nome = [{"m2": v, "texto": _amb_limpo(a.text)[:40], "x": ax, "y": ay}
-                for a, v, ax, ay in pendentes.values()]
+                for a, v, _sx, _sy, ax, ay in pendentes.values()]
     return pares, sem_nome
 
 
