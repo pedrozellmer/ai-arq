@@ -923,7 +923,31 @@ def _permissoes_da_pasta(tok: str, pasta_id: str):
     return None     # pasta com mais de 1.000 permissões: melhor não decidir pela metade
 
 
+# 🩸 11/10 (auditoria ADM-3/SERV-2): duas sincronizações do MESMO projeto ao mesmo tempo (clique duplo em "Usar esta
+# pasta", ou o aceite de um convite chegando enquanto a admin clica em "Atualizar acesso") liam a pasta antes de a
+# outra compartilhar; a 2ª batia no índice único ao registrar e "desfazia" no Drive o acesso que a 1ª tinha acabado
+# de dar — o banco dizia "tem acesso", o Drive não, e nenhuma volta consertava. Uma por vez por projeto (o servidor
+# roda num processo só); a que espera relê tudo depois. E conflito ao registrar nunca mais desfaz (ver _registrar_dado).
+_TRAVAS_SINC = {}
+_TRAVA_DAS_TRAVAS = threading.Lock()
+
+
+def _trava_do_projeto(projeto_id: str):
+    # uma trava por projeto tocado desde que o servidor subiu; nunca é apagada (apagar uma trava que outra thread
+    # acabou de pegar deixaria duas rodarem juntas), e o servidor recomeça a cada deploy
+    with _TRAVA_DAS_TRAVAS:
+        if projeto_id not in _TRAVAS_SINC:
+            _TRAVAS_SINC[projeto_id] = threading.Lock()
+        return _TRAVAS_SINC[projeto_id]
+
+
 def sincronizar(projeto_id: str) -> dict:
+    """Uma sincronização por vez por projeto (11/10, ADM-3): a segunda espera a primeira e relê o banco e o Drive."""
+    with _trava_do_projeto(str(projeto_id)):
+        return _sincronizar(projeto_id)
+
+
+def _sincronizar(projeto_id: str) -> dict:
     """Equipe ativa = quem tem acesso de edição à pasta. Cria o que falta, tira de quem saiu (e da pasta
     antiga, se a admin trocou). Nunca derruba quem chamou: falha vira item em `falhas`.
 
@@ -1004,6 +1028,14 @@ def sincronizar(projeto_id: str) -> dict:
             "select": campos})
         return None if (st_o >= 300 or st_o == 0 or outros is None) else outros
 
+    def _ja_registrado(membro_id, pasta):
+        """11/10 (ADM-3): o registro deste acesso (projeto, pessoa, pasta) já existe? Então o conflito ao gravar é
+        "outra volta chegou antes" — o acesso é o MESMO e não se desfaz. Não consegui ler = não sei = False."""
+        st_j, ja = esc._SERVICO("GET", "escritorio_drive_permissoes", params={
+            "projeto_id": f"eq.{projeto_id}", "membro_id": f"eq.{membro_id}", "pasta_id": f"eq.{pasta}",
+            "select": "id"})
+        return st_j < 300 and st_j != 0 and bool(ja)
+
     def _desfazer(pasta, perm_id, papel_antes):
         """Tira no Drive o que NÓS demos: devolve o papel de antes (se a admin tinha dado um menor) ou apaga."""
         if papel_antes:
@@ -1069,7 +1101,7 @@ def sincronizar(projeto_id: str) -> dict:
             if nossos and nossos[0].get("papel_antes"):
                 registro["papel_antes"] = nossos[0]["papel_antes"]
             st_g, _ = esc._SERVICO("POST", "escritorio_drive_permissoes", body=registro)
-            if st_g >= 300 or st_g == 0:
+            if (st_g >= 300 or st_g == 0) and not (st_g == 409 and _ja_registrado(membro_id, pasta)):
                 falhas_dar.append(email)
             continue
         # tinha um papel MENOR dado à mão (ex.: leitor e a equipe precisa editar): guarda pra devolver na saída
@@ -1089,6 +1121,8 @@ def sincronizar(projeto_id: str) -> dict:
             if papel_antes:
                 registro["papel_antes"] = papel_antes
             st_g, _ = esc._SERVICO("POST", "escritorio_drive_permissoes", body=registro)
+            if st_g == 409 and _ja_registrado(membro_id, pasta):
+                continue        # 🩸 ADM-3: já registrado por outra volta — o Google devolve a MESMA permissão; desfazer tiraria o acesso
             if st_g >= 300 or st_g == 0:
                 # sem o registro, ninguém tiraria esse acesso depois (e a próxima volta o acharia "à mão"): desfaz
                 _desfazer(pasta, perm["id"], papel_antes)

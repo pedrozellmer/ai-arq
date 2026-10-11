@@ -1729,7 +1729,13 @@ async function usarPasta(pasta, confirmado) {
     $('up-ok').onclick = () => usarPasta((v.pasta && v.pasta.id) || pasta, true);
     return;
   }
-  const r = await apiEsc(`projetos/${PROJ.id}/pasta`, 'POST', { pasta: String(pasta).trim() });
+  // 11/10 (auditoria ADM-3): o servidor compartilha a pasta com cada pessoa no Google (segundos) — um 2º clique
+  // disparava outra sincronização por cima
+  if (SINC_EM_CURSO) return;
+  SINC_EM_CURSO = true; if ($('up-ok')) $('up-ok').disabled = true;
+  let r;
+  try { r = await apiEsc(`projetos/${PROJ.id}/pasta`, 'POST', { pasta: String(pasta).trim() }); }
+  finally { SINC_EM_CURSO = false; if ($('up-ok')) $('up-ok').disabled = false; }
   if (!r.ok) return toast(r.dados.detail || 'Não consegui ligar a pasta.', true);
   fecharModal();
   PROJ.pasta_id = r.dados.pasta.id; PROJ.pasta_caminho = r.dados.pasta.nome; ARQ_PASTA = ''; ARQ_TRILHA = [];
@@ -1738,8 +1744,19 @@ async function usarPasta(pasta, confirmado) {
     + (sp ? ` · ${sp} fornecedor${sp > 1 ? 'es' : ''} ficou sem pasta: escolha de novo em Equipe → Editar` : ''), !!(f || sp));
   await recarregar();
 }
+let SINC_EM_CURSO = false;
+// 11/10 (auditoria ADM-3): um clique por vez — o botão fica travado enquanto o pedido dele está em andamento
+async function umaVez(btn, fn) {
+  if (!btn || btn.disabled) return;
+  btn.disabled = true;
+  try { await fn(); } finally { if (btn.isConnected) btn.disabled = false; }
+}
 async function sincronizarPasta(calado) {
-  const r = await apiEsc(`projetos/${PROJ.id}/drive/sincronizar`, 'POST');
+  if (SINC_EM_CURSO) { if (!calado) toast('Ainda estou atualizando o acesso no Google Drive. Aguarde um instante.'); return; }
+  SINC_EM_CURSO = true;
+  let r;
+  try { r = await apiEsc(`projetos/${PROJ.id}/drive/sincronizar`, 'POST'); }
+  finally { SINC_EM_CURSO = false; }
   if (calado) return;
   if (!r.ok) return toast(r.dados.detail || 'Não consegui atualizar o acesso.', true);
   if (r.dados.sem_conexao) return toast('O seu Google Drive está desconectado: conecte de novo pra atualizar o acesso da equipe.', true);
@@ -2321,7 +2338,7 @@ let CV_PRE = {};
 function convidar(pre) {
   pre = pre || {}; CV_PRE = pre;
   abrirModal('Convidar pessoa para ' + PROJ.nome, `
-    <div class="grade g2"><div><label class="lbl" for="cv-e">E-mail</label><input id="cv-e" type="email" class="in" maxlength="254" value="${esc(pre.email || '')}" placeholder="nome@exemplo.com"></div>
+    <div class="grade g2"><div><label class="lbl" for="cv-e">E-mail</label><input id="cv-e" type="email" class="in" maxlength="254" value="${esc(pre.email || '')}" placeholder="nome@exemplo.com"${pre.email ? ' readonly style="background:#F8FAFC"' : ''}>${pre.email ? '<span class="sub" style="display:block">O convite vai de novo pra este e-mail. Se ele está errado, cancele este convite e convide o e-mail certo.</span>' : ''}</div>
       <div><label class="lbl" for="cv-n">Nome</label><input id="cv-n" class="in" maxlength="120" value="${esc(pre.nome || '')}" placeholder="como você chama a pessoa"></div>
       <div><label class="lbl" for="cv-f">Função</label><input id="cv-f" class="in" maxlength="60" list="cv-fs" value="${esc(pre.funcao || '')}"><datalist id="cv-fs"><option>Arquiteto(a)</option><option>Estagiário(a)</option><option>Projetista</option><option>Renderista</option></datalist></div>
       <div><label class="lbl" for="cv-t">Telefone / WhatsApp</label><input id="cv-t" class="in" maxlength="40" inputmode="tel" value="${esc(pre.telefone || '')}"></div></div>
@@ -2352,6 +2369,7 @@ function perfilDoConvite() {
 }
 // as subpastas de 1º nível da pasta do projeto (Emitidos e Fotos são do sistema: ficam de fora)
 // 27/09 (board TELA-9): serve ao convite E ao "Editar" do fornecedor que já entrou (`atual` = a pasta que ele vê hoje)
+const PASTA_DE_HOJE = '__a_de_hoje__';
 async function carregarPastasDoFornecedor(selId = 'cv-pasta', subId = 'cv-pasta-sub', atual = null) {
   const sel = $(selId); if (!sel || sel.dataset.lido) return;
   if (!PROJ.pasta_id) { $(subId).textContent = 'Ligue a pasta do Drive ao projeto (em Arquivos) pra escolher uma subpasta pro fornecedor.'; sel.disabled = true; return; }
@@ -2359,9 +2377,18 @@ async function carregarPastasDoFornecedor(selId = 'cv-pasta', subId = 'cv-pasta-
   const r = await apiEsc(`projetos/${PROJ.id}/arquivos`);
   const ps = r.ok ? (r.dados.arquivos || []).filter((f) => f.pasta && f.nome !== 'Emitidos' && f.nome !== 'Fotos') : [];
   if (!$(selId)) return;
-  if (atual && atual.id && !ps.some((p) => p.id === atual.id)) ps.unshift({ id: atual.id, nome: (atual.nome || 'pasta atual') + ' (a de hoje)' });
+  // 🩸 11/10 (auditoria ADM-2/BANCO-1): a tela NÃO lê o id da pasta do fornecedor (o banco só entrega o nome), e o
+  // seletor abria sempre em "Nenhuma": a admin achava que ele não tinha pasta, e salvar "Nenhuma" não tirava nada.
+  // A pasta de hoje é achada pelo NOME entre as subpastas; se não está mais lá (renomeada, movida), entra como
+  // "(a de hoje)" com um valor que só quer dizer "não mexer".
+  let deHoje = '';
+  if (atual && atual.nome) {
+    const igual = ps.find((p) => p.nome === atual.nome);
+    if (igual) deHoje = igual.id;
+    else { ps.unshift({ id: PASTA_DE_HOJE, nome: atual.nome + ' (a de hoje)' }); deHoje = PASTA_DE_HOJE; }
+  }
   ps.forEach((p) => { const o = document.createElement('option'); o.value = p.id; o.textContent = p.nome; sel.appendChild(o); });
-  if (atual && atual.id) sel.value = atual.id;
+  sel.value = deHoje; sel.dataset.inicial = deHoje; sel.dataset.pronto = '1';
   if (!ps.length) $(subId).textContent = r.ok ? 'A pasta do projeto não tem subpastas. Crie uma no Drive (ex.: Marcenaria) e abra de novo.' : 'Não consegui ler as pastas agora. Dá pra deixar sem e escolher depois, em Equipe → Editar.';
 }
 async function enviarConvite() {
@@ -2371,7 +2398,10 @@ async function enviarConvite() {
   if (corpo.perfil === 'fornecedor' && $('cv-pasta') && $('cv-pasta').value) corpo.pasta = $('cv-pasta').value;
   // reenvio sem mudar o perfil nem escolher pasta: não manda o perfil — o servidor mantém o que era (inclusive a
   // pasta do fornecedor, que "perfil informado sem pasta" limparia)
-  if (CV_PRE.perfil && corpo.perfil === CV_PRE.perfil && !corpo.pasta) delete corpo.perfil;
+  // 🩸 11/10 (auditoria ADM-1): só no MESMO e-mail. Com o e-mail trocado o convite é NOVO, e sem perfil o cliente
+  // entrava como equipe. (O campo agora fica travado no reenvio, e o servidor recusa convite novo sem perfil.)
+  const mesmoEmail = !!CV_PRE.email && corpo.email.toLowerCase() === String(CV_PRE.email).trim().toLowerCase();
+  if (mesmoEmail && CV_PRE.perfil && corpo.perfil === CV_PRE.perfil && !corpo.pasta) delete corpo.perfil;
   $('cv-ok').disabled = true;
   const { data: { session } } = await sb.auth.getSession();
   let r, d = {};
@@ -2408,8 +2438,8 @@ function editarPessoa(id) {
       <span class="sub" style="display:block" id="pe-pasta-sub">Uma subpasta da pasta do projeto. Ele só lê.${m.status === 'ativo' ? ' Trocar tira o acesso à pasta de antes.' : ''}</span></div>` : ''}
     <div><label class="lbl" for="pe-o">Observação (só você vê)</label><textarea id="pe-o" rows="2" class="in" maxlength="1000">${esc(NOTAS[id] || '')}</textarea>
       <span class="sub" style="display:block">Valor combinado fica no financeiro, não aqui.</span></div>
-    <div class="rodape"><button class="btn" onclick="fecharModal()">Cancelar</button><button class="btn btn-d" onclick="salvarPessoa('${id}')">Salvar</button></div>`);
-  if (m.papel === 'fornecedor' && m.status !== 'removido') carregarPastasDoFornecedor('pe-pasta', 'pe-pasta-sub', m.drive_pasta_id ? { id: m.drive_pasta_id, nome: m.drive_pasta_nome } : null);
+    <div class="rodape"><button class="btn" onclick="fecharModal()">Cancelar</button><button class="btn btn-d" id="pe-ok" onclick="umaVez(this, () => salvarPessoa('${id}'))">Salvar</button></div>`);
+  if (m.papel === 'fornecedor' && m.status !== 'removido') carregarPastasDoFornecedor('pe-pasta', 'pe-pasta-sub', m.drive_pasta_nome ? { nome: m.drive_pasta_nome } : null);
 }
 async function salvarPessoa(id) {
   const mud = { nome: $('pe-n').value.trim() || null, funcao: $('pe-f').value.trim() || null, telefone: $('pe-t').value.trim() || null };
@@ -2421,8 +2451,9 @@ async function salvarPessoa(id) {
     : await sb.from('escritorio_membro_notas').delete().eq('membro_id', id);
   if (n.error) return falhou(n.error, 'Salvei os dados, mas não a observação');
   // 27/09 (board TELA-9): a pasta do fornecedor quem grava é o servidor (confere que é subpasta do projeto e o Drive acompanha)
+  // 11/10 (ADM-2): só chama se a admin MEXEU no seletor depois de a lista chegar ("a de hoje" = não mexer)
   const m = MEMBROS.find((x) => x.id === id), sel = $('pe-pasta');
-  if (m && sel && !sel.disabled && sel.dataset.lido && (sel.value || '') !== (m.drive_pasta_id || '')) {
+  if (m && sel && !sel.disabled && sel.dataset.pronto && sel.value !== PASTA_DE_HOJE && (sel.value || '') !== (sel.dataset.inicial || '')) {
     const r = await apiEsc(`projetos/${PROJ.id}/membros/${id}/pasta`, 'POST', { pasta: sel.value || null });
     if (!r.ok) return toast('Salvei os dados, mas não a pasta: ' + (r.dados.detail || 'tente de novo.'), true);
     fecharModal(); await recarregar();

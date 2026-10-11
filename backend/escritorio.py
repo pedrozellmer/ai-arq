@@ -331,8 +331,11 @@ def convidar(projeto_id: str, request: Request, corpo: dict):
     if email == (eu.get("email") or "").lower():
         raise HTTPException(400, "Esse é o seu próprio e-mail.")
     campos = {k: texto_curto(corpo.get(k), k) for k in ("nome", "funcao", "telefone")}
-    # 26/09 (perfis): sem `perfil` no pedido, um convite NOVO é da equipe (a tela de hoje não manda) e um
-    # REENVIO mantém o perfil que o convite já tinha — senão "reenviar" transformava o cliente em equipe.
+    # 26/09 (perfis): sem `perfil` no pedido, um REENVIO mantém o perfil que o convite já tinha — senão "reenviar"
+    # transformava o cliente em equipe.
+    # 🩸 11/10 (auditoria ADM-1): convite NOVO sem perfil virava EQUIPE. A tela tirava o perfil no "Reenviar" e, com
+    # o e-mail corrigido (endereço novo = convite novo), o cliente ou o fornecedor entrava como equipe: tarefas,
+    # atas, quantitativo e EDIÇÃO na pasta do Drive. Convite novo agora exige o perfil escrito (mais abaixo).
     perfil_pedido = corpo.get("perfil")
     if perfil_pedido is not None:
         perfil_pedido = str(perfil_pedido).strip().lower()
@@ -348,6 +351,8 @@ def convidar(projeto_id: str, request: Request, corpo: dict):
                                  "select": "id,status,convite_expira,papel,drive_pasta_id"}))
     if atual and atual["status"] == "ativo":
         raise HTTPException(409, "Essa pessoa já está no projeto.")
+    if perfil_pedido is None and not atual:
+        raise HTTPException(400, "Escolha o perfil da pessoa neste projeto: equipe, fornecedor ou cliente.")
     pasta_desligada = False
     if perfil_pedido is None and atual:
         papel, pasta_linha = atual["papel"], {}
@@ -360,7 +365,7 @@ def convidar(projeto_id: str, request: Request, corpo: dict):
                 if x.status_code == 400:
                     pasta_linha, pasta_desligada = {"drive_pasta_id": None, "drive_pasta_nome": None}, True
     else:
-        papel = PERFIS[perfil_pedido or "equipe"]
+        papel = PERFIS[perfil_pedido]
         pasta = None
         if papel == "fornecedor" and corpo.get("pasta"):
             if not _PASTA_DO_FORNECEDOR:
