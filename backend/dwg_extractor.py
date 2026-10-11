@@ -8607,9 +8607,18 @@ def _linhas_dos_ambientes(amb, limite: int = _AMB_LISTA_MAX) -> list:
           "   posição dos dois textos da etiqueta — o nome no mesmo texto ou logo acima. É o",
           "   número do PROJETISTA, não medição na geometria: use como a área de piso/forro",
           "   DAQUELE ambiente e marque 'estimado'.",
-          "   ⚠ Se o MESMO ambiente tem área MEDIDA neste arquivo (hachura, contorno fechado ou",
-          "   o par RÓTULO ↔ ÁREA DA REGIÃO), a quantidade é a MEDIDA; a área escrita serve pra",
-          "   conferir — se as duas divergirem, diga a diferença na observação."]
+          # 🩸 11/10/2026, medido no acervo: 203 ambientes com o mesmo nome aqui e no par
+          # RÓTULO ↔ ÁREA DA REGIÃO; 102 batem ±2 %, 101 divergem — só 15 dentro de
+          # ±10 %, 53 por mais de 2×. Num arquivo conferido à mão (12 divergentes) a
+          # etiqueta estava certa em todos e era a REGIÃO que juntava cômodos vizinhos.
+          "   ⚠ A área escrita NÃO troca o total de um acabamento MEDIDO por layer (ÁREAS",
+          "   HACHURADAS POR LAYER, ÁREAS DE CONTORNO FECHADO POR LAYER): o total medido continua",
+          "   sendo a quantidade do acabamento, e as etiquetas servem pra reparti-lo por ambiente",
+          "   ou pra onde não há medição do layer.",
+          "   ⚠ Se o par RÓTULO ↔ ÁREA DA REGIÃO traz o MESMO ambiente (mesmo nome, uma vez de",
+          "   cada lado) com área mais de 10 % diferente da escrita, fique com a ESCRITA e cite",
+          "   a da região na observação: a região costuma ser um pedaço do cômodo ou juntar os",
+          "   vizinhos."]
     if por_desenho:
         ls += ["   ⚠ Vem POR DESENHO das pranchas. O mesmo pavimento costuma ser desenhado várias",
                "   vezes (planta baixa, layout, forro, piso…): o ambiente que se repete nesses",

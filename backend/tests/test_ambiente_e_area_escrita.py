@@ -635,8 +635,30 @@ def test_a_secao_por_desenho_diz_que_nao_soma():
     assert ls[0].startswith("AMBIENTE ↔ ÁREA ESCRITA NA ETIQUETA")
     assert "NÃO some um desenho com o outro" in txt and "outra versão da planta" in txt
     assert "só lugares diferentes (outro pavimento" in txt, "dois desenhos podem ser dois andares com os mesmos cômodos"
-    assert "a quantidade é a MEDIDA" in txt and "a área escrita serve pra" in txt, (
-        "sem a precedência, a linha medida do ambiente vira linha estimada pela etiqueta")
+    # a precedência, medida no acervo: o total MEDIDO do layer não é trocado pela etiqueta…
+    um = " ".join(l.strip() for l in ls)
+    assert ("A área escrita NÃO troca o total de um acabamento MEDIDO por layer" in um
+            and "o total medido continua sendo a quantidade do acabamento" in um), (
+        "sem isto a soma das etiquetas passa por cima da hachura medida do acabamento")
+    # …e contra a REGIÃO do rótulo vale a ESCRITA (a região junta vizinhos ou é um pedaço)
+    assert ("com área mais de 10 % diferente da escrita, fique com a ESCRITA e cite a da região na observação"
+            in um)
+    assert "(mesmo nome, uma vez de cada lado)" in um, "nome repetido não dá pra casar região com etiqueta"
+    assert "ÁREAS HACHURADAS POR LAYER, ÁREAS DE CONTORNO FECHADO POR LAYER" in um
+
+
+def test_a_secao_cita_as_outras_pelo_nome_que_elas_tem_no_prompt():
+    """A precedência aponta pra outras seções do prompt: se o cabeçalho delas
+    mudar de nome, a frase fica apontando pra lugar nenhum."""
+    import inspect
+    fonte = inspect.getsource(dx.DXFExtraction.to_structured_prompt)
+    for cab in ('"ÁREAS HACHURADAS POR LAYER:"', '"ÁREAS DE CONTORNO FECHADO POR LAYER ',
+                '"RÓTULO ↔ ÁREA DA REGIÃO '):
+        assert cab in fonte, cab
+
+
+def test_a_secao_por_desenho_lista_os_grupos():
+    ls = dx._linhas_dos_ambientes(dx.ambientes_por_desenho(_tudo(), _mapa()))
     assert "  [PLANTA BAIXA TÉRREO — folha A1 PLANTA]  (planta)" in ls
     assert "    CIRCULAÇÃO = 49.82 m²" in ls and "    SALA DE REUNIÃO = 26.75 m²" in ls
     assert "    CIRCULAÇÃO = 46.60 m²" in ls
