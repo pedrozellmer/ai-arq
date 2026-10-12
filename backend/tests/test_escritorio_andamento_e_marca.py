@@ -262,7 +262,8 @@ def test_andamento_conta_so_as_etapas_antes_da_atual_mais_a_parte_feita_dela():
                   "const pAtual = W ? pesoDa(pesos, et[iA]) * Math.max(0, Math.min(1, frac)) / W * 100 : 0;",
                   "return { pct: Math.round(pAntes + pAtual), pAntes, pAtual, obra, obraPct,"):
         assert linha in c, linha
-    assert "calcAndamento(et, iA, pesos, feitas, total, OBRA.projeto === p.id ? OBRA.pct : null)" in _fn("andamentoAtual")
+    # 12/10 (ADM-13): + o "concluído" (o projeto que a admin concluiu conta 100%)
+    assert "calcAndamento(et, iA, pesos, feitas, total, OBRA.projeto === p.id ? OBRA.pct : null, concluido)" in _fn("andamentoAtual")
     p = _fn("pesoDa")
     assert "Number.isFinite(v) && v >= 0 ? Math.min(v, 20) : 1" in p          # sem peso = 1; negativo não vale
 

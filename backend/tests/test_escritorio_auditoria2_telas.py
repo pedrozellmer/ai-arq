@@ -377,3 +377,156 @@ def test_a_ata_diz_quem_e_de_fora():
     opcoes = re.findall(r'<option value="([^"]*)">([^<]*)</option>', html)
     assert opcoes == [("", "Quem?"), ("m2", "Ana"), ("m1", "Ana (fornecedor)"), ("m3", "Caio (cliente)"), ("cliente", "O cliente")]
     assert 'onchange="avisoDaLinhaDaAta(this)"' in html and 'data-c="aviso" hidden' in html
+
+
+# ══ 9. trocar o projeto medido ligado (NAV-4 — Pedro, 12/10: "Botão pra trocar") ══
+def _candidatos(lista, atual, ligados):
+    return _js([funcao_js("candidatosDeMedido", "escritorio.html", E)],
+               "candidatosDeMedido(" + json.dumps(lista) + ", " + json.dumps(atual) + ", new Set(" + json.dumps(ligados)
+               + ")).map(function (p) { return [p.job_id, p.novaLeitura]; })")
+
+
+_MEDIDOS = [                                            # na ordem do banco: o mais recente primeiro
+    {"job_id": "antigo", "status": "done"},
+    {"job_id": "atual", "status": "done"},
+    {"job_id": "filho", "status": "done", "parent_job_id": "atual"},
+    {"job_id": "processando", "status": "processing", "parent_job_id": "atual"},
+    {"job_id": "erro", "status": "error"},
+    {"job_id": "arquivado", "status": "done", "archived": True},
+    {"job_id": "de-outro", "status": "done"},
+]
+
+
+def test_quem_pode_ser_ligado_e_a_leitura_nova_vem_primeiro():
+    """Reprocessar cria outro projeto medido: é ele (pronto) que a admin quer ligar. Fica de fora o de hoje, o que
+    ainda processa ou deu erro, o arquivado e o que já está noutro projeto do Escritório."""
+    assert _candidatos(_MEDIDOS, "atual", ["de-outro"]) == [["filho", True], ["antigo", False]]
+    # projeto que nasceu sem prancha: ninguém é "leitura nova" e a ordem é a do banco
+    assert _candidatos(_MEDIDOS, None, ["de-outro"]) == [["antigo", False], ["atual", False], ["filho", False]]
+    assert _candidatos([], "atual", []) == [] and _candidatos(None, "atual", []) == []
+
+
+def _ligar(resposta, antes="velho", admin="true"):
+    pre = ("var ADMIN = " + admin + ", avisos = [], gravou = null, fechou = 0;"
+           "var PROJ = { id: 'p1', job_id: " + json.dumps(antes) + " }, OBRA = { projeto: 'p1', pct: 50 };"
+           "function souAdmin() { return ADMIN; } function toast(t, erro) { avisos.push([t, !!erro]); }"
+           "function falhou(e, t) { avisos.push([t, true]); } function fecharModal() { fechou++; } function render() {}"
+           "var guardado = { aiarq_esc_mapa: JSON.stringify({ velho: { id: 'p1' }, outro: { id: 'p2' } }) };"
+           "var localStorage = { getItem: function (k) { return guardado[k] || null; }, setItem: function (k, v) { guardado[k] = v; } };"
+           "var sb = { from: function () { return { update: function (m) { gravou = m; return { eq: function () {"
+           "  return { select: function () { return " + json.dumps(resposta) + "; } }; } }; } }; } };")
+    return _js([pre, sem_await(funcao_js("ligarMedido", "escritorio.html", E)), "ligarMedido('novo');"],
+               "{ job: PROJ.job_id, avisos: avisos, gravou: gravou, fechou: fechou,"
+               "  mapa: Object.keys(JSON.parse(guardado.aiarq_esc_mapa)), obra: OBRA }")
+
+
+def test_trocar_o_medido_grava_esquece_o_antigo_e_pede_o_cronograma_de_novo():
+    r = _ligar({"data": [{"id": "p1"}], "error": None})
+    assert r["gravou"] == {"job_id": "novo"} and r["job"] == "novo" and r["fechou"] == 1
+    assert r["mapa"] == ["outro"]                                   # a lembrança do navegador sobre o antigo saiu
+    assert r["obra"] == {"projeto": None, "pct": None}              # o % da obra era do cronograma do antigo
+    assert r["avisos"] == [["Projeto medido trocado: a equipe já vê o novo", False]]
+    assert _ligar({"data": [{"id": "p1"}], "error": None}, antes=None)["avisos"][0][0].startswith("Projeto medido ligado")
+
+
+def test_troca_que_o_banco_nao_fez_nao_vira_trocado():
+    r = _ligar({"data": [], "error": None})                         # a RLS filtrou calada (não é a admin)
+    assert r["job"] == "velho" and r["fechou"] == 0 and r["avisos"][0][1] is True and "só a admin" in r["avisos"][0][0]
+    r = _ligar({"data": None, "error": {"code": "23505"}})          # o medido já está noutro projeto do Escritório
+    assert r["job"] == "velho" and "já está ligado a outro projeto" in r["avisos"][0][0]
+    r = _ligar({"data": None, "error": {"code": "42501"}})          # o gatilho: o medido não é da conta dela
+    assert r["job"] == "velho" and "não é da sua conta" in r["avisos"][0][0]
+    r = _ligar({"data": [{"id": "p1"}], "error": None}, admin="false")
+    assert r["gravou"] is None and r["job"] == "velho"              # a equipe nem tenta
+
+
+def test_o_botao_de_trocar_e_so_da_admin_e_trocar_pede_confirmacao():
+    """Guarda de TEXTO, declarado."""
+    c = funcao_js("telaCapa", "escritorio.html", E)
+    assert "${souAdmin() ? '<p class=\"sub\" style=\"margin:10px 0 0\">Reprocessou este projeto ou ligou o errado? <button type=\"button\" class=\"lnk\" onclick=\"trocarMedido()\">" in c
+    assert "Este projeto nasceu sem prancha.${souAdmin() ? ' Já mediu ele no AI.arq? <button type=\"button\" class=\"lnk\" onclick=\"trocarMedido()\">" in c
+    assert "use <b>Trazer projeto medido</b> na lista do Escritório" not in c        # criava um SEGUNDO projeto
+    t = funcao_js("trocarMedido", "escritorio.html", E)
+    assert t.strip().split(NL)[1].strip() == "if (!souAdmin()) return;"
+    assert ".eq('user_id', EU.id)" in t                    # a conta de administração do site lê os projetos de todos
+    assert "b.onclick = () => (PROJ.job_id ? confirmarTrocaDeMedido(job, nome) : umaVez(b, () => ligarMedido(job)));" in t
+    assert "PROJETOS.filter((p) => p.id !== PROJ.id)" in t
+
+
+# ══ 10. concluir o projeto (ADM-13 — Pedro, 12/10: "Sim, criar") ══
+def _andamento(args):
+    i = E.index("const LOGO_OK")
+    bloco = E[i:E.index("function pillPrazo", i)]
+    return _js([_linha(E, "const MODELO_DTZ = "), bloco], "calcAndamento(MODELO_DTZ, " + args + ")")
+
+
+def test_projeto_concluido_conta_100_e_sem_concluir_a_ultima_etapa_sem_tarefa_fica_em_89():
+    a = _andamento("8, {}, 0, 0, null, true")
+    assert a["pct"] == 100 and a["concluido"] is True and a["pAntes"] == 100 and a["pAtual"] == 0
+    assert _andamento("8, {}, 0, 0, null, false")["pct"] == 89            # o que o Pedro via: 8 de 9
+    assert _andamento("8, {}, 0, 0, null")["pct"] == 89                   # controle: sem o argumento, como antes
+    assert _andamento("8, { Entrega: 5 }, 1, 4, null, true")["pct"] == 100  # peso e tarefas não mudam o concluído
+
+
+_CONCLUIR_BASE = """
+var ADMIN = true, avisos = [], gravou = null, PERGUNTOU = 0, ACEITA = true;
+var PROJ = { id: 'p1', etapas: ['Briefing', 'Obra', 'Entrega'], etapa_atual: 'Entrega', concluido_em: null }, TAR = [];
+function souAdmin() { return ADMIN; } function aberta(t) { return t.status !== 'ok'; }
+function toast(t, erro) { avisos.push([t, !!erro]); } function falhou(e, t) { avisos.push([t, true]); } function render() {}
+function confirm() { PERGUNTOU++; return ACEITA; }
+var RESPOSTA = { data: [{ id: 'p1' }], error: null };
+var sb = { from: function () { return { update: function (m) { gravou = m; return { eq: function () {
+  var r = { error: RESPOSTA.error, select: function () { return RESPOSTA; } }; return r; } }; } }; } };
+"""
+_CONCLUIR = [_CONCLUIR_BASE, sem_await(funcao_js("concluirProjeto", "escritorio.html", E)),
+             sem_await(funcao_js("marcarAtual", "escritorio.html", E))]
+
+
+def _concluir(cena, acao):
+    return _js(_CONCLUIR + [cena, acao], "{ gravou: gravou, concluido: PROJ.concluido_em, etapa: PROJ.etapa_atual,"
+                                         "  avisos: avisos, perguntou: PERGUNTOU }")
+
+
+def test_concluir_o_projeto_na_ultima_etapa_grava_a_data_e_reabrir_limpa():
+    r = _concluir("", "concluirProjeto(true);")
+    assert list(r["gravou"]) == ["concluido_em"] and r["gravou"]["concluido_em"] and r["concluido"] == r["gravou"]["concluido_em"]
+    assert r["avisos"] == [["Projeto concluído: 100%", False]] and r["perguntou"] == 0
+    r = _concluir("PROJ.concluido_em = '2026-10-12T12:00:00Z';", "concluirProjeto(false);")
+    assert r["gravou"] == {"concluido_em": None} and r["concluido"] is None and r["avisos"][0][0] == "Projeto reaberto"
+
+
+def test_controles_do_concluir():
+    r = _concluir("PROJ.etapa_atual = 'Obra';", "concluirProjeto(true);")          # não é a última etapa
+    assert r["gravou"] is None and r["concluido"] is None and r["avisos"][0][1] is True
+    r = _concluir("ADMIN = false;", "concluirProjeto(true);")                      # a equipe não conclui
+    assert r["gravou"] is None and r["concluido"] is None
+    r = _concluir("RESPOSTA = { data: [], error: null };", "concluirProjeto(true);")   # a RLS filtrou calada
+    assert r["concluido"] is None and r["avisos"][0][1] is True
+    cena = "TAR = [{ etapa: 'Entrega', status: 'dev' }]; ACEITA = false;"          # tarefa aberta: pergunta; "não" = nada
+    r = _concluir(cena, "concluirProjeto(true);")
+    assert r["perguntou"] == 1 and r["gravou"] is None
+    r = _concluir(cena + " ACEITA = true;", "concluirProjeto(true);")
+    assert r["perguntou"] == 1 and r["concluido"]
+
+
+def test_mudar_a_etapa_atual_reabre_o_projeto_concluido():
+    r = _concluir("PROJ.concluido_em = '2026-10-12T12:00:00Z';", "marcarAtual(1);")
+    assert r["gravou"] == {"etapa_atual": "Obra", "concluido_em": None} and r["concluido"] is None and r["etapa"] == "Obra"
+    assert "projeto reaberto" in r["avisos"][0][0]
+    r = _concluir("", "marcarAtual(1);")                                           # controle: sem concluir, só a etapa
+    assert r["gravou"] == {"etapa_atual": "Obra"} and "reaberto" not in r["avisos"][0][0]
+
+
+def test_o_cliente_recebe_so_a_data_e_a_admin_ve_o_botao():
+    """Guarda de TEXTO, declarado."""
+    a = funcao_js("andamentoAtual", "escritorio.html", E)
+    assert "const concluido = souEquipe() ? !!p.concluido_em : !!CONCL_EXT;" in a
+    assert "OBRA.projeto === p.id ? OBRA.pct : null, concluido);" in a
+    c = funcao_js("carregarProjeto", "escritorio.html", E)
+    assert "papel.data === 'cliente' ? await sb.rpc('escritorio_projeto_concluido', { p_projeto: id }) : null" in c
+    assert "CONCL_EXT = ce && !ce.error && typeof ce.data === 'string' ? ce.data : null;" in c
+    v = funcao_js("avancoEtapa", "escritorio.html", E)
+    assert "onclick=\"concluirProjeto(true)\">Concluir ${esc(atual)} e o projeto ✓</button>" in v
+    assert "onclick=\"concluirProjeto(false)\">Reabrir</button>" in v
+    assert v.index("if (!souAdmin()) return") < v.index("concluirProjeto(true)")      # o botão vem depois da porta da admin
+    assert "pct = p.concluido_em ? 100 : et.length && i >= 0 ?" in funcao_js("telaLista", "escritorio.html", E)

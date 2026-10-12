@@ -402,7 +402,7 @@ let EMI = [], EMI_EV = [], TEM_EMI = false;
 let DEST = [], FOTOS = [], TEM_FOTOS = false;
 // 27/09 (Pedro aprovou a maquete "andamento e marca"): a marca do escritório do projeto aberto; o andamento de quem é
 // de fora (o banco só manda os números); o % executado da obra (do cronograma de obra, pedido ao servidor)
-let MARCA = null, AND_EXT = null, OBRA = { projeto: null, pct: null };
+let MARCA = null, AND_EXT = null, OBRA = { projeto: null, pct: null }, CONCL_EXT = null;
 let VIEW = 'lista', FILTRO = 'todas', FILTRO_E = '', ETAPA_SEL = null;
 
 // ── utilidades ──
@@ -490,8 +490,11 @@ const faixaDeFora = (padrao) => (MARCA && MARCA.cor ? `linear-gradient(135deg,${
 // Nada estimado: etapa atual sem tarefa conta zero até ser concluída.
 const ehEtapaDeObra = (e) => /(^|[^A-Za-zÀ-ÿ])obras?([^A-Za-zÀ-ÿ]|$)/i.test(String(e || ''));
 function pesoDa(pesos, e) { const v = Number((pesos || {})[e]); return Number.isFinite(v) && v >= 0 ? Math.min(v, 20) : 1; }
-function calcAndamento(et, iA, pesos, feitas, total, obraPct) {
+function calcAndamento(et, iA, pesos, feitas, total, obraPct, concluido) {
   if (!et.length || iA < 0) return null;
+  // 12/10 (auditoria ADM-13): a última etapa não tinha "Concluir" — projeto entregue parava em 89%. O projeto que a
+  // admin CONCLUIU conta inteiro, com ou sem tarefa na última etapa.
+  if (concluido) return { pct: 100, pAntes: 100, pAtual: 0, obra: false, obraPct, feitas, total, iA, n: et.length, etapa: et[iA], concluido: true };
   const W = et.reduce((a, e) => a + pesoDa(pesos, e), 0);
   const obra = ehEtapaDeObra(et[iA]) && obraPct != null;
   const frac = obra ? obraPct / 100 : (total ? feitas / total : 0);
@@ -509,7 +512,9 @@ function andamentoAtual() {
   } else if (AND_EXT) {
     total = AND_EXT.tarefas_etapa || 0; feitas = AND_EXT.feitas_etapa || 0; pesos = AND_EXT.etapa_pesos || {};
   }
-  return calcAndamento(et, iA, pesos, feitas, total, OBRA.projeto === p.id ? OBRA.pct : null);
+  // concluído: a equipe lê a linha do projeto; o cliente recebe só a data, do banco (rpc escritorio_projeto_concluido)
+  const concluido = souEquipe() ? !!p.concluido_em : !!CONCL_EXT;
+  return calcAndamento(et, iA, pesos, feitas, total, OBRA.projeto === p.id ? OBRA.pct : null, concluido);
 }
 // na etapa de obra, pede ao servidor o % executado do cronograma de obra (uma vez por projeto); chegou, redesenha
 function pedirObra() {
@@ -526,6 +531,7 @@ function pedirObra() {
 const fmt1 = (v) => (Math.round(v * 10) / 10).toLocaleString('pt-BR');
 function linhaAndamento(a) {
   if (!a) return 'etapa atual não marcada';
+  if (a.concluido) return `<b>Projeto concluído</b> · ${a.n} de ${a.n} etapa${a.n === 1 ? '' : 's'}`;
   const concl = `${a.iA} de ${a.n} etapa${a.n === 1 ? '' : 's'} concluída${a.iA === 1 ? '' : 's'}`;
   const atual = a.obra ? `${fmt1(a.obraPct)}% executado no cronograma de obra`
     : a.total ? `${a.feitas} de ${a.total} tarefa${a.total === 1 ? '' : 's'} feita${a.feitas === 1 ? '' : 's'}` : 'nenhuma tarefa feita ainda';
@@ -539,8 +545,9 @@ function comoAndamento() {
       <li><b>Etapa concluída conta inteira.</b></li>
       <li><b>A etapa atual conta pela parte feita das tarefas dela</b> (Aprovado ou Concluído).</li>
       <li><b>Numa etapa de obra, a parte feita vem do cronograma de obra</b>: o % executado de cada fase, pesado pela duração.</li>
-      <li><b>Etapa atual sem tarefa conta zero</b> até ser concluída.</li></ol>
-    ${a ? `<p class="sub" style="margin:0">Agora: ${fmt1(a.pAntes)}% das etapas concluídas + ${fmt1(a.pAtual)}% da etapa atual = <b>${a.pct}%</b>.</p>` : ''}
+      <li><b>Etapa atual sem tarefa conta zero</b> até ser concluída.</li>
+      <li><b>Projeto concluído conta 100%</b>: na última etapa, quem conclui é o escritório.</li></ol>
+    ${a ? (a.concluido ? '<p class="sub" style="margin:0">Agora: o projeto foi concluído = <b>100%</b>.</p>' : `<p class="sub" style="margin:0">Agora: ${fmt1(a.pAntes)}% das etapas concluídas + ${fmt1(a.pAtual)}% da etapa atual = <b>${a.pct}%</b>.</p>`) : ''}
     <div class="rodape"><button class="btn btn-d" onclick="fecharModal()">Entendi</button></div>`);
 }
 // o peso de cada etapa (só a admin): padrão 1; só grava o que for diferente de 1
@@ -674,6 +681,8 @@ async function carregarProjeto(id) {
   ]);
   // 27/09: o andamento do CLIENTE vem do banco só em números (ele não lê a linha do projeto nem todas as tarefas)
   const ae = papel.data === 'cliente' ? await sb.rpc('escritorio_andamento', { p_projeto: id }) : null;
+  // 12/10 (ADM-13): e se o projeto foi CONCLUÍDO (só a data) — acessório: sem ela, o andamento de sempre
+  const ce = papel.data === 'cliente' ? await sb.rpc('escritorio_projeto_concluido', { p_projeto: id }) : null;
   const temEmi = !em.error && !ev.error;
   const membros = m.data, notas = {};
   if (papel.data === 'dono') {   // contatos da equipe: só o admin (LGPD — a equipe não precisa do telefone do colega)
@@ -696,6 +705,7 @@ async function carregarProjeto(id) {
   DEST = de.error ? [] : de.data; TEM_FOTOS = !fo.error; FOTOS = fo.error ? [] : fo.data;
   MARCA = mk.error ? null : marcaLimpa((mk.data || [])[0]);
   AND_EXT = ae && !ae.error ? (ae.data || [])[0] || null : null;
+  CONCL_EXT = ce && !ce.error && typeof ce.data === 'string' ? ce.data : null;
   OBRA = { projeto: null, pct: null };            // o % da obra é pedido de novo a cada leitura
   return true;
 }
@@ -850,7 +860,7 @@ function telaLista() {
   return `${faixa('tar', 'Escritório', n ? `${n} projeto${n > 1 ? 's' : ''}: tarefas, atas, equipe e a pasta do Drive de cada um.` : 'Tarefas, atas, equipe e a pasta do Drive de cada projeto.',
       NO_PILOTO ? '<button class="btn" onclick="trazerMedido()">Trazer projeto medido</button><button class="btn btn-g" onclick="novoProjeto()">+ Novo projeto</button>' : '')}
     ${n ? `<div class="grade g2 g3">${PROJETOS.map((p) => {
-      const c = corDe(p.id), et = p.etapas || [], i = et.indexOf(p.etapa_atual), pct = et.length && i >= 0 ? Math.round((i / et.length) * 100) : 0;   // TELA-9: só as concluídas
+      const c = corDe(p.id), et = p.etapas || [], i = et.indexOf(p.etapa_atual), pct = p.concluido_em ? 100 : et.length && i >= 0 ? Math.round((i / et.length) * 100) : 0;   // TELA-9: só as concluídas; ADM-13: concluído = inteiro
       return `<a class="card pj rise" style="--c1:${c[0]};--c2:${c[1]}" href="#/p/${p.id}/capa">
         <div class="pj-topo"><span class="pj-ini">${esc(iniciais({ nome: String(p.nome || '').split(/\s+/).filter((w) => /^[A-Za-zÀ-ÿ0-9]/.test(w) && !/^(d[aeo]s?|e)$/i.test(w)).join(' ') || p.nome }))}</span></div>
         <div class="pj-corpo">
@@ -876,6 +886,66 @@ async function trazerMedido() {
     ? `<p class="sub" style="margin:0 0 10px">Escolha o projeto. Ele vira um projeto do Escritório, com equipe, tarefas e atas, e quem você convidar vê o quantitativo, o cronograma e o memorial dele (baixar, só quem você liberar).</p>
        <ul class="lista">${livres.map((p) => `<li><a href="#/job/${encodeURIComponent(p.job_id)}/capa" onclick="fecharModal()" style="flex:1;color:inherit;text-decoration:none"><b style="font-size:14px">${esc((window.tituloProjeto || String)(p.project_name || 'Projeto'))}</b><span class="sub" style="display:block;margin:0">${esc([p.typology, (p.items_count || 0) + ' itens', p.created_at ? dBR(p.created_at) : ''].filter(Boolean).join(' · '))}</span></a></li>`).join('')}</ul>${fechar}`
     : `<p class="sub" style="margin:0">Todos os seus projetos medidos já estão no Escritório, ou você ainda não mediu nenhum.</p>${fechar}`);
+}
+
+// 🏢 12/10 (auditoria NAV-4; Pedro: "Botão pra trocar"): reprocessar um projeto medido cria OUTRO (a leitura nova) e
+// o projeto do Escritório continuava apontando pro antigo — a equipe via o quantitativo velho, e "Trazer projeto
+// medido" criava um SEGUNDO projeto do Escritório, sem equipe nem tarefas. Aqui a admin troca o medido ligado (ou
+// liga um, se o projeto nasceu sem prancha). Nada muda sozinho. Quem garante que o medido é DA CONTA dela e que não
+// está noutro projeto do Escritório é o banco (gatilho escritorio_projeto_job_guarda + índice um-por-job).
+// Quem pode ser ligado: da conta, PRONTO, não arquivado, diferente do de hoje e fora de outro projeto do Escritório.
+// A leitura nova do projeto de hoje (o reprocesso dele) vem primeiro.
+function candidatosDeMedido(lista, atual, ligados) {
+  return (lista || []).filter((p) => p.job_id && !p.archived && p.status === 'done' && p.job_id !== atual && !ligados.has(p.job_id))
+    .map((p, i) => ({ ...p, novaLeitura: !!atual && p.parent_job_id === atual, ordem: i }))
+    .sort((a, b) => (b.novaLeitura - a.novaLeitura) || (a.ordem - b.ordem));
+}
+async function trocarMedido() {
+  if (!souAdmin()) return;
+  const titulo = PROJ.job_id ? 'Trocar o projeto medido ligado' : 'Ligar a um projeto medido';
+  abrirModal(titulo, '<p class="sub" style="margin:0">Carregando seus projetos…</p>');
+  // 🪤 o filtro user_id é obrigatório (a conta de administração do site lê os projetos de todos os clientes)
+  const { data, error } = await sb.from('projects').select('job_id,project_name,typology,items_count,created_at,archived,status,parent_job_id')
+    .eq('user_id', EU.id).order('created_at', { ascending: false }).limit(80);
+  if (error) { fecharModal(); return falhou(error, 'Não consegui ler seus projetos'); }
+  const ligados = new Set(PROJETOS.filter((p) => p.id !== PROJ.id).map((p) => p.job_id).filter(Boolean));
+  const livres = candidatosDeMedido(data, PROJ.job_id, ligados);
+  const fechar = '<div class="rodape"><button class="btn" onclick="fecharModal()">Fechar</button></div>';
+  if (!livres.length) return abrirModal(titulo, `<p class="sub" style="margin:0">Não há outro projeto medido pronto na sua conta pra ligar aqui. Um projeto que ainda está processando (ou deu erro) aparece quando ficar pronto.</p>${fechar}`);
+  abrirModal(titulo, `<p class="sub" style="margin:0 0 10px">${PROJ.job_id ? 'A equipe passa a ver o quantitativo, o cronograma e o memorial do projeto que você escolher. O de hoje continua no seu painel.' : 'A equipe passa a ver o quantitativo, o cronograma e o memorial dele (baixar, só quem você liberar).'}</p>
+    <ul class="lista">${livres.map((p) => `<li><button type="button" data-medido="${esc(p.job_id)}" style="flex:1;text-align:left;background:none;border:0;padding:0;cursor:pointer;font:inherit;color:inherit"><b style="font-size:14px">${esc((window.tituloProjeto || String)(p.project_name || 'Projeto'))}</b>${p.novaLeitura ? ' <span class="pill p-ind">leitura nova deste projeto</span>' : ''}<span class="sub" style="display:block;margin:0">${esc([p.typology, (p.items_count || 0) + ' itens', p.created_at ? dBR(p.created_at) : ''].filter(Boolean).join(' · '))}</span></button></li>`).join('')}</ul>${fechar}`);
+  // ligar pela 1ª vez é direto; TROCAR pede confirmação (a equipe deixa de ver o quantitativo de hoje)
+  document.querySelectorAll('[data-medido]').forEach((b) => {
+    const job = b.getAttribute('data-medido'), nome = (b.querySelector('b') || {}).textContent || 'este projeto';
+    b.onclick = () => (PROJ.job_id ? confirmarTrocaDeMedido(job, nome) : umaVez(b, () => ligarMedido(job)));
+  });
+}
+function confirmarTrocaDeMedido(job, nome) {
+  abrirModal('Trocar o projeto medido?', `<p style="margin:0;font-size:14px;line-height:1.5">A equipe deixa de ver o quantitativo, o cronograma e o memorial de hoje e passa a ver os de <b>${esc(nome)}</b>.</p>
+    <p class="sub" style="margin:0">Tarefas, atas, equipe, emissões e arquivos do Escritório não mudam. O projeto medido de hoje continua no seu painel, e dá pra trocar de volta.</p>
+    <p class="sub" style="margin:0">O cronograma de obra e o financeiro ficam guardados em cada projeto medido: confira se o novo já tem os dele.</p>
+    <div class="rodape"><button class="btn" onclick="trocarMedido()">Voltar</button><button class="btn btn-d" id="tm-ok">Trocar</button></div>`);
+  $('tm-ok').onclick = () => umaVez($('tm-ok'), () => ligarMedido(job));
+}
+async function ligarMedido(job) {
+  if (!souAdmin() || !job) return;
+  const antes = PROJ.job_id || null;
+  // `.select()` devolve as linhas que o banco MUDOU: a RLS que filtra calada não pode virar "Trocado"
+  const { data, error } = await sb.from('escritorio_projetos').update({ job_id: job }).eq('id', PROJ.id).select('id');
+  if (error) {
+    if (error.code === '23505') return toast('Esse projeto medido já está ligado a outro projeto do Escritório.', true);
+    if (error.code === '42501') return toast('Esse projeto medido não é da sua conta.', true);
+    return falhou(error, 'Não troquei o projeto medido');
+  }
+  if (!data || !data.length) return toast('Não troquei: só a admin do projeto liga o projeto medido.', true);
+  PROJ.job_id = job;
+  // a lembrança do navegador sobre o medido ANTIGO sai (as páginas dele voltam ao menu normal; o banco confirma)
+  try {
+    if (antes) { const mapa = JSON.parse(localStorage.getItem('aiarq_esc_mapa') || '{}') || {}; delete mapa[antes]; localStorage.setItem('aiarq_esc_mapa', JSON.stringify(mapa)); }
+  } catch (_) {}
+  OBRA = { projeto: null, pct: null };            // o % da obra é do cronograma do medido: pede de novo
+  fecharModal(); render();
+  toast(antes ? 'Projeto medido trocado: a equipe já vê o novo' : 'Projeto medido ligado: a equipe já vê o quantitativo');
 }
 
 // 🏢 Veio do menu de um projeto MEDIDO (24/09): abre o projeto do Escritório ligado a ele; no 1º clique, cria.
@@ -1014,8 +1084,9 @@ function telaCapa() {
       ${souAdmin() ? tool(`projeto.html?job_id=${J}#cotacoes`, 'cot', 'Comparativo', 'Cotações de fornecedor', true) : ''}
       ${souAdmin() ? tool(`financeiro.html?job_id=${J}`, 'fin', 'Financeiro', 'Pagamentos da obra', true) : ''}
       ${souAdmin() ? tool(`projeto.html?job_id=${J}#processamento`, 'proc', 'Processamento', 'Reprocessar ou reportar problema', true) : ''}
-    </div>`
-      : `<p class="sub" style="margin-top:14px">Este projeto nasceu sem prancha. Pra trabalhar um projeto que você já mediu, use <b>Trazer projeto medido</b> na lista do Escritório.</p>`}
+    </div>
+    ${souAdmin() ? '<p class="sub" style="margin:10px 0 0">Reprocessou este projeto ou ligou o errado? <button type="button" class="lnk" onclick="trocarMedido()">Trocar o projeto medido ligado</button></p>' : ''}`
+      : `<p class="sub" style="margin-top:14px">Este projeto nasceu sem prancha.${souAdmin() ? ' Já mediu ele no AI.arq? <button type="button" class="lnk" onclick="trocarMedido()">Ligar a um projeto medido</button>: a equipe passa a ver o quantitativo, o cronograma e o memorial.' : ''}</p>`}
   </section>
   <section class="card rise"><div class="linha" style="justify-content:space-between"><h2 class="h2">${souAdmin() ? 'Precisa de você' : 'Suas tarefas'}</h2><a class="btn btn-s" href="#/p/${p.id}/tarefas">Abrir o quadro</a></div>
     ${foco.length ? `<ul class="lista" style="margin-top:8px">${foco.slice(0, 8).map((t) => `<li style="cursor:pointer" onclick="ir('tarefas');setTimeout(()=>abrirCartao('${t.id}'),50)"><span style="width:9px;height:9px;border-radius:50%;background:${(ST.find((s) => s.k === t.status) || {}).cor}"></span><span style="flex:1;min-width:0;font-size:14.5px">${esc(t.titulo)}<span class="sub" style="display:block;margin:0">${stT(t.status)}</span></span>${pillPrazo(t)}${avs(t)}</li>`).join('')}</ul>` : '<p class="vazio" style="margin-top:8px">Nada parado com você.</p>'}
@@ -1055,11 +1126,31 @@ function avancoEtapa(et, iA) {
   const estado = !atual ? 'Nenhuma etapa marcada como atual.'
     : abertasAqui ? `${abertasAqui} tarefa${abertasAqui > 1 ? 's' : ''} aberta${abertasAqui > 1 ? 's' : ''} nesta etapa.`
     : totalAqui ? '✓ Tudo pronto nesta etapa.' : 'Nenhuma tarefa nesta etapa.';
-  if (!souAdmin()) return `<div class="avanco"><span>Etapa atual: <b>${esc(atual || '—')}</b> · ${estado}</span><span class="sub" style="margin:0">Quem avança a etapa é a admin do projeto.</span></div>`;
+  // 12/10 (auditoria ADM-13; Pedro: "Sim, criar"): a última etapa não tinha "Concluir" — o projeto entregue parava em
+  // 89% (8 de 9), na capa e na tela do cliente. Agora a admin conclui o projeto (e pode reabrir).
+  const fim = PROJ.concluido_em ? `<span class="pill p-ok"><i></i>projeto concluído em ${esc(dBR(PROJ.concluido_em))}</span>` : '';
+  if (!souAdmin()) return `<div class="avanco"><span>Etapa atual: <b>${esc(atual || '—')}</b> · ${fim ? 'Projeto concluído.' : estado}</span>${fim || '<span class="sub" style="margin:0">Quem avança a etapa é a admin do projeto.</span>'}</div>`;
   const botao = !atual ? `<button class="btn btn-p btn-s" onclick="marcarAtual(0)">Começar por ${esc(et[0])} →</button>`
     : prox ? `<button class="btn btn-p btn-s" onclick="avancarEtapa()">Concluir ${esc(atual)} e passar pra ${esc(prox)} →</button>`
-    : '<span class="pill p-ok"><i></i>última etapa</span>';
-  return `<div class="avanco ${atual && !abertasAqui && totalAqui ? 'pronto' : ''}"><span>Etapa atual: <b>${esc(atual || '—')}</b> · ${estado}</span>${botao}</div>`;
+    : fim ? `${fim}<button type="button" class="lnk" onclick="concluirProjeto(false)">Reabrir</button>`
+    : `<button class="btn btn-p btn-s" onclick="concluirProjeto(true)">Concluir ${esc(atual)} e o projeto ✓</button>`;
+  return `<div class="avanco ${atual && !abertasAqui && totalAqui ? 'pronto' : ''}"><span>Etapa atual: <b>${esc(atual || '—')}</b> · ${fim ? 'Projeto concluído.' : estado}</span>${botao}</div>`;
+}
+// concluir (ou reabrir) o projeto: só a admin, só na última etapa. `.select()` devolve o que o banco MUDOU — a RLS que
+// filtra calada não pode virar "Concluído".
+async function concluirProjeto(sim) {
+  if (!souAdmin()) return;
+  const et = PROJ.etapas || [], iA = et.indexOf(PROJ.etapa_atual);
+  if (sim) {
+    if (!et.length || iA !== et.length - 1) return toast('O projeto conclui na última etapa.', true);
+    const n = TAR.filter((t) => t.etapa === et[iA] && aberta(t)).length;
+    if (n && !confirm(`Ainda há ${n} tarefa${n > 1 ? 's' : ''} aberta${n > 1 ? 's' : ''} em ${et[iA]}. Concluir o projeto mesmo assim? (as tarefas continuam no quadro)`)) return;
+  }
+  const quando = sim ? new Date().toISOString() : null;
+  const { data, error } = await sb.from('escritorio_projetos').update({ concluido_em: quando }).eq('id', PROJ.id).select('id');
+  if (error) return falhou(error, sim ? 'Não concluí o projeto' : 'Não reabri o projeto');
+  if (!data || !data.length) return toast('Só a admin do projeto conclui o projeto.', true);
+  PROJ.concluido_em = quando; render(); toast(sim ? 'Projeto concluído: 100%' : 'Projeto reaberto');
 }
 async function avancarEtapa() {
   const et = PROJ.etapas || [], iA = et.indexOf(PROJ.etapa_atual);
@@ -1080,9 +1171,11 @@ function painelEtapa() {
   </div>`;
 }
 async function marcarAtual(i) {
-  const { error } = await sb.from('escritorio_projetos').update({ etapa_atual: PROJ.etapas[i] }).eq('id', PROJ.id);
+  const mud = { etapa_atual: PROJ.etapas[i] };
+  if (PROJ.concluido_em) mud.concluido_em = null;      // 12/10 (ADM-13): mudar a etapa atual REABRE o projeto concluído
+  const { error } = await sb.from('escritorio_projetos').update(mud).eq('id', PROJ.id);
   if (error) return falhou(error, 'Não mudei a etapa');
-  PROJ.etapa_atual = PROJ.etapas[i]; render(); toast('Etapa atual: ' + PROJ.etapa_atual);
+  Object.assign(PROJ, mud); render(); toast('Etapa atual: ' + PROJ.etapa_atual + (mud.concluido_em === null ? ' · projeto reaberto' : ''));
 }
 function editarProjeto() {
   const p = PROJ;
