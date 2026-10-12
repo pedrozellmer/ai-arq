@@ -5779,6 +5779,63 @@ def _nome_da_peca_no_vinculo(nome, vista="") -> str:
     return n or str(nome or "")
 
 
+# ════════════════════════════════════════════════════════
+#  O BLOCO DO SÍMBOLO DE NÍVEL NÃO É PEÇA — pelo nome (12/10/2026)
+# ════════════════════════════════════════════════════════
+# 🩸 "Marcadores de nível — 106 un", com a fonte "106 INSERTs do bloco" do
+# símbolo de nível da planta. O extract_dxf já descarta bloco de anotação cujo
+# nome COMEÇA por NIVEL / NIV / LEVEL seguido de separador (`_ANNOTATION_NAME_RE`,
+# sem acento); o símbolo escapava por acento ("NÍVEL-PLANTA"), por falta de
+# separador ("nivelcorte1"), por prefixo de padrão ("XX-Nível Planta-1", "cota
+# nível planta", "simbolo_cota nível") e por ser a família de cota de elevação
+# do Revit ("Elevações de ponto - …"), que nem tem "nível" no nome.
+# 📏 Medido no acervo pelo motor (65 arquivos com bloco de nome de nível ou
+# atributo de nível): 125 blocos, 1.982 inserções em 38 arquivos de 23 jobs
+# contados como peça; os nomes-base lidos um a um, todos anotação.
+# 🪤 O lado falso tem forma. O Revit exporta "<família> - <tipo>-<id>-<vista>",
+# e a VISTA muitas vezes se chama "Nível 1": montante, pilar, vaga, paraciclo e
+# piso direcional com "nível" só na vista são PEÇA (730 blocos, 1.520 inserções,
+# mais 1.218 de piso direcional). A régua olha a FAMÍLIA — o que vem antes do
+# 1º "-<id>-" (4+ dígitos, ou "V<n>" da cópia de vista) — nunca o nome inteiro.
+# E "sensor de nível", "chave de nível", "caixa…" e o "niv" de "universal" não
+# casam com nenhuma das formas.
+# 🚫 Fica de fora, medido: a prova pelo DESENHO (atributo ou texto com forma de
+# nível colado à inserção). Ela confirma 80 dos 124 blocos e não vê 44 (a cabeça
+# de nível em corte e fachada tem o texto na outra ponta da linha); só ela pega 4
+# blocos de nome sem "nível" (111 inserções em 4 jobs), e com o número sem sinal
+# "prova" a marca de porta e o piso tátil. E os nomes que não batem nas formas
+# ("a_nível", "fp_3-nível", "2º nível": 1 a 5 inserções cada) continuam peça.
+_RE_VISTA_DO_REVIT = re.compile(r"-(?:\d{4,}|v\d+)-")
+_RE_NOME_DE_SIMBOLO_DE_NIVEL = re.compile(
+    # começa por nível / níveis / niv / level (o guarda antigo, agora sem acento
+    # e também colado em número)…
+    r"^(?:nive(?:l|is)|niv|level)(?:[\s_.-]|\d|$)"
+    # …ou "nível" colado em corte/planta ("nivelcorte1")
+    r"|^nivel(?:corte|planta)"
+    # "nível planta", "nível corte" com prefixo de padrão ("xx-nível planta-1")
+    r"|(?:^|[\s_.-])nivel[\s_.-]+(?:planta|corte)(?:[\s_.-]|\d|$)"
+    # cota (de) nível, cotanivel
+    r"|(?:^|[\s_.-])cota[\s_.-]*(?:de[\s_.-]*)?nivel"
+    # símbolo … nível ("simbolo_cota nível", "xx_smb_nivel")
+    r"|(?:^|[\s_.-])si?mb\w*[\s_.-]+(?:\w+[\s_.-]+)?nivel"
+    # indicação (de) nível, "ind nível", "indniv"
+    r"|^indicacao[\s_.-]*(?:de[\s_.-]*)?nive(?:l|is)|^ind[\s_.-]*niv"
+    # diferença de nível
+    r"|^diferenca[\s_.-]+de[\s_.-]+nivel"
+    # as famílias de cota de elevação do Revit
+    r"|^elevac(?:ao|oes) de ponto(?:[\s_.-]|$)|^spot elevations?(?:[\s_.-]|$)"
+    r"|^coordenadas de ponto(?:[\s_.-]|$)")
+
+
+def nome_de_simbolo_de_nivel(nome) -> bool:
+    """O nome do bloco é de SÍMBOLO DE NÍVEL (anotação), e não de peça? Lê sem
+    acento e só a família do nome do Revit. Ver o comentário acima."""
+    s = "".join(c for c in unicodedata.normalize("NFD", str(nome or ""))
+                if unicodedata.category(c) != "Mn").lower().strip()
+    if not s:
+        return False
+    return bool(_RE_NOME_DE_SIMBOLO_DE_NIVEL.search(_RE_VISTA_DO_REVIT.split(s, 1)[0].strip()))
+
 
 def pecas_no_vinculo(doc, nomes_inseridos, nome_do_arquivo, e_anotacao=None) -> dict:
     """{base: {disciplina, instancias, vista, outras_vistas, pecas: {nome: n}}}
@@ -9864,10 +9921,18 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             _seta_pela_definicao[name] = _ok
         return _seta_pela_definicao[name]
 
+    # 12/10/2026 — o símbolo de nível pelo nome lido do jeito certo (acento,
+    # prefixo, família do Revit): ver `nome_de_simbolo_de_nivel`. Muda CONTAGEM
+    # (o bloco deixa de ser contado). Chave: SIMBOLO_DE_NIVEL_E_ANOTACAO=0 volta
+    # ao guarda antigo, sem deploy.
+    _nivel_pelo_nome = os.environ.get("SIMBOLO_DE_NIVEL_E_ANOTACAO", "1") != "0"
+
     def _is_annotation_block(name: str) -> bool:
         if not name:
             return False
         if _ANNOTATION_NAME_RE.match(name):
+            return True
+        if _nivel_pelo_nome and nome_de_simbolo_de_nivel(name):
             return True
         if _XREF_NAME_RE.search(name):
             return True
