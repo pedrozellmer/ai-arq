@@ -1379,6 +1379,18 @@ def _promovido(b):
          "permission_id": "perm-forn", "ja_existia": False, "papel_antes": None}]
 
 
+def _so_as_colunas_pedidas(b):
+    """O PostgREST só devolve as colunas do `select`. O BancoFiel devolve a linha inteira — e aí esquecer de PEDIR o
+    papel_antes passaria calado no teste e apagaria o acesso na produção."""
+    def servico(method, path, body=None, params=None, prefer=None, **k):
+        st, linhas = b(method, path, body=body, params=params, prefer=prefer, **k)
+        sel = (params or {}).get("select")
+        if method == "GET" and path.lstrip("/") == "escritorio_drive_permissoes" and sel and isinstance(linhas, list):
+            linhas = [{c: x.get(c) for c in sel.split(",")} for x in linhas]
+        return st, linhas
+    esc._SERVICO = servico
+
+
 def _voltaram(g):
     return [(u.split("/files/", 1)[1].split("?", 1)[0], c) for m, u, c in g.chamadas if m == "PATCH" and "/permissions/" in u]
 
@@ -1387,6 +1399,7 @@ def test_apagar_o_projeto_devolve_o_papel_que_a_admin_tinha_dado_a_mao():
     """SERV-4: "Apagar projeto" apagava direto — quem tinha leitura dada pela admin fora do AI.arq perdia também ela."""
     b, _, _ = montar(DONA, "dono")
     _promovido(b)
+    _so_as_colunas_pedidas(b)
     g = _pastas()
     assert ed.projeto_apagar(PROJ, REQ)["apagado"] is True
     assert _voltaram(g) == [("PASTA_PROJ/permissions/perm-eq", {"role": "reader"})]
@@ -1397,6 +1410,7 @@ def test_limpar_a_conta_da_admin_devolve_o_papel_de_antes():
     """SERV-4, o outro caminho (exclusão de conta)."""
     b, _, _ = montar(DONA, "dono")
     _promovido(b)
+    _so_as_colunas_pedidas(b)
     g = _pastas()
     feito = ed.limpar_conta(DONA["id"])
     assert _voltaram(g) == [("PASTA_PROJ/permissions/perm-eq", {"role": "reader"})]
@@ -1463,6 +1477,13 @@ def test_pasta_que_o_banco_nao_gravou_nao_vira_ok(resposta):
         ed.projeto_pasta(PROJ, REQ, {"pasta": "PASTA_PROJ"})
     assert e.value.status_code == 502 and "gravar a pasta" in e.value.detail
     assert not g.permissoes_dadas() and b.t["escritorio_projetos"][0]["pasta_id"] == "PASTA_MARC"
-    esc._SERVICO = b                                       # controle: gravou → liga e compartilha a NOVA
+
+    def fiel(method, path, body=None, params=None, prefer=None, **k):
+        # o PostgREST só devolve a linha gravada a quem PEDE (Prefer: return=representation); sem pedir, é 204 sem corpo
+        st, dados = b(method, path, body=body, params=params, prefer=prefer, **k)
+        if method == "PATCH" and path.lstrip("/") == "escritorio_projetos" and "return=representation" not in (prefer or ""):
+            return 204, None
+        return st, dados
+    esc._SERVICO = fiel                                    # controle: gravou → liga e compartilha a NOVA
     r = ed.projeto_pasta(PROJ, REQ, {"pasta": "PASTA_PROJ"})
     assert r["ok"] and r["pasta"]["id"] == "PASTA_PROJ" and ("PASTA_PROJ", "writer", EQUIPE["email"]) in g.permissoes_dadas()

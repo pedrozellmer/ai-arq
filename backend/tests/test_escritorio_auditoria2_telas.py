@@ -597,6 +597,8 @@ def test_o_que_estava_digitado_no_cartao_volta():
     r = _js(_rascunho("sairDoCartao('t1'); campos = {}; voltarAoCartao('t1'); voltarAoCartao('t1');"), "abriu")
     assert r[0][0] == "t1" and r[0][1]["mud"]["descricao"] == "Três parágrafos"      # volta com o digitado
     assert r[1] == ["t1", None]                                                      # e só uma vez: depois é o do banco
+    r = _js(_rascunho("TAR.push({ id: 't2', status: 'afazer' }); sairDoCartao('t1'); voltarAoCartao('t2');"), "abriu")
+    assert r == [["t2", None]]                                                       # o digitado num cartão não vaza pra outro
     assert _js(_rascunho("CART = { id: 'outro', pessoas: [] };"), "rascunhoDoCartao('t1')") is None
     assert _js(_rascunho("delete campos['ct-t'];"), "rascunhoDoCartao('t1')") is None    # o cartão do fornecedor não tem título
 
