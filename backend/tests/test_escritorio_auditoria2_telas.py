@@ -596,7 +596,7 @@ def test_a_trava_e_da_gravacao_igual_nao_do_tipo():
 
 def _rascunho(extra=""):
     pre = ("var campos = { 'ct-t': { value: 'Título digitado' }, 'ct-e': { value: 'Obra' }, 'ct-p': { value: '2026-11-01' },"
-           "  'ct-d': { value: 'Três parágrafos' }, 'ct-cli': { checked: true }, 'ct-st': { value: 'dev' }, 'ct-com': { value: '@Ana confere' } };"
+           "  'ct-d': { value: 'Três parágrafos' }, 'ct-cli': { checked: true }, 'ct-st': { value: 'dev' }, 'ct-com': { value: '@Fulana confere' } };"
            "function $(id) { return campos[id] || null; }"
            "var TAR = [{ id: 't1', status: 'afazer' }], CART = { id: 't1', pessoas: ['m1', 'm2'] }, abriu = [];"
            "function abrirCartao(id, r) { abriu.push([id, r]); }")
@@ -608,7 +608,7 @@ def test_o_que_estava_digitado_no_cartao_volta():
     """ADM-6: subir/descer, editar ou apagar comentário e "Excluir → Voltar" reabriam o cartão do banco."""
     r = _js(_rascunho(), "rascunhoDoCartao('t1')")
     assert r == {"mud": {"titulo": "Título digitado", "etapa": "Obra", "prazo": "2026-11-01", "descricao": "Três parágrafos",
-                         "do_cliente": True}, "st": "dev", "pessoas": ["m1", "m2"], "comentario": "@Ana confere"}
+                         "do_cliente": True}, "st": "dev", "pessoas": ["m1", "m2"], "comentario": "@Fulana confere"}
     r = _js(_rascunho("sairDoCartao('t1'); campos = {}; voltarAoCartao('t1'); voltarAoCartao('t1');"), "abriu")
     assert r[0][0] == "t1" and r[0][1]["mud"]["descricao"] == "Três parágrafos"      # volta com o digitado
     assert r[1] == ["t1", None]                                                      # e só uma vez: depois é o do banco
@@ -653,7 +653,7 @@ def test_pedido_de_revisao_que_ja_virou_tarefa_nao_vira_de_novo():
 
 _PESSOA_BASE = """
 var gravado = [], avisos = [], fechou = 0;
-var campos = { 'pe-n': { value: 'Ana' }, 'pe-f': { value: 'Arquiteta' }, 'pe-t': { value: '' }, 'pe-o': { value: '' } };
+var campos = { 'pe-n': { value: 'Fulana' }, 'pe-f': { value: 'Arquiteta' }, 'pe-t': { value: '' }, 'pe-o': { value: '' } };
 function $(id) { return campos[id] || null; }
 var PROJ = { id: 'p1' }, MEMBROS = [{ id: 'm1' }];
 function falhou(e, t) { avisos.push(t); } function toast(t) { avisos.push(t); } function fecharModal() { fechou++; } function recarregar() {}
@@ -671,12 +671,12 @@ def _salvar_pessoa(contatos, notas):
 
 def test_o_que_a_tela_nao_leu_nao_e_gravado():
     """ADM-7: a leitura de contatos falhava calada e salvar o "Editar" gravava telefone nulo e APAGAVA a anotação."""
-    assert _salvar_pessoa("false", "false") == [["escritorio_membros", "update", {"nome": "Ana", "funcao": "Arquiteta"}]]
+    assert _salvar_pessoa("false", "false") == [["escritorio_membros", "update", {"nome": "Fulana", "funcao": "Arquiteta"}]]
     r = _salvar_pessoa("true", "true")                                   # controle: leu tudo — o vazio É vontade da admin
-    assert r == [["escritorio_membros", "update", {"nome": "Ana", "funcao": "Arquiteta", "telefone": None}],
+    assert r == [["escritorio_membros", "update", {"nome": "Fulana", "funcao": "Arquiteta", "telefone": None}],
                  ["escritorio_membro_notas", "delete"]]
     assert _salvar_pessoa("false", "true")[1] == ["escritorio_membro_notas", "delete"]
-    assert _salvar_pessoa("true", "false") == [["escritorio_membros", "update", {"nome": "Ana", "funcao": "Arquiteta", "telefone": None}]]
+    assert _salvar_pessoa("true", "false") == [["escritorio_membros", "update", {"nome": "Fulana", "funcao": "Arquiteta", "telefone": None}]]
     c = funcao_js("carregarProjeto", "escritorio.html", E)
     assert "else contatosLidos = false;" in c and "else notasLidas = false;" in c
     assert "CONTATOS_LIDOS = contatosLidos; NOTAS_LIDAS = notasLidas;" in c
