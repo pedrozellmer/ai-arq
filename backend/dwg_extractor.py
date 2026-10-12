@@ -1100,9 +1100,16 @@ class DXFExtraction:
                     lines.append(f"    (+{len(contagem) - 50} texto(s) desta camada não listado(s))")
             if _tags_soltas and _contar is not None:
                 _linhas_tags = []
+                _tem_nivel = False
                 for layer, _tg in sorted(_tags_soltas.items()):
+                    # 12/10/2026 — a etiqueta de NÍVEL ("+0.19", "+2.90") é referência de
+                    # altura, nunca peça. 📏 No acervo, pelo motor: 371 das 1.657 etiquetas
+                    # listáveis (22 %), em 15 arquivos de 6 jobs; em 5 arquivos de 3 jobs,
+                    # todas. Sai da lista — e a seção diz que saiu.
+                    _sem_nivel = [_x for _x in _tg if not _RE_ETIQUETA_DE_NIVEL.match(" ".join(str(_x).split()))]
+                    _tem_nivel = _tem_nivel or len(_sem_nivel) < len(_tg)
                     # o código de porta e janela tem 2 letras ("P1", "J3"): aqui valem
-                    _ct = _contar(_tg, min_len=2)
+                    _ct = _contar(_sem_nivel, min_len=2)
                     if _ct:
                         _linhas_tags.append(
                             f"  [{layer}]: " + "; ".join(
@@ -1111,11 +1118,29 @@ class DXFExtraction:
                             + (f" (+{len(_ct) - _TAGS_SOLTAS_MAX} não listada(s))"
                                if len(_ct) > _TAGS_SOLTAS_MAX else ""))
                 if _linhas_tags:
+                    # 12/10/2026 — o título citava "nível" entre os exemplos do que a
+                    # etiqueta é; nível não é peça, e saiu do título e da lista.
                     lines.append("  ETIQUETAS SOLTAS NO DESENHO (o código que o CAD mostra onde o bloco da")
-                    lines.append("   etiqueta foi explodido — porta, janela, eixo, nível. Lido do arquivo como")
-                    lines.append("   os textos acima, e o ×N tem a MESMA ressalva: conta a etiqueta, não a")
+                    lines.append("   etiqueta foi explodido — porta, janela, eixo. Lido do arquivo como os")
+                    lines.append("   textos acima, e o ×N tem a MESMA ressalva: conta a etiqueta, não a")
                     lines.append("   peça — o quadro de esquadrias e o desenho de detalhe repetem o código):")
+                    # 🩸 12/10/2026 — a 1ª planilha com a etiqueta: a IA leu a ressalva e pôs o
+                    # ×N cru como quantidade (13 onde o quadro diz 12). 📏 No único arquivo do
+                    # acervo em que a etiqueta é célula de quadro lido, casando o código sem o
+                    # sufixo e sem o zero à esquerda ("JA-10**" = "JA-10", "JA-09" = "JA-9"),
+                    # o ×N é o quadro + 2 em 29 de 29 códigos: a planta, a célula do quadro e
+                    # o título do detalhe. Quem casa o código é a IA; a seção diz quem manda.
+                    if ((self.metadata or {}).get("quadros_com_quantidade") or {}).get("quadros"):
+                        lines.append("   ⚠ Este arquivo tem QUADRO COM QUANTIDADE (acima): a etiqueta cujo código é")
+                        lines.append("   linha de um quadro leva a quantidade do QUADRO — o ×N conta também a célula")
+                        lines.append("   do quadro e o título do detalhe. Cite o ×N na observação.")
                     lines.extend(_linhas_tags)
+                if _tem_nivel:
+                    # corte dito, SEM dizer quantas: "N etiquetas de nível" é número com
+                    # cara de resposta (vira "N marcadores de nível"). Sem o bloco
+                    # (arquivo só com nível) as duas linhas vêm sozinhas.
+                    lines.append("  (as etiquetas de NÍVEL soltas no desenho não são listadas: são referência de")
+                    lines.append("   altura, não peça — NÃO gere item a partir delas)")
             if _txt_vista:
                 lines.append("  TEXTOS QUE ESTÃO SÓ EM CORTE/ELEVAÇÃO/DETALHE (a MESMA peça da planta")
                 lines.append("   vista de novo — servem de ESPECIFICAÇÃO; NÃO conte nem some com a")
@@ -5822,6 +5847,15 @@ def _texto_do_text(e) -> str:
 #: etiquetas soltas distintas listadas por camada no prompt (acervo: o arquivo
 #: com mais tem 46 distintas)
 _TAGS_SOLTAS_MAX = 80
+#: A etiqueta solta que é NÍVEL: sinal + número com 2 ou 3 decimais, ou o zero
+#: escrito com decimais. 📏 As formas do acervo (12/10, pelo motor, nos 29
+#: arquivos com etiqueta solta; dígito = 9): "+9.99" ×294, "+9,99" ×31,
+#: "+99,99" ×18, "-9.99" ×11, "+9.99(NA)" ×8, "+99.99" ×3, "+999,99" ×2 — e o
+#: zero sem sinal, "0.00" ×2 e "0,0" ×1, na mesma camada dos outros níveis.
+#: "±" e "(NO)" entram por serem o par de "+" e de "(NA)" na mesma notação.
+#: 🪤 Sem sinal só o zero ("999,99" confunde com dimensão; dimensão não é zero)
+#: e porcentagem não ("-2,00%" é rampa).
+_RE_ETIQUETA_DE_NIVEL = re.compile(r"^(?:[+\-±]\d{1,3}[.,]\d{2,3}(?:\(N[AO]\))?|0[.,]0{1,3})$")
 
 
 def _tag_do_attdef_solto(e) -> str:

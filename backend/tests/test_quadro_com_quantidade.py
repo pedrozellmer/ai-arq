@@ -286,6 +286,66 @@ def test_a_etiqueta_solta_e_celula_do_quadro(tmp_path):
     assert como_dict(q) == [{"#": "12", "Ref.": "PA6", "Tipo": "de abrir"}, {"#": "03", "Ref.": "PA7", "Tipo": "de correr"}]
 
 
+# 🩸 12/10/2026 — a 1ª planilha com a etiqueta solta: a IA leu a ressalva do ×N e
+# pôs o ×N cru como quantidade (13 onde o quadro diz 12). 📏 No único arquivo do
+# acervo em que a etiqueta é célula de quadro lido, o ×N é o quadro + 2 em 29 de
+# 29 códigos (a planta, a célula do quadro, o título do detalhe). A seção não casa
+# código nenhum: diz quem manda.
+_O_QUADRO_MANDA = ("⚠ Este arquivo tem QUADRO COM QUANTIDADE (acima): a etiqueta cujo código é linha de um quadro "
+                   "leva a quantidade do QUADRO — o ×N conta também a célula do quadro e o título do detalhe. "
+                   "Cite o ×N na observação.")
+
+
+def _quadro_com_etiquetas():
+    d = Desenho()
+    xs, yb, _b = tabela(d, 0, 100, [8, 10, 20], ["Ref.", "Quantidade", "Tipo"],
+                        [[None, "12", "de abrir"], [None, "03", "de correr"]])
+    d.tag(xs[0] + 0.5, yb - 3 + 1.0, "PA6").tag(xs[0] + 0.5, yb - 6 + 1.0, "PA7")
+    for k in range(3):                                  # as mesmas etiquetas na "planta", longe do quadro
+        d.tag(200 + 5 * k, 20, "PA6")
+    return d
+
+
+def test_com_quadro_lido_o_bloco_de_etiquetas_diz_que_o_quadro_manda(tmp_path):
+    linhas = dx.extract_dxf(_quadro_com_etiquetas().grava(tmp_path)).to_structured_prompt().splitlines()
+    i = next(k for k, l in enumerate(linhas) if l.startswith("  ETIQUETAS SOLTAS NO DESENHO"))
+    assert " ".join(l.strip() for l in linhas[i + 4:i + 7]) == _O_QUADRO_MANDA
+    assert linhas[i + 7].startswith("  [") and "PA6 ×4" in linhas[i + 7], linhas[i:i + 9]   # a lista vem DEPOIS da frase
+    # "(acima)" é verdade: a seção dos quadros vem antes do bloco das etiquetas
+    assert next(k for k, l in enumerate(linhas) if l.startswith("QUADROS COM QUANTIDADE")) < i
+    # diz o que FAZER e não lista número: nenhuma quantidade do quadro na frase
+    assert "12" not in _O_QUADRO_MANDA and "PA6" not in _O_QUADRO_MANDA
+
+
+def test_CONTROLE_sem_quadro_lido_o_bloco_fica_como_estava(tmp_path, monkeypatch):
+    d = Desenho()
+    for k in range(3):
+        d.tag(200 + 5 * k, 20, "PA6")
+    d.t(0, 0, "SALA")
+    p = dx.extract_dxf(d.grava(tmp_path)).to_structured_prompt()
+    assert "ETIQUETAS SOLTAS NO DESENHO" in p and "PA6 ×3" in p
+    assert "QUADRO COM QUANTIDADE (acima)" not in p
+    # e com o quadro no desenho mas a chave do leitor desligada: sem registro, sem frase
+    monkeypatch.setenv("QUADRO_COM_QUANTIDADE", "0")
+    p2 = dx.extract_dxf(_quadro_com_etiquetas().grava(tmp_path)).to_structured_prompt()
+    assert "ETIQUETAS SOLTAS NO DESENHO" in p2 and "QUADRO COM QUANTIDADE (acima)" not in p2
+
+
+def test_CONTROLE_quadro_visto_e_nao_lido_nao_e_quadro_acima(tmp_path):
+    """O registro existe (o quadro foi visto e recusado), mas a seção dos quadros
+    não sai — "acima" não haveria nada: a frase também não sai."""
+    d = Desenho()
+    tabela(d, 0, 100, LARG, CAB, [["J1", "Janela", "00", "v"], ["J2", "Janela", "0", "v"], ["J3", "Janela", "00", "v"]])
+    for k in range(3):
+        d.tag(200 + 5 * k, 20, "PA6")
+    ex = dx.extract_dxf(d.grava(tmp_path))
+    reg = ex.metadata["quadros_com_quantidade"]
+    assert reg["quadros"] == [] and reg["nao_lidos"]
+    p = ex.to_structured_prompt()
+    assert "ETIQUETAS SOLTAS NO DESENHO" in p and "PA6 ×3" in p
+    assert "QUADROS COM QUANTIDADE" not in p and "QUADRO COM QUANTIDADE (acima)" not in p
+
+
 def test_CONTROLE_sem_ler_a_etiqueta_solta_a_coluna_falta(tmp_path, monkeypatch):
     monkeypatch.setenv("ATTDEF_SOLTO_E_TEXTO", "0")
     d = Desenho()

@@ -192,7 +192,116 @@ def test_a_etiqueta_de_duas_letras_e_listada_e_a_de_uma_nao(tmp_path, monkeypatc
             msp.add_attdef(tag, (i, 2), dxfattribs={"height": H, "layer": "ARQ-SIMB"})
     linhas = dx.extract_dxf(_arquivo(tmp_path, monta)).to_structured_prompt().splitlines()
     linha = next(l for l in linhas if l.startswith("  [ARQ-SIMB]: "))
-    assert linha == "  [ARQ-SIMB]: +0.15; P1 ×2; J3", linha        # o nível repetido sai sem ×N; "A" não entra
+    assert linha == "  [ARQ-SIMB]: P1 ×2; J3", linha         # "A" não entra; o nível sai da lista (12/10)
+    assert linhas[linhas.index(linha) + 1:][:2] == _CORTE
+
+
+#: 12/10/2026 — a etiqueta de nível é referência de altura, nunca peça; no acervo
+#: é 22 % das etiquetas soltas listáveis, e em 5 arquivos de 3 jobs, todas. (A linha
+#: "marcadores de nível" da 1ª planilha com o bloco veio da contagem do BLOCO do
+#: símbolo de nível, não da etiqueta — é outra régua.)
+#: 🪤 O corte é dito SEM dizer quantas: "N etiquetas de nível" é número com cara
+#: de resposta (vira "N marcadores de nível").
+_CORTE = ["  (as etiquetas de NÍVEL soltas no desenho não são listadas: são referência de",
+          "   altura, não peça — NÃO gere item a partir delas)"]
+
+
+def test_o_corte_nao_traz_numero():
+    assert not any(c.isdigit() for c in "".join(_CORTE))
+
+
+def _com_etiquetas(tmp_path, tags):
+    def monta(doc, msp):
+        msp.add_text("SALA", dxfattribs={"height": H, "layer": "ARQ-TEXTO", "insert": (1, 5)})
+        for i, tag in enumerate(tags):
+            msp.add_attdef(tag, (i, 2), dxfattribs={"height": H, "layer": "ARQ-SIMB"})
+    return dx.extract_dxf(_arquivo(tmp_path, monta))
+
+
+def test_a_forma_de_nivel_e_o_que_nao_e():
+    e_nivel = dx._RE_ETIQUETA_DE_NIVEL.match
+    # as formas do acervo, mais o "±" e o "(NO)" da mesma notação
+    for t in ("+0.19", "+0,19", "-0.02", "+12,50", "+12.50", "+0.20(NA)", "±0,00", "+0.10(NO)", "-1,250", "+882,70",
+              "0.00", "0,0", "0,00", "0.000"):          # o zero vem sem sinal
+        assert e_nivel(t), t
+    for t in ("-2,00%",                    # inclinação de rampa
+              "882,70", "0,15", "0.10", "1.00", "1,0",  # sem sinal e não é zero: confunde com dimensão
+              "0", "00.00", "0.0000", "0.00%", "0,00(NA)",
+              "+12", "-3", "+0.5",         # sem decimal, ou com um só
+              "+1.2345", "+1234.50",       # fora do tamanho de um nível
+              "+0.20NA", "+0.20(NB)", "+0.20(NA)x",
+              "P+1", "JA-09", "PA6", "1:50", "+0.15x2", "+0.15/+0.20", "N+1", "x+0.15"):
+        assert not e_nivel(t), t
+
+
+def test_a_etiqueta_de_nivel_sai_do_bloco_e_a_secao_diz_que_cortou(tmp_path, monkeypatch):
+    monkeypatch.delenv("ATTDEF_SOLTO_E_TEXTO", raising=False)
+    ex = _com_etiquetas(tmp_path, ("PA1", "PA1", "+0.19", "+0.19", "+0.19", "-0,02", "+0.20(NA)", "-2,00%", "882,70"))
+    linhas = ex.to_structured_prompt().splitlines()
+    i = next(k for k, l in enumerate(linhas) if l.startswith("  ETIQUETAS SOLTAS NO DESENHO"))
+    assert linhas[i + 4] == "  [ARQ-SIMB]: PA1 ×2; -2,00%; 882,70", linhas[i:i + 6]    # rampa e cota sem sinal ficam
+    assert linhas[i + 5:i + 7] == _CORTE
+    assert not any(l.startswith("  (") and "NÍVEL" in l and any(c.isdigit() for c in l) for l in linhas)
+    # sai só da LISTA: a etiqueta continua nos textos da extração, com a marca
+    niveis = [t for t in ex.texts if getattr(t, "de_attdef", False) and dx._RE_ETIQUETA_DE_NIVEL.match(t.text)]
+    assert len(niveis) == 5
+
+
+def test_o_titulo_do_bloco_nao_cita_nivel(tmp_path, monkeypatch):
+    monkeypatch.delenv("ATTDEF_SOLTO_E_TEXTO", raising=False)
+    linhas = _com_etiquetas(tmp_path, ("PA1", "+0.19")).to_structured_prompt().splitlines()
+    i = next(k for k, l in enumerate(linhas) if l.startswith("  ETIQUETAS SOLTAS NO DESENHO"))
+    titulo = " ".join(l.strip() for l in linhas[i:i + 4])
+    assert "foi explodido — porta, janela, eixo. Lido do arquivo" in titulo, titulo
+    assert "nível" not in titulo.lower() and "nivel" not in titulo.lower()
+    assert "conta a etiqueta, não a peça" in titulo
+
+
+def test_arquivo_so_com_nivel_fica_sem_o_bloco_e_com_a_linha_do_corte(tmp_path, monkeypatch):
+    """Sem código nenhum pra listar, o cabeçalho do bloco não tem o que
+    encabeçar — mas o corte não é calado: as duas linhas dele vêm sozinhas."""
+    monkeypatch.delenv("ATTDEF_SOLTO_E_TEXTO", raising=False)
+    linhas = _com_etiquetas(tmp_path, ("+0.19", "+0.19", "+2.90", "0,00")).to_structured_prompt().splitlines()
+    assert not any("ETIQUETAS SOLTAS" in l for l in linhas)
+    assert not any(l.startswith("  [ARQ-SIMB]") for l in linhas)
+    assert linhas.count(_CORTE[0]) == 1
+    k = linhas.index(_CORTE[0])
+    assert linhas[k:k + 2] == _CORTE and k > linhas.index("TEXTOS/LEGENDAS:")
+
+
+@pytest.mark.parametrize("camadas_com_nivel", [("ARQ-ANOT",), ("ARQ-SIMB",), ("ARQ-ANOT", "ARQ-SIMB")])
+def test_o_corte_vale_pra_qualquer_camada_e_sai_uma_vez(tmp_path, monkeypatch, camadas_com_nivel):
+    """O nível pode estar só na 1ª camada, só na última ou nas duas: o corte sai,
+    uma vez, depois da lista."""
+    monkeypatch.delenv("ATTDEF_SOLTO_E_TEXTO", raising=False)
+
+    def monta(doc, msp):
+        tags = [("PA1", "ARQ-ANOT"), ("PA2", "ARQ-SIMB")] + [("+0.19", c) for c in camadas_com_nivel]
+        for i, (tag, layer) in enumerate(tags):
+            msp.add_attdef(tag, (i, 2), dxfattribs={"height": H, "layer": layer})
+    linhas = dx.extract_dxf(_arquivo(tmp_path, monta)).to_structured_prompt().splitlines()
+    assert linhas.count(_CORTE[0]) == 1, [l for l in linhas if "NÍVEL" in l]
+    k = linhas.index(_CORTE[0])
+    assert linhas[k - 2:k] == ["  [ARQ-ANOT]: PA1", "  [ARQ-SIMB]: PA2"] and linhas[k:k + 2] == _CORTE
+
+
+def test_camada_so_de_nivel_nao_ganha_linha(tmp_path, monkeypatch):
+    monkeypatch.delenv("ATTDEF_SOLTO_E_TEXTO", raising=False)
+
+    def monta(doc, msp):
+        for i, (tag, layer) in enumerate((("+0.19", "ARQ-ANOT"), ("+2.90", "ARQ-ANOT"), ("PA1", "ARQ-SIMB"))):
+            msp.add_attdef(tag, (i, 2), dxfattribs={"height": H, "layer": layer})
+    linhas = dx.extract_dxf(_arquivo(tmp_path, monta)).to_structured_prompt().splitlines()
+    assert not any(l.startswith("  [ARQ-ANOT]") for l in linhas)
+    k = linhas.index(_CORTE[0])
+    assert linhas[k - 1] == "  [ARQ-SIMB]: PA1"
+
+
+def test_CONTROLE_sem_etiqueta_de_nivel_nao_ha_linha_de_corte(tmp_path, monkeypatch):
+    monkeypatch.delenv("ATTDEF_SOLTO_E_TEXTO", raising=False)
+    p = _com_etiquetas(tmp_path, ("PA1", "PA1", "JA-02")).to_structured_prompt()
+    assert "de NÍVEL soltas" not in p and "NÃO gere item a partir delas" not in p
+    assert "QUADRO COM QUANTIDADE (acima)" not in p
 
 
 def test_a_lista_de_etiquetas_tem_teto_e_diz_o_que_ficou_de_fora(tmp_path, monkeypatch):
