@@ -403,6 +403,8 @@ let DEST = [], FOTOS = [], TEM_FOTOS = false;
 // 27/09 (Pedro aprovou a maquete "andamento e marca"): a marca do escritório do projeto aberto; o andamento de quem é
 // de fora (o banco só manda os números); o % executado da obra (do cronograma de obra, pedido ao servidor)
 let MARCA = null, AND_EXT = null, OBRA = { projeto: null, pct: null }, CONCL_EXT = null;
+let CONTATOS_LIDOS = true, NOTAS_LIDAS = true;     // 12/10 (ADM-7): o que a leitura da equipe NÃO conseguiu ler não se grava
+let GRAVANDO = {};                                 // 12/10 (ADM-8): o que está sendo gravado agora (Enter repetido, clique duplo)
 let VIEW = 'lista', FILTRO = 'todas', FILTRO_E = '', ETAPA_SEL = null;
 
 // ── utilidades ──
@@ -685,12 +687,18 @@ async function carregarProjeto(id) {
   const ce = papel.data === 'cliente' ? await sb.rpc('escritorio_projeto_concluido', { p_projeto: id }) : null;
   const temEmi = !em.error && !ev.error;
   const membros = m.data, notas = {};
+  // 🩸 12/10 (auditoria ADM-7): se uma destas duas leituras falhava, a Equipe aparecia sem telefone e sem anotação,
+  // calada — e salvar o "Editar" de alguém GRAVAVA o vazio por cima (telefone nulo, anotação apagada). Agora a tela
+  // sabe o que não leu: avisa e não grava o campo que não chegou a ler.
+  let contatosLidos = true, notasLidas = true;
   if (papel.data === 'dono') {   // contatos da equipe: só o admin (LGPD — a equipe não precisa do telefone do colega)
     const c = await sb.rpc('escritorio_contatos', { p_projeto: id });
     if (!c.error) c.data.forEach((x) => { const y = membros.find((z) => z.id === x.membro_id); if (y) { y.email = x.email; y.telefone = x.telefone; y.email_conta = x.email_conta || null; } });
+    else contatosLidos = false;
     // a anotação sobre cada pessoa: tabela própria, só o admin lê
     const n = await sb.from('escritorio_membro_notas').select('membro_id,observacao').eq('projeto_id', id);
     if (!n.error) n.data.forEach((x) => { notas[x.membro_id] = x.observacao; });
+    else notasLidas = false;
   }
   // 🩸 26/09 (auditoria TELA-1/TELA-2): a subpasta aberta, o filtro de etapa e a etapa selecionada eram globais e
   // passavam pro próximo projeto (Arquivos travava em "não é deste projeto"; o quadro filtrava por etapa que nem existe)
@@ -700,6 +708,7 @@ async function carregarProjeto(id) {
     Object.keys(FOTO_URL).forEach((k) => { try { URL.revokeObjectURL(FOTO_URL[k]); } catch (_) {} }); FOTO_URL = {};
   }
   PROJ = proj; MEMBROS = membros; TAR = t.data; PESSOAS_T = tp.data; ATAS = a.data; PAPEL = papel.data; NOTAS = notas;
+  CONTATOS_LIDOS = contatosLidos; NOTAS_LIDAS = notasLidas;
   TEM_CHK = temChk; CHK = temChk ? ck.data : []; ETQ = temChk ? et.data : []; TETQ = temChk ? te.data : [];
   TEM_EMI = temEmi; EMI = temEmi ? em.data : []; EMI_EV = temEmi ? ev.data : [];
   DEST = de.error ? [] : de.data; TEM_FOTOS = !fo.error; FOTOS = fo.error ? [] : fo.data;
@@ -1470,6 +1479,19 @@ async function salvarColuna(id) {
   if (error) return falhou(error, 'Não movi');
   fecharModal(); await recarregar(); toast('Movido para ' + stT(st));
 }
+// 🩸 12/10 (auditoria ADM-6): o que está digitado no cartão aberto e ainda não foi salvo. Subir/descer na coluna,
+// editar ou apagar um comentário e o "Voltar" do Excluir reabriam o cartão DO BANCO: título, descrição, prazo, pessoas
+// e o comentário pela metade sumiam sem aviso. Agora quem sai do cartão por um desses caminhos volta pro que estava
+// digitando (o mesmo `rascunho` que o aviso "quem é de fora vai ver" já usava).
+function rascunhoDoCartao(id) {
+  const t = TAR.find((x) => x.id === id);
+  if (!t || !CART || CART.id !== id || !$('ct-t') || !$('ct-st')) return null;
+  return { mud: { titulo: $('ct-t').value, etapa: $('ct-e').value || null, prazo: $('ct-p').value || null, descricao: $('ct-d').value || null, do_cliente: $('ct-cli').checked },
+    st: $('ct-st').value || t.status, pessoas: [...CART.pessoas], comentario: $('ct-com') ? $('ct-com').value : '' };
+}
+let RASC = null;
+function sairDoCartao(id) { RASC = { id, r: rascunhoDoCartao(id) }; }
+function voltarAoCartao(id) { const r = RASC && RASC.id === id ? RASC.r : null; RASC = null; return abrirCartao(id, r); }
 async function abrirCartao(id, rascunho) {
   if (souFornecedor()) return abrirCartaoFornecedor(id);
   const t = TAR.find((x) => x.id === id); if (!t) return;
@@ -1521,6 +1543,7 @@ async function abrirCartao(id, rascunho) {
       ${podeApagar ? `<button class="btn btn-r btn-s" onclick="apagarCartao('${id}')">Excluir cartão</button>` : ''}
     </aside></div>
     <div class="rodape"><button class="btn" onclick="fecharModal()">Fechar</button><button class="btn btn-d" onclick="salvarCartao('${id}')">Salvar</button></div>`, true);
+  if (rascunho && rascunho.comentario && $('ct-com')) $('ct-com').value = rascunho.comentario;     // ADM-6: o comentário pela metade também volta
   carregarComentarios(id);
 }
 
@@ -1543,26 +1566,28 @@ const escRe = (s) => String(s || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 let COMS = [];
 function editarComentario(cid, tid) {
   const c = COMS.find((x) => x.id === cid); if (!c || c.autor !== EU.id) return;
+  sairDoCartao(tid);
   abrirModal('Editar comentário', `<textarea id="ec-t" class="in" rows="4" maxlength="5000">${esc(c.texto)}</textarea>
-    <div class="rodape"><button class="btn" onclick="abrirCartao('${tid}')">Voltar</button><button class="btn btn-d" id="ec-ok">Salvar</button></div>`);
+    <div class="rodape"><button class="btn" onclick="voltarAoCartao('${tid}')">Voltar</button><button class="btn btn-d" id="ec-ok">Salvar</button></div>`);
   $('ec-ok').onclick = async () => {
     const txt = $('ec-t').value.trim(); if (!txt) return toast('O comentário não pode ficar vazio.', true);
     $('ec-ok').disabled = true;
     const { error } = await sb.from('escritorio_comentarios').update({ texto: txt }).eq('id', cid);
     if (error) { $('ec-ok').disabled = false; return falhou(error, 'Não salvei o comentário'); }
-    toast('Comentário editado'); abrirCartao(tid);
+    toast('Comentário editado'); voltarAoCartao(tid);
   };
 }
 function apagarComentario(cid, tid) {
   const c = COMS.find((x) => x.id === cid); if (!c) return;
+  sairDoCartao(tid);
   abrirModal('Apagar o comentário?', `<p style="margin:0;font-size:14px;white-space:pre-wrap">${esc(c.texto.slice(0, 300))}</p>
-    <div class="rodape"><button class="btn" onclick="abrirCartao('${tid}')">Voltar</button><button class="btn btn-r" id="ac-ok">Apagar</button></div>`);
+    <div class="rodape"><button class="btn" onclick="voltarAoCartao('${tid}')">Voltar</button><button class="btn btn-r" id="ac-ok">Apagar</button></div>`);
   $('ac-ok').onclick = async () => {
     $('ac-ok').disabled = true;
     const { error, count } = await sb.from('escritorio_comentarios').delete({ count: 'exact' }).eq('id', cid);
     if (error) { $('ac-ok').disabled = false; return falhou(error, 'Não apaguei'); }
-    if (!count) { toast('Só quem escreveu (ou a admin) apaga o comentário.', true); return abrirCartao(tid); }
-    toast('Comentário apagado'); abrirCartao(tid);
+    if (!count) { toast('Só quem escreveu (ou a admin) apaga o comentário.', true); return voltarAoCartao(tid); }
+    toast('Comentário apagado'); voltarAoCartao(tid);
   };
 }
 async function comentar(id) {
@@ -1614,6 +1639,7 @@ async function gravarCartao(id, rascunho) {
 async function subirDescer(id, d) {
   const t = TAR.find((x) => x.id === id), viz = TAR.filter((x) => x.status === t.status).sort((a, b) => a.posicao - b.posicao), k = viz.indexOf(t), o = viz[k + d];
   if (!o) return;
+  const digitado = rascunhoDoCartao(id);          // ADM-6: o cartão reabre com o que estava sendo digitado
   // 26/09 (auditoria TELA-5): posições empatadas faziam "subir/descer" trocar um número pelo mesmo — nada mudava.
   // Empatou: a coluna ganha 1, 2, 3… antes da troca.
   if (o.posicao === t.posicao) {
@@ -1624,7 +1650,7 @@ async function subirDescer(id, d) {
   const [a, b] = [o.posicao, t.posicao];
   const r = await Promise.all([sb.from('escritorio_tarefas').update({ posicao: a }).eq('id', t.id), sb.from('escritorio_tarefas').update({ posicao: b }).eq('id', o.id)]);
   if (r.some((x) => x.error)) return falhou(r.find((x) => x.error).error, 'Não mudei a ordem');
-  t.posicao = a; o.posicao = b; render(); abrirCartao(id);
+  t.posicao = a; o.posicao = b; render(); abrirCartao(id, digitado);
 }
 // 🩸 26/09 (auditoria TELA-4): um clique apagava o cartão com comentários, checklist, etiquetas e pessoas (cascata),
 // sem volta. Agora pede confirmação dizendo o que vai junto — no mesmo padrão de "Tirar do projeto".
@@ -1632,8 +1658,9 @@ function apagarCartao(id) {
   const t = TAR.find((x) => x.id === id); if (!t) return;
   const nChk = CHK.filter((c) => c.tarefa_id === id).length, nCom = Number(CART && CART.id === id ? CART.nComentarios || 0 : 0);
   const junto = [nCom ? `${nCom} comentário${nCom > 1 ? 's' : ''}` : 'os comentários', nChk ? `${nChk} ite${nChk > 1 ? 'ns' : 'm'} do checklist` : '', 'as etiquetas e as pessoas marcadas'].filter(Boolean).join(', ');
+  sairDoCartao(id);                                // ADM-6: o "Voltar" devolve o que estava sendo digitado
   abrirModal('Excluir o cartão?', `<p style="margin:0;font-size:14px;line-height:1.5"><b>${esc(t.titulo)}</b> some do quadro junto com ${esc(junto)}. Não dá pra desfazer.</p>
-    <div class="rodape"><button class="btn" onclick="abrirCartao('${id}')">Voltar</button><button class="btn btn-r" onclick="confirmarApagarCartao('${id}')">Excluir</button></div>`);
+    <div class="rodape"><button class="btn" onclick="voltarAoCartao('${id}')">Voltar</button><button class="btn btn-r" onclick="confirmarApagarCartao('${id}')">Excluir</button></div>`);
 }
 async function confirmarApagarCartao(id) {
   const { error, count } = await sb.from('escritorio_tarefas').delete({ count: 'exact' }).eq('id', id);
@@ -1876,8 +1903,12 @@ async function sincronizarPasta(calado) {
   if (calado) return;
   if (!r.ok) return toast(r.dados.detail || 'Não consegui atualizar o acesso.', true);
   if (r.dados.sem_conexao) return toast('O seu Google Drive está desconectado: conecte de novo pra atualizar o acesso da equipe.', true);
-  const f = (r.dados.falhas || []).length;
-  toast(`Acesso atualizado: ${r.dados.compartilhados || 0} entrou, ${r.dados.tirados || 0} saiu` + (f ? ` · ${f} não deu` : ''));
+  const f = (r.dados.falhas || []).length, sp = (r.dados.fornecedor_sem_pasta || []).length;
+  // 12/10 (auditoria ADM-10): a sincronização pode DESLIGAR a pasta de um fornecedor (a subpasta saiu da pasta do
+  // projeto) — a tela dizia só "1 saiu" e a Equipe seguia mostrando "vê a pasta X" até recarregar
+  try { await recarregar(); } catch (_) {}
+  toast(`Acesso atualizado: ${r.dados.compartilhados || 0} entrou, ${r.dados.tirados || 0} saiu` + (f ? ` · ${f} não deu` : '')
+    + (sp ? ` · ${sp} fornecedor${sp > 1 ? 'es ficaram' : ' ficou'} sem pasta (ela saiu da pasta do projeto): escolha de novo em Equipe → Editar` : ''), !!sp);
 }
 
 // ══════════════ EMISSÕES (R00, R01…) ══════════════
@@ -2582,23 +2613,28 @@ function editarPessoa(id) {
     <div class="grade g2"><div><label class="lbl" for="pe-n">Nome</label><input id="pe-n" class="in" maxlength="120" value="${esc(m.nome || '')}"></div>
       <div><label class="lbl" for="pe-f">Função</label><input id="pe-f" class="in" maxlength="60" value="${esc(m.funcao || '')}"></div>
       <div><label class="lbl">E-mail</label><input class="in" readonly value="${esc(m.email || '')}" style="background:#F8FAFC"><span class="sub" style="display:block">${m.status === 'ativo' ? 'É o e-mail do convite. Pra trocar, convide o e-mail novo.' : 'Pra trocar, cancele e convide o e-mail certo.'}</span></div>
-      <div><label class="lbl" for="pe-t">Telefone / WhatsApp</label><input id="pe-t" class="in" maxlength="40" inputmode="tel" value="${esc(m.telefone || '')}"></div></div>
+      <div><label class="lbl" for="pe-t">Telefone / WhatsApp</label><input id="pe-t" class="in" maxlength="40" inputmode="tel" value="${esc(m.telefone || '')}"${CONTATOS_LIDOS ? '' : ' disabled'}>${CONTATOS_LIDOS ? '' : '<span class="sub" style="display:block;color:#92400E">Não consegui ler o telefone agora: ele fica como está. Recarregue a página pra editar.</span>'}</div></div>
     ${m.papel === 'fornecedor' && m.status !== 'removido' ? `<div><label class="lbl" for="pe-pasta">Pasta do Drive que ele vê</label><select id="pe-pasta" class="in"><option value="">Nenhuma</option></select>
       <span class="sub" style="display:block" id="pe-pasta-sub">Uma subpasta da pasta do projeto. Ele só lê.${m.status === 'ativo' ? ' Trocar tira o acesso à pasta de antes.' : ''}</span></div>` : ''}
-    <div><label class="lbl" for="pe-o">Observação (só você vê)</label><textarea id="pe-o" rows="2" class="in" maxlength="1000">${esc(NOTAS[id] || '')}</textarea>
+    <div><label class="lbl" for="pe-o">Observação (só você vê)</label><textarea id="pe-o" rows="2" class="in" maxlength="1000"${NOTAS_LIDAS ? '' : ' disabled placeholder="Não consegui ler a observação agora: ela fica como está. Recarregue a página pra editar."'}>${esc(NOTAS[id] || '')}</textarea>
       <span class="sub" style="display:block">Valor combinado fica no financeiro, não aqui.</span></div>
     <div class="rodape"><button class="btn" onclick="fecharModal()">Cancelar</button><button class="btn btn-d" id="pe-ok" onclick="umaVez(this, () => salvarPessoa('${id}'))">Salvar</button></div>`);
   if (m.papel === 'fornecedor' && m.status !== 'removido') carregarPastasDoFornecedor('pe-pasta', 'pe-pasta-sub', m.drive_pasta_nome ? { nome: m.drive_pasta_nome } : null);
 }
 async function salvarPessoa(id) {
-  const mud = { nome: $('pe-n').value.trim() || null, funcao: $('pe-f').value.trim() || null, telefone: $('pe-t').value.trim() || null };
+  // 12/10 (auditoria ADM-7): o que a tela NÃO conseguiu ler (telefone, anotação) não é gravado — o vazio na tela
+  // era "não li", não "a admin apagou"
+  const mud = { nome: $('pe-n').value.trim() || null, funcao: $('pe-f').value.trim() || null };
+  if (CONTATOS_LIDOS) mud.telefone = $('pe-t').value.trim() || null;
   const { error } = await sb.from('escritorio_membros').update(mud).eq('id', id);
   if (error) return falhou(error, 'Não salvei');
-  const obs = $('pe-o').value.trim();
-  const n = obs
-    ? await sb.from('escritorio_membro_notas').upsert({ membro_id: id, projeto_id: PROJ.id, observacao: obs, atualizado_em: new Date().toISOString() })
-    : await sb.from('escritorio_membro_notas').delete().eq('membro_id', id);
-  if (n.error) return falhou(n.error, 'Salvei os dados, mas não a observação');
+  if (NOTAS_LIDAS) {
+    const obs = $('pe-o').value.trim();
+    const n = obs
+      ? await sb.from('escritorio_membro_notas').upsert({ membro_id: id, projeto_id: PROJ.id, observacao: obs, atualizado_em: new Date().toISOString() })
+      : await sb.from('escritorio_membro_notas').delete().eq('membro_id', id);
+    if (n.error) return falhou(n.error, 'Salvei os dados, mas não a observação');
+  }
   // 27/09 (board TELA-9): a pasta do fornecedor quem grava é o servidor (confere que é subpasta do projeto e o Drive acompanha)
   // 11/10 (ADM-2): só chama se a admin MEXEU no seletor depois de a lista chegar ("a de hoje" = não mexer)
   const m = MEMBROS.find((x) => x.id === id), sel = $('pe-pasta');
