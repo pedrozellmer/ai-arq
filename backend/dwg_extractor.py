@@ -6314,6 +6314,12 @@ _LEG_PALAVRAS_FORA = frozenset({"de", "da", "do", "das", "dos", "com", "para", "
 #: coluna (até 1,5 passo de um membro) também é amostra.
 _LEG_COLUNA_BLOCOS_MIN = 3
 _LEG_COLUNA_PASSOS = 1.5
+#: A coluna de legenda SEMEADA PELA FORMA (ver (e) em `amostras_de_legenda`,
+#: 12/10): ≥4 símbolos diferentes, cada um com o rótulo dele à direita.
+_LEG_FORMA_MIN = 4
+#: o rótulo de legenda DESCREVE ("TOMADA BAIXA", "BLOCO 14x19"): tem palavra. A
+#: etiqueta de circuito ("Q.3.1-4") e o número da vaga ("107") não têm.
+_RE_LEG_PALAVRA = re.compile(r"[A-Za-zÀ-ÿ]{4,}")
 
 
 def _nota_da_legenda(n):
@@ -6373,8 +6379,25 @@ def amostras_de_legenda(insercoes, textos):
       da coluna) de um membro também é amostra, e a coluna cresce por ela.
       Símbolo mais largo que 12h fica fora. Chave: LEGENDA_POR_COLUNA=0
       desliga sem deploy.
+
+    🩸 12/10/2026 (fila de 07/10, item j): a legenda de bloco ANÔNIMO, de
+    sigla ou de nome sem relação com o rótulo ("QZA" ao lado de "Extintor de
+    água pressurizada", "QZ-AP" de "Eletroduto aparente") não tem amostra
+    provada pelo nome — a coluna (d) nem nasce, e a legenda inteira vira peça.
+    📏 178 DXF do acervo com título de legenda: 626 → 758 amostras, +132 em 12
+    arquivos de 10 jobs e nenhuma a menos; 64 blocos só existiam na legenda.
+    🔑 (e) a coluna SEMEADA PELA FORMA (`_sementes_pela_forma`): uma coluna de
+      rótulos (c) em que ≥4 inserções diferentes têm rótulo ao lado pela
+      janela (g), os símbolos se empilham, os NOMES dos blocos e os RÓTULOS
+      são todos diferentes, todo rótulo começa à direita do símbolo dele e ao
+      menos metade deles tem palavra. As sementes entram como provadas numa
+      2ª passada de (d). Chave: LEGENDA_PELA_FORMA=0 desliga sem deploy.
+    🪤 Só ACRESCENTA: semeada, a coluna de (d) tem mais membros, o passo
+    mediano encolhe e o alcance (1,5 passo) também — 15 amostras de hoje
+    deixavam de ser alcançadas em 2 arquivos. O resultado é a união.
     """
     tx = []           # (x, y, h, palavras) — texto sem palavra conta na COLUNA
+    tx_s = []         # o texto de cada um, como está escrito (pra (e))
     for t in textos or []:
         try:
             s, x, y, h = t[0], float(t[1]), float(t[2]), float(t[3])
@@ -6382,6 +6405,7 @@ def amostras_de_legenda(insercoes, textos):
             continue
         if h > 0 and str(s or "").strip():
             tx.append((x, y, h, _palavras_do_rotulo(s)))
+            tx_s.append(" ".join(str(s).split()))
     if not tx:
         return {}
     por_palavra = defaultdict(list)
@@ -6449,6 +6473,7 @@ def amostras_de_legenda(insercoes, textos):
 
     out = {}
     provadas, resto = [], []
+    todas = []        # (nome, x0, y0, x1, y1, índice em `resto` ou None) — pra (e)
     for ins in insercoes or []:
         try:
             nome, caixa, pos = ins
@@ -6460,11 +6485,29 @@ def amostras_de_legenda(insercoes, textos):
         if h:
             out.setdefault(nome, []).append(pos)
             provadas.append((x0, x1, py, h))
+            todas.append((nome, x0, y0, x1, y1, None))
         else:
+            todas.append((nome, x0, y0, x1, y1, len(resto)))
             resto.append((nome, pos, x0, x1, py))
-    if os.environ.get("LEGENDA_POR_COLUNA", "1") != "0":
+    por_coluna = os.environ.get("LEGENDA_POR_COLUNA", "1") != "0"
+    if por_coluna:
         for nome, pos in _vizinhas_da_coluna(provadas, resto):
             out.setdefault(nome, []).append(pos)
+    if os.environ.get("LEGENDA_PELA_FORMA", "1") != "0":
+        # (e) as sementes entram como provadas numa 2ª passada de (d), e o
+        # resultado dela só ACRESCENTA ao de cima (união, inserção a inserção)
+        entra = {todas[i][5]: h for i, h in _sementes_pela_forma(todas, tx, tx_s).items()
+                 if todas[i][5] is not None}
+        if entra:
+            novas = [(resto[k][0], resto[k][1]) for k in sorted(entra)]
+            if por_coluna:
+                novas += _vizinhas_da_coluna(
+                    provadas + [(resto[k][2], resto[k][3], resto[k][4], h) for k, h in entra.items()],
+                    [r for k, r in enumerate(resto) if k not in entra])
+            tem = Counter((n, p) for n, ps in out.items() for p in ps)
+            for (nome, pos), c in Counter(novas).items():
+                for _ in range(c - tem[(nome, pos)]):
+                    out.setdefault(nome, []).append(pos)
     return out
 
 
@@ -6506,6 +6549,99 @@ def _vizinhas_da_coluna(provadas, resto):
                     achadas.append((resto[k][0], resto[k][1]))
                     cresceu = True
     return achadas
+
+
+def _sementes_pela_forma(todas, tx, tx_s) -> dict:
+    """(e) de `amostras_de_legenda`: {índice em `todas`: altura do rótulo} das
+    inserções que formam uma coluna de legenda PELA FORMA, sem o nome.
+    `todas` = [(nome, x0, y0, x1, y1, …)]; `tx` = [(x, y, h, …)] e `tx_s` o
+    texto de cada um.
+
+    A coluna de rótulos é a de (c): mesmo x (±0,5h), mesma altura (±10 %),
+    vizinhos a até 15h. Nela, cada rótulo procura o símbolo pela janela (g); a
+    coluna semeia quando ≥ `_LEG_FORMA_MIN` inserções DIFERENTES têm rótulo (o
+    símbolo com 2–3 linhas de rótulo conta uma vez), se empilham (as faixas x
+    se encostam) e:
+      • os NOMES dos blocos são todos diferentes — legenda mostra um de cada.
+        🪤 Só com "rótulos distintos" entravam a etiqueta de nível em corte
+        (17 numa coluna), a de furo e a de revestimento: o MESMO bloco repetido;
+      • os RÓTULOS são todos diferentes;
+      • todo rótulo começa À DIREITA do desenho do símbolo dele (x ≥ x1 − 0,5h)
+        e ao menos metade tem palavra (`_RE_LEG_PALAVRA`).
+        🩸 Sem estas duas, a 2ª leva da medida (arquivos > 60 MB) trouxe a VAGA
+        DE ESTACIONAMENTO numerada (bloco de nome único por inserção, o número
+        DENTRO da caixa: 23 vagas em 3 colunas) e o equipamento com etiqueta de
+        circuito — e (d), semeada por elas, engolia a fileira inteira.
+    🪤 Limites: a legenda de código curto ("LX2") e a que repete o MESMO bloco
+    em várias linhas não são semeadas. Marcar peça de verdade como legenda é
+    pior que deixar o símbolo contado: a régua é estreita de propósito.
+    """
+    if len(todas) < _LEG_FORMA_MIN or len(tx) < _LEG_FORMA_MIN:
+        return {}
+    ordem = sorted(range(len(tx)), key=lambda i: tx[i][0])
+    xs = [tx[i][0] for i in ordem]
+    ord_ins = sorted(range(len(todas)), key=lambda i: todas[i][1])
+    ix0 = [todas[i][1] for i in ord_ins]
+    visto, sem = set(), {}
+    for i0 in ordem:
+        if i0 in visto:
+            continue
+        x, _y, h = tx[i0][:3]
+        viz = [k for k in ordem[bisect_left(xs, x - 0.5 * h):bisect_right(xs, x + 0.5 * h)]
+               if abs(tx[k][2] - h) <= 0.1 * h]
+        viz.sort(key=lambda k: -tx[k][1])
+        visto.update(viz)
+        colunas, col = [], []
+        for k in viz:
+            if col and tx[col[-1]][1] - tx[k][1] > _LEG_COLUNA_H * h:
+                colunas.append(col)
+                col = []
+            col.append(k)
+        colunas.append(col)
+        for col in colunas:
+            if len(col) < _LEG_FORMA_MIN:
+                continue
+            par = {}                                  # inserção → o 1º rótulo dela (o de cima)
+            for k in col:
+                tx_, ty, th = tx[k][:3]
+                melhor = None
+                for i in ord_ins[bisect_left(ix0, tx_ - (_LEG_LARGURA_H + _LEG_JANELA_H) * th):
+                                 bisect_right(ix0, tx_ + th)]:
+                    _n, x0, y0, x1, y1 = todas[i][:5]
+                    if not (x0 - th <= tx_ <= x1 + _LEG_JANELA_H * th) or (x1 - x0) > _LEG_LARGURA_H * th:
+                        continue
+                    if max(0.0, y0 - (ty + th), ty - y1) > th:
+                        continue
+                    if melhor is None or x1 > todas[melhor][3]:
+                        melhor = i
+                if melhor is not None:
+                    par.setdefault(melhor, k)
+            if len(par) < _LEG_FORMA_MIN:
+                continue
+            # os símbolos empilhados: a maior cadeia de faixas x que se encostam
+            cadeias, atual, fim = [], [], None
+            for i in sorted(par, key=lambda i: todas[i][1]):
+                if atual and todas[i][1] <= fim:
+                    atual.append(i)
+                    fim = max(fim, todas[i][3])
+                else:
+                    if atual:
+                        cadeias.append(atual)
+                    atual, fim = [i], todas[i][3]
+            cadeias.append(atual)
+            cad = max(cadeias, key=len)
+            if len(cad) < _LEG_FORMA_MIN:
+                continue
+            rotulos = [tx_s[par[i]] for i in cad]
+            if len({todas[i][0] for i in cad}) < len(cad) or len(set(rotulos)) < len(cad):
+                continue
+            if any(tx[par[i]][0] < todas[i][3] - 0.5 * tx[par[i]][2] for i in cad):
+                continue
+            if sum(1 for r in rotulos if _RE_LEG_PALAVRA.search(r)) * 2 < len(cad):
+                continue
+            for i in cad:
+                sem[i] = tx[par[i]][2]
+    return sem
 
 
 #: Nome que o AutoCAD dá ao bloco criado por "Colar como bloco" (PASTEBLOCK):

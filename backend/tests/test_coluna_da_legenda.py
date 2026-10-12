@@ -91,12 +91,30 @@ def test_copia_da_legenda_com_os_simbolos_empurrados():
 
 
 def test_CONTROLE_sem_a_coluna_o_rotulo_que_nao_repete_o_nome_escapa(monkeypatch):
-    """A chave desliga (d) — e prova que o caso depende dela."""
+    """A chave desliga (d) — e prova que o caso depende dela.
+
+    12/10/2026: a coluna semeada pela FORMA (e) alcança sozinha o símbolo com
+    rótulo ("SP" ao lado de "SENSOR DE PRESENÇA"); pra o controle seguir
+    falando só de (d), (e) fica desligada aqui. As duas juntas:
+    `test_sem_a_coluna_a_forma_pega_so_quem_tem_rotulo`."""
     monkeypatch.setenv("LEGENDA_POR_COLUNA", "0")
+    monkeypatch.setenv("LEGENDA_PELA_FORMA", "0")
     ins, tx = _montar(_SEGURANCA)
     out = dx.amostras_de_legenda(ins, tx)
     assert "SP" not in out and "SI" not in out and "LUM SOM" not in out, out
     assert out.get("CENTRAL DE ALARME") == [(0.0, -1.35)], out
+
+
+def test_sem_a_coluna_a_forma_pega_so_quem_tem_rotulo(monkeypatch):
+    """(d) desligada e (e) ligada: os símbolos COM rótulo viram amostra pela
+    forma; o sem rótulo ("LUM SOM") só entra pela coluna de símbolos (d)."""
+    monkeypatch.setenv("LEGENDA_POR_COLUNA", "0")
+    ins, tx = _montar(_SEGURANCA)
+    out = dx.amostras_de_legenda(ins, tx)
+    assert out.get("SP") == [(0.0, -1.80)] and out.get("SI") == [(0.0, -2.25)], out
+    assert "LUM SOM" not in out, out
+    monkeypatch.delenv("LEGENDA_POR_COLUNA")
+    assert dx.amostras_de_legenda(ins, tx).get("LUM SOM") == [(0.0, -3.15)]
 
 
 def test_CONTROLE_duas_provas_nao_fazem_coluna():
