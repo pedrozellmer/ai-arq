@@ -21165,6 +21165,30 @@ bloco — só cite os que estão no inventário deste arquivo."""
         except Exception as _eaq:
             _log_error("motor:cozinhas-acima-do-quadro", f"FALHOU: {_eaq}", job_id)
 
+        # 🩸 12/10/2026 — A SOMA ESCRITA TEM DE FECHAR. A linha cuja quantidade é o
+        # total de uma soma que a própria observação escreve ("a + b + … = T") e
+        # cujas parcelas NÃO somam T ganha o aviso (`selo_apos_soma_que_nao_fecha`).
+        # Roda aqui, sobre TODAS as linhas (DXF, PDF, depois da consolidação) e
+        # antes da trava abaixo, que tira o selo de quem carrega a marca. Não
+        # mexe na quantidade.
+        try:
+            from engine_rules import selo_apos_soma_que_nao_fecha as _regra_conta
+            _n_conta = 0
+            for _it in all_items:
+                _cf = getattr(_it, "confidence", "")
+                _cf_s, _ob_s, _avisou = _regra_conta(
+                    str(getattr(_cf, "value", _cf) or ""),
+                    str(getattr(_it, "observations", "") or ""),
+                    getattr(_it, "quantity", None))
+                if _avisou:
+                    _it.observations = _ob_s
+                    _n_conta += 1
+            if _n_conta:
+                _log_error("motor:conta-nao-fecha",
+                           f"linhas={len(all_items)} avisadas={_n_conta}", job_id, severity="info")
+        except Exception as _ecn:
+            _log_error("motor:conta-nao-fecha", f"FALHOU: {_ecn}", job_id)
+
         # ─────────────────────────────────────────────────────────────────
         # 🩸 SELO × AVISO DE REBAIXAMENTO NA MESMA LINHA (27/09/2026, estudo de
         # leitura, item 3) — a trava final. 12 linhas ✓ desde 23/09 traziam na

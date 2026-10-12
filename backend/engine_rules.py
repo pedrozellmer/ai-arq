@@ -968,6 +968,128 @@ def selo_apos_regra_da_soma(conf, obs, quantidade=None):
     return conf, obs, False
 
 
+# ══════════════════════════════════════════════════════════════════════
+#  A SOMA ESCRITA TEM DE FECHAR (12/10/2026)
+# ══════════════════════════════════════════════════════════════════════
+#: 🩸 12/10/2026 — avaliação da seção AMBIENTE ↔ ÁREA ESCRITA: a IA fez uma linha
+#: de piso com a soma de 20 ambientes, listou as 20 parcelas na observação e
+#: escreveu "= 377,36 m²". As parcelas somam 367,36. A regra da soma (acima) só
+#: tira o selo — diz, com todas as letras, que NÃO julga se a conta está certa.
+#: 📏 No banco (60 dias de cliente): 247 somas "a + b + … = T" em 65 jobs; em 123
+#: o T é a quantidade da linha, e em 5 delas (4 %) a conta não fecha — sempre
+#: soma longa (13 a 22 parcelas), erro de 1 un ou de 1 a 3 m².
+#: 🔑 A régua só AVISA e tira o selo: não troca a quantidade. Quando a conta não
+#: fecha, não dá pra saber se o erro está no total ou numa parcela que a IA
+#: esqueceu de escrever (regra dura nº1: não escolher um número).
+#: 🪤 Só julga a conta que lê com certeza: cada parcela é um nome (opcional) e UM
+#: número no fim; parêntese, multiplicação ou número ambíguo na cadeia → não
+#: julga. Tolerância de arredondamento: 0,011 + 0,005 por parcela.
+MARCA_CONTA_NAO_FECHA = "⚠ CONTA NÃO FECHA"
+
+_RE_TOTAL_ESCRITO = _re.compile(r"=\s*(\d[\d.,]*\d|\d)")
+#: o número "solto" de uma parcela — não o que está colado a letra ("Layout1")
+_RE_NUMERO_SOLTO = _re.compile(r"(?<![\w.,])(\d[\d.,]*\d|\d)(?![\w]|[.,]\d)")
+#: depois do número da parcela só pode vir a unidade (e a aspa que fecha a citação)
+_RE_FIM_DA_PARCELA = _re.compile(
+    r"^\s*(?:m²|m2|m³|m3|ml|m|un|und|unid|pç|pc|kg)?\.?\s*['\"\u2019\u201d]?\s*$", _re.IGNORECASE)
+#: o que faz da parcela uma CONTA (não um número): a régua não julga
+_RE_PARCELA_COM_CONTA = _re.compile(r"\d\s*[x×*/]\s*\d|[-−–]\s*\d")
+_RE_PARENTESE = _re.compile(r"[()\[\]]")
+#: fim de frase no meio da cadeia: não dá pra saber onde ela começa — não julga
+#: (🪤 "Vest. Fem 23,70" tem ponto e espaço e NÃO é fim de frase)
+_RE_QUEBRA_DE_FRASE = _re.compile(r"[.;:!?]\s|\n|\s\|\s|\s[—–]\s")
+#: número que é RÓTULO da parcela ("DEFENSOR 02 8,37", "SALA 1=8,37"): inteiro curto
+_RE_ROTULO_NUMERICO = _re.compile(r"^\d{1,3}$")
+_CONTA_JANELA = 12            # no 1º pedaço, quanto do texto antes do número é da parcela
+_CONTA_ID_MIN = 10000         # inteiro daqui pra cima, somando pra um total pequeno, é ID
+
+
+def _valor_da_parcela(pedaco, primeiro):
+    """(valor, tem "=") de UM pedaço da cadeia, ou None quando o pedaço não é
+    "nome (opcional) + UM número". No 1º pedaço o que vem antes é a frase: vale
+    só a vizinhança do último número."""
+    nums = list(_RE_NUMERO_SOLTO.finditer(pedaco))
+    if not nums:
+        return None
+    ultimo = nums[-1]
+    if not _RE_FIM_DA_PARCELA.match(pedaco[ultimo.end():]):
+        return None
+    trecho = pedaco[max(0, ultimo.start() - _CONTA_JANELA):] if primeiro else pedaco
+    if _RE_PARCELA_COM_CONTA.search(trecho):
+        return None
+    # parêntese: no meio da cadeia é sub-conta ("WC (2,40+8,30)"); no 1º pedaço só
+    # conta o que está COLADO ao número — "(folha X): SALA 16,16" é a frase de antes
+    if _RE_PARENTESE.search(pedaco[max(0, ultimo.start() - 2):] if primeiro else pedaco):
+        return None
+    if not primeiro:
+        if _RE_QUEBRA_DE_FRASE.search(pedaco[:ultimo.start()]):
+            return None
+        # outro número no pedaço só pode ser rótulo ("02"): "8,30 e 2,60" é dúvida
+        if any(not _RE_ROTULO_NUMERICO.match(n.group(1)) for n in nums[:-1]):
+            return None
+        # "=" no pedaço só como nome=valor: UM, colado ao número ("1 + 2 = 3 e 4 + 5"
+        # são duas contas na mesma frase — não julga)
+        ig = pedaco.rfind("=")
+        if ig >= 0 and (pedaco.count("=") > 1 or pedaco[ig + 1:ultimo.start()].strip()):
+            return None
+    v = num_br_para_float(ultimo.group(1))
+    if v is None:
+        return None
+    return v, "=" in trecho
+
+
+def soma_escrita_que_nao_fecha(obs, quantidade):
+    """(soma das parcelas, total escrito, nº de parcelas) quando a observação traz
+    "a + b + … = T", T é a quantidade da linha e as parcelas NÃO somam T. None
+    em todos os outros casos — inclusive quando a conta não se lê com certeza."""
+    try:
+        q = float(quantidade)
+    except (TypeError, ValueError):
+        return None
+    texto = str(obs or "")
+    if "+" not in texto or "=" not in texto:
+        return None
+    for m in _RE_TOTAL_ESCRITO.finditer(texto):
+        total = num_br_para_float(m.group(1))
+        if total is None or abs(total - q) >= 0.011:
+            continue
+        pedacos = texto[:m.start()].split("+")
+        if len(pedacos) < 2:
+            continue
+        lidos = [_valor_da_parcela(pd, k == 0) for k, pd in enumerate(pedacos)]
+        if any(x is None for x in lidos):
+            continue
+        # 🪤 "'SALA 1=8,37 + SALA 2=8,37'": o "=" que achamos pode ser o de DENTRO da
+        # última parcela (nome=valor). Se as outras têm "=" e a última não, é esse.
+        if any(ig for _v, ig in lidos[:-1]) and not lidos[-1][1]:
+            continue
+        # 🩸 12/10/2026, no passado (1.149 linhas do banco): "IDs 513992 + 1316622 = 2"
+        # — as parcelas são IDENTIFICADORES de elemento e o "total" é quantos são. Os 2
+        # únicos falsos alarmes da medida, um deles na única linha com selo.
+        if total < 1000 and all(v >= _CONTA_ID_MIN and v == int(v) for v, _ig in lidos):
+            continue
+        soma = sum(v for v, _ig in lidos)
+        if abs(soma - total) > 0.011 + 0.005 * len(lidos):
+            return round(soma, 2), total, len(lidos)
+    return None
+
+
+def selo_apos_soma_que_nao_fecha(conf, obs, quantidade):
+    """(conf, obs, avisou) — a linha cuja quantidade é o total de uma soma escrita
+    que não fecha ganha o aviso e sai sem selo. Não mexe na quantidade."""
+    t = str(obs or "")
+    if MARCA_CONTA_NAO_FECHA in t:
+        return conf, obs, False
+    achou = soma_escrita_que_nao_fecha(t, quantidade)
+    if not achou:
+        return conf, obs, False
+    soma, total, n = achou
+    aviso = ("%s — as %d parcelas escritas na observação somam %s e a linha traz %s. "
+             "Confira qual dos dois vale antes de usar. "
+             % (MARCA_CONTA_NAO_FECHA, n, _num_br(soma), _num_br(total)))
+    return "estimado", aviso + t, True
+
+
 def num_br_para_float(bruto):
     """'12.642,38' → 12642.38. O parser pt-BR ÚNICO do motor.
 
@@ -6310,7 +6432,7 @@ MARCAS_DE_REBAIXAMENTO = (MARCA_NUMERO_DO_QUADRO,
                           MARCA_MENOS_PAREDE, MARCA_UNIDADE_DE_CONTAGEM,
                           MARCA_EXTRACAO_COM_RESSALVA, MARCA_QUANTIDADE_RECUPERADA,
                           MARCA_ESCALA_DIVERGENTE, MARCA_ACIMA_DO_QUADRO,
-                          MARCA_ESCOPO_MOBILIARIO)
+                          MARCA_ESCOPO_MOBILIARIO, MARCA_CONTA_NAO_FECHA)
 
 
 _RE_ELETRODOMESTICO = _re.compile(
