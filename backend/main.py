@@ -751,6 +751,9 @@ _STAGES_DIAGNOSTICO = frozenset({
     "motor:refaz-planilha-admin",
     "libredwg:usado-no-fluxo", "libredwg:qualidade", "libredwg:batch",
     "pdfvec:shadow", "pdfvec:promo", "pdfvec:memoria", "dxfrooms:shadow",
+    # 12/10: SOMBRA — a escala em uso da página de PDF ao lado do grupo mais
+    # forte das cotas dela (ver `_linha_das_cotas_x_escala`). Não decide nada.
+    "pdfvec:cotas-x-escala",
     "dwg:aec-detectado-no-upload",
     "admin:filhote", "admin:filhote-inicio", "admin:filhote-email",
     "admin:desarquivar-fixture", "admin:reparo-aviso-falso",
@@ -14004,6 +14007,40 @@ def _dedupe_revisoes(file_paths: list) -> tuple:
 _PREVIEW_MOVE_MAX_MB = float(os.getenv("PREVIEW_MOVE_MAX_MB", "50"))
 
 
+def _linha_das_cotas_x_escala(prancha, vm) -> str:
+    """A linha do log `pdfvec:cotas-x-escala` de uma página de PDF medida, ou
+    "" quando não há o que registrar.
+
+    🔬 12/10/2026 — SOMBRA (fila de 07/10, item n). A escala que a medição usa
+    (carimbo, rótulo da vista, texto, viewport ou votação) ao lado do grupo
+    mais forte das cotas da folha contra a própria linha de cota
+    (`pdfvec_cotas.resumo_do_grupo_forte`; só existe quando o grupo é forte).
+    A regra que barraria a "folha exportada noutro tamanho de papel" não subiu:
+    no acervo a assinatura dela não se separa de um 1:50 lido 5 % alto. Este
+    registro é o que falta pra decidir com número de produção.
+    🚫 Não decide nada. `chave=valor` de propósito: é linha pra ser contada.
+    """
+    _vm = vm if isinstance(vm, dict) else {}
+    _g = _vm.get("cotas_grupo")
+    if not isinstance(_g, dict):
+        return ""
+    try:
+        _esc = float(_vm.get("scale") or 0)
+        _ge = float(_g.get("escala") or 0)
+        _pad = float(_g.get("padrao") or 0)
+        _fam = int(_g.get("familias") or 0)
+        _amp = float(_g.get("amplitude") or 0)
+    except (TypeError, ValueError):
+        return ""
+    if _esc <= 0 or _ge <= 0:
+        return ""
+    return ("%s: escala=%g fonte=%s validada=%s grupo=%g familias=%d amplitude=%g "
+            "razao=%.3f padrao=%g razao_padrao=%.3f"
+            % (prancha, _esc, str(_vm.get("scale_src") or "?"),
+               "sim" if _vm.get("escala_validada") else "nao",
+               _ge, _fam, _amp, _ge / _esc, _pad, (_ge / _pad) if _pad > 0 else 0.0))
+
+
 # 🪤 21/09: `_FONTE_DA_ESCALA` e `_frase_da_escala_sem_prova` moravam aqui.
 # Subiram pra dentro da fatia que os testes de honestidade executam (perto de
 # `_PREFIXO_CABE_NA_GEOMETRIA`): a frase do número preservado chama as duas.
@@ -18188,6 +18225,16 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     elif _tipo_saida == "sem_escala":
                         _log_error("pdfvec:sem-escala", f"{_stem} ({filename}): {_det_saida}",
                                    job_id, severity="warning")
+                    # 🔬 12/10/2026 — SOMBRA (fila de 07/10, item n): a escala em
+                    # uso × o grupo mais forte das cotas da folha. Só registro —
+                    # no try PRÓPRIO: uma falha aqui cairia no `except` de baixo e
+                    # a prancha perderia a medição por causa de uma linha de log.
+                    try:
+                        _ln_cx = _linha_das_cotas_x_escala(_stem, _vm)
+                        if _ln_cx:
+                            _log_error("pdfvec:cotas-x-escala", _ln_cx, job_id, severity="info")
+                    except Exception:
+                        pass
                     if _vm.get("escala_validada") and (_vm.get("n_rooms") or _vm.get("walls_m")):
                         _linhas = [
                             "",

@@ -149,12 +149,19 @@ def _split_rect_tokens(text: str, l: float, b: float, r: float,
 # ───────────────────── extração de tokens (pypdfium2) ─────────────────────
 
 def extract_cota_tokens(pdf_path: str, page_index: int = 0,
-                        region_bbox: Optional[Sequence[float]] = None) -> list[dict]:
+                        region_bbox: Optional[Sequence[float]] = None,
+                        _todos: Optional[list] = None) -> list[dict]:
     """Extrai tokens numéricos com cara de cota e posição (pontos PDF, y pra
     cima). region_bbox (x0, y0, x1, y1) filtra pela view principal.
 
     Retorna [{"text", "value_m", "center": (x, y), "bbox"}]. PDF sem texto
     extraível (cota plotada como curva) devolve [] — honesto, sem chute.
+
+    `_todos` (12/10/2026, sombra do grupo de cotas): uma lista que recebe uma
+    CÓPIA de cada token da FOLHA INTEIRA, dentro ou fora da região, até
+    MAX_TOKENS — na mesma passada de leitura, que é o que custa (nas 545
+    páginas PDF do acervo: mediana 0,03 s, pior 5,7 s). O que a função DEVOLVE
+    não muda — conferido nas mesmas 545, com e sem a lista.
 
     📏 28/09/2026 (estudo de leitura, D7c): o pypdfium2 dá a posição no
     espaço BRUTO da página; paredes e salas vêm no espaço do pdfminer, que
@@ -197,14 +204,21 @@ def extract_cota_tokens(pdf_path: str, page_index: int = 0,
                     if val is None:
                         continue
                     cx, cy = tok["center"]
+                    dentro = True
                     if region_bbox is not None:
                         x0, y0, x1, y1 = region_bbox
-                        if not (x0 <= cx <= x1 and y0 <= cy <= y1):
-                            continue
+                        dentro = x0 <= cx <= x1 and y0 <= cy <= y1
+                    guarda = _todos is not None and len(_todos) < MAX_TOKENS
+                    if not dentro and not guarda:
+                        continue
                     tok["center"] = _geo(cx, cy)
                     (qx0, qy0), (qx1, qy1) = _geo(l, b), _geo(r, t)
                     tok["bbox"] = (min(qx0, qx1), min(qy0, qy1), max(qx0, qx1), max(qy0, qy1))
                     tok["value_m"] = val
+                    if guarda:
+                        _todos.append(dict(tok))
+                    if not dentro:
+                        continue
                     tokens.append(tok)
                     if len(tokens) >= MAX_TOKENS:
                         return tokens
@@ -340,8 +354,12 @@ def match_cotas(tokens: Sequence[dict], elements: Sequence[dict],
 def validate_scale(pdf_path: str, page_index: int, scale_denominator: float,
                    region_bbox: Optional[Sequence[float]] = None,
                    walls: Optional[Sequence[dict]] = None,
-                   rooms: Optional[Sequence[dict]] = None) -> dict:
+                   rooms: Optional[Sequence[dict]] = None,
+                   _todos: Optional[list] = None) -> dict:
     """Valida a escala da view principal cruzando cotas escritas × medido.
+
+    `_todos`: repassado ao `extract_cota_tokens` (os tokens da folha inteira,
+    pra sombra do grupo de cotas). Não entra na validação.
 
     Retorna:
       n_cotas   : tokens com cara de cota DENTRO da view principal
@@ -366,7 +384,9 @@ def validate_scale(pdf_path: str, page_index: int, scale_denominator: float,
 
     NÃO promove nada — evidência pra outra etapa decidir.
     """
-    tokens = extract_cota_tokens(pdf_path, page_index, region_bbox)
+    # sem a lista da sombra, a chamada é EXATAMENTE a de sempre
+    tokens = (extract_cota_tokens(pdf_path, page_index, region_bbox) if _todos is None
+              else extract_cota_tokens(pdf_path, page_index, region_bbox, _todos=_todos))
     den = float(scale_denominator)
     m_per_pt = PT_TO_M * den
     paredes = _elements_from_walls(walls)
@@ -664,18 +684,11 @@ def _familias(valores) -> int:
     return n
 
 
-def juiz_desmente(pares: Sequence[tuple[float, float]], den: float) -> Optional[dict]:
-    """O grupo de escala que desmente a prova de `den`, ou None se ela fica.
-
-    Desmente só com as três: (1) há um grupo de escala implícita com ≥
-    JUIZ_MIN_FAMILIAS famílias de valor e amplitude ≥ JUIZ_MIN_AMPLITUDE;
-    (2) ele está a mais de JUIZ_OUTRA_ESCALA de `den`; (3) o apoio de `den`
-    (famílias a ±JUIZ_APOIO_REL) × JUIZ_PROPORCAO fica abaixo dele. Puro.
-    """
-    if not pares or not den or den <= 0:
-        return None
-    ps = sorted(pares)
-    melhor = None                                   # (famílias, amplitude, escala)
+def _grupo_mais_forte(ps) -> Optional[tuple]:
+    """(famílias, amplitude, escala) do grupo de escala implícita com mais
+    famílias de valor em `ps` (os pares JÁ em ordem), ou None sem pares. A
+    mesma busca serve ao juiz da prova e à sombra do grupo de cotas."""
+    melhor = None
     j = 0
     for i, (s, _) in enumerate(ps):
         if j < i:
@@ -688,6 +701,21 @@ def juiz_desmente(pares: Sequence[tuple[float, float]], den: float) -> Optional[
         fam = _familias(vals)
         if melhor is None or fam > melhor[0]:
             melhor = (fam, max(vals) / min(vals), ps[(i + j - 1) // 2][0])
+    return melhor
+
+
+def juiz_desmente(pares: Sequence[tuple[float, float]], den: float) -> Optional[dict]:
+    """O grupo de escala que desmente a prova de `den`, ou None se ela fica.
+
+    Desmente só com as três: (1) há um grupo de escala implícita com ≥
+    JUIZ_MIN_FAMILIAS famílias de valor e amplitude ≥ JUIZ_MIN_AMPLITUDE;
+    (2) ele está a mais de JUIZ_OUTRA_ESCALA de `den`; (3) o apoio de `den`
+    (famílias a ±JUIZ_APOIO_REL) × JUIZ_PROPORCAO fica abaixo dele. Puro.
+    """
+    if not pares or not den or den <= 0:
+        return None
+    ps = sorted(pares)
+    melhor = _grupo_mais_forte(ps)
     if not melhor:
         return None
     fam, amp, esc = melhor
@@ -708,6 +736,48 @@ def prova_desmentida_pela_linha_de_cota(pdf_path: str, page_index: int, scale_de
     da implantação não podem derrubar a prova da planta."""
     tokens = extract_cota_tokens(pdf_path, page_index, region_bbox)
     return juiz_desmente(pares_cota_linha(tokens, segs), float(scale_denominator))
+
+
+# ───────────── SOMBRA: o grupo de cotas da folha × a escala em uso ─────────────
+#
+# 🔬 12/10/2026 — fila de 07/10, item (n). A escala DECLARADA (carimbo, rótulo
+# da vista, texto da folha) entra sem passar por juiz nenhum, e um PDF escrevia
+# "1:75" com as cotas dando 1:53. A regra que o barraria ("a declarada ÷ √2")
+# NÃO subiu: medida com esta mesma busca nas 545 páginas PDF do acervo, a
+# assinatura não se separa de um 1:50 de verdade lido alto — dos 113 grupos
+# fortes perto de uma escala conhecida da folha, 98 ficam a ±3 %, 9 abaixo
+# (até 0,928) e 6 ACIMA (até 1,10: 1:50 lido como 1:52,3 a 1:54,3).
+# 🔑 Por isso só o REGISTRO: o grupo mais forte da folha inteira vai ao log ao
+# lado da escala em uso, pra medir em produção o que 113 casos não decidem.
+# 🚫 Não decide nada: não mexe em escala, validação, prompt nem selo.
+# ⏱️ Não relê a folha: os tokens vêm da passada que a validação já faz
+# (`_todos` do `extract_cota_tokens`); o que a sombra acrescenta é casar com os
+# traços e buscar o grupo.
+#: escalas de desenho pra dizer de qual o grupo está mais perto: a tabela da
+#: votação (ESCALAS_PADRAO) e as que ela não tem (1:40 é a do caso do H87).
+ESCALAS_DE_DESENHO: tuple[float, ...] = tuple(sorted(set(ESCALAS_PADRAO) | {40, 300, 400, 750}))
+
+
+def resumo_do_grupo_forte(pares: Sequence[tuple[float, float]]) -> Optional[dict]:
+    """O grupo mais forte de `pares` (`pares_cota_linha`), se for FORTE pela
+    régua do juiz (≥ JUIZ_MIN_FAMILIAS famílias, amplitude ≥
+    JUIZ_MIN_AMPLITUDE); senão None. Puro.
+
+    Devolve a escala do grupo, as famílias, a amplitude, a escala de desenho
+    mais próxima ("padrao") e a RAZÃO crua grupo ÷ ela — sem sim/não: a faixa
+    do que conta como "é escala de desenho" é o que a sombra existe pra medir.
+    """
+    if not pares:
+        return None
+    melhor = _grupo_mais_forte(sorted(pares))
+    if not melhor:
+        return None
+    fam, amp, esc = melhor
+    if fam < JUIZ_MIN_FAMILIAS or amp < JUIZ_MIN_AMPLITUDE or esc <= 0:
+        return None
+    padrao = min(ESCALAS_DE_DESENHO, key=lambda p: max(esc / p, p / esc))
+    return {"escala": round(esc, 1), "familias": fam, "amplitude": round(amp, 1),
+            "padrao": padrao, "razao_padrao": round(esc / padrao, 3)}
 
 
 # ─────────────────────────── auto-teste no corpus ───────────────────────────

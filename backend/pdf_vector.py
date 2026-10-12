@@ -567,10 +567,16 @@ def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
     # do bbox da view medida, então "escala_validada" vale SÓ pra ela —
     # "cotas_escopo" marca isso no log.
     _t_et = time.time()
+    # 🔬 12/10/2026 — SOMBRA (fila de 07/10, item n): os tokens de cota da FOLHA
+    # INTEIRA, guardados na mesma passada de leitura da validação (ver abaixo).
+    # 🪤 Interruptor PDFVEC_GRUPO_DE_COTAS=0: a chamada volta a ser a de sempre.
+    _sombra_cotas = _segs is not None and os.environ.get("PDFVEC_GRUPO_DE_COTAS", "1") != "0"
+    _cotas_folha: list = []
     try:
         from pdfvec_cotas import validate_scale
         cot = validate_scale(pdf_path, page_index, room_den, room_bbox,
-                             walls=walls_ok, rooms=rooms_ok)
+                             walls=walls_ok, rooms=rooms_ok,
+                             **({"_todos": _cotas_folha} if _sombra_cotas else {}))
         out["cotas_encontradas"] = cot["n_cotas"]
         out["cotas_batem"] = cot["n_matches"]
         out["escala_validada"] = bool(cot["validada"])
@@ -601,6 +607,22 @@ def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
             out["cotas_escopo"] = "view_principal"
     except Exception as e:
         out["err_cotas"] = f"{type(e).__name__}: {e}"[:120]
+    if _sombra_cotas and _cotas_folha:
+        # 🔬 12/10/2026 — SOMBRA: o grupo mais forte das cotas da folha contra
+        # a própria linha de cota, pra ir ao log ao lado da escala em uso (o
+        # main grava `pdfvec:cotas-x-escala`). A escala declarada entra sem juiz
+        # nenhum, e a regra que a julgaria não se sustentou no acervo — falta
+        # número de produção. 🚫 NÃO decide nada: escala, validação e medidas
+        # ficam como estão.
+        # 🪤 O erro NÃO vai numa chave `err_*`: o main lê todo `err_*` com cara
+        # de falta de memória como prancha não medida e avisa o cliente.
+        try:
+            from pdfvec_cotas import pares_cota_linha, resumo_do_grupo_forte
+            _gr = resumo_do_grupo_forte(pares_cota_linha(_cotas_folha, _segs[0]))
+            if _gr:
+                out["cotas_grupo"] = _gr
+        except Exception as e:
+            out["cotas_grupo_erro"] = f"{type(e).__name__}: {e}"[:120]
     _marca("cotas", _t_et)
 
     # 5) POR LAYER (descoberta 07/07: OCG preserva os layers do CAD no PDF) —
