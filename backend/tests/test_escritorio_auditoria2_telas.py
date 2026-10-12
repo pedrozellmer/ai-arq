@@ -146,23 +146,26 @@ function toast(t) { avisos.push(t); } function stT(k) { return k; }
 function etapaDoFiltro() { return ''; } function meuMembro() { return { id: 'm-eu' }; }
 function avisoCliente() { return 'AVISO'; }
 function confirmarDeFora(av, botao, seguir) { perguntou = botao; SEGUIR = seguir; }
-var MEMBROS = [];
+var MEMBROS = [], GRAVANDO = {}, CONTA = 1, releu = 0;
+function recarregar() { releu++; }
 function povoar() { MEMBROS = []; for (var i = 0; i < CLIENTES; i++) MEMBROS.push({ status: 'ativo', papel: 'cliente' }); }
 var sb = { from: function (t) { return {
-  update: function (m) { gravado.push({ t: t, m: m }); return { eq: function () { return { error: null }; } }; },
+  update: function (m, o) { gravado.push({ t: t, m: m, contou: !!(o && o.count === 'exact') });
+    return { eq: function () { return { error: null, count: CONTA }; } }; },
   insert: function (o) { gravado.push({ t: t, o: o });
     return { error: null, select: function () { return { single: function () { return { data: Object.assign({ id: 'novo' }, o), error: null }; } }; } }; } }; } };
 """
 _QUADRO = [_QUADRO_BASE, _linha(E, "const podeLevar = "), _linha(E, "const clientesAtivos = "),
            _linha(E, "const saiDaListaDoCliente = "),
+           sem_await(funcao_js("umaGravacao", "escritorio.html", E)), sem_await(funcao_js("semAcessoAoCartao", "escritorio.html", E)),
            sem_await(funcao_js("mover", "escritorio.html", E)), sem_await(funcao_js("criarCartao", "escritorio.html", E))]
 
 
-def _mover(status, do_cliente, destino, clientes=1, seguir=False):
-    cena = ("CLIENTES = %d; povoar(); var TAR = [{ id: 't1', status: %s, do_cliente: %s, posicao: 1 }];"
-            % (clientes, json.dumps(status), "true" if do_cliente else "false"))
+def _mover(status, do_cliente, destino, clientes=1, seguir=False, conta=1):
+    cena = ("CLIENTES = %d; CONTA = %d; povoar(); var TAR = [{ id: 't1', status: %s, do_cliente: %s, posicao: 1 }];"
+            % (clientes, conta, json.dumps(status), "true" if do_cliente else "false"))
     acao = "mover('t1', " + json.dumps(destino) + ", 0);" + (" if (SEGUIR) SEGUIR();" if seguir else "")
-    return _js(_QUADRO + [cena, acao], "{ gravado: gravado, avisos: avisos, perguntou: perguntou, cartao: TAR[0] }")
+    return _js(_QUADRO + [cena, acao], "{ gravado: gravado, avisos: avisos, perguntou: perguntou, cartao: TAR[0], releu: releu }")
 
 
 def test_cartao_que_volta_de_aguardando_cliente_sai_da_lista_do_cliente():
@@ -530,3 +533,170 @@ def test_o_cliente_recebe_so_a_data_e_a_admin_ve_o_botao():
     assert "onclick=\"concluirProjeto(false)\">Reabrir</button>" in v
     assert v.index("if (!souAdmin()) return") < v.index("concluirProjeto(true)")      # o botão vem depois da porta da admin
     assert "pct = p.concluido_em ? 100 : et.length && i >= 0 ?" in funcao_js("telaLista", "escritorio.html", E)
+
+
+# ══ 11. grupo A dos achados pequenos (12/10): dado que se perdia e gravação que mentia ══
+def test_gravacao_que_o_banco_filtrou_nao_vira_movido():
+    """BANCO-5: quem perdeu o acesso ao cartão com ele aberto lia "Movido" — o banco devolve 0 linha, sem erro."""
+    r = _mover("dev", False, "afazer", conta=0)
+    assert r["gravado"][0]["contou"] is True                       # a gravação pede a contagem
+    assert r["cartao"]["status"] == "dev"                          # o cartão volta pro lugar
+    assert r["avisos"] == ["Não gravei: você não tem mais acesso a este cartão. Atualizei a tela."] and r["releu"] == 1
+    r = _mover("dev", False, "afazer")                             # controle: gravou 1 linha
+    assert r["cartao"]["status"] == "afazer" and r["avisos"] == ["Movido para afazer"] and r["releu"] == 0
+
+
+def test_salvar_o_cartao_tambem_confere_a_contagem():
+    """BANCO-5. Guarda de TEXTO, declarado."""
+    g = funcao_js("gravarCartao", "escritorio.html", E)
+    assert ".update(mud, { count: 'exact' }).eq('id', id);" in g
+    assert g.index("if (!count) { fecharModal(); return semAcessoAoCartao(); }") < g.index("escritorio_tarefa_pessoas")
+    assert ".update({ status: st, posicao: pos }, { count: 'exact' })" in funcao_js("salvarColuna", "escritorio.html", E)
+
+
+def test_uma_gravacao_por_vez():
+    """ADM-8: enquanto a 1ª não voltou, a 2ª (Enter repetido, clique duplo) não faz nada."""
+    real = funcao_js("umaGravacao", "escritorio.html", E)
+    r = _js(["var GRAVANDO = {}, n = 0;", real,
+             "umaGravacao('x', function () { n++; return new Promise(function () {}); });"      # a 1ª fica pendurada
+             "umaGravacao('x', function () { n += 10; });"                                      # a 2ª do MESMO tipo: nada
+             "umaGravacao('y', function () { n += 100; });"],                                   # outro tipo: passa
+            "[n, !!GRAVANDO.x]")
+    assert r == [101, True]
+    solta = sem_await(real)                                         # sem o adiamento: uma depois da outra, as duas gravam
+    assert _js(["var GRAVANDO = {}, n = 0;", solta, "umaGravacao('x', function () { n++; }); umaGravacao('x', function () { n++; });"],
+               "[n, Object.keys(GRAVANDO).length]") == [2, 0]
+    assert _js(["var GRAVANDO = {};", solta, "try { umaGravacao('x', function () { throw new Error('caiu'); }); } catch (e) {}"],
+               "Object.keys(GRAVANDO).length") == 0                 # erro não deixa a trava presa
+
+
+def test_quem_grava_passa_pela_trava():
+    """ADM-8. Guarda de TEXTO, declarado: cartão, item do checklist, comentário, cancelar convite e virar tarefa."""
+    for fn, chave in (("criarCartao", "cartao"), ("addChk", "chk"), ("comentar", "comentario"), ("confirmarTirar", "tirar"),
+                      ("virarTarefa", "virar")):
+        corpo = funcao_js(fn, "escritorio.html", E)
+        assert ("return umaGravacao('%s', async () => {" % chave) in corpo, fn
+        assert corpo.index("umaGravacao(") < corpo.index("sb.from("), fn        # a trava vem ANTES de gravar
+
+
+def _rascunho(extra=""):
+    pre = ("var campos = { 'ct-t': { value: 'Título digitado' }, 'ct-e': { value: 'Obra' }, 'ct-p': { value: '2026-11-01' },"
+           "  'ct-d': { value: 'Três parágrafos' }, 'ct-cli': { checked: true }, 'ct-st': { value: 'dev' }, 'ct-com': { value: '@Ana confere' } };"
+           "function $(id) { return campos[id] || null; }"
+           "var TAR = [{ id: 't1', status: 'afazer' }], CART = { id: 't1', pessoas: ['m1', 'm2'] }, abriu = [];"
+           "function abrirCartao(id, r) { abriu.push([id, r]); }")
+    fns = [funcao_js(n, "escritorio.html", E) for n in ("rascunhoDoCartao", "sairDoCartao", "voltarAoCartao")]
+    return [pre, "var RASC = null;"] + fns + [extra]
+
+
+def test_o_que_estava_digitado_no_cartao_volta():
+    """ADM-6: subir/descer, editar ou apagar comentário e "Excluir → Voltar" reabriam o cartão do banco."""
+    r = _js(_rascunho(), "rascunhoDoCartao('t1')")
+    assert r == {"mud": {"titulo": "Título digitado", "etapa": "Obra", "prazo": "2026-11-01", "descricao": "Três parágrafos",
+                         "do_cliente": True}, "st": "dev", "pessoas": ["m1", "m2"], "comentario": "@Ana confere"}
+    r = _js(_rascunho("sairDoCartao('t1'); campos = {}; voltarAoCartao('t1'); voltarAoCartao('t1');"), "abriu")
+    assert r[0][0] == "t1" and r[0][1]["mud"]["descricao"] == "Três parágrafos"      # volta com o digitado
+    assert r[1] == ["t1", None]                                                      # e só uma vez: depois é o do banco
+    assert _js(_rascunho("CART = { id: 'outro', pessoas: [] };"), "rascunhoDoCartao('t1')") is None
+    assert _js(_rascunho("delete campos['ct-t'];"), "rascunhoDoCartao('t1')") is None    # o cartão do fornecedor não tem título
+
+
+def test_os_caminhos_de_volta_do_cartao_usam_o_rascunho():
+    """ADM-6. Guarda de TEXTO, declarado."""
+    for fn in ("editarComentario", "apagarComentario", "apagarCartao"):
+        corpo = funcao_js(fn, "escritorio.html", E)
+        assert corpo.index("sairDoCartao(") < corpo.index("abrirModal("), fn
+        assert "onclick=\"voltarAoCartao('${" in corpo and "onclick=\"abrirCartao('${" not in corpo, fn
+    s = funcao_js("subirDescer", "escritorio.html", E)
+    assert "const digitado = rascunhoDoCartao(id);" in s and "abrirCartao(id, digitado);" in s
+    a = funcao_js("abrirCartao", "escritorio.html", E)
+    assert "if (rascunho && rascunho.comentario && $('ct-com')) $('ct-com').value = rascunho.comentario;" in a
+
+
+def _pedido(tarefas):
+    pre = ("var EMI = [{ id: 'e1', copia_nome: 'Planta_R01.pdf', arquivo_nome: 'Planta.pdf' }];"
+           "var TAR = " + json.dumps(tarefas) + ";")
+    x = {"emissao_id": "e1", "nota": "falta a tomada da ilha", "criado_em": "2026-10-10T12:00:00+00:00"}
+    return _js([pre, _linha(E, "const tituloDaRevisao = "), funcao_js("tarefaDoPedido", "escritorio.html", E)],
+               "(tarefaDoPedido(" + json.dumps(x) + ") || {}).id || null")
+
+
+def test_pedido_de_revisao_que_ja_virou_tarefa_nao_vira_de_novo():
+    """ADM-9: o link "virar tarefa" seguia lá depois de usado e cada clique criava mais um cartão igual."""
+    titulo = "Revisão pedida pelo cliente: Planta_R01.pdf"
+    feito = {"id": "t9", "titulo": titulo, "descricao": "falta a tomada da ilha", "criado_em": "2026-10-10T12:05:00+00:00"}
+    assert _pedido([feito]) == "t9"
+    assert _pedido([]) is None
+    assert _pedido([{**feito, "descricao": "outro pedido"}]) is None            # outro texto: outro pedido
+    assert _pedido([{**feito, "criado_em": "2026-10-09T08:00:00+00:00"}]) is None   # cartão de ANTES deste pedido (o da vez passada)
+    v = funcao_js("virarTarefa", "escritorio.html", E)
+    assert v.index("if (tarefaDoPedido(x)) return toast(") < v.index("umaGravacao('virar'")
+    assert "tarefaDoPedido(x) ? ' · <span class=\"sub\" style=\"margin:0\">já virou tarefa</span>'" in E
+
+
+_PESSOA_BASE = """
+var gravado = [], avisos = [], fechou = 0;
+var campos = { 'pe-n': { value: 'Ana' }, 'pe-f': { value: 'Arquiteta' }, 'pe-t': { value: '' }, 'pe-o': { value: '' } };
+function $(id) { return campos[id] || null; }
+var PROJ = { id: 'p1' }, MEMBROS = [{ id: 'm1' }];
+function falhou(e, t) { avisos.push(t); } function toast(t) { avisos.push(t); } function fecharModal() { fechou++; } function recarregar() {}
+var sb = { from: function (t) { return {
+  update: function (m) { gravado.push([t, 'update', m]); return { eq: function () { return { error: null }; } }; },
+  upsert: function (m) { gravado.push([t, 'upsert', m]); return { error: null }; },
+  delete: function () { return { eq: function () { gravado.push([t, 'delete']); return { error: null }; } }; } }; } };
+"""
+
+
+def _salvar_pessoa(contatos, notas):
+    return _js([_PESSOA_BASE, "var CONTATOS_LIDOS = %s, NOTAS_LIDAS = %s, PASTA_DE_HOJE = '__a_de_hoje__';" % (contatos, notas),
+                sem_await(funcao_js("salvarPessoa", "escritorio.html", E)), "salvarPessoa('m1');"], "gravado")
+
+
+def test_o_que_a_tela_nao_leu_nao_e_gravado():
+    """ADM-7: a leitura de contatos falhava calada e salvar o "Editar" gravava telefone nulo e APAGAVA a anotação."""
+    assert _salvar_pessoa("false", "false") == [["escritorio_membros", "update", {"nome": "Ana", "funcao": "Arquiteta"}]]
+    r = _salvar_pessoa("true", "true")                                   # controle: leu tudo — o vazio É vontade da admin
+    assert r == [["escritorio_membros", "update", {"nome": "Ana", "funcao": "Arquiteta", "telefone": None}],
+                 ["escritorio_membro_notas", "delete"]]
+    assert _salvar_pessoa("false", "true")[1] == ["escritorio_membro_notas", "delete"]
+    assert _salvar_pessoa("true", "false") == [["escritorio_membros", "update", {"nome": "Ana", "funcao": "Arquiteta", "telefone": None}]]
+    c = funcao_js("carregarProjeto", "escritorio.html", E)
+    assert "else contatosLidos = false;" in c and "else notasLidas = false;" in c
+    assert "CONTATOS_LIDOS = contatosLidos; NOTAS_LIDAS = notasLidas;" in c
+    ed = funcao_js("editarPessoa", "escritorio.html", E)
+    assert "${CONTATOS_LIDOS ? '' : ' disabled'}" in ed and "${NOTAS_LIDAS ? '' : ' disabled placeholder=" in ed
+
+
+def _sincronizar(dados):
+    pre = ("var avisos = [], releu = 0, SINC_EM_CURSO = false, PROJ = { id: 'p1' };"
+           "function toast(t, erro) { avisos.push([t, !!erro]); } function recarregar() { releu++; }"
+           "function apiEsc() { return { ok: true, dados: " + json.dumps(dados) + " }; }")
+    return _js([pre, sem_await(funcao_js("sincronizarPasta", "escritorio.html", E)), "sincronizarPasta();"], "{ avisos: avisos, releu: releu }")
+
+
+def test_atualizar_acesso_avisa_quando_o_fornecedor_fica_sem_pasta_e_rele_a_equipe():
+    """ADM-10: a tela dizia só "1 saiu" e a Equipe seguia mostrando "vê a pasta X"."""
+    r = _sincronizar({"compartilhados": 0, "tirados": 1, "fornecedor_sem_pasta": ["m1"]})
+    assert r["releu"] == 1 and r["avisos"][0][1] is True and "1 fornecedor ficou sem pasta" in r["avisos"][0][0]
+    r = _sincronizar({"compartilhados": 2, "tirados": 0})                 # controle: ninguém perdeu a pasta
+    assert r["releu"] == 1 and r["avisos"] == [["Acesso atualizado: 2 entrou, 0 saiu", False]]
+
+
+def test_o_sair_do_portal_limpa_o_cadastro_completo_e_o_convite():
+    """FORA-4: a próxima conta no mesmo navegador entrava no painel sem ficha, sem Termos e sem declarar 18 anos."""
+    pre = ("var apagou = [], limpou = 0, saiu = 0;"
+           "var localStorage = { removeItem: function (k) { apagou.push(k); } }, sessionStorage = { removeItem: function (k) { apagou.push(k); } };"
+           "var window = { aiarqConvite: { limpar: function () { limpou++; } } }, location = { href: '' };"
+           "var sb = { auth: { signOut: function () { saiu++; return { finally: function (f) { f(); } }; } } };")
+    r = _js([pre, funcao_js("sairDaConta", "escritorio.html", E), "sairDaConta();"],
+            "{ apagou: apagou, limpou: limpou, saiu: saiu, foi: location.href }")
+    assert "aiarq_profile_complete" in r["apagou"] and r["limpou"] == 1
+    assert {"aiarq_esc_mapa", "aiarq_esc_ctx", "aiarq_escritorio_levou"} <= set(r["apagou"])      # o que já limpava
+    assert r["saiu"] == 1 and r["foi"] == "login.html"
+    # controle: é o mesmo que o Sair das outras páginas limpa
+    assert "localStorage.removeItem('aiarq_profile_complete')" in ML and "window.aiarqConvite.limpar()" in ML
+
+
+def test_emitir_diz_quando_nao_mandou_por_falta_do_registro_da_copia():
+    """SERV-3 (a metade da tela). Guarda de TEXTO, declarado."""
+    assert "(typeof r.dados.erro === 'string' && r.dados.erro ? ' · ' + r.dados.erro : ` · ${nF} não deu: mande de novo em Emissões`)" in E

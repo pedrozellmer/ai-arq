@@ -98,7 +98,9 @@ def test_o_fornecedor_nao_cria_tarefa_e_so_move_a_dele():
     assert "${cria ? `<div><button class=\"add\"" in t
     assert _fn("abrirCartao").strip().split(NL)[1].strip() == "if (souFornecedor()) return abrirCartaoFornecedor(id);"
     s = _fn("salvarColuna")
-    assert ".update({ status: st, posicao: pos })" in s and "titulo" not in s and "descricao" not in s
+    # 12/10 (BANCO-5): a mesma gravação, agora pedindo a contagem (0 linha = o banco filtrou: nada de "Movido")
+    assert ".update({ status: st, posicao: pos }, { count: 'exact' })" in s and "titulo" not in s and "descricao" not in s
+    assert "if (!count) { fecharModal(); return semAcessoAoCartao(); }" in s
 
 
 def test_o_checklist_do_fornecedor_so_marca():
