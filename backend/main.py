@@ -10344,6 +10344,61 @@ def _etiquetas_entre_pranchas(extraction, structured_text: str, acumulado: dict,
         return structured_text
 
 
+# ── CHAVES POR AVALIAÇÃO (12/10/2026) ───────────────────────────────────────────
+# 🩸 11/10: a seção AMBIENTE ↔ ÁREA ESCRITA subiu LIGADA com teste, mutação, A/B
+# de prompt em 129 arquivos e bancada verdes — e a 1ª planilha de verdade trocou
+# 18 linhas de piso por uma de 491 m² tirada de um total que a seção listava.
+# Nada disso mede o que a IA FAZ com o texto; só a avaliação isolada mede. E a
+# avaliação só enxergava a seção se a chave estivesse ligada PRA TODO MUNDO.
+# 🔑 A extração roda num subprocesso por prancha (`_extract_dxf_isolated`), e é
+# nele que as chaves do extrator são lidas. Então a chave pode valer SÓ pro
+# filho de UM job: `?chaves=NOME=1,OUTRA=0` na rota de avaliação. Nunca em job
+# de cliente — só job de avaliação ("ev…") tem entrada no dicionário.
+# 🪤 Três limites, ditos: (1) a chave tem de ser lida no `extract_dxf` (que roda
+# no filho); o `to_structured_prompt()` é refeito AQUI, no servidor
+# (`_etiquetas_entre_pranchas`), e chave lida nele não seria a da avaliação.
+# (2) O dicionário mora na memória: avaliação que atravessa um restart continua
+# SEM as chaves, com o nome dizendo que tinha — confira pelo log da seção.
+# (3) Só a rota `eval-reprocess` aceita; a `eval-combine` não.
+#: as chaves do extrator que uma avaliação pode ligar ou desligar pra si
+_CHAVES_AVALIAVEIS = frozenset({
+    "AMBIENTE_AREA_ESCRITA", "ATTDEF_SOLTO_E_TEXTO", "QUADRO_COM_QUANTIDADE",
+    "LEGENDA_PELA_FORMA", "LEGENDA_POR_COLUNA", "LEITURA_POR_FOLHA", "VISTAS_DA_MESMA_BASE",
+})
+_CHAVES_DA_AVALIACAO: dict = {}        # job de avaliação → {chave: "0" | "1"}
+
+
+def _chaves_pedidas(texto) -> dict:
+    """"AMBIENTE_AREA_ESCRITA=1,ATTDEF_SOLTO_E_TEXTO=0" → {chave: "0"|"1"}.
+    Vazio → {}. Chave desconhecida, valor que não é 0/1 ou forma torta levantam
+    ValueError: avaliação com chave digitada errado rodaria SEM ela e pareceria
+    ter rodado com."""
+    saida: dict = {}
+    for parte in str(texto or "").replace(";", ",").split(","):
+        parte = parte.strip()
+        if not parte:
+            continue
+        nome, sep, valor = parte.partition("=")
+        nome, valor = nome.strip().upper(), valor.strip()
+        if not sep or nome not in _CHAVES_AVALIAVEIS or valor not in ("0", "1"):
+            raise ValueError("chave de avaliação inválida: %r (aceitas: %s, com =0 ou =1)"
+                             % (parte[:60], ", ".join(sorted(_CHAVES_AVALIAVEIS))))
+        saida[nome] = valor
+    return saida
+
+
+def _env_da_extracao(job_id: str):
+    """O ambiente do subprocesso de extração deste job: None = herda o do
+    servidor (TODO job de cliente); dict = o do servidor com as chaves pedidas
+    por cima (só job de avaliação que pediu chaves)."""
+    chaves = _CHAVES_DA_AVALIACAO.get(str(job_id or ""))
+    if not chaves or not str(job_id).startswith("ev"):
+        return None
+    env = dict(os.environ)
+    env.update(chaves)
+    return env
+
+
 def _extract_dxf_isolated(dxf_path, unit_consensus, timeout_s=900, job_id: str = ""):
     """Extrai UMA prancha DXF num SUBPROCESSO matável com teto de memória (fix
     confiabilidade 2026-07-22). Uma prancha densa que estouraria a RAM mata só o
@@ -10359,7 +10414,20 @@ def _extract_dxf_isolated(dxf_path, unit_consensus, timeout_s=900, job_id: str =
     import tempfile
     import pickle as _pk
     _worker = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dxf_extract_worker.py")
+    # 12/10: as chaves que a avaliação pediu valem SÓ no filho. No caminho
+    # in-process elas NÃO valem (o servidor inteiro leria a chave): avisa em vez
+    # de rodar calado sem elas.
+    _env_filho = _env_da_extracao(job_id)
+
+    def _sem_as_chaves(motivo):
+        if _env_filho is not None:
+            _log_error("admin:filhote",
+                       "chaves da avaliação NÃO aplicadas em %s (%s): a extração caiu no caminho "
+                       "in-process, que lê as chaves do servidor"
+                       % (os.path.basename(str(dxf_path)), motivo), job_id)
+
     if not os.path.exists(_worker):
+        _sem_as_chaves("sem o worker")
         return _extract_dxf_inprocess(dxf_path, unit_consensus, job_id)   # sem worker → in-process
     _fd, _out = tempfile.mkstemp(suffix=".pkl", prefix="dxfext_")
     os.close(_fd)
@@ -10382,6 +10450,8 @@ def _extract_dxf_isolated(dxf_path, unit_consensus, timeout_s=900, job_id: str =
                    timeout=timeout_s, capture_output=True)
         if _preexec is not None:
             _kw["preexec_fn"] = _preexec
+        if _env_filho is not None:
+            _kw["env"] = _env_filho
         _proc = subprocess.run(
             [sys.executable, _worker, dxf_path, _out,
              ("" if unit_consensus is None else str(unit_consensus))], **_kw)
@@ -10395,6 +10465,7 @@ def _extract_dxf_isolated(dxf_path, unit_consensus, timeout_s=900, job_id: str =
         try: os.remove(_out)
         except OSError: pass
         print(f"[dxf-isolado] subprocesso não lançou ({type(_le).__name__}: {_le}) — fallback in-process")
+        _sem_as_chaves("o subprocesso não lançou")
         return _extract_dxf_inprocess(dxf_path, unit_consensus, job_id)
     # 🚨 O EMAGRECEDOR FALHAVA CALADO NO CAMINHO REAL (18/08/2026, caso cliente-93).
     # `dxf_slim.emagrecer_dxf_se_preciso` é a proteção de memória: quando ele
@@ -36042,7 +36113,8 @@ async def reprocess_project(job_id: str, request: Request):
 
 @app.post("/api/admin/eval-reprocess/{job_id}")
 def admin_eval_reprocess(job_id: str, request: Request,
-                         project_type: Optional[str] = None):
+                         project_type: Optional[str] = None,
+                         chaves: Optional[str] = None):
     """ADMIN — "modo avaliação": re-roda os arquivos de um projeto num job
     ISOLADO, sem tocar no projeto do cliente. Serve pra comparar leituras sem
     risco (ex.: DWG vs PDF, ou motor novo vs antigo).
@@ -36054,10 +36126,18 @@ def admin_eval_reprocess(job_id: str, request: Request,
     - parent_job_id → guarda extra contra email de falha;
     - user_id='eval'→ não aparece no dashboard de nenhum cliente;
     - NÃO incrementa o reprocess_count do original (não gasta o grátis do cliente).
-    Mesmo pipeline do processamento real → avaliação fiel. Só ADMIN_EMAIL acessa."""
+    Mesmo pipeline do processamento real → avaliação fiel. Só ADMIN_EMAIL acessa.
+
+    `?chaves=NOME=1,OUTRA=0` (12/10/2026): liga ou desliga chaves do extrator SÓ
+    nesta avaliação — pra medir uma seção nova na planilha de verdade sem ligá-la
+    pros clientes. Ver `_CHAVES_AVALIAVEIS`."""
     _require_admin(request)
     import urllib.request, urllib.error, json, shutil
     from urllib.parse import unquote
+    try:
+        _chaves_eval = _chaves_pedidas(chaves)
+    except ValueError as _ech:
+        raise HTTPException(400, str(_ech))
 
     # 1) Projeto original (service role — admin já validado no _require_admin)
     try:
@@ -36156,7 +36236,10 @@ def admin_eval_reprocess(job_id: str, request: Request,
         "user_id": "eval",
         "user_email": "",  # vazio → nenhum email de cliente dispara
         "user_name": "",
-        "project_name": f"[TESTE] {orig.get('project_name', 'Projeto')} — avaliação",
+        # as chaves pedidas ficam no NOME: quem abre a avaliação vê com o que ela rodou
+        "project_name": (f"[TESTE] {orig.get('project_name', 'Projeto')} — avaliação"
+                         + (" [" + ", ".join("%s=%s" % kv for kv in sorted(_chaves_eval.items())) + "]"
+                            if _chaves_eval else "")),
         "typology": typology,
         "project_type": ptype,
         "files_count": len(eval_file_paths),
@@ -36167,6 +36250,14 @@ def admin_eval_reprocess(job_id: str, request: Request,
         "user_pe_direito": orig.get("user_pe_direito"),  # idem — pé-direito informado
         "is_eval": True,
     })
+
+    # 12/10: as chaves desta avaliação, antes de disparar (o filho da extração as lê)
+    if _chaves_eval:
+        _CHAVES_DA_AVALIACAO[eval_job_id] = dict(_chaves_eval)
+        _log_error("admin:filhote-inicio",
+                   "avaliação com chaves próprias: " + ", ".join(
+                       "%s=%s" % kv for kv in sorted(_chaves_eval.items())),
+                   eval_job_id, severity="info")
 
     # 5) Dispara — MESMO pipeline (avaliação fiel). NÃO incrementa reprocess do original.
     import threading
@@ -36208,6 +36299,7 @@ def admin_eval_reprocess(job_id: str, request: Request,
         "eval_job_id": eval_job_id,
         "files_count": len(eval_file_paths),
         "view_url": f"/projeto.html?job_id={eval_job_id}",
+        "chaves": dict(_chaves_eval),
     }
 
 
