@@ -413,10 +413,12 @@ def projeto_pasta(projeto_id: str, request: Request, corpo: dict):
         raise HTTPException(502, "O Google não respondeu agora. Tente de novo em instantes.")
     if (corpo or {}).get("previa"):
         return {"previa": _previa_da_pasta(projeto_id, eu["id"], tok, f)}
-    st_u, _ = esc._SERVICO("PATCH", "escritorio_projetos",
-                           body={"pasta_id": f["id"], "pasta_caminho": f.get("name") or "", "armazenamento": "google_drive"},
-                           params={"id": f"eq.{projeto_id}"})
-    if st_u >= 300:
+    # 🩸 12/10 (auditoria SERV-6): só `>= 300` — o banco sem responder (status 0) passava, a rota sincronizava a pasta
+    # ANTIGA e respondia "ok" com o nome da nova. Agora 0 também é falha, e a linha tem que voltar gravada.
+    st_u, gravado = esc._SERVICO("PATCH", "escritorio_projetos",
+                                 body={"pasta_id": f["id"], "pasta_caminho": f.get("name") or "", "armazenamento": "google_drive"},
+                                 params={"id": f"eq.{projeto_id}"}, prefer="return=representation")
+    if st_u >= 300 or st_u == 0 or not gravado:
         raise HTTPException(502, "Não consegui gravar a pasta agora. Tente de novo em instantes.")
     return {"ok": True, "pasta": {"id": f["id"], "nome": f.get("name") or ""}, **sincronizar(projeto_id)}
 
@@ -515,7 +517,13 @@ def pasta_do_fornecedor(projeto_id: str, entrada) -> dict:
         raise HTTPException(400, "Isso não é uma pasta do Drive do projeto.")
     if st != 200:
         raise HTTPException(502, "O Google não respondeu agora. Tente de novo em instantes.")
-    if not _dentro_da_pasta(tok, alvo, p["pasta_id"]):
+    # 🩸 12/10 (auditoria SERV-5): `_dentro_da_pasta` junta "fora" e "o Google não respondeu" num False. No reenvio
+    # do convite isso virava 400 → o servidor DESLIGAVA a subpasta do fornecedor e a tela dizia "não está mais dentro
+    # da pasta do projeto" por causa de um soluço. "Não sei" é 502 (tente de novo); só "fora" de verdade é 400.
+    onde = _onde_esta(tok, alvo, p["pasta_id"])
+    if onde is None:
+        raise HTTPException(502, "O Google não respondeu agora. Tente de novo em instantes.")
+    if onde != "dentro":
         raise HTTPException(400, "Essa pasta não está dentro da pasta do projeto.")
     return {"id": f["id"], "nome": str(f.get("name") or "")[:300]}
 
@@ -582,8 +590,12 @@ def projeto_arquivos(projeto_id: str, request: Request, pasta: str = ""):
         return {"sem_conexao": True, "pasta": {"id": raiz, "nome": nome_raiz}}
     tok = _acesso(p["dono"])
     # a admin pode ter tirado a pasta do fornecedor de dentro do projeto depois: aí o id dele não vale mais
-    if raiz != p["pasta_id"] and not _dentro_da_pasta(tok, raiz, p["pasta_id"]):
-        raise HTTPException(403, "A pasta que a admin separou pra você não está mais no projeto.")
+    if raiz != p["pasta_id"]:
+        onde = _onde_esta(tok, raiz, p["pasta_id"])
+        if onde is None:        # 12/10 (SERV-5): soluço do Google não é "a admin tirou a sua pasta"
+            raise HTTPException(502, "O Google não respondeu agora. Tente de novo em instantes.")
+        if onde != "dentro":
+            raise HTTPException(403, "A pasta que a admin separou pra você não está mais no projeto.")
     alvo = raiz if not pasta else id_da_pasta(pasta)
     if alvo != raiz and not _dentro_da_pasta(tok, alvo, raiz, bloquear_limitado=equipe):
         raise HTTPException(403, "Essa pasta não é deste projeto.")
@@ -751,9 +763,17 @@ def projeto_emitir(projeto_id: str, request: Request, corpo: dict):
             raise HTTPException(409, "O Google não deixa copiar este arquivo (o dono dele bloqueou cópia, ou a conta "
                                      "conectada não pode copiar). Nada foi emitido.")
         raise HTTPException(502, "O Google não fez a cópia agora. Nada foi emitido; tente de novo.")
-    st_u, _ = esc._SERVICO("PATCH", "escritorio_emissoes", params={"id": f"eq.{emissao_id}"},
-                           body={"copia_id": copia["id"], "copia_nome": str(copia.get("name") or nome)[:320]})
-    if st_u >= 300 or st_u == 0:
+    # 🩸 12/10 (auditoria SERV-3): se esta gravação falhava, a emissão ficava SEM o id da cópia e o `_mandar` logo
+    # abaixo dava leitura ao cliente mesmo assim (com o id que estava na memória). No dia em que ele saísse do projeto,
+    # ninguém saberia de qual arquivo tirar o acesso. Agora tenta 2 vezes; sem o id gravado, NÃO manda pra ninguém.
+    copia_gravada = False
+    for _tentativa in (1, 2):
+        st_u, _ = esc._SERVICO("PATCH", "escritorio_emissoes", params={"id": f"eq.{emissao_id}"},
+                               body={"copia_id": copia["id"], "copia_nome": str(copia.get("name") or nome)[:320]})
+        if st_u < 300 and st_u != 0:
+            copia_gravada = True
+            break
+    if not copia_gravada:
         esc._registrar("escritorio:emitir", f"emissão {emissao_id} ficou sem o id da cópia (HTTP {st_u})")
     # 🔒 26/09 (auditoria SEG-1): trava que SÓ a dona destrava (ownerRestricted). Sem isso qualquer pessoa da
     # equipe (editora da pasta) tirava a trava e mudava o que foi ao cliente. Confere na resposta se pegou.
@@ -766,7 +786,10 @@ def projeto_emitir(projeto_id: str, request: Request, corpo: dict):
     if not travada:
         esc._registrar("escritorio:emitir", f"emissão {emissao_id}: a trava da cópia não pegou (HTTP {st_t})")
     envio = {"mandados": 0, "falhas": []}
-    if (corpo or {}).get("para"):
+    if (corpo or {}).get("para") and not copia_gravada:
+        envio = {"mandados": 0, "falhas": ["banco"],
+                 "erro": "A cópia foi feita no Drive, mas não consegui registrar. Não mandei pra ninguém: emita de novo."}
+    elif (corpo or {}).get("para"):
         # a emissão já existe: falha ao mandar NÃO desfaz a emissão (a tela manda de novo pelo /mandar)
         try:
             envio = _mandar(projeto_id, {"id": emissao_id, "copia_id": copia["id"], "arquivo_nome": original,
@@ -1172,10 +1195,15 @@ def _tirar_emissoes_de_quem_saiu(projeto_id: str, tok: str, ativos_de_fora: set,
     tirados, falhas = 0, []
     for d in sair:
         copia = copia_de.get(str(d["emissao_id"]))
-        st_d = 404
-        if copia:
-            st_d, _ = _drive("DELETE", f"files/{copia}/permissions/{d['permission_id']}", tok,
-                             params={"supportsAllDrives": "true"})
+        if not copia:
+            # 🩸 12/10 (auditoria SERV-3): sem o id da cópia NÃO dá pra tirar nada no Google — e isto contava como
+            # "tirado" (404 de mentira): a tela dizia "perdeu o acesso" e a pessoa seguia lendo o arquivo. É falha:
+            # o acesso continua registrado, pra alguém ver e tirar à mão no Drive.
+            falhas.append("emissão (sem a cópia registrada)")
+            _marca(d.get("membro_id"), "falhou")
+            continue
+        st_d, _ = _drive("DELETE", f"files/{copia}/permissions/{d['permission_id']}", tok,
+                         params={"supportsAllDrives": "true"})
         # 404: o arquivo (ou o acesso) já não existe — nada a tirar. A cópia é da dona: ela sempre enxerga.
         if st_d in (200, 204, 404):
             st_u, _ = esc._SERVICO("PATCH", "escritorio_emissao_destinos", body={"permission_id": None}, params={
@@ -1190,6 +1218,17 @@ def _tirar_emissoes_de_quem_saiu(projeto_id: str, tok: str, ativos_de_fora: set,
             falhas.append("emissão")
             _marca(d.get("membro_id"), "falhou")
     return tirados, falhas
+
+
+def _tirar_o_que_demos(tok: str, pasta: str, perm_id: str, papel_antes) -> int:
+    """Tira no Drive um acesso à pasta que NÓS demos, e devolve o status do Google. A MESMA regra do sincronizar: se a
+    admin já tinha dado à mão um papel MENOR (leitor) e nós promovemos, volta o papel de antes; senão apaga.
+    🩸 12/10 (auditoria SERV-4): "Apagar projeto" e a limpeza da conta apagavam direto — quem tinha leitura dada pela
+    admin fora do AI.arq perdia também ela (contra a regra da casa: "o que a admin deu à mão fica como estava")."""
+    if papel_antes:
+        return _drive("PATCH", f"files/{pasta}/permissions/{perm_id}", tok,
+                      params={"supportsAllDrives": "true"}, corpo={"role": papel_antes})[0]
+    return _drive("DELETE", f"files/{pasta}/permissions/{perm_id}", tok, params={"supportsAllDrives": "true"})[0]
 
 
 def limpar_conta(user_id: str) -> dict:
@@ -1236,7 +1275,7 @@ def limpar_conta(user_id: str) -> dict:
     for p in projs:
         feito["projetos_da_dona"] += 1
         st_r, feitos = esc._SERVICO("GET", "escritorio_drive_permissoes", params={
-            "projeto_id": f"eq.{p['id']}", "select": "id,pasta_id,permission_id,ja_existia"})
+            "projeto_id": f"eq.{p['id']}", "select": "id,pasta_id,permission_id,ja_existia,papel_antes"})
         if st_r >= 300 or feitos is None:
             feito["pendentes"] += 1
             continue
@@ -1245,8 +1284,7 @@ def limpar_conta(user_id: str) -> dict:
                 if not tok:
                     feito["pendentes"] += 1
                     continue
-                st_x, _ = _drive("DELETE", f"files/{f['pasta_id']}/permissions/{f['permission_id']}", tok,
-                                 params={"supportsAllDrives": "true"})
+                st_x = _tirar_o_que_demos(tok, f["pasta_id"], f["permission_id"], f.get("papel_antes"))
                 if st_x not in (200, 204, 404):
                     feito["pendentes"] += 1
                     continue
@@ -1348,7 +1386,7 @@ def projeto_apagar(projeto_id: str, request: Request, pasta_sumiu: int = 0):
         raise HTTPException(403, "Só a admin do projeto apaga o projeto.")
     p = _dono_do_projeto(projeto_id)
     st_r, feitos = esc._SERVICO("GET", "escritorio_drive_permissoes", params={
-        "projeto_id": f"eq.{projeto_id}", "select": "id,pasta_id,permission_id,email,ja_existia"})
+        "projeto_id": f"eq.{projeto_id}", "select": "id,pasta_id,permission_id,email,ja_existia,papel_antes"})
     st_d, dest = esc._SERVICO("GET", "escritorio_emissao_destinos", params={
         "projeto_id": f"eq.{projeto_id}", "permission_id": "not.is.null", "select": "membro_id"})
     if st_r >= 300 or st_r == 0 or feitos is None or st_d >= 300 or st_d == 0 or dest is None:
@@ -1370,8 +1408,8 @@ def projeto_apagar(projeto_id: str, request: Request, pasta_sumiu: int = 0):
                 continue
             if outros:
                 continue
-            st_x, _ = _drive("DELETE", f"files/{f['pasta_id']}/permissions/{f['permission_id']}", tok,
-                             params={"supportsAllDrives": "true"})
+            # 12/10 (SERV-4): quem tinha um acesso menor dado à mão volta a ele (não perde tudo)
+            st_x = _tirar_o_que_demos(tok, f["pasta_id"], f["permission_id"], f.get("papel_antes"))
             if st_x == 404 and f["pasta_id"] not in enxerga:
                 st_v, _ = _drive("GET", f"files/{f['pasta_id']}", tok, params={"fields": "id", "supportsAllDrives": "true"})
                 # True = enxerga · False = o Google disse 404 (não existe pra esta conta) · None = não sei (soluço)
