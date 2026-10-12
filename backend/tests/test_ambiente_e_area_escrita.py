@@ -714,6 +714,62 @@ def test_a_secao_sem_desenho_diz_como_usar_sem_falar_de_desenho():
     assert "UM desenho só" not in um and "naquele desenho" not in um
 
 
+# 🩸 12/10/2026 — as duas avaliações isoladas com o texto de 11/10. Os pares
+# saíram certos nas duas; numa, uma linha por ambiente (o pedido); na outra, UMA
+# linha com a soma de todos MAIS três de ambientes que já estavam na soma (27 m²
+# em dobro), e o forro inteiro copiado do piso.
+def _as_duas_secoes():
+    return {"por desenho": dx._linhas_dos_ambientes(dx.ambientes_por_desenho(_tudo(), _mapa())),
+            "sem desenho": dx._linhas_dos_ambientes(dx.ambientes_por_desenho(_tudo(), None))}
+
+
+def _instrucoes(ls):
+    """Só o que a seção MANDA fazer: o que vem antes da 1ª linha da lista."""
+    fim = next(i for i, l in enumerate(ls) if l.startswith("  [") or " = " in l and " m²" in l)
+    return " ".join(l.strip() for l in ls[:fim])
+
+
+@pytest.mark.parametrize("qual", ["por desenho", "sem desenho"])
+def test_cada_ambiente_entra_uma_vez_em_cada_servico(qual):
+    um = _instrucoes(_as_duas_secoes()[qual])
+    assert ("⚠ Cada ambiente entra UMA vez em cada serviço (piso, forro, rodapé…): ou uma linha por ambiente, "
+            "ou todos numa linha de soma. Se um ambiente ganha linha própria (por ter acabamento diferente), "
+            "ele SAI da soma. A linha de soma diz na observação quais ambientes ela tem, e nenhum deles "
+            "aparece em outra linha do mesmo serviço.") in um
+    # exemplo concreto vira regra: nenhum nome de ambiente nas instruções
+    for nome in ("WC", "BANHEIRO", "COZINHA", "banheiro", "cozinha"):
+        assert nome not in um, nome
+
+
+@pytest.mark.parametrize("qual", ["por desenho", "sem desenho"])
+def test_a_linha_por_ambiente_vem_ANTES_da_soma_e_da_regra_de_uma_vez(qual):
+    """A ordem importa: o pedido é UMA linha POR AMBIENTE. A soma é a exceção,
+    e a regra nova só fecha a soma — não pode virar o convite a ir sempre pra ela."""
+    um = _instrucoes(_as_duas_secoes()[qual])
+    por_ambiente = um.index("UMA linha POR AMBIENTE")
+    soma = um.index("se juntar ambientes numa linha, a quantidade é a SOMA")
+    uma_vez = um.index("⚠ Cada ambiente entra UMA vez em cada serviço")
+    assert um.index("→ COMO USAR") < por_ambiente < soma < uma_vez
+    assert um.count("UMA linha POR AMBIENTE") == 1
+    # dentro da regra nova, a linha por ambiente também vem primeiro
+    regra = um[uma_vez:um.index("⚠ FORRO não é cópia do piso")]
+    assert regra.index("ou uma linha por ambiente") < regra.index("ou todos numa linha de soma")
+    # e as duas regras novas ficam com o COMO USAR, antes das ressalvas de precedência
+    assert uma_vez < um.index("⚠ FORRO não é cópia do piso") < um.index("⚠ A área escrita NÃO troca")
+
+
+@pytest.mark.parametrize("qual", ["por desenho", "sem desenho"])
+def test_forro_nao_e_copia_do_piso(qual):
+    um = _instrucoes(_as_duas_secoes()[qual])
+    assert ("⚠ FORRO não é cópia do piso: só liste forro por ambiente quando o arquivo mostra forro naquele "
+            "ambiente (um desenho com título de forro, uma legenda ou um texto de forro). Sem isso, NÃO gere "
+            "forro a partir destas áreas.") in um
+    # a abertura deixou de mandar usar a área como piso E forro
+    assert ("use como a área de PISO daquele ambiente (de forro, só onde o arquivo mostra forro — ver abaixo) "
+            "e marque 'estimado'.") in um
+    assert "piso/forro" not in um and "DAQUELE ambiente" not in um
+
+
 def test_o_total_escrito_fora_das_pranchas_nao_e_posto_na_frente():
     """Com desenho das pranchas na lista, o total do grupo de fora é de cópia de
     trabalho ou de quadro solto: a seção diz que existe, sem o número."""

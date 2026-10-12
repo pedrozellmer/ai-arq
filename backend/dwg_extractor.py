@@ -8665,8 +8665,10 @@ def _linhas_dos_ambientes(amb, limite: int = _AMB_LISTA_MAX) -> list:
     ls = ["AMBIENTE ↔ ÁREA ESCRITA NA ETIQUETA (lido do arquivo, não é chute):",
           "  (o projetista escreveu a área de cada ambiente; o motor juntou o NOME à ÁREA pela",
           "   posição dos dois textos da etiqueta — o nome no mesmo texto ou logo acima. É o",
-          "   número do PROJETISTA, não medição na geometria: use como a área de piso/forro",
-          "   DAQUELE ambiente e marque 'estimado'."]
+          # 🩸 12/10/2026 — "área de piso/forro" mandava replicar o piso como forro: na
+          # avaliação com a seção, o forro saiu igual ao piso em todos os ambientes.
+          "   número do PROJETISTA, não medição na geometria: use como a área de PISO daquele",
+          "   ambiente (de forro, só onde o arquivo mostra forro — ver abaixo) e marque 'estimado'."]
     # 🩸 11/10/2026, a 1ª planilha em produção com a seção: a IA trocou 18 linhas de piso
     # por ambiente por UMA de 491 m², tirada do "TOTAL = 491,00 m²" da lista de totais do
     # grupo fora das pranchas (a soma dos ambientes da planta dava ~345). A seção dizia
@@ -8682,6 +8684,19 @@ def _linhas_dos_ambientes(amb, limite: int = _AMB_LISTA_MAX) -> list:
                "   linha POR AMBIENTE, com a área escrita dele. Acabamento sem especificação continua",
                "   sendo uma linha por ambiente; se juntar ambientes numa linha, a quantidade é a",
                "   SOMA das áreas deles — NUNCA um total escrito."]
+    # 🩸 12/10/2026 — as duas avaliações com o texto de 11/10 (um prédio de 22 ambientes):
+    # numa, uma linha por ambiente, como pedido; na outra, UMA linha com a soma de todos
+    # (permitida) MAIS três linhas de ambientes que já estavam na soma — 27 m² em dobro.
+    # A linha por ambiente segue sendo o pedido; isto só fecha a soma com linha própria.
+    ls += ["   ⚠ Cada ambiente entra UMA vez em cada serviço (piso, forro, rodapé…): ou uma linha",
+           "   por ambiente, ou todos numa linha de soma. Se um ambiente ganha linha própria (por",
+           "   ter acabamento diferente), ele SAI da soma. A linha de soma diz na observação quais",
+           "   ambientes ela tem, e nenhum deles aparece em outra linha do mesmo serviço.",
+           # 🩸 a mesma avaliação: forro = piso, 394,69 m², "estimativa". O motor não sabe
+           # dizer que um desenho é de forro (só planta / corte / detalhe): a IA olha o título.
+           "   ⚠ FORRO não é cópia do piso: só liste forro por ambiente quando o arquivo mostra",
+           "   forro naquele ambiente (um desenho com título de forro, uma legenda ou um texto",
+           "   de forro). Sem isso, NÃO gere forro a partir destas áreas."]
     ls += [
           # 🩸 11/10/2026, medido no acervo: 203 ambientes com o mesmo nome aqui e no par
           # RÓTULO ↔ ÁREA DA REGIÃO; 102 batem ±2 %, 101 divergem — só 15 dentro de
