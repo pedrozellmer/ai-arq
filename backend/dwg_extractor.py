@@ -312,7 +312,11 @@ class DXFExtraction:
                                            # QUANTIDADE). 🩸 o A/B do acervo
                                            # pegou o registro cru aqui: 1,6 mil
                                            # letras de dicionário num arquivo
-                                           "quadros_com_quantidade"})
+                                           "quadros_com_quantidade",
+                                           # 12/10: a marca do extract_dxf com as
+                                           # chaves que ELE tira do prompt (ver
+                                           # AREAS_DO_QUADRO_FORA_DO_PROMPT)
+                                           "metadados_fora_do_prompt"})
 
     def to_structured_prompt(self) -> str:
         """Converts extraction to a structured text prompt for Claude."""
@@ -322,11 +326,18 @@ class DXFExtraction:
         # Metadata
         if self.metadata:
             lines.append("METADADOS DO ARQUIVO:")
+            # 12/10/2026 — além da lista fixa, as chaves que o extract_dxf MARCOU
+            # neste arquivo. A marca é decidida lá (e não aqui) porque este prompt
+            # é refeito no servidor: chave de ambiente lida aqui não seria a da
+            # avaliação.
+            _marcadas = self.metadata.get("metadados_fora_do_prompt") or ()
+            _marcadas = frozenset(str(_m) for _m in _marcadas) if isinstance(_marcadas, (list, tuple, set, frozenset)) \
+                else frozenset()
             for k, v in self.metadata.items():
                 # 🩸 29/09: o registro do detector de cópias, cru, fazia a IA
                 # duvidar de TODA contagem ("~35 por planta" nas 70 luminárias
                 # que eram 70). Vai dito em português, logo abaixo.
-                if k in self._METADADOS_FORA_DO_PROMPT:
+                if k in self._METADADOS_FORA_DO_PROMPT or k in _marcadas:
                     continue
                 lines.append(f"  {k}: {v}")
             lines.append("")
@@ -5768,6 +5779,7 @@ def _nome_da_peca_no_vinculo(nome, vista="") -> str:
     return n or str(nome or "")
 
 
+
 def pecas_no_vinculo(doc, nomes_inseridos, nome_do_arquivo, e_anotacao=None) -> dict:
     """{base: {disciplina, instancias, vista, outras_vistas, pecas: {nome: n}}}
     dos vínculos da MESMA disciplina do arquivo; {} se o arquivo não diz a
@@ -11127,6 +11139,18 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             # fosse um ambiente gigante (ver `linha_do_quadro_de_areas`).
             # 🔒 Rótulo normalizado e curto, nunca o texto do autor.
             metadata["areas_do_quadro_rotulos"] = [_r for _r, _v in _pares]
+            # 🩸 12/10/2026 — as duas listas saíam CRUAS na seção METADADOS do
+            # prompt: toda área escrita no arquivo, sem nome, e ao lado uma lista
+            # de rótulos (num arquivo, 113 números e 113 rótulos vazios; no
+            # acervo, 16 de 73 prompts conferidos, até 436 números num só — 7,9 %
+            # do prompt). Número sem nome com cara de resposta, e em dobro quando
+            # a planta está repetida. São registro pro main (o consenso da área
+            # total e a régua do recorte), que continua lendo as duas daqui.
+            # Chave: AREAS_DO_QUADRO_FORA_DO_PROMPT=0 volta a despejar, sem deploy.
+            # 🪤 É decidida AQUI e vai como marca no registro: o prompt é refeito
+            # no servidor, onde a chave de uma avaliação não vale.
+            if os.environ.get("AREAS_DO_QUADRO_FORA_DO_PROMPT", "1") != "0":
+                metadata["metadados_fora_do_prompt"] = ["areas_do_quadro_rotulos", "areas_do_quadro_texto"]
             logger.info("[area-regra] %d candidato(s) de área lidos do texto: %s",
                         len(_cand), _cand[:6])
     except Exception as _ea:

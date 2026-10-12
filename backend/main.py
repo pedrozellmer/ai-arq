@@ -10408,6 +10408,7 @@ def _quadros_entre_pranchas(extraction, structured_text: str, vistos: dict,
 _CHAVES_AVALIAVEIS = frozenset({
     "AMBIENTE_AREA_ESCRITA", "ATTDEF_SOLTO_E_TEXTO", "QUADRO_COM_QUANTIDADE",
     "LEGENDA_PELA_FORMA", "LEGENDA_POR_COLUNA", "LEITURA_POR_FOLHA", "VISTAS_DA_MESMA_BASE",
+    "AREAS_DO_QUADRO_FORA_DO_PROMPT",
 })
 _CHAVES_DA_AVALIACAO: dict = {}        # job de avaliação → {chave: "0" | "1"}
 
