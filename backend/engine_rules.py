@@ -6267,7 +6267,10 @@ MARCA_PAREDE_ESPESSA = "⚠ PAREDE ESPESSA PELAS DUAS FACES"
 MARCA_GRADE_DE_TABELA = "⚠ GRADE DE TABELA, NÃO REDE"
 #: 🩸 05/10/2026 (E07) — ver `selo_apos_faixa_de_paralelas`.
 MARCA_FAIXA_DE_PARALELAS = "⚠ FAIXA DE PARALELAS, NÃO METRO"
-MARCAS_DE_REBAIXAMENTO = (MARCA_PECA_SEM_BLOCO, MARCA_LAYER_SEM_NOME, MARCA_TUBO_FACE_DUPLA,
+#: 🩸 12/10/2026 — ver `selo_apos_numero_do_quadro`.
+MARCA_NUMERO_DO_QUADRO = "⚠ NÚMERO DO QUADRO"
+MARCAS_DE_REBAIXAMENTO = (MARCA_NUMERO_DO_QUADRO,
+                          MARCA_PECA_SEM_BLOCO, MARCA_LAYER_SEM_NOME, MARCA_TUBO_FACE_DUPLA,
                           MARCA_CONTORNO_DE_PECA, MARCA_MOLDURA_OU_LIMITE,
                           MARCA_TRAVESSA_DE_ESTEIRA, MARCA_PAREDE_ESPESSA, MARCA_GRADE_DE_TABELA,
                           MARCA_FAIXA_DE_PARALELAS,
@@ -7261,6 +7264,137 @@ def ressalva_da_planta_repetida(copias) -> str:
     return ("a mesma planta aparece repetida no desenho (%d peça(s) em cópia, %d "
             "deslocamento(s)) — comprimento de layer e área de hachura somam as cópias"
             % (pecas, len(vet)))
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  O NÚMERO DO QUADRO NÃO É CONTAGEM (12/10/2026)
+# ══════════════════════════════════════════════════════════════════════════
+#: 🩸 12/10/2026 — achado na revisão da seção QUADROS COM QUANTIDADE, antes de
+#: ela subir. A seção manda a IA ficar com a quantidade do QUADRO, marcar
+#: 'estimado' e citar a contagem do desenho na observação. Se a IA marca
+#: 'confirmado' mesmo assim, a rede de procedência (`selos_sem_geometria`) NÃO
+#: rebaixa: "contagem de blocos", "bloco 'PA6' = 13 un", "13 inserções do
+#: bloco", "seção ESQUADRIAS … 13 un" e "hachura" são prova de geometria e têm
+#: precedência sobre a palavra "quadro". A linha saía com 12 (o número ESCRITO
+#: pelo projetista), selo ✓ MEDIDO, e a observação dizendo que a contagem deu
+#: 13 — provado com as funções reais em 6 de 10 redações testadas.
+#: 🔑 A régua não depende da redação da IA: usa o que o motor LEU. Rebaixa só
+#: com as três juntas —
+#:   (a) a linha está 'confirmado' e a observação cita "quadro" (não o de aço:
+#:       esse tem a exceção dele, `_cita_o_quadro_de_aco`);
+#:   (b) a quantidade é a de alguma linha dos quadros lidos NESTE arquivo
+#:       (`quantidades_dos_quadros`), no arredondamento da planilha (2 casas);
+#:   (c) nenhuma geometria citada dá o MESMO número: nem a contagem do bloco
+#:       fonte da linha (`_o_bloco_fonte_conta_o_mesmo`), nem o layer citado
+#:       (`prova_da_geometria`). Quadro e desenho batendo, o ✓ fica — é medida.
+#: 📏 No passado (12/10): nas planilhas já entregues dos 17 jobs do acervo com
+#: quadro lido, 9 linhas confirmadas citam "quadro" — todas contagem de bloco
+#: com o quadro citado só pra CONFIRMAR a especificação, ou quadro ELÉTRICO; 2
+#: têm quantidade igual à de uma linha de quadro do arquivo, e nas 2 o bloco
+#: fonte conta o mesmo: a régua não rebaixaria nenhuma.
+#: 🪤 Sem chave própria: sem quadro lido não há quantidade pra comparar, e o
+#: registro só existe com QUADRO_COM_QUANTIDADE ligada.
+#: 🚨 SÓ REBAIXA: não mexe na quantidade, não apaga.
+_RE_CITA_QUADRO = _re.compile(r"\bquadros?\b", _re.IGNORECASE)
+_RE_NUMERO_NO_COMECO = _re.compile(r"^\s*(\d{1,3}(?:\.\d{3})+(?:,\d+)?|\d+(?:[.,]\d+)?)")
+_RE_SO_MILHAR = _re.compile(r"^\d{1,3}(?:\.\d{3})+$")
+
+
+def numero_escrito_no_quadro(texto):
+    """O número de uma célula de quantidade de quadro, como o projetista a
+    escreveu: "12", "12 un", "12,00", "148,50 m²", "1.250" (milhar), "2.404,96".
+    None quando a célula não é só uma quantidade ("V", "ver projeto", "2 x 3")
+    ou é zero. A régua do que é quantidade é a do leitor (`_RE_QQ_NUMERO`)."""
+    s = str(texto or "")
+    if not _RE_QQ_NUMERO.match(s):
+        return None
+    m = _RE_NUMERO_NO_COMECO.match(s)
+    if not m:
+        return None
+    n = m.group(1)
+    if "," in n:
+        n = n.replace(".", "").replace(",", ".")
+    elif _RE_SO_MILHAR.match(n):
+        n = n.replace(".", "")
+    try:
+        v = float(n)
+    except ValueError:
+        return None
+    return v if v > 0 else None
+
+
+def quantidades_dos_quadros(registro) -> list:
+    """Os NÚMEROS das linhas dos quadros que o motor leu no arquivo (o registro
+    é o `metadata["quadros_com_quantidade"]` da extração), sem repetição e em
+    2 casas. Registro ausente ou estranho → []."""
+    out = set()
+    try:
+        for q in (registro or {}).get("quadros") or []:
+            for linha in q.get("linhas") or []:
+                v = numero_escrito_no_quadro(linha.get("q"))
+                if v is not None:
+                    out.add(round(v, 2))
+    except Exception:
+        return []
+    return sorted(out)
+
+
+def _o_bloco_fonte_conta_o_mesmo(obs, q, unit, blocos) -> bool:
+    """O bloco de onde a linha tirou o número (`bloco_fonte_da_linha`) tem, na
+    extração, a MESMA contagem que a quantidade?
+
+    🪤 Não exige a palavra "bloco" (como `contagem_de_bloco_citada` exige): a
+    seção ESQUADRIAS do prompt lista "nome: N un" e a IA cita assim ("seção
+    ESQUADRIAS — 'janela 1.4: 1 un'"). Aqui o erro caro é rebaixar a contagem
+    de verdade e dizer ao cliente que ela é "do quadro" — "1" e "2" são linha
+    de quase todo quadro. Vale o nome como a extração tem e a RAIZ dele, que é
+    o que o prompt mostra (a mesma conta de `selo_apos_planta_repetida`)."""
+    if str(unit or "").strip().lower() not in _UNIDADES_DE_BLOCO or q != int(q):
+        return False
+    todos = {}
+    try:
+        for n, c in (blocos or {}).items():
+            todos[n] = todos.get(n, 0) + int(c)
+            r = raiz_do_nome_do_bloco(n)
+            if r != n:
+                todos[r] = todos.get(r, 0) + int(c)
+    except (TypeError, ValueError, AttributeError):
+        return False
+    fonte = bloco_fonte_da_linha(obs, set(todos))
+    return bool(fonte) and todos.get(fonte) == int(q)
+
+
+def selo_apos_numero_do_quadro(conf, obs, quantity, unit, quantidades, blocos, indice):
+    """(conf, obs, rebaixou) — a quantidade ESCRITA num quadro não sai ✓ MEDIDO
+    só porque a observação também cita uma contagem. Ver o comentário acima.
+
+    `quantidades` = `quantidades_dos_quadros` do arquivo; `blocos` = todos os
+    blocos da extração ({nome: contagem}); `indice` = o que o motor mediu
+    (`prova_da_geometria`).
+    """
+    if conf != "confirmado" or not quantidades:
+        return conf, obs, False
+    t = str(obs or "")
+    if not _RE_CITA_QUADRO.search(t) or _cita_o_quadro_de_aco(t.lower(), unit):
+        return conf, obs, False
+    try:
+        q = float(quantity)
+    except (TypeError, ValueError):
+        return conf, obs, False
+    if q <= 0:
+        return conf, obs, False
+    try:
+        if not any(abs(q - float(x)) < 0.005 for x in quantidades):
+            return conf, obs, False
+    except (TypeError, ValueError):
+        return conf, obs, False
+    if _o_bloco_fonte_conta_o_mesmo(t, q, unit, blocos):
+        return conf, obs, False           # a contagem do bloco fonte dá o mesmo número
+    if prova_da_geometria(q, unit, t, indice):
+        return conf, obs, False           # o layer citado mede o mesmo número
+    aviso = ("%s — é a quantidade que o projetista escreveu no quadro; a contagem do "
+             "desenho deu outro valor ou não foi citada. " % MARCA_NUMERO_DO_QUADRO)
+    return "estimado", aviso + t, True
 
 
 def linha_zerada_so_de_legenda(obs, quantity, unit, amostras) -> str:

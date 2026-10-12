@@ -17064,6 +17064,16 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                                    or _cop_md.get("nomes") or {})
                         except Exception:
                             _blocos_copiados = set()
+                        # 🩸 12/10/2026: as quantidades ESCRITAS nos quadros que o
+                        # motor leu neste arquivo — a linha com um desses números e
+                        # selo de medido só fica se a geometria citada der o mesmo
+                        # (`selo_apos_numero_do_quadro`). Sem quadro lido, lista vazia.
+                        try:
+                            from engine_rules import quantidades_dos_quadros as _qtd_quadros
+                            _quadros_q = _qtd_quadros(
+                                (extraction.metadata or {}).get("quadros_com_quantidade"))
+                        except Exception:
+                            _quadros_q = []
                         # 🩸 29/09 (caso 18c57c3c): bloco que é ANOTAÇÃO do desenho
                         # (marca de fiação, nuvem de revisão) — {nome: contagem}
                         try:
@@ -17314,6 +17324,16 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                     conf, obs_raw, qty, normalized_unit, _blocos_copiados,
                                     _blocos_n)
                                 if _era_copia:
+                                    _rebaixado_pela_fonte = True
+                                # 🩸 12/10/2026: o número ESCRITO num quadro do desenho
+                                # não sai medido só porque a observação cita a contagem
+                                # — só se a geometria citada der o MESMO número.
+                                from engine_rules import (
+                                    selo_apos_numero_do_quadro as _regra_quadro)
+                                conf, obs_raw, _era_quadro = _regra_quadro(
+                                    conf, obs_raw, qty, normalized_unit, _quadros_q,
+                                    _blocos_n, _indice_geom)
+                                if _era_quadro:
                                     _rebaixado_pela_fonte = True
                                 # 🩸 30/09 (filhote evefe9af): peça desenhada sem bloco e
                                 # layer sem nome — o número é medido, o serviço não
