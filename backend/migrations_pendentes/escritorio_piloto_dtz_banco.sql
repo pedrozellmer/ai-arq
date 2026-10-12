@@ -1439,3 +1439,24 @@ create policy escritorio_emissao_eventos_cliente_responde on public.escritorio_e
   with check (public.escritorio_papel(projeto_id) = 'cliente' and public.escritorio_emissao_minha(emissao_id)
               and not public.escritorio_emissao_substituida(emissao_id)
               and tipo in ('aprovado','revisao') and registrado_por = (select auth.uid()));
+
+-- ── 30. (12/10, 2ª auditoria do Escritório — ADM-13) "Concluir projeto": a data em que a admin concluiu ──
+-- APLICADA em 12/10/2026 como `escritorio_concluir_projeto` (ok do Pedro: "Pode aplicar").
+-- A última etapa não tinha "Concluir": o projeto entregue parava em 89% (8 de 9). Quem grava é a admin (a
+-- política de UPDATE de escritorio_projetos já é só do dono). Ensaiada numa transação desfeita: equipe e cliente
+-- gravam 0 linha; admin, equipe e cliente leem a data; fornecedor e quem não é do projeto leem null.
+alter table public.escritorio_projetos add column if not exists concluido_em timestamptz;
+
+-- o cliente não lê a linha do projeto: recebe SÓ a data (o andamento dele vai a 100%). O fornecedor não vê andamento.
+create or replace function public.escritorio_projeto_concluido(p_projeto uuid)
+ returns timestamptz
+ language sql
+ stable security definer
+ set search_path to ''
+as $function$
+  select p.concluido_em
+    from public.escritorio_projetos p
+   where p.id = p_projeto and public.escritorio_papel(p_projeto) in ('dono', 'freela', 'cliente')
+$function$;
+revoke all on function public.escritorio_projeto_concluido(uuid) from public, anon;
+grant execute on function public.escritorio_projeto_concluido(uuid) to authenticated, service_role;
