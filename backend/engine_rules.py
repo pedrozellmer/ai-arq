@@ -2721,6 +2721,30 @@ def blocos_citados(obs) -> frozenset:
                      if m.group(1).strip())
 
 
+# 🩸 12/10/2026 — a seção AMBIENTE ↔ ÁREA ESCRITA faz a IA entregar uma linha por
+# ambiente, e dois ambientes com a MESMA área ("ESTAGIÁRIO GRAD" e "ESTAGIÁRIO
+# PÓS", 23,67 m² cada) fundiam na passada 2: o nome está no meio da descrição
+# ("Piso — ESTAGIÁRIO PÓS — especificação a definir"), fora da cabeça, e o resto
+# é igual. Um ambiente inteiro saía da planilha, no piso e no forro — em 2 de 3
+# avaliações com a seção. O que não depende da redação: a observação cita a
+# etiqueta de onde veio a área ("etiqueta de ambiente 'ESTAGIÁRIO PÓS = 23,67
+# m²'"). Duas linhas que citam etiquetas de nomes DIFERENTES (e nenhum em comum)
+# são dois ambientes — dois itens. A mesma régua dos blocos citados (29/09).
+# 📏 No banco (45 dias de cliente, seção desligada): 34 fusões em m², lidas uma a
+# uma, nenhuma de ambiente diferente — o defeito nasce com a seção ligada.
+_RX_AMBIENTE_CITADO = _re.compile(
+    r"['\"\u2018\u201c]\s*([^'\"\u2018\u2019\u201c\u201d=]{2,60}?)\s*=\s*\d[\d.,]*\s*m(?:²|2)\s*['\"\u2019\u201d]",
+    _re.I)
+
+
+def ambientes_citados(obs) -> frozenset:
+    """Os nomes de ambiente que a observação cita como fonte da área
+    ("'NOME = 23,67 m²'"), sem acento e em minúsculas."""
+    return frozenset(" ".join(_sem_acento(m.group(1)).lower().split())
+                     for m in _RX_AMBIENTE_CITADO.finditer(str(obs or ""))
+                     if m.group(1).strip())
+
+
 def perfil_de_fusao(desc: str, unidade: str = "", ref_sheet: str = "", obs: str = "") -> dict:
     """Tudo o que as duas réguas abaixo comparam, calculado UMA vez por item."""
     brutos = _re.findall(r"[a-z0-9]+", _texto_fusao(desc))
@@ -2793,6 +2817,8 @@ def perfil_de_fusao(desc: str, unidade: str = "", ref_sheet: str = "", obs: str 
         "nomes": {k: frozenset(v) for k, v in nomes.items()},
         # 29/09: os blocos que a OBSERVAÇÃO cita como fonte (vazio sem obs)
         "blocos": blocos_citados(obs),
+        # 12/10: as etiquetas de ambiente que a OBSERVAÇÃO cita como fonte da área
+        "ambientes_citados": ambientes_citados(obs),
     }
 
 
@@ -2823,6 +2849,11 @@ def motivo_para_nao_fundir(a, b) -> str:
     if a.get("blocos") and b.get("blocos") and not (a["blocos"] & b["blocos"]):
         return "blocos %s × %s" % ("/".join(sorted(a["blocos"]))[:30],
                                     "/".join(sorted(b["blocos"]))[:30])
+    # etiquetas de ambiente citadas como fonte da área: os dois citam e nenhuma
+    # em comum → dois ambientes (12/10)
+    _ca, _cb = a.get("ambientes_citados"), b.get("ambientes_citados")
+    if _ca and _cb and not (_ca & _cb):
+        return "ambientes citados %s × %s" % ("/".join(sorted(_ca))[:30], "/".join(sorted(_cb))[:30])
     # sigla entre parênteses: como o código, basta cada lado ter uma que o outro
     # não tem ("(DJIII)" × "(DJKI)"); a mesma sigla, ou sigla de um lado só, não bloqueia
     if (a["siglas"] - b["siglas"]) and (b["siglas"] - a["siglas"]):
