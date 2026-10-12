@@ -1298,7 +1298,7 @@ function blocoChecklist(tid) {
 function redesenharChk(tid) { const b = $('ct-chk'); if (b) b.innerHTML = blocoChecklist(tid); render(); }
 async function addChk(tid) {
   const inp = $('chk-novo'), txt = String((inp && inp.value) || '').trim(); if (!txt) return;
-  return umaGravacao('chk', async () => {          // ADM-8: Enter repetido criava o mesmo item duas vezes
+  return umaGravacao('chk:' + tid + ':' + txt, async () => {          // ADM-8: Enter repetido criava o mesmo item duas vezes
     const pos = Math.max(0, ...chkDa(tid).map((c) => c.posicao)) + 1;
     const { data, error } = await sb.from('escritorio_checklist').insert({ tarefa_id: tid, projeto_id: PROJ.id, texto: txt, posicao: pos }).select('id,tarefa_id,texto,feito,posicao').single();
     if (error) return falhou(error, 'Não adicionei o item');
@@ -1432,9 +1432,10 @@ async function mover(id, st, i, mostrarAoCliente) {
   if (velho.status !== st) toast('Movido para ' + stT(st) + (mostrarAoCliente ? ' · o cliente vê este cartão' : saiDoCliente ? ' · saiu da lista do cliente' : ''));
 }
 const saiDaListaDoCliente = (antes, st) => antes.status === 'cliente' && !!antes.do_cliente && ['afazer', 'dev', 'revdtz', 'revsol'].includes(st);
-// BANCO-5: o banco não gravou (0 linha, sem erro) — diz a verdade e relê o que a pessoa ainda pode ver
+// BANCO-5: o banco não gravou (0 linha, sem erro) — diz a verdade e relê o que a pessoa ainda pode ver. 0 linha é
+// "o cartão não existe mais" (alguém excluiu) OU "o banco não deixa mais você mexer nele": a tela não sabe qual.
 async function semAcessoAoCartao() {
-  toast('Não gravei: você não tem mais acesso a este cartão. Atualizei a tela.', true);
+  toast('Não gravei: este cartão foi excluído ou você não tem mais acesso a ele. Atualizei a tela.', true);
   try { await recarregar(); } catch (_) {}
 }
 
@@ -1448,8 +1449,10 @@ function addCartao(st, btn) {
 function novaTarefa() { const b = document.querySelector('.col[data-st="afazer"] .add'); if (b) addCartao('afazer', b); }
 // 🩸 12/10 (auditoria ADM-8): Enter repetido, Enter + clique no botão ou clique duplo gravavam DUAS vezes — dois
 // comentários iguais (e a @menção em dobro no resumo das 18h), dois cartões, dois itens do checklist; e o 2º clique em
-// "Cancelar convite" dizia "essa pessoa já tinha entrado no projeto", o que era falso. Uma gravação de cada tipo por
-// vez: a segunda, enquanto a primeira não voltou, não faz nada.
+// "Cancelar convite" dizia "essa pessoa já tinha entrado no projeto", o que era falso. A MESMA gravação uma vez só:
+// a segunda igual, enquanto a primeira não voltou, não faz nada. 🪤 A chave é a gravação (o texto e onde, a pessoa,
+// o pedido), não o tipo: com uma chave por tipo, o cartão digitado noutra coluna enquanto o 1º ainda gravava sumia
+// calado, e tirar duas pessoas em seguida parava na segunda (a 1ª ainda esperando o Drive).
 async function umaGravacao(chave, fn) {
   if (GRAVANDO[chave]) return;
   GRAVANDO[chave] = true;
@@ -1463,7 +1466,7 @@ async function criarCartao(st, txt, confirmado) {
   // nasce sem a pendência; com cliente, a tela diz o que ele vai ver e pede ok.
   const mostrar = st === 'cliente' && clientesAtivos().length > 0;
   if (mostrar && !confirmado) return confirmarDeFora([avisoCliente({})], 'Criar e mostrar', () => criarCartao(st, txt, true));
-  return umaGravacao('cartao', async () => {       // ADM-8: Enter repetido (ou Enter + "Adicionar") criava dois cartões
+  return umaGravacao('cartao:' + st + ':' + txt, async () => {       // ADM-8: Enter repetido (ou Enter + "Adicionar") criava dois cartões
     const max = Math.max(0, ...TAR.filter((x) => x.status === st).map((x) => x.posicao));
     const { data, error } = await sb.from('escritorio_tarefas').insert({ projeto_id: PROJ.id, titulo: txt, status: st, posicao: max + 1, etapa: etapaDoFiltro() || PROJ.etapa_atual || null, do_cliente: mostrar, criado_por: EU.id }).select().single();
     if (error) return falhou(error, 'Não criei o cartão');
@@ -1621,7 +1624,7 @@ function apagarComentario(cid, tid) {
 async function comentar(id) {
   const txt = $('ct-com').value.trim(); if (!txt) return;
   const mencoes = MEMBROS.filter((m) => m.status === 'ativo' && m.user_id !== EU.id && new RegExp('@' + escRe(curto(m)) + '(?![A-Za-zÀ-ÿ])').test(txt)).map((m) => m.id);
-  return umaGravacao('comentario', async () => {   // ADM-8: o 2º clique em "Comentar" gravava o comentário (e a @menção) de novo
+  return umaGravacao('comentario:' + id + ':' + txt, async () => {   // ADM-8: o 2º clique em "Comentar" gravava o comentário (e a @menção) de novo
     const { error } = await sb.from('escritorio_comentarios').insert({ tarefa_id: id, projeto_id: PROJ.id, texto: txt, mencoes, autor: EU.id });
     if (error) return falhou(error, 'Não comentei');
     if ($('ct-com')) $('ct-com').value = '';
@@ -2019,7 +2022,7 @@ function tarefaDoPedido(x) {
 async function virarTarefa(evId) {
   const x = EMI_EV.find((v) => v.id === evId), e = x && EMI.find((y) => y.id === x.emissao_id); if (!x || !e || !souEquipe()) return;
   if (tarefaDoPedido(x)) return toast('Esse pedido já virou tarefa: está no quadro.');
-  return umaGravacao('virar', async () => {
+  return umaGravacao('virar:' + evId, async () => {
     const titulo = tituloDaRevisao(e);
     const pos = Math.max(0, ...TAR.filter((t) => t.status === 'afazer').map((t) => t.posicao)) + 1;
     const { error } = await sb.from('escritorio_tarefas').insert({ projeto_id: PROJ.id, titulo, descricao: x.nota || null, status: 'afazer', posicao: pos, etapa: PROJ.etapa_atual || null, criado_por: EU.id });
@@ -2728,7 +2731,7 @@ async function confirmarTirar(id) {
   // 🔒 A7: "cancelar convite" numa tela velha apagava quem JÁ tinha entrado. Só apaga se
   // ainda for convite (o banco também só deixa apagar quem não está ativo) e confere a contagem.
   // ADM-8: o 2º clique chegava com o convite JÁ apagado pelo 1º (0 linha) e a tela dizia "já tinha entrado no projeto"
-  return umaGravacao('tirar', async () => {
+  return umaGravacao('tirar:' + id, async () => {
     const q = m.status === 'convidado'
       ? sb.from('escritorio_membros').delete({ count: 'exact' }).eq('id', id).eq('status', 'convidado')
       : sb.from('escritorio_membros').update({ status: 'removido', removido_em: new Date().toISOString() }, { count: 'exact' }).eq('id', id);

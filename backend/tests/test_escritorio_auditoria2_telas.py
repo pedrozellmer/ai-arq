@@ -541,7 +541,8 @@ def test_gravacao_que_o_banco_filtrou_nao_vira_movido():
     r = _mover("dev", False, "afazer", conta=0)
     assert r["gravado"][0]["contou"] is True                       # a gravação pede a contagem
     assert r["cartao"]["status"] == "dev"                          # o cartão volta pro lugar
-    assert r["avisos"] == ["Não gravei: você não tem mais acesso a este cartão. Atualizei a tela."] and r["releu"] == 1
+    assert r["avisos"] == ["Não gravei: este cartão foi excluído ou você não tem mais acesso a ele. Atualizei a tela."]
+    assert r["releu"] == 1
     r = _mover("dev", False, "afazer")                             # controle: gravou 1 linha
     assert r["cartao"]["status"] == "afazer" and r["avisos"] == ["Movido para afazer"] and r["releu"] == 0
 
@@ -572,11 +573,25 @@ def test_uma_gravacao_por_vez():
 
 def test_quem_grava_passa_pela_trava():
     """ADM-8. Guarda de TEXTO, declarado: cartão, item do checklist, comentário, cancelar convite e virar tarefa."""
-    for fn, chave in (("criarCartao", "cartao"), ("addChk", "chk"), ("comentar", "comentario"), ("confirmarTirar", "tirar"),
-                      ("virarTarefa", "virar")):
+    for fn, chave in (("criarCartao", "'cartao:' + st + ':' + txt"), ("addChk", "'chk:' + tid + ':' + txt"),
+                      ("comentar", "'comentario:' + id + ':' + txt"), ("confirmarTirar", "'tirar:' + id"),
+                      ("virarTarefa", "'virar:' + evId")):
         corpo = funcao_js(fn, "escritorio.html", E)
-        assert ("return umaGravacao('%s', async () => {" % chave) in corpo, fn
+        assert ("return umaGravacao(%s, async () => {" % chave) in corpo, fn
         assert corpo.index("umaGravacao(") < corpo.index("sb.from("), fn        # a trava vem ANTES de gravar
+
+
+def test_a_trava_e_da_gravacao_igual_nao_do_tipo():
+    """Revisão do próprio conserto (12/10): com uma chave só por tipo, o cartão digitado noutra coluna enquanto o 1º
+    ainda gravava sumia calado — e tirar duas pessoas em seguida parava na segunda (a 1ª esperando o Drive)."""
+    pendurado = ("sb = { from: function (t) { return { insert: function (o) { gravado.push(o.status + '/' + o.titulo);"
+                 "  return { select: function () { return { single: function () { return new Promise(function () {}); } }; } }; } }; } };")
+    cena = ("var TAR = []; CLIENTES = 0; povoar();"
+            "criarCartao('afazer', 'Planta'); criarCartao('afazer', 'Planta'); criarCartao('afazer', ' Planta ');"    # o Enter repetido
+            "criarCartao('afazer', 'Corte'); criarCartao('dev', 'Planta');")                                           # outra gravação
+    r = _js([_QUADRO_BASE, _linha(E, "const clientesAtivos = "), funcao_js("umaGravacao", "escritorio.html", E),
+             funcao_js("criarCartao", "escritorio.html", E), pendurado, cena], "gravado")
+    assert r == ["afazer/Planta", "afazer/Corte", "dev/Planta"]
 
 
 def _rascunho(extra=""):
@@ -632,7 +647,7 @@ def test_pedido_de_revisao_que_ja_virou_tarefa_nao_vira_de_novo():
     assert _pedido([{**feito, "descricao": "outro pedido"}]) is None            # outro texto: outro pedido
     assert _pedido([{**feito, "criado_em": "2026-10-09T08:00:00+00:00"}]) is None   # cartão de ANTES deste pedido (o da vez passada)
     v = funcao_js("virarTarefa", "escritorio.html", E)
-    assert v.index("if (tarefaDoPedido(x)) return toast(") < v.index("umaGravacao('virar'")
+    assert v.index("if (tarefaDoPedido(x)) return toast(") < v.index("umaGravacao('virar:' + evId")
     assert "tarefaDoPedido(x) ? ' · <span class=\"sub\" style=\"margin:0\">já virou tarefa</span>'" in E
 
 
