@@ -9174,6 +9174,13 @@ def _linhas_dos_quadros(reg) -> list:
         if q.get("copia_de"):
             ls.append("    = o MESMO conteúdo do QUADRO %d, desenhado de novo: conte UMA vez." % q["copia_de"])
             continue
+        if q.get("de_outra_prancha"):
+            # 12/10: o mesmo quadro (mesma assinatura) já foi listado em outro arquivo
+            # deste projeto — quem marca é o servidor (`_quadros_entre_pranchas`)
+            ls.append(("    = o MESMO quadro já listado na prancha «%s» deste projeto: as linhas dele"
+                       % str(q["de_outra_prancha"])[:60])[:_QQ_LINHA_MAX])
+            ls.append("      NÃO são itens desta prancha — não repita.")
+            continue
         for f in q.get("faltam") or []:
             ls.append("    ⚠ a coluna '%s' não tem texto no arquivo (no desenho é símbolo, bloco ou imagem):"
                       " as linhas abaixo não trazem esse dado." % f[:_QQ_NOME_MAX])

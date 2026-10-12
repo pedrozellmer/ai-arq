@@ -10348,6 +10348,46 @@ def _etiquetas_entre_pranchas(extraction, structured_text: str, acumulado: dict,
         return structured_text
 
 
+def _quadros_entre_pranchas(extraction, structured_text: str, vistos: dict,
+                            prancha: str, job_id: str = "") -> str:
+    """O MESMO quadro com quantidade em vários arquivos do job é listado UMA vez.
+
+    🩸 12/10/2026, 1ª avaliação com a seção QUADROS COM QUANTIDADE num job de 14
+    arquivos: a lista de material da entrada de energia (16 linhas) estava
+    desenhada em três pranchas de elétrica e saiu três vezes na planilha. O
+    registro de cada quadro traz a `assinatura` do conteúdo (colunas + linhas);
+    o 1º arquivo que mostra um quadro ALIMENTA `vistos`; nos seguintes o quadro
+    de mesma assinatura é marcado (`de_outra_prancha`) e o texto da IA é refeito
+    — a seção passa a dizer "o MESMO quadro já listado na prancha X". Só mexe no
+    registro e no texto; devolve o texto (o mesmo, se nada mudou). Nunca levanta.
+    🪤 Quadro desenhado de novo no MESMO arquivo é outra régua (`copia_de`).
+    """
+    try:
+        quadros = ((getattr(extraction, "metadata", None) or {})
+                   .get("quadros_com_quantidade") or {}).get("quadros") or []
+        marcados = 0
+        for q in quadros:
+            ass = q.get("assinatura")
+            if not ass or q.get("copia_de"):
+                continue
+            dono = vistos.setdefault(ass, prancha)
+            if dono != prancha and not q.get("de_outra_prancha"):
+                q["de_outra_prancha"] = dono
+                marcados += 1
+        if not marcados:
+            return structured_text
+        try:
+            _log_error("motor:quadro-entre-pranchas",
+                       f"{prancha}: {marcados} quadro(s) já listado(s) em outra prancha do job",
+                       job_id, severity="info")
+        except Exception:
+            pass
+        return extraction.to_structured_prompt()
+    except Exception as e:
+        print(f"[quadro-entre-pranchas] falhou (segue como veio): {e}")
+        return structured_text
+
+
 # ── CHAVES POR AVALIAÇÃO (12/10/2026) ───────────────────────────────────────────
 # 🩸 11/10: a seção AMBIENTE ↔ ÁREA ESCRITA subiu LIGADA com teste, mutação, A/B
 # de prompt em 129 arquivos e bancada verdes — e a 1ª planilha de verdade trocou
@@ -15756,6 +15796,9 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                 # 25/09: o que as pranchas com planta já contaram (ver
                 # `_etiquetas_entre_pranchas`)
                 _etiquetas_da_planta: dict = {}
+                # 12/10: a assinatura dos quadros com quantidade que cada prancha já
+                # listou (ver `_quadros_entre_pranchas`)
+                _quadros_do_job: dict = {}
                 # 28/09: unidades que o quadro de áreas de cada prancha declara
                 # (ver `cozinhas_acima_das_unidades`)
                 _unidades_do_quadro: dict = {}
@@ -15973,6 +16016,9 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                         continue
                     structured_text = _etiquetas_entre_pranchas(
                         extraction, structured_text, _etiquetas_da_planta, _dxf_nome, job_id)
+                    # 12/10: o mesmo quadro com quantidade em vários arquivos do job
+                    structured_text = _quadros_entre_pranchas(
+                        extraction, structured_text, _quadros_do_job, _dxf_nome, job_id)
                     # Cap de segurança (auditoria 06/07): projeto gigante pode gerar
                     # prompt enorme e estourar RAM/contexto do modelo. 300k chars é
                     # folgado pra uma prancha real.
