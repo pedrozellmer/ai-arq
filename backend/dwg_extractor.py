@@ -307,7 +307,12 @@ class DXFExtraction:
                                            "parede_espessa_pelas_faces",
                                            # 10/10: seção própria (AMBIENTE ↔
                                            # ÁREA ESCRITA NA ETIQUETA)
-                                           "ambientes_area_escrita"})
+                                           "ambientes_area_escrita",
+                                           # 11/10: seção própria (QUADROS COM
+                                           # QUANTIDADE). 🩸 o A/B do acervo
+                                           # pegou o registro cru aqui: 1,6 mil
+                                           # letras de dicionário num arquivo
+                                           "quadros_com_quantidade"})
 
     def to_structured_prompt(self) -> str:
         """Converts extraction to a structured text prompt for Claude."""
@@ -996,6 +1001,13 @@ class DXFExtraction:
             lines.extend(_linhas_dos_ambientes((self.metadata or {}).get("ambientes_area_escrita")))
         except Exception as _e_amb:                # nunca derruba o prompt
             logger.warning("[ambiente-area] seção do prompt falhou: %s", _e_amb)
+
+        # 11/10: QUADROS COM QUANTIDADE (ver `quadros_do_modelo`) — as células do
+        # quadro chegavam como textos soltos e a quantidade não ia pra planilha
+        try:
+            lines.extend(_linhas_dos_quadros((self.metadata or {}).get("quadros_com_quantidade")))
+        except Exception as _e_qq:                 # nunca derruba o prompt
+            logger.warning("[quadro-quantidade] seção do prompt falhou: %s", _e_qq)
 
         # Medições ESTRUTURAIS determinísticas (tabela de aço lida dos textos,
         # pilares contados na geometria, vigas/lajes por layer). Auto-limitada:
@@ -8911,6 +8923,180 @@ def _linhas_dos_ambientes(amb, limite: int = _AMB_LISTA_MAX) -> list:
     return ls
 
 
+# ════════════════════════════════════
+#  QUADRO COM QUANTIDADE — as linhas do quadro, do modelo ao prompt
+# ════════════════════════════════════
+# 📏 11/10/2026 — ver `engine_rules.quadros_com_quantidade` (o leitor, pela
+# grade do próprio quadro). Aqui mora a cola: os trechos retos do modelo em
+# volta de cada cabeçalho de quantidade, o registro que vai no metadata e a
+# seção do prompt.
+#: tetos da seção. Medido no acervo (39 quadros em 23 arquivos): mediana de 14
+#: linhas por quadro, 9 em cada 10 até 31, máximo 54; no máximo 4 quadros por
+#: arquivo. A seção tem mediana de 2,4 mil letras e máximo de 15 mil.
+_QQ_QUADROS_MAX = 12
+_QQ_LINHAS_MAX = 60
+_QQ_LINHAS_ARQUIVO_MAX = 240
+_QQ_NOME_MAX = 40
+_QQ_CELULA_MAX = 90
+_QQ_LINHA_MAX = 420
+
+
+def _trechos_retos_dos_quadros(msp, texts) -> tuple:
+    """(hs, vs) — [(y, xa, xb)] e [(x, ya, yb)]: os trechos retos horizontais e
+    verticais do modelo (LINE e lados sem arco de LWPOLYLINE/POLYLINE) que tocam
+    a caixa em volta de algum cabeçalho de quantidade. 🔑 Sem cabeçalho de
+    quantidade nos textos, não lê o modelo (custo zero em quem não tem quadro).
+    Medido: 0,07–1,9 s nos arquivos pesados (64 mil entidades = 1,9 s)."""
+    import engine_rules as _er
+    alturas = sorted(h for h in (float(getattr(t, "height", 0) or 0) for t in texts or ()) if h > 0)
+    hmed = alturas[len(alturas) // 2] if alturas else 1.0
+    caixas = []
+    for t in texts or ():
+        try:
+            if _er._RE_QQ_CABECALHO.match(_er._qq_chave(" ".join(str(t.text).split()))):
+                h = float(getattr(t, "height", 0) or 0) or hmed
+                x, y = float(t.position[0]), float(t.position[1])
+                caixas.append((x - _er._QQ_LADO_MAX * h, y - _er._QQ_FIM_MAX * h, x + _er._QQ_LADO_MAX * h,
+                               y + (_er._QQ_CAB_TOPO_MAX + 2) * h))
+        except Exception:
+            continue
+    if not caixas:
+        return [], []
+    ux0, uy0 = min(c[0] for c in caixas), min(c[1] for c in caixas)
+    ux1, uy1 = max(c[2] for c in caixas), max(c[3] for c in caixas)
+    hs, vs = set(), set()
+    for e in msp.query("LINE LWPOLYLINE POLYLINE"):
+        try:
+            tipo = e.dxftype()
+            if tipo == "LINE":
+                pts = [(e.dxf.start[0], e.dxf.start[1], 0.0), (e.dxf.end[0], e.dxf.end[1], 0.0)]
+            elif tipo == "LWPOLYLINE":
+                pts = [(p[0], p[1], p[2]) for p in e.get_points("xyb")]
+                if e.closed and pts:
+                    pts.append(pts[0])
+            else:
+                if not (e.is_2d_polyline or e.is_3d_polyline):
+                    continue                    # malha e polyface não são traço
+                _2d = e.is_2d_polyline
+                pts = [(v.dxf.location[0], v.dxf.location[1],
+                        float(v.dxf.get("bulge", 0) or 0) if _2d else 0.0) for v in e.vertices]
+                if e.is_closed and pts:
+                    pts.append(pts[0])
+        except Exception:
+            continue
+        for (ax, ay, blg), (bx, by, _b) in zip(pts, pts[1:]):
+            if blg or (ax == bx and ay == by):  # o lado em arco não é linha de quadro
+                continue
+            x0, x1, y0, y1 = min(ax, bx), max(ax, bx), min(ay, by), max(ay, by)
+            if x0 > ux1 or x1 < ux0 or y0 > uy1 or y1 < uy0:
+                continue
+            if not any(x0 <= c[2] and x1 >= c[0] and y0 <= c[3] and y1 >= c[1] for c in caixas):
+                continue
+            L = math.hypot(x1 - x0, y1 - y0)
+            # float(): o ponto da LWPOLYLINE vem em numpy
+            if y1 - y0 <= 0.002 * L:
+                hs.add((round(float(ay + by) / 2.0, 6), round(float(x0), 6), round(float(x1), 6)))
+            elif x1 - x0 <= 0.002 * L:
+                vs.add((round(float(ax + bx) / 2.0, 6), round(float(y0), 6), round(float(y1), 6)))
+    return sorted(hs), sorted(vs)
+
+
+def quadros_do_modelo(msp, texts) -> dict:
+    """O registro dos QUADROS COM QUANTIDADE do desenho (vai no metadata; só
+    listas, dicts, textos e números) — ou {} quando não há candidato.
+
+    {"quadros": [{"colunas", "iq", "linhas": [{"q", "cel"}], "faltam", "x", "y",
+                  "copia_de": nº do quadro de MESMO conteúdo já listado | None,
+                  "assinatura": 12 letras do conteúdo}],
+     "nao_lidos": [{"colunas", "motivo"}]}
+
+    🔑 `copia_de`: o mesmo quadro desenhado de novo no arquivo sai UMA vez.
+    🔑 `assinatura`: o mesmo quadro aparece em VÁRIAS pranchas de um projeto (no
+    acervo, a lista de material de 22 linhas em 4 arquivos do mesmo job) — quem
+    junta os arquivos reconhece pela assinatura; aqui só se vê um arquivo.
+    """
+    import hashlib
+    import engine_rules as _er
+    hs, vs = _trechos_retos_dos_quadros(msp, texts)
+    if not hs:
+        return {}                                   # sem horizontal não há régua: não é quadro
+    lidos, nao, vistos = [], [], {}
+    for q in _er.quadros_com_quantidade(texts, hs, vs):
+        if q["motivo"]:
+            nao.append({"colunas": [str(c) for c in q["colunas"]][:20], "motivo": q["motivo"]})
+            continue
+        linhas = [{"q": l["q"], "cel": [str(c) for c in l["cel"]]} for l in q["linhas"]]
+        colunas = [str(c) for c in q["colunas"]]
+        ass = hashlib.sha1(repr((colunas, [(l["q"], l["cel"]) for l in linhas])).encode("utf-8")).hexdigest()[:12]
+        lidos.append({"colunas": colunas, "iq": int(q["iq"]), "linhas": linhas,
+                      "faltam": [str(c) for c in q["faltam"]],
+                      "x": round(float(q["x"]), 4), "y": round(float(q["y"]), 4),
+                      "copia_de": vistos.get(ass), "assinatura": ass})
+        vistos.setdefault(ass, len(lidos))
+    if not lidos and not nao:
+        return {}
+    return {"quadros": lidos, "nao_lidos": nao}
+
+
+def _linhas_dos_quadros(reg) -> list:
+    """As linhas da seção QUADROS COM QUANTIDADE do prompt, a partir do registro
+    de `quadros_do_modelo`. Lista até os tetos e DIZ quantas linhas e quantos
+    quadros ficaram de fora (lista cortada calada vira "não existe")."""
+    qs = (reg or {}).get("quadros") or []
+    if not qs:
+        return []
+    # o título numa linha só, como o das outras seções (linha sem recuo = seção nova)
+    ls = ["QUADROS COM QUANTIDADE (a quantidade que o projetista escreveu num quadro — lido do arquivo, não é chute):",
+          "  (cada linha abaixo é UMA linha de um quadro: a quantidade ESCRITA e as outras células, cada",
+          "   uma com o nome da coluna dela. É o número do PROJETISTA, não contagem na geometria.",
+          # 🩸 11/10/2026 — a lição da seção de ambientes (a 1ª planilha em produção
+          # trocou 18 linhas por um total listado): a seção diz o que FAZER.
+          "   → COMO USAR: cada linha de quadro é UM item da planilha, com a quantidade escrita nela;",
+          "   cite o quadro na observação e marque 'estimado'. Não junte linhas de quadros diferentes",
+          "   num item.",
+          # 📏 medido no banco: em 4 de 5 jobs com quadro de esquadrias a planilha saiu
+          # com a contagem de bloco no lugar da quantidade do quadro (18 no lugar de
+          # 537; 7 no lugar de 55), ou com as duas. Nos 2 arquivos em que as etiquetas
+          # desenhadas foram contadas, a contagem crua passava do quadro (o dobro, da
+          # planta desenhada duas vezes; e +1 por tipo, do desenho de detalhe).
+          "   ⚠ Se o MESMO item também sai na contagem de BLOCOS, é UMA linha na planilha, não duas:",
+          "   fique com a quantidade do QUADRO e cite a contagem na observação. A contagem só vê o que",
+          "   está desenhado NESTE arquivo (e pode contar de novo a planta repetida ou o desenho de",
+          "   detalhe); o quadro é o total que o projetista fechou.",
+          "   ⚠ Linha \"(sem quantidade)\" é subtítulo ou continuação da linha de cima: não é item.",
+          "   ⚠ Quantidade que não é número (\"V\", \"ver projeto\") sai como está escrita: não invente o",
+          "   número.",
+          "   ⚠ \"a / b\" numa célula = duas linhas de texto; coluna de nome \"X / Y\" = duas colunas que o",
+          "   motor não separou, com os valores na ordem dos nomes.)"]
+    resta = _QQ_LINHAS_ARQUIVO_MAX
+    for k, q in enumerate(qs[:_QQ_QUADROS_MAX], 1):
+        iq = q["iq"]
+        ls.append(("  QUADRO %d — colunas: %s" % (
+            k, " | ".join((n or "(sem título)")[:_QQ_NOME_MAX] for n in q["colunas"])))[:_QQ_LINHA_MAX])
+        if q.get("copia_de"):
+            ls.append("    = o MESMO conteúdo do QUADRO %d, desenhado de novo: conte UMA vez." % q["copia_de"])
+            continue
+        for f in q.get("faltam") or []:
+            ls.append("    ⚠ a coluna '%s' não tem texto no arquivo (no desenho é símbolo, bloco ou imagem):"
+                      " as linhas abaixo não trazem esse dado." % f[:_QQ_NOME_MAX])
+        mostra = q["linhas"][:max(0, min(_QQ_LINHAS_MAX, resta))]
+        resta -= len(mostra)
+        for l in mostra:
+            if l["q"] is None:
+                ls.append(("    (sem quantidade)  %s" % " / ".join(l["cel"]))[:_QQ_LINHA_MAX])
+                continue
+            cs = " | ".join("%s: %s" % ((q["colunas"][i] or "(sem título)")[:_QQ_NOME_MAX], c[:_QQ_CELULA_MAX])
+                            for i, c in enumerate(l["cel"]) if c and i != iq)
+            ls.append(("    %s %s  ←  %s" % ((q["colunas"][iq] or "quantidade")[:_QQ_NOME_MAX],
+                                              l["q"][:_QQ_CELULA_MAX], cs))[:_QQ_LINHA_MAX])
+        if len(q["linhas"]) > len(mostra):
+            ls.append("    (+%d linha(s) deste quadro não listada(s))" % (len(q["linhas"]) - len(mostra)))
+    if len(qs) > _QQ_QUADROS_MAX:
+        ls.append("  (+%d quadro(s) não listado(s))" % (len(qs) - _QQ_QUADROS_MAX))
+    ls.append("")
+    return ls
+
+
 # ══════════════════════════════════════════════════════════════════════
 #  FOLHA DE PAPEL DESENHADA NO MODELO — cada vista numa escala
 # ══════════════════════════════════════════════════════════════════════
@@ -11035,6 +11221,23 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
                         "%d grupo(s)%s", os.path.basename(filepath), _amb["etiquetas"],
                         _amb["pares"], _amb["sem_nome"], len(_amb["grupos"]),
                         " por desenho" if _amb["por_desenho"] else "")
+    # 11/10: QUADRO COM QUANTIDADE — as linhas do quadro que o projetista desenhou
+    # (esquadrias, luminárias, lista de material), lidas pela grade do próprio
+    # quadro (ver `quadros_do_modelo`). Só lê os textos e os trechos retos do
+    # modelo. Chave: QUADRO_COM_QUANTIDADE=0 desliga sem deploy.
+    if os.environ.get("QUADRO_COM_QUANTIDADE", "1") != "0":
+        try:
+            _qq = quadros_do_modelo(msp, texts)
+            if _qq:
+                metadata["quadros_com_quantidade"] = _qq
+                logger.info("[quadro-quantidade] %s: %d quadro(s) lido(s) (%d cópia(s)), %d linha(s) "
+                            "com quantidade; %d candidato(s) não lido(s)", os.path.basename(filepath),
+                            len(_qq["quadros"]), sum(1 for _q in _qq["quadros"] if _q["copia_de"]),
+                            sum(1 for _q in _qq["quadros"] if not _q["copia_de"]
+                                for _l in _q["linhas"] if _l["q"] is not None),
+                            len(_qq["nao_lidos"]))
+        except Exception as _eqq:
+            logger.warning("[quadro-quantidade] falhou (não-fatal): %s", _eqq)
     # 🩸 04/10 (E12): a parede de mais de 40 cm somada pelas duas faces — ressalva
     # do layer (fora da chave do selo e do resgate; ⚠ no prompt)
     if _parede_espessa is None:

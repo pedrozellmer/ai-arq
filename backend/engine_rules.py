@@ -3510,6 +3510,478 @@ def ambientes_com_area_escrita(textos) -> tuple:
     return pares, sem_nome
 
 
+# ══════════════════════════════════════════════
+#  📋 QUADRO COM QUANTIDADE — lido pela GRADE do próprio quadro
+# ══════════════════════════════════════════════
+# 📏 11/10/2026 — estudo do acervo (342 DXF). O projetista escreve a quantidade
+# num quadro do desenho (esquadrias, luminárias, lista de material, blocos de
+# enchimento). O motor entregava cada célula como um texto solto, a IA não
+# remontava as linhas e a quantidade do quadro não chegava à planilha: em 4 de 5
+# jobs conferidos no banco o quadro de esquadrias sumiu ("porta … 0", e a
+# contagem de bloco no lugar).
+#
+# 🪤 POR QUE PELA GRADE. A 1ª versão remontava o quadro só pelos textos (coluna
+# = o cabeçalho de x mais próximo; linha = cada número embaixo do cabeçalho) e
+# tinha três defeitos MEDIDOS:
+#   • o cabeçalho centrado em cima de célula alinhada à esquerda: a descrição
+#     saía com o nome da coluna vizinha ("SIMB.");
+#   • a cadeia de linhas só aceitava número e parava CALADA na 1ª quantidade
+#     "V" / "*ver projeto*" — um quadro de 23 linhas saía com 11, dado por lido;
+#   • três quadros lado a lado emprestavam cabeçalho e célula uns aos outros.
+# As linhas do próprio quadro (LINE e lados retos de polilinha) respondem os
+# três: a horizontal embaixo do cabeçalho dá a largura do quadro, as verticais
+# que descem dela dão as colunas, e o texto entra na coluna em que o ponto dele
+# cai. O texto só refina DENTRO de uma célula da grade (quadro só com moldura,
+# sub-coluna sem separador) e só quando não há dúvida.
+# 🪤 A grade sozinha também não fecha (medido): quadro só com moldura, régua que
+# acaba antes da borda, vertical que não sobe ao cabeçalho, quadro em grupos
+# com vão entre eles. Por isso as duas juntas.
+#
+# Medido no acervo (73 arquivos com cabeçalho de quantidade, 142 cabeçalhos):
+# 42 candidatos, 39 lidos em 23 arquivos de 17 jobs, 627 linhas com quantidade;
+# os 3 não lidos estão certos (rótulo de carimbo, legenda "XX UNID.", gabarito
+# todo em "00"); o quadro de AÇO fica de fora calado (tem leitor próprio).
+# 🪤 Limites que ficam: o motor só lê texto de 1º nível do modelo — quadro
+# DENTRO de bloco, no papel ou no objeto de tabela do CAD (ACAD_TABLE: 20
+# arquivos de 13 jobs) não chega aqui; quadro girado não é lido.
+_QQ_REGUA_MAX = 6.0           # a régua de baixo do cabeçalho, em alturas de letra
+_QQ_CAB_TOPO_MAX = 12.0       # a horizontal de largura inteira acima do cabeçalho
+_QQ_CAB_2A_LINHA = 1.6        # sem ela, o cabeçalho vai até aqui acima
+_QQ_LADO_MAX = 150.0          # até onde o quadro vai pros lados
+_QQ_FIM_MAX = 400.0           # ...e pra baixo
+_QQ_PRIMEIRA_LINHA = 10.0     # a 1ª linha fica até aqui abaixo da régua
+_QQ_SALTO = 2.5               # o passo que passa disso × a mediana é o fim do quadro
+_QQ_GAP_COL = 3.0             # vão entre colunas de texto, em alturas
+#: com a grade, o quadro de UMA linha é quadro (blocos de enchimento: um tipo
+#: só, centenas de peças) e "DESCRIÇÃO | QUANTIDADE" também (cobertura em m² e
+#: ml, luminárias)
+_QQ_LINHAS_MIN = 1
+_QQ_COLUNAS_MIN = 2
+_QQ_NUMERO_MIN = 0.5          # ≥ metade das quantidades é número
+_QQ_GIRO_MAX = 1.0            # graus
+_QQ_CABECALHOS_MAX = 400      # cabeçalhos de quantidade olhados por arquivo
+#: o cabeçalho é o texto que é SÓ a palavra ("QUANT.", "Qtde", "QTD (un)");
+#: "QUANTITATIVO", "QTD DE FOLHAS" não são
+_RE_QQ_CABECALHO = _re.compile(
+    r"^(?:quant(?:idade)?s?|qtde?s?|qde|qtd|quant)\.?(?:\s*[(/]?\s*(?:un|und|unid|m|ml|m2|pc|pç)\.?\s*\)?)?$")
+_RE_QQ_NUMERO = _re.compile(
+    r"^\s*(?:\d{1,3}(?:\.\d{3})+(?:,\d+)?|\d{1,6}(?:[.,]\d{1,3})?)\s*"
+    r"(?:un|und|unid\.?|unidades?|pc|pç|pcs|pe[cç]as?|m|mt|mts|ml|metros?|m2|m²|m3|m³|kg|cj|conj|vb|gl|l)?"
+    r"\.?\s*$", _re.IGNORECASE)
+_RE_QQ_ZERO = _re.compile(r"^\s*0+(?:[.,]0+)?(?!\d)")
+#: o quadro de AÇO tem coluna de BITOLA (a mesma régua do leitor de aço,
+#: `structural_extractor._BITOLA_HDR_RE`) e de COMPRIMENTO, ou a coluna "AÇO" /
+#: "POS". 🪤 "C.Unt." e "C.Tot." abreviados passavam pela régua de comprimento
+#: do leitor de aço — 2 quadros de aço saíam como quadro de quantidade.
+_RE_QQ_COMP = _re.compile(r"\bcomp|c\.?\s*tot|c\.?\s*uni?t|comprimento", _re.IGNORECASE)
+_RE_QQ_COL_ACO = _re.compile(r"^(?:a[cç]o|pos\.?|posi[cç][aã]o)$", _re.IGNORECASE)
+
+
+def _qq_chave(s) -> str:
+    return " ".join(_sem_acento(s).lower().split())
+
+
+def _qq_mediana(v):
+    v = sorted(v)
+    return v[len(v) // 2] if v else 0.0
+
+
+def _qq_corridas(itens, tol_c, tol_gap) -> list:
+    """[(coord, ini, fim)] emendando os trechos colineares (mesma coord ± tol_c,
+    vão ≤ tol_gap): a régua quebrada célula a célula vira uma régua só."""
+    out = []
+    itens = sorted(itens)
+    i = 0
+    while i < len(itens):
+        j = i
+        grupo = []
+        while j < len(itens) and itens[j][0] - itens[i][0] <= tol_c:
+            grupo.append((itens[j][1], itens[j][2], itens[j][0]))
+            j += 1
+        grupo.sort()
+        ini, fim, c = grupo[0]
+        cs = [c]
+        for a, b, c2 in grupo[1:]:
+            if a <= fim + tol_gap:
+                fim = max(fim, b)
+                cs.append(c2)
+            else:
+                out.append((sum(cs) / len(cs), ini, fim))
+                ini, fim, cs = a, b, [c2]
+        out.append((sum(cs) / len(cs), ini, fim))
+        i = j
+    return out
+
+
+def _qq_grupos_por_x(xs, gap) -> list:
+    """Os x ordenados em grupos encadeados (vão ≤ gap)."""
+    gs = []
+    for x in sorted(xs):
+        if gs and x - gs[-1][-1] <= gap:
+            gs[-1].append(x)
+        else:
+            gs.append([x])
+    return gs
+
+
+def _qq_em_ordem(itens, h) -> list:
+    """Os textos [(x, y, texto)] na ordem de leitura: uma lista por LINHA de
+    texto, de cima pra baixo (mesma linha = y a menos de meia altura do
+    anterior), cada uma da esquerda pra direita."""
+    linhas = []
+    for x, y, r in sorted(itens, key=lambda z: -z[1]):
+        if linhas and linhas[-1][-1][1] - y <= 0.5 * h:
+            linhas[-1].append((x, y, r))
+        else:
+            linhas.append([(x, y, r)])
+    return [[r for _x, _y, r in sorted(ln)] for ln in linhas]
+
+
+def _qq_celula(itens, h) -> str:
+    """O texto de uma célula: os pedaços da mesma linha com espaço ("3" + "MT"),
+    as linhas com " / "."""
+    return " / ".join(" ".join(ln) for ln in _qq_em_ordem(itens, h))
+
+
+def quadros_com_quantidade(textos, hs, vs) -> list:
+    """Os QUADROS COM QUANTIDADE de um desenho, lidos pela grade de cada um.
+
+    `textos`: itens com `.text`, `.position` (x, y), `.height`, `.layer` e, se
+    houver, `.rotation` e `.ancora_dx`. `hs` = [(y, xa, xb)] e `vs` =
+    [(x, ya, yb)]: os trechos retos horizontais e verticais do modelo. Só lê.
+
+    Devolve um item por candidato: {"motivo": "" (lido) | por que não,
+    "colunas": [nome], "iq": índice da coluna da quantidade, "linhas":
+    [{"q": quantidade escrita | None, "cel": [célula por coluna]}], "faltam":
+    [coluna com título e sem texto em linha nenhuma], "x", "y", …}. A linha de
+    "q" None é a SEM quantidade (subtítulo, continuação): `cel` traz os textos
+    dela, linha a linha.
+
+    Pra cada texto que é cabeçalho de quantidade:
+     1. RÉGUA: a horizontal mais alta que passa por baixo dele. O vão dela é a
+        largura do quadro — o vizinho, que tem a régua dele, fica de fora. Sem
+        régua não é quadro.
+     2. INTERVALOS: as verticais que cruzam a régua pra baixo + as duas pontas.
+     3. CABEÇALHO: os textos entre a régua e a 1ª horizontal de largura inteira
+        acima. O que ocupa mais de um intervalo é título de grupo (prefixo); o
+        que ocupa todos, sozinho na linha dele, é o título do quadro (fora).
+        Dentro de um intervalo os textos se juntam em FOLHAS pelo x
+        ("Dimensões" em cima de "(cm)" é uma folha).
+     4. VIZINHO COLADO na mesma régua: o quadro acaba onde o NOME de uma coluna
+        se repete; sem repetição é o mesmo quadro com duas quantidades (fica a
+        da esquerda).
+     5. LINHAS: todo texto da coluna da quantidade, número ou não, enquanto as
+        verticais da coluna o ladeiam, o passo não salta e não aparece outro
+        cabeçalho de quantidade. A faixa da linha é entre as horizontais que
+        cruzam a coluna, quando há uma entre cada par de linhas; senão, meio
+        passo pra cada lado (o que sobra entre duas faixas é linha SEM
+        quantidade).
+     6. COLUNAS: intervalo com uma folha é uma coluna. Com várias, abre em
+        sub-colunas só se as células formam o mesmo número de colunas, todas
+        cheias; NA DÚVIDA o intervalo sai inteiro (nomes e células na ordem do
+        desenho, com " / "). Dúvida no intervalo da quantidade = quadro não lido
+        — quadro lido com coluna trocada é pior que quadro não lido.
+    """
+    try:
+        from structural_extractor import _BITOLA_HDR_RE as _re_bitola
+    except Exception:                               # nunca derruba a leitura
+        _re_bitola = _re.compile(r"bitola|\bbit\b|di[âa]m\.?|\bø\b|\bfi\b|gauge", _re.IGNORECASE)
+    txs = []
+    for t in textos or []:
+        try:
+            s = " ".join(str(t.text).split())
+            # o texto girado não é de quadro (o quadro é lido deitado; 359,98° é −0,02°)
+            giro = (float(getattr(t, "rotation", 0) or 0) + 180.0) % 360.0 - 180.0
+            # 🔑 DOIS x. O do PONTO DE ALINHAMENTO diz em que intervalo da grade o
+            # texto está: no MTEXT de parágrafo centrado numa caixa larga, o ponto
+            # de inserção fica na célula VIZINHA (medido: 2 de 3.059 células iam
+            # pra coluna errada). O de INSERÇÃO agrupa as células em colunas
+            # DENTRO de um intervalo: a caixa começa no mesmo x mesmo quando uma
+            # célula é centrada e a outra não (pelo alinhamento, uma coluna de um
+            # quadro do acervo partia em duas).
+            if s and abs(giro) <= _QQ_GIRO_MAX:
+                xi = float(t.position[0])
+                txs.append((xi + float(getattr(t, "ancora_dx", 0) or 0), float(t.position[1]),
+                            float(getattr(t, "height", 0) or 0), _qq_chave(s), s, xi))
+        except Exception:
+            continue
+    # texto SOBREPOSTO (o mesmo texto no mesmo ponto, comum em CAD): conta uma vez
+    txs = list({(round(xi, 3), round(y, 3), r): (x, y, hh, s, r, xi) for x, y, hh, s, r, xi in txs}.values())
+    hmed = _qq_mediana([t[2] for t in txs if t[2] > 0]) or 1.0
+    cabecalhos = sorted((t for t in txs if _RE_QQ_CABECALHO.match(t[3])), key=lambda t: (-t[1], t[0]))
+    quadros, vistos = [], set()
+    for xq, yq, hq, _sq, _rq, _xqi in cabecalhos[:_QQ_CABECALHOS_MAX]:
+        h = hq or hmed
+        e = 0.3 * h
+        bx0, bx1 = xq - _QQ_LADO_MAX * h, xq + _QQ_LADO_MAX * h
+        by0, by1 = yq - _QQ_FIM_MAX * h, yq + (_QQ_CAB_TOPO_MAX + 2) * h
+        H = _qq_corridas([(y, a, b) for y, a, b in hs if by0 <= y <= by1 and b >= bx0 and a <= bx1],
+                         0.05 * h, 0.6 * h)
+        V = _qq_corridas([(x, a, b) for x, a, b in vs if bx0 <= x <= bx1 and b >= by0 and a <= by1],
+                         0.05 * h, 0.6 * h)
+        perto = [t for t in txs if bx0 <= t[0] <= bx1 and by0 <= t[1] <= by1]
+        # 1. a régua de baixo do cabeçalho
+        embaixo = [r for r in H if r[1] - e <= xq <= r[2] + e and yq - _QQ_REGUA_MAX * h <= r[0] <= yq + 0.1 * h]
+        if not embaixo:
+            continue
+        yb, X0, X1 = max(embaixo)
+        # 2. os intervalos: as verticais que cruzam a régua pra baixo + as pontas
+        # da régua (🪤 a régua acaba antes da moldura num quadro do acervo, e a
+        # quantidade era a última coluna: ficava "fora das verticais")
+        bordas = []
+        for x in sorted(v[0] for v in V if X0 - e <= v[0] <= X1 + e and v[1] <= yb - e and v[2] >= yb - e):
+            if not bordas or x - bordas[-1] > 0.5 * h:
+                bordas.append(x)
+        real = [True] * len(bordas)
+        if not bordas or bordas[0] - X0 > 0.5 * h:
+            bordas.insert(0, X0)
+            real.insert(0, False)
+        if X1 - bordas[-1] > 0.5 * h:
+            bordas.append(X1)
+            real.append(False)
+        nint = len(bordas) - 1
+
+        def intervalo(x):
+            return next((i for i in range(nint) if bordas[i] - 1e-9 <= x < bordas[i + 1]), None)
+
+        def cobre(xb, y):
+            return any(abs(v[0] - xb) <= 0.5 * h and v[1] - e <= y <= v[2] + e for v in V)
+
+        iq = intervalo(xq)
+        if iq is None:
+            continue
+        # 3. o cabeçalho
+        larg = bordas[-1] - bordas[0]
+        inteiras = [r[0] for r in H if yq + 0.1 * h < r[0] <= yq + _QQ_CAB_TOPO_MAX * h
+                    and min(r[2], bordas[-1]) - max(r[1], bordas[0]) >= 0.9 * larg]
+        yt = min(inteiras) if inteiras else yq + _QQ_CAB_2A_LINHA * h
+        do_cab = [(x, y, r, xi) for x, y, _h, _s, r, xi in perto
+                  if yb < y <= yt + 0.1 * h and bordas[0] - e <= x <= bordas[-1] + e]
+        folha_txt = [[] for _ in range(nint)]
+        prefixo = [[] for _ in range(nint)]
+        for x, y, r, xi in do_cab:
+            esq = max([v[0] for v in V if v[0] <= x + 1e-9 and v[1] - e <= y <= v[2] + e and v[0] >= bordas[0] - e]
+                      + [bordas[0]])
+            dir_ = min([v[0] for v in V if v[0] > x + 1e-9 and v[1] - e <= y <= v[2] + e and v[0] <= bordas[-1] + e]
+                       + [bordas[-1]])
+            dentro = [i for i in range(nint) if bordas[i] >= esq - 0.5 * h and bordas[i + 1] <= dir_ + 0.5 * h]
+            if len(dentro) == 1:
+                folha_txt[dentro[0]].append((xi, y, r))
+            elif 1 < len(dentro) < nint:
+                for i in dentro:
+                    prefixo[i].append((xi, y, r))
+            elif not dentro or abs(y - yq) <= 0.6 * h \
+                    or sum(1 for _x, y2, _r, _xi in do_cab if abs(y2 - y) <= 0.6 * h) >= 2:
+                # entre verticais que não são borda; ou o cabeçalho sem vertical
+                # nenhuma (num quadro do acervo elas param na régua): o texto da
+                # linha do cabeçalho, ou de uma linha com mais textos, vale pelo
+                # intervalo em que começa. O texto SOZINHO na linha dele,
+                # ocupando o quadro todo, é o título e fica de fora.
+                i = intervalo(min(max(x, bordas[0]), bordas[-1] - 1e-9))
+                folha_txt[i].append((xi, y, r))
+        folhas = []                                # por intervalo: [(x mínimo, nome)]
+        for i in range(nint):
+            fs = []
+            for it in sorted(folha_txt[i]):
+                if fs and it[0] - fs[-1][-1][0] <= _QQ_GAP_COL * h:
+                    fs[-1].append(it)
+                else:
+                    fs.append([it])
+            folhas.append([(min(x for x, _y, _r in f), " ".join(r for ln in _qq_em_ordem(f, h) for r in ln))
+                           for f in fs])
+        e_qtd = [[bool(_RE_QQ_CABECALHO.match(_qq_chave(nm))) for _x, nm in fs] for fs in folhas]
+        nomes_cab = [nm for fs in folhas for _x, nm in fs]
+        if any(_re_bitola.search(nm) for nm in nomes_cab) and any(
+                _RE_QQ_COMP.search(nm) or _RE_QQ_COL_ACO.match(nm.strip()) for nm in nomes_cab):
+            continue                                # quadro de AÇO: o leitor de aço cuida
+        if sum(e_qtd[iq]) != 1:
+            continue                                # o cabeçalho da quantidade não ficou sozinho numa folha
+
+        def nome(i, nm):
+            pre = " ".join(r for ln in _qq_em_ordem(prefixo[i], h) for r in ln)
+            return (pre + " · " + nm) if (pre and nm) else (pre or nm)
+
+        # 4. o vizinho colado na mesma régua
+        lo, hi = 0, nint
+
+        def corte(a, b):
+            vistos_ = {_qq_chave(nm) for i in range(lo, a + 1) for _x, nm in folhas[i] if nm}
+            for i in range(a + 1, b + 1):
+                # o nome da coluna de quantidade não conta: "COD | QTD | QTD" é
+                # um quadro só, com duas quantidades
+                nomes_i = [_qq_chave(nm) for _x, nm in folhas[i]
+                           if nm and not _RE_QQ_CABECALHO.match(_qq_chave(nm))]
+                if any(nm in vistos_ for nm in nomes_i):
+                    return i
+                vistos_.update(nomes_i)
+            return None
+        segunda = False
+        for j in range(nint):
+            if j == iq or not any(e_qtd[j]):
+                continue
+            c = corte(min(iq, j), max(iq, j))
+            if c is None:
+                segunda = segunda or j < iq
+            elif j > iq:
+                hi = min(hi, c)
+            else:
+                lo = max(lo, c)
+        if segunda:
+            continue                                # 2ª quantidade do mesmo quadro: fica a da esquerda
+        chave = (round(bordas[lo], 3), round(bordas[hi], 3), round(yb, 3))
+        if chave in vistos:
+            continue
+        vistos.add(chave)
+        xa_t, xb_t = bordas[lo], bordas[hi]
+        q = {"x": xq, "y": yq, "motivo": "", "linhas": [], "faltam": [], "iq": None,
+             "colunas": [nome(i, nm) for i in range(lo, hi) for _x, nm in (folhas[i] or [(0, "")])],
+             "intervalos": hi - lo, "ponta_sem_vertical": int(not real[lo]) + int(not real[hi]),
+             "por_regua": False, "juntos": 0}
+        quadros.append(q)
+        # a coluna da quantidade: o intervalo dela, ou — com mais folhas no
+        # intervalo — até o meio do caminho pras folhas vizinhas
+        xs_f = [x for x, _nm in folhas[iq]]
+        kq = next(k for k, v in enumerate(e_qtd[iq]) if v)
+        so_ela = len(xs_f) == 1
+        if so_ela:
+            qa, qb = bordas[iq], bordas[iq + 1]
+        else:
+            xf = xs_f[kq]
+            esq_ = [xf - x for x in xs_f if x < xf - 1e-9]
+            dir__ = [x - xf for x in xs_f if x > xf + 1e-9]
+            qa = max(bordas[iq], xf - (max(2.0 * h, 0.5 * min(esq_)) if esq_ else (xf - bordas[iq])))
+            qb = min(bordas[iq + 1], xf + (max(2.0 * h, 0.5 * min(dir__)) if dir__ else (bordas[iq + 1] - xf)))
+        # 5. as linhas: TODO texto da coluna da quantidade (🪤 só o número parava
+        # calado na 1ª quantidade "V" e o quadro saía pela metade)
+        cand = sorted(((y, s) for x, y, _h, s, _r, xi in perto
+                       if qa - 1e-9 <= (x if so_ela else xi) < qb and y < yb - 0.2 * h and intervalo(x) == iq),
+                      key=lambda z: -z[0])
+        ys, passos = [], []
+        for y, s in cand:
+            if _RE_QQ_CABECALHO.match(s):
+                break                               # outro cabeçalho de quantidade: é o quadro de baixo
+            if (real[iq] and not cobre(bordas[iq], y)) or (real[iq + 1] and not cobre(bordas[iq + 1], y)):
+                break                               # as verticais da coluna acabaram
+            if not ys:
+                if yb - y > _QQ_PRIMEIRA_LINHA * h:
+                    break
+            else:
+                p = ys[-1] - y
+                if p < 0.4 * h:                     # outro texto na mesma linha (número + unidade)
+                    continue
+                if p > (_QQ_SALTO * _qq_mediana(passos) if len(passos) >= 2 else _QQ_PRIMEIRA_LINHA * h):
+                    break
+                passos.append(p)
+            ys.append(y)
+        if len(ys) < _QQ_LINHAS_MIN:
+            q["motivo"] = "sem linha com quantidade"
+            continue
+        passo = _qq_mediana(passos) or 3 * h
+        regras = sorted({round(r[0], 6) for r in H if r[1] <= qa + e and r[2] >= qb - e
+                         and ys[-1] - 2 * passo <= r[0] < yb - e}, reverse=True)
+        por_regua = all(any(ys[k + 1] < r < ys[k] for r in regras) for k in range(len(ys) - 1))
+        faixas, sem_q = [], []                     # (topo, base) por linha; faixas sem quantidade
+        if por_regua:
+            cortes = [yb] + regras
+            for y in ys:
+                topo = min(c for c in cortes if c > y)
+                abaixo = [c for c in cortes if c < y]
+                faixas.append((topo, max(abaixo) if abaixo else y - passo / 2))
+            usadas = set(faixas)
+            sem_q = [(a, b) for a, b in zip(cortes, cortes[1:])
+                     if (a, b) not in usadas and b >= faixas[-1][1] - 1e-9]
+        else:
+            for k, y in enumerate(ys):
+                topo = y + min(passo, (ys[k - 1] - y) if k else 2 * (yb - y)) / 2
+                base = y - min(passo, (y - ys[k + 1]) if k + 1 < len(ys) else passo) / 2
+                faixas.append((topo, base))
+            antes = yb
+            for topo, base in faixas:
+                if antes - topo > 1e-9:
+                    sem_q.append((antes, topo))
+                antes = base
+        q["por_regua"] = por_regua
+        # 6. as colunas
+        cels = [[] for _ in ys]                    # por linha: (intervalo, x de inserção, y, texto)
+        for x, y, _h, _s, r, xi in perto:
+            if not (xa_t - e <= x <= xb_t + e):
+                continue
+            k = next((k for k, (topo, base) in enumerate(faixas) if base <= y < topo), None)
+            if k is not None:
+                cels[k].append((intervalo(min(max(x, xa_t), xb_t - 1e-9)), xi, y, r))
+        col_de = {}    # intervalo → ("uma", nome, tem folha) | ("sub", [(x de, x até, nome)]) | ("junto", nome)
+        for i in range(lo, hi):
+            fs = folhas[i]
+            if len(fs) <= 1:
+                col_de[i] = ("uma", nome(i, fs[0][1] if fs else ""), bool(fs))
+                continue
+            apoio = {}
+            for k, linha in enumerate(cels):
+                for ii, x, _y, _r in linha:
+                    if ii == i:
+                        apoio.setdefault(x, set()).add(k)
+            gs = _qq_grupos_por_x(apoio, _QQ_GAP_COL * h)
+            densos = [g for g in gs if len(set().union(*(apoio[x] for x in g))) >= 0.5 * len(ys)]
+            if len(densos) == len(fs) and len(densos) == len(gs):
+                col_de[i] = ("sub", [(g[0], g[-1], nome(i, fs[n][1])) for n, g in enumerate(densos)])
+            else:
+                col_de[i] = ("junto", nome(i, " / ".join(nm for _x, nm in fs)))
+                q["juntos"] += 1
+        if col_de[iq][0] == "junto":
+            q["motivo"] = "a coluna da quantidade não se separa das vizinhas"
+            continue
+        colunas, com_folha, onde = [], [], {}      # nome das colunas; (intervalo, sub) → índice
+        for i in range(lo, hi):
+            if col_de[i][0] == "sub":
+                for n, (_a, _b, nm) in enumerate(col_de[i][1]):
+                    onde[(i, n)] = len(colunas)
+                    colunas.append(nm)
+                    com_folha.append(True)
+            else:
+                onde[(i, 0)] = len(colunas)
+                colunas.append(col_de[i][1])
+                com_folha.append(col_de[i][0] == "uma" and col_de[i][2])
+        idx_q = onde[(iq, kq if col_de[iq][0] == "sub" else 0)]
+        usados = [0] * len(colunas)
+        saida = []                                 # (y do meio, linha)
+        for k in range(len(ys)):
+            cel = [[] for _ in colunas]
+            for i, x, y, r in cels[k]:
+                n = 0
+                if col_de[i][0] == "sub":
+                    n = next(n for n, (a, b, _nm) in enumerate(col_de[i][1]) if a - 1e-9 <= x <= b + 1e-9)
+                cel[onde[(i, n)]].append((x, y, r))
+            cel = [_qq_celula(c, h) for c in cel]
+            for n, c in enumerate(cel):
+                if c and n != idx_q:
+                    usados[n] += 1
+            saida.append(((faixas[k][0] + faixas[k][1]) / 2, {"q": cel[idx_q], "cel": cel}))
+        for a, b in sem_q:
+            its = [(x, y, r) for x, y, _h, _s, r, _xi in perto if b <= y < a and xa_t - e <= x <= xb_t + e]
+            if its:
+                saida.append(((a + b) / 2, {"q": None, "cel": [" | ".join(ln) for ln in _qq_em_ordem(its, h)]}))
+        # a coluna sem título e sem célula em linha nenhuma (o vão entre duas
+        # caixas, a do símbolo sem cabeçalho) não é coluna de nada: sai
+        fica = [n for n in range(len(colunas)) if n == idx_q or colunas[n] or usados[n]]
+        if len(fica) < len(colunas):
+            for _y, l in saida:
+                if l["q"] is not None:
+                    l["cel"] = [l["cel"][n] for n in fica]
+            colunas, com_folha, usados = ([v[n] for n in fica] for v in (colunas, com_folha, usados))
+            idx_q = fica.index(idx_q)
+        q["colunas"], q["iq"] = colunas, idx_q
+        q["linhas"] = [l for _y, l in sorted(saida, key=lambda z: -z[0])]
+        q["faltam"] = [colunas[n] for n in range(len(colunas)) if n != idx_q and com_folha[n] and not usados[n]]
+        qs_ = [l["q"] for l in q["linhas"] if l["q"] is not None]
+        if all(_RE_QQ_ZERO.match(v) for v in qs_):
+            q["motivo"] = "a coluna da quantidade está toda em zero"
+        elif sum(1 for v in qs_ if _RE_QQ_NUMERO.match(v)) < _QQ_NUMERO_MIN * len(qs_):
+            q["motivo"] = "a coluna da quantidade quase não tem número"
+        elif sum(1 for c in colunas if c) < _QQ_COLUNAS_MIN:
+            q["motivo"] = "menos de %d colunas com título" % _QQ_COLUNAS_MIN
+    return quadros
+
+
 # ══════════════════════════════════════════════════════════════════════════
 #  🧬 MERGE DE LEITURAS — a melhor prancha de cada
 # ══════════════════════════════════════════════════════════════════════════
