@@ -1347,3 +1347,122 @@ def test_controle_conflito_sem_registro_nenhum_continua_desfazendo():
     r = ed.sincronizar(PROJ)
     assert [t.split("/permissions/")[0] for t in g.permissoes_tiradas()] == ["PASTA_PROJ"]
     assert r["falhas_dar"] == [EQUIPE["email"]]
+
+
+# ══ 12/10 — grupo A dos achados pequenos da 2ª auditoria (acesso e dados) ══
+def test_emissao_sem_a_copia_registrada_nao_conta_como_acesso_tirado():
+    """SERV-3: sem o id da cópia não dá pra tirar nada no Google — e isso contava como "tirado" (404 de mentira):
+    a tela dizia "perdeu o acesso" e a pessoa seguia lendo o arquivo."""
+    b, _, _ = montar(DONA, "dono")
+    membro(b, M_CLI, "cliente", CLI, status="removido")
+    b.t["escritorio_emissoes"].append({"id": E1, "projeto_id": PROJ, "copia_id": None, "arquivo_nome": "Planta.pdf",
+                                       "copia_nome": "Planta_R02.pdf", "revisao": 2})
+    b.t["escritorio_emissao_destinos"].append({"emissao_id": E1, "projeto_id": PROJ, "membro_id": M_CLI,
+                                               "permission_id": "perm-cli"})
+    g = _pastas()
+    r = ed.sincronizar(PROJ)
+    assert r["saidas"][M_CLI] == "falhou" and "emissão (sem a cópia registrada)" in r["falhas"]
+    assert b.t["escritorio_emissao_destinos"][0]["permission_id"] == "perm-cli"      # o registro fica: alguém ainda tira
+    assert not g.permissoes_tiradas()
+    b.t["escritorio_emissoes"][0]["copia_id"] = "COPIA1"                             # controle: com o id, sai de verdade
+    r = ed.sincronizar(PROJ)
+    assert r["saidas"][M_CLI] == "tirado" and g.permissoes_tiradas() == ["COPIA1/permissions/perm-cli"]
+    assert b.t["escritorio_emissao_destinos"][0]["permission_id"] is None
+
+
+def _promovido(b):
+    """A admin tinha dado LEITOR à mão; o AI.arq promoveu a editor (papel_antes guarda o que era)."""
+    b.t["escritorio_drive_permissoes"] += [
+        {"id": "dp-1", "projeto_id": PROJ, "membro_id": M_EQ, "email": EQUIPE["email"], "pasta_id": "PASTA_PROJ",
+         "permission_id": "perm-eq", "ja_existia": False, "papel_antes": "reader"},
+        {"id": "dp-2", "projeto_id": PROJ, "membro_id": M_FORN, "email": FORN["email"], "pasta_id": "PASTA_MARC",
+         "permission_id": "perm-forn", "ja_existia": False, "papel_antes": None}]
+
+
+def _voltaram(g):
+    return [(u.split("/files/", 1)[1].split("?", 1)[0], c) for m, u, c in g.chamadas if m == "PATCH" and "/permissions/" in u]
+
+
+def test_apagar_o_projeto_devolve_o_papel_que_a_admin_tinha_dado_a_mao():
+    """SERV-4: "Apagar projeto" apagava direto — quem tinha leitura dada pela admin fora do AI.arq perdia também ela."""
+    b, _, _ = montar(DONA, "dono")
+    _promovido(b)
+    g = _pastas()
+    assert ed.projeto_apagar(PROJ, REQ)["apagado"] is True
+    assert _voltaram(g) == [("PASTA_PROJ/permissions/perm-eq", {"role": "reader"})]
+    assert g.permissoes_tiradas() == ["PASTA_MARC/permissions/perm-forn"]            # controle: o que era só nosso sai
+
+
+def test_limpar_a_conta_da_admin_devolve_o_papel_de_antes():
+    """SERV-4, o outro caminho (exclusão de conta)."""
+    b, _, _ = montar(DONA, "dono")
+    _promovido(b)
+    g = _pastas()
+    feito = ed.limpar_conta(DONA["id"])
+    assert _voltaram(g) == [("PASTA_PROJ/permissions/perm-eq", {"role": "reader"})]
+    assert g.permissoes_tiradas() == ["PASTA_MARC/permissions/perm-forn"]
+    assert feito["tirados"] == 2 and feito["pendentes"] == 0 and b.t["escritorio_drive_permissoes"] == []
+
+
+def _marcenaria_um_nivel_abaixo(g):
+    """A subpasta do fornecedor dentro de uma pasta intermediária — pro soluço ser no CAMINHO, não na própria pasta."""
+    g.pastas["PASTA_MEIO"] = {"name": "Fornecedores", "mimeType": ed.PASTA}
+    g.pais.update(PASTA_MARC="PASTA_MEIO", PASTA_MEIO="PASTA_PROJ")
+
+
+def test_soluco_do_google_no_caminho_nao_desliga_a_subpasta_do_fornecedor_no_reenvio():
+    """SERV-5: "fora da pasta" e "o Google não respondeu" eram o mesmo False — o reenvio do convite DESLIGAVA a subpasta
+    do fornecedor por causa de um soluço."""
+    b, _, _ = montar(DONA, "dono")
+    linha = membro(b, M_FORN, "fornecedor", FORN, status="removido", drive_pasta_id="PASTA_MARC",
+                   drive_pasta_nome="Marcenaria")
+    g = _pastas()
+    _marcenaria_um_nivel_abaixo(g)
+    assert ed.pasta_do_fornecedor(PROJ, "PASTA_MARC") == {"id": "PASTA_MARC", "nome": "Marcenaria"}    # controle
+    g.erro.add("PASTA_MEIO")
+    with pytest.raises(HTTPException) as e:
+        ed.pasta_do_fornecedor(PROJ, "PASTA_MARC")
+    assert e.value.status_code == 502 and "não respondeu" in e.value.detail
+    r = esc.convidar(PROJ, REQ, {"email": FORN["email"]})
+    assert r["pasta_desligada"] is False and linha["drive_pasta_id"] == "PASTA_MARC"
+    g.erro.clear()
+    g.pais["PASTA_MEIO"] = "PASTA_FORA"                    # controle: fora DE VERDADE continua 400
+    with pytest.raises(HTTPException) as e:
+        ed.pasta_do_fornecedor(PROJ, "PASTA_MARC")
+    assert e.value.status_code == 400
+
+
+def test_soluco_do_google_nao_diz_ao_fornecedor_que_a_admin_tirou_a_pasta_dele():
+    """SERV-5, na lista de arquivos: era 403 "a pasta que a admin separou pra você não está mais no projeto"."""
+    b, _, _ = montar(FORN, "fornecedor")
+    membro(b, M_FORN, "fornecedor", FORN, drive_pasta_id="PASTA_MARC", drive_pasta_nome="Marcenaria")
+    g = _pastas()
+    g.erro.add("PASTA_MARC")
+    with pytest.raises(HTTPException) as e:
+        ed.projeto_arquivos(PROJ, REQ)
+    assert e.value.status_code == 502 and "não respondeu" in e.value.detail
+    g.erro.clear()
+    assert ed.projeto_arquivos(PROJ, REQ)["pasta"]["id"] == "PASTA_MARC"             # controle
+
+
+@pytest.mark.parametrize("resposta", [(0, None), (200, [])])
+def test_pasta_que_o_banco_nao_gravou_nao_vira_ok(resposta):
+    """SERV-6: o banco sem responder (status 0) passava: a rota sincronizava a pasta ANTIGA e dizia "ok" com o nome da
+    nova. 0 linha gravada (o projeto sumiu no meio) é a mesma coisa."""
+    b, _, _ = montar(DONA, "dono")
+    b.t["escritorio_projetos"][0]["pasta_id"] = "PASTA_MARC"
+    membro(b, M_EQ, "freela", EQUIPE)
+    g = _pastas()
+
+    def servico(method, path, body=None, params=None, prefer=None, **k):
+        if method == "PATCH" and path.lstrip("/") == "escritorio_projetos":
+            return resposta
+        return b(method, path, body=body, params=params, prefer=prefer, **k)
+    esc._SERVICO = servico
+    with pytest.raises(HTTPException) as e:
+        ed.projeto_pasta(PROJ, REQ, {"pasta": "PASTA_PROJ"})
+    assert e.value.status_code == 502 and "gravar a pasta" in e.value.detail
+    assert not g.permissoes_dadas() and b.t["escritorio_projetos"][0]["pasta_id"] == "PASTA_MARC"
+    esc._SERVICO = b                                       # controle: gravou → liga e compartilha a NOVA
+    r = ed.projeto_pasta(PROJ, REQ, {"pasta": "PASTA_PROJ"})
+    assert r["ok"] and r["pasta"]["id"] == "PASTA_PROJ" and ("PASTA_PROJ", "writer", EQUIPE["email"]) in g.permissoes_dadas()

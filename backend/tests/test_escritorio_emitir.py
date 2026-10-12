@@ -301,3 +301,53 @@ def test_na_tela_so_a_admin_emite_e_registra_e_o_botao_nao_abre_o_arquivo():
     # o nome do arquivo é texto de gente: vai em data-*, nunca dentro de onclick
     assert 'class="btn btn-s arq-emitir" data-id="${esc(f.id)}" data-nome="${esc(f.nome)}"' in h
     assert "onclick=\"emitirArquivo(" not in h
+
+
+# ══ 12/10 (auditoria SERV-3): a cópia que o banco não registrou ══
+def _registro_da_copia_falha(b, vezes):
+    """O PATCH que grava o id da cópia na emissão fica sem resposta `vezes` vezes; depois grava."""
+    restam = [vezes]
+
+    def servico(method, path, body=None, params=None, prefer=None, **k):
+        if method == "PATCH" and path == "escritorio_emissoes" and restam[0] > 0:
+            restam[0] -= 1
+            return 0, None
+        return b(method, path, body=body, params=params, prefer=prefer, **k)
+    esc._SERVICO = servico
+
+
+def _espia_o_mandar(monkeypatch):
+    mandou = []
+    monkeypatch.setattr(ed, "_mandar", lambda *a, **k: mandou.append(a) or {"mandados": 1, "falhas": []})
+    return mandou
+
+
+def test_copia_que_o_banco_nao_registrou_nao_e_mandada_pra_ninguem(monkeypatch):
+    """SERV-3: sem o id da cópia gravado, o cliente ganhava a leitura mesmo assim — e, no dia em que saísse do projeto,
+    ninguém saberia de qual arquivo tirar."""
+    b = Banco()
+    Google(emitidos_existe=True)
+    mandou = _espia_o_mandar(monkeypatch)
+    _registro_da_copia_falha(b, 2)
+    r = ed.projeto_emitir(PROJ, REQ, {"arquivo_id": ARQ, "para": ["m-cli"]})
+    assert r["ok"] and r["mandados"] == 0 and r["falhas"] == ["banco"] and "Não mandei pra ninguém" in r["erro"]
+    assert mandou == [] and b.emissoes[0].get("copia_id") is None
+    assert [a for a in b.avisos if "sem o id da cópia" in a[1]]
+
+
+def test_o_registro_da_copia_tenta_de_novo_e_ai_manda(monkeypatch):
+    b = Banco()
+    Google(emitidos_existe=True)
+    mandou = _espia_o_mandar(monkeypatch)
+    _registro_da_copia_falha(b, 1)                          # controle: soluço de UMA vez — a 2ª tentativa grava
+    r = ed.projeto_emitir(PROJ, REQ, {"arquivo_id": ARQ, "para": ["m-cli"]})
+    assert r["mandados"] == 1 and "erro" not in r and len(mandou) == 1
+    assert b.emissoes[0]["copia_id"] == "COPIA_NOVA_0001" and not b.avisos
+
+
+def test_controle_emissao_sem_destinatario_e_sem_registro_nao_vira_erro_de_envio():
+    b = Banco()
+    Google(emitidos_existe=True)
+    _registro_da_copia_falha(b, 2)
+    r = _emitir()
+    assert r["ok"] and r["falhas"] == [] and "erro" not in r
