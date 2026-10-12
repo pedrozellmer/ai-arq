@@ -158,7 +158,119 @@ def test_CONTROLE_linha_que_ja_esta_estimada_ou_zerada_fica_como_esta():
 def test_CONTROLE_o_quadro_de_aco_tem_a_excecao_dele():
     obs = "Peso conforme quadro de aço da prancha: CA-50 Ø10 = 148,50 kg."
     assert regua(obs, q=148.5, unit="kg") == ("confirmado", obs, False)
-    assert regua("Peso conforme quadro de cargas: 148,50 kg.", q=148.5, unit="kg")[2] is True   # controle
+    assert regua("Peso conforme quadro de materiais: 148,50 kg.", q=148.5, unit="kg")[2] is True   # controle
+
+
+# ── (a): "quadro" que NÃO é quadro de quantidade ───────────────────────────
+# 🩸 12/10/2026 (revisão): em prancha de elétrica a linha "Quadro de distribuição
+# QD-1 — 1 un" cita "quadro" por ser o próprio item, o arquivo tem lista de
+# material lida, e "1" é linha de quase todo quadro — a linha ganharia "é a
+# quantidade que o projetista escreveu no quadro": frase falsa pro cliente.
+
+PAINEL_OU_OBJETO = [
+    "Quadro elétrico de sobrepor, conforme diagrama unifilar.",
+    "Fonte: quadro de distribuição QD-1 conforme diagrama.",
+    "Conforme quadro de cargas do projeto.",
+    "Quadro de força e luz no térreo.",
+    "Quadro geral de baixa tensão (QGBT).",
+    "Quadro geral.",
+    "Alimentado pelo quadro QGBT.",
+    "Quadros elétricos QDL-1 e QDF-2.",
+    "Quadro terminal de iluminação.",
+    "Quadro de disjuntores do pavimento.",
+    "Quadro de medição da concessionária.",
+    "Quadro de comando das bombas.",
+    "Quadro branco na sala de reunião.",
+    "Quadro de avisos no hall.",
+    "Quadro de vidro temperado.",
+]
+DE_QUANTIDADE = [
+    "1 un conforme quadro de esquadrias.",
+    "QUADRO 1: QTD 1 ← Ref.: PX6",
+    "Conforme quadro.",
+    "Quantidade do quadro de quantidades.",
+    "Quadro de materiais da prancha.",
+    "Confirmar com quadro de luminárias.",
+    "QUADRO GERAL DE ÁREAS",
+    "Quadro geral de esquadrias do projeto.",
+]
+
+
+@pytest.mark.parametrize("obs", PAINEL_OU_OBJETO)
+def test_CONTROLE_o_painel_eletrico_e_o_objeto_nao_sao_quadro_de_quantidade(obs):
+    assert E.cita_quadro_de_quantidade(obs) is False
+    # 1 un, o número igual ao de uma linha de quadro lida, e nenhum bloco citado: a régua não age
+    assert regua(obs, q=1.0, quantidades=[1.0, 2.0]) == ("confirmado", obs, False)
+
+
+@pytest.mark.parametrize("obs", DE_QUANTIDADE)
+def test_o_quadro_de_quantidade_citado_de_varios_jeitos(obs):
+    assert E.cita_quadro_de_quantidade(obs) is True
+    assert regua(obs, q=1.0, quantidades=[1.0, 2.0])[2] is True
+
+
+def test_citando_os_dois_quadros_a_regua_age():
+    """O painel E o quadro de quantidade na mesma observação: basta uma
+    citação de quadro de quantidade."""
+    for obs in ("Quadro de distribuição QD-1; quantidade conforme QUADRO 1.",
+                "QUADRO 2: QTD 1 ← DESCRIÇÃO: Quadro de distribuição",
+                "Conforme quadro de materiais. Alimenta o quadro elétrico QDL-1."):
+        assert E.cita_quadro_de_quantidade(obs) is True, obs
+        assert regua(obs, q=1.0, quantidades=[1.0, 2.0])[2] is True, obs
+
+
+# 🩸 A lista de sentidos sozinha não tirava as linhas de painel do passado: a
+# observação dizia "não representa quadro físico adicional", "quadros novos vs
+# existentes" e citava um bloco 'CJ QUADROS'. O que elas têm em comum é que o
+# ITEM da linha é um quadro.
+_OBS_DE_PAINEL = "Fonte: contagem no desenho. Não representa quadro físico adicional; quadros novos vs existentes a confirmar."
+
+
+@pytest.mark.parametrize("descricao", [
+    "Quadro de força — fornecimento e instalação",
+    "Indicação de quadro elétrico — bloco de identificação",
+    "Kit de quadros — fornecimento e instalação de kit de quadros",
+    "QUADROS de distribuição",
+])
+def test_CONTROLE_quando_o_item_da_linha_e_um_quadro_a_regua_nao_age(descricao):
+    r = E.selo_apos_numero_do_quadro("confirmado", _OBS_DE_PAINEL, 1.0, "un", [1.0, 2.0], BLOCOS, INDICE,
+                                     descricao=descricao)
+    assert r == ("confirmado", _OBS_DE_PAINEL, False)
+
+
+def test_a_mesma_observacao_num_item_que_NAO_e_quadro_e_rebaixada():
+    """Prova que quem segura o controle de cima é a descrição: a observação
+    cita "quadro" num sentido que a lista não conhece."""
+    for descricao in ("Porta de abrir PX6", "", None,
+                      "Janela maxim-ar — dimensões a confirmar no quadro de esquadrias"):   # "quadro" lá no fim
+        r = E.selo_apos_numero_do_quadro("confirmado", _OBS_DE_PAINEL, 1.0, "un", [1.0, 2.0], BLOCOS, INDICE,
+                                         descricao=descricao)
+        assert r[2] is True, descricao
+
+
+def test_nome_de_bloco_com_a_palavra_quadro_nao_e_citacao_de_quadro():
+    obs = "Fonte: 1 INSERT do bloco 'CJ QUADROS'."
+    blocos = {"CJ QUADROS": 3, "PX6": 13}                 # a contagem (3) não é a quantidade: (c) não segura
+    assert E.cita_quadro_de_quantidade(obs) is True         # pela palavra, pareceria
+    assert regua(obs, q=1.0, quantidades=[1.0, 2.0], blocos=blocos) == ("confirmado", obs, False)
+    # controle: sem esse bloco na extração, a mesma frase é citação — e com outra citação de verdade, age
+    assert regua(obs, q=1.0, quantidades=[1.0, 2.0], blocos={"PX6": 13})[2] is True
+    com_quadro = obs + " Quantidade conforme quadro de materiais."
+    assert regua(com_quadro, q=1.0, quantidades=[1.0, 2.0], blocos=blocos)[2] is True
+    # nome curto não apaga texto: um bloco chamado "QUADRO" não some com a citação "QUADRO 1"
+    assert regua("QUADRO 1: QTD 1 ← Ref.: PX6", q=1.0, quantidades=[1.0], blocos={"QUADRO": 9})[2] is True
+
+
+def test_a_pontuacao_fecha_a_janela_do_sentido():
+    """"QUADRO 1: … distribuição" é quadro de quantidade — a palavra do painel
+    só vale colada ao "quadro" (até duas palavras, sem pontuação no meio)."""
+    assert E.cita_quadro_de_quantidade("QUADRO 1: distribuição dos pontos por ambiente") is True
+    assert E.cita_quadro_de_quantidade("quadro (de distribuição)") is True
+    assert E.cita_quadro_de_quantidade("quadro com a lista de pontos de distribuição") is True      # 4ª palavra
+    assert E.cita_quadro_de_quantidade("quadro de comando e força") is False
+    assert E.cita_quadro_de_quantidade("quadro novo de distribuição") is False                      # 2 palavras no meio
+    assert E.cita_quadro_de_quantidade("Fonte: 13 INSERTs do bloco 'PX6'.") is False                # nem cita quadro
+    assert E.cita_quadro_de_quantidade(None) is False and E.cita_quadro_de_quantidade("") is False
 
 
 def test_SEM_quadro_lido_a_regua_nao_mexe_em_linha_nenhuma():
@@ -299,6 +411,18 @@ def test_CONTROLE_o_laco_com_a_contagem_batendo_nao_mexe():
     assert E.MARCA_NUMERO_DO_QUADRO not in it.observations and it.confidence.value == "confirmado", it.observations
 
 
+def test_o_laco_de_producao_passa_a_descricao_o_item_que_e_quadro_fica():
+    """A mesma observação e o mesmo número, dois itens: o painel fica como
+    veio; a porta é rebaixada. Só a descrição muda — é o laço que a entrega."""
+    obs = "Conforme quadro; ver diagrama."
+    painel, porta = _laco(
+        [_item(obs, q=1.0, desc="Quadro de distribuição QD-1 — fornecimento e instalação"),
+         dict(_item(obs, q=1.0), item_num="2")],
+        _quadros_q=[1.0, 2.0])
+    assert painel.confidence.value == "confirmado" and E.MARCA_NUMERO_DO_QUADRO not in painel.observations
+    assert porta.confidence.value == "estimado" and E.MARCA_NUMERO_DO_QUADRO in porta.observations
+
+
 def _cats_do_cross_check():
     import _executa
     esc = {}
@@ -350,6 +474,7 @@ def test_o_process_job_passa_a_linha_pela_regua_antes_da_chave():
     c = chamadas[0]
     assert [getattr(a, "id", None) for a in c.args] == [
         "conf", "obs_raw", "qty", "normalized_unit", "_quadros_q", "_blocos_n", "_indice_geom"]
+    assert {k.arg: getattr(k.value, "id", None) for k in c.keywords} == {"descricao": "desc"}
     # o resultado volta pra linha: (conf, obs_raw, …) = régua(…)
     atrib = [no for no in ast.walk(fn) if isinstance(no, ast.Assign) and no.value is c]
     assert atrib and [getattr(t, "id", None) for t in atrib[0].targets[0].elts][:2] == ["conf", "obs_raw"]

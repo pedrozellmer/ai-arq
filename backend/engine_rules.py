@@ -7280,8 +7280,9 @@ def ressalva_da_planta_repetida(copias) -> str:
 #: 13 — provado com as funções reais em 6 de 10 redações testadas.
 #: 🔑 A régua não depende da redação da IA: usa o que o motor LEU. Rebaixa só
 #: com as três juntas —
-#:   (a) a linha está 'confirmado' e a observação cita "quadro" (não o de aço:
-#:       esse tem a exceção dele, `_cita_o_quadro_de_aco`);
+#:   (a) a linha está 'confirmado' e a observação cita um quadro de QUANTIDADE
+#:       (`cita_quadro_de_quantidade`: não o painel elétrico nem o objeto; e
+#:       não o de aço, que tem a exceção dele, `_cita_o_quadro_de_aco`);
 #:   (b) a quantidade é a de alguma linha dos quadros lidos NESTE arquivo
 #:       (`quantidades_dos_quadros`), no arredondamento da planilha (2 casas);
 #:   (c) nenhuma geometria citada dá o MESMO número: nem a contagem do bloco
@@ -7296,6 +7297,63 @@ def ressalva_da_planta_repetida(copias) -> str:
 #: registro só existe com QUADRO_COM_QUANTIDADE ligada.
 #: 🚨 SÓ REBAIXA: não mexe na quantidade, não apaga.
 _RE_CITA_QUADRO = _re.compile(r"\bquadros?\b", _re.IGNORECASE)
+#: 🩸 12/10/2026 (revisão, antes de subir): "quadro" também é o PAINEL elétrico
+#: e o objeto. Em prancha de elétrica a linha "Quadro de distribuição QD-1 — 1
+#: un" cita "quadro" por ser o próprio item; o arquivo costuma ter lista de
+#: material (um quadro de quantidade lido) e "1" é linha de quase todo quadro —
+#: bastava a IA não citar o bloco fonte pra linha ganhar "é a quantidade que o
+#: projetista escreveu no quadro": frase falsa pro cliente. A condição (a) é
+#: citar quadro de QUANTIDADE: o "quadro" que NÃO vem seguido, em até 2
+#: palavras, de um destes sentidos nem de sigla de painel (QD…, QG…, QL…, QF…).
+#: Se TODAS as citações da observação são desses sentidos, a régua não age.
+#: 🪤 A pontuação fecha a janela ("QUADRO 1: … distribuição" é quadro de
+#: quantidade), e "quadro geral" só é painel quando não é "geral DE alguma
+#: coisa" que não seja tensão, força, distribuição, luz ou energia — "QUADRO
+#: GERAL DE ÁREAS" é título de quadro de quantidade.
+_RE_QUADRO_QUE_NAO_E_DE_QUANTIDADE = _re.compile(
+    r"quadros?(?:\s+[^\s.;:|()]+){0,2}?\s+"
+    r"(?:el[ée]tric[oa]s?|distribui[çc][ãa]o|cargas?|for[çc]a|luz|ilumina[çc][ãa]o|tomadas?|comandos?"
+    r"|medi[çc][ãa]o|medidor(?:es)?|energia|automa[çc][ãa]o|bombas?|telefonia|terminal|terminais"
+    r"|disjuntor(?:es)?|branco|negro|avisos?|vidro"
+    r"|gera(?:l|is)(?!\s+d[eao]s?\s+(?!baixa|m[ée]dia|alta|for[çc]a|distribui|luz|energia|bt\b))"
+    r"|Q[DGLF][A-Z0-9]*(?:[-.][A-Z0-9]+)*)(?![\wÀ-ÿ])",
+    _re.IGNORECASE)
+
+
+def cita_quadro_de_quantidade(obs) -> bool:
+    """A observação cita um quadro que pode ser de QUANTIDADE ("QUADRO 1",
+    "quadro de esquadrias", "conforme quadro")? Falso se não cita "quadro", ou
+    se todas as citações são de painel elétrico / objeto ("quadro de
+    distribuição", "quadro QGBT", "quadro branco")."""
+    t = str(obs or "")
+    return any(not _RE_QUADRO_QUE_NAO_E_DE_QUANTIDADE.match(t, m.start())
+               for m in _RE_CITA_QUADRO.finditer(t))
+
+
+#: 🩸 12/10/2026 — a lista de sentidos sozinha NÃO tirava as 3 linhas de painel
+#: do passado: a observação diz "não representa quadro físico adicional",
+#: "quadros novos vs existentes" e cita um bloco 'CJ QUADROS'. O que as três
+#: têm em comum é que o ITEM da linha é um quadro — "Quadro de força", "Kit de
+#: quadros", "Indicação de quadro elétrico": "quadro" entre as 3 primeiras
+#: palavras da DESCRIÇÃO. A descrição que cita o quadro de quantidade lá no fim
+#: ("Janela maxim-ar — dimensões a confirmar no quadro de esquadrias") não.
+_RE_O_ITEM_E_UM_QUADRO = _re.compile(r"^\W*(?:[\wÀ-ÿ.-]+\W+){0,2}quadros?\b", _re.IGNORECASE)
+
+
+def _sem_os_nomes_de_bloco(obs, blocos) -> str:
+    """A observação sem os NOMES DE BLOCO que trazem a palavra "quadro" ('CJ
+    QUADROS'): nome de bloco citado não é citação de quadro. 🪤 Só o nome que
+    tem mais do que a palavra — um bloco chamado "QUADRO" ou "QUADRO 1" não
+    pode apagar a citação "QUADRO 1" da seção."""
+    t = str(obs or "")
+    for nome in (blocos or {}):
+        nm = str(nome or "").strip()
+        if (_RE_CITA_QUADRO.search(nm)
+                and len(_re.sub(r"[\W_]", "", _RE_CITA_QUADRO.sub("", nm))) >= 2):
+            t = _re.sub(_re.escape(nm), " ", t, flags=_re.IGNORECASE)
+    return t
+
+
 _RE_NUMERO_NO_COMECO = _re.compile(r"^\s*(\d{1,3}(?:\.\d{3})+(?:,\d+)?|\d+(?:[.,]\d+)?)")
 _RE_SO_MILHAR = _re.compile(r"^\d{1,3}(?:\.\d{3})+$")
 
@@ -7364,18 +7422,23 @@ def _o_bloco_fonte_conta_o_mesmo(obs, q, unit, blocos) -> bool:
     return bool(fonte) and todos.get(fonte) == int(q)
 
 
-def selo_apos_numero_do_quadro(conf, obs, quantity, unit, quantidades, blocos, indice):
+def selo_apos_numero_do_quadro(conf, obs, quantity, unit, quantidades, blocos, indice,
+                               descricao=""):
     """(conf, obs, rebaixou) — a quantidade ESCRITA num quadro não sai ✓ MEDIDO
     só porque a observação também cita uma contagem. Ver o comentário acima.
 
     `quantidades` = `quantidades_dos_quadros` do arquivo; `blocos` = todos os
     blocos da extração ({nome: contagem}); `indice` = o que o motor mediu
-    (`prova_da_geometria`).
+    (`prova_da_geometria`); `descricao` = a descrição do item — quando o
+    próprio item é um quadro (painel), a régua não age.
     """
     if conf != "confirmado" or not quantidades:
         return conf, obs, False
+    if _RE_O_ITEM_E_UM_QUADRO.match(str(descricao or "")):
+        return conf, obs, False           # o item da linha É um quadro
     t = str(obs or "")
-    if not _RE_CITA_QUADRO.search(t) or _cita_o_quadro_de_aco(t.lower(), unit):
+    if (not cita_quadro_de_quantidade(_sem_os_nomes_de_bloco(t, blocos))
+            or _cita_o_quadro_de_aco(t.lower(), unit)):
         return conf, obs, False
     try:
         q = float(quantity)

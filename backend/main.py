@@ -17332,7 +17332,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                     selo_apos_numero_do_quadro as _regra_quadro)
                                 conf, obs_raw, _era_quadro = _regra_quadro(
                                     conf, obs_raw, qty, normalized_unit, _quadros_q,
-                                    _blocos_n, _indice_geom)
+                                    _blocos_n, _indice_geom, descricao=desc)
                                 if _era_quadro:
                                     _rebaixado_pela_fonte = True
                                 # 🩸 30/09 (filhote evefe9af): peça desenhada sem bloco e
