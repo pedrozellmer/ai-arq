@@ -1409,3 +1409,33 @@ as $function$
 $function$;
 revoke all on function public.escritorio_andamento(uuid) from public, anon;
 grant execute on function public.escritorio_andamento(uuid) to authenticated, service_role;
+
+-- ── 29. (11/10, 2ª auditoria do Escritório — BANCO-3) revisão SUBSTITUÍDA não aceita resposta do cliente ──
+-- APLICADA em 12/10/2026 como `escritorio_revisao_substituida_nao_responde` (ok do Pedro: "Pode aplicar").
+-- A tela (esperaResposta/substituidaPor) e a rota /emissoes/{id}/responder já recusam; isto fecha o caminho
+-- direto pelo banco. "Substituída" = existe emissão do MESMO arquivo, com revisão MAIOR, mandada (e não
+-- retirada) pra mesma pessoa. Ensaiada numa transação desfeita: R00 com R01 mandada = true; R01 = false; outro
+-- arquivo = false; revisão nova RETIRADA dela (permission_id nulo) = false.
+create or replace function public.escritorio_emissao_substituida(p_emissao uuid)
+ returns boolean
+ language sql
+ stable security definer
+ set search_path to ''
+as $function$
+  select exists (
+    select 1
+      from public.escritorio_emissoes e
+      join public.escritorio_emissoes n
+        on n.projeto_id = e.projeto_id and n.arquivo_id = e.arquivo_id and n.revisao > e.revisao
+      join public.escritorio_emissao_destinos d on d.emissao_id = n.id and d.permission_id is not null
+      join public.escritorio_membros m on m.id = d.membro_id and m.projeto_id = d.projeto_id
+     where e.id = p_emissao and m.user_id = (select auth.uid()) and m.status = 'ativo')
+$function$;
+revoke all on function public.escritorio_emissao_substituida(uuid) from public, anon;
+grant execute on function public.escritorio_emissao_substituida(uuid) to authenticated, service_role;
+
+drop policy if exists escritorio_emissao_eventos_cliente_responde on public.escritorio_emissao_eventos;
+create policy escritorio_emissao_eventos_cliente_responde on public.escritorio_emissao_eventos for insert to authenticated
+  with check (public.escritorio_papel(projeto_id) = 'cliente' and public.escritorio_emissao_minha(emissao_id)
+              and not public.escritorio_emissao_substituida(emissao_id)
+              and tipo in ('aprovado','revisao') and registrado_por = (select auth.uid()));
