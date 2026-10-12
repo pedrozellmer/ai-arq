@@ -7151,6 +7151,9 @@ _RE_NOME_DE_AMBIENTE = re.compile(
     r"corredor|hall|dep[oó]sito|lavanderia|garagem|estar|jantar|despensa|gourmet)"
     r"(?![a-zà-ú])|[aá]rea\s+(?:de\s+)?serv|a\.\s*serv|i\.\s*s\.)", re.IGNORECASE)
 _AMBIENTES_QUE_FAZEM_PLANTA = 3
+#: 12/10: tantos nomes de ambiente dentro das janelas 'fora' de um arquivo que
+#: sairia ZERADO = é a obra, não o detalhe — ver o fim de `aplicar_leitura_por_folha`
+_AMBIENTES_QUE_NAO_SAO_DETALHE = 10
 
 
 def _so_vistas_no_modelo(msp) -> list:
@@ -7350,6 +7353,12 @@ def mapa_de_folhas(doc) -> dict:
             if _mv:
                 uteis = _mv
                 out["origem"] = "modelo sem janela"
+        # 12/10/2026 — quantos nomes de ambiente cada janela 'fora' tem dentro: é o
+        # que a trava do fim de `aplicar_leitura_por_folha` usa pra separar a OBRA
+        # inteira mal classificada do diagrama que é mesmo só diagrama.
+        for j in uteis:
+            if j.get("tipo") == "fora":
+                j["ambientes_dentro"] = sum(1 for a in ambientes if _dentro(a, j["caixa"]))
         out["folhas"] = uteis
     except Exception as e:                   # nunca derruba a extração
         logger.warning("mapa_de_folhas: %s", e)
@@ -7965,6 +7974,11 @@ def _peca_do_revit(nome) -> tuple:
     return m.group("base").strip(), vista, bool(_RE_CORTE_NO_NOME_DA_VISTA.search(vista))
 
 
+#: a chave do resultado quando a leitura por folha recusou-se a zerar o arquivo
+#: (traz o que havia antes); quem chamou refaz a medida por folha com o mapa neutro
+_FOLHA_TIRARIA_TUDO = "tiraria_tudo"
+
+
 def aplicar_leitura_por_folha(walls, hatches, polygon_areas, blocks, mapa) -> dict:
     """Tira da medição o que está em desenho 'fora' e dá peso N à planta de N andares.
 
@@ -7996,6 +8010,12 @@ def aplicar_leitura_por_folha(walls, hatches, polygon_areas, blocks, mapa) -> di
                 "area": round(sum(h.area * getattr(h, "peso", 1.0) for h in hatches)
                               + sum(p.area * getattr(p, "peso", 1.0) for p in polygon_areas), 2),
                 "blocos": sum(b.count for b in blocks)}
+
+    # 🩸 12/10/2026 — o retrato de antes, pra a trava do fim (ver `_FOLHA_TIRARIA_TUDO`)
+    _foto = ([(w, w.peso) for w in walls],
+             [(h, getattr(h, "peso", 1.0), getattr(h, "na_vista", False)) for h in hatches],
+             [(p, getattr(p, "peso", 1.0), getattr(p, "na_vista", False)) for p in polygon_areas],
+             [(b, b.count, list(getattr(b, "positions", None) or [])) for b in blocks])
 
     # 25/09: a base do pavimento redesenhada em plantas temáticas conta 1×
     antes = _totais()
@@ -8171,6 +8191,50 @@ def aplicar_leitura_por_folha(walls, hatches, polygon_areas, blocks, mapa) -> di
               "area": round(sum(h.area * getattr(h, "peso", 1.0) for h in hatches)
                             + sum(p.area * getattr(p, "peso", 1.0) for p in polygon_areas), 2),
               "blocos": sum(b.count for b in blocks)}
+    _n_amb = sum(int(f.get("ambientes_dentro") or 0) for f in regs)
+    if (all(f["tipo"] == "fora" for f in regs)
+            and _n_amb >= _AMBIENTES_QUE_NAO_SAO_DETALHE
+            and (antes["comprimento"] or antes["area"] or antes["blocos"])
+            and not (depois["comprimento"] or depois["area"] or depois["blocos"])):
+        # 🩸 12/10/2026 — a OBRA inteira lida como detalhe. Numa avaliação, um prédio
+        # (3.049 blocos, 8 km de linha, 326 nomes de ambiente) estava numa janela
+        # só, cujo maior texto era "DETALHES": tipo 'fora', e a medição do arquivo
+        # foi a ZERO — a planilha saiu só com o que estava escrito.
+        # 🔑 Age só com as TRÊS juntas: todos os desenhos do arquivo são 'fora', a
+        # medição iria a zero, e as janelas têm `_AMBIENTES_QUE_NAO_SAO_DETALHE`
+        # ou mais nomes de ambiente dentro. Aí desfaz tudo (listas, pesos,
+        # contagens), tira o tipo dos desenhos (quem lê o mapa depois — textos,
+        # ambientes, o que está fora das pranchas — não pode tratar o arquivo
+        # inteiro como detalhe) e diz por quê.
+        # 📏 O A/B do acervo (328 arquivos, 12/10) derrubou as duas metades
+        # sozinhas, uma de cada vez:
+        #   • só "todos 'fora' + zero": disparava em 4 pranchas que são SÓ diagrama
+        #     unifilar (0 nomes de ambiente) e devolvia os fios à soma;
+        #   • só "10 ou mais nomes de ambiente na janela": disparava num esquema
+        #     de prumada com os cômodos escritos andar por andar (146 nomes), num
+        #     arquivo que tem as plantas ao lado — voltavam 4 km de tubo.
+        # Juntas, disparam num arquivo só: o do caso.
+        # 🪤 A folha só de fachadas (H61) zera o COMPRIMENTO de propósito — vista
+        # não é detalhe, e não entra aqui.
+        walls[:] = [w for w, _p in _foto[0]]
+        for w, p in _foto[0]:
+            w.peso = p
+        for lista, foto in ((hatches, _foto[1]), (polygon_areas, _foto[2])):
+            lista[:] = [h for h, _p, _v in foto]
+            for h, p, v in foto:
+                h.peso, h.na_vista = p, v
+        blocks[:] = [b for b, _c, _ps in _foto[3]]
+        for b, c, ps in _foto[3]:
+            b.count, b.positions = c, ps
+        for f in regs:
+            f["tipo_recusado"], f["tipo"] = f.get("tipo", ""), ""
+            f["nao_e_detalhe"] = "%s (%d ambientes)" % (str(f.get("titulo", ""))[:60],
+                                                         int(f.get("ambientes_dentro") or 0))
+        return {"aplicada": False, "desenhos": len(regs), _FOLHA_TIRARIA_TUDO: antes,
+                "motivo": "tiraria TUDO do arquivo (%d desenho(s) 'fora' com %d nomes de ambiente: %s) "
+                          "— a medição ficou como estava"
+                          % (len(regs), _n_amb,
+                             "; ".join(sorted({str(f.get("titulo", ""))[:40] for f in regs}))[:120])}
     res.update(aplicada=True, antes=antes, depois=depois)
     return res
 
@@ -11196,6 +11260,10 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             _mapa_amb = _mapa
             _medida = medir_por_folha(walls, hatches, polygon_areas, blocks, _mapa)
             _folhas = aplicar_leitura_por_folha(walls, hatches, polygon_areas, blocks, _mapa)
+            if _folhas.get(_FOLHA_TIRARIA_TUDO):
+                # 12/10: a folha se recusou a zerar o arquivo e tirou o tipo dos
+                # desenhos — a medida por folha é refeita com o mapa neutro
+                _medida = medir_por_folha(walls, hatches, polygon_areas, blocks, _mapa)
             _n_txt = _marcar_textos_repetidos_da_planta(texts, _mapa)
             # 25/09: CONT.SE da tabela da legenda (ver `contagem_pela_legenda`)
             _cont_leg = contagem_pela_legenda(doc, _mapa)
@@ -11209,9 +11277,10 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             if _fdp:
                 metadata["fora_das_pranchas"] = _fdp
             _folhas["desenhos_lista"] = [
-                {"folha": f["folha"][:40], "titulo": f.get("titulo", "")[:90],
-                 "tipo": f.get("tipo", ""), "andares": f.get("andares", 1),
-                 "como": f.get("como", "")}
+                dict({"folha": f["folha"][:40], "titulo": f.get("titulo", "")[:90],
+                      "tipo": f.get("tipo", ""), "andares": f.get("andares", 1),
+                      "como": f.get("como", "")},
+                     **({"nao_e_detalhe": f["nao_e_detalhe"]} if f.get("nao_e_detalhe") else {}))
                 for f in _mapa.get("folhas", [])]
             _folhas["janelas_gerais"] = _mapa.get("gerais", 0)
             # 25/09: "modelo" = desenhos achados pelo título dentro do modelspace

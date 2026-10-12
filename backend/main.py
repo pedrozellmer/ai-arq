@@ -1228,6 +1228,10 @@ def _leitura_por_folha_resumo(extraction) -> str:
     peso = "".join(
         f" {k}=[{v.get('m', 0)}m {v.get('m2', 0)}m2 {v.get('blocos', 0)}bl]"
         for k, v in med.items() if v.get("m") or v.get("m2") or v.get("blocos"))
+    # 12/10: a janela que o título dizia 'fora' e os nomes de ambiente desmentiram
+    _nd = "|".join(str(x.get("nao_e_detalhe"))[:60] for x in ds if x.get("nao_e_detalhe"))[:200]
+    if _nd:
+        peso += f" nao_e_detalhe=[{_nd}]"
     if not f.get("aplicada"):
         return (f"aplicada=nao motivo='{f.get('motivo', '')}' desenhos={len(ds)} "
                 f"gerais={f.get('janelas_gerais', 0)} sem_janela={f.get('sem_janela', 0)}"
