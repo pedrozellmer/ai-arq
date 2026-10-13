@@ -2374,7 +2374,7 @@ document.addEventListener('click', (ev) => { const b = ev.target.closest && ev.t
 // foto não tem pra onde ir. Antes oferecia "Subir fotos", a pessoa mandava até 40 MB no 4G e só então lia a recusa.
 const semPastaPraFotos = () => souEquipe() && !(PROJ && PROJ.pasta_id);
 const avisoSemPastaPraFotos = () => (souAdmin()
-  ? 'Pra subir fotos, ligue antes a pasta do Drive do projeto, em <a href="#/p/' + PROJ.id + '/arquivos">Arquivos</a>: elas ficam na pasta Fotos de lá.'
+  ? 'Pra subir fotos, ligue antes a pasta do Drive do projeto, em <a href="#/p/' + PROJ.id + '/arquivos" onclick="fecharModal()">Arquivos</a>: elas ficam na pasta Fotos de lá.'
   : 'Ainda não dá pra subir fotos: a admin precisa ligar a pasta do Drive a este projeto.');
 function telaFotos() {
   const podeSubir = !souCliente() && !semPastaPraFotos();
