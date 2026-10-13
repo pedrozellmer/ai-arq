@@ -2867,6 +2867,35 @@ def ambientes_citados(obs) -> frozenset:
                      if m.group(1).strip())
 
 
+# 🩸 13/10/2026 — uma prancha de locação de fundação: "Bloco de coroamento de
+# estaca — altura H.B. = 1,50 m" (3 un) absorveu "… altura H.B. = 1,30 m" (3 un).
+# Três blocos sumiram da planilha. A régua da altura (`_RX_ALTURA`) lê "h=1,50",
+# "altura 1,50 m" e "1,50 m do piso" — não "altura H.B. = 1,50 m": depende da
+# REDAÇÃO da IA, como a da sigla dependia. O que não depende: as duas descrições
+# são a MESMA frase e só um NÚMERO muda. Se a frase é igual e o número difere, o
+# número é o que distingue os dois itens — sejam altura, espessura, vão ou cota.
+# Número igual escrito de outro jeito ("1,5" × "1,50") não é diferença, e número
+# de referência ("nota 4", "prancha 12") fica de fora, como no `_numeros_fusao`.
+# 📏 No banco (90 dias de cliente): 182 fusões com "absorveu" em 25 projetos —
+# com a frase igual e só o número diferente, UMA: a do caso.
+_RX_NUMERO_ESCRITO_NA_FRASE = _re.compile(r"\d+(?:[.,]\d+)?")
+
+
+def frase_e_numeros(desc) -> tuple:
+    """(a frase sem os números, os números) — a frase em minúsculas, sem acento,
+    sem espaço e com "#" no lugar de cada número; os números normalizados
+    ("1,50" → "1.5"), na ordem em que aparecem."""
+    s = _RX_NUMERO_DE_REFERENCIA.sub(" ", str(desc or ""))
+    s = _sem_acento(s).lower()
+    numeros = []
+    for m in _RX_NUMERO_ESCRITO_NA_FRASE.finditer(s):
+        v = m.group(0).replace(",", ".")
+        if "." in v:
+            v = v.rstrip("0").rstrip(".")
+        numeros.append(v.lstrip("0") or "0")
+    return "".join(_RX_NUMERO_ESCRITO_NA_FRASE.sub("#", s).split()), tuple(numeros)
+
+
 def perfil_de_fusao(desc: str, unidade: str = "", ref_sheet: str = "", obs: str = "") -> dict:
     """Tudo o que as duas réguas abaixo comparam, calculado UMA vez por item."""
     brutos = _re.findall(r"[a-z0-9]+", _texto_fusao(desc))
@@ -2941,6 +2970,8 @@ def perfil_de_fusao(desc: str, unidade: str = "", ref_sheet: str = "", obs: str 
         "blocos": blocos_citados(obs),
         # 12/10: as etiquetas de ambiente que a OBSERVAÇÃO cita como fonte da área
         "ambientes_citados": ambientes_citados(obs),
+        # 13/10: a frase sem os números, e os números (ver `frase_e_numeros`)
+        "frase_e_numeros": frase_e_numeros(desc),
     }
 
 
@@ -3027,6 +3058,12 @@ def motivo_para_nao_fundir(a, b) -> str:
             for est, nomes in p["nomes"].items():
                 if nomes and not (nomes & q["raizes"]):
                     return "%s %s só numa das pranchas" % (est, "/".join(sorted(nomes)))
+    # a MESMA frase com um número diferente: o número distingue os dois (13/10).
+    # Por último: quando uma régua de cima sabe dizer O QUE o número é (altura,
+    # bitola, dimensão), o motivo é o dela.
+    (_fa, _na), (_fb, _nb) = (a.get("frase_e_numeros") or ("", ())), (b.get("frase_e_numeros") or ("", ()))
+    if _fa == _fb and _na != _nb:
+        return "só o número difere %s × %s" % ("/".join(_na)[:30], "/".join(_nb)[:30])
     return ""
 
 
