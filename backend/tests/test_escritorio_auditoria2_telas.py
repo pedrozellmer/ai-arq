@@ -1317,6 +1317,10 @@ def test_o_painel_deixa_a_lembranca_pronta_depois_do_login():
     r = _lembra(antes, [{"id": ID_A, "job_id": "j1", "nome": "Casa Exemplo", "etapa_atual": "Entrega"}])
     assert sorted(r) == ["j1", "j3", "j4", "j5"]                         # só o que era DELA como admin e saiu do banco
     assert (r["j1"]["nome"], r["j1"]["marca"], r["j1"]["sub"], r["j1"]["t"]) == ("Casa Exemplo", "Estúdio Exemplo", "Obra · 3 pessoas", 5)
+    # o MESMO projeto medido ligado a OUTRO projeto do Escritório (trocou): o nome do escritório de antes não é herdado
+    r = _lembra({"j1": {"id": ID_B, "nome": "Antigo", "sub": "x", "uid": "u1", "t": 5, "marca": "Outro Estúdio", "papel": "dono"}},
+                [{"id": ID_A, "job_id": "j1", "nome": "Casa Exemplo", "etapa_atual": "Obra"}])
+    assert (r["j1"]["id"], r["j1"]["marca"], r["j1"]["sub"]) == (ID_A, "", "Obra")
     r = _lembra({}, [{"id": "nao-e-uuid", "job_id": "j9", "nome": "x"}, {"id": ID_A, "job_id": None, "nome": "sem medido"}])
     assert r == {}                                                       # só UUID vira link; sem projeto medido não há menu
     assert "lembrarEscritorio(r.data, currentUser.id);" in D
