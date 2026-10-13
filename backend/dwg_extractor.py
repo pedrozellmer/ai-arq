@@ -8891,17 +8891,22 @@ def ambientes_por_desenho(texts, mapa) -> dict:
     `janelas_nao_usadas` conta as duas, e a seção diz isso. E dois desenhos
     podem ser pavimentos DIFERENTES com os mesmos nomes de cômodo: quem diz se
     soma é o título, não o motor.
+    🩸 12/10/2026 — a área em COLUNA de quadro (`celulas_de_quadro_de_area`) não é
+    etiqueta de cômodo: não entra em `ambientes`, `totais` nem `sem_nome` — o
+    grupo só conta quantas tem (`em_quadro`), e a seção diz que existem.
     Devolve {} sem etiqueta de área; senão {"por_desenho", "etiquetas", "pares",
-    "sem_nome", "janelas_nao_usadas", "grupos": [{"desenho", "desenhos", "tipo",
-    "fora", "ambientes": [[nome, m2, n]], "totais": [[nome, m2, n]], "sem_nome":
-    [m2, …]}]} — `totais` são os nomes de TOTAL/RESUMO, que não são cômodo.
+    "sem_nome", "em_quadro", "janelas_nao_usadas", "grupos": [{"desenho",
+    "desenhos", "tipo", "fora", "ambientes": [[nome, m2, n]], "totais": [[nome,
+    m2, n]], "sem_nome": [m2, …], "em_quadro": n}]} — `totais` são os nomes de
+    TOTAL/RESUMO, que não são cômodo; `etiquetas` = pares + sem_nome + em_quadro.
     Cada etiqueta está em UM grupo só. Nunca levanta.
     """
     try:
-        from engine_rules import ambientes_com_area_escrita
+        from engine_rules import ambientes_com_area_escrita, celulas_de_quadro_de_area
         pares, soltas = ambientes_com_area_escrita(texts)
         if not pares and not soltas:
             return {}
+        celulas = celulas_de_quadro_de_area(pares, soltas, texts)
         folhas = (mapa or {}).get("folhas") or []
         por_desenho = bool(folhas) and not (mapa or {}).get("origem")
 
@@ -8932,14 +8937,24 @@ def ambientes_por_desenho(texts, mapa) -> dict:
                     "desenho": " + ".join(nomes[:4]) + (" (+%d)" % (len(nomes) - 4) if len(nomes) > 4 else ""),
                     "desenhos": len(ch or ()), "tipo": tipos.pop() if len(tipos) == 1 else "",
                     "fora": ch == (),                 # fora de toda janela
-                    "_amb": Counter(), "_tot": Counter(), "sem_nome": []}
+                    "_amb": Counter(), "_tot": Counter(), "sem_nome": [], "em_quadro": 0}
             return grupos[ch]
 
+        n_pares = n_soltas = 0
         for p in pares:
-            _grupo_de(p["x"], p["y"])["_tot" if p.get("resumo") else "_amb"][
-                (p["nome"], round(float(p["m2"]), 2))] += 1
+            g = _grupo_de(p["x"], p["y"])
+            if (p["x"], p["y"]) in celulas:
+                g["em_quadro"] += 1
+                continue
+            n_pares += 1
+            g["_tot" if p.get("resumo") else "_amb"][(p["nome"], round(float(p["m2"]), 2))] += 1
         for s in soltas:
-            _grupo_de(s["x"], s["y"])["sem_nome"].append(round(float(s["m2"]), 2))
+            g = _grupo_de(s["x"], s["y"])
+            if (s["x"], s["y"]) in celulas:
+                g["em_quadro"] += 1
+                continue
+            n_soltas += 1
+            g["sem_nome"].append(round(float(s["m2"]), 2))
         lista = []
         # na ordem dos desenhos do mapa; "fora das pranchas" por último
         for ch in sorted(grupos, key=lambda c: (c == (), c or ())):
@@ -8949,7 +8964,8 @@ def ambientes_por_desenho(texts, mapa) -> dict:
             g["sem_nome"] = sorted(g["sem_nome"])
             lista.append(g)
         return {"por_desenho": por_desenho, "etiquetas": len(pares) + len(soltas),
-                "pares": len(pares), "sem_nome": len(soltas),
+                "pares": n_pares, "sem_nome": n_soltas,
+                "em_quadro": len(pares) + len(soltas) - n_pares - n_soltas,
                 # janela GERAL (mostra o desenho todo) ou que não deu pra ler: o
                 # que está "fora" pode estar numa delas
                 "janelas_nao_usadas": (int((mapa or {}).get("gerais") or 0)
@@ -9086,6 +9102,12 @@ def _linhas_dos_ambientes(amb, limite: int = _AMB_LISTA_MAX) -> list:
                       + " · ".join("%.2f" % v for v in sem[:_AMB_SEM_NOME_MAX])
                       + (" (+%d)" % (len(sem) - _AMB_SEM_NOME_MAX) if len(sem) > _AMB_SEM_NOME_MAX else "")
                       + " m²")
+        if g.get("em_quadro"):
+            # 🩸 12/10/2026 — "INTERNOS ÁREA = 619,00 m²" (a célula de um quadro de
+            # acabamentos) virou o forro de uma escola. Sem o número e sem a contagem: é
+            # a lição do corte do nível — número na frente da IA é resposta pronta.
+            ls.append(rec + "(as áreas escritas em linha de quadro não entram aqui: são célula de"
+                      " tabela, com a descrição ao lado)")
     ls.append("")
     return ls
 
@@ -11416,9 +11438,9 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         _amb = ambientes_por_desenho(texts, _mapa_amb)
         if _amb:
             metadata["ambientes_area_escrita"] = _amb
-            logger.info("[ambiente-area] %s: %d etiqueta(s) de área, %d com nome, %d sem; "
-                        "%d grupo(s)%s", os.path.basename(filepath), _amb["etiquetas"],
-                        _amb["pares"], _amb["sem_nome"], len(_amb["grupos"]),
+            logger.info("[ambiente-area] %s: %d etiqueta(s) de área, %d com nome, %d sem, "
+                        "%d em quadro; %d grupo(s)%s", os.path.basename(filepath), _amb["etiquetas"],
+                        _amb["pares"], _amb["sem_nome"], _amb.get("em_quadro", 0), len(_amb["grupos"]),
                         " por desenho" if _amb["por_desenho"] else "")
     # 11/10: QUADRO COM QUANTIDADE — as linhas do quadro que o projetista desenhou
     # (esquadrias, luminárias, lista de material), lidas pela grade do próprio

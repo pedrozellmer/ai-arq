@@ -1205,11 +1205,15 @@ def _ambientes_resumo(extraction) -> str:
         _teto = 200
     fora = sum(_n(g, "ambientes") + _n(g, "totais") + len(g.get("sem_nome") or [])
                for g in gs if g.get("fora"))
+    # 12/10: `em_quadro` = as áreas em coluna de quadro, que a seção não lista
+    # (`com_nome` e `sem_nome` já vêm sem elas); no FIM, pra linha antiga caber na nova
     return ("etiquetas=%d com_nome=%d sem_nome=%d totais=%d grupos=%d por_desenho=%s "
-            "fora_das_pranchas=%d pares_distintos=%d nao_listados=%d janelas_nao_usadas=%d" % (
+            "fora_das_pranchas=%d pares_distintos=%d nao_listados=%d janelas_nao_usadas=%d "
+            "em_quadro=%d" % (
                 int(a.get("etiquetas") or 0), int(a.get("pares") or 0), int(a.get("sem_nome") or 0),
                 sum(_n(g, "totais") for g in gs), len(gs), "sim" if a.get("por_desenho") else "nao",
-                fora, distintos, max(distintos - int(_teto), 0), int(a.get("janelas_nao_usadas") or 0)))
+                fora, distintos, max(distintos - int(_teto), 0), int(a.get("janelas_nao_usadas") or 0),
+                int(a.get("em_quadro") or 0)))
 
 
 def _leitura_por_folha_resumo(extraction) -> str:

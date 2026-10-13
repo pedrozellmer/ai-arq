@@ -3663,6 +3663,140 @@ def ambientes_com_area_escrita(textos) -> tuple:
     return pares, sem_nome
 
 
+# ── A COLUNA DE ÁREAS é célula de QUADRO, não etiqueta de cômodo ──────────────
+# 🩸 12/10/2026 — avaliação de uma escola com a seção ligada: "INTERNOS ÁREA =
+# 619,00 m²" e "PEITORIS E SOLEIRAS = 225,00 m²" saíram como ambientes, e o
+# forro foi orçado com os 619. São células da coluna ÁREA de um quadro de
+# acabamentos (DESCRIÇÃO | ÁREA): o "nome" era o título do quadro em cima do
+# cabeçalho da coluna e, na linha de baixo, o título do quadro vizinho.
+# 📏 Medido pelo motor nos 88 arquivos do acervo com etiqueta de área (59 jobs,
+# 5.082 etiquetas — o que a seção recebe, guardado, e esta régua rodada em cima):
+# - a célula é SÓ a área ("619 m²"). A etiqueta que traz o nome no próprio
+#   texto existe empilhada de verdade a 2,8 alturas — layout de loja, uma
+#   etiqueta por expositor — e é par certo: fica FORA da régua;
+# - as células ficam uma EMBAIXO da outra: cada uma a poucas alturas da de cima
+#   (de 1,4 a 6,1 nas 34 pilhas do acervo, lidas uma a uma: todas quadro) e
+#   quase na mesma x — até 0,95 altura de lado dentro do mesmo quadro (número
+#   centrado ou alinhado à direita, gravado pelo início). Com a folga lateral
+#   de 1 a 5 alturas o acervo dá o MESMO resultado; em 10 começa a mudar;
+# - o teto do vão: até 12 alturas só entra quadro; em 13 entram as salas de um
+#   prédio de escritórios, empilhadas de verdade. Fica em 6,5;
+# - 🪤 a régua é o ELO de cada área com a de cima, não a coluna inteira nem o
+#   passo mediano: agrupar pela x primeiro encadeia etiquetas vizinhas pela
+#   planta toda (com folga de 10 alturas entravam 17 salas), e pela mediana
+#   uma etiqueta a 28 alturas da última célula entrava na pilha (no caso
+#   medido era outra célula; um cômodo ali sairia junto com o quadro);
+# - 3 ou mais: com 2 entram salas de verdade (medido); com 4 perdem-se 54 células;
+# - na linha da célula há outro texto — a descrição. Não na mesma linha exata:
+#   num quadro medido a descrição fica MEIA linha abaixo das áreas, noutro tem
+#   duas linhas e a âncora no topo. Vale a FAIXA da linha (± meio passo), até
+#   80 alturas de lado (medido: a 60; com 40 perdem-se 24 células);
+# - a lista escrita nome / área / nome / área (o nome em cima de cada área,
+#   nada ao lado) é par CERTO e fica: tem texto na faixa em 25–33 % das linhas
+#   (os quadros, em 100 %: qualquer corte entre os dois dá o mesmo).
+# Alcance: 34 pilhas em 18 arquivos de 17 jobs; saem 196 etiquetas que iam
+# pra linha "SEM nome por perto" (38 % das do acervo), 20 totais com o nome do
+# cabeçalho ("Área = 37,04") e 8 ambientes falsos.
+# 🪤 NÃO medidos (no acervo, mexer não muda nada; estão presos por teste, pelo
+# papel que têm): "ao lado" começa a 1,5 altura — é o que separa a descrição do
+# NOME, que fica em cima da área; e o texto da linha tem 3 letras ou mais — a
+# marca de porta e o traço de célula vazia não são descrição.
+# 🪤 A prova FÍSICA (área ÷ passo²: um cômodo de 20 m² a 0,6 m do vizinho teria
+# 33 m de largura) foi medida e NÃO entrou: depende do fator de unidade, e dá
+# "quadro" pras salas de verdade de um arquivo com o fator fora.
+_AMB_QUADRO_MIN = 3               # áreas empilhadas
+_AMB_QUADRO_VAO_MAX = 6.5         # cada uma a até N alturas da de cima…
+_AMB_QUADRO_DX = 2.0              # …e a até N alturas de lado dela
+_AMB_QUADRO_LADO_MIN = 1.5        # o texto da linha: de 1,5…
+_AMB_QUADRO_LADO_MAX = 80.0       # …a 80 alturas de lado
+_AMB_QUADRO_LINHAS_COM_TEXTO = 0.8
+_AMB_QUADRO_LETRAS_MIN = 3        # o texto da linha é uma descrição, não uma marca
+
+
+def celulas_de_quadro_de_area(pares, sem_nome, textos) -> set:
+    """As etiquetas de área que são CÉLULA DE QUADRO → {(x, y)}, o ponto gravado
+    de cada uma (o "x", "y" que `ambientes_com_area_escrita` devolve).
+
+    `pares` e `sem_nome` = o que `ambientes_com_area_escrita(textos)` devolveu.
+    Célula = área SEM o nome no próprio texto e sem giro, numa pilha de 3 ou
+    mais — cada uma logo embaixo de outra (até 6,5 alturas abaixo, até 2 de
+    lado) — com outro texto na faixa da linha em 80 % das linhas ou mais. Só lê.
+    """
+    import bisect
+
+    letra, outros = {}, []
+    for t in (textos or []):
+        try:
+            x, y = float(t.position[0]), float(t.position[1])
+            ang = float(getattr(t, "rotation", 0) or 0) % 180.0
+            s = _amb_limpo(getattr(t, "text", ""))
+        except Exception:
+            continue
+        letra[(x, y)] = (float(getattr(t, "height", 0) or 0), min(ang, 180.0 - ang))
+        if (len(s) >= _AMB_QUADRO_LETRAS_MIN and rotulo_area_de_comodo(s) is None
+                and nome_e_area_no_mesmo_texto(s) is None):
+            outros.append((y, x))
+    hs = sorted(h for h, _g in letra.values() if h > 0)
+    hmed = hs[len(hs) // 2] if hs else 0.0
+    areas = []                          # (x, y, altura) das que a régua olha
+    for p in list(pares or []) + list(sem_nome or []):
+        if p.get("como") == "mesmo":
+            continue
+        x, y = float(p["x"]), float(p["y"])
+        h, giro = letra.get((x, y), (0.0, 0.0))
+        h = h or hmed
+        if h > 0 and giro <= _AMB_ANGULO_TOL:
+            areas.append((x, y, h))
+    areas.sort(key=lambda k: (-k[1], k[0]))             # de cima pra baixo
+    hmax = max((k[2] for k in areas), default=0.0)
+    # o ELO: cada área procura a de CIMA mais perto dela. O vão e a folga em
+    # alturas, com 2 casas — o teto vale no valor exato (uma linha pulada de
+    # 2 × 2,50 dá 5,00 e a conta em ponto flutuante, 5,0000001); vão zero é a
+    # mesma etiqueta gravada duas vezes no mesmo ponto, não outra linha.
+    pilha_de, pilhas, vaos = [], {}, {}
+    for n, (x, y, h) in enumerate(areas):
+        melhor = None
+        for m in range(n - 1, -1, -1):
+            px, py, ph = areas[m]
+            if round((py - y) / hmax, 2) > _AMB_QUADRO_VAO_MAX:
+                break                   # de cima pra baixo: daqui pra trás, só mais longe
+            regua = max(h, ph)
+            vao, de_lado = round((py - y) / regua, 2), round(abs(px - x) / regua, 2)
+            if 0 < vao <= _AMB_QUADRO_VAO_MAX and de_lado <= _AMB_QUADRO_DX:
+                if melhor is None or (vao, de_lado) < melhor[:2]:
+                    melhor = (vao, de_lado, m)
+        if melhor is None:
+            pilha_de.append(n)
+            pilhas[n], vaos[n] = [(x, y, h)], []
+        else:
+            dona = pilha_de[melhor[2]]
+            pilha_de.append(dona)
+            pilhas[dona].append((x, y, h))
+            vaos[dona].append(melhor[0])
+    outros.sort()
+    ys = [o[0] for o in outros]
+
+    def _meio(v):
+        v = sorted(v)
+        return v[len(v) // 2] if len(v) % 2 else (v[len(v) // 2 - 1] + v[len(v) // 2]) / 2.0
+
+    celulas = set()
+    for dona, pilha in pilhas.items():
+        if len(pilha) < _AMB_QUADRO_MIN:
+            continue
+        h = _meio([k[2] for k in pilha])
+        meia = 0.5 * _meio(vaos[dona]) * h
+        com_texto = 0
+        for x, y, _h in pilha:
+            i, j = bisect.bisect_left(ys, y - meia), bisect.bisect_right(ys, y + meia)
+            if any(_AMB_QUADRO_LADO_MIN * h < abs(ox - x) <= _AMB_QUADRO_LADO_MAX * h
+                   for _oy, ox in outros[i:j]):
+                com_texto += 1
+        if com_texto >= _AMB_QUADRO_LINHAS_COM_TEXTO * len(pilha):
+            celulas.update((x, y) for x, y, _h in pilha)
+    return celulas
+
+
 # ══════════════════════════════════════════════
 #  📋 QUADRO COM QUANTIDADE — lido pela GRADE do próprio quadro
 # ══════════════════════════════════════════════

@@ -37,7 +37,10 @@ _AMB = {
 def test_a_linha_traz_os_numeros_da_secao():
     assert main._ambientes_resumo(_Ex(_AMB)) == (
         "etiquetas=12 com_nome=9 sem_nome=3 totais=2 grupos=2 por_desenho=sim "
-        "fora_das_pranchas=7 pares_distintos=4 nao_listados=0 janelas_nao_usadas=1")
+        "fora_das_pranchas=7 pares_distintos=4 nao_listados=0 janelas_nao_usadas=1 em_quadro=0")
+    # 12/10: as áreas em coluna de quadro, que a seção não lista, vão no fim da linha
+    assert main._ambientes_resumo(_Ex(dict(_AMB, etiquetas=17, em_quadro=5))).endswith(
+        "janelas_nao_usadas=1 em_quadro=5")
 
 
 def test_a_lista_cortada_no_teto_aparece():
