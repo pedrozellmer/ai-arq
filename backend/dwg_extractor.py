@@ -313,6 +313,9 @@ class DXFExtraction:
                                            # pegou o registro cru aqui: 1,6 mil
                                            # letras de dicionário num arquivo
                                            "quadros_com_quantidade",
+                                           # 13/10: rastro; o texto é o do aviso
+                                           # que a cota superou
+                                           "extensao_superada_pela_cota_que_corrigiu",
                                            # 12/10: a marca do extract_dxf com as
                                            # chaves que ELE tira do prompt (ver
                                            # AREAS_DO_QUADRO_FORA_DO_PROMPT)
@@ -9717,6 +9720,21 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         # os avisos antigos foram computados com o fator ERRADO — refaz a
         # heurística de extensão com o fator provado pelas cotas
         _, unit_warnings = _validate_unit_factor(doc, unit_factor)
+        # 🩸 13/10/2026 — um DWG em metros com cabeçalho de milímetros: 200 cotas
+        # provaram o fator (7 com número digitado), e mesmo assim nenhum m/m² do
+        # arquivo saiu medido. Refeita com o fator PROVADO, a heurística de
+        # extensão achou um traço de 1.101 m e voltou a avisar "unidade suspeita"
+        # — a ressalva de escala inteira, contra a prova. Com a régua "validada"
+        # a cota já supera essa heurística (logo abaixo); com a "corrigida" é a
+        # MESMA prova (texto exibido × medida geométrica), e não superava.
+        # Só a correção pelas COTAS: DIMLFAC e plausibilidade são inferência, e
+        # nelas o aviso de extensão continua valendo.
+        # 📏 Na produção (60 dias, `motor:unidade`): 19 pranchas "corrigida", uma
+        # com o aviso — a do caso. Chave: COTA_QUE_CORRIGE_SUPERA_EXTENSAO=0
+        # volta ao que era, sem deploy.
+        if unit_warnings and os.environ.get("COTA_QUE_CORRIGE_SUPERA_EXTENSAO", "1") != "0":
+            dim_check["extensao_superada"] = " | ".join(unit_warnings)
+            unit_warnings = []
     elif dim_check.get("status") in (None, "ambigua"):
         # 🚨 26/08/2026 — "ambigua" ESTAVA FORA desta cascata, e isso fazia a
         # prancha com MAIS evidência receber MENOS tentativa: prancha sem cota
@@ -9905,6 +9923,11 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             # corrigida_lfac (caso cliente-82) não deixava rastro no metadata — 21/08
             metadata["unidade_corrigida_por_cotas"] = dim_check["mensagem"]
             metadata["unidade_nome_provada"] = dim_check["unidade_nome"]
+            if dim_check.get("extensao_superada"):
+                # rastro pro log, fora do prompt: o texto do aviso manda "tratar
+                # quantidades como estimado", e é justamente o que foi superado
+                metadata["extensao_superada_pela_cota_que_corrigiu"] = \
+                    dim_check["extensao_superada"]
         elif _dim_status == "provada_por_rotulo":
             # 5ª RÉGUA: o rótulo de área da própria prancha bate com a
             # geometria. Prova de verdade (dado escrito × dado medido, mesma
