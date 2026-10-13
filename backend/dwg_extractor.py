@@ -7322,6 +7322,152 @@ def _so_vistas_no_modelo(msp) -> list:
     return regs
 
 
+# ════════════════════════════════════════════════════════
+#  O ARQUIVO QUE É SÓ VISTA, DITO PELO PREFIXO DOS LAYERS (13/10/2026)
+# ════════════════════════════════════════════════════════
+# 🩸 Um projeto de 8 DWG exportados do ArchiCAD: dois arquivos são CORTE e foram
+# medidos como planta — "guarda-corpo — comprimento total no corte 571,60 ml",
+# com selo. Não há texto de título no modelo; a leitura por folha saiu
+# "nenhum desenho com título que diga o que é".
+# 🔑 O ArchiCAD exporta cada desenho posto na folha com os layers prefixados por
+# "<id>_<nome do desenho>_<n>_": "A_Corte AA_1_ARQ - Parede", "2_Pav.tipo 1_1_ARQ
+# - Piso", "001_MAPA CHAVE_3_0". O nome do desenho é o 2º campo.
+# 📏 No acervo (326 DWG, 123 jobs) a convenção aparece em 2 arquivos, os dois
+# PLANTA ("1_PLANTA BAIXA", "4._PAVIMENTO TIPO I (3° ao 24° pavto) - 22x"), e
+# nenhum corte: o caso é o primeiro. Deles vem a forma — o <n> não é sempre 1
+# ("_12_", "_9_"), o id pode ter espaço e hífen ("XX - LEG"), o nome do
+# desenho pode ter "_" ("DETALHE 1_ SHAFT HIDRÁULICA"), e o desenho de verdade
+# tem dezenas de layers (28 e 32), a legenda e o mapa-chave um só.
+# A RÉGUA: do comprimento medido que não é de mapa-chave nem de legenda, 90 % ou
+# mais está em desenho(s) da convenção cujo NOME é de vista — corte, elevação,
+# fachada, com plural e as abreviaturas CRT / ELEV / FACH. Aí o arquivo inteiro
+# é 'vista' pra leitura por folha (comprimento sai; área fica, marcada como
+# vista de lado, menos a seção fina do corte; bloco fica).
+# 🪤 O mapa-chave fica FORA da conta dos 90 %. No caso (log de produção) ele é um
+# layer só, "001_MAPA CHAVE_2_0", com 70.036 m dos 78.870 m medidos no arquivo
+# de corte — 88,8 %: a obra inteira numa vista minúscula. Sem tirá-lo, a régua
+# não dispararia justamente nos cortes. A legenda ("LG_Acabamentos_11_0", e no
+# acervo "XX - LEG_LEGENDA DE PORTAS…") também não é o desenho.
+# 🪤 Os dois lados falsos, medidos:
+# - 76 DWG do acervo (48 jobs) têm palavra de vista no nome de ALGUM layer — é
+#   o layer da marca de corte da planta; a fração do comprimento neles nunca
+#   passa de 38 %. A régua lê o CAMPO DO DESENHO, nunca o nome inteiro do
+#   layer: "1_PLANTA BAIXA_1_ANT-MCD.Marcador - Corte" é planta (e
+#   `tipo_do_desenho` do nome inteiro diria 'vista').
+# - o nome do desenho NÃO vira título de planta: "(3° ao 24° pavto) - 22x" não
+#   multiplica nada. A régua só sabe dizer "este arquivo é vista".
+_RE_LAYER_DE_DESENHO_DO_ARCHICAD = re.compile(r"^([^_]{1,12})_(.+?)_(\d+)_(.+)$")
+_RE_NOME_DE_DESENHO_DE_VISTA = re.compile(
+    r"(?<![a-z])(?:cortes?|crt|elevac(?:ao|oes)|elev|fachadas?|fach)(?![a-z])")
+_RE_NOME_DE_MAPA_CHAVE = re.compile(
+    r"(?<![a-z])(?:mapa|planta)[\s.-]*chave(?![a-z])|(?<![a-z])key[\s.-]?plan(?![a-z])")
+#: a legenda posta na folha: pelo id do desenho ("LG", "XX - LEG") ou pelo nome
+_RE_ID_DE_LEGENDA = re.compile(r"(?:^|[\s.-])(?:lg|leg|legendas?)$")
+_RE_NOME_DE_LEGENDA = re.compile(r"(?<![a-z])legendas?(?![a-z])")
+_VISTA_PELO_PREFIXO_FRACAO = 0.9
+_VISTA_PELO_PREFIXO_LAYERS = 3      # layers com o mesmo prefixo que fazem um desenho
+
+
+def _sem_acento_minusculo(s) -> str:
+    return "".join(c for c in unicodedata.normalize("NFD", str(s or ""))
+                   if unicodedata.category(c) != "Mn").lower()
+
+
+def nome_de_desenho_e_vista(nome) -> bool:
+    """O NOME do desenho (o 2º campo do prefixo do ArchiCAD) é de corte,
+    elevação ou fachada? "Detalhe do corte" e "corte esquemático" não são
+    (detalhe e esquema ganham, como no título — `tipo_do_desenho`)."""
+    from engine_rules import tipo_do_desenho
+    s = _sem_acento_minusculo(nome)
+    return bool(_RE_NOME_DE_DESENHO_DE_VISTA.search(s)) and tipo_do_desenho(str(nome or "")) != "fora"
+
+
+def vista_pelo_prefixo_dos_layers(walls, nomes_de_layer) -> dict:
+    """O arquivo é SÓ vista, pelo prefixo "<id>_<desenho>_<n>_" dos layers?
+
+    `walls` = o comprimento que o motor mediu (layer + metros); `nomes_de_layer`
+    = a tabela de layers do arquivo, que diz quais prefixos são DESENHO (3 ou
+    mais layers). Devolve {} quando não é; senão {"titulo", "desenhos",
+    "fracao", "m", "m_total", "m_mapa_chave", "m_legenda"} — `m_total` é o
+    comprimento sem o mapa-chave e sem a legenda. Ver o comentário acima.
+    Nunca levanta.
+    """
+    try:
+        escrito = {}                    # (id, desenho) em minúsculas → o nome como está escrito
+
+        def _campos(layer):
+            # nome de layer não distingue maiúscula no CAD: a tabela e a entidade
+            # podem escrever o mesmo layer de dois jeitos
+            m = _RE_LAYER_DE_DESENHO_DO_ARCHICAD.search(str(layer or ""))
+            if not m:
+                return None
+            nome = " ".join(m.group(2).split())
+            c = (m.group(1).strip().lower(), nome.lower())
+            escrito.setdefault(c, nome)
+            return c
+
+        camadas = {}
+        for nome in {str(n or "") for n in (nomes_de_layer or ())}:
+            c = _campos(nome)
+            if c:
+                camadas[c] = camadas.get(c, 0) + 1
+        desenhos = {c for c, k in camadas.items() if k >= _VISTA_PELO_PREFIXO_LAYERS}
+        escrito.clear()                 # o nome que vai pro título é o da entidade medida
+        por_desenho, total, mapa_chave, legenda = {}, 0.0, 0.0, 0.0
+        for w in walls or ():
+            comp = float(getattr(w, "length", 0) or 0)
+            if comp <= 0:
+                continue
+            c = _campos(getattr(w, "layer", ""))
+            if c:
+                _id, _nome = _sem_acento_minusculo(c[0]), _sem_acento_minusculo(c[1])
+                if _RE_NOME_DE_MAPA_CHAVE.search(_nome):
+                    mapa_chave += comp
+                    continue
+                if _RE_ID_DE_LEGENDA.search(_id) or _RE_NOME_DE_LEGENDA.search(_nome):
+                    legenda += comp
+                    continue
+            total += comp
+            if c in desenhos:
+                por_desenho[c] = por_desenho.get(c, 0.0) + comp
+        vistas = {c: v for c, v in por_desenho.items() if nome_de_desenho_e_vista(c[1])}
+        m_vista = sum(vistas.values())
+        if total <= 0 or round(m_vista / total, 4) < _VISTA_PELO_PREFIXO_FRACAO:
+            return {}
+        nomes = [escrito[c] for c, _v in sorted(vistas.items(), key=lambda kv: -kv[1])]
+        return {"titulo": " | ".join(nomes)[:160], "desenhos": len(nomes),
+                "fracao": round(m_vista / total, 3), "m": round(m_vista, 1),
+                "m_total": round(total, 1), "m_mapa_chave": round(mapa_chave, 1),
+                "m_legenda": round(legenda, 1)}
+    except Exception as e:                       # nunca derruba a extração
+        logger.warning("vista_pelo_prefixo_dos_layers: %s", e)
+        return {}
+
+
+def _caixa_do_arquivo(walls, hatches, polygon_areas, blocks) -> tuple:
+    """A caixa que contém tudo o que tem posição — a do desenho 'vista' que é o
+    arquivo inteiro. Sem nada com posição, uma caixa que contém qualquer ponto."""
+    xs, ys = [], []
+    for w in walls or ():
+        if tuple(w.start) == (0, 0) and tuple(w.end) == (0, 0):
+            continue
+        xs += [float(w.start[0]), float(w.end[0])]
+        ys += [float(w.start[1]), float(w.end[1])]
+    for lista in (hatches, polygon_areas):
+        for h in lista or ():
+            bb = getattr(h, "bbox", ()) or ()
+            if len(bb) == 4:
+                xs += [float(bb[0]), float(bb[2])]
+                ys += [float(bb[1]), float(bb[3])]
+    for b in blocks or ():
+        for p in getattr(b, "positions", None) or ():
+            xs.append(float(p[0]))
+            ys.append(float(p[1]))
+    if not xs:
+        return (-1e12, -1e12, 1e12, 1e12)
+    return (min(xs), min(ys), max(xs), max(ys))
+
+
 def mapa_de_folhas(doc) -> dict:
     """Os desenhos do modelspace, pelas folhas: [{folha, titulo, tipo, andares, caixa}].
 
@@ -8205,9 +8351,16 @@ def aplicar_leitura_por_folha(walls, hatches, polygon_areas, blocks, mapa) -> di
         return _NA_VISTA
 
     tirou = {"m": 0.0, "m2": 0.0, "blocos": 0}
+    # 13/10: quando o arquivo INTEIRO é uma vista (`vista_pelo_prefixo_dos_layers`),
+    # o trecho sem posição também está nela — não existe "fora da vista" ali
+    tudo_e_vista = (len(regs) == 1 and regs[0]["tipo"] == "vista"
+                    and bool(regs[0].get("arquivo_inteiro")))
     novas = []
     for w in walls:
         if tuple(w.start) == (0, 0) and tuple(w.end) == (0, 0):
+            if tudo_e_vista:
+                tirou["m"] += w.length
+                continue
             novas.append(w)                          # sem posição: neutro
             continue
         pk = peso(((w.start[0] + w.end[0]) / 2, (w.start[1] + w.end[1]) / 2), "m")
@@ -11494,9 +11647,26 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
     if os.environ.get("LEITURA_POR_FOLHA", "1") != "0":
         try:
             _mapa = mapa_de_folhas(doc)
+            # 13/10: o arquivo que é só VISTA, dito pelo prefixo dos layers do
+            # ArchiCAD (ver `vista_pelo_prefixo_dos_layers`). Só quando nenhum
+            # desenho do mapa tem tipo: título ou janela que diga o que o desenho
+            # é ganha. Chave: VISTA_PELO_PREFIXO_DOS_LAYERS=0 desliga sem deploy.
+            _vpp = {}
+            if (os.environ.get("VISTA_PELO_PREFIXO_DOS_LAYERS", "1") != "0"
+                    and not any(f.get("tipo") in ("fora", "planta", "vista")
+                                for f in _mapa.get("folhas", []))):
+                _vpp = vista_pelo_prefixo_dos_layers(walls, [_l.dxf.name for _l in doc.layers])
+                if _vpp:
+                    _mapa["folhas"] = [{
+                        "folha": "modelo", "titulo": _vpp["titulo"], "tipo": "vista", "andares": 1,
+                        "como": "prefixo dos layers", "arquivo_inteiro": True,
+                        "caixa": _caixa_do_arquivo(walls, hatches, polygon_areas, blocks)}]
+                    _mapa["origem"] = "prefixo dos layers"
             _mapa_amb = _mapa
             _medida = medir_por_folha(walls, hatches, polygon_areas, blocks, _mapa)
             _folhas = aplicar_leitura_por_folha(walls, hatches, polygon_areas, blocks, _mapa)
+            if _vpp:
+                _folhas["vista_pelo_prefixo"] = _vpp
             if _folhas.get(_FOLHA_TIRARIA_TUDO):
                 # 12/10: a folha se recusou a zerar o arquivo e tirou o tipo dos
                 # desenhos — a medida por folha é refeita com o mapa neutro

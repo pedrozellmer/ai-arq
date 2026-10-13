@@ -1259,6 +1259,14 @@ def _leitura_por_folha_resumo(extraction) -> str:
     n_vista = sum(1 for x in ds if x.get("tipo") == "vista")
     # 25/09: desenhos achados pelo TÍTULO no modelspace (sem janela por desenho)
     _orig = " origem=modelo" if f.get("origem") == "modelo" else ""
+    # 13/10: o arquivo inteiro lido como vista pelo prefixo dos layers do ArchiCAD
+    # (dwg_extractor.vista_pelo_prefixo_dos_layers) — o arquivo é apagado depois
+    # do job: sem isto não dá pra medir na produção quantas vezes a régua age
+    _vp = f.get("vista_pelo_prefixo") or {}
+    if _vp:
+        _orig += " origem=prefixo-dos-layers[%s %s%% de %sm; mapa-chave %sm]" % (
+            str(_vp.get("titulo", ""))[:40], round(100 * float(_vp.get("fracao") or 0)),
+            _vp.get("m_total", 0), _vp.get("m_mapa_chave", 0))
     # 25/09: a base repetida nas plantas temáticas do mesmo pavimento, contada 1×
     _rp = f.get("repetidas") or {}
     if _rp:
@@ -10444,6 +10452,7 @@ _CHAVES_AVALIAVEIS = frozenset({
     "LEGENDA_PELA_FORMA", "LEGENDA_POR_COLUNA", "LEITURA_POR_FOLHA", "VISTAS_DA_MESMA_BASE",
     "AREAS_DO_QUADRO_FORA_DO_PROMPT", "SIMBOLO_DE_NIVEL_E_ANOTACAO",
     "FAMILIA_DE_ANOTACAO_DO_REVIT", "COTA_QUE_CORRIGE_SUPERA_EXTENSAO",
+    "VISTA_PELO_PREFIXO_DOS_LAYERS",
 })
 _CHAVES_DA_AVALIACAO: dict = {}        # job de avaliação → {chave: "0" | "1"}
 
