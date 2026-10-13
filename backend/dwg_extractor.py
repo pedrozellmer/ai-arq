@@ -5837,6 +5837,68 @@ def nome_de_simbolo_de_nivel(nome) -> bool:
     return bool(_RE_NOME_DE_SIMBOLO_DE_NIVEL.search(_RE_VISTA_DO_REVIT.split(s, 1)[0].strip()))
 
 
+# ════════════════════════════════════════════════════════
+#  A FAMÍLIA DE ANOTAÇÃO DO REVIT NÃO É PEÇA — pelo nome (13/10/2026)
+# ════════════════════════════════════════════════════════
+# 🩸 "Cabeça de grade / grelha de cobertura — fornecimento e instalação — 20 un",
+# com selo, numa planilha entregue: a fonte eram "20 INSERTs do bloco 'Eixo -
+# M_Cabeça da grade - EIXO Círculo'" — as 20 BOLHAS DE EIXO da planta. E
+# "Identificador parede — 205 un", "Tags de revestimento — 18 un", com selo.
+# O guarda de anotação do extract_dxf (`_ANNOTATION_NAME_RE`) é em inglês e só
+# olha o começo do nome (TAG, SECTION, ELEVATION…): a família de anotação que o
+# Revit exporta em português passava como peça.
+# 📏 Medido pelo motor (extração de verdade nos 114 arquivos de 55 jobs com
+# palavra de anotação em nome de bloco): 1.842 inserções contadas como peça em
+# 18 jobs, em quatro formas — lidas uma a uma (família + tipo), todas anotação:
+#  I  a família começa por "Identificador" / "M_Identificador" (o Tag do Revit
+#     em português: de ambiente, de porta, de janela, de parede, de piso, de
+#     nota-chave) — 192 inserções, 5 jobs;
+#  C  a família é EXATAMENTE a categoria de anotação — "Corte", "Elevação",
+#     "Eixo" ou "Grid" — e o nome tem tipo depois de " - " ("Corte - M_Cabeça do
+#     corte - Preenchida", "Eixo - M_Cabeça da grade - Círculo 2", "Elevação -
+#     Número de detalhe 2", "Grid - Extremidade superior da grelha") — 665
+#     inserções, 13 jobs, 28 tipos. 🪤 Não precisa olhar o tipo: 21 dos 28 não
+#     têm "cabeça" no nome ("Extremidade superior do corte", "Seta preenchida",
+#     "Interna-Horizontal") e são a mesma marca;
+#  A  a família começa por "Anotacao_" (anotação de coluna e de tubo, na
+#     hidráulica) — 318 inserções, 4 jobs;
+#  T  "TAG" como PALAVRA depois de um prefixo de padrão ("XX-TAG-PORTA",
+#     "XX_TAG_DOOR") — 667 inserções, 2 jobs. A 1ª palavra "TAG" o guarda antigo
+#     já tirava.
+# 🪤 Como no nível, a régua olha a FAMÍLIA — o que vem antes do 1º "-<id>-" e,
+# dentro disso, antes do 1º " - " — e nunca o nome inteiro: "Montante - 3x5-
+# <id>-Corte AA" é peça vista num corte.
+# 🪤 O lado falso, medido em TODO nome de bloco contado (24.898 nomes de 178
+# arquivos): a régua só pega anotação. O que ela NÃO pode pegar tem forma:
+# - "tag" DENTRO de palavra — "…PortaGiro…" é porta, "CESTAGOL" é cesta;
+# - bloco de CAD chamado só "Corte" ou "Eixo", sem tipo, e "Eixos do pilar";
+# - e três palavras que o banco mostrou serem PEÇA em planilha de cliente:
+#   "Símbolo Internacional Acessível" (sinalização), "CHAMADA DE ENFERMEIRA"
+#   (sistema de chamada) e "Seta de fluxo" (pintura de piso de garagem). Por
+#   isso "símbolo", "chamada" e "seta" NÃO são forma desta régua — e "Simbolo
+#   Janelas", que numa planilha virou 14 janelas com selo, continua contado.
+_RE_FAMILIA_IDENTIFICADOR = re.compile(r"^(?:m_)?identificador(?:[\s_.-]|\d|$)")
+_RE_FAMILIA_ANOTACAO = re.compile(r"^anotac(?:ao|oes)[\s_.-]")
+_RE_FAMILIA_COM_TAG = re.compile(r"[\s_.-]tag(?:[\s_.-]|$)")
+_CATEGORIAS_DE_ANOTACAO_DO_REVIT = frozenset({"corte", "elevacao", "eixo", "grid"})
+
+
+def nome_de_anotacao_do_revit(nome) -> bool:
+    """O nome do bloco é de FAMÍLIA DE ANOTAÇÃO do Revit (etiqueta, cabeça de
+    corte, bolha de eixo, marca de elevação), e não de peça? Lê sem acento e só
+    a família do nome. Ver o comentário acima."""
+    s = "".join(c for c in unicodedata.normalize("NFD", str(nome or ""))
+                if unicodedata.category(c) != "Mn").lower().strip()
+    if not s:
+        return False
+    partes = _RE_VISTA_DO_REVIT.split(s, 1)[0].split(" - ")
+    familia = partes[0].strip()
+    if familia in _CATEGORIAS_DE_ANOTACAO_DO_REVIT:
+        return len(partes) > 1 and bool(partes[1].strip())
+    return bool(_RE_FAMILIA_IDENTIFICADOR.search(familia) or _RE_FAMILIA_ANOTACAO.search(familia)
+                or _RE_FAMILIA_COM_TAG.search(familia))
+
+
 def pecas_no_vinculo(doc, nomes_inseridos, nome_do_arquivo, e_anotacao=None) -> dict:
     """{base: {disciplina, instancias, vista, outras_vistas, pecas: {nome: n}}}
     dos vínculos da MESMA disciplina do arquivo; {} se o arquivo não diz a
@@ -9975,6 +10037,11 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
     # (o bloco deixa de ser contado). Chave: SIMBOLO_DE_NIVEL_E_ANOTACAO=0 volta
     # ao guarda antigo, sem deploy.
     _nivel_pelo_nome = os.environ.get("SIMBOLO_DE_NIVEL_E_ANOTACAO", "1") != "0"
+    # 13/10/2026 — a família de anotação do Revit (identificador, cabeça de corte,
+    # bolha de eixo, marca de elevação, tag com prefixo): ver
+    # `nome_de_anotacao_do_revit`. Muda CONTAGEM. Chave:
+    # FAMILIA_DE_ANOTACAO_DO_REVIT=0 volta ao guarda antigo, sem deploy.
+    _anotacao_do_revit = os.environ.get("FAMILIA_DE_ANOTACAO_DO_REVIT", "1") != "0"
 
     def _is_annotation_block(name: str) -> bool:
         if not name:
@@ -9982,6 +10049,8 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         if _ANNOTATION_NAME_RE.match(name):
             return True
         if _nivel_pelo_nome and nome_de_simbolo_de_nivel(name):
+            return True
+        if _anotacao_do_revit and nome_de_anotacao_do_revit(name):
             return True
         if _XREF_NAME_RE.search(name):
             return True
