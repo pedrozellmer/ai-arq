@@ -2100,7 +2100,10 @@ const paraMarcados = () => [...document.querySelectorAll('input[name="em-para"]:
 function mandarDepois(id) {
   const e = EMI.find((x) => x.id === id); if (!e || !souAdmin()) return;
   const ja = destinosDa(e).filter((d) => d.permission_id).map((d) => d.membro_id);
-  abrirModal(`Mandar ${revTxt(e.revisao)} · ${e.copia_nome || e.arquivo_nome}`, `${blocoMandarPra(ja, false) || '<p class="sub" style="margin:0">Todo mundo de fora deste projeto já recebeu esta emissão.</p>'}
+  // FORA-2: o "Mandar pra…" nem mostrava a nota escrita no dia da emissão (às vezes semanas antes, antes de o
+  // cliente ser convidado) — e ela ia junto, pra tela e pro e-mail de quem recebe
+  const nota = String(e.nota || '').trim();
+  abrirModal(`Mandar ${revTxt(e.revisao)} · ${e.copia_nome || e.arquivo_nome}`, `${nota ? `<div class="aviso" style="font-size:13px;margin:0 0 10px"><b>Vai junto a nota desta emissão.</b> Quem receber lê na tela e, o cliente, também no e-mail:<br><span style="white-space:pre-wrap;overflow-wrap:anywhere">“${esc(nota)}”</span></div>` : ''}${blocoMandarPra(ja, false) || '<p class="sub" style="margin:0">Todo mundo de fora deste projeto já recebeu esta emissão.</p>'}
     <div class="rodape"><button class="btn" onclick="fecharModal()">Cancelar</button><button class="btn btn-d" id="md-ok">Mandar</button></div>`);
   $('md-ok').onclick = async () => {
     const para = paraMarcados(); if (!para.length) return toast('Marque pra quem mandar.', true);
@@ -2193,6 +2196,12 @@ document.addEventListener('click', (ev) => {
   ev.preventDefault(); ev.stopPropagation();
   emitirArquivo(b.dataset.id || '', b.dataset.nome || '');
 });
+// 🩸 13/10 (auditoria FORA-2/BANCO-8 — decisão do Pedro: "rótulo e prévia" e "avisar na tela"): as notas da emissão
+// são LIDAS por quem é de fora, e nada na tela dizia isso. A do Emitir vai pra tela de quem recebe (cliente e
+// fornecedor) e pro e-mail do cliente; a do "Registrar retorno" o banco entrega ao cliente que recebeu a emissão
+// (a tela dele esconde a de "Enviada", mas ela chega ao navegador). Texto interno escrito ali por engano vazava.
+const AVISO_NOTA_DA_EMISSAO = 'Quem receber esta emissão <b>lê esta nota</b>: na tela e, o cliente, também no e-mail. Não escreva aqui o que é só da equipe.';
+const AVISO_NOTA_DO_RETORNO = 'O cliente que receber esta emissão pelo AI.arq <b>pode ler esta nota</b>. Não escreva aqui o que é só da equipe.';
 function emitirArquivo(id, nome) {
   if (!ID_DRIVE.test(id)) return;
   const ja = EMI.filter((e) => e.arquivo_id === id);
@@ -2202,8 +2211,9 @@ function emitirArquivo(id, nome) {
   abrirModal('Emitir ' + rotulo, `
     <p style="margin:0 0 10px;font-size:14px;line-height:1.5">Uma <b>cópia</b> de <b>${esc(nome)}</b> vai pra pasta <b>Emitidos</b> deste projeto, com ${TEM_EMI ? `<b>${revTxt(prox)}</b>` : 'a revisão'} no nome. O original continua sendo o arquivo de trabalho, sem mudar nada.</p>
     ${TEM_EMI && ja.length ? `<p class="sub" style="margin:0 0 10px">Última emitida: ${revTxt(prox - 1)}, em ${esc(quandoArq(ja[0].emitido_em))}.</p>` : ''}
-    <label class="lbl" for="em-nota">O que muda nesta revisão (opcional)</label>
+    <label class="lbl" for="em-nota">O que muda nesta revisão (opcional) · quem receber lê</label>
     <textarea id="em-nota" class="in" rows="3" maxlength="1000" placeholder="Ex.: cozinha ajustada como pedido na reunião"></textarea>
+    <p class="sub" style="margin:4px 0 0">${AVISO_NOTA_DA_EMISSAO}</p>
     ${blocoMandarPra([], true)}
     <p class="sub" style="margin:8px 0 0">A cópia fica travada no Drive: só a dona do Drive destrava. Assim ela é sempre o que foi emitido.</p>
     <div class="rodape"><button class="btn" onclick="fecharModal()">Cancelar</button><button class="btn btn-d" id="em-ok">Emitir ${rotulo}</button></div>`);
@@ -2277,6 +2287,7 @@ function registrarRetorno(id) {
     <label class="lbl" for="ret-em">Quando</label><input id="ret-em" class="in" type="date" value="${hojeISO()}" max="${hojeISO()}">
     <label class="lbl" for="ret-nota" style="margin-top:10px">Nota (opcional)</label>
     <textarea id="ret-nota" class="in" rows="3" maxlength="1000" placeholder="Ex.: aprovou por e-mail, pediu pra aumentar a janela da sala"></textarea>
+    <p class="sub" style="margin:4px 0 0">${AVISO_NOTA_DO_RETORNO}</p>
     <div class="rodape"><button class="btn" onclick="fecharModal()">Cancelar</button><button class="btn btn-d" id="ret-ok">Registrar</button></div>`);
   $('ret-ok').onclick = () => salvarRetorno(id);
 }

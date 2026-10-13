@@ -1324,3 +1324,48 @@ def test_o_painel_deixa_a_lembranca_pronta_depois_do_login():
     r = _lembra({}, [{"id": "nao-e-uuid", "job_id": "j9", "nome": "x"}, {"id": ID_A, "job_id": None, "nome": "sem medido"}])
     assert r == {}                                                       # só UUID vira link; sem projeto medido não há menu
     assert "lembrarEscritorio(r.data, currentUser.id);" in D
+
+
+# ══ 15. as decisões do Pedro em 13/10: as notas da emissão dizem QUEM LÊ (FORA-2 e BANCO-8) ══
+_NOTAS_BASE = """
+var modais = [], botao = { onclick: null };
+function $(id) { return botao; } function abrirModal(t, h) { modais.push([t, h]); }
+function souAdmin() { return true; } function hojeISO() { return '2026-10-13'; } function quandoArq(s) { return s; }
+function blocoMandarPra() { return '[PRA QUEM]'; } function destinosDa() { return []; } function ultimoEv() { return null; }
+function confirmarEmissao() {} function salvarRetorno() {}
+var TEM_EMI = true;
+"""
+_NOTAS = [_NOTAS_BASE, _ESC, _linha(E, "const revTxt = "), _linha(E, "const ID_DRIVE = "), _linha(E, "const EV = "),
+          _linha(E, "const AVISO_NOTA_DA_EMISSAO = "), _linha(E, "const AVISO_NOTA_DO_RETORNO = "),
+          funcao_js("emitirArquivo", "escritorio.html", E), funcao_js("registrarRetorno", "escritorio.html", E),
+          funcao_js("mandarDepois", "escritorio.html", E)]
+
+
+def _modal(emi, chamada):
+    return _js(_NOTAS + ["var EMI = " + json.dumps(emi) + ";", chamada], "modais.length ? modais[0][1] : null")
+
+
+def test_o_emitir_diz_que_a_nota_e_lida_por_quem_recebe():
+    """FORA-2: "O que muda nesta revisão (opcional)" não dizia quem lia — e a nota vai pra tela de quem recebe e pro
+    e-mail do cliente."""
+    h = _modal([], "emitirArquivo('ARQUIVO_PLANTA_0001', 'Planta.pdf');")
+    assert '<label class="lbl" for="em-nota">O que muda nesta revisão (opcional) · quem receber lê</label>' in h
+    assert "Quem receber esta emissão <b>lê esta nota</b>: na tela e, o cliente, também no e-mail." in h
+    assert h.index('id="em-nota"') < h.index("lê esta nota") < h.index("[PRA QUEM]")       # o aviso fica junto do campo
+
+
+def test_o_mandar_pra_mostra_a_nota_que_vai_junto():
+    """FORA-2: a nota escrita no dia da emissão (às vezes antes de o cliente ser convidado) ia junto sem aparecer."""
+    e = {"id": "e1", "revisao": 2, "copia_nome": "Planta_R02.pdf", "nota": "cliente mudou de ideia <b>de novo</b>"}
+    h = _modal([e], "mandarDepois('e1');")
+    assert "<b>Vai junto a nota desta emissão.</b>" in h and "“cliente mudou de ideia &lt;b&gt;de novo&lt;/b&gt;”" in h
+    assert h.index("Vai junto a nota") < h.index("[PRA QUEM]")                               # antes de escolher pra quem
+    for sem in (None, "", "   "):                                                            # controle: sem nota, sem aviso
+        assert "Vai junto" not in _modal([{**e, "nota": sem}], "mandarDepois('e1');")
+
+
+def test_o_registrar_retorno_diz_que_o_cliente_pode_ler_a_nota():
+    """BANCO-8: a nota do "Enviada ao cliente" some da tela dele, mas o banco entrega — e nada avisava a admin."""
+    h = _modal([{"id": "e1", "revisao": 0, "copia_nome": "Planta_R00.pdf"}], "registrarRetorno('e1');")
+    assert "O cliente que receber esta emissão pelo AI.arq <b>pode ler esta nota</b>." in h
+    assert h.index('id="ret-nota"') < h.index("pode ler esta nota")
