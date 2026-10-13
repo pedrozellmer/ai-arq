@@ -496,6 +496,7 @@ def test_resposta_do_cliente_grava_com_o_login_dele_e_avisa_a_admin_uma_vez():
     b, enviados, _ = montar(CLI, "cliente")
     membro(b, M_CLI, "cliente", CLI, nome="Cliente Exemplo")
     _emissao(b)
+    _so_as_colunas_pedidas(b, "escritorio_emissao_eventos")       # a nota só chega se o servidor PEDIR a coluna
     r = esc.responder_emissao(E1, REQ, {"tipo": "revisao", "nota": "a porta <script>x</script> da despensa"})
     assert r["ok"] and r["aviso_enviado"] is True
     ev = b.t["escritorio_emissao_eventos"][0]
@@ -1386,16 +1387,20 @@ def _promovido(b):
          "permission_id": "perm-forn", "ja_existia": False, "papel_antes": None}]
 
 
-def _so_as_colunas_pedidas(b):
-    """O PostgREST só devolve as colunas do `select`. O BancoFiel devolve a linha inteira — e aí esquecer de PEDIR o
-    papel_antes passaria calado no teste e apagaria o acesso na produção."""
+def _so_as_colunas_pedidas(b, tabela="escritorio_drive_permissoes", por_baixo=None):
+    """O PostgREST só devolve as colunas do `select`. O BancoFiel devolve a linha inteira — e aí esquecer de PEDIR uma
+    coluna (o papel_antes, a nota) passaria calado no teste e daria errado na produção. `por_baixo` = outro dublê já
+    montado em cima do banco (a projeção vale por cima dele)."""
+    de_baixo = por_baixo or b
+
     def servico(method, path, body=None, params=None, prefer=None, **k):
-        st, linhas = b(method, path, body=body, params=params, prefer=prefer, **k)
+        st, linhas = de_baixo(method, path, body=body, params=params, prefer=prefer, **k)
         sel = (params or {}).get("select")
-        if method == "GET" and path.lstrip("/") == "escritorio_drive_permissoes" and sel and isinstance(linhas, list):
+        if method == "GET" and path.lstrip("/") == tabela and sel and isinstance(linhas, list):
             linhas = [{c: x.get(c) for c in sel.split(",")} for x in linhas]
         return st, linhas
     esc._SERVICO = servico
+    return servico
 
 
 def _voltaram(g):
@@ -1494,3 +1499,95 @@ def test_pasta_que_o_banco_nao_gravou_nao_vira_ok(resposta):
     esc._SERVICO = fiel                                    # controle: gravou → liga e compartilha a NOVA
     r = ed.projeto_pasta(PROJ, REQ, {"pasta": "PASTA_PROJ"})
     assert r["ok"] and r["pasta"]["id"] == "PASTA_PROJ" and ("PASTA_PROJ", "writer", EQUIPE["email"]) in g.permissoes_dadas()
+
+
+# ══ 13/10 — grupo B dos achados pequenos da 2ª auditoria (a tela que dizia o que não sabia) ══
+def _banco_que_falha(b, metodo, tabela, respostas):
+    """As próximas chamadas `metodo` em `tabela` devolvem, na ordem, o que está em `respostas` — cada item é
+    (status, grava): com grava=True a chamada ACONTECE no banco e só a resposta se perde. Acabou a lista, o banco responde."""
+    fila = list(respostas)
+
+    def servico(method, path, body=None, params=None, prefer=None, **k):
+        if method == metodo and path.lstrip("/") == tabela and fila:
+            status, grava = fila.pop(0)
+            if grava:
+                b(method, path, body=body, params=params, prefer=prefer, **k)
+            return status, None
+        return b(method, path, body=body, params=params, prefer=prefer, **k)
+    _so_as_colunas_pedidas(b, tabela, por_baixo=servico)    # e o que volta são só as colunas que o servidor pediu
+
+
+def _enviados(b):
+    return [e for e in b.t["escritorio_emissao_eventos"] if e["tipo"] == "enviado"]
+
+
+@pytest.mark.parametrize("metodo, respostas, registrou, n", [
+    ("GET", [(502, False)], True, 1),                       # a leitura falha uma vez: a 2ª lê e o registro sai
+    ("GET", [(0, False), (502, False)], False, 0),          # não leu nas duas: não sabe se já havia — não grava
+    ("POST", [(500, False)], True, 1),                      # a gravação falha uma vez: a 2ª grava
+    ("POST", [(500, False), (500, False)], False, 0),       # não gravou nas duas
+    ("POST", [(0, False), (0, False)], False, 0),           # o banco mudo nas duas, e nada foi gravado
+    ("POST", [(0, True)], True, 1),                         # GRAVOU e a resposta se perdeu: confere, não grava de novo
+    ("POST", [], True, 1)])                                 # controle
+def test_o_registro_enviado_tenta_de_novo_e_a_resposta_diz_se_gravou(metodo, respostas, registrou, n):
+    """FORA-6: a leitura dos eventos falhava e o registro era pulado; ou o registro falhava e o retorno nem era lido.
+    O cliente recebia "Pra você aprovar" e a admin seguia vendo "Emitida", sem ninguém saber."""
+    b, enviados, _ = montar(DONA, "dono")
+    membro(b, M_CLI, "cliente", CLI)
+    _emissao(b)
+    _pastas()
+    _banco_que_falha(b, metodo, "escritorio_emissao_eventos", respostas)
+    r = ed.projeto_mandar_emissao(PROJ, E1, REQ, {"para": [M_CLI]})
+    assert r["mandados"] == 1 and r["enviado_registrado"] is registrou and len(_enviados(b)) == n
+    assert r["avisados"] == 1 and len(enviados) == 1        # o cliente recebeu: o e-mail dele sai do mesmo jeito
+
+
+def test_controles_do_registro_enviado():
+    b, _, _ = montar(DONA, "dono")
+    membro(b, M_FORN, "fornecedor", FORN)
+    membro(b, M_CLI, "cliente", CLI)
+    _emissao(b)
+    _pastas()
+    r = ed.projeto_mandar_emissao(PROJ, E1, REQ, {"para": [M_FORN]})
+    assert r["mandados"] == 1 and r["enviado_registrado"] is None and _enviados(b) == []       # só fornecedor: nada a registrar
+    b.t["escritorio_emissao_eventos"].append({"id": "ev-0", "emissao_id": E1, "projeto_id": PROJ, "tipo": "enviado",
+                                              "em": "2026-10-01", "pelo_cliente": False})
+    r = ed.projeto_mandar_emissao(PROJ, E1, REQ, {"para": [M_CLI]})
+    assert r["enviado_registrado"] is True and len(_enviados(b)) == 1                          # já havia: não vira dois
+
+
+@pytest.mark.parametrize("quem, papel", [(FORN, "fornecedor"), (EQUIPE, "freela"), (DONA, "dono")])
+def test_a_tela_pergunta_se_da_pra_subir_foto_antes_de_a_pessoa_mandar(quem, papel):
+    """FORA-9/ADM-12: na obra, no 4G, a pessoa mandava até 40 MB pra só então ler que a pasta não estava ligada."""
+    b, _, _ = montar(quem, papel)
+    g = _pastas()
+    assert ed.projeto_fotos_pode(PROJ, REQ) == {"pode": True}
+    b.t["escritorio_drive_conexoes"].clear()
+    assert ed.projeto_fotos_pode(PROJ, REQ) == {"pode": False, "motivo": "O Google Drive do projeto está desconectado. Avise a admin."}
+    b.t["escritorio_projetos"][0]["pasta_id"] = None
+    assert ed.projeto_fotos_pode(PROJ, REQ) == {"pode": False, "motivo": "A admin ainda não ligou a pasta do Drive a este projeto."}
+    assert g.chamadas == []                                 # pergunta leve: não chama o Google
+
+
+@pytest.mark.parametrize("papel", ["cliente", None])
+def test_quem_nao_sobe_foto_nao_pergunta(papel):
+    montar(CLI, papel)
+    with pytest.raises(HTTPException) as e:
+        ed.projeto_fotos_pode(PROJ, REQ)
+    assert e.value.status_code == 403
+
+
+def test_a_pergunta_e_o_envio_dizem_a_mesma_coisa():
+    """Se o envio recusar por um motivo que a pergunta não conhece, a pessoa volta a mandar os 40 MB pra descobrir."""
+    b, _, _ = montar(FORN, "fornecedor")
+    _pastas()
+    b.t["escritorio_drive_conexoes"].clear()
+    with pytest.raises(HTTPException) as e:
+        ed.projeto_fotos_subir(PROJ, REQ, fotos=[_arq(JPG)])
+    assert e.value.status_code == 409 and e.value.detail == ed.projeto_fotos_pode(PROJ, REQ)["motivo"]
+    b.t["escritorio_projetos"][0]["pasta_id"] = None
+    with pytest.raises(HTTPException) as e:
+        ed.projeto_fotos_subir(PROJ, REQ, fotos=[_arq(JPG)])
+    assert e.value.status_code == 409 and e.value.detail == ed.projeto_fotos_pode(PROJ, REQ)["motivo"]
+    import main
+    assert "/api/escritorio/projetos/{projeto_id}/pode-subir-fotos" in {r.path for r in main.app.routes}

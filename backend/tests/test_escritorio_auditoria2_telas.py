@@ -860,11 +860,14 @@ var A = PROJETOS[0].id, B = PROJETOS[1].id, ROTA = { id: A, view: 'tarefas' }, N
 var location = { hash: '', replace: function (u) { location.hash = u; } }, main = { innerHTML: '' };
 function $(id) { return main; } function menu() {} function lerRota() { return ROTA; }
 function souEquipe() { return true; } function souFornecedor() { return false; }
-function carregarProjetos() {} function abrirPeloJob() {}
+var NO_MEIO_DA_LISTA = null, ESTOURA = false, console = { error: function () {} };
+function carregarProjetos() { if (NO_MEIO_DA_LISTA) { var f = NO_MEIO_DA_LISTA; NO_MEIO_DA_LISTA = null; f(); } }
+function abrirPeloJob() {}
 function render() { pintou.push(VIEW + ':' + (PROJ ? PROJ.id.slice(0, 1) : '-')); }
 function carregarProjeto(id, vale) {
   leu.push(id.slice(0, 1));
   if (NO_MEIO) { var f = NO_MEIO; NO_MEIO = null; f(); }      // a pessoa faz outra coisa ENQUANTO este projeto carrega
+  if (ESTOURA === id.slice(0, 1)) { ESTOURA = false; throw new Error('o banco caiu no meio'); }   // só a leitura DESTE projeto
   valeu.push(vale ? vale() : null);
   if (vale && !vale()) return false;                          // o mesmo contrato da de verdade: atrasada não troca nada
   PROJ = { id: id }; MEMBROS = [{}];
@@ -875,7 +878,8 @@ function carregarProjeto(id, vale) {
 
 def _navega(cena):
     return _js([_NAV_BASE, sem_await(funcao_js("navegar", "escritorio.html", E)), sem_await(funcao_js("recarregar", "escritorio.html", E)),
-                cena], "{ pintou: pintou, leu: leu, valeu: valeu, view: VIEW, proj: PROJ && PROJ.id.slice(0, 1), hash: location.hash }")
+                cena], "{ pintou: pintou, leu: leu, valeu: valeu, view: VIEW, proj: PROJ && PROJ.id.slice(0, 1), hash: location.hash,"
+                       "  erro: main.innerHTML }")
 
 
 def test_resposta_atrasada_do_projeto_anterior_nao_pinta_por_cima_do_novo():
@@ -891,6 +895,26 @@ def test_resposta_atrasada_do_projeto_anterior_nao_pinta_por_cima_do_novo():
 def test_ir_pra_lista_enquanto_o_projeto_carrega_nao_volta_pro_projeto():
     r = _navega("NO_MEIO = function () { ROTA = { id: null, view: 'lista' }; navegar(); }; navegar();")
     assert r["pintou"] == ["lista:-"] and r["proj"] is None and r["view"] == "lista"
+
+
+def test_abrir_um_projeto_enquanto_a_lista_carrega_nao_pinta_duas_vezes():
+    """ADM-18, o caminho da lista: a lista atrasada pintava de novo por cima do projeto que a pessoa acabou de abrir."""
+    r = _navega("ROTA = { id: null, view: 'lista' };"
+                "NO_MEIO_DA_LISTA = function () { ROTA = { id: A, view: 'tarefas' }; navegar(); }; navegar();")
+    assert r["pintou"] == ["tarefas:a"] and r["proj"] == "a" and r["view"] == "tarefas"
+    r = _navega("ROTA = { id: null, view: 'lista' }; navegar();")        # controle: a lista sozinha pinta a lista
+    assert r["pintou"] == ["lista:-"]
+
+
+def test_navegacao_deixada_pra_tras_nao_le_o_projeto_nem_pinta_o_erro_dela():
+    # a lista dos projetos ainda carregava quando a pessoa foi pra lista: o projeto A nem chega a ser lido
+    r = _navega("PROJETOS.length = 0; NO_MEIO_DA_LISTA = function () { ROTA = { id: null, view: 'lista' }; navegar(); }; navegar();")
+    assert r["leu"] == [] and r["pintou"] == ["lista:-"]
+    # a leitura do A estourou DEPOIS de a pessoa ir pro B: o "Não consegui carregar" do A não cobre o B
+    r = _navega("ESTOURA = 'a'; NO_MEIO = function () { ROTA = { id: B, view: 'capa' }; navegar(); }; navegar();")
+    assert r["erro"] == "" and r["pintou"] == ["capa:b"]
+    r = _navega("ESTOURA = 'a'; navegar();")                             # controle: o erro da navegação da vez aparece
+    assert "Não consegui carregar agora" in r["erro"] and r["pintou"] == []
 
 
 def test_reler_o_projeto_nao_pinta_depois_que_a_pessoa_foi_pra_outro():
