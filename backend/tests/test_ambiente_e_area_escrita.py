@@ -689,7 +689,9 @@ def test_a_secao_por_desenho_lista_os_grupos():
     assert "    CIRCULAÇÃO = 46.60 m²" in ls
     i_fora = next(i for i, l in enumerate(ls) if l.startswith("  [FORA DAS PRANCHAS"))
     assert i_fora > ls.index("  [PLANTA DE LAYOUT TÉRREO — folha A2 LAYOUT]  (planta)")
-    assert any("+ 1 etiqueta(s) de área SEM nome por perto: 90.00 m²" in l for l in ls[i_fora:])
+    # 12/10: com ambiente no grupo, a área sem nome é dita, não listada (ver mais abaixo)
+    assert "    (há etiquetas de área sem nome aqui fora; não são listadas: não são ambiente)" in ls[i_fora:]
+    assert not any("90.00" in l for l in ls)
     assert ls[-1] == ""
 
 
@@ -789,28 +791,92 @@ def test_o_aviso_dos_totais_de_fora_conta_as_etiquetas():
     assert not any("491" in l or "351" in l for l in ls)
 
 
-def test_o_total_de_um_desenho_das_pranchas_e_listado_com_o_aviso():
+# 🩸 12/10/2026 — a lição do "TOTAL = 491 m²" e do corte do nível, levada pra dentro
+# das pranchas: com AMBIENTE listado no grupo, o total e a área sem nome são ditos,
+# não listados — sem número e sem contagem. Sem ambiente nenhum, ficam como eram.
+TOTAL_DITO = "(há total escrito %s; não é listado: não é área de piso nem de forro)"
+SEM_NOME_DITA = "(há etiquetas de área sem nome %s; não são listadas: não são ambiente)"
+
+
+def test_o_total_de_um_desenho_com_ambiente_e_dito_nao_listado():
     tx = _tudo() + [_t("ÁREA ÚTIL = 76,57m²", 30, 25)]            # dentro da 1ª prancha
     ls = dx._linhas_dos_ambientes(dx.ambientes_por_desenho(tx, _mapa()))
+    i = ls.index("    " + TOTAL_DITO % "neste desenho")
+    assert i < next(k for k, l in enumerate(ls) if l.startswith("  [PLANTA DE LAYOUT")), "no grupo da 1ª prancha"
+    assert not any("76.57" in l or "totais/resumos escritos" in l for l in ls)
+    assert not any(c.isdigit() for c in ls[i]), "sem número e sem contagem"
+    assert "    CIRCULAÇÃO = 49.82 m²" in ls[:i], "os ambientes do desenho continuam listados"
+
+
+def test_CONTROLE_o_total_de_um_desenho_SEM_ambiente_fica_listado_com_o_aviso():
+    """A prancha que só tem o total escrito (nenhum ambiente): ele é tudo o que o
+    desenho tem — fica listado, com o aviso de que não é área de piso."""
+    tx = _etiquetas(0, "49,82m²", "26,75m²") + [_t("ÁREA ÚTIL = 76,57m²", 60, 25)]   # o total na 2ª prancha
+    ls = dx._linhas_dos_ambientes(dx.ambientes_por_desenho(tx, _mapa()))
     linha = next(l for l in ls if "totais/resumos escritos" in l)
-    assert ls.index(linha) < next(i for i, l in enumerate(ls) if l.startswith("  [PLANTA DE LAYOUT"))
+    assert ls.index(linha) > next(i for i, l in enumerate(ls) if l.startswith("  [PLANTA DE LAYOUT"))
     assert "ÁREA ÚTIL = 76.57 m²" in linha
     assert "NÃO são ambiente e NÃO são área de piso nem de forro" in linha
     assert "total costuma ser área construída ou do lote, com parede e área externa" in linha
     assert "servem só pra conferir a soma dos ambientes" in linha
+    assert not any("há total escrito" in l for l in ls)
 
 
-def test_sem_desenho_das_pranchas_o_total_e_listado_com_o_aviso():
-    """Lista única (sem janela do papel) ou SÓ o grupo de fora: aí o total é tudo
-    o que há — fica listado, com o aviso."""
+def test_sem_desenho_das_pranchas_o_total_com_ambiente_tambem_e_so_dito():
+    """Lista única (sem janela do papel): "neste arquivo". SÓ o grupo de fora:
+    "aqui fora". O número do total não aparece em nenhum dos dois."""
     unica = dx._linhas_dos_ambientes(dx.ambientes_por_desenho(_tudo(), None))
-    linha = next(l for l in unica if "totais/resumos escritos" in l)
-    assert "ÁREA TOTAL = 491.00 m²" in linha and "NÃO são área de piso nem de forro" in linha
-    assert not any("aqui fora não listado" in l for l in unica)
+    assert "  " + TOTAL_DITO % "neste arquivo" in unica
+    assert not any("491" in l or "totais/resumos escritos" in l or "aqui fora" in l for l in unica)
     so_fora = dx._linhas_dos_ambientes(dx.ambientes_por_desenho(
         _etiquetas(200, "46,60m²", "29,86m²", extra=[_t("ÁREA TOTAL = 491,00m²", 220, 25)]), _mapa()))
     assert any(l.startswith("  [FORA DAS PRANCHAS") for l in so_fora)
-    assert any("totais/resumos escritos" in l and "ÁREA TOTAL = 491.00 m²" in l for l in so_fora)
+    assert "    " + TOTAL_DITO % "aqui fora" in so_fora
+    assert not any("491" in l or "total(is)/resumo(s)" in l for l in so_fora)
+
+
+def test_CONTROLE_sem_ambiente_nenhum_o_total_e_listado_com_o_aviso():
+    """Arquivo que só tem totais escritos (quadro de áreas, nenhuma etiqueta de
+    cômodo): são tudo o que há — ficam listados."""
+    ls = dx._linhas_dos_ambientes(dx.ambientes_por_desenho(
+        [_t("ÁREA TOTAL = 491,00m²", 220, 25), _t("ÁREA ÚTIL = 351,00m²", 250, 25)], None))
+    linha = next(l for l in ls if "totais/resumos escritos" in l)
+    assert "ÁREA TOTAL = 491.00 m²" in linha and "ÁREA ÚTIL = 351.00 m²" in linha
+    assert "NÃO são área de piso nem de forro" in linha
+    assert not any("há total escrito" in l for l in ls)
+
+
+def test_a_area_sem_nome_com_ambiente_no_grupo_e_dita_nao_listada():
+    """Por desenho, em lista única e no grupo de fora: a frase muda o lugar, e o
+    número da área sem nome não aparece."""
+    por_desenho = dx._linhas_dos_ambientes(dx.ambientes_por_desenho(
+        _etiquetas(0, "49,82m²", "26,75m²", extra=[_t("A=12,34m²", 30, 5), _t("A=7,00m²", 35, 5)]), _mapa()))
+    i = por_desenho.index("    " + SEM_NOME_DITA % "neste desenho")
+    assert not any(c.isdigit() for c in por_desenho[i]), "sem número e sem contagem"
+    assert not any("12.34" in l or "7.00" in l or "SEM nome por perto" in l for l in por_desenho)
+    unica = dx._linhas_dos_ambientes(dx.ambientes_por_desenho(_tudo(), None))
+    assert "  " + SEM_NOME_DITA % "neste arquivo" in unica
+    assert not any("90.00" in l or "SEM nome por perto" in l for l in unica)
+    fora = dx._linhas_dos_ambientes(dx.ambientes_por_desenho(_tudo(), _mapa()))
+    assert "    " + SEM_NOME_DITA % "aqui fora" in fora and not any("90.00" in l for l in fora)
+
+
+def test_a_frase_das_sem_nome_e_uma_so_por_grupo():
+    tx = _etiquetas(0, "49,82m²", "26,75m²", extra=[_t("A=%d,00m²" % (10 + i), 2 + i * 2, 3) for i in range(15)])
+    ls = dx._linhas_dos_ambientes(dx.ambientes_por_desenho(tx, _mapa()))
+    assert sum(1 for l in ls if "há etiquetas de área sem nome" in l) == 1
+    assert not any("(+3)" in l for l in ls)
+
+
+def test_o_grupo_com_a_lista_de_ambientes_cortada_no_teto_ainda_tem_ambiente():
+    """A lista cortada no teto não esvazia o grupo: ele TEM ambiente, e o total e
+    a sem-nome continuam só ditos."""
+    tx = [_t("LOJA %02d A=%d,00m²" % (i, 10 + i), 2 + (i % 12) * 3, 2 + (i // 12) * 3) for i in range(30)]
+    tx += [_t("ÁREA TOTAL = 491,00m²", 220, 25), _t("A=3,21m²", 230, 5)]
+    ls = dx._linhas_dos_ambientes(dx.ambientes_por_desenho(tx, None), limite=0)
+    assert not any(l.startswith("  LOJA ") for l in ls) and "  (+30 par(es) deste grupo não listado(s))" in ls
+    assert "  " + TOTAL_DITO % "neste arquivo" in ls and "  " + SEM_NOME_DITA % "neste arquivo" in ls
+    assert not any("491" in l or "3.21" in l for l in ls)
 
 
 def test_a_janela_geral_ou_sem_leitura_e_dita_no_grupo_de_fora():

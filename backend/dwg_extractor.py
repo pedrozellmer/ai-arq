@@ -9084,12 +9084,24 @@ def _linhas_dos_ambientes(amb, limite: int = _AMB_LISTA_MAX) -> list:
             ls.append(rec + _par(n, v, k))
         if len(amb_g) > len(mostra):
             ls.append(rec + "(+%d par(es) deste grupo não listado(s))" % (len(amb_g) - len(mostra)))
+        # 🩸 12/10/2026 — a lição do "TOTAL = 491 m²" (11/10) e do corte do nível: número na
+        # frente da IA é resposta pronta. Na avaliação de uma escola as áreas sem nome iam na
+        # lista ao lado dos ambientes ("… SEM nome por perto: 33.00 · 139.00 · 222.00 · 875.00")
+        # e os totais, por extenso. Com AMBIENTE listado no grupo, o total e a área sem nome
+        # não trazem nada que ela deva usar: a seção diz que existem — sem número e sem
+        # contagem. Sem ambiente nenhum no grupo, são tudo o que ele tem: ficam como eram.
+        # 📏 Acervo (88 arquivos, 151 grupos, já sem as células de quadro): a linha das
+        # sem-nome perde os números em 43 grupos de 26 jobs (141 números) e fica igual em 17;
+        # a dos totais deixa de listar em 22 grupos de 17 jobs (114 totais) e fica em 14.
+        onde = "aqui fora" if g.get("fora") else ("neste desenho" if por_desenho else "neste arquivo")
         tot = g.get("totais") or []
         if tot and g.get("fora") and tem_desenho:
             # o total escrito FORA das pranchas é de cópia de trabalho ou de quadro solto:
             # foi dele que saiu o "piso = 491 m²". Diz que existe, não põe o número na frente.
             ls.append(rec + "(%d total(is)/resumo(s) escrito(s) aqui fora não listado(s): não são"
                       " área de piso nem de forro)" % sum(k for _n, _v, k in tot))
+        elif tot and amb_g:
+            ls.append(rec + "(há total escrito %s; não é listado: não é área de piso nem de forro)" % onde)
         elif tot:
             ls.append(rec + "totais/resumos escritos (NÃO são ambiente e NÃO são área de piso nem de"
                       " forro — total costuma ser área construída ou do lote, com parede e área"
@@ -9097,7 +9109,9 @@ def _linhas_dos_ambientes(amb, limite: int = _AMB_LISTA_MAX) -> list:
                       + "; ".join(_par(n, v, k) for n, v, k in tot[:10])
                       + (" (+%d)" % (len(tot) - 10) if len(tot) > 10 else ""))
         sem = g.get("sem_nome") or []
-        if sem:
+        if sem and amb_g:
+            ls.append(rec + "(há etiquetas de área sem nome %s; não são listadas: não são ambiente)" % onde)
+        elif sem:
             ls.append(rec + "+ %d etiqueta(s) de área SEM nome por perto: " % len(sem)
                       + " · ".join("%.2f" % v for v in sem[:_AMB_SEM_NOME_MAX])
                       + (" (+%d)" % (len(sem) - _AMB_SEM_NOME_MAX) if len(sem) > _AMB_SEM_NOME_MAX else "")

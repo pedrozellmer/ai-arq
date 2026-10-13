@@ -350,7 +350,8 @@ def test_a_secao_diz_que_ha_area_em_quadro_sem_numero_nenhum():
     for numero in ("615", "218", "231", "35.00", "142"):
         assert numero not in txt, numero
     assert "INTERNOS" not in txt
-    assert "+ 1 etiqueta(s) de área SEM nome por perto: 4.00 m²" in txt, "a sem-nome da planta continua"
+    assert "(há etiquetas de área sem nome neste desenho; não são listadas: não são ambiente)" in txt, \
+        "a sem-nome da planta continua sendo dita"
     # a frase não conta as células: é a lição do corte do nível
     frase = next(l for l in ls if FRASE in l)
     assert not any(c.isdigit() for c in frase)
