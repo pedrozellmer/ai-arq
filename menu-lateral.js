@@ -327,7 +327,9 @@
   function gravarMapa(job, c) {
     try {
       var m = lerMapa(), uid = uidLocal();
-      if (c) m[job] = { id: c.id, nome: c.nome, sub: c.sub || '', uid: uid, t: Date.now() };
+      // 13/10 (auditoria NAV-10/NAV-11): a lembrança guarda também o nome do escritório e o papel da pessoa NESTE
+      // projeto — a página seguinte já nasce com o nome certo no menu e, pra equipe, sem as portas do dono
+      if (c) m[job] = { id: c.id, nome: c.nome, sub: c.sub || '', uid: uid, t: Date.now(), marca: c.marca || '', papel: c.papel || '' };
       else delete m[job];
       var ks = Object.keys(m).sort(function (a, b) { return (m[b].t || 0) - (m[a].t || 0); });
       ks.slice(60).forEach(function (k) { delete m[k]; });          // guarda os 60 mais recentes
@@ -341,7 +343,7 @@
       var c = JSON.parse(sessionStorage.getItem('aiarq_esc_ctx') || 'null');
       if (!(c && c.job === JOB)) {
         var m = lerMapa()[JOB];
-        c = m && m.uid && m.uid === uidLocal() ? { job: JOB, id: m.id, nome: m.nome, sub: m.sub } : null;
+        c = m && m.uid && m.uid === uidLocal() ? { job: JOB, id: m.id, nome: m.nome, sub: m.sub, marca: m.marca || '', papel: m.papel || '' } : null;
         ESC_DO_MAPA = !!c;
       }
       return c && UUID_RE.test(c.id || '') ? c : null;
@@ -350,10 +352,31 @@
 
   // O menu do Escritório: as telas dele em cima e as do projeto medido embaixo (as mesmas de gruposProjeto,
   // menos Visão geral — quem faz esse papel é a Página do projeto). 11/10: Fotos entrou (o escritorio.html já tinha).
+  // 13/10 (auditoria NAV-11): no escritorio.html o grupo se chama com o NOME do escritório; aqui era "Escritório" fixo
+  // — o menu "trocava" de nome ao passar pro Quantitativo. O nome vem da marca desta aba ou da lembrança (quem grava
+  // é o escritorio.html, que lê do banco). 🔒 É texto de gente (o cadastro de quem administra): entra SÓ como texto
+  // (textContent, no pintarMarca), nunca na string HTML do menu — a mesma regra do nome do projeto.
+  function nomeDoEscritorio() {
+    var m = ESC ? String(ESC.marca || '').trim() : '';
+    return m ? m.slice(0, 80) : 'Escritório';
+  }
+  function pintarMarca(side) {
+    if (!side || !ESC) return;
+    var nome = nomeDoEscritorio();
+    var t = side.querySelector('.side-grp-t[data-marca]');
+    if (t) t.textContent = nome;
+    var sair = side.querySelector('.aiarq-sair-proj');
+    if (sair && sair.lastChild) sair.lastChild.textContent = 'Projetos do ' + nome;
+  }
+  // 13/10 (auditoria NAV-10): as portas que são só do dono do projeto medido. A lembrança diz o papel: pra equipe o
+  // menu já NASCE sem elas (antes apareciam em toda página e sumiam quando o servidor respondia — e, se ele
+  // demorasse ou falhasse, ficavam: o clique dava 403).
+  var DO_DONO = ['revisao', 'financeiro', 'comparativo', 'processamento'];
   function gruposEscritorio() {
     var e = 'escritorio.html#/p/' + ESC.id + '/';
+    var soEquipe = ESC.papel === 'freela';
     return [
-      { titulo: 'Escritório', itens: [
+      { titulo: 'Escritório', marca: true, itens: [
         { href: e + 'capa',     rotulo: 'Página do projeto', ic: 'painel',   track: 'menu-esc-capa' },
         { href: e + 'tarefas',  rotulo: 'Tarefas',           ic: 'quadro',   track: 'menu-esc-tarefas' },
         { href: e + 'arquivos', rotulo: 'Arquivos',          ic: 'pasta',    track: 'menu-esc-arquivos' },
@@ -362,7 +385,9 @@
         { href: e + 'atas',     rotulo: 'Atas',              ic: 'memorial', track: 'menu-esc-atas' },
         { href: e + 'equipe',   rotulo: 'Equipe',            ic: 'equipe',   track: 'menu-esc-equipe' }
       ]},
-      { titulo: 'Quantitativo e obra', itens: gruposProjeto()[0].itens.filter(function (it) { return !!it.chave; }) }
+      { titulo: 'Quantitativo e obra', itens: gruposProjeto()[0].itens.filter(function (it) {
+        return !!it.chave && !(soEquipe && DO_DONO.indexOf(it.chave) >= 0);
+      }) }
     ];
   }
 
@@ -499,7 +524,7 @@
     var out = '';
     GRUPOS.forEach(function (g) {
       out += '<div class="side-grp">'
-           + (g.titulo ? '<p class="side-grp-t">' + g.titulo + '</p>' : '');
+           + (g.titulo ? '<p class="side-grp-t"' + (g.marca ? ' data-marca="1"' : '') + '>' + g.titulo + '</p>' : '');
       g.itens.forEach(function (it) {
         // "Em breve": não é link. Item de menu que não leva a lugar nenhum
         // vira reclamação; aqui está escrito que ainda não existe.
@@ -656,6 +681,7 @@
       var escNome = side.querySelector('#aiarq-proj-nome'), escSub = side.querySelector('#aiarq-proj-sub');
       if (escNome) escNome.textContent = String(ESC.nome || 'Projeto').slice(0, 160);
       if (escSub) escSub.textContent = String(ESC.sub || '').slice(0, 120);
+      pintarMarca(side);               // NAV-11: o nome do escritório no título do grupo e no "Projetos do …"
     }
 
     side.querySelector('#aiarq-fechar').addEventListener('click', function (ev) {
@@ -1017,7 +1043,8 @@
     if (ESC || !c || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(c.id || '')) return;
     var side = document.getElementById('aiarq-side');
     if (!side) return;
-    ESC = { job: JOB, id: c.id, nome: String(c.nome || 'Projeto').slice(0, 160), sub: String(c.sub || '').slice(0, 120) };
+    ESC = { job: JOB, id: c.id, nome: String(c.nome || 'Projeto').slice(0, 160), sub: String(c.sub || '').slice(0, 120),
+            marca: String(c.marca || '').slice(0, 80), papel: c.papel === 'freela' || c.papel === 'dono' ? c.papel : '' };
     try { sessionStorage.setItem('aiarq_esc_ctx', JSON.stringify(ESC)); } catch (_) {}
     gravarMapa(JOB, ESC);          // da próxima vez o menu já nasce assim (sem inverter)
     GRUPOS = gruposEscritorio();
@@ -1044,6 +1071,7 @@
       sair.setAttribute('href', 'escritorio.html#/');
       if (sair.lastChild) sair.lastChild.textContent = 'Projetos do Escritório';
     }
+    pintarMarca(side);                 // NAV-11: com a marca conhecida, o nome do escritório (como texto)
     var tag = side.querySelector('.aiarq-fixado .tag');
     if (tag) tag.textContent = 'Escritório · projeto aberto';
     var nm = side.querySelector('#aiarq-proj-nome');
@@ -1082,7 +1110,9 @@
       .then(function (r) {
         if (!r || r.error) return;                       // falha de leitura não é "não tem": não mexe
         if (!r.data) { if (ESC_DO_MAPA) gravarMapa(JOB, null); return; }   // saiu do Escritório
-        var c = { id: r.data.id, nome: r.data.nome, sub: r.data.etapa_atual || '' };
+        // quem lê a linha do projeto é o DONO (a equipe chega pelo /acesso, no montarEquipe). O nome do escritório
+        // que já estava na lembrança continua (esta leitura não traz a marca).
+        var c = { id: r.data.id, nome: r.data.nome, sub: r.data.etapa_atual || '', papel: 'dono', marca: (ESC && ESC.marca) || '' };
         confirmouEscritorio(c.id);
         if (!ESC) return aplicarEscritorio(c);
         gravarMapa(JOB, c);                              // já está no menu certo: só atualiza nome/etapa
@@ -1116,7 +1146,13 @@
       if (sub) sub.textContent = ESC ? 'equipe · só leitura' : 'equipe · só leitura · ' + (a.itens || 0) + ' itens';
       tirarItensDoDono();
       // a equipe entra no Escritório pelo projeto dela: o menu vira o do Escritório
-      if (a.escritorio_id) aplicarEscritorio({ id: a.escritorio_id, nome: (window.tituloProjeto || String)(a.nome || 'Projeto') });
+      if (a.escritorio_id) aplicarEscritorio({ id: a.escritorio_id, nome: (window.tituloProjeto || String)(a.nome || 'Projeto'), papel: 'freela' });
+      // NAV-10: menu que já tinha nascido da lembrança SEM o papel (gravada antes de 13/10): guarda que aqui é equipe
+      if (a.escritorio_id && ESC && ESC.id === a.escritorio_id && ESC.papel !== 'freela') {
+        ESC.papel = 'freela';
+        try { sessionStorage.setItem('aiarq_esc_ctx', JSON.stringify(ESC)); } catch (_) {}
+        gravarMapa(JOB, ESC);
+      }
       if (a.escritorio_id) confirmouEscritorio(a.escritorio_id);     // 11/10: a Visão geral vai pra Página do projeto
     }, function () {});
   }

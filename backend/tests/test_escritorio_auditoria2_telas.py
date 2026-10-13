@@ -132,7 +132,7 @@ def test_painel_as_tres_portas_usam_o_destino_e_o_mapa_e_so_dos_projetos_da_pess
     assert 'href="${escProj(destinoDoProjeto(p.job_id, done))}" data-abrir="${escProj(p.job_id)}" data-pronto="${done ? 1 : 0}"' in c
     assert "projeto.html?job_id=${escProj(p.job_id)}'" not in c                         # a porta antiga do cartão saiu
     assert 'href="${escapeH(destinoDoProjeto(p.job_id, _st === \'done\'))}" data-abrir="${escapeH(p.job_id)}"' in D
-    assert "sbClient.from('escritorio_projetos').select('id,job_id').eq('dono', currentUser.id).not('job_id', 'is', null)" in D
+    assert "sbClient.from('escritorio_projetos').select('id,job_id,nome,etapa_atual').eq('dono', currentUser.id).not('job_id', 'is', null)" in D
 
 
 # ══ 3. o quadro: a pendência do cliente ══
@@ -330,7 +330,7 @@ def test_saidas_de_quem_e_de_fora():
 
 def test_processamento_e_fotos_no_menu_do_escritorio():
     """NAV-5/NAV-11. O menu do Escritório é montado de verdade, com os grupos reais."""
-    g = funcao_js("gruposProjeto", "menu-lateral.js", ML) + funcao_js("gruposEscritorio", "menu-lateral.js", ML)
+    g = funcao_js("gruposProjeto", "menu-lateral.js", ML) + _linha(ML, "  var DO_DONO = ") + funcao_js("gruposEscritorio", "menu-lateral.js", ML)
     pre = "var JOB = 'j1', ESC = { id: '" + UUID + "' }; function url(p) { return p + '?job_id=' + JOB; }"
     grupos = _js([pre, g], "gruposEscritorio().map(function (x) { return x.itens.map(function (i) { return i.rotulo; }); })")
     assert grupos[0] == ["Página do projeto", "Tarefas", "Arquivos", "Emissões", "Fotos", "Atas", "Equipe"]
@@ -532,7 +532,8 @@ def test_o_cliente_recebe_so_a_data_e_a_admin_ve_o_botao():
     assert "onclick=\"concluirProjeto(true)\">Concluir ${esc(atual)} e o projeto ✓</button>" in v
     assert "onclick=\"concluirProjeto(false)\">Reabrir</button>" in v
     assert v.index("if (!souAdmin()) return") < v.index("concluirProjeto(true)")      # o botão vem depois da porta da admin
-    assert "pct = p.concluido_em ? 100 : et.length && i >= 0 ?" in funcao_js("telaLista", "escritorio.html", E)
+    # 13/10: a barra da lista mudou de lugar (etapaNaLista, por perfil e com peso) — o concluído continua inteiro
+    assert "pct: p.externo ? null : p.concluido_em ? 100 :" in funcao_js("etapaNaLista", "escritorio.html", E)
 
 
 # ══ 11. grupo A dos achados pequenos (12/10): dado que se perdia e gravação que mentia ══
@@ -823,13 +824,17 @@ def test_mandar_avisa_a_admin_quando_o_enviado_nao_foi_registrado():
     assert "registre em Registrar retorno' : ''), !!f || semRegistro);" in m
 
 
+_ETAPA_NA_LISTA = [_linha(E, "const ehEtapaDeObra = "), funcao_js("pesoDa", "escritorio.html", E),
+                   funcao_js("calcAndamento", "escritorio.html", E), funcao_js("etapaNaLista", "escritorio.html", E)]
+
+
 def _lista(piloto_lido, resumo_lido, projetos, no_piloto="false"):
     pre = ("var NO_PILOTO = %s, PILOTO_LIDO = %s, RESUMO_LIDO = %s, EU = { id: 'u1' };" % (no_piloto, piloto_lido, resumo_lido)
            + "var PROJETOS = " + json.dumps(projetos) + ";"
            + _ESC + "function faixa(i, t, s, botoes) { return '[FAIXA ' + (botoes || 'sem botoes') + ']'; }"
            "function corDe() { return ['#111111', '#222222']; } function iniciais() { return 'CE'; }")
-    return _js([pre, _trecho(E, "const naoLiNaLista = ", NL + "].filter(Boolean);"), _trecho(E, "const oQueALista = () => {", NL + "};"),
-                funcao_js("telaLista", "escritorio.html", E)], "telaLista()")
+    return _js([pre, _trecho(E, "const naoLiNaLista = ", NL + "].filter(Boolean);"), _trecho(E, "const oQueALista = () => {", NL + "};")]
+               + _ETAPA_NA_LISTA + [funcao_js("telaLista", "escritorio.html", E)], "telaLista()")
 
 
 def test_lista_nao_chama_de_piloto_fechado_o_que_nao_conseguiu_ler():
@@ -860,7 +865,8 @@ var A = PROJETOS[0].id, B = PROJETOS[1].id, ROTA = { id: A, view: 'tarefas' }, N
 var location = { hash: '', replace: function (u) { location.hash = u; } }, main = { innerHTML: '' };
 function $(id) { return main; } function menu() {} function lerRota() { return ROTA; }
 function souEquipe() { return true; } function souFornecedor() { return false; }
-var NO_MEIO_DA_LISTA = null, ESTOURA = false, console = { error: function () {} };
+var NO_MEIO_DA_LISTA = null, ESTOURA = false, console = { error: function () {} }, RESUMO_LIDO = true, avisos = [];
+function toast(t, erro) { avisos.push([t, !!erro]); }
 function carregarProjetos() { if (NO_MEIO_DA_LISTA) { var f = NO_MEIO_DA_LISTA; NO_MEIO_DA_LISTA = null; f(); } }
 function abrirPeloJob() {}
 function render() { pintou.push(VIEW + ':' + (PROJ ? PROJ.id.slice(0, 1) : '-')); }
@@ -879,7 +885,7 @@ function carregarProjeto(id, vale) {
 def _navega(cena):
     return _js([_NAV_BASE, sem_await(funcao_js("navegar", "escritorio.html", E)), sem_await(funcao_js("recarregar", "escritorio.html", E)),
                 cena], "{ pintou: pintou, leu: leu, valeu: valeu, view: VIEW, proj: PROJ && PROJ.id.slice(0, 1), hash: location.hash,"
-                       "  erro: main.innerHTML }")
+                       "  erro: main.innerHTML, avisos: avisos }")
 
 
 def test_resposta_atrasada_do_projeto_anterior_nao_pinta_por_cima_do_novo():

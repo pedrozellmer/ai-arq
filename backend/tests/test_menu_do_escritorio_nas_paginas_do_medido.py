@@ -60,7 +60,9 @@ def test_grupos_do_escritorio_apontam_pras_telas_dele_e_pras_do_medido():
     f = js[i:js.index("\n  }\n", i)]
     for tela in ("capa", "tarefas", "arquivos", "atas", "equipe"):
         assert "e + '" + tela + "'" in f
-    assert "gruposProjeto()[0].itens.filter(function (it) { return !!it.chave; })" in f
+    # 13/10 (NAV-10): as telas do medido, menos as que são só do dono quando a lembrança diz que a pessoa é equipe
+    assert "gruposProjeto()[0].itens.filter(function (it) {" in f
+    assert "return !!it.chave && !(soEquipe && DO_DONO.indexOf(it.chave) >= 0);" in f
     assert "var GRUPOS = FIXADO ? (ESC ? gruposEscritorio() : gruposProjeto()) : GRUPOS_CONTA;" in js
 
 # 25/09, 2ª parte (Pedro: "faz o que achar mais lógico"): o menu vira o do Escritório SEMPRE que o projeto

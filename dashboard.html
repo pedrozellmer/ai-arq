@@ -2362,10 +2362,11 @@
     // o menu-lateral.js confirmar a ligação no banco).
     (async () => {
       try {
-        const r = await sbClient.from('escritorio_projetos').select('id,job_id').eq('dono', currentUser.id).not('job_id', 'is', null);
+        const r = await sbClient.from('escritorio_projetos').select('id,job_id,nome,etapa_atual').eq('dono', currentUser.id).not('job_id', 'is', null);
         if (r.error || !Array.isArray(r.data)) return;
         r.data.forEach((x) => { if (x.job_id && /^[0-9a-f-]{36}$/i.test(String(x.id || ''))) ESC_POR_JOB[x.job_id] = x.id; });
         ligarPortasDoEscritorio();
+        lembrarEscritorio(r.data, currentUser.id);
       } catch (_) {}
     })();
 
@@ -5538,6 +5539,26 @@
   function destinoDoProjeto(job, pronto) {
     const id = ESC_POR_JOB[job];
     return id && pronto ? 'escritorio.html#/p/' + id + '/capa' : 'projeto.html?job_id=' + encodeURIComponent(job);
+  }
+  // 🏢 13/10 (auditoria NAV-10/NAV-7): o Sair apaga a lembrança do Escritório (LGPD-9) — então, depois de cada login,
+  // a 1ª página de cada projeto ligado nascia com o menu antigo e invertia um segundo depois (a queixa de 26/09 de
+  // volta). O painel acabou de ler DO BANCO quais projetos da pessoa estão no Escritório: deixa a lembrança pronta,
+  // no mesmo formato que o menu-lateral.js grava. E o que era dela como admin e NÃO está mais no banco (apagado
+  // noutro aparelho) sai da lembrança. Só mexe no que é desta conta; o resto (ela como equipe de outro escritório) fica.
+  function lembrarEscritorio(linhas, uid) {
+    try {
+      const mapa = JSON.parse(localStorage.getItem('aiarq_esc_mapa') || '{}') || {};
+      const ligados = {};
+      (linhas || []).forEach((x) => {
+        if (!x.job_id || !/^[0-9a-f-]{36}$/i.test(String(x.id || ''))) return;
+        ligados[x.job_id] = true;
+        const antes = mapa[x.job_id] && mapa[x.job_id].id === x.id && mapa[x.job_id].uid === uid ? mapa[x.job_id] : {};
+        mapa[x.job_id] = { id: x.id, nome: String(x.nome || 'Projeto').slice(0, 160), sub: antes.sub || String(x.etapa_atual || '').slice(0, 120),
+          uid: uid, t: antes.t || Date.now(), marca: antes.marca || '', papel: 'dono' };
+      });
+      Object.keys(mapa).forEach((k) => { const m = mapa[k]; if (m && m.uid === uid && m.papel === 'dono' && !ligados[k]) delete mapa[k]; });
+      localStorage.setItem('aiarq_esc_mapa', JSON.stringify(mapa));
+    } catch (_) {}
   }
   // o mapa pode chegar depois da lista desenhada: acerta os links que já estão na tela
   function ligarPortasDoEscritorio() {

@@ -513,6 +513,23 @@ function calcAndamento(et, iA, pesos, feitas, total, obraPct, concluido) {
   const pAtual = W ? pesoDa(pesos, et[iA]) * Math.max(0, Math.min(1, frac)) / W * 100 : 0;
   return { pct: Math.round(pAntes + pAtual), pAntes, pAtual, obra, obraPct, feitas, total, iA, n: et.length, etapa: et[iA] };
 }
+// 13/10: a bolinha de cada etapa. Com o projeto CONCLUÍDO (ADM-13) a última seguia azul, "atual", ao lado do 100%
+// — concluído, todas estão feitas.
+const classeDaEtapa = (i, iA, concluido) => (concluido || i < iA ? 'feita' : i === iA ? 'atual' : '');
+const numDaEtapa = (i, iA, concluido) => (concluido || i < iA ? '✓' : i + 1);
+// 13/10 (auditoria BANCO-6/ADM-14): o que o cartão da LISTA mostra da etapa, por perfil.
+//  • fornecedor: nada — ele não vê andamento (decisão de 27/09), e a lista desenhava etapa e barra pra ele;
+//  • cliente: a etapa em texto, SEM barra — a da lista era outra conta (sem peso, sem a parte feita): 33% na lista e
+//    41% na capa, pra mesma obra. O número dele é o da capa;
+//  • equipe e admin: a barra das etapas CONCLUÍDAS com o peso de cada uma — a mesma parte escura da barra da capa
+//    (antes, com peso personalizado, a lista dizia 44% e a capa 31%).
+function etapaNaLista(p) {
+  const et = p.etapas || [], i = et.indexOf(p.etapa_atual);
+  if (!et.length || (p.externo && p.papel_externo === 'fornecedor')) return null;
+  const a = p.externo ? null : calcAndamento(et, i, p.etapa_pesos || {}, 0, 0, null, false);
+  return { etapa: p.etapa_atual || 'Sem etapa', de: i >= 0 ? `etapa ${i + 1} de ${et.length}` : '',
+    pct: p.externo ? null : p.concluido_em ? 100 : a ? Math.round(a.pAntes) : 0 };
+}
 function andamentoAtual() {
   const p = PROJ, et = (p && p.etapas) || [], iA = et.indexOf(p && p.etapa_atual);
   if (!p) return null;
@@ -839,7 +856,13 @@ async function navegar() {
       if (!PROJ || PROJ.id !== r.id || !MEMBROS.length) {
         const abriu = await carregarProjeto(r.id, daVez);
         if (!daVez()) return;
-        if (!abriu) { location.hash = '#/'; return; }
+        if (!abriu) {
+          // 13/10 (auditoria NAV-8): troca o endereço (não empilha: o Voltar não fica preso num projeto que não abre)
+          // e DIZ por que a pessoa foi parar na lista — o link antigo de quem saiu do projeto caía lá calado.
+          // "Não li" não é "não existe": se a leitura dos projetos de fora falhou, o aviso é outro.
+          toast(RESUMO_LIDO ? 'Esse projeto não está mais disponível pra você.' : 'Não consegui abrir o projeto agora: recarregue a página em instantes.', true);
+          location.replace('#/'); return;
+        }
       }
       // 26/09 (perfis): cada um abre só as telas dele (o banco não mostraria nada nas outras, mas a tela nem oferece)
       const telas = souEquipe() ? ['capa', 'tarefas', 'arquivos', 'emissoes', 'atas', 'equipe', 'fotos']
@@ -860,14 +883,17 @@ function marcarContexto() {
   try {
     if (PROJ && PROJ.job_id) {
       const ativos = MEMBROS.filter((m) => m.status === 'ativo').length;
+      // 13/10 (auditoria NAV-10/NAV-11): vai junto o nome do escritório (o menu de lá usa no título do grupo) e o
+      // papel da pessoa neste projeto (pra equipe, o menu de lá já nasce sem as portas do dono)
       const ctx = { job: PROJ.job_id, id: PROJ.id, nome: PROJ.nome,
-        sub: [PROJ.etapa_atual, ativos + ' pessoa' + (ativos === 1 ? '' : 's')].filter(Boolean).join(' · ') };
+        sub: [PROJ.etapa_atual, ativos + ' pessoa' + (ativos === 1 ? '' : 's')].filter(Boolean).join(' · '),
+        marca: MARCA ? MARCA.nome : '', papel: souAdmin() ? 'dono' : 'freela' };
       sessionStorage.setItem('aiarq_esc_ctx', JSON.stringify(ctx));
       // 26/09 (Pedro: "o menu fica invertendo"): a lembrança que dura (localStorage, por pessoa) — as páginas do
       // medido nascem direto no menu do Escritório, mesmo abertas pelo painel ou numa aba nova. O mesmo
       // formato que o menu-lateral.js grava (gravarMapa); quem confirma é o banco.
       const mapa = JSON.parse(localStorage.getItem('aiarq_esc_mapa') || '{}') || {};
-      mapa[PROJ.job_id] = { id: PROJ.id, nome: PROJ.nome, sub: ctx.sub, uid: EU.id, t: Date.now() };
+      mapa[PROJ.job_id] = { id: PROJ.id, nome: PROJ.nome, sub: ctx.sub, uid: EU.id, t: Date.now(), marca: ctx.marca, papel: ctx.papel };
       localStorage.setItem('aiarq_esc_mapa', JSON.stringify(mapa));
     } else if (PROJ) sessionStorage.removeItem('aiarq_esc_ctx');
   } catch (_) {}
@@ -922,13 +948,13 @@ function telaLista() {
       NO_PILOTO ? '<button class="btn" onclick="trazerMedido()">Trazer projeto medido</button><button class="btn btn-g" onclick="novoProjeto()">+ Novo projeto</button>' : '')}
     ${aviso}
     ${n ? `<div class="grade g2 g3">${PROJETOS.map((p) => {
-      const c = corDe(p.id), et = p.etapas || [], i = et.indexOf(p.etapa_atual), pct = p.concluido_em ? 100 : et.length && i >= 0 ? Math.round((i / et.length) * 100) : 0;   // TELA-9: só as concluídas; ADM-13: concluído = inteiro
+      const c = corDe(p.id), b = etapaNaLista(p);   // TELA-9: só as concluídas; ADM-13: concluído = inteiro; 13/10: por perfil e com peso
       return `<a class="card pj rise" style="--c1:${c[0]};--c2:${c[1]}" href="#/p/${p.id}/capa">
         <div class="pj-topo"><span class="pj-ini">${esc(iniciais({ nome: String(p.nome || '').split(/\s+/).filter((w) => /^[A-Za-zÀ-ÿ0-9]/.test(w) && !/^(d[aeo]s?|e)$/i.test(w)).join(' ') || p.nome }))}</span></div>
         <div class="pj-corpo">
           <div class="linha" style="justify-content:space-between;align-items:flex-start"><b>${esc(p.nome)}</b>${p.job_id ? '<span class="pill p-ind">medido</span>' : ''}</div>
           ${p.cliente_nome ? `<span class="sub" style="margin:0">Cliente: ${esc(p.cliente_nome)}</span>` : ''}
-          ${et.length ? `<div><div class="linha" style="justify-content:space-between;margin-bottom:6px"><span class="sub" style="margin:0;font-weight:600;color:#334155">${esc(p.etapa_atual || 'Sem etapa')}</span><span class="sub tab" style="margin:0">${i >= 0 ? `etapa ${i + 1} de ${et.length}` : ''}</span></div><div class="barra"><i style="width:${pct}%"></i></div></div>` : ''}
+          ${b ? `<div><div class="linha" style="justify-content:space-between;margin-bottom:6px"><span class="sub" style="margin:0;font-weight:600;color:#334155">${esc(b.etapa)}</span><span class="sub tab" style="margin:0">${b.de}</span></div>${b.pct === null ? '' : `<div class="barra"><i style="width:${b.pct}%"></i></div>`}</div>` : ''}
           <span class="sub" style="margin:0">${p.externo ? (p.papel_externo === 'cliente' ? 'Seu projeto' : 'Você é fornecedor') + (p.escritorio ? ' · com ' + esc(p.escritorio) : '') : p.dono === EU.id ? 'Você é admin' : 'Você faz parte da equipe'}</span></div></a>`; }).join('')}</div>`
       : `<div class="card"><p class="h2" style="font-size:16px">Comece pelo primeiro projeto</p><p class="sub">Um projeto aqui nasce sem prancha: tarefas, atas, equipe e a pasta do Drive. Já mediu o projeto no AI.arq? Use <b>Trazer projeto medido</b>: a equipe trabalha nele e vê o quantitativo.</p></div>`}`;
 }
@@ -1116,7 +1142,7 @@ function telaCapa() {
       </div>
     </div>
     ${et.length ? `<div style="margin-top:22px"><div class="linha" style="justify-content:space-between"><p class="lbl" style="margin:0">Etapas</p>${souAdmin() ? '<button type="button" class="lnk" onclick="editarPesos()">Peso das etapas</button>' : ''}</div><div class="etapas" role="tablist">
-      ${et.map((e, i) => { const ts = TAR.filter((t) => t.etapa === e), n = ts.length, f = ts.filter((t) => !aberta(t)).length; return `<button role="tab" class="etp ${i < iA ? 'feita' : i === iA ? 'atual' : ''}" aria-pressed="${ETAPA_SEL === e}" onclick="verEtapa(${i})"><span class="num">${i < iA ? '✓' : i + 1}</span><b>${esc(e)}</b><small>${ehEtapaDeObra(e) && p.job_id ? 'pelo cronograma de obra' : `${n} tarefa${n === 1 ? '' : 's'}${f ? ` · ${f} feita${f === 1 ? '' : 's'}` : ''}`}</small></button>`; }).join('')}</div>
+      ${et.map((e, i) => { const ts = TAR.filter((t) => t.etapa === e), n = ts.length, f = ts.filter((t) => !aberta(t)).length; return `<button role="tab" class="etp ${classeDaEtapa(i, iA, !!p.concluido_em)}" aria-pressed="${ETAPA_SEL === e}" onclick="verEtapa(${i})"><span class="num">${numDaEtapa(i, iA, !!p.concluido_em)}</span><b>${esc(e)}</b><small>${ehEtapaDeObra(e) && p.job_id ? 'pelo cronograma de obra' : `${n} tarefa${n === 1 ? '' : 's'}${f ? ` · ${f} feita${f === 1 ? '' : 's'}` : ''}`}</small></button>`; }).join('')}</div>
       ${avancoEtapa(et, iA)}
       ${ETAPA_SEL ? painelEtapa() : `<p class="sub">Clique numa etapa pra ver as tarefas dela${souAdmin() ? ' ou pra voltar a ela' : ''}.</p>`}</div>` : ''}
   </section>
@@ -1275,8 +1301,23 @@ function apagarProjeto() {
     if (!r.ok) { $('ap-ok').disabled = false; $('ap-ok').textContent = pastaSumiu ? 'Apagar mesmo assim' : 'Apagar de vez'; return toast(typeof r.dados.detail === 'string' ? r.dados.detail : 'Não consegui apagar agora.', true); }
     const id = PROJ.id;
     fecharModal(); PROJETOS = PROJETOS.filter((x) => x.id !== id); PROJ = null; MEMBROS = [];
-    location.hash = '#/'; toast('Projeto apagado');
+    esquecerProjeto(id);
+    // 13/10 (auditoria NAV-8): `location.hash = '#/'` EMPILHAVA a lista — o Voltar do navegador levava ao endereço do
+    // projeto apagado, que não abria e empilhava a lista de novo: o Voltar nunca saía do Escritório. Agora TROCA.
+    location.replace('#/'); toast('Projeto apagado');
   };
+}
+// 13/10 (auditoria NAV-7): o projeto apagado continuava na lembrança deste navegador — a primeira página do projeto
+// medido (Quantitativo, Cronograma…) ainda nascia com o menu do Escritório, com links pra um projeto que não existe.
+function esquecerProjeto(id) {
+  try {
+    const c = JSON.parse(sessionStorage.getItem('aiarq_esc_ctx') || 'null');
+    if (c && c.id === id) sessionStorage.removeItem('aiarq_esc_ctx');
+    const mapa = JSON.parse(localStorage.getItem('aiarq_esc_mapa') || '{}') || {};
+    const antes = Object.keys(mapa).length;
+    Object.keys(mapa).forEach((k) => { if (mapa[k] && mapa[k].id === id) delete mapa[k]; });
+    if (Object.keys(mapa).length !== antes) localStorage.setItem('aiarq_esc_mapa', JSON.stringify(mapa));
+  } catch (_) {}
 }
 async function salvarProjeto() {
   const nome = $('ep-n').value.trim(); if (!nome) return toast('O projeto precisa de um nome.', true);
@@ -2284,7 +2325,7 @@ function telaVisaoCliente() {
     ${a ? `<div class="rs" style="margin-bottom:14px"><p class="lbl">Andamento do projeto</p><p class="rs-n tab">${a.pct}%</p>${barraAndamento(a)}
       <p class="sub" style="margin:6px 0 0">${a.iA} de ${a.n} etapa${a.n === 1 ? '' : 's'} concluída${a.iA === 1 ? '' : 's'} · agora em <b>${esc(a.etapa)}</b></p>
       <button type="button" class="lnk" style="margin-top:4px" onclick="comoAndamento()">Como é calculado?</button></div>` : ''}
-    ${et.length ? `<p class="lbl">Em que etapa está</p><div class="etapas">${et.map((e, i) => `<div class="etp ${i < iA ? 'feita' : i === iA ? 'atual' : ''}" style="cursor:default"><span class="num">${i < iA ? '✓' : i + 1}</span><b>${esc(e)}</b></div>`).join('')}</div>` : ''}
+    ${et.length ? `<p class="lbl">Em que etapa está</p><div class="etapas">${et.map((e, i) => `<div class="etp ${classeDaEtapa(i, iA, !!CONCL_EXT)}" style="cursor:default"><span class="num">${numDaEtapa(i, iA, !!CONCL_EXT)}</span><b>${esc(e)}</b></div>`).join('')}</div>` : ''}
   </section>
   ${esperando.map((e) => `<section class="card rise" style="border:2px solid #F59E0B"><div class="linha" style="gap:16px">
       <span class="kpi-ico" style="width:48px;height:48px;background:#FFFBEB;color:#B45309">${svg('emi', 24)}</span>
