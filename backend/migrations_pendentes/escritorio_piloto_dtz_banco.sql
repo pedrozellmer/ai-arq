@@ -1460,3 +1460,27 @@ as $function$
 $function$;
 revoke all on function public.escritorio_projeto_concluido(uuid) from public, anon;
 grant execute on function public.escritorio_projeto_concluido(uuid) to authenticated, service_role;
+
+-- ── 31. (13/10, 2ª auditoria do Escritório — BANCO-7) o resumo de quem é de fora diz o NOME DO ESCRITÓRIO ──
+-- APLICADA em 13/10/2026 como `escritorio_resumo_externo_nome_do_escritorio` (ok do Pedro: "Pode aplicar").
+-- Na mesma tela o cliente lia o nome do escritório (trilha e faixa, pela escritorio_marca) e o nome PESSOAL de quem
+-- administra (menu e lista, por este resumo). Agora os dois usam a mesma regra: a empresa do cadastro de quem
+-- administra; sem empresa, o nome de sempre. Só o corpo muda (mesma assinatura, mesmas permissões).
+-- Ensaiada numa transação desfeita, com um cliente de teste: antes = nome pessoal; com empresa = a empresa; empresa
+-- em branco = volta ao nome; 1 linha por projeto; os outros campos iguais; anônimo continua sem executar.
+create or replace function public.escritorio_resumo_externo(p_projeto uuid default null::uuid)
+ returns table(projeto_id uuid, nome text, escritorio text, papel text, etapas text[], etapa_atual text, inicio date, entrega date, proxima_entrega text, proxima_entrega_data date)
+ language sql
+ stable security definer
+ set search_path to ''
+as $function$
+  select p.id, p.nome,
+         coalesce(nullif(btrim(pf.company), ''),
+                  (select d.nome from public.escritorio_membros d where d.projeto_id = p.id and d.papel = 'dono' limit 1)),
+         m.papel, p.etapas, p.etapa_atual, p.inicio, p.entrega, p.proxima_entrega, p.proxima_entrega_data
+    from public.escritorio_membros m
+    join public.escritorio_projetos p on p.id = m.projeto_id
+    left join public.profiles pf on pf.user_id = p.dono::text
+   where m.user_id = (select auth.uid()) and m.status = 'ativo' and m.papel in ('cliente','fornecedor')
+     and (p_projeto is null or p.id = p_projeto)
+$function$;
