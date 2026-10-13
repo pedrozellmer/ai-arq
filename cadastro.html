@@ -103,7 +103,7 @@
       </p>
 
       <!-- Beta: teste gr&aacute;tis, sem cart&atilde;o -->
-      <div class="flex items-start gap-2.5 rounded-xl bg-indigo-50 border border-indigo-100 px-4 py-3 mb-7" role="note">
+      <div id="caixa-beta" class="flex items-start gap-2.5 rounded-xl bg-indigo-50 border border-indigo-100 px-4 py-3 mb-7" role="note">
         <span class="text-base leading-none mt-0.5" aria-hidden="true">&#129514;</span>
         <p class="text-sm text-indigo-900"><b>Estamos em beta &mdash; teste gr&aacute;tis, sem cart&atilde;o.</b> Aproveite pra testar &agrave; vontade.</p>
       </div>
@@ -133,7 +133,7 @@
           <input type="tel" id="whatsapp" name="whatsapp" required
             class="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none transition"
             placeholder="(21) 99999-9999" maxlength="15">
-          <p class="text-xs text-gray-500 mt-1">Usamos seu WhatsApp e e-mail pra te avisar sobre <strong>seus projetos</strong> — quando a planilha fica pronta ou se dá algum problema. (Novidades e promoções só se você marcar a opção abaixo.)</p>
+          <p id="whats-porque" class="text-xs text-gray-500 mt-1">Usamos seu WhatsApp e e-mail pra te avisar sobre <strong>seus projetos</strong> — quando a planilha fica pronta ou se dá algum problema. (Novidades e promoções só se você marcar a opção abaixo.)</p>
         </div>
 
         <!-- CPF ou CNPJ — opcional na 1ª etapa: só será necessário no dia em
@@ -350,6 +350,7 @@
   // 🩸 26/09 (auditoria LOG-A1): quem veio do convite SEM código (achado pelo e-mail da conta) e não tinha ficha
   // volta pro convite no fim — sem isto caía no painel e o convite sumia.
   let _voltaSemCodigo = false;
+  let _conviteDeFora = false;   // 13/10 (FORA-11): veio do convite como cliente ou fornecedor (ficha curta, textos do projeto)
   try { _voltaSemCodigo = sessionStorage.getItem('aiarq_convite_sem_codigo') === '1'; } catch (_) {}
   const destinoDepois = () => ((_convite || _voltaSemCodigo) ? 'convite.html' : 'dashboard.html');
   // Rastreio anônimo do funil (chegou na página de cadastro).
@@ -644,6 +645,16 @@
           const el = document.getElementById(id), caixa = el && el.closest('div');
           if (caixa) { caixa.hidden = true; caixa.style.display = 'none'; }
         });
+        // 🩸 13/10 (auditoria FORA-11): o dono da obra, que veio só entrar no projeto, ainda lia "Estamos em beta —
+        // teste grátis, sem cartão" e "quando a planilha fica pronta" — e perguntava à arquiteta se ia pagar e que
+        // planilha era essa. Pra quem é de fora, os textos falam do projeto do convite; a oferta do quantitativo some.
+        _conviteDeFora = true;
+        const beta = document.getElementById('caixa-beta');
+        if (beta) { beta.hidden = true; beta.style.display = 'none'; }
+        const porque = document.getElementById('whats-porque');
+        // 🪤 só o que o sistema faz: o aviso do projeto (a emissão pra aprovar) sai por E-MAIL; o WhatsApp é o contato
+        // pra quando dá problema — ninguém manda aviso de projeto por WhatsApp sozinho
+        if (porque) porque.textContent = 'Usamos seu e-mail pra te avisar sobre este projeto, e o WhatsApp se der algum problema. (Novidades e promoções só se você marcar a opção abaixo.)';
       }
     }
     mostrarFormulario(erroDaChecagem
@@ -881,7 +892,9 @@
     // pronta e dar suporte. Exige preenchimento + formato v\u00e1lido (>=10 d\u00edgitos).
     const _waDigits = whatsapp.replace(/\D/g, '');
     if (!whatsapp) {
-      showError('Por favor, informe seu WhatsApp \u2014 a gente te avisa por l\u00e1 quando a planilha ficar pronta.');
+      showError(_conviteDeFora   // FORA-11: quem veio do convite como cliente ou fornecedor n\u00e3o espera planilha nenhuma
+        ? 'Por favor, informe seu WhatsApp \u2014 \u00e9 por ele que a gente fala com voc\u00ea se der algum problema.'
+        : 'Por favor, informe seu WhatsApp \u2014 a gente te avisa por l\u00e1 quando a planilha ficar pronta.');
       whatsappInput.focus();
       return;
     }

@@ -896,6 +896,15 @@ const naoLiNaLista = () => [
   PILOTO_LIDO ? '' : 'se esta conta cria projetos (os botões de criar ficam escondidos até dar certo)',
   RESUMO_LIDO ? '' : 'os projetos em que você entrou como cliente ou fornecedor',
 ].filter(Boolean);
+// 13/10 (auditoria FORA-12): a lista prometia "tarefas, atas, equipe e a pasta do Drive de cada um" também a quem é
+// SÓ de fora — o cliente com dois projetos não acha ata, equipe nem pasta. Diz o que cada perfil tem de verdade.
+const oQueALista = () => {
+  const deFora = PROJETOS.length > 0 && PROJETOS.every((p) => p.externo);
+  if (!deFora) return 'tarefas, atas, equipe e a pasta do Drive de cada um';
+  if (PROJETOS.every((p) => p.papel_externo === 'cliente')) return 'as emissões, as pendências e as fotos de cada um';
+  if (PROJETOS.every((p) => p.papel_externo === 'fornecedor')) return 'as suas tarefas, os arquivos e as fotos de cada um';
+  return 'o que o escritório separou pra você em cada um';
+};
 function telaLista() {
   const falta = naoLiNaLista();
   const aviso = falta.length ? `<div class="aviso"><b>Não consegui ler agora:</b> ${falta.join('; e ')}. Foi um soluço de conexão com o banco: recarregue a página em instantes.</div>` : '';
@@ -909,7 +918,7 @@ function telaLista() {
       <p class="sub" style="margin-top:10px"><a href="dashboard.html">Voltar ao painel</a></p></div>`;
   }
   const n = PROJETOS.length;
-  return `${faixa('tar', 'Escritório', n ? `${n} projeto${n > 1 ? 's' : ''}: tarefas, atas, equipe e a pasta do Drive de cada um.` : 'Tarefas, atas, equipe e a pasta do Drive de cada projeto.',
+  return `${faixa('tar', 'Escritório', n ? `${n} projeto${n > 1 ? 's' : ''}: ${oQueALista()}.` : 'Tarefas, atas, equipe e a pasta do Drive de cada projeto.',
       NO_PILOTO ? '<button class="btn" onclick="trazerMedido()">Trazer projeto medido</button><button class="btn btn-g" onclick="novoProjeto()">+ Novo projeto</button>' : '')}
     ${aviso}
     ${n ? `<div class="grade g2 g3">${PROJETOS.map((p) => {
@@ -1122,7 +1131,7 @@ function telaCapa() {
     <p class="grupo-t"><i style="background:linear-gradient(90deg,#4F46E5,#A78BFA)"></i>Escritório</p>
     <div class="grade g2 g4">
       ${tool(`#/p/${p.id}/tarefas`, 'tar', 'Tarefas', `${abertas.length} abertas`)}
-      ${tool(`#/p/${p.id}/arquivos`, 'arq', 'Arquivos', p.pasta_caminho ? 'Drive · ' + esc(p.pasta_caminho) : 'Ligar a pasta do Drive')}
+      ${tool(`#/p/${p.id}/arquivos`, 'arq', 'Arquivos', p.pasta_caminho ? 'Drive · ' + esc(p.pasta_caminho) : souAdmin() ? 'Ligar a pasta do Drive' : 'Pasta do Drive ainda não ligada')}
       ${tool(`#/p/${p.id}/emissoes`, 'emi', 'Emissões', EMI.length ? `${EMI.length} ${EMI.length === 1 ? 'emitida' : 'emitidas'}` : 'R00, R01… ao cliente')}
       ${tool(`#/p/${p.id}/fotos`, 'foto', 'Fotos', FOTOS.length ? `${FOTOS.length} foto${FOTOS.length === 1 ? '' : 's'} da obra` : 'Da obra, pelo celular')}
       ${tool(`#/p/${p.id}/atas`, 'atas', 'Atas', `${ATAS.length} ${ATAS.length === 1 ? 'reunião' : 'reuniões'}`)}
@@ -1841,8 +1850,14 @@ async function carregarArquivos() {
     const emitir = podeEmitir ? `<span class="arq-e">${f.pasta ? '' : `<button type="button" class="btn btn-s arq-emitir" data-id="${esc(f.id)}" data-nome="${esc(f.nome)}">Emitir</button>`}</span>` : '';
     return `<li${abre}><span class="arq-ic">${ic}</span><span class="arq-n">${nome}${tag}</span><span class="arq-q">${quando}</span><span class="arq-t">${f.pasta ? '—' : tamanhoArq(f.tamanho)}</span>${emitir}</li>`;
   }).join('')}</ul>` : passo('pastas', 'Pasta vazia', 'Os arquivos que você puser nesta pasta do Drive aparecem aqui.'))
-    + (souAdmin() ? '' : '<p class="sub" style="margin-top:12px">Pra abrir e editar os arquivos, use a conta Google em que você recebeu o compartilhamento da pasta.</p>');
+    + avisoDaContaGoogle();
 }
+// 13/10 (auditoria FORA-12): "Pra abrir e editar os arquivos…" aparecia também pro fornecedor, que só LÊ a pasta
+// dele — ele tentava editar a prancha no Drive e dava com o bloqueio. A admin não precisa do aviso (o Drive é dela).
+const avisoDaContaGoogle = () => (souAdmin() ? ''
+  : `<p class="sub" style="margin-top:12px">${souFornecedor()
+    ? 'Pra abrir os arquivos, use a conta Google em que você recebeu o compartilhamento da pasta. Você só lê: quem edita é o escritório.'
+    : 'Pra abrir e editar os arquivos, use a conta Google em que você recebeu o compartilhamento da pasta.'}</p>`);
 // data e hora da última modificação no Drive, no fuso de Brasília ("13/04/2026 às 14:32")
 function quandoArq(iso) {
   const d = new Date(iso); if (isNaN(d)) return '';
@@ -2325,7 +2340,9 @@ async function carregarCronogramaCliente() {
   if (!r.ok) { corpo.innerHTML = `<p class="vazio">${esc(typeof r.dados.detail === 'string' ? r.dados.detail : 'Não consegui abrir o cronograma agora.')}</p>`; return; }
   const c = r.dados.cronograma, fases = (c && c.fases) || [];
   if (r.dados.status !== 'ok' || !fases.length || !c.resumo || !c.resumo.data_inicio || !c.resumo.data_fim) {
-    corpo.innerHTML = `<div class="passo"><span class="passo-ic">${svg('crono', 28)}</span><b>O cronograma ainda não foi montado</b><p>Quando o escritório montar o cronograma da obra, as etapas e as datas aparecem aqui.</p></div>`;
+    // 13/10 (auditoria FORA-13): "Quando o escritório montar…" era promessa — em projeto sem prancha medida o
+    // cronograma pode nunca existir, e o cliente voltava toda semana pra ler que ia aparecer. Agora é condição.
+    corpo.innerHTML = `<div class="passo"><span class="passo-ic">${svg('crono', 28)}</span><b>Este projeto ainda não tem cronograma por aqui</b><p>Se o escritório montar o cronograma da obra no AI.arq, as etapas e as datas aparecem nesta tela.</p></div>`;
     return;
   }
   const ini = dISO(c.resumo.data_inicio), total = Math.max(1, (dISO(c.resumo.data_fim) - ini) / 864e5);
@@ -2584,17 +2601,25 @@ async function salvarAta() {
 }
 
 // ══════════════ EQUIPE ══════════════
+// 13/10 (auditoria ADM-16): o aviso dos perfis falava com QUALQUER pessoa da equipe como se fosse a admin ("quem você
+// convida", "só quem você liberar abaixo", "o resto do seu Drive") — e ela não convida, não libera e o Drive não é dela.
+const textoDosPerfis = () => (souAdmin()
+  ? { titulo: 'Quem você convida entra no projeto, não no escritório — com um perfil.', libera: 'você liberar abaixo',
+      escolhe: 'você escolher', marca: 'você marcar', drive: 'seu Drive' }
+  : { titulo: 'Cada pessoa entra no projeto, não no escritório — com um perfil. Quem convida é a admin.', libera: 'a admin liberar',
+      escolhe: 'a admin escolher', marca: 'a equipe marcar', drive: 'Drive da admin' });
 function telaEquipe() {
   const vis = MEMBROS.filter((m) => m.status !== 'removido');
   const at = vis.filter((m) => m.status === 'ativo').length, cv = vis.filter(conviteVivo).length;
   // 26/09 (auditoria LGPD-3): quem SAIU some da lista, mas os dados (e-mail, telefone, a sua anotação) ficavam pra
   // sempre sem nenhum botão que alcançasse — só por SQL. Agora a admin vê e apaga.
   const saiu = souAdmin() ? MEMBROS.filter((m) => m.status === 'removido') : [];
-  return `${faixa('eq', 'Equipe', `${at} no projeto${cv ? ` · ${cv} convite${cv > 1 ? 's' : ''} aguardando` : ''}. Cada pessoa vê só este projeto.`,
+  const quemFala = textoDosPerfis();
+  return `${faixa('eq', 'Equipe',`${at} no projeto${cv ? ` · ${cv} convite${cv > 1 ? 's' : ''} aguardando` : ''}. Cada pessoa vê só este projeto.`,
       souAdmin() ? '<button class="btn btn-p" onclick="convidar()">+ Convidar pessoa</button>' : '')}
-    <div class="aviso"><b>Quem você convida entra no projeto, não no escritório — com um perfil.</b><br>
-      <span style="font-size:12.5px;color:#475569"><b>Equipe</b>: vê e edita as tarefas, as atas e a pasta do Drive deste projeto (acesso de edição pela conta Google da pessoa); vê o nome e a função dos colegas, mas não o e-mail nem o telefone.${PROJ.job_id ? ' Com o projeto medido ligado, vê o quantitativo, o cronograma e o memorial, só leitura; <b>baixar arquivos</b> só quem você liberar abaixo.' : ''}
-      <b>Fornecedor</b>: só as tarefas marcadas pra ele, a subpasta que você escolher (só leitura), as emissões mandadas pra ele e as fotos. <b>Cliente</b>: a etapa do projeto, as emissões mandadas pra ele (aprova ou pede revisão), as tarefas do cliente e as fotos que você marcar. Ninguém vê os outros projetos, o financeiro nem o resto do seu Drive.</span></div>
+    <div class="aviso"><b>${quemFala.titulo}</b><br>
+      <span style="font-size:12.5px;color:#475569"><b>Equipe</b>: vê e edita as tarefas, as atas e a pasta do Drive deste projeto (acesso de edição pela conta Google da pessoa); vê o nome e a função dos colegas, mas não o e-mail nem o telefone.${PROJ.job_id ? ` Com o projeto medido ligado, vê o quantitativo, o cronograma e o memorial, só leitura; <b>baixar arquivos</b> só quem ${quemFala.libera}.` : ''}
+      <b>Fornecedor</b>: só as tarefas marcadas pra ele, a subpasta que ${quemFala.escolhe} (só leitura), as emissões mandadas pra ele e as fotos. <b>Cliente</b>: a etapa do projeto, as emissões mandadas pra ele (aprova ou pede revisão), as tarefas do cliente e as fotos que ${quemFala.marca}. Ninguém vê os outros projetos, o financeiro nem o resto do ${quemFala.drive}.</span></div>
     <section class="card"><div class="linha" style="justify-content:space-between"><h2 class="h2">${vis.length} pessoa${vis.length > 1 ? 's' : ''}</h2></div>
       <ul class="lista" style="margin-top:8px">${vis.map((m) => `<li style="flex-wrap:wrap">${av(m)}<div style="flex:1;min-width:180px"><b style="font-size:14px">${esc(nomeDe(m))}${m.user_id === EU.id ? ' <span style="font-weight:400;color:#64748B">(você)</span>' : ''}</b>
         <span class="sub" style="display:block;margin:0">${esc(m.funcao || (m.papel === 'dono' ? 'Admin do projeto' : ''))}${m.email ? ' · ' + esc(m.email) : ''}${m.telefone ? ' · ' + esc(m.telefone) : ''}</span>

@@ -13,7 +13,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon-v2.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Convite para um projeto — AI.arq</title>
-<meta name="description" content="Você foi convidado para trabalhar num projeto no AI.arq.">
+<meta name="description" content="Você foi convidado para um projeto no AI.arq.">
 <meta name="robots" content="noindex,nofollow">
 <link rel="stylesheet" href="/tailwind.min.css">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -112,7 +112,7 @@
                 class="w-full inline-flex items-center justify-center rounded-xl gradient-main text-white font-semibold py-3.5 shadow-btn hover:scale-[1.01] transition">Entrar no projeto</button>
         <button type="button" onclick="sairEUsarOutraConta()"
                 class="mt-3 w-full inline-flex items-center justify-center rounded-xl border border-gray-300 bg-white text-gray-800 font-semibold py-3 hover:bg-gray-50 transition">Não sou eu · usar outra conta</button>
-        <button type="button" onclick="agoraNao()" class="mt-4 text-sm text-gray-500 hover:text-gray-900 underline">Agora não · voltar ao painel</button>
+        <button id="btn-agora-nao" type="button" onclick="agoraNao()" class="mt-4 text-sm text-gray-500 hover:text-gray-900 underline">Agora não · voltar ao painel</button>
       </div>
 
       <!-- deu certo -->
@@ -124,7 +124,7 @@
         <p class="text-base text-gray-700 mb-6"><b id="p-projeto" class="text-indigo-700">—</b></p>
         <p id="p-outra-conta" hidden class="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 mb-6 text-sm text-amber-900 text-left">
           Você entrou com uma conta de e-mail diferente da que recebeu o convite. Tudo certo pro projeto —
-          só lembre que a pasta de arquivos vai ser compartilhada com <b>esta</b> conta.
+          só lembre que <span id="p-outra-oque">a pasta de arquivos vai ser compartilhada com</span> <b>esta</b> conta.
         </p>
         <a id="btn-projeto" href="escritorio.html" class="w-full inline-flex items-center justify-center rounded-xl gradient-main text-white font-semibold py-3.5 shadow-btn hover:scale-[1.01] transition">Abrir o projeto</a>
       </div>
@@ -168,6 +168,26 @@
     $('e-texto').textContent = texto;
     $('btn-tentar').hidden = !podeTentar;
     mostrar('st-erro');
+  }
+
+  // 13/10 (auditoria FORA-8/FORA-12): o perfil do convite que está na tela (quem diz é o SERVIDOR). O cliente (dono
+  // da obra) e o fornecedor não têm painel pra onde "voltar" — o painel é o do quantitativo ("envie sua prancha") —
+  // nem ganham "a pasta de arquivos" do projeto: os textos seguem o perfil.
+  let PERFIL = 'equipe';
+  const OQUE_VAI_PRA_CONTA = {
+    equipe: 'a pasta de arquivos vai ser compartilhada com',
+    fornecedor: 'a pasta que o escritório separar pra você vai ser compartilhada com',
+    cliente: 'os arquivos que o escritório mandar pra você vão ser compartilhados com',
+  };
+  function aplicarPerfil(p) {
+    PERFIL = ['cliente', 'fornecedor'].includes(p) ? p : 'equipe';
+    $('btn-agora-nao').textContent = PERFIL === 'equipe' ? 'Agora não · voltar ao painel' : 'Agora não · entro depois pelo link do e-mail';
+    $('p-outra-oque').textContent = OQUE_VAI_PRA_CONTA[PERFIL];
+  }
+  // convite vencido: diz DE QUEM e PRA QUAL projeto era (o servidor manda os dois) e oferece a conta, não a vitrine
+  function textoDoVencido(d) {
+    const projeto = String((d && d.projeto) || '').trim(), por = String((d && d.convidado_por) || '').trim();
+    return 'O convite' + (por ? ' de ' + por : '') + (projeto ? ' para o projeto ' + projeto : '') + ' venceu. Peça um novo a quem te convidou.';
   }
 
   // 1) O token: vem no fragmento (#t=…) na 1ª visita; depois, do navegador.
@@ -242,8 +262,15 @@
       $('btn-site').href = SESSAO ? 'escritorio.html' : 'login.html?redirect=escritorio.html';
       return;
     }
-    erro(r.status === 410 ? 'Este convite venceu' : 'Este link não vale mais',
-         (r.dados && r.dados.detail) || 'Peça um novo a quem te convidou.', false);
+    if (r.status === 410) {
+      // 🩸 13/10 (auditoria FORA-8): o convite vencido dizia só "peça um novo a quem te convidou" — sem dizer quem nem
+      // de qual projeto, que o servidor manda — e o único botão levava à página de vendas.
+      erro('Este convite venceu', (r.dados && r.dados.detail) || textoDoVencido(r.dados), false);
+      $('btn-site').textContent = SESSAO ? 'Abrir o Escritório' : 'Entrar na minha conta';
+      $('btn-site').href = SESSAO ? 'escritorio.html' : 'login.html?redirect=escritorio.html';
+      return;
+    }
+    erro('Este link não vale mais', (r.dados && r.dados.detail) || 'Peça um novo a quem te convidou.', false);
   }
 
   // Esta conta NÃO vai aceitar agora: desliga ela do convite no servidor (volta pra esteira normal).
@@ -265,6 +292,14 @@
     esquecerAba();
     try { sessionStorage.removeItem('aiarq_convite_sem_codigo'); } catch (_) {}
     window.aiarqConvite.limparSe(token);   // o convite continua no e-mail; o painel para de trazer pra cá
+    // 🩸 13/10 (auditoria FORA-8): o dono da obra que criou a conta pelo convite e clicava "Agora não" ia parar no
+    // painel do quantitativo ("envie sua prancha"), que nunca foi dele — sem porta pro Escritório e sem volta pro
+    // convite. Quem é de fora fica aqui, com o caminho de volta dito: o link do e-mail.
+    if (PERFIL !== 'equipe') {
+      erro('Tudo bem, fica pra depois', 'O convite continua no seu e-mail: quando quiser entrar no projeto, abra o link de novo.', false);
+      $('btn-site').hidden = true;
+      return;
+    }
     location.href = 'dashboard.html';
   }
 
@@ -344,6 +379,7 @@
   }
   function escolherConvite(c) {
     CONVITE_ID = c.convite_id;
+    aplicarPerfil(c.perfil);
     $('p-projeto').textContent = c.projeto || 'o projeto';
     $('cf-projeto').textContent = (c.projeto || 'o projeto') + (c.convidado_por ? ' · a convite de ' + c.convidado_por : '');
     [...$('cf-outros-lista').children].forEach((b) => {
@@ -363,12 +399,13 @@
     if (v.status === 404 || v.status === 409 || v.status === 410) return recusado(v);
     // soluço (rede/servidor): o token não conferido segue só na aba, e o "Tentar de novo" acha ele lá
     if (v.status !== 200) return erro('Não deu pra abrir o convite agora', v.dados.detail || 'Tente de novo em instantes.', true);
-    if (v.dados.expirado) return recusado({ status: 410, dados: {} });
+    if (v.dados.expirado) return recusado({ status: 410, dados: { projeto: v.dados.projeto, convidado_por: v.dados.convidado_por } });
     const projeto = v.dados.projeto || 'um projeto', por = v.dados.convidado_por || 'Alguém';
     // 26/09 (perfis): o cliente (dono da obra) e o fornecedor não vêm "trabalhar" em atas e tarefas — o texto e o
     // cadastro (curto, pra eles) seguem o perfil do convite, que o SERVIDOR diz
     const perfil = ['cliente', 'fornecedor'].includes(v.dados.perfil) ? v.dados.perfil : 'equipe';
     window.aiarqConvite.guardar(token, { projeto, por, perfil });   // o cadastro mostra "a convite de…"
+    aplicarPerfil(perfil);
     if (perfil !== 'equipe') {
       $('c-verbo').textContent = 'acompanhar o';
       $('c-ve').innerHTML = perfil === 'cliente'

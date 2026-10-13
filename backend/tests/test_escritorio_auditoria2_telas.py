@@ -828,8 +828,8 @@ def _lista(piloto_lido, resumo_lido, projetos, no_piloto="false"):
            + "var PROJETOS = " + json.dumps(projetos) + ";"
            + _ESC + "function faixa(i, t, s, botoes) { return '[FAIXA ' + (botoes || 'sem botoes') + ']'; }"
            "function corDe() { return ['#111111', '#222222']; } function iniciais() { return 'CE'; }")
-    return _js([pre, _trecho(E, "const naoLiNaLista = ", NL + "].filter(Boolean);"), funcao_js("telaLista", "escritorio.html", E)],
-               "telaLista()")
+    return _js([pre, _trecho(E, "const naoLiNaLista = ", NL + "].filter(Boolean);"), _trecho(E, "const oQueALista = () => {", NL + "};"),
+                funcao_js("telaLista", "escritorio.html", E)], "telaLista()")
 
 
 def test_lista_nao_chama_de_piloto_fechado_o_que_nao_conseguiu_ler():
