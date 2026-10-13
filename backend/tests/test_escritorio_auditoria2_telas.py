@@ -1067,18 +1067,26 @@ def test_conta_com_outro_email_nao_ouve_falar_de_pasta_que_o_perfil_nao_ganha():
     assert '<meta name="description" content="Você foi convidado para um projeto no AI.arq.">' in CV
 
 
+def _cadastro(cena):
+    pre = ("var _conviteDeFora = false, el = { 'caixa-beta': { hidden: false, style: {} }, 'whats-porque': { textContent: 'o de sempre' } };"
+           "var document = { getElementById: function (id) { return el[id] || null; } };")
+    return _js([pre, funcao_js("textosDeQuemEDeFora", "cadastro.html", CAD), _trecho(CAD, "  const erroDoWhatsVazio = () => (_conviteDeFora", "planilha ficar pronta.');"), cena],
+               "{ beta: el['caixa-beta'], porque: el['whats-porque'].textContent, erro: erroDoWhatsVazio() }")
+
+
 def test_cadastro_curto_de_quem_e_de_fora_nao_vende_o_quantitativo():
-    """FORA-11. Guarda de TEXTO, declarado: a caixa do beta some e os textos do WhatsApp falam do projeto."""
+    """FORA-11: o dono da obra lia "Estamos em beta — teste grátis, sem cartão" e "quando a planilha fica pronta"."""
+    r = _cadastro("textosDeQuemEDeFora();")
+    assert r["beta"] == {"hidden": True, "style": {"display": "none"}}
+    assert r["porque"].startswith("Usamos seu e-mail pra te avisar sobre este projeto, e o WhatsApp se der algum problema.")
+    assert "planilha" not in r["porque"] + r["erro"] and "se der algum problema" in r["erro"]
+    r = _cadastro("")                                                    # controle: o cliente do quantitativo lê o de sempre
+    assert r["beta"] == {"hidden": False, "style": {}} and r["porque"] == "o de sempre" and "planilha ficar pronta" in r["erro"]
+    # a ligação: só a ficha curta (cliente ou fornecedor do convite) chama, e o erro do WhatsApp vazio passa por ela
     i = CAD.index("if (_convite.perfil === 'cliente' || _convite.perfil === 'fornecedor') {")
-    curto = CAD[i:CAD.index("mostrarFormulario(erroDaChecagem", i)]
-    assert "_conviteDeFora = true;" in curto
-    assert "const beta = document.getElementById('caixa-beta');" in curto and "beta.hidden = true; beta.style.display = 'none';" in curto
-    assert "porque.textContent = 'Usamos seu e-mail pra te avisar sobre este projeto, e o WhatsApp se der algum problema." in curto
-    assert "planilha" not in curto.split("// 🩸 13/10")[1].split("_conviteDeFora = true;")[1]        # o que ele passa a ler não fala de planilha
+    assert "textosDeQuemEDeFora();" in CAD[i:CAD.index("mostrarFormulario(erroDaChecagem", i)]
+    assert CAD.count("textosDeQuemEDeFora();") == 1 and "showError(erroDoWhatsVazio());" in CAD
     assert '<div id="caixa-beta" class="flex items-start' in CAD and '<p id="whats-porque" class="text-xs' in CAD
-    assert "let _conviteDeFora = false;" in CAD
-    j = CAD.index("showError(_conviteDeFora")
-    assert "se der algum problema.'" in CAD[j:j + 400] and "quando a planilha ficar pronta.');" in CAD[j:j + 520]   # o de sempre continua pros outros
 
 
 def _perfis(admin):
