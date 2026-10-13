@@ -734,9 +734,13 @@ def _avisar_admin(e: dict, tipo: str, nota, eu: dict, evento_id) -> bool:
     desde = (datetime.now(timezone.utc) - timedelta(seconds=_PAUSA_DO_AVISO)).isoformat()
     st, recentes = _SERVICO("GET", "escritorio_emissao_eventos", params={
         "emissao_id": f"eq.{e['id']}", "pelo_cliente": "is.true", "criado_em": f"gte.{desde}",
-        "registrado_por": f"eq.{eu['id']}", "tipo": f"eq.{tipo}", "select": "id"})
+        "registrado_por": f"eq.{eu['id']}", "tipo": f"eq.{tipo}", "select": "id,nota"})
     if st < 300 and st != 0 and recentes is not None:
-        recentes = [r for r in recentes if str(r.get("id")) != str(evento_id)]
+        # 13/10 (auditoria SERV-7): o clique duplo repete o MESMO texto. Outro texto em menos de 10 min ("e a bancada
+        # tem que ter 90 cm", de outra aba ou do celular) é outro pedido — e não ia por e-mail à admin.
+        mesma = str(nota or "").strip()
+        recentes = [r for r in recentes if str(r.get("id")) != str(evento_id)
+                    and str(r.get("nota") or "").strip() == mesma]
     if st >= 300 or st == 0 or recentes is None or recentes:
         return False        # já avisou há pouco (ou não sei): a resposta está registrada do mesmo jeito
     admin = _um(_SERVICO("GET", "escritorio_membros", params={

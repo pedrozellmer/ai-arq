@@ -714,6 +714,264 @@ def test_o_sair_do_portal_limpa_o_cadastro_completo_e_o_convite():
     assert "localStorage.removeItem('aiarq_profile_complete')" in ML and "window.aiarqConvite.limpar()" in ML
 
 
+# (13/10) o teste de texto do SERV-3 na tela virou teste de comportamento: está na seção 12, com o resumo do envio
+
+
+# ══ 12. grupo B dos achados pequenos (13/10): a tela que dizia o que não sabia ══
+_ESC = 'function esc(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }'
+
+
+def _trecho(src, comeco, fim):
+    """De uma declaração que começa a linha com `comeco` até o primeiro `fim` depois dela (inclusive)."""
+    i = src.index(NL + comeco) + 1
+    return src[i:src.index(fim, i) + len(fim)]
+
+
+def _resumo(d):
+    return _js([funcao_js("resumoDoEnvio", "escritorio.html", E)], "resumoDoEnvio(" + json.dumps(d) + ")")
+
+
+def test_o_resumo_do_envio_diz_o_que_mandou_o_que_nao_deu_e_o_que_nao_registrou():
+    assert _resumo({"mandados": 0, "falhas": []}) == ""
+    assert _resumo({"mandados": 2, "falhas": []}) == " · mandado pra 2 pessoas"
+    assert _resumo({"mandados": 1, "falhas": ["m9"]}) == " · mandado pra 1 pessoa · 1 não deu: mande de novo em Emissões"
+    # SERV-3: o motivo que o servidor mandou vale mais que o texto genérico
+    motivo = "A cópia foi feita no Drive, mas não consegui registrar. Não mandei pra ninguém: emita de novo."
+    assert _resumo({"mandados": 0, "falhas": ["banco"], "erro": motivo}) == " · " + motivo
+    # FORA-6: recebeu, mas o registro "Enviada ao cliente" não gravou
+    assert 'não consegui registrar "Enviada ao cliente"' in _resumo({"mandados": 1, "falhas": [], "enviado_registrado": False})
+    for registrou in (True, None):                                   # controle: gravou, ou não foi pra cliente nenhum
+        assert "registrar" not in _resumo({"mandados": 1, "falhas": [], "enviado_registrado": registrou})
+
+
+def _emite(dados):
+    pre = ("var modais = [], avisos = [], EMITINDO = false, PROJ = { id: 'p1' }, botao = { disabled: false, textContent: '' };"
+           "function $(id) { return id === 'em-ok' ? botao : null; }"
+           "function paraMarcados() { return []; } function fecharModal() {} function recarregar() {}"
+           "function abrirModal(t, h) { modais.push([t, h]); } function toast(t, e) { avisos.push([t, !!e]); }"
+           + _ESC + "function apiEsc() { return { ok: true, status: 200, dados: " + json.dumps(dados) + " }; }")
+    return _js([pre, funcao_js("resumoDoEnvio", "escritorio.html", E), sem_await(funcao_js("confirmarEmissao", "escritorio.html", E)),
+                "confirmarEmissao('ARQ');"], "{ modais: modais, avisos: avisos }")
+
+
+def test_emitido_sem_trava_tambem_diz_o_que_houve_com_o_envio():
+    """ADM-11: com a trava E o envio falhando juntos, o aviso "sem trava" não dizia que 1 cliente não tinha recebido."""
+    r = _emite({"nome": "Planta_R02.pdf", "travada": False, "mandados": 1, "falhas": ["m2"]})
+    (titulo, html), = r["modais"]
+    assert titulo == "Emitido, mas sem trava" and "<b>O envio:</b> mandado pra 1 pessoa · 1 não deu: mande de novo em Emissões." in html
+    assert "color:#B91C1C" in html and r["avisos"] == []
+    r = _emite({"nome": "Planta_R02.pdf", "travada": False, "mandados": 0, "falhas": []})      # controle: não mandou nada
+    assert "O envio:" not in r["modais"][0][1]
+    r = _emite({"nome": "Planta_R02.pdf", "travada": False, "mandados": 2, "falhas": []})      # deu certo: diz, sem vermelho
+    assert "<b>O envio:</b> mandado pra 2 pessoas." in r["modais"][0][1] and "#B91C1C" not in r["modais"][0][1]
+
+
 def test_emitir_diz_quando_nao_mandou_por_falta_do_registro_da_copia():
-    """SERV-3 (a metade da tela). Guarda de TEXTO, declarado."""
-    assert "(typeof r.dados.erro === 'string' && r.dados.erro ? ' · ' + r.dados.erro : ` · ${nF} não deu: mande de novo em Emissões`)" in E
+    """SERV-3 (a metade da tela) e FORA-6: o aviso sai em vermelho quando algo do envio não deu."""
+    motivo = "A cópia foi feita no Drive, mas não consegui registrar. Não mandei pra ninguém: emita de novo."
+    r = _emite({"nome": "Planta_R02.pdf", "travada": True, "mandados": 0, "falhas": ["banco"], "erro": motivo})
+    assert r["avisos"] == [["Emitido: Planta_R02.pdf · " + motivo, True]] and r["modais"] == []
+    r = _emite({"nome": "Planta_R02.pdf", "travada": True, "mandados": 1, "falhas": [], "enviado_registrado": False})
+    assert r["avisos"][0][1] is True and "Registrar retorno" in r["avisos"][0][0]
+    r = _emite({"nome": "Planta_R02.pdf", "travada": True, "mandados": 1, "falhas": [], "enviado_registrado": True})
+    assert r["avisos"] == [["Emitido: Planta_R02.pdf · mandado pra 1 pessoa", False]]          # controle
+
+
+def _espera(ev, dest, expr, cliente=True, emitido="2026-09-30T12:00:00+00:00"):
+    i = E.index(NL + "const evDa = ") + 1
+    bloco = E[i:E.index(NL + "const quemRespondeu", i)]
+    assert "const esperaResposta = (e) => {" in bloco and "const enviadaPraMimEm = (e) => {" in bloco
+    pre = ("var EU = { id: 'u-eu' }, MEMBROS = [];"
+           "var EMI = [{ id: 'e0', arquivo_id: 'A', revisao: 0, emitido_em: " + json.dumps(emitido) + " }];"
+           "var EMI_EV = " + json.dumps(ev) + "; var DEST = " + json.dumps(dest) + ";"
+           "function souCliente() { return " + ("true" if cliente else "false") + "; }"
+           "function meuMembro() { return { id: 'm-eu' }; } function deFora() { return true; }")
+    return _js([pre, bloco], expr)
+
+
+def test_emissao_mandada_pro_cliente_sem_registro_nenhum_tambem_espera_por_ele():
+    """FORA-6: o registro "enviado" não gravou (soluço do banco no envio) — o cliente recebia "Pra você aprovar" e não
+    achava os botões."""
+    minha = [{"emissao_id": "e0", "membro_id": "m-eu", "permission_id": "p0"}]
+    assert _espera([], minha, "esperaResposta(EMI[0])") is True
+    assert _espera([], [], "esperaResposta(EMI[0])") is False                                    # não foi mandada pra ele
+    assert _espera([], [{"emissao_id": "e0", "membro_id": "m-eu", "permission_id": None}], "esperaResposta(EMI[0])") is False
+    assert _espera([], [{"emissao_id": "e0", "membro_id": "m-outro", "permission_id": "p9"}], "esperaResposta(EMI[0])") is False
+    assert _espera([], minha, "esperaResposta(EMI[0])", cliente=False) is False                  # o escritório: só com o "enviado"
+    respondi = [{"emissao_id": "e0", "tipo": "aprovado", "pelo_cliente": True, "registrado_por": "u-eu"}]
+    assert _espera(respondi, minha, "esperaResposta(EMI[0])") is False                           # já respondeu: não espera mais
+    a_mao = [{"emissao_id": "e0", "tipo": "aprovado", "pelo_cliente": False, "registrado_por": "u-admin"}]
+    assert _espera(a_mao, minha, "esperaResposta(EMI[0])") is False                              # o escritório registrou à mão: fechada
+
+
+def test_enviada_em_e_a_data_em_que_esta_pessoa_recebeu():
+    """FORA-7: o cartão mostrava a data do último registro de qualquer um — até a resposta do outro cliente do casal."""
+    ev = [{"emissao_id": "e0", "tipo": "enviado", "em": "2026-10-01"},
+          {"emissao_id": "e0", "tipo": "aprovado", "em": "2026-10-05", "pelo_cliente": True, "registrado_por": "u-outra"}]
+    minha = {"emissao_id": "e0", "membro_id": "m-eu", "permission_id": "p0", "enviado_em": "2026-10-08T15:00:00+00:00"}
+    dela = {"emissao_id": "e0", "membro_id": "m-outra", "permission_id": "p1", "enviado_em": "2026-10-01T12:00:00+00:00"}
+    assert _espera(ev, [dela, minha], "enviadaPraMimEm(EMI[0])") == "2026-10-08T15:00:00+00:00"
+    assert _espera(ev, [dela, {**minha, "enviado_em": None}], "enviadaPraMimEm(EMI[0])") == "2026-10-01"    # o "enviado", não a resposta dela
+    assert _espera(ev[1:], [dela], "enviadaPraMimEm(EMI[0])") == "2026-09-30T12:00:00+00:00"                # sem nada: a emissão
+    assert "Enviada em ${esc(dBR(enviadaPraMimEm(e)))}" in E and "Enviada em ${esc(dBR((ultimoEv(e) || {}).em" not in E
+
+
+def test_mandar_avisa_a_admin_quando_o_enviado_nao_foi_registrado():
+    """FORA-6 (o "Mandar pra…"). Guarda de TEXTO, declarado."""
+    m = funcao_js("mandarDepois", "escritorio.html", E)
+    assert "const semRegistro = r.dados.enviado_registrado === false;" in m
+    assert "registre em Registrar retorno' : ''), !!f || semRegistro);" in m
+
+
+def _lista(piloto_lido, resumo_lido, projetos, no_piloto="false"):
+    pre = ("var NO_PILOTO = %s, PILOTO_LIDO = %s, RESUMO_LIDO = %s, EU = { id: 'u1' };" % (no_piloto, piloto_lido, resumo_lido)
+           + "var PROJETOS = " + json.dumps(projetos) + ";"
+           + _ESC + "function faixa(i, t, s, botoes) { return '[FAIXA ' + (botoes || 'sem botoes') + ']'; }"
+           "function corDe() { return ['#111111', '#222222']; } function iniciais() { return 'CE'; }")
+    return _js([pre, _trecho(E, "const naoLiNaLista = ", NL + "].filter(Boolean);"), funcao_js("telaLista", "escritorio.html", E)],
+               "telaLista()")
+
+
+def test_lista_nao_chama_de_piloto_fechado_o_que_nao_conseguiu_ler():
+    """ADM-17: num soluço do banco, a admin do piloto lia "O Escritório está em piloto fechado"."""
+    assert "piloto fechado" in _lista("true", "true", [])                                        # controle: leu e não é do piloto
+    for piloto, resumo in (("false", "true"), ("true", "false"), ("false", "false")):
+        t = _lista(piloto, resumo, [])
+        assert "Não consegui carregar agora" in t and "piloto fechado" not in t, (piloto, resumo)
+
+
+def test_lista_com_projetos_diz_o_que_nao_leu():
+    """ADM-17: os botões de criar sumiam sem aviso, e os projetos de fora sumiam da lista."""
+    casa = [{"id": "p1", "nome": "Casa Exemplo", "etapas": [], "dono": "u1"}]
+    t = _lista("false", "true", casa)
+    assert "<b>Não consegui ler agora:</b> se esta conta cria projetos" in t and "cliente ou fornecedor" not in t
+    t = _lista("true", "false", casa, no_piloto="true")
+    assert "os projetos em que você entrou como cliente ou fornecedor" in t and "se esta conta cria" not in t
+    assert "Trazer projeto medido" in t                                                          # os botões da admin seguem lá
+    assert "Não consegui ler agora" not in _lista("true", "true", casa, no_piloto="true")        # controle
+    c = funcao_js("carregarProjetos", "escritorio.html", E)
+    assert "PILOTO_LIDO = !pil.error; RESUMO_LIDO = !fora.error;" in c
+
+
+_NAV_BASE = """
+var NAV_PEDIDO = 0, VIEW = 'lista', PROJ = null, MEMBROS = [], NO_PILOTO = true, pintou = [], leu = [], valeu = [];
+var PROJETOS = [{ id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }, { id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' }];
+var A = PROJETOS[0].id, B = PROJETOS[1].id, ROTA = { id: A, view: 'tarefas' }, NO_MEIO = null;
+var location = { hash: '', replace: function (u) { location.hash = u; } }, main = { innerHTML: '' };
+function $(id) { return main; } function menu() {} function lerRota() { return ROTA; }
+function souEquipe() { return true; } function souFornecedor() { return false; }
+function carregarProjetos() {} function abrirPeloJob() {}
+function render() { pintou.push(VIEW + ':' + (PROJ ? PROJ.id.slice(0, 1) : '-')); }
+function carregarProjeto(id, vale) {
+  leu.push(id.slice(0, 1));
+  if (NO_MEIO) { var f = NO_MEIO; NO_MEIO = null; f(); }      // a pessoa faz outra coisa ENQUANTO este projeto carrega
+  valeu.push(vale ? vale() : null);
+  if (vale && !vale()) return false;                          // o mesmo contrato da de verdade: atrasada não troca nada
+  PROJ = { id: id }; MEMBROS = [{}];
+  return true;
+}
+"""
+
+
+def _navega(cena):
+    return _js([_NAV_BASE, sem_await(funcao_js("navegar", "escritorio.html", E)), sem_await(funcao_js("recarregar", "escritorio.html", E)),
+                cena], "{ pintou: pintou, leu: leu, valeu: valeu, view: VIEW, proj: PROJ && PROJ.id.slice(0, 1), hash: location.hash }")
+
+
+def test_resposta_atrasada_do_projeto_anterior_nao_pinta_por_cima_do_novo():
+    """ADM-18: clicou no A e, antes de ele carregar, no B — a resposta do A chegava por último e a tela ficava no A
+    com o endereço do B."""
+    r = _navega("NO_MEIO = function () { ROTA = { id: B, view: 'equipe' }; navegar(); }; navegar();")
+    assert r["leu"] == ["a", "b"] and r["valeu"] == [True, False]        # a leitura do A soube que não era mais a da vez
+    assert r["pintou"] == ["equipe:b"] and r["view"] == "equipe" and r["proj"] == "b" and r["hash"] == ""
+    r = _navega("navegar();")                                            # controle: sem ninguém no meio, o A abre
+    assert r["pintou"] == ["tarefas:a"] and r["valeu"] == [True]
+
+
+def test_ir_pra_lista_enquanto_o_projeto_carrega_nao_volta_pro_projeto():
+    r = _navega("NO_MEIO = function () { ROTA = { id: null, view: 'lista' }; navegar(); }; navegar();")
+    assert r["pintou"] == ["lista:-"] and r["proj"] is None and r["view"] == "lista"
+
+
+def test_reler_o_projeto_nao_pinta_depois_que_a_pessoa_foi_pra_outro():
+    """ADM-18, o outro caminho: o reler que vem depois de toda gravação."""
+    r = _navega("navegar(); pintou = []; NO_MEIO = function () { ROTA = { id: B, view: 'capa' }; }; recarregar();")
+    assert r["pintou"] == [] and r["valeu"][-1] is False
+    r = _navega("navegar(); pintou = []; NO_MEIO = function () { ROTA = { id: A, view: 'arquivos' }; }; recarregar();")
+    assert r["pintou"] == ["tarefas:a"] and r["valeu"][-1] is True        # controle: trocar de TELA no mesmo projeto não descarta
+    r = _navega("navegar(); pintou = []; recarregar();")
+    assert r["pintou"] == ["tarefas:a"]
+
+
+def test_a_troca_do_projeto_pergunta_se_ainda_vale_depois_de_ler_tudo():
+    """ADM-18. Guarda de TEXTO, declarado: a pergunta vem depois da ÚLTIMA ida ao banco e antes da troca."""
+    c = funcao_js("carregarProjeto", "escritorio.html", E)
+    pergunta = c.index("if (aindaVale && !aindaVale()) return false;")
+    assert c.rindex("await ") < pergunta < c.index("PROJ = proj; MEMBROS = membros;")
+    assert pergunta < c.index("ARQ_PASTA = ''; ARQ_TRILHA = [];")        # nem os filtros do projeto que está na tela são zerados
+
+
+def _cria(admin, equipe):
+    pre = ("var ST_EQUIPE = ['afazer', 'dev', 'revdtz'];"
+           "function souAdmin() { return %s; } function souEquipe() { return %s; }" % (admin, equipe))
+    return _js([pre, _linha(E, "const criaNaColuna = ")],
+               "['afazer', 'dev', 'revdtz', 'revsol', 'cliente', 'aprov', 'ok'].filter(criaNaColuna)")
+
+
+def test_o_botao_de_adicionar_cartao_so_aparece_onde_a_pessoa_cria():
+    """ADM-15: a equipe via "+ Adicionar cartão" nas 7 colunas e, em 4 delas, o clique só dava erro."""
+    assert _cria("true", "true") == ["afazer", "dev", "revdtz", "revsol", "cliente", "aprov", "ok"]
+    assert _cria("false", "true") == ["afazer", "dev", "revdtz"]
+    assert _cria("false", "false") == []                                 # o fornecedor não cria em coluna nenhuma
+    assert "${criaNaColuna(s.k) ? `<div><button class=\"add\"" in funcao_js("telaTarefas", "escritorio.html", E)
+    assert "if (!criaNaColuna(st)) return toast('Nesta coluna quem cria é a admin do projeto.', true);" in funcao_js("addCartao", "escritorio.html", E)
+
+
+def _fotos(papel, pasta, resposta, acao="subirFotos();"):
+    pre = ("var PAPEL = %s, PROJ = { id: 'p1', pasta_id: %s }, modais = [], abriu = 0, perguntou = [];" % (json.dumps(papel), json.dumps(pasta))
+           + "function souAdmin() { return PAPEL === 'dono'; } function souEquipe() { return PAPEL === 'dono' || PAPEL === 'freela'; }"
+           "function souCliente() { return PAPEL === 'cliente'; }"
+           "function abrirModal(t, h) { modais.push([t, h]); } function formularioDeFotos() { abriu++; }"
+           + _ESC + "function apiEsc(c) { perguntou.push(c); return " + json.dumps(resposta) + "; }")
+    return _js([pre, _linha(E, "const semPastaPraFotos = "), _trecho(E, "const avisoSemPastaPraFotos = ", NL + "  : 'Ainda não dá pra subir fotos: a admin precisa ligar a pasta do Drive a este projeto.');"),
+                sem_await(funcao_js("subirFotos", "escritorio.html", E)), funcao_js("naoDaPraSubirFotos", "escritorio.html", E), acao],
+               "{ modais: modais, abriu: abriu, perguntou: perguntou, sem: semPastaPraFotos() }")
+
+
+_PODE = {"ok": True, "status": 200, "dados": {"pode": True}}
+_SEM_PASTA = {"ok": True, "status": 200, "dados": {"pode": False, "motivo": "A admin ainda não ligou a pasta do Drive a este projeto."}}
+
+
+def test_o_fornecedor_fica_sabendo_antes_de_escolher_as_fotos():
+    """FORA-9: na obra, no 4G, ele mandava até 40 MB pra só então ler "a admin ainda não ligou a pasta"."""
+    r = _fotos("fornecedor", None, _SEM_PASTA)
+    assert r["perguntou"] == ["projetos/p1/pode-subir-fotos"] and r["abriu"] == 0
+    (titulo, html), = r["modais"]
+    assert titulo == "Ainda não dá pra subir fotos" and "A admin ainda não ligou a pasta do Drive" in html and "Nada foi enviado" in html
+    r = _fotos("fornecedor", None, _PODE)                                # controle: liberado → o formulário abre
+    assert r["abriu"] == 1 and r["modais"] == []
+    r = _fotos("fornecedor", None, {"ok": False, "status": 0, "dados": {"detail": "Sem conexão"}})
+    assert r["abriu"] == 1 and r["modais"] == []                         # a pergunta sem resposta não tranca: o envio decide
+    assert _fotos("cliente", None, _PODE) == {"modais": [], "abriu": 0, "perguntou": [], "sem": False}
+
+
+def test_equipe_sem_pasta_ligada_nem_pergunta_ao_servidor():
+    """ADM-12: a equipe e a admin leem a pasta do projeto — a tela já sabe."""
+    r = _fotos("freela", None, _PODE)
+    assert r["sem"] is True and r["perguntou"] == [] and r["abriu"] == 0 and "a admin precisa ligar a pasta" in r["modais"][0][1]
+    r = _fotos("dono", None, _PODE)
+    assert 'href="#/p/p1/arquivos"' in r["modais"][0][1] and r["abriu"] == 0          # pra admin: onde ligar
+    r = _fotos("freela", "PASTA_1", _PODE)                                            # controle: com pasta, segue o caminho normal
+    assert r["sem"] is False and r["perguntou"] == ["projetos/p1/pode-subir-fotos"] and r["abriu"] == 1
+    r = _fotos("freela", "PASTA_1", {"ok": True, "status": 200, "dados": {"pode": False, "motivo": "O Google Drive do projeto está desconectado. Avise a admin."}})
+    assert r["abriu"] == 0 and "desconectado" in r["modais"][0][1]                    # o que a tela da equipe não tinha como saber
+    assert _fotos("fornecedor", None, _PODE)["sem"] is False                          # o fornecedor não lê a pasta: pergunta
+
+
+def test_a_tela_de_fotos_troca_o_botao_pelo_aviso_e_o_409_nao_oferece_tentar_de_novo():
+    """ADM-12/FORA-9. Guarda de TEXTO, declarado."""
+    t = funcao_js("telaFotos", "escritorio.html", E)
+    assert "const podeSubir = !souCliente() && !semPastaPraFotos();" in t
+    assert "${semPastaPraFotos() ? `<div class=\"aviso\">${avisoSemPastaPraFotos()}</div>` : ''}" in t
+    e = funcao_js("enviarFotos", "escritorio.html", E)
+    assert e.index("if (r.status === 409) { fecharModal(); return naoDaPraSubirFotos(") < e.index("b.textContent = 'Tentar de novo'")

@@ -48,7 +48,7 @@ def _h():
 
 # ── TELA-13 / TELA-1 / TELA-2: um projeto não herda nada do outro ──
 def test_carregar_projeto_troca_tudo_junto_no_fim():
-    cp = _corpo(_h(), "async function carregarProjeto(id) {")
+    cp = _corpo(_h(), "async function carregarProjeto(id, aindaVale) {")
     i_leituras = cp.index("await Promise.all([")
     i_troca = cp.index("PROJ = proj; MEMBROS = membros;")
     assert i_leituras < i_troca and "PROJ = PROJETOS.find" not in cp, "o PROJ não pode trocar antes das leituras"

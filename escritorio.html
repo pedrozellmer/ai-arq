@@ -393,6 +393,9 @@ const stT = (k) => (ST.find((s) => s.k === k) || {}).t || k;
 const COLS_MEMBRO = 'id,projeto_id,user_id,nome,papel,funcao,status,convidado_em,aceito_em,removido_em,pode_baixar,drive_pasta_nome';
 // ── estado ──
 let NO_PILOTO = false, TEM_PAINEL = true;
+// 13/10 (auditoria ADM-17): a tela sabe o que NÃO conseguiu ler — "não li" não é "não está no piloto" nem "não tem projeto"
+let PILOTO_LIDO = true, RESUMO_LIDO = true;
+let NAV_PEDIDO = 0;                                // 13/10 (auditoria ADM-18): a navegação da vez (a anterior, atrasada, não pinta)
 let EU = null, PROJETOS = [], PROJ = null, MEMBROS = [], PAPEL = null, TAR = [], PESSOAS_T = [], ATAS = [], NOTAS = {};
 // 26/09: checklist e etiquetas do cartão (tabelas da seção 24). TEM_CHK = as tabelas existem e leram bem.
 let CHK = [], ETQ = [], TETQ = [], TEM_CHK = false;
@@ -651,6 +654,10 @@ async function carregarProjetos() {
     proxima_entrega: x.proxima_entrega, proxima_entrega_data: x.proxima_entrega_data, escritorio: x.escritorio || '',
     externo: true, papel_externo: x.papel }))];
   NO_PILOTO = !pil.error && pil.data === true;
+  // 🩸 13/10 (auditoria ADM-17): num soluço do banco estas duas leituras falhavam CALADAS — a admin do piloto lia "O
+  // Escritório está em piloto fechado" (ou perdia os botões de criar), e os projetos em que a pessoa é cliente ou
+  // fornecedora sumiam da lista. A lista agora diz o que não conseguiu ler.
+  PILOTO_LIDO = !pil.error; RESUMO_LIDO = !fora.error;
   // o painel do AI.arq só é saída pra quem tem o que fazer lá: está no piloto, é equipe/admin de algum projeto ou
   // tem projeto medido próprio. Pro cliente e o fornecedor "só de fora", o painel é o do quantitativo (vazio).
   // Leitura que falha conta como "tem" (mostrar a saída a mais é melhor que prender a pessoa).
@@ -658,7 +665,10 @@ async function carregarProjetos() {
 }
 // 🩸 26/09 (auditoria TELA-13): o PROJ trocava ANTES das leituras — uma falha no meio deixava o projeto novo com
 // as tarefas, a equipe e o PAPEL do anterior. Agora tudo é lido em variáveis locais e trocado junto, no fim.
-async function carregarProjeto(id) {
+// 🩸 13/10 (auditoria ADM-18): `aindaVale` (opcional) é perguntado logo ANTES da troca. A leitura faz várias idas ao
+// banco; quem clicava no projeto A e, antes de ele carregar, no B, podia receber a resposta do A por último — a
+// tela, o menu e o título ficavam no A com o endereço do B. Resposta que não é mais a da vez não troca nada.
+async function carregarProjeto(id, aindaVale) {
   const proj = PROJETOS.find((p) => p.id === id) || null;
   if (!proj) return false;
   const [m, t, tp, a, papel] = await Promise.all([
@@ -706,6 +716,7 @@ async function carregarProjeto(id) {
     if (!n.error) n.data.forEach((x) => { notas[x.membro_id] = x.observacao; });
     else notasLidas = false;
   }
+  if (aindaVale && !aindaVale()) return false;      // ADM-18: chegou atrasada — a pessoa já foi pra outro lugar
   // 🩸 26/09 (auditoria TELA-1/TELA-2): a subpasta aberta, o filtro de etapa e a etapa selecionada eram globais e
   // passavam pro próximo projeto (Arquivos travava em "não é deste projeto"; o quadro filtrava por etapa que nem existe)
   if (!PROJ || PROJ.id !== id) {
@@ -812,22 +823,31 @@ function renderMoldura() {
 
 async function navegar() {
   const r = lerRota();
+  // ADM-18: cada navegação tem o seu número; depois de cada espera, só segue quem ainda é a da vez
+  const pedido = ++NAV_PEDIDO, daVez = () => pedido === NAV_PEDIDO;
   menu(false);
   try {
     if (r.job) { await abrirPeloJob(r.job, r.view); return; }
     if (!r.id) {
       VIEW = 'lista'; PROJ = null; await carregarProjetos();
+      if (!daVez()) return;
       // 26/09 (perfis — "o cliente cai direto no projeto"): quem só tem UM projeto, e é de fora, não passa pela lista
       if (PROJETOS.length === 1 && PROJETOS[0].externo && !NO_PILOTO) { location.replace(`#/p/${PROJETOS[0].id}/capa`); return; }
     } else {
       if (!PROJETOS.length || !PROJETOS.find((p) => p.id === r.id)) await carregarProjetos();
-      if (!PROJ || PROJ.id !== r.id || !MEMBROS.length) { if (!(await carregarProjeto(r.id))) { location.hash = '#/'; return; } }
+      if (!daVez()) return;
+      if (!PROJ || PROJ.id !== r.id || !MEMBROS.length) {
+        const abriu = await carregarProjeto(r.id, daVez);
+        if (!daVez()) return;
+        if (!abriu) { location.hash = '#/'; return; }
+      }
       // 26/09 (perfis): cada um abre só as telas dele (o banco não mostraria nada nas outras, mas a tela nem oferece)
       const telas = souEquipe() ? ['capa', 'tarefas', 'arquivos', 'emissoes', 'atas', 'equipe', 'fotos']
         : souFornecedor() ? ['capa', 'tarefas', 'arquivos', 'emissoes', 'fotos'] : ['capa', 'tarefas', 'emissoes', 'fotos', 'cronograma'];
       VIEW = telas.includes(r.view) ? r.view : 'capa';
     }
   } catch (e) {
+    if (!daVez()) return;      // o erro é de uma navegação que a pessoa já deixou pra trás
     $('main').innerHTML = `<div class="card"><p class="h2">Não consegui carregar agora</p><p class="sub">Foi um soluço de conexão com o banco. Recarregue a página em instantes.</p></div>`;
     console.error(e); return;
   }
@@ -862,11 +882,28 @@ function render() {
   const volta = VIEW !== 'lista' && VIEW !== 'capa' ? `<button class="voltar" onclick="ir('capa')">← ${souEquipe() ? 'Página do projeto' : souCliente() ? 'Visão do projeto' : 'Visão geral'}</button>` : '';
   $('main').innerHTML = volta + T[VIEW]();
 }
-async function recarregar() { await carregarProjeto(PROJ.id); render(); }
+// ADM-18: reler o projeto A depois de a pessoa ter ido pro B não pinta o A por cima — vale enquanto o endereço e o
+// projeto na tela ainda forem o que estava sendo relido (trocar de TELA dentro do mesmo projeto não descarta nada)
+async function recarregar() {
+  const id = PROJ.id, noMesmo = () => !!PROJ && PROJ.id === id && lerRota().id === id;
+  await carregarProjeto(id, noMesmo);
+  if (noMesmo()) render();
+}
 
 // ══════════════ LISTA ══════════════
+// ADM-17: o que a lista não conseguiu ler, dito com todas as letras (vazio = leu tudo)
+const naoLiNaLista = () => [
+  PILOTO_LIDO ? '' : 'se esta conta cria projetos (os botões de criar ficam escondidos até dar certo)',
+  RESUMO_LIDO ? '' : 'os projetos em que você entrou como cliente ou fornecedor',
+].filter(Boolean);
 function telaLista() {
+  const falta = naoLiNaLista();
+  const aviso = falta.length ? `<div class="aviso"><b>Não consegui ler agora:</b> ${falta.join('; e ')}. Foi um soluço de conexão com o banco: recarregue a página em instantes.</div>` : '';
   if (!NO_PILOTO && !PROJETOS.length) {
+    // sem ter lido, "piloto fechado" seria um palpite: a pessoa pode ser do piloto ou ter projeto de fora
+    if (falta.length) return `<div class="card"><p class="h2" style="font-size:16px">Não consegui carregar agora</p>
+      <p class="sub">Foi um soluço de conexão com o banco. Recarregue a página em instantes.</p>
+      <p class="sub" style="margin-top:10px"><a href="dashboard.html">Voltar ao painel</a></p></div>`;
     return `<div class="card"><p class="h2" style="font-size:16px">O Escritório está em piloto fechado</p>
       <p class="sub">Por enquanto, quem usa o Escritório entra por convite de um projeto. Se você recebeu um convite, abra o link do e-mail.</p>
       <p class="sub" style="margin-top:10px"><a href="dashboard.html">Voltar ao painel</a></p></div>`;
@@ -874,6 +911,7 @@ function telaLista() {
   const n = PROJETOS.length;
   return `${faixa('tar', 'Escritório', n ? `${n} projeto${n > 1 ? 's' : ''}: tarefas, atas, equipe e a pasta do Drive de cada um.` : 'Tarefas, atas, equipe e a pasta do Drive de cada projeto.',
       NO_PILOTO ? '<button class="btn" onclick="trazerMedido()">Trazer projeto medido</button><button class="btn btn-g" onclick="novoProjeto()">+ Novo projeto</button>' : '')}
+    ${aviso}
     ${n ? `<div class="grade g2 g3">${PROJETOS.map((p) => {
       const c = corDe(p.id), et = p.etapas || [], i = et.indexOf(p.etapa_atual), pct = p.concluido_em ? 100 : et.length && i >= 0 ? Math.round((i / et.length) * 100) : 0;   // TELA-9: só as concluídas; ADM-13: concluído = inteiro
       return `<a class="card pj rise" style="--c1:${c[0]};--c2:${c[1]}" href="#/p/${p.id}/capa">
@@ -1248,6 +1286,9 @@ const FILT = { todas: () => true, minhas: eMinha, cliente: comCliente };
 const etapaDoFiltro = () => ((PROJ && PROJ.etapas) || []).includes(FILTRO_E) ? FILTRO_E : '';
 const visivel = (t) => FILT[FILTRO](t) && (!etapaDoFiltro() || t.etapa === FILTRO_E);
 const podeLevar = (t, st) => souAdmin() || st === t.status || (['afazer', 'dev', 'revdtz', 'revsol'].includes(t.status) && ST_EQUIPE.includes(st));
+// 13/10 (auditoria ADM-15): "+ Adicionar cartão" aparecia pra equipe nas 7 colunas e, em 4 delas, o clique só dava
+// "nesta coluna quem cria é a admin". O botão aparece onde a pessoa cria — a mesma regra do addCartao.
+const criaNaColuna = (st) => souAdmin() || (souEquipe() && ST_EQUIPE.includes(st));
 function telaTarefas() {
   const ch = (k, t) => `<button class="chip" aria-pressed="${FILTRO === k}" onclick="FILTRO='${k}';render()">${t}<span class="n">${TAR.filter(FILT[k]).filter(aberta).length}</span></button>`;
   const ab = TAR.filter(aberta), atr = ab.filter(atrasada).length;
@@ -1262,7 +1303,7 @@ function telaTarefas() {
       <div class="col" style="--sc:${s.cor}" data-st="${s.k}" ondragover="sobre(event)" ondrop="soltar(event)" aria-label="${s.t}">
         <div class="col-h"><i style="background:${s.cor}"></i>${s.t}<span class="n">${ts.length}</span></div>
         <div class="cards">${ts.map(cartao).join('')}</div>
-        ${cria ? `<div><button class="add" onclick="addCartao('${s.k}',this)">+ Adicionar cartão</button></div>` : ''}
+        ${criaNaColuna(s.k) ? `<div><button class="add" onclick="addCartao('${s.k}',this)">+ Adicionar cartão</button></div>` : ''}
       </div>`; }).join('')}</div>`;
 }
 // a etapa vira a etiqueta colorida do cartão (como no Trello): a cor segue a ORDEM da etapa no projeto,
@@ -1440,7 +1481,7 @@ async function semAcessoAoCartao() {
 }
 
 function addCartao(st, btn) {
-  if (!souAdmin() && !ST_EQUIPE.includes(st)) return toast('Nesta coluna quem cria é a admin do projeto.', true);
+  if (!criaNaColuna(st)) return toast('Nesta coluna quem cria é a admin do projeto.', true);
   const slot = btn.parentElement;
   slot.innerHTML = `<div class="tc" style="cursor:auto"><textarea class="in" rows="2" maxlength="300" placeholder="O que precisa ser feito?" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();criarCartao('${st}',this.value)}if(event.key==='Escape')render()"></textarea>
     <div class="linha"><button class="btn btn-p btn-s" onclick="criarCartao('${st}',this.closest('.tc').querySelector('textarea').value)">Adicionar</button><button class="btn btn-s" onclick="render()">Cancelar</button></div></div>`;
@@ -1974,10 +2015,22 @@ const respondeuEu = (e) => evDa(e).some((x) => x.pelo_cliente && x.registrado_po
 const mandadaPraMim = (e) => { const eu = meuMembro(); return !!eu && DEST.some((d) => d.emissao_id === e.id && d.membro_id === eu.id && d.permission_id); };
 const substituidaPor = (e) => EMI.filter((x) => x.arquivo_id === e.arquivo_id && Number(x.revisao) > Number(e.revisao) && mandadaPraMim(x))
   .sort((a, b) => Number(b.revisao) - Number(a.revisao))[0] || null;
+// 🩸 13/10 (auditoria FORA-6): pro CLIENTE, emissão que foi mandada pra ele e não tem registro NENHUM também espera
+// por ele — o registro "enviado" pode não ter gravado (soluço do banco na hora do envio), e aí ele recebia o e-mail
+// "Pra você aprovar" e não achava os botões. O banco deixa responder: a regra dele é ter recebido a emissão.
 const esperaResposta = (e) => {
-  const u = ultimoEv(e); if (!u) return false;
-  if (souCliente()) return !substituidaPor(e) && !respondeuEu(e) && (u.tipo === 'enviado' || !!u.pelo_cliente);
-  return u.tipo === 'enviado';
+  const u = ultimoEv(e);
+  if (souCliente()) {
+    if (substituidaPor(e) || respondeuEu(e)) return false;
+    return u ? (u.tipo === 'enviado' || !!u.pelo_cliente) : mandadaPraMim(e);
+  }
+  return !!u && u.tipo === 'enviado';
+};
+// 13/10 (auditoria FORA-7): quando ESTA pessoa recebeu a emissão. O cartão "Aguardando a sua aprovação" mostrava a
+// data do último registro de qualquer um (até a resposta do outro cliente do casal) como "Enviada em".
+const enviadaPraMimEm = (e) => {
+  const eu = meuMembro(), d = eu && DEST.find((x) => x.emissao_id === e.id && x.membro_id === eu.id && x.permission_id);
+  return (d && d.enviado_em) || (evDa(e).find((x) => x.tipo === 'enviado') || {}).em || e.emitido_em;
 };
 const quemRespondeu = (x) => { if (x.registrado_por === EU.id) return 'Você'; const m = MEMBROS.find((y) => y.user_id === x.registrado_por); return m ? curto(m) : 'Outra pessoa do lado do cliente'; };
 function blocoMandarPra(jaTem, clienteMarcado) {
@@ -2002,8 +2055,10 @@ function mandarDepois(id) {
     const f = (r.dados.falhas || []).length;
     // 11/10 (auditoria FORA-5): a emissão já tem resposta registrada por você — quem recebe agora vê o arquivo, sem
     // os botões de aprovar (e o e-mail "pra você aprovar" não sai)
+    const semRegistro = r.dados.enviado_registrado === false;      // FORA-6: recebeu, mas o "Enviada ao cliente" não gravou
     toast(`Mandado pra ${r.dados.mandados || 0} pessoa(s)` + (f ? ` · ${f} não deu (a pessoa entrou sem e-mail confirmado?)` : '')
-      + (r.dados.ja_respondida ? ' · esta emissão já tem resposta registrada: quem recebeu agora só vê o arquivo' : ''), !!f);
+      + (r.dados.ja_respondida ? ' · esta emissão já tem resposta registrada: quem recebeu agora só vê o arquivo' : '')
+      + (semRegistro ? ' · o cliente recebeu, mas não consegui registrar "Enviada ao cliente": registre em Registrar retorno' : ''), !!f || semRegistro);
     await recarregar();
   };
 }
@@ -2114,12 +2169,24 @@ async function confirmarEmissao(id) {
   }
   if (!r.ok) { b.disabled = false; b.textContent = 'Tentar de novo'; return toast(r.dados.detail || 'Não deu pra emitir agora.', true); }
   fecharModal();
-  const nM = r.dados.mandados || 0, nF = (r.dados.falhas || []).length;
-  if (r.dados.travada) toast(`Emitido: ${r.dados.nome}` + (nM ? ` · mandado pra ${nM} pessoa${nM > 1 ? 's' : ''}` : '') + (nF ? (typeof r.dados.erro === 'string' && r.dados.erro ? ' · ' + r.dados.erro : ` · ${nF} não deu: mande de novo em Emissões`) : ''), !!nF);
+  const nF = (r.dados.falhas || []).length, envio = resumoDoEnvio(r.dados);
+  if (r.dados.travada) toast(`Emitido: ${r.dados.nome}` + envio, !!nF || r.dados.enviado_registrado === false);
+  // 13/10 (auditoria ADM-11): este aviso não dizia se o envio ao cliente tinha dado certo — com a trava E o envio
+  // falhando juntos, a admin ficava achando que todo mundo tinha recebido
   else abrirModal('Emitido, mas sem trava', `<p style="margin:0;font-size:14px;line-height:1.5"><b>${esc(r.dados.nome)}</b> foi pra pasta Emitidos, mas <b>o Drive não aceitou a trava</b>: quem é da equipe consegue editar a cópia.</p>
     <p class="sub" style="margin:0">Se quiser garantir, bloqueie o arquivo no próprio Drive.</p>
+    ${envio ? `<p style="margin:0;font-size:14px;line-height:1.5${nF || r.dados.enviado_registrado === false ? ';color:#B91C1C' : ''}"><b>O envio:</b> ${esc(envio.replace(/^ · /, ''))}.</p>` : ''}
     <div class="rodape"><button class="btn btn-d" onclick="fecharModal()">Entendi</button></div>`);
   await recarregar();
+}
+// o que aconteceu com o envio (do Emitir e do "Mandar pra…"), em texto: '' = não mandou pra ninguém e nada falhou
+function resumoDoEnvio(d) {
+  const nM = d.mandados || 0, nF = (d.falhas || []).length;
+  return (nM ? ` · mandado pra ${nM} pessoa${nM > 1 ? 's' : ''}` : '')
+    + (nF ? (typeof d.erro === 'string' && d.erro ? ' · ' + d.erro : ` · ${nF} não deu: mande de novo em Emissões`) : '')
+    // 13/10 (auditoria FORA-6): o cliente recebeu, mas o registro "Enviada ao cliente" não gravou — a emissão ficaria
+    // como "Emitida" pra admin, sem ninguém saber. Ele responde do mesmo jeito; a admin registra o envio à mão.
+    + (d.enviado_registrado === false ? ' · o cliente recebeu, mas não consegui registrar "Enviada ao cliente": registre em Registrar retorno' : '');
 }
 function telaEmissoes() {
   const ir2 = souAdmin() ? `<button class="btn btn-s" onclick="ir('arquivos')">Emitir um arquivo</button>` : '';
@@ -2208,7 +2275,7 @@ function telaVisaoCliente() {
       <span class="kpi-ico" style="width:48px;height:48px;background:#FFFBEB;color:#B45309">${svg('emi', 24)}</span>
       <div style="flex:1 1 240px;min-width:0"><p class="lbl" style="margin:0;color:#B45309">Aguardando a sua aprovação</p>
         <b style="font-size:16px;overflow-wrap:anywhere">${esc(e.copia_nome || e.arquivo_nome)}</b><span class="rev-tag">${revTxt(e.revisao)}</span>
-        <p class="sub" style="margin:2px 0 0">Enviada em ${esc(dBR((ultimoEv(e) || {}).em || e.emitido_em))}${e.nota ? ' · “' + esc(e.nota) + '”' : ''}</p></div>
+        <p class="sub" style="margin:2px 0 0">Enviada em ${esc(dBR(enviadaPraMimEm(e)))}${e.nota ? ' · “' + esc(e.nota) + '”' : ''}</p></div>
       <div class="linha" style="gap:8px">${linkCopia(e) ? `<a class="btn btn-s" href="${esc(linkCopia(e))}" target="_blank" rel="noopener">Abrir</a>` : ''}<button type="button" class="btn btn-s btn-r" onclick="responderEmissao('${e.id}','revisao')">Pedir revisão</button><button type="button" class="btn btn-s btn-d" onclick="responderEmissao('${e.id}','aprovado')">Aprovar</button></div></div></section>`).join('')}
   <div class="grade g2 rise">
     <section class="card"><h2 class="h2" style="font-size:16px">O que depende de você</h2>
@@ -2303,8 +2370,14 @@ async function carregarMiniaturas() {
   await Promise.all([trabalha(), trabalha(), trabalha(), trabalha()]);   // 4 de cada vez: 1 processo no servidor
 }
 document.addEventListener('click', (ev) => { const b = ev.target.closest && ev.target.closest('[data-ff]'); if (!b) return; FILTRO_F = b.dataset.ff || ''; render(); });
+// 13/10 (auditoria ADM-12): a equipe e a admin LEEM a pasta do projeto — sem pasta ligada, a tela já sabe que a
+// foto não tem pra onde ir. Antes oferecia "Subir fotos", a pessoa mandava até 40 MB no 4G e só então lia a recusa.
+const semPastaPraFotos = () => souEquipe() && !(PROJ && PROJ.pasta_id);
+const avisoSemPastaPraFotos = () => (souAdmin()
+  ? 'Pra subir fotos, ligue antes a pasta do Drive do projeto, em <a href="#/p/' + PROJ.id + '/arquivos">Arquivos</a>: elas ficam na pasta Fotos de lá.'
+  : 'Ainda não dá pra subir fotos: a admin precisa ligar a pasta do Drive a este projeto.');
 function telaFotos() {
-  const podeSubir = !souCliente();
+  const podeSubir = !souCliente() && !semPastaPraFotos();
   const etapas = [...new Set(FOTOS.map((f) => f.etapa).filter(Boolean))];
   const lista = FOTOS.filter((f) => !FILTRO_F || (FILTRO_F === '__cliente' ? f.pro_cliente : f.etapa === FILTRO_F));
   const grupos = [];
@@ -2317,10 +2390,11 @@ function telaFotos() {
   // o nome da etapa vai em data-* (é texto de gente), nunca dentro de onclick
   const chip = (k, t, n) => `<button type="button" class="chip" aria-pressed="${FILTRO_F === k}" data-ff="${esc(k)}">${esc(t)}<span class="n">${n}</span></button>`;
   return `${faixa('foto', souCliente() ? 'Fotos da obra' : 'Fotos do projeto', souCliente() ? 'As fotos da obra que o escritório separou pra você.' : 'Ficam na pasta Fotos do Drive do projeto. A equipe e os fornecedores sobem pelo celular, na obra.', podeSubir ? '<button class="btn btn-g" onclick="subirFotos()">Subir fotos</button>' : '')}
+    ${semPastaPraFotos() ? `<div class="aviso">${avisoSemPastaPraFotos()}</div>` : ''}
     ${!TEM_FOTOS ? '<section class="card"><p class="vazio">Não consegui ler as fotos agora. Recarregue a página em instantes.</p></section>' : ''}
     ${FOTOS.length ? `<div class="linha">${chip('', 'Todas', FOTOS.length)}${etapas.map((e) => chip(e, e, FOTOS.filter((f) => f.etapa === e).length)).join('')}${souEquipe() ? chip('__cliente', 'Visíveis pro cliente', FOTOS.filter((f) => f.pro_cliente).length) : ''}</div>` : ''}
     ${grupos.length ? grupos.map((g) => `<section class="rise"><p class="lbl" style="margin:0 0 8px">${esc(g.dia)} · ${g.fotos.length} foto${g.fotos.length === 1 ? '' : 's'}</p><div class="fotos-g">${g.fotos.map(fotoTile).join('')}</div></section>`).join('')
-      : `<section class="card rise"><div class="passo"><span class="passo-ic">${svg('foto', 28)}</span><b>Nenhuma foto ${FILTRO_F ? 'neste filtro' : 'ainda'}</b><p>${podeSubir ? 'Use <b>Subir fotos</b>: no celular, dá pra tirar a foto na hora.' : 'Quando o escritório separar fotos da obra pra você, elas aparecem aqui.'}</p></div></section>`}`;
+      : `<section class="card rise"><div class="passo"><span class="passo-ic">${svg('foto', 28)}</span><b>Nenhuma foto ${FILTRO_F ? 'neste filtro' : 'ainda'}</b><p>${podeSubir ? 'Use <b>Subir fotos</b>: no celular, dá pra tirar a foto na hora.' : souCliente() ? 'Quando o escritório separar fotos da obra pra você, elas aparecem aqui.' : 'As fotos da obra aparecem aqui quando a pasta do Drive estiver ligada.'}</p></div></section>`}`;
 }
 function verFoto(id) {
   const f = FOTOS.find((x) => x.id === id); if (!f) return;
@@ -2350,8 +2424,23 @@ function verFoto(id) {
     FOTOS = FOTOS.filter((x) => x.id !== id); fecharModal(); render(); toast('Foto apagada');
   };
 }
-function subirFotos() {
+// 🩸 13/10 (auditoria FORA-9/ADM-12): pergunta ao servidor ANTES de a pessoa escolher as fotos. Quem é de fora (o
+// fornecedor, na obra, no 4G) não lê a linha do projeto: mandava as fotos inteiras pra só então ler "a admin ainda não
+// ligou a pasta" — e o botão virava "Tentar de novo", que repetia o mesmo envio e o mesmo erro. Se a pergunta não
+// tiver resposta (sem conexão), o formulário abre do mesmo jeito: quem decide é o envio.
+async function subirFotos() {
   if (souCliente()) return;
+  if (semPastaPraFotos()) return naoDaPraSubirFotos(avisoSemPastaPraFotos());
+  const pode = await apiEsc(`projetos/${PROJ.id}/pode-subir-fotos`);
+  if (pode.ok && pode.dados.pode === false) return naoDaPraSubirFotos(esc(pode.dados.motivo || 'Ainda não dá pra subir fotos neste projeto.'));
+  formularioDeFotos();
+}
+function naoDaPraSubirFotos(html) {
+  abrirModal('Ainda não dá pra subir fotos', `<p style="margin:0;font-size:14px;line-height:1.5">${html}</p>
+    <p class="sub" style="margin:0">Nada foi enviado. Guarde as fotos no celular e suba quando estiver liberado.</p>
+    <div class="rodape"><button class="btn btn-d" onclick="fecharModal()">Entendi</button></div>`);
+}
+function formularioDeFotos() {
   abrirModal('Subir fotos', `<div><label class="lbl" for="sf-arq">Fotos</label><input id="sf-arq" type="file" class="in" accept="image/*" multiple>
       <span class="sub" style="display:block">No celular, dá pra tirar a foto na hora. Até 10 por vez, 12 MB cada.</span></div>
     <div class="grade g2"><div><label class="lbl" for="sf-e">Etapa</label><select id="sf-e" class="in"><option value="">—</option>${(PROJ.etapas || []).map((e) => `<option ${e === PROJ.etapa_atual ? 'selected' : ''}>${esc(e)}</option>`).join('')}</select></div>
@@ -2386,6 +2475,8 @@ async function enviarFotos() {
     fecharModal(); try { await recarregar(); } catch (_) {}
     return toast('A conexão caiu no meio: confira se as fotos entraram antes de mandar de novo.', true);
   }
+  // FORA-9: 409 = sem pasta ligada ou Drive desconectado — mandar de novo dá no mesmo erro até a admin resolver
+  if (r.status === 409) { fecharModal(); return naoDaPraSubirFotos(esc(typeof d.detail === 'string' ? d.detail : 'Ainda não dá pra subir fotos neste projeto.')); }
   if (!r.ok) { b.disabled = false; b.textContent = 'Tentar de novo'; return toast(typeof d.detail === 'string' ? d.detail : 'As fotos não subiram agora. Tente de novo.', true); }
   fecharModal(); await recarregar();
   const n = (d.fotos || []).length;

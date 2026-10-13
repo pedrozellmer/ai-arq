@@ -95,7 +95,9 @@ def test_o_fornecedor_nao_cria_tarefa_e_so_move_a_dele():
     t = _fn("telaTarefas")
     assert "const cria = souEquipe();" in t
     assert "cria ? '<button class=\"btn btn-p\" onclick=\"novaTarefa()\">+ Nova tarefa</button>' : ''" in t
-    assert "${cria ? `<div><button class=\"add\"" in t
+    # 13/10 (ADM-15): o botão de cada coluna segue a regra de quem cria NELA (o fornecedor não é equipe: nenhuma)
+    assert "${criaNaColuna(s.k) ? `<div><button class=\"add\"" in t
+    assert "const criaNaColuna = (st) => souAdmin() || (souEquipe() && ST_EQUIPE.includes(st));" in H
     assert _fn("abrirCartao").strip().split(NL)[1].strip() == "if (souFornecedor()) return abrirCartaoFornecedor(id);"
     s = _fn("salvarColuna")
     # 12/10 (BANCO-5): a mesma gravação, agora pedindo a contagem (0 linha = o banco filtrou: nada de "Movido")
@@ -175,7 +177,9 @@ def test_com_dois_clientes_cada_um_responde_a_sua():
     i = H.index("const esperaResposta = (e) => {")
     espera = H[i:H.index("};", i)]
     # 11/10 (BANCO-3): e a revisão substituída por uma mais nova, mandada pra ele, não espera mais
-    assert "if (souCliente()) return !substituidaPor(e) && !respondeuEu(e) && (u.tipo === 'enviado' || !!u.pelo_cliente);" in espera
+    # 13/10 (FORA-6): e a que foi mandada pra ele sem registro nenhum TAMBÉM espera (o "enviado" pode não ter gravado)
+    assert "if (substituidaPor(e) || respondeuEu(e)) return false;" in espera
+    assert "return u ? (u.tipo === 'enviado' || !!u.pelo_cliente) : mandadaPraMim(e);" in espera
     assert "const respondeuEu = (e) => evDa(e).some((x) => x.pelo_cliente && x.registrado_por === EU.id);" in H
     assert "'Você aprovou'" not in H and "esc(quemRespondeu(x)) + (x.tipo === 'aprovado' ? ' aprovou'" in H
     assert "if (x.registrado_por === EU.id) return 'Você';" in H

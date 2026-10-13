@@ -505,11 +505,18 @@ def test_resposta_do_cliente_grava_com_o_login_dele_e_avisa_a_admin_uma_vez():
     assert aviso["assunto"].startswith("Cliente pediu revisão") and len(aviso["assunto"]) <= esc.TETO_ASSUNTO
     assert "<script>" not in aviso["html"] and "&lt;script&gt;" in aviso["html"]
     # 2º clique IGUAL em seguida (o clique duplo): a resposta grava, mas a admin não leva outro e-mail
-    r2 = esc.responder_emissao(E1, REQ, {"tipo": "revisao", "nota": "a porta da despensa"})
+    r2 = esc.responder_emissao(E1, REQ, {"tipo": "revisao", "nota": "a porta <script>x</script> da despensa"})
     assert r2["ok"] and r2["aviso_enviado"] is False and len(enviados) == 1
+    # 🩸 13/10 (auditoria SERV-7): OUTRO texto em seguida não é clique duplo — é outro pedido, e a admin que acompanha
+    # pelo e-mail só ficava sabendo do primeiro
+    r2b = esc.responder_emissao(E1, REQ, {"tipo": "revisao", "nota": "e a bancada tem que ter 90 cm"})
+    assert r2b["ok"] and r2b["aviso_enviado"] is True and len(enviados) == 2
+    assert "bancada" in enviados[1]["html"]
     # 🩸 27/09 (board MAIL-1): MUDOU a resposta (pediu revisão → aprovou) — isso a admin precisa saber
     r3 = esc.responder_emissao(E1, REQ, {"tipo": "aprovado"})
-    assert r3["ok"] and r3["aviso_enviado"] is True and len(enviados) == 2
+    assert r3["ok"] and r3["aviso_enviado"] is True and len(enviados) == 3
+    r4 = esc.responder_emissao(E1, REQ, {"tipo": "aprovado"})            # controle: o clique duplo sem texto cala
+    assert r4["ok"] and r4["aviso_enviado"] is False and len(enviados) == 3
 
 
 def test_quem_nao_recebeu_a_emissao_leva_403_do_banco():

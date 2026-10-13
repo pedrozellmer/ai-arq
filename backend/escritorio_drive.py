@@ -868,22 +868,47 @@ def _mandar(projeto_id: str, emissao: dict, para, quem: str, tok: str) -> dict:
             pro_cliente = True
             avisar.append(email)
     ja_respondida = False
+    # 🩸 13/10 (auditoria FORA-6): o registro "enviado" (o que faz a emissão aparecer "Com o cliente" pra admin) podia
+    # não gravar e ninguém ficava sabendo — a leitura dos eventos falhava e o registro era pulado, ou o registro
+    # falhava e o retorno nem era lido. Agora lê e grava com uma segunda tentativa, e a resposta diz se registrou
+    # (a tela avisa a admin). O cliente responde do mesmo jeito: pra ele vale ter RECEBIDO a emissão.
+    enviado_registrado = None           # None = não foi pra cliente nenhum (não há o que registrar)
     if pro_cliente:
-        st_e, ev = esc._SERVICO("GET", "escritorio_emissao_eventos", params={
-            "emissao_id": f"eq.{emissao['id']}", "select": "id,tipo,pelo_cliente", "order": "em.asc,criado_em.asc"})
+        enviado_registrado = False
+        st_e, ev = 0, None
+        for _tentativa in (1, 2):
+            st_e, ev = esc._SERVICO("GET", "escritorio_emissao_eventos", params={
+                "emissao_id": f"eq.{emissao['id']}", "select": "id,tipo,pelo_cliente", "order": "em.asc,criado_em.asc"})
+            if st_e < 300 and st_e != 0 and ev is not None:
+                break
         if st_e < 300 and st_e != 0 and ev is not None:
             if not [x for x in ev if x.get("tipo") == "enviado"]:
-                esc._SERVICO("POST", "escritorio_emissao_eventos", body={
-                    "emissao_id": emissao["id"], "projeto_id": projeto_id, "tipo": "enviado",
-                    "em": _hoje_no_brasil(), "registrado_por": quem})
+                for _tentativa in (1, 2):
+                    st_g, _ = esc._SERVICO("POST", "escritorio_emissao_eventos", body={
+                        "emissao_id": emissao["id"], "projeto_id": projeto_id, "tipo": "enviado",
+                        "em": _hoje_no_brasil(), "registrado_por": quem})
+                    if st_g < 300 and st_g != 0:
+                        enviado_registrado = True
+                        break
+                    if st_g == 0:
+                        # sem resposta, PODE ter gravado: confere antes de gravar de novo (senão viram dois "enviado")
+                        st_c, agora = esc._SERVICO("GET", "escritorio_emissao_eventos", params={
+                            "emissao_id": f"eq.{emissao['id']}", "tipo": "eq.enviado", "select": "id"})
+                        if st_c < 300 and st_c != 0 and agora:
+                            enviado_registrado = True
+                            break
             else:
+                enviado_registrado = True
                 # 🩸 11/10 (auditoria FORA-5): a emissão já foi enviada e o ÚLTIMO registro é uma resposta anotada à
                 # mão pelo escritório ("o cliente aprovou por telefone"): pra quem recebe agora ela está fechada — a
                 # tela não mostra Aprovar nem Pedir revisão. O e-mail "Pra você aprovar" prometia o que não havia.
                 ultimo = ev[-1]
                 ja_respondida = ultimo.get("tipo") in ("aprovado", "revisao") and not ultimo.get("pelo_cliente")
+        if not enviado_registrado:
+            esc._registrar("escritorio:mandar", f"emissão {emissao['id']}: mandada ao cliente sem o registro 'enviado'")
     avisados = 0 if ja_respondida else _avisar_clientes(projeto_id, emissao, avisar)
-    return {"mandados": mandados, "falhas": falhas, "avisados": avisados, "ja_respondida": ja_respondida}
+    return {"mandados": mandados, "falhas": falhas, "avisados": avisados, "ja_respondida": ja_respondida,
+            "enviado_registrado": enviado_registrado}
 
 
 def _avisar_clientes(projeto_id: str, emissao: dict, emails: list) -> int:
@@ -1523,6 +1548,27 @@ def _subir_pro_drive(tok: str, pasta: str, nome: str, mime: str, dados: bytes):
         return st, {}
 
 
+_FOTOS_SEM_PASTA = "A admin ainda não ligou a pasta do Drive a este projeto."
+_FOTOS_SEM_DRIVE = "O Google Drive do projeto está desconectado. Avise a admin."
+
+
+@router.get("/projetos/{projeto_id}/pode-subir-fotos")
+def projeto_fotos_pode(projeto_id: str, request: Request):
+    """13/10 (auditoria FORA-9/ADM-12): dá pra subir foto AGORA? A tela pergunta ANTES de a pessoa escolher as fotos.
+    Na obra, no 4G, ela mandava até 40 MB pra só então ler "a admin ainda não ligou a pasta" — e quem é de fora (o
+    fornecedor) nem tinha como saber antes: ele não lê a linha do projeto. As mesmas duas condições do envio (pasta
+    ligada e Drive conectado), sem chamar o Google."""
+    esc._exige_login(request)
+    if esc._papel(request, projeto_id) not in ("dono", "freela", "fornecedor"):
+        raise HTTPException(403, "Só a equipe e os fornecedores do projeto sobem fotos.")
+    p = _dono_do_projeto(projeto_id)
+    if not p.get("pasta_id"):
+        return {"pode": False, "motivo": _FOTOS_SEM_PASTA}
+    if not _conexao(p["dono"]):
+        return {"pode": False, "motivo": _FOTOS_SEM_DRIVE}
+    return {"pode": True}
+
+
 @router.post("/projetos/{projeto_id}/fotos")
 def projeto_fotos_subir(projeto_id: str, request: Request, fotos: list[UploadFile] = File(...),
                         legenda: str = Form(""), etapa: str = Form(""), pro_cliente: str = Form("")):
@@ -1553,9 +1599,9 @@ def projeto_fotos_subir(projeto_id: str, request: Request, fotos: list[UploadFil
         lidas.append((dados, mime, ext))
     p = _dono_do_projeto(projeto_id)
     if not p.get("pasta_id"):
-        raise HTTPException(409, "A admin ainda não ligou a pasta do Drive a este projeto.")
+        raise HTTPException(409, _FOTOS_SEM_PASTA)
     if not _conexao(p["dono"]):
-        raise HTTPException(409, "O Google Drive do projeto está desconectado. Avise a admin.")
+        raise HTTPException(409, _FOTOS_SEM_DRIVE)
     tok = _acesso(p["dono"])
     pasta = _subpasta_da_dona(tok, p["pasta_id"], FOTOS)
     dia = _hoje_no_brasil()
