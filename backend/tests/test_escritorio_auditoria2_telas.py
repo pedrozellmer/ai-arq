@@ -999,3 +999,132 @@ def test_a_tela_de_fotos_troca_o_botao_pelo_aviso_e_o_409_nao_oferece_tentar_de_
     assert "${semPastaPraFotos() ? `<div class=\"aviso\">${avisoSemPastaPraFotos()}</div>` : ''}" in t
     e = funcao_js("enviarFotos", "escritorio.html", E)
     assert e.index("if (r.status === 409) { fecharModal(); return naoDaPraSubirFotos(") < e.index("b.textContent = 'Tentar de novo'")
+
+
+# ══ 13. grupo C dos achados pequenos (13/10): o que o cliente, o fornecedor e a equipe LEEM ══
+CV = _ler("convite.html")
+CAD = _ler("cadastro.html")
+_CV_BASE = """
+var el = {}, foi = { limpou: [], erro: null, desligou: 0, esqueceu: 0 };
+function $(id) { return el[id] || (el[id] = { textContent: '', hidden: false, href: '' }); }
+var location = { href: '' }, sessionStorage = { removeItem: function () {} };
+var window = { aiarqConvite: { limparSe: function (t) { foi.limpou.push(t); }, pendente: function () { return null; } } };
+var token = 'tok-1', daAba = 'tok-1', m = null, SESSAO = null;
+function desligarConta() { foi.desligou++; } function esquecerAba() { foi.esqueceu++; }
+function erro(t, x, tentar) { foi.erro = [t, x, !!tentar]; }
+function semCodigo() { foi.semCodigo = true; }
+"""
+_CV_PERFIL = [_linha(CV, "  let PERFIL = "), _trecho(CV, "  const OQUE_VAI_PRA_CONTA = {", NL + "  };"),
+              funcao_js("aplicarPerfil", "convite.html", CV), funcao_js("textoDoVencido", "convite.html", CV)]
+
+
+def _convite(cena, expr):
+    return _js([_CV_BASE] + _CV_PERFIL + [sem_await(funcao_js("agoraNao", "convite.html", CV)), funcao_js("recusado", "convite.html", CV), cena], expr)
+
+
+def test_convite_vencido_diz_de_quem_e_pra_qual_projeto_e_oferece_a_conta():
+    """FORA-8: lia-se só "Peça um novo a quem te convidou", sem o nome de quem nem do projeto (o servidor manda os
+    dois), e o único botão levava à página de vendas."""
+    r = _convite("recusado({ status: 410, dados: { projeto: 'Casa Exemplo', convidado_por: 'Estúdio Exemplo' } });",
+                 "{ erro: foi.erro, botao: [el['btn-site'].textContent, el['btn-site'].href] }")
+    assert r["erro"] == ["Este convite venceu", "O convite de Estúdio Exemplo para o projeto Casa Exemplo venceu. Peça um novo a quem te convidou.", False]
+    assert r["botao"] == ["Entrar na minha conta", "login.html?redirect=escritorio.html"]
+    r = _convite("SESSAO = { user: {} }; recusado({ status: 410, dados: {} });", "{ erro: foi.erro, botao: el['btn-site'].textContent }")
+    assert r == {"erro": ["Este convite venceu", "O convite venceu. Peça um novo a quem te convidou.", False], "botao": "Abrir o Escritório"}
+    r = _convite("recusado({ status: 410, dados: { detail: 'Este convite venceu em 01/10.' } });", "foi.erro[1]")
+    assert r == "Este convite venceu em 01/10."                         # o texto do servidor, quando ele manda, vale
+    assert _js(_CV_PERFIL, "textoDoVencido({ projeto: ' Casa Exemplo ' })") == "O convite para o projeto Casa Exemplo venceu. Peça um novo a quem te convidou."
+    # controle: link trocado (404, sem conta) continua com o texto dele e sem mexer no botão
+    r = _convite("recusado({ status: 404, dados: {} });", "{ erro: foi.erro, botao: (el['btn-site'] || {}).textContent || '' }")
+    assert r == {"erro": ["Este link não vale mais", "Peça um novo a quem te convidou.", False], "botao": ""}
+    assert "recusado({ status: 410, dados: { projeto: v.dados.projeto, convidado_por: v.dados.convidado_por } })" in CV
+
+
+def test_agora_nao_de_quem_e_de_fora_nao_manda_pro_painel_do_quantitativo():
+    """FORA-8: o dono da obra clicava "Agora não · voltar ao painel" — um painel que nunca foi dele — e caía em
+    "envie sua prancha", sem porta pro Escritório e sem volta pro convite."""
+    for perfil in ("cliente", "fornecedor"):
+        r = _convite("aplicarPerfil('%s'); agoraNao();" % perfil,
+                     "{ foi: location.href, erro: foi.erro, limpou: foi.limpou, desligou: foi.desligou, botao: el['btn-agora-nao'].textContent, site: el['btn-site'].hidden }")
+        assert r["foi"] == "" and r["erro"][0] == "Tudo bem, fica pra depois" and "abra o link de novo" in r["erro"][1], perfil
+        assert r["botao"] == "Agora não · entro depois pelo link do e-mail" and r["site"] is True
+        assert r["limpou"] == ["tok-1"] and r["desligou"] == 1          # o que já fazia: o painel não traz mais pra cá
+    r = _convite("aplicarPerfil('equipe'); agoraNao();", "{ foi: location.href, erro: foi.erro, botao: el['btn-agora-nao'].textContent }")
+    assert r == {"foi": "dashboard.html", "erro": None, "botao": "Agora não · voltar ao painel"}      # controle: a equipe tem painel
+    assert _convite("aplicarPerfil('qualquer coisa');", "PERFIL") == "equipe"                          # perfil inventado não vira "de fora"
+
+
+def test_conta_com_outro_email_nao_ouve_falar_de_pasta_que_o_perfil_nao_ganha():
+    """FORA-12: "a pasta de arquivos vai ser compartilhada com esta conta" aparecia pro cliente, que nunca recebe pasta."""
+    oque = lambda p: _convite("aplicarPerfil('%s');" % p, "el['p-outra-oque'].textContent")       # noqa: E731
+    assert oque("cliente") == "os arquivos que o escritório mandar pra você vão ser compartilhados com"
+    assert oque("fornecedor") == "a pasta que o escritório separar pra você vai ser compartilhada com"
+    assert oque("equipe") == "a pasta de arquivos vai ser compartilhada com"
+    assert 'só lembre que <span id="p-outra-oque">a pasta de arquivos vai ser compartilhada com</span> <b>esta</b> conta.' in CV
+    # o perfil chega nos DOIS caminhos (com o código do convite e pelo e-mail da conta)
+    assert "aplicarPerfil(perfil);" in funcao_js("iniciar", "convite.html", CV)
+    assert "aplicarPerfil(c.perfil);" in funcao_js("escolherConvite", "convite.html", CV)
+    assert '<meta name="description" content="Você foi convidado para um projeto no AI.arq.">' in CV
+
+
+def test_cadastro_curto_de_quem_e_de_fora_nao_vende_o_quantitativo():
+    """FORA-11. Guarda de TEXTO, declarado: a caixa do beta some e os textos do WhatsApp falam do projeto."""
+    i = CAD.index("if (_convite.perfil === 'cliente' || _convite.perfil === 'fornecedor') {")
+    curto = CAD[i:CAD.index("mostrarFormulario(erroDaChecagem", i)]
+    assert "_conviteDeFora = true;" in curto
+    assert "const beta = document.getElementById('caixa-beta');" in curto and "beta.hidden = true; beta.style.display = 'none';" in curto
+    assert "porque.textContent = 'Usamos seu e-mail pra te avisar sobre este projeto, e o WhatsApp se der algum problema." in curto
+    assert "planilha" not in curto.split("// 🩸 13/10")[1].split("_conviteDeFora = true;")[1]        # o que ele passa a ler não fala de planilha
+    assert '<div id="caixa-beta" class="flex items-start' in CAD and '<p id="whats-porque" class="text-xs' in CAD
+    assert "let _conviteDeFora = false;" in CAD
+    j = CAD.index("showError(_conviteDeFora")
+    assert "se der algum problema.'" in CAD[j:j + 400] and "quando a planilha ficar pronta.');" in CAD[j:j + 520]   # o de sempre continua pros outros
+
+
+def _perfis(admin):
+    return _js(["function souAdmin() { return %s; }" % admin, _trecho(E, "const textoDosPerfis = () => (souAdmin()", NL + "      escolhe: 'a admin escolher', marca: 'a equipe marcar', drive: 'Drive da admin' });")],
+               "textoDosPerfis()")
+
+
+def test_a_equipe_nao_le_que_convida_nem_que_libera():
+    """ADM-16: "Quem você convida…", "só quem você liberar abaixo", "o resto do seu Drive" apareciam pra qualquer um da equipe."""
+    eq, adm = _perfis("false"), _perfis("true")
+    assert "você" not in " ".join(eq.values()) and eq["libera"] == "a admin liberar" and eq["drive"] == "Drive da admin"
+    assert adm["titulo"].startswith("Quem você convida") and adm["libera"] == "você liberar abaixo" and adm["drive"] == "seu Drive"
+    t = funcao_js("telaEquipe", "escritorio.html", E)
+    assert "<b>${quemFala.titulo}</b>" in t and "só quem ${quemFala.libera}." in t and "o resto do ${quemFala.drive}." in t
+    assert "você convida" not in t and "você liberar" not in t and "seu Drive" not in t          # nada mais fixo na tela
+    assert "souAdmin() ? 'Ligar a pasta do Drive' : 'Pasta do Drive ainda não ligada'" in E
+
+
+def _conta_google(papel):
+    pre = "var PAPEL = %s; function souAdmin() { return PAPEL === 'dono'; } function souFornecedor() { return PAPEL === 'fornecedor'; }" % json.dumps(papel)
+    return _js([pre, _trecho(E, "const avisoDaContaGoogle = () => (souAdmin() ? ''", "</p>`);")], "avisoDaContaGoogle()")
+
+
+def test_o_fornecedor_nao_le_que_pode_editar_os_arquivos():
+    """FORA-12: a pasta dele é só pra ler."""
+    assert "abrir e editar" not in _conta_google("fornecedor") and "Você só lê" in _conta_google("fornecedor")
+    assert "Pra abrir e editar os arquivos" in _conta_google("freela")
+    assert _conta_google("dono") == ""
+
+
+def _lista_diz(projetos):
+    return _js(["var PROJETOS = " + json.dumps(projetos) + ";", _trecho(E, "const oQueALista = () => {", NL + "};")], "oQueALista()")
+
+
+def test_a_lista_de_quem_e_so_de_fora_nao_promete_atas_equipe_nem_pasta():
+    """FORA-12: o cliente com dois projetos lia "tarefas, atas, equipe e a pasta do Drive de cada um"."""
+    cli, forn, meu = {"externo": True, "papel_externo": "cliente"}, {"externo": True, "papel_externo": "fornecedor"}, {"dono": "u1"}
+    assert _lista_diz([cli, cli]) == "as emissões, as pendências e as fotos de cada um"
+    assert _lista_diz([forn, forn]) == "as suas tarefas, os arquivos e as fotos de cada um"
+    assert _lista_diz([cli, forn]) == "o que o escritório separou pra você em cada um"
+    assert _lista_diz([meu, cli]) == "tarefas, atas, equipe e a pasta do Drive de cada um"      # controle: quem tem projeto próprio
+    assert "${n} projeto${n > 1 ? 's' : ''}: ${oQueALista()}." in funcao_js("telaLista", "escritorio.html", E)
+
+
+def test_o_cronograma_do_cliente_nao_promete_o_que_pode_nunca_vir():
+    """FORA-13. Guarda de TEXTO, declarado."""
+    c = funcao_js("carregarCronogramaCliente", "escritorio.html", E)
+    assert "<b>Este projeto ainda não tem cronograma por aqui</b><p>Se o escritório montar o cronograma da obra no AI.arq," in c
+    assert "<p>Quando o escritório montar" not in E and "O cronograma ainda não foi montado" not in E     # a promessa saiu da tela
