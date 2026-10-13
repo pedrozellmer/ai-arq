@@ -6347,7 +6347,8 @@ def _build_leu_sem_medir_email(name: str, project_name: str, job_id: str,
                                email: str = "", so_pdf: bool = False,
                                area_informada_serve: bool = True,
                                mediu_a_prancha: bool = False,
-                               dwg_nao_abriu: bool = False):
+                               dwg_nao_abriu: bool = False,
+                               cad_com_escala_provada: bool = False):
     """O TERCEIRO e-mail: 'li o seu desenho, mas não medi nada dele'.
 
     🩸 06/09/2026, visto AO VIVO. O cliente-15 subiu 3 PDFs de uma guarita e
@@ -6389,6 +6390,16 @@ def _build_leu_sem_medir_email(name: str, project_name: str, job_id: str,
       · `dwg_nao_abriu`: 1 DWG que não converteu + PDFs contava como "só PDF",
         e o motivo dizia "regra nossa, não um defeito do seu arquivo" logo
         antes de "⚠ Seu arquivo DWG não abriu". O motivo é o DWG.
+
+    🩸 13/10/2026 — um DWG lido inteiro, com a escala provada por 200 cotas, e
+    o e-mail dizia "o motivo costuma ser escala: sem cota…" e "o que resolve:
+    mande a mesma planta em DXF" — duas linhas acima do aviso "✅ Escala
+    conferida pelo próprio desenho". Reenviar em DXF não muda nada (o DWG vira
+    DXF aqui dentro). 📏 Em 60 dias: 23 destes e-mails "do CAD", 4 com a escala
+    conferida no próprio aviso. `cad_com_escala_provada` (quem chama olha o
+    mesmo resumo de escala que escreve o ✅) troca o motivo pelo que o aviso já
+    diz — a escala é um passo, ligar a medida a um item é outro — e tira o
+    conselho do DXF. O padrão mantém o texto de antes.
     """
     import html as _hs
     _pn = (project_name or "").strip()
@@ -6431,6 +6442,13 @@ def _build_leu_sem_medir_email(name: str, project_name: str, job_id: str,
             "gente nunca marca um número como medido — a IA lê a prancha e "
             "<b>estima</b>, e medido só sai da geometria de um DWG ou DXF."
             + _dos_zerados + "<br><br>")
+    elif cad_com_escala_provada:
+        _motivo = (
+            "O motivo não é a escala nem o formato do arquivo: o seu CAD foi lido "
+            "e a escala dele foi conferida pelo próprio desenho. Saber a escala é "
+            "um passo; ligar cada medida a um item da "
+            "lista é outro, e foi nesse que a gente parou — e a gente não marca "
+            "como medido o que não consegue sustentar.<br><br>")
     else:
         _motivo = (
             "O motivo costuma ser escala: sem cota, sem carimbo confiável e sem "
@@ -6438,6 +6456,17 @@ def _build_leu_sem_medir_email(name: str, project_name: str, job_id: str,
             "a gente não inventa medida.<br><br>")
     _area = (" Se só existe o PDF, me diga a área total no upload — entra como "
              "informada por você, nunca como medida." if area_informada_serve else "")
+    if cad_com_escala_provada and not so_pdf and not dwg_nao_abriu:
+        _resolve = (
+            "<b>Não precisa reenviar em outro formato:</b> DWG e DXF dão a mesma "
+            "leitura aqui. Os avisos do projeto dizem o que pesou no seu arquivo; se "
+            "algum deles for coisa que dá pra ajustar no desenho, ajuste e envie de "
+            "novo no mesmo projeto — a gente refaz, de graça.")
+    else:
+        _resolve = (
+            "<b>O que resolve:</b> mande a mesma planta em <b>DXF</b> (no AutoCAD "
+            "ou BricsCAD: Salvar Como → DXF 2013) no mesmo projeto. A gente refaz "
+            f"medindo de verdade, de graça.{_area}")
     _fato = ("nenhuma linha da planilha saiu marcada como medida" if mediu_a_prancha
              else f"nenhuma quantidade foi medida {_de_onde}")
     corpo = (
@@ -6452,9 +6481,7 @@ def _build_leu_sem_medir_email(name: str, project_name: str, job_id: str,
         f"quantitativo pronto</b>. Prefiro te dizer isso agora do que deixar "
         f"você descobrir na hora de orçar.<br><br>"
         f"{_motivo}"
-        f"<b>O que resolve:</b> mande a mesma planta em <b>DXF</b> (no AutoCAD "
-        f"ou BricsCAD: Salvar Como → DXF 2013) no mesmo projeto. A gente refaz "
-        f"medindo de verdade, de graça.{_area}"
+        f"{_resolve}"
         f"{extra_body_html}"
         + _bloco_avaliar_projeto(job_id, email, sem_medida=True))
     if mediu_a_prancha:
@@ -22177,12 +22204,23 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     from engine_rules import area_informada_mudaria_a_planilha as _area_muda
                     _area_serve = _area_muda(all_items, sum(
                         float((_r or {}).get("rooms_m2") or 0) for _r in _pp_email.values()))
+                    # 🩸 13/10: com a escala de TODO CAD do envio conferida (o
+                    # mesmo resumo que escreve o "✅ Escala conferida"), o motivo
+                    # não é escala e reenviar em DXF não resolve. Ver o montador.
+                    try:
+                        _esc_email = list(_escala_arqs)
+                    except NameError:
+                        _esc_email = []     # fatia sem o laço dos CAD
+                    _esc_provada = bool(_esc_email) and all(
+                        (_a or {}).get("status") in ("cotas", "rotulo", "consenso", "nota")
+                        for _a in _esc_email)
                     _subj_pp, _html_pp = _build_leu_sem_medir_email(
                         _nm, _rows[0].get("project_name") or "", job_id,
                         len(all_items), _n_zerado, f"{_aviso_html}{_diag}", email=_pe,
                         so_pdf=(_veio_pdf and not dwg_failed),
                         area_informada_serve=_area_serve,
-                        mediu_a_prancha=bool(_medimos), dwg_nao_abriu=bool(dwg_failed))
+                        mediu_a_prancha=bool(_medimos), dwg_nao_abriu=bool(dwg_failed),
+                        cad_com_escala_provada=_esc_provada)
                     _log_error("motor:leu-sem-medir",
                                f"itens={len(all_items)} medidos=0 zerados={_n_zerado} "
                                f"— e-mail trocado por 'identifiquei, mas não medi'", job_id)

@@ -39,7 +39,9 @@ def _corpo_do_process_job():
     """O trecho que escolhe qual e-mail sai."""
     src = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
     i = src.index("_nada_medido = (len(all_items) > 0")
-    return src[i:i + 4000], src
+    # 13/10: 4000 → 5000 — o trecho ganhou as linhas da escala provada
+    # (`cad_com_escala_provada`) e o `log_kind` saiu da janela.
+    return src[i:i + 5000], src
 
 
 # ─────────────────────────────────────────────────────────────────────────────
