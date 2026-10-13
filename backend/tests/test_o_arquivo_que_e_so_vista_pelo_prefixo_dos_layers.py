@@ -50,6 +50,9 @@ NAO_VISTA = ["Planta Baixa", "Pav.tipo 1", "Terraço", "Cobertura", "MAPA CHAVE"
 @pytest.fixture(autouse=True)
 def _chave(monkeypatch):
     monkeypatch.delenv(CHAVE, raising=False)
+    # a régua irmã (o mapa-chave fora das medidas) tem chave própria: aqui fica em 0,
+    # pra esta régua ser medida sozinha — as duas juntas têm o teste delas no fim
+    monkeypatch.setenv("MAPA_CHAVE_DO_ARCHICAD_FORA", "0")
 
 
 @pytest.mark.parametrize("nome", VISTA)
@@ -371,6 +374,15 @@ def test_a_caixa_do_arquivo_contem_tudo_o_que_tem_posicao():
     assert not dx._dentro((0.0, 0.0), cx)
     vazia = dx._caixa_do_arquivo([_parede("X", 1.0)], [], [], [])
     assert dx._dentro((123456.0, -98765.0), vazia) and dx._dentro((0.0, 0.0), vazia)
+
+
+def test_com_as_duas_reguas_ligadas_o_mapa_chave_sai_antes_e_o_corte_e_vista_do_mesmo_jeito(tmp_path, monkeypatch):
+    monkeypatch.delenv("MAPA_CHAVE_DO_ARCHICAD_FORA", raising=False)
+    ex = dx.extract_dxf(_dxf(tmp_path))
+    assert ex.folhas["desenhos_lista"][0]["titulo"] == "Corte AA" and ex.folhas["origem"] == "prefixo dos layers"
+    assert ex.folhas["vista_pelo_prefixo"]["m_mapa_chave"] == 0.0 and ex.folhas["vista_pelo_prefixo"]["fracao"] == 1.0
+    assert 990 < ex.metadata["mapa_chave_fora"]["m"] < 1010
+    assert _metros(ex) == 0.0 and _area(ex) == 12.0
 
 
 # ── o log e a chave ──────────────────────────────────────────────────────────

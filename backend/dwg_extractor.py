@@ -316,6 +316,9 @@ class DXFExtraction:
                                            # 13/10: rastro; o texto é o do aviso
                                            # que a cota superou
                                            "extensao_superada_pela_cota_que_corrigiu",
+                                           # 13/10: rastro do que saiu com o
+                                           # mapa-chave do ArchiCAD (log)
+                                           "mapa_chave_fora",
                                            # 12/10: a marca do extract_dxf com as
                                            # chaves que ELE tira do prompt (ver
                                            # AREAS_DO_QUADRO_FORA_DO_PROMPT)
@@ -7468,6 +7471,66 @@ def _caixa_do_arquivo(walls, hatches, polygon_areas, blocks) -> tuple:
     return (min(xs), min(ys), max(xs), max(ys))
 
 
+# ════════════════════════════════════════════════════════
+#  O MAPA-CHAVE DO ARCHICAD FICA FORA DAS MEDIDAS (13/10/2026)
+# ════════════════════════════════════════════════════════
+# 🩸 No mesmo projeto do corte lido como planta: em TODA prancha o layer
+# "001_MAPA CHAVE_2_0" — a obra inteira desenhada de novo numa vista minúscula,
+# pra mostrar onde a prancha fica — tinha ~69 a 70 km de linha na medição:
+# 68.891 m dos 80.342 m da planta térrea (85,7 %) e 70.036 m dos 78.870 m do
+# arquivo de corte (88,8 %). Nenhuma linha da planilha saiu dele; mas ele era a
+# soma do arquivo, e qualquer régua que olhe o comprimento total olhava o
+# mapa-chave.
+# 🔑 Quem diz que é mapa-chave é o CAMPO DO DESENHO do prefixo do ArchiCAD
+# ("<id>_<desenho>_<n>_<layer>") — a mesma leitura de
+# `vista_pelo_prefixo_dos_layers`. Sai por LAYER, não por posição: o trecho, a
+# área (hachura e contorno fechado) e a inserção de bloco que estão nele.
+# 🪤 Só a convenção do ArchiCAD: um layer comum chamado "MAPA CHAVE", ou o
+# título "PLANTA CHAVE" numa janela, continuam com a leitura por folha de
+# sempre. E a LEGENDA posta na folha ("LG_…") fica como está: não há dano
+# medido dela.
+# 📏 No acervo (326 DWG) nenhum arquivo tem layer assim — o único mapa-chave em
+# layer é a inserção de um DWG num layer "<arquivo> - Mapa Chave - …_dwg", fora
+# da convenção. O alcance é o caso.
+def layer_de_mapa_chave_do_archicad(layer) -> bool:
+    """O layer é de um desenho do ArchiCAD cujo NOME é mapa-chave / planta-chave
+    / key plan ("001_MAPA CHAVE_2_0")?"""
+    m = _RE_LAYER_DE_DESENHO_DO_ARCHICAD.search(str(layer or ""))
+    return bool(m and _RE_NOME_DE_MAPA_CHAVE.search(_sem_acento_minusculo(m.group(2))))
+
+
+def tirar_o_mapa_chave(walls, hatches, polygon_areas) -> dict:
+    """Tira das medidas o que está em layer de mapa-chave do ArchiCAD — muta as
+    listas no lugar. Devolve {} quando não há; senão {"layers", "m", "m2"}. A
+    inserção de bloco nesse layer é descartada na própria contagem (ver
+    `extract_dxf`). Nunca levanta."""
+    try:
+        layers, m, m2 = set(), 0.0, 0.0
+        ficam = []
+        for w in walls:
+            if layer_de_mapa_chave_do_archicad(w.layer):
+                layers.add(str(w.layer))
+                m += float(w.length)
+            else:
+                ficam.append(w)
+        walls[:] = ficam
+        for lista in (hatches, polygon_areas):
+            ficam = []
+            for h in lista:
+                if layer_de_mapa_chave_do_archicad(h.layer):
+                    layers.add(str(h.layer))
+                    m2 += float(h.area)
+                else:
+                    ficam.append(h)
+            lista[:] = ficam
+        if not layers:
+            return {}
+        return {"layers": sorted(layers)[:6], "m": round(m, 1), "m2": round(m2, 1)}
+    except Exception as e:                       # nunca derruba a extração
+        logger.warning("tirar_o_mapa_chave: %s", e)
+        return {}
+
+
 def mapa_de_folhas(doc) -> dict:
     """Os desenhos do modelspace, pelas folhas: [{folha, titulo, tipo, andares, caixa}].
 
@@ -10218,6 +10281,9 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
     # `nome_de_anotacao_do_revit`. Muda CONTAGEM. Chave:
     # FAMILIA_DE_ANOTACAO_DO_REVIT=0 volta ao guarda antigo, sem deploy.
     _anotacao_do_revit = os.environ.get("FAMILIA_DE_ANOTACAO_DO_REVIT", "1") != "0"
+    # 13/10: o mapa-chave do ArchiCAD fica fora das medidas (`tirar_o_mapa_chave`)
+    _mapa_chave_fora = os.environ.get("MAPA_CHAVE_DO_ARCHICAD_FORA", "1") != "0"
+    _mapa_chave_blocos = 0
 
     def _is_annotation_block(name: str) -> bool:
         if not name:
@@ -10462,6 +10528,10 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
                     _dinamico_de[bname] = _nome_do_bloco_dinamico(doc, bname)
                 if _dinamico_de[bname]:
                     _dinamicos[_dinamico_de[bname]] = _dinamicos.get(_dinamico_de[bname], 0) + 1
+            continue
+        # 13/10: a inserção no layer do mapa-chave do ArchiCAD (ver `tirar_o_mapa_chave`)
+        if _mapa_chave_fora and layer_de_mapa_chave_do_archicad(layer):
+            _mapa_chave_blocos += 1
             continue
         # Skip utility / system layers that don't represent real items
         if layer and layer.upper() in _UTILITY_LAYERS_UPPER:
@@ -11297,6 +11367,14 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         metadata["amostras_legenda"] = "%d em %d layer(s), %.2f m2" % (
             len(_amostras), len({h.layer for h in _amostras}),
             sum(h.area for h in _amostras))
+    # 13/10: o mapa-chave do ArchiCAD fica fora das medidas (ver `tirar_o_mapa_chave`)
+    # — AQUI, antes de tudo o que deriva das paredes e das áreas (eixo, espessura
+    # × unidade, leitura por folha). Chave: MAPA_CHAVE_DO_ARCHICAD_FORA=0.
+    if _mapa_chave_fora:
+        _mc = tirar_o_mapa_chave(walls, hatches, polygon_areas)
+        if _mc or _mapa_chave_blocos:
+            metadata["mapa_chave_fora"] = dict(_mc or {"layers": [], "m": 0.0, "m2": 0.0},
+                                               blocos=_mapa_chave_blocos)
 
     # ---- Texts ------------------------------------------------------------
     texts: list[TextAnnotation] = []

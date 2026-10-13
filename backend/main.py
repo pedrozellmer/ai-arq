@@ -1216,6 +1216,21 @@ def _ambientes_resumo(extraction) -> str:
                 int(a.get("em_quadro") or 0)))
 
 
+def _mapa_chave_fora_resumo(extraction) -> str:
+    """O que saiu das medidas com o mapa-chave do ArchiCAD, pro fim da linha
+    `motor:parede-medida` ("" quando nada saiu). O arquivo é apagado depois do
+    job: sem isto não dá pra medir na produção quanto o mapa-chave pesava."""
+    try:
+        mc = (getattr(extraction, "metadata", None) or {}).get("mapa_chave_fora") or {}
+        if not mc:
+            return ""
+        return " | mapa_chave_fora=[%s: %sm %sm2 %sbl]" % (
+            "; ".join(str(x)[:40] for x in (mc.get("layers") or [])[:3]) or "-",
+            mc.get("m", 0), mc.get("m2", 0), mc.get("blocos", 0))
+    except Exception:
+        return ""
+
+
 def _leitura_por_folha_resumo(extraction) -> str:
     """Uma linha pro log: o que a leitura por folha fez nesta prancha.
 
@@ -10452,7 +10467,7 @@ _CHAVES_AVALIAVEIS = frozenset({
     "LEGENDA_PELA_FORMA", "LEGENDA_POR_COLUNA", "LEITURA_POR_FOLHA", "VISTAS_DA_MESMA_BASE",
     "AREAS_DO_QUADRO_FORA_DO_PROMPT", "SIMBOLO_DE_NIVEL_E_ANOTACAO",
     "FAMILIA_DE_ANOTACAO_DO_REVIT", "COTA_QUE_CORRIGE_SUPERA_EXTENSAO",
-    "VISTA_PELO_PREFIXO_DOS_LAYERS",
+    "VISTA_PELO_PREFIXO_DOS_LAYERS", "MAPA_CHAVE_DO_ARCHICAD_FORA",
 })
 _CHAVES_DA_AVALIACAO: dict = {}        # job de avaliação → {chave: "0" | "1"}
 
@@ -16166,10 +16181,11 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                                        reverse=True)[:8]
                         _log_error(
                             "motor:parede-medida",
-                            "arq=%s layers_de_parede=%d soma=%.2f m | topo: %s"
+                            "arq=%s layers_de_parede=%d soma=%.2f m | topo: %s%s"
                             % (os.path.basename(dxf_path), len(_wl), _soma_par,
                                " · ".join("%s=%.1f" % (k, float(v or 0))
-                                          for k, v in _topo)),
+                                          for k, v in _topo),
+                               _mapa_chave_fora_resumo(extraction)),
                             job_id)
                         # 🩸 09/09 — O ESPELHO QUE FALTAVA: existia o log de
                         # PAREDE por layer e nenhum de ÁREA. No job 43c52488 o
