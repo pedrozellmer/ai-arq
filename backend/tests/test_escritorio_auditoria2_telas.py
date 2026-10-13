@@ -1142,3 +1142,181 @@ def test_o_cronograma_do_cliente_nao_promete_o_que_pode_nunca_vir():
     c = funcao_js("carregarCronogramaCliente", "escritorio.html", E)
     assert "<b>Este projeto ainda não tem cronograma por aqui</b><p>Se o escritório montar o cronograma da obra no AI.arq," in c
     assert "<p>Quando o escritório montar" not in E and "O cronograma ainda não foi montado" not in E     # a promessa saiu da tela
+
+
+# ══ 14. grupo D dos achados pequenos (13/10): menu e visual ══
+_ARMAZEM = """
+function armazem(inicial) {
+  var d = inicial || {}, gravou = 0;
+  return { dados: d, gravou: function () { return gravou; },
+    getItem: function (k) { return Object.prototype.hasOwnProperty.call(d, k) ? d[k] : null; },
+    setItem: function (k, v) { d[k] = String(v); gravou++; }, removeItem: function (k) { delete d[k]; } };
+}
+"""
+ID_A, ID_B = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+
+
+def _esquece(ctx, mapa, alvo=ID_A):
+    pre = (_ARMAZEM + "var sessionStorage = armazem(" + json.dumps({"aiarq_esc_ctx": json.dumps(ctx)} if ctx else {}) + "),"
+           "localStorage = armazem(" + json.dumps({"aiarq_esc_mapa": json.dumps(mapa)}) + ");")
+    return _js([pre, funcao_js("esquecerProjeto", "escritorio.html", E), "esquecerProjeto(" + json.dumps(alvo) + ");"],
+               "{ ctx: sessionStorage.getItem('aiarq_esc_ctx'), mapa: JSON.parse(localStorage.getItem('aiarq_esc_mapa')), gravou: localStorage.gravou() }")
+
+
+def test_projeto_apagado_sai_da_lembranca_do_navegador():
+    """NAV-7: a 1ª página do projeto medido ainda nascia com o menu do Escritório, com links pra projeto que não existe."""
+    r = _esquece({"job": "j1", "id": ID_A}, {"j1": {"id": ID_A, "uid": "u1"}, "j2": {"id": ID_B, "uid": "u1"}})
+    assert r == {"ctx": None, "mapa": {"j2": {"id": ID_B, "uid": "u1"}}, "gravou": 1}
+    r = _esquece({"job": "j2", "id": ID_B}, {"j2": {"id": ID_B, "uid": "u1"}})          # controle: é de OUTRO projeto — fica
+    assert json.loads(r["ctx"])["id"] == ID_B and r["mapa"] == {"j2": {"id": ID_B, "uid": "u1"}} and r["gravou"] == 0
+    a = funcao_js("apagarProjeto", "escritorio.html", E)
+    assert a.index("esquecerProjeto(id);") < a.index("location.replace('#/'); toast('Projeto apagado');")
+    assert not re.search(r"\n\s*location\.hash = '#/'", a)                               # NAV-8: troca, não empilha (como instrução)
+
+
+def test_projeto_que_nao_abre_troca_o_endereco_e_diz_por_que():
+    """NAV-8: `location.hash = '#/'` empilhava a lista — o Voltar levava ao projeto que não abre, que empilhava de
+    novo: o botão Voltar nunca saía do Escritório. E quem saiu do projeto caía na lista sem explicação."""
+    cena = ("var trocas = []; location.replace = function (u) { trocas.push(u); location.hash = u; };"
+            "carregarProjeto = function () { return false; }; navegar();")
+    r = _js([_NAV_BASE, sem_await(funcao_js("navegar", "escritorio.html", E)), cena],
+            "{ trocas: trocas, hash: location.hash, avisos: avisos, pintou: pintou }")
+    assert r == {"trocas": ["#/"], "hash": "#/", "avisos": [["Esse projeto não está mais disponível pra você.", True]], "pintou": []}
+    r = _js([_NAV_BASE, sem_await(funcao_js("navegar", "escritorio.html", E)), "RESUMO_LIDO = false;" + cena], "avisos")
+    assert r == [["Não consegui abrir o projeto agora: recarregue a página em instantes.", True]]   # "não li" não é "não existe"
+    r = _navega("navegar();")                                                            # controle: o projeto que abre não avisa nada
+    assert r["avisos"] == [] and r["pintou"] == ["tarefas:a"]
+
+
+def test_projeto_concluido_nao_deixa_a_ultima_bolinha_azul():
+    etapa = lambda i, ia, c: _js([_linha(E, "const classeDaEtapa = "), _linha(E, "const numDaEtapa = ")],      # noqa: E731
+                                 "[classeDaEtapa(%d, %d, %s), numDaEtapa(%d, %d, %s)]" % (i, ia, c, i, ia, c))
+    assert etapa(8, 8, "true") == ["feita", "✓"]                         # concluído: a última também está feita
+    assert etapa(8, 8, "false") == ["atual", 9] and etapa(3, 8, "false") == ["feita", "✓"] and etapa(5, 2, "false") == ["", 6]
+    assert etapa(5, 2, "true") == ["feita", "✓"]
+    assert 'class="etp ${classeDaEtapa(i, iA, !!p.concluido_em)}"' in funcao_js("telaCapa", "escritorio.html", E)
+    assert 'class="etp ${classeDaEtapa(i, iA, !!CONCL_EXT)}"' in funcao_js("telaVisaoCliente", "escritorio.html", E)
+    assert "${numDaEtapa(i, iA, !!p.concluido_em)}" in E and "${numDaEtapa(i, iA, !!CONCL_EXT)}" in E
+
+
+_ETAPAS9 = ["Briefing", "Estudo", "Anteprojeto", "Legal", "Executivo", "Detalhamento", "Compatibilização", "Obra", "Entrega"]
+
+
+def _na_lista(p):
+    return _js(_ETAPA_NA_LISTA, "etapaNaLista(" + json.dumps({"etapas": _ETAPAS9, "etapa_atual": "Executivo", **p}) + ")")
+
+
+def test_a_barra_da_lista_segue_o_perfil_e_o_peso_das_etapas():
+    """BANCO-6: o fornecedor (que não vê andamento) via etapa e barra; o cliente via 33% na lista e 41% na capa.
+    ADM-14: com peso personalizado, a lista dizia 44% e a capa 31% pra mesma parte concluída."""
+    assert _na_lista({"externo": True, "papel_externo": "fornecedor"}) is None
+    assert _na_lista({"externo": True, "papel_externo": "cliente"}) == {"etapa": "Executivo", "de": "etapa 5 de 9", "pct": None}
+    assert _na_lista({})["pct"] == 44                                                    # pesos iguais: 4 de 9, como sempre
+    assert _na_lista({"etapa_pesos": {"Executivo": 5}})["pct"] == 31                     # 4 de 13: a parte escura da capa
+    assert _na_lista({"concluido_em": "2026-10-12T12:00:00+00:00"})["pct"] == 100
+    assert _na_lista({"etapa_atual": "Etapa que não existe"}) == {"etapa": "Etapa que não existe", "de": "", "pct": 0}
+    assert _na_lista({"etapas": []}) is None
+    forn = {"id": "p1", "nome": "Casa", "etapas": _ETAPAS9, "etapa_atual": "Executivo", "externo": True, "papel_externo": "fornecedor"}
+    t = _lista("true", "true", [forn, {**forn, "id": "p2"}])
+    assert 'class="barra"' not in t and "etapa 5 de 9" not in t and "Você é fornecedor" in t
+    t = _lista("true", "true", [{**forn, "papel_externo": "cliente"}])
+    assert 'class="barra"' not in t and "etapa 5 de 9" in t
+    t = _lista("true", "true", [{**forn, "externo": False, "dono": "u1"}], no_piloto="true")
+    assert '<div class="barra"><i style="width:44%"></i></div>' in t                     # controle: o projeto da pessoa
+
+
+def _menu(esc, expr, extra=""):
+    pre = ("var JOB = 'j1', ESC = " + json.dumps(esc) + "; function url(p) { return p + '?job_id=' + JOB; }")
+    return _js([pre, funcao_js("gruposProjeto", "menu-lateral.js", ML), _linha(ML, "  var DO_DONO = "), funcao_js("nomeDoEscritorio", "menu-lateral.js", ML),
+                funcao_js("pintarMarca", "menu-lateral.js", ML), funcao_js("gruposEscritorio", "menu-lateral.js", ML), extra], expr)
+
+
+_DO_DONO = {"Revisão", "Financeiro", "Comparativo", "Processamento"}
+
+
+def test_o_menu_da_equipe_ja_nasce_sem_as_portas_do_dono():
+    """NAV-10: Revisão, Financeiro e Comparativo apareciam em toda página e sumiam quando o servidor respondia — e, se
+    ele demorasse ou falhasse, ficavam: o clique dava 403."""
+    rotulos = "gruposEscritorio()[1].itens.map(function (i) { return i.rotulo; })"
+    equipe = set(_menu({"id": UUID, "papel": "freela"}, rotulos))
+    dono = set(_menu({"id": UUID, "papel": "dono"}, rotulos))
+    assert not (equipe & _DO_DONO) and {"Quantitativo", "Cronograma", "Memorial"} <= {r.split(" ")[0] for r in equipe}
+    assert _DO_DONO <= dono and dono - equipe == _DO_DONO
+    assert set(_menu({"id": UUID}, rotulos)) == dono                     # lembrança antiga (sem o papel): como era
+    assert "tirarItensDoDono();" in funcao_js("montarEquipe", "menu-lateral.js", ML)     # e o servidor continua tirando
+
+
+def test_o_nome_do_escritorio_entra_no_menu_so_como_texto():
+    """NAV-11: no escritorio.html o grupo tem o nome do escritório; aqui era "Escritório" fixo. 🔒 O nome é texto de
+    gente: nunca vai pra string HTML do menu."""
+    feio = "<img src=x onerror=alert(1)>"
+    assert _menu({"id": UUID, "marca": "  Estúdio Exemplo  "}, "nomeDoEscritorio()") == "Estúdio Exemplo"
+    assert _menu({"id": UUID}, "nomeDoEscritorio()") == "Escritório" and _menu(None, "nomeDoEscritorio()") == "Escritório"
+    assert len(_menu({"id": UUID, "marca": "x" * 200}, "nomeDoEscritorio()")) == 80
+    g = _menu({"id": UUID, "marca": feio}, "[gruposEscritorio()[0].titulo, gruposEscritorio()[0].marca]")
+    assert g == ["Escritório", True]                                     # o título que vira HTML é fixo
+    assert "'<p class=\"side-grp-t\"' + (g.marca ? ' data-marca=\"1\"' : '') + '>' + g.titulo + '</p>'" in ML
+    lado = ("var titulo = { textContent: 'Escritório' }, volta = { lastChild: { textContent: 'Projetos do Escritório' } };"
+            "var side = { querySelector: function (s) { return s === '.side-grp-t[data-marca]' ? titulo : s === '.aiarq-sair-proj' ? volta : null; } };"
+            "pintarMarca(side);")
+    assert _menu({"id": UUID, "marca": feio}, "[titulo.textContent, volta.lastChild.textContent]", lado) == [feio, "Projetos do " + feio]
+    assert _menu(None, "[titulo.textContent, volta.lastChild.textContent]", lado) == ["Escritório", "Projetos do Escritório"]
+    assert ML.count("pintarMarca(side);") == 2                           # ao nascer e quando o banco confirma (aplicarEscritorio)
+    assert "ESC.marca" not in ML[ML.index("side.innerHTML ="):ML.index("document.body.appendChild(side);")]
+
+
+def test_a_lembranca_guarda_o_nome_do_escritorio_e_o_papel():
+    """NAV-10/NAV-11. O que o menu grava; e, declarado, a ligação entre as peças."""
+    pre = (_ARMAZEM + "var localStorage = armazem({}); function uidLocal() { return 'u1'; }")
+    r = _js([pre, _linha(ML, "  function lerMapa() "), funcao_js("gravarMapa", "menu-lateral.js", ML),
+             "gravarMapa('j1', { id: '" + UUID + "', nome: 'Casa', sub: 'Obra', marca: 'Estúdio Exemplo', papel: 'freela' });"
+             "gravarMapa('j2', { id: '" + UUID + "', nome: 'Loja' });"],
+            "JSON.parse(localStorage.getItem('aiarq_esc_mapa'))")
+    assert (r["j1"]["marca"], r["j1"]["papel"], r["j1"]["uid"]) == ("Estúdio Exemplo", "freela", "u1")
+    assert (r["j2"]["marca"], r["j2"]["papel"]) == ("", "")
+    assert "{ job: JOB, id: m.id, nome: m.nome, sub: m.sub, marca: m.marca || '', papel: m.papel || '' }" in ML
+    a = funcao_js("aplicarEscritorio", "menu-lateral.js", ML)
+    assert "marca: String(c.marca || '').slice(0, 80), papel: c.papel === 'freela' || c.papel === 'dono' ? c.papel : '' };" in a
+    eq = funcao_js("montarEquipe", "menu-lateral.js", ML)
+    assert "papel: 'freela' });" in eq and "if (a.escritorio_id && ESC && ESC.id === a.escritorio_id && ESC.papel !== 'freela') {" in eq
+    d = funcao_js("descobrirEscritorio", "menu-lateral.js", ML)
+    assert "papel: 'dono', marca: (ESC && ESC.marca) || '' };" in d
+
+
+def test_o_escritorio_marca_a_aba_com_o_nome_e_o_papel():
+    def marca(admin, marca_js):
+        pre = (_ARMAZEM + "var sessionStorage = armazem({}), localStorage = armazem({});"
+               "var PROJ = { id: '" + UUID + "', job_id: 'j1', nome: 'Casa', etapa_atual: 'Obra' }, EU = { id: 'u1' };"
+               "var MEMBROS = [{ status: 'ativo' }, { status: 'ativo' }], MARCA = " + marca_js + ";"
+               "function souAdmin() { return " + admin + "; }")
+        return _js([pre, funcao_js("marcarContexto", "escritorio.html", E), "marcarContexto();"],
+                   "[JSON.parse(sessionStorage.getItem('aiarq_esc_ctx')), JSON.parse(localStorage.getItem('aiarq_esc_mapa')).j1]")
+    ctx, mapa = marca("true", "{ nome: 'Estúdio Exemplo' }")
+    assert (ctx["marca"], ctx["papel"], mapa["marca"], mapa["papel"], mapa["uid"]) == ("Estúdio Exemplo", "dono", "Estúdio Exemplo", "dono", "u1")
+    ctx, mapa = marca("false", "null")
+    assert (ctx["marca"], ctx["papel"], mapa["papel"]) == ("", "freela", "freela")
+
+
+def _lembra(mapa, linhas, uid="u1"):
+    pre = _ARMAZEM + "var localStorage = armazem(" + json.dumps({"aiarq_esc_mapa": json.dumps(mapa)}) + ");"
+    return _js([pre, funcao_js("lembrarEscritorio", "dashboard.html", D),
+                "lembrarEscritorio(" + json.dumps(linhas) + ", " + json.dumps(uid) + ");"], "JSON.parse(localStorage.getItem('aiarq_esc_mapa'))")
+
+
+def test_o_painel_deixa_a_lembranca_pronta_depois_do_login():
+    """NAV-10: o Sair apaga a lembrança; depois de cada login a 1ª página de cada projeto ligado nascia com o menu
+    antigo e invertia um segundo depois. NAV-7: e o que foi apagado noutro aparelho sai da lembrança."""
+    r = _lembra({}, [{"id": ID_A, "job_id": "j1", "nome": "Casa Exemplo", "etapa_atual": "Obra"}])
+    assert (r["j1"]["id"], r["j1"]["nome"], r["j1"]["sub"], r["j1"]["uid"], r["j1"]["papel"], r["j1"]["marca"]) == \
+        (ID_A, "Casa Exemplo", "Obra", "u1", "dono", "")
+    antes = {"j1": {"id": ID_A, "nome": "Casa", "sub": "Obra · 3 pessoas", "uid": "u1", "t": 5, "marca": "Estúdio Exemplo", "papel": "dono"},
+             "j2": {"id": ID_B, "nome": "Apagado noutro aparelho", "uid": "u1", "t": 4, "papel": "dono"},
+             "j3": {"id": ID_B, "nome": "Sou equipe aqui", "uid": "u1", "t": 3, "papel": "freela"},
+             "j4": {"id": ID_B, "nome": "Lembrança antiga, sem papel", "uid": "u1", "t": 2},
+             "j5": {"id": ID_B, "nome": "De outra conta", "uid": "u2", "t": 1, "papel": "dono"}}
+    r = _lembra(antes, [{"id": ID_A, "job_id": "j1", "nome": "Casa Exemplo", "etapa_atual": "Entrega"}])
+    assert sorted(r) == ["j1", "j3", "j4", "j5"]                         # só o que era DELA como admin e saiu do banco
+    assert (r["j1"]["nome"], r["j1"]["marca"], r["j1"]["sub"], r["j1"]["t"]) == ("Casa Exemplo", "Estúdio Exemplo", "Obra · 3 pessoas", 5)
+    r = _lembra({}, [{"id": "nao-e-uuid", "job_id": "j9", "nome": "x"}, {"id": ID_A, "job_id": None, "nome": "sem medido"}])
+    assert r == {}                                                       # só UUID vira link; sem projeto medido não há menu
+    assert "lembrarEscritorio(r.data, currentUser.id);" in D
