@@ -9108,9 +9108,11 @@ def _linhas_dos_ambientes(amb, limite: int = _AMB_LISTA_MAX) -> list:
         tot = g.get("totais") or []
         if tot and g.get("fora") and tem_desenho:
             # o total escrito FORA das pranchas é de cópia de trabalho ou de quadro solto:
-            # foi dele que saiu o "piso = 491 m²". Diz que existe, não põe o número na frente.
-            ls.append(rec + "(%d total(is)/resumo(s) escrito(s) aqui fora não listado(s): não são"
-                      " área de piso nem de forro)" % sum(k for _n, _v, k in tot))
+            # foi dele que saiu o "piso = 491 m²". Diz que existe, não põe o número na frente
+            # — nem a contagem (13/10: o aviso dizia "N total(is)…"; é a mesma regra das
+            # duas frases de baixo e do corte do nível).
+            ls.append(rec + "(há total/resumo escrito aqui fora; não é listado: não é área de piso"
+                      " nem de forro)")
         elif tot and amb_g:
             ls.append(rec + "(há total escrito %s; não é listado: não é área de piso nem de forro)" % onde)
         elif tot:

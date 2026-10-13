@@ -803,23 +803,33 @@ def test_forro_nao_e_copia_do_piso(qual):
     assert "piso/forro" not in um and "DAQUELE ambiente" not in um
 
 
+#: o aviso do grupo FORA DAS PRANCHAS quando há desenho das pranchas na lista — sem
+#: número e sem contagem (13/10)
+TOTAL_DE_FORA = "(há total/resumo escrito aqui fora; não é listado: não é área de piso nem de forro)"
+
+
 def test_o_total_escrito_fora_das_pranchas_nao_e_posto_na_frente():
     """Com desenho das pranchas na lista, o total do grupo de fora é de cópia de
     trabalho ou de quadro solto: a seção diz que existe, sem o número."""
     ls = dx._linhas_dos_ambientes(dx.ambientes_por_desenho(_tudo(), _mapa()))
     i_fora = next(i for i, l in enumerate(ls) if l.startswith("  [FORA DAS PRANCHAS"))
-    assert "    (1 total(is)/resumo(s) escrito(s) aqui fora não listado(s): não são área de piso nem de forro)" \
-        in ls[i_fora:]
+    assert "    " + TOTAL_DE_FORA in ls[i_fora:]
     assert not any("491" in l for l in ls), "o número do total não aparece em lugar nenhum da seção"
     assert not any("totais/resumos escritos" in l for l in ls)
     assert "    CIRCULAÇÃO = 46.60 m²" in ls[i_fora:], "os ambientes de fora continuam listados"
 
 
-def test_o_aviso_dos_totais_de_fora_conta_as_etiquetas():
+def test_o_aviso_dos_totais_de_fora_nao_traz_numero_nem_contagem():
+    """🩸 13/10/2026 — o aviso dizia "(3 total(is)/resumo(s) escrito(s) aqui fora não
+    listado(s): …)". A contagem também é número na frente da IA: com um total ou
+    com três, a frase é a mesma, uma vez só."""
+    um = dx._linhas_dos_ambientes(dx.ambientes_por_desenho(_tudo(), _mapa()))
     tx = _tudo() + [_t("ÁREA TOTAL = 491,00m²", 240, 25), _t("ÁREA ÚTIL = 351,00m²", 250, 25)]
-    ls = dx._linhas_dos_ambientes(dx.ambientes_por_desenho(tx, _mapa()))
-    assert "    (3 total(is)/resumo(s) escrito(s) aqui fora não listado(s): não são área de piso nem de forro)" in ls
-    assert not any("491" in l or "351" in l for l in ls)
+    tres = dx._linhas_dos_ambientes(dx.ambientes_por_desenho(tx, _mapa()))
+    for ls in (um, tres):
+        assert sum(1 for l in ls if l == "    " + TOTAL_DE_FORA) == 1
+        assert not any("491" in l or "351" in l or "total(is)" in l for l in ls)
+    assert not any(c.isdigit() for c in TOTAL_DE_FORA)
 
 
 # 🩸 12/10/2026 — a lição do "TOTAL = 491 m²" e do corte do nível, levada pra dentro
