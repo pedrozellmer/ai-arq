@@ -760,6 +760,37 @@ def test_a_linha_por_ambiente_vem_ANTES_da_soma_e_da_regra_de_uma_vez(qual):
     assert uma_vez < um.index("⚠ FORRO não é cópia do piso") < um.index("⚠ A área escrita NÃO troca")
 
 
+# 🩸 12/10/2026 — a mesma escola, com a seção: "Piso cerâmico — 193,34 m²", e a
+# observação dizia "valor ajustado para 193,34 excluindo cozinha/refeitório" depois
+# de somar "≈ 350 m²". Número inventado, com a etiqueta como fonte.
+SOMA_EXATA = ("⚠ A quantidade de uma linha tirada desta seção é a área escrita de UM ambiente ou a soma EXATA "
+              "dos ambientes que a observação lista (nome = área, um por um) — nunca um valor 'ajustado', "
+              "'aproximado' ou 'conservador', nem a soma menos alguma coisa. Se não dá pra saber QUAIS ambientes "
+              "recebem o acabamento, quantidade 0 e a lista dos candidatos na observação.")
+
+
+@pytest.mark.parametrize("qual", ["por desenho", "sem desenho"])
+def test_a_quantidade_e_a_area_escrita_ou_a_soma_exata(qual):
+    um = _instrucoes(_as_duas_secoes()[qual])
+    assert um.count(SOMA_EXATA) == 1
+    # logo depois do COMO USAR ("… NUNCA um total escrito.") e antes da regra de uma vez por serviço
+    assert um.index("NUNCA um total escrito.") + len("NUNCA um total escrito.") + 1 == um.index(SOMA_EXATA)
+    assert um.index(SOMA_EXATA) < um.index("⚠ Cada ambiente entra UMA vez em cada serviço")
+    # a linha por ambiente continua sendo o pedido, e vem antes
+    assert um.index("UMA linha POR AMBIENTE") < um.index(SOMA_EXATA)
+    # a frase não traz exemplo de ambiente nem número de área
+    frase = um[um.index(SOMA_EXATA):um.index(SOMA_EXATA) + len(SOMA_EXATA)]
+    assert not any(c.isdigit() for c in frase.replace("quantidade 0", ""))
+
+
+def test_a_frase_da_soma_exata_fica_nas_instrucoes_nao_na_lista():
+    ls = dx._linhas_dos_ambientes(dx.ambientes_por_desenho(_tudo(), _mapa()))
+    i = next(k for k, l in enumerate(ls) if "A quantidade de uma linha tirada desta seção" in l)
+    assert i < next(k for k, l in enumerate(ls) if l.startswith("  ["))
+    assert all(l.startswith("   ") and not l.startswith("    ") for l in ls[i:i + 5]), "no recuo das instruções"
+    assert sum(1 for l in ls if "soma EXATA" in l) == 1
+
+
 @pytest.mark.parametrize("qual", ["por desenho", "sem desenho"])
 def test_forro_nao_e_copia_do_piso(qual):
     um = _instrucoes(_as_duas_secoes()[qual])

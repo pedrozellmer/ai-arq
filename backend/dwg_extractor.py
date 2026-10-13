@@ -9015,6 +9015,17 @@ def _linhas_dos_ambientes(amb, limite: int = _AMB_LISTA_MAX) -> list:
                "   linha POR AMBIENTE, com a área escrita dele. Acabamento sem especificação continua",
                "   sendo uma linha por ambiente; se juntar ambientes numa linha, a quantidade é a",
                "   SOMA das áreas deles — NUNCA um total escrito."]
+    # 🩸 12/10/2026 — avaliação de uma escola com a seção: "Piso cerâmico — 193,34 m²". A
+    # observação somava os ambientes úmidos ("≈ 350 m²") e dizia "valor ajustado para 193,34
+    # excluindo cozinha/refeitório": número inventado, com a etiqueta como fonte. A seção
+    # dizia de onde tirar a quantidade; não dizia que ela é a área escrita ou a soma EXATA,
+    # nem o que fazer quando não dá pra saber quais ambientes levam o acabamento. Casa com a
+    # régua da soma: a observação lista as parcelas, o motor confere a conta.
+    ls += ["   ⚠ A quantidade de uma linha tirada desta seção é a área escrita de UM ambiente ou a",
+           "   soma EXATA dos ambientes que a observação lista (nome = área, um por um) — nunca um",
+           "   valor 'ajustado', 'aproximado' ou 'conservador', nem a soma menos alguma coisa. Se",
+           "   não dá pra saber QUAIS ambientes recebem o acabamento, quantidade 0 e a lista dos",
+           "   candidatos na observação."]
     # 🩸 12/10/2026 — as duas avaliações com o texto de 11/10 (um prédio de 22 ambientes):
     # numa, uma linha por ambiente, como pedido; na outra, UMA linha com a soma de todos
     # (permitida) MAIS três linhas de ambientes que já estavam na soma — 27 m² em dobro.
