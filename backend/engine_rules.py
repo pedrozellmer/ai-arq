@@ -2318,7 +2318,12 @@ _ATRIB_POR_CATEGORIA = (
     # resistência do concreto: fck 25 ≠ fck 30
     ("fck", (_re.compile(r"\bfck\s*(\d{2,3})\b", _re.I),)),
     # dimensão: 10x10 ≠ 25x15
-    ("dimensao", (_re.compile(r"\b(\d{1,3}(?:[.,]\d{1,2})?\s*[x×]\s*\d{1,3}(?:[.,]\d{1,2})?)\b", _re.I),)),
+    # 🩸 14/10/2026 (fc14a25f): em milímetro — "1964mm × 2882mm", "955mm × 2882mm",
+    # "1534mm × 2882mm" — a 1ª não casava (4 dígitos, "mm" colado) e quatro
+    # persianas de largura diferente viraram "1964mm × 2882mm — 4 variantes".
+    ("dimensao", (_re.compile(r"\b(\d{1,3}(?:[.,]\d{1,2})?\s*[x×]\s*\d{1,3}(?:[.,]\d{1,2})?)\b", _re.I),
+                  _re.compile(r"(?<![\d.,])(\d{1,4}(?:[.,]\d{1,2})?\s*mm\s*[x×]\s*\d{1,4}(?:[.,]\d{1,2})?"
+                              r"|\d{1,4}(?:[.,]\d{1,2})?\s*[x×]\s*\d{1,4}(?:[.,]\d{1,2})?\s*mm)(?!\d)", _re.I))),
     # código de projeto/legenda: LM1 ≠ LM2, P3 ≠ P7
     # código de projeto/legenda. 🪤 Aceita HÍFEN e prefixo de 2 letras: sem
     # isso "Porta de madeira PM-01" e "Porta de vidro PV-01" fundiam numa linha
@@ -2354,6 +2359,9 @@ def atributos_distintivos(desc: str) -> dict:
             if m:
                 v = (m.group(1) or "").strip().lower()
                 v = _re.sub(r"\s+", "", v).replace(",", ".")
+                if cat == "dimensao":
+                    # "1964mm×2882" = "1964 x 2882 mm" = "1964×2882"
+                    v = v.replace("mm", "").replace("×", "x")
                 v = v.lstrip("0") or "0"
                 if v:
                     out[cat] = v
