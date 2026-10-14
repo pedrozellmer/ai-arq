@@ -34490,10 +34490,20 @@ def _alerta_nps(row: dict, category: str = "detractor", comentario_depois: bool 
             # /api/nps/comentario — o 1º e-mail já saiu sem ele
             if comentario_depois:
                 _assunto = "💬 Comentário que chegou depois da nota · " + _assunto
+            # 🩸 13/10/2026: dois alertas no mesmo dia com "Cliente: ?" — a carinha da
+            # página do projeto manda `user_name` vazio, e o perfil tinha o nome. Aqui,
+            # dentro da thread, a busca no cadastro não segura a resposta da nota.
+            _nome = (row.get("user_name") or "").strip()
+            if not _nome:
+                try:
+                    _nome = _resolve_client_name(row.get("user_email") or "",
+                                                 str(row.get("user_id") or ""))
+                except Exception:
+                    _nome = ""
             _avisou_nps = _notify_admin(
                 _assunto,
                 f"<b>Resposta:</b> {_rotulo}<br>"
-                f"<b>Cliente:</b> {row.get('user_name') or '?'} ({row.get('user_email') or '?'})<br>"
+                f"<b>Cliente:</b> {_nome or '?'} ({row.get('user_email') or '?'})<br>"
                 f"<b>Comentário:</b> {_com or '(sem comentário)'}"
                 f"{_ctx}<br><br>{_fecho}")
             # 🔒 LGPD (22/09/2026): o e-mail vai no AVISO acima (o Pedro precisa
