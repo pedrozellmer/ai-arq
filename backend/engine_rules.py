@@ -1793,7 +1793,9 @@ def casar_texto_com_regiao(textos, regioes, max_por_regiao=1, min_preenchimento=
     `textos`:  itens com `.position` (x, y) e `.text`/`.layer`
     `regioes`: itens com `.bbox` (x_min, y_min, x_max, y_max), `.area`, `.layer`
 
-    Devolve [{area, layer_da_regiao, texto, layer_do_texto}] — só os pares.
+    Devolve [{area, layer_da_regiao, texto, layer_do_texto, na_vista}] — só os pares.
+    `na_vista` é a marca da REGIÃO que casou (a leitura por folha a pôs dentro de
+    um corte/elevação): quem lista o par decide o que fazer com ela.
 
     🪤 Casa com a MENOR região que contém o texto. Sem isso, o contorno do
     pavimento inteiro engoliria todos os rótulos e cada cômodo receberia a área
@@ -1832,7 +1834,9 @@ def casar_texto_com_regiao(textos, regioes, max_por_regiao=1, min_preenchimento=
             continue
         _regs.append((float(b[0]), float(b[1]), float(b[2]), float(b[3]), float(a),
                       (getattr(r, "layer", "") if not isinstance(r, dict) else r.get("layer")) or "",
-                      "contorno fechado" if "contorno" in _pat.lower() else "hachura"))
+                      "contorno fechado" if "contorno" in _pat.lower() else "hachura",
+                      bool(getattr(r, "na_vista", False) if not isinstance(r, dict)
+                           else r.get("na_vista"))))
     if not _regs:
         return []
     # menor primeiro: o cômodo ganha do pavimento
@@ -1849,7 +1853,7 @@ def casar_texto_com_regiao(textos, regioes, max_por_regiao=1, min_preenchimento=
         if not texto_conta_objeto(s):
             continue
         x, y = float(p[0]), float(p[1])
-        for i, (x0, y0, x1, y1, a, ly, orig) in enumerate(_regs):
+        for i, (x0, y0, x1, y1, a, ly, orig, vista) in enumerate(_regs):
             if x0 <= x <= x1 and y0 <= y <= y1:
                 if usados.get(i, 0) >= max_por_regiao:
                     break
@@ -1861,6 +1865,7 @@ def casar_texto_com_regiao(textos, regioes, max_por_regiao=1, min_preenchimento=
                     "texto": " ".join(str(s).split())[:80],
                     "layer_do_texto": (getattr(t, "layer", "") if not isinstance(t, dict)
                                        else t.get("layer")) or "",
+                    "na_vista": vista,
                 })
                 break
     return pares

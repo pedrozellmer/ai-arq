@@ -1231,6 +1231,19 @@ def _mapa_chave_fora_resumo(extraction) -> str:
         return ""
 
 
+def _rotulo_em_vista_fora_resumo(extraction) -> str:
+    """Quantos pares RÓTULO ↔ ÁREA saíram da seção do prompt por estarem em
+    região de corte/elevação, pro fim da linha `motor:parede-medida` ("" quando
+    nenhum). É por ela que se confere, numa avaliação, que a chave valeu."""
+    try:
+        rv = (getattr(extraction, "metadata", None) or {}).get("rotulo_em_vista_fora") or {}
+        if not rv.get("pares"):
+            return ""
+        return " | rotulo_em_vista_fora=[%s par(es) %sm2]" % (rv.get("pares", 0), rv.get("m2", 0))
+    except Exception:
+        return ""
+
+
 def _leitura_por_folha_resumo(extraction) -> str:
     """Uma linha pro log: o que a leitura por folha fez nesta prancha.
 
@@ -10468,6 +10481,7 @@ _CHAVES_AVALIAVEIS = frozenset({
     "AREAS_DO_QUADRO_FORA_DO_PROMPT", "SIMBOLO_DE_NIVEL_E_ANOTACAO",
     "FAMILIA_DE_ANOTACAO_DO_REVIT", "COTA_QUE_CORRIGE_SUPERA_EXTENSAO",
     "VISTA_PELO_PREFIXO_DOS_LAYERS", "MAPA_CHAVE_DO_ARCHICAD_FORA",
+    "PAR_DE_ROTULO_EM_VISTA_FORA",
 })
 _CHAVES_DA_AVALIACAO: dict = {}        # job de avaliação → {chave: "0" | "1"}
 
@@ -16181,11 +16195,12 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                                        reverse=True)[:8]
                         _log_error(
                             "motor:parede-medida",
-                            "arq=%s layers_de_parede=%d soma=%.2f m | topo: %s%s"
+                            "arq=%s layers_de_parede=%d soma=%.2f m | topo: %s%s%s"
                             % (os.path.basename(dxf_path), len(_wl), _soma_par,
                                " · ".join("%s=%.1f" % (k, float(v or 0))
                                           for k, v in _topo),
-                               _mapa_chave_fora_resumo(extraction)),
+                               _mapa_chave_fora_resumo(extraction),
+                               _rotulo_em_vista_fora_resumo(extraction)),
                             job_id)
                         # 🩸 09/09 — O ESPELHO QUE FALTAVA: existia o log de
                         # PAREDE por layer e nenhum de ÁREA. No job 43c52488 o

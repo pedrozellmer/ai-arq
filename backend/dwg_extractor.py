@@ -319,6 +319,9 @@ class DXFExtraction:
                                            # 13/10: rastro do que saiu com o
                                            # mapa-chave do ArchiCAD (log)
                                            "mapa_chave_fora",
+                                           # 13/10: a marca (e o rastro) do par
+                                           # RÓTULO ↔ ÁREA em região de vista
+                                           "rotulo_em_vista_fora",
                                            # 12/10: a marca do extract_dxf com as
                                            # chaves que ELE tira do prompt (ver
                                            # AREAS_DO_QUADRO_FORA_DO_PROMPT)
@@ -985,18 +988,12 @@ class DXFExtraction:
         # de cada contorno fechado. É o que ataca a linha zerada — 31,7% das
         # linhas saíam sem quantidade, e 514 delas já citavam a camada.
         try:
-            from engine_rules import casar_texto_com_regiao as _casar
-            # Hachura JUNTO com contorno fechado: medi em 09/08 que polilinha
-            # fechada quase não existe nos projetos reais, e a hachura é a fonte
-            # mais comum das medições que funcionam.
-            # 🪤 Não duplica: cada região aceita 1 rótulo e cada rótulo casa com
-            # UMA região (a menor que o contém) — se a mesma área existe como
-            # hachura E como contorno, o texto vai pra uma só.
-            # 🩸 11/10, A/B no acervo: a ETIQUETA solta (ATTDEF: "PA7", "B01") não é
-            # rótulo de região — caía dentro da hachura do próprio símbolo ("PA7" →
-            # 0,26 m²) ou do cômodo onde a porta está (507 linhas novas em 12 arquivos).
-            _pares = _casar([_t for _t in self.texts if not getattr(_t, "de_attdef", False)],
-                            list(self.polygon_areas) + list(self.hatches))
+            _pares = pares_rotulo_regiao(self.texts, self.polygon_areas, self.hatches)
+            # 13/10: o par cuja região está DENTRO de corte/elevação sai (ver
+            # `pares_rotulo_regiao`). A marca é do extract_dxf (chave
+            # PAR_DE_ROTULO_EM_VISTA_FORA): este prompt é refeito no servidor.
+            if "rotulo_em_vista_fora" in (self.metadata or {}):
+                _pares = [_p for _p in _pares if not _p.get("na_vista")]
         except Exception:
             _pares = []
         if _pares:
@@ -7531,6 +7528,54 @@ def tirar_o_mapa_chave(walls, hatches, polygon_areas) -> dict:
         return {}
 
 
+# ── o par RÓTULO ↔ ÁREA em região de VISTA fica fora da seção ───────────────
+# 🩸 13/10/2026 — a seção RÓTULO ↔ ÁREA DA REGIÃO do prompt casa o texto com a
+# região fechada que o contém e diz "Use como a quantidade daquele ambiente".
+# Ela nunca olhou a marca `na_vista` que a leitura por folha põe na região que
+# está DENTRO de um corte ou de uma elevação: num arquivo de corte, 44 pares
+# ("SANIT." → 3,84 m², um por andar) eram a parede do cômodo vista de lado.
+# 📏 Acervo (39 DXF em que a folha acha vista): 142 dos 590 pares, em 19
+# arquivos de 12 jobs, 65 em corte e 77 em elevação. Lidos um a um, nenhum é
+# área de ambiente: 37 são nome de lugar sobre a parede ou o corte dele
+# ("I.S. SOCIAL", "PISCINA"), 61 são folha de esquadria, peça de estrutura,
+# aterro, nível ("ABRIR", "CORRE", "V342", "+6,325m") e 44 são código de
+# acabamento sobre UM pano de parede ("RV", "PT", "ACM" — 41 num job só).
+# → O par cuja região está `na_vista` SAI da seção. É subtração: a área da
+#   região continua em ÁREAS HACHURADAS POR LAYER, com o aviso de vista de lado.
+# 🪤 Só o nome de ambiente não bastava: a régua do nome reconhece 2 dos 44
+#   rótulos do arquivo do caso ("SANIT." abreviado não é nome pra ela).
+# ⏭️ O pano de acabamento da elevação perde o rótulo aqui. Se um dia voltar, é
+#   em seção própria, com a frase dele — não sob "quantidade daquele ambiente".
+# 🪤 Pela marca da região QUE CASOU, depois de casar. Tirar a região da lista
+#   antes faria o texto dela casar com a próxima maior que o contém.
+def pares_rotulo_regiao(texts, polygon_areas, hatches) -> list:
+    """Os pares que a seção RÓTULO ↔ ÁREA DA REGIÃO do prompt lista (ver
+    `to_structured_prompt`), cada um com a marca `na_vista` da região."""
+    from engine_rules import casar_texto_com_regiao
+    # Hachura JUNTO com contorno fechado: medi em 09/08 que polilinha
+    # fechada quase não existe nos projetos reais, e a hachura é a fonte
+    # mais comum das medições que funcionam.
+    # 🪤 Não duplica: cada região aceita 1 rótulo e cada rótulo casa com
+    # UMA região (a menor que o contém) — se a mesma área existe como
+    # hachura E como contorno, o texto vai pra uma só.
+    # 🩸 11/10, A/B no acervo: a ETIQUETA solta (ATTDEF: "PA7", "B01") não é
+    # rótulo de região — caía dentro da hachura do próprio símbolo ("PA7" →
+    # 0,26 m²) ou do cômodo onde a porta está (507 linhas novas em 12 arquivos).
+    return casar_texto_com_regiao([t for t in (texts or []) if not getattr(t, "de_attdef", False)],
+                                  list(polygon_areas or []) + list(hatches or []))
+
+
+def rotulo_em_vista_fora(texts, polygon_areas, hatches) -> dict:
+    """O rastro do que a seção deixa de listar: {"pares", "m2"} dos pares cuja
+    região está dentro de corte/elevação. Nunca levanta."""
+    try:
+        de_vista = [p for p in pares_rotulo_regiao(texts, polygon_areas, hatches) if p.get("na_vista")]
+        return {"pares": len(de_vista), "m2": round(sum((float(p["area"]) for p in de_vista), 0.0), 2)}
+    except Exception as e:                       # nunca derruba a extração
+        logger.warning("rotulo_em_vista_fora: %s", e)
+        return {"pares": 0, "m2": 0.0}
+
+
 def mapa_de_folhas(doc) -> dict:
     """Os desenhos do modelspace, pelas folhas: [{folha, titulo, tipo, andares, caixa}].
 
@@ -11809,6 +11854,17 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
                         "%d em quadro; %d grupo(s)%s", os.path.basename(filepath), _amb["etiquetas"],
                         _amb["pares"], _amb["sem_nome"], _amb.get("em_quadro", 0), len(_amb["grupos"]),
                         " por desenho" if _amb["por_desenho"] else "")
+    # 13/10: o par RÓTULO ↔ ÁREA DA REGIÃO cuja região está DENTRO de corte ou
+    # elevação sai da seção do prompt (ver `pares_rotulo_regiao`). Depois da
+    # leitura por folha, que é quem marca a região. 🪤 Decidida AQUI e levada como
+    # marca no registro: o prompt é refeito no servidor, onde a chave de uma
+    # avaliação não vale. Chave: PAR_DE_ROTULO_EM_VISTA_FORA=0 desliga sem deploy.
+    if os.environ.get("PAR_DE_ROTULO_EM_VISTA_FORA", "1") != "0":
+        metadata["rotulo_em_vista_fora"] = rotulo_em_vista_fora(texts, polygon_areas, hatches)
+        if metadata["rotulo_em_vista_fora"]["pares"]:
+            logger.info("[rotulo-vista] %s: %d par(es) RÓTULO ↔ ÁREA em região de corte/elevação "
+                        "fora da seção (%.2f m²)", os.path.basename(filepath),
+                        metadata["rotulo_em_vista_fora"]["pares"], metadata["rotulo_em_vista_fora"]["m2"])
     # 11/10: QUADRO COM QUANTIDADE — as linhas do quadro que o projetista desenhou
     # (esquadrias, luminárias, lista de material), lidas pela grade do próprio
     # quadro (ver `quadros_do_modelo`). Só lê os textos e os trechos retos do
