@@ -20792,6 +20792,14 @@ bloco — só cite os que estão no inventário deste arquivo."""
                        f"de {_a['n_partes']} linha(s) da mesma disciplina, que somam "
                        f"{_a['soma_partes']:.2f} {_a['unidade']}. Some uma OU outra, "
                        f"nunca as duas. ")
+                if _a.get("fecha") is False:
+                    # 15/10 (3cc04055): o total e as partes não fecham — uma das
+                    # leituras está errada, e a gente não sabe qual
+                    _av = (f"⚠ NÃO SOME COM AS DE BAIXO: esta linha parece ser o TOTAL "
+                           f"de {_a['n_partes']} linha(s) com o mesmo nome, mas elas somam "
+                           f"{_a['soma_partes']:.2f} {_a['unidade']} e o total diz "
+                           f"{_a['quantidade']:g} — os números não fecham. Some uma OU "
+                           f"outra, nunca as duas, e confira qual está certa no desenho. ")
                 _it.observations = _av + (_it.observations or "")
                 if _it.confidence == _Conf.CONFIRMADO:
                     _it.confidence = _Conf.ESTIMADO

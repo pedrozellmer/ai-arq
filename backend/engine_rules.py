@@ -2234,6 +2234,18 @@ def linhas_pai_e_filho(items, tolerancia=0.35):
 
     Dispara quando a soma das linhas IRMÃS (mesma unidade e mesma disciplina,
     sem a palavra "total") fica dentro de `tolerancia` do valor da linha-total.
+
+    🩸 15/10/2026 (3cc04055): "Armadura CA-50 — Total geral" 379 kg ao lado de
+    "Armadura CA-50 — Ø 8,0 mm" 316 e "— Ø 10,0 mm" 271. A leitura do quadro
+    errou e a soma (587) não fecha com o total — a folga passou dos 35 % e a
+    linha saiu sem marca: quem soma a coluna conta o aço duas vezes. Quando o
+    total NÃO fecha, ele ainda é o total das partes se elas estão na MESMA
+    prancha, têm o MESMO nome antes do " — " e nenhuma é maior que ele
+    (`fecha` = False no achado). Sem o nome, "Área total dos quartos" casaria
+    com "Quarto 1"; sem o "maior que cada parte", "Revestimento de piso —
+    Quadra — área total da quadra" casaria com os outros pisos.
+    📏 90 dias de cliente: 15 linhas em 12 projetos; os 3 falsos que o nome
+    deixava passar (área/altura total do próprio item) saem pelo "maior".
     """
     norm = []
     for it in (items or []):
@@ -2268,18 +2280,32 @@ def linhas_pai_e_filho(items, tolerancia=0.35):
         if soma <= 0:
             continue
         folga = abs(soma - q) / q
-        if folga < tolerancia:
-            achados.append({
-                "indice": i,
-                "descricao": desc,
-                "unidade": unidade,
-                "quantidade": q,
-                "n_partes": len(partes),
-                "soma_partes": round(soma, 2),
-                "folga": round(folga, 3),
-                "indices_partes": [j for j, _ in partes],
-            })
+        fecha = folga < tolerancia
+        if not fecha:
+            cab = _cabeca_do_total(desc)
+            partes = [(j, n) for j, n in partes
+                      if n[5] == prancha and cab and _cabeca_do_total(n[0]) == cab]
+            if not partes or q <= max(n[2] for _, n in partes):
+                continue
+            soma = sum(n[2] for _, n in partes)
+            folga = abs(soma - q) / q
+        achados.append({
+            "indice": i,
+            "descricao": desc,
+            "unidade": unidade,
+            "quantidade": q,
+            "n_partes": len(partes),
+            "soma_partes": round(soma, 2),
+            "folga": round(folga, 3),
+            "indices_partes": [j for j, _ in partes],
+            "fecha": fecha,
+        })
     return achados
+
+
+def _cabeca_do_total(desc) -> str:
+    """O nome do item antes do primeiro " — " (ou " - "), em minúsculas."""
+    return _re.split(r"\s[—–-]\s", str(desc or ""), maxsplit=1)[0].strip().lower()
 
 
 # ══════════════════════════════════════════════════════════════════════
