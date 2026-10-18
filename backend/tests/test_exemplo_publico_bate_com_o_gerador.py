@@ -112,3 +112,71 @@ def test_CONTROLE_o_conferir_pega_planilha_e_pagina_mexidas(tmp_path):
     html = io.open(PAGINA, encoding="utf-8").read()
     io.open(pagina, "w", encoding="utf-8").write(html.replace('"num": "1.1"', '"num": "1.9"', 1))
     assert any(p.startswith("página:") for p in mod.conferir(pagina=pagina)), "o conferir não viu a página mexida"
+
+
+# ── 18/10/2026: o cronograma físico do exemplo (mesmo código do produto, prazo de 3 meses) ──
+
+CRONO = os.path.join(RAIZ, "exemplos", "cronograma-exemplo-aiarq.xlsx")
+_LINHA_FASE = re.compile(r'<tr class="border-b border-gray-100 align-top"><td[^>]*><span class="font-semibold">(.*?)'
+                         r'</span><br><span[^>]*>(.*?)</span></td><td[^>]*>.*?</td><td[^>]*>(\d+)</td>'
+                         r'<td[^>]*><span[^>]*>(.*?)</span></td></tr>')
+
+
+def _fases_da_pagina(html=None):
+    """[(fase, dias, origem, conta)] do resumo publicado na página."""
+    html = html or io.open(PAGINA, encoding="utf-8").read()
+    m = re.search(r'<div id="fases-cronograma" class="mt-4 overflow-x-auto">(.*?)</div>', html, re.S)
+    return [(fase, dias, origem, conta) for fase, conta, dias, origem in _LINHA_FASE.findall(m.group(1) if m else "")]
+
+
+def _fases_do_xlsx():
+    """[(fase, dias, origem)] da aba Cronograma publicada."""
+    from openpyxl import load_workbook
+    ws = load_workbook(CRONO)["Cronograma"]
+    linhas = list(ws.iter_rows(values_only=True))
+    i = next(n for n, r in enumerate(linhas) if r[0] == "Nº")
+    col = {nome: k for k, nome in enumerate(linhas[i])}
+    return [(r[col["FASE / DISCIPLINA"]], r[col["DURAÇÃO (DIAS)"]], r[col["ORIGEM DA DURAÇÃO"]])
+            for r in linhas[i + 1:] if isinstance(r[0], int)]
+
+
+def test_resumo_da_pagina_e_cronograma_contam_a_mesma_historia():
+    """Conferência independente do script: lê a página e o .xlsx publicados, fase a fase."""
+    import html as _h
+    pagina = [(_h.unescape(f), int(d), _h.unescape(o)) for f, d, o, _conta in _fases_da_pagina()]
+    assert len(pagina) >= 5, "a página mostra só %d fases do cronograma" % len(pagina)
+    assert pagina == _fases_do_xlsx()
+
+
+def test_fase_calculada_cita_o_SINAPI_e_a_sem_conta_diz_que_e_referencia():
+    """Copy pública só afirma o que o código faz: conta com fonte, ou a palavra de que não houve conta."""
+    for fase, _d, origem, conta in _fases_da_pagina():
+        if origem.startswith("sem conta"):
+            assert "prazo de referência" in conta, (fase, conta)
+            assert "SINAPI" not in conta, (fase, conta)
+        else:
+            assert re.search(r"SINAPI \d{5,6}", conta), "%s (%s) sem o código SINAPI na conta: %r" % (fase, origem, conta)
+
+
+def test_CONTROLE_o_conferir_pega_cronograma_e_resumo_mexidos(tmp_path):
+    """🧪 Prova que morde: duração trocada no .xlsx, fase trocada na página, arquivo que sumiu."""
+    from openpyxl import load_workbook
+    mod = _script()
+    crono = str(tmp_path / "cronograma.xlsx")
+    shutil.copy(CRONO, crono)
+    wb = load_workbook(crono)
+    ws = wb["Cronograma"]
+    alvo = next(linha[4] for linha in ws.iter_rows() if isinstance(linha[0].value, int))
+    alvo.value = alvo.value + 1
+    wb.save(crono)
+    assert any(p.startswith("cronograma:") for p in mod.conferir(crono=crono)), "o conferir não viu a duração mexida"
+    assert any(p.startswith("cronograma:") for p in mod.conferir(crono=str(tmp_path / "nao_existe.xlsx")))
+
+    fase = _fases_da_pagina()[0][0]
+    pagina = str(tmp_path / "exemplo.html")
+    html = io.open(PAGINA, encoding="utf-8").read()
+    mexida = html.replace('font-semibold">%s</span><br>' % fase, 'font-semibold">%s</span><br>' % (fase + " X"), 1)
+    assert mexida != html
+    io.open(pagina, "w", encoding="utf-8").write(mexida)
+    assert any("resumo das fases" in p for p in mod.conferir(pagina=pagina)), "o conferir não viu a fase mexida"
+    assert _fases_da_pagina(mexida)[0][0] != _fases_do_xlsx()[0][0]

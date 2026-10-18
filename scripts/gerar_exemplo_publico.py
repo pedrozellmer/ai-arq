@@ -8,8 +8,13 @@ que não sai mais (achado PROD-11 da revisão do plano de outubro do Instagram �
 da bio o mês inteiro). Página e planilha já tinham se descolado uma vez (d5b45d6, 17/07): por isso
 as duas saem da MESMA rodada, e a numeração da página é LIDA da planilha gerada.
 
+18/10/2026 — o exemplo ganhou o CRONOGRAMA FÍSICO, saído dos mesmos itens pelo código do produto
+(backend/cronograma.py + cronograma_xlsx.py), com prazo de 3 meses (escolha do Pedro pro exemplo;
+a sugestão automática da tela daria 5, de uma tabela sem fonte). Mesma regra: o .xlsx e o resumo das
+fases na página saem da mesma rodada, e o --conferir cobra os dois.
+
 Uso:
-    python scripts/gerar_exemplo_publico.py             # regera o .xlsx e a tabela do exemplo.html
+    python scripts/gerar_exemplo_publico.py             # regera os .xlsx e as tabelas do exemplo.html
     python scripts/gerar_exemplo_publico.py --conferir  # só confere; sai 1 se algo ficou velho
 
 Nada aqui chama IA nem busca no SINAPI: os candidatos da rodada de 17/07 estão gravados no itens.json.
@@ -33,6 +38,10 @@ MEMORIAL = os.path.join(RAIZ, "exemplos", "memorial-exemplo-aiarq.docx")
 # 18/10/2026: o trecho do memorial na página sai do mesmo gerador, entre estes marcadores
 _BLOCO_MEMORIAL = re.compile(r"(<!-- memorial:inicio -->)(.*?)(<!-- memorial:fim -->)", re.S)
 SECAO_DO_TRECHO = "Instalações Elétricas e Dados"
+CRONO_XLSX = os.path.join(RAIZ, "exemplos", "cronograma-exemplo-aiarq.xlsx")
+# Data FIXA: com a de hoje, o arquivo mudaria a cada rodada e o --conferir nunca ficaria verde.
+CRONO_INICIO = "2026-11-02"
+CRONO_MESES = 3  # Pedro, 18/10/2026
 _BLOCO_EX = re.compile(r"const EX = \{.*?\]\};", re.S)
 _NUM_ITEM = re.compile(r"^\d+\.\d+$")
 _NUM_INDIRETO = re.compile(r"^S\.\d+$")
@@ -309,6 +318,91 @@ def frases_que_a_pagina_tem_que_ter(ex, indiretos):
     ]
 
 
+def _itens_do_cronograma(dados, numeros):
+    """Os itens no formato de project_items — o que a rota do cronograma lê do banco."""
+    fila = sorted(dados["itens"], key=lambda i: _chave_num(numeros[i["desc"]]))
+    return [{"description": it["desc"], "unit": it["un"], "quantity": it["qtd"], "discipline": it["disc"],
+             "confidence": "confirmado" if it["medido"] else "estimado", "observations": it["obs"],
+             "item_num": numeros[it["desc"]], "sort_order": n}
+            for n, it in enumerate(fila)]
+
+
+def gerar_cronograma_do_exemplo(dados, numeros):
+    from cronograma import gerar_cronograma
+    return gerar_cronograma(_itens_do_cronograma(dados, numeros), CRONO_INICIO, CRONO_MESES)
+
+
+def gerar_planilha_do_cronograma(cron, dados, destino):
+    from cronograma_xlsx import gerar_cronograma_xlsx
+    p = dados["projeto"]
+    gerar_cronograma_xlsx(cron, destino, {"project_name": p["name"], "architect_name": p["architect"]})
+
+
+# A palavra de cada origem é a MESMA da coluna ORIGEM DA DURAÇÃO do .xlsx (e dos chips da tela).
+# A cor segue o quantitativo: verde = saiu do desenho, laranja = estimativa, cinza = sem conta.
+_COR_ORIGEM = {"calculada": "bg-emerald-100 text-emerald-800", "calculada-parcial": "bg-amber-100 text-amber-800",
+               "estimada": "bg-amber-100 text-amber-800", "padrão": "bg-gray-100 text-gray-700"}
+_BLOCO_FASES = re.compile(r'(<div id="fases-cronograma" class="mt-4 overflow-x-auto">)(.*?)(</div>)', re.S)
+
+
+def _data_br(iso):
+    a, m, d = iso.split("-")
+    return "%s/%s/%s" % (d, m, a)
+
+
+def tabela_das_fases(cron, eol="\n"):
+    """O resumo das fases em HTML puro: nome, início, duração, origem e a conta (ou a falta dela).
+    Sem <div> dentro, pelo mesmo motivo da tabela dos itens."""
+    import html as _h
+    from cronograma_xlsx import _ORIGEM_LEGIVEL
+    e = lambda s: _h.escape(str(s), quote=False)  # noqa: E731
+    th = '<th class="py-2 pr-3">%s</th>'
+    # A conta vai embaixo do nome da fase (como a observação embaixo do item): numa coluna própria, o
+    # celular a espremia em 3 palavras por linha. min-w-[640px]: lá, a tabela rola dentro da caixa.
+    linhas = ['<table class="w-full min-w-[640px] text-sm text-left">',
+              '<caption class="text-left text-xs text-gray-500 pb-2">As %d fases do cronograma, na ordem de início'
+              '</caption>' % len(cron["fases"]),
+              '<thead><tr class="border-b border-gray-200 text-xs text-gray-500">'
+              + "".join(th % c for c in ("Fase e de onde veio a duração", "Início", "Dias", "Origem da duração"))
+              + "</tr></thead>", "<tbody>"]
+    for f in cron["fases"]:
+        origem = f.get("origem") or ""
+        linhas.append(
+            '<tr class="border-b border-gray-100 align-top">'
+            '<td class="py-2 pr-3"><span class="font-semibold">%s</span><br>'
+            '<span class="text-xs text-gray-600">%s</span></td>'
+            '<td class="py-2 pr-3 whitespace-nowrap tabular-nums">%s</td>'
+            '<td class="py-2 pr-3 tabular-nums">%d</td>'
+            '<td class="py-2 pr-3"><span class="rounded-full px-2 text-xs font-semibold %s">%s</span></td></tr>'
+            % (e(f["label"]), e(f.get("origem_detalhe") or ""), _data_br(f["inicio"]), f["dur_dias"],
+               _COR_ORIGEM.get(origem, "bg-gray-100 text-gray-700"), e(_ORIGEM_LEGIVEL.get(origem, "editada por você"))))
+    linhas += ["</tbody>", "</table>",
+               '<p class="mt-3 text-[11px] text-gray-500 leading-relaxed">%s</p>' % e(cron["ressalva"])]
+    return eol.join(linhas)
+
+
+# (singular, plural) — o que a prosa da seção do cronograma diz de cada origem
+_ORIGEM_NA_PROSA = {"calculada": ("calculada das quantidades", "calculadas das quantidades"),
+                    "calculada-parcial": ("calculada em parte", "calculadas em parte"),
+                    "estimada": ("calculada de estimativa", "calculadas de estimativa"),
+                    "padrão": ("sem conta", "sem conta")}
+
+
+def frases_do_cronograma(cron):
+    """A prosa da seção do cronograma cita prazo e contagens; muda o dado, a prosa muda junto."""
+    frases = ['href="/exemplos/cronograma-exemplo-aiarq.xlsx"',
+              "Prazo de <strong>%d meses</strong>" % cron["resumo"]["duracao_meses"],
+              "<strong>%d fases</strong>" % len(cron["fases"])]
+    for origem, (um, varios) in _ORIGEM_NA_PROSA.items():
+        n = sum(1 for f in cron["fases"] if f.get("origem") == origem)
+        if n:
+            frases.append("<strong>%d %s</strong>" % (n, um if n == 1 else varios))
+    desconhecidas = {f.get("origem") for f in cron["fases"]} - set(_ORIGEM_NA_PROSA)
+    if desconhecidas:
+        frases.append("(origem sem frase na página: %s)" % sorted(desconhecidas, key=str))
+    return frases
+
+
 def _celulas(caminho):
     from openpyxl import load_workbook
     wb = load_workbook(caminho)
@@ -330,7 +424,7 @@ def diferencas_da_planilha(esperada, atual):
     return difs
 
 
-def conferir(pagina=PAGINA, xlsx=XLSX, memorial=MEMORIAL):
+def conferir(pagina=PAGINA, xlsx=XLSX, memorial=MEMORIAL, crono=CRONO_XLSX):
     """Lista do que está velho (vazia = tudo em dia). Não escreve nada."""
     dados = carregar()
     problemas = []
@@ -344,6 +438,13 @@ def conferir(pagina=PAGINA, xlsx=XLSX, memorial=MEMORIAL):
             problemas.append("memorial: %s não existe" % os.path.relpath(memorial, RAIZ))
         elif texto_do_docx(novo_mem) != texto_do_docx(memorial):
             problemas.append("memorial: o .docx não é o que sai do itens.json + gerador do memorial")
+        cron = gerar_cronograma_do_exemplo(dados, numeros)
+        novo_crono = os.path.join(tmp, "cronograma.xlsx")
+        gerar_planilha_do_cronograma(cron, dados, novo_crono)
+        if not os.path.exists(crono):
+            problemas.append("cronograma: o arquivo %s não existe" % os.path.relpath(crono, RAIZ))
+        else:
+            problemas += ["cronograma: " + d for d in diferencas_da_planilha(novo_crono, crono)[:15]]
     ex = ex_da_pagina(dados, numeros)
     with io.open(pagina, encoding="utf-8", newline="") as f:
         html = f.read()
@@ -362,8 +463,14 @@ def conferir(pagina=PAGINA, xlsx=XLSX, memorial=MEMORIAL):
         problemas.append("página: não achei o trecho do memorial (<!-- memorial:inicio --> … fim)")
     elif mm.group(2).replace("\r\n", "\n") != trecho_do_memorial(estrutura):
         problemas.append("página: o trecho do memorial não é o que sai do gerador do memorial")
-    problemas +=["página: a prosa não diz %r" % fr for fr in frases_que_a_pagina_tem_que_ter(ex, indiretos)
-                  if fr not in html]
+    f = _BLOCO_FASES.search(html)
+    if not f:
+        problemas.append('página: não achei o <div id="fases-cronograma" class="mt-4 overflow-x-auto">')
+    elif f.group(2).replace("\r\n", "\n") != tabela_das_fases(cron):
+        problemas.append("página: o resumo das fases não é o que sai do itens.json + cronograma.py")
+    problemas +=["página: a prosa não diz %r" % fr
+                 for fr in frases_que_a_pagina_tem_que_ter(ex, indiretos) + frases_do_cronograma(cron)
+                 if fr not in html]
     return problemas
 
 
@@ -384,20 +491,28 @@ def regerar():
     assert _BLOCO_MEMORIAL.search(novo_html), "não achei <!-- memorial:inicio --> … <!-- memorial:fim --> no exemplo.html"
     novo_html = _BLOCO_MEMORIAL.sub(lambda m: m.group(1) + trecho_do_memorial(estrutura, eol) + m.group(3),
                                     novo_html, count=1)
-    faltam = [fr for fr in frases_que_a_pagina_tem_que_ter(ex, indiretos) if fr not in novo_html]
+    cron = gerar_cronograma_do_exemplo(dados, numeros)
+    tmp_crono = CRONO_XLSX + ".tmp.xlsx"
+    gerar_planilha_do_cronograma(cron, dados, tmp_crono)
+    assert _BLOCO_FASES.search(novo_html), 'não achei o <div id="fases-cronograma" ...> no exemplo.html'
+    novo_html = _BLOCO_FASES.sub(lambda m: m.group(1) + tabela_das_fases(cron, eol) + m.group(3), novo_html, count=1)
+    faltam = [fr for fr in frases_que_a_pagina_tem_que_ter(ex, indiretos) + frases_do_cronograma(cron)
+              if fr not in novo_html]
     if faltam:
         os.remove(tmp_xlsx)
         os.remove(tmp_mem)
+        os.remove(tmp_crono)
         sys.exit("A prosa do exemplo.html não bate com os dados — atualize à mão e rode de novo:\n  "
                  + "\n  ".join(faltam))
     os.replace(tmp_xlsx, XLSX)
     os.replace(tmp_mem, MEMORIAL)
+    os.replace(tmp_crono, CRONO_XLSX)
     tmp_html = PAGINA + ".tmp"
     with io.open(tmp_html, "w", encoding="utf-8", newline="") as f:
         f.write(novo_html)
     os.replace(tmp_html, PAGINA)
-    print("exemplo regerado: %d itens (%d medidos), %d linhas de custo indireto"
-          % (ex["total"], ex["medidos"], indiretos))
+    print("exemplo regerado: %d itens (%d medidos), %d linhas de custo indireto; cronograma de %d fases"
+          % (ex["total"], ex["medidos"], indiretos, len(cron["fases"])))
 
 
 if __name__ == "__main__":
