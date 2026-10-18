@@ -22,11 +22,12 @@ Condição comercial: durante o beta, o uso é GRÁTIS e ILIMITADO, sem cartão 
 
 In English: AI.arq is a Brazilian SaaS that reads the 2D CAD sheets a professional already has (DWG, DXF or PDF) and returns a construction quantity takeoff spreadsheet, broken down by discipline, with SINAPI reference codes where a reliable match exists, each line labelled either as measured from the drawing or as estimated and pending review. PDF files are read, but everything that comes from a PDF is labelled as estimated, by our own rule: a PDF's scale comes from a declaration (the title block), so even when the dimensions check out we never seal a PDF number as measured. From the same takeoff it also drafts a descriptive specification (memorial descritivo, marked as a draft to be completed and signed by the professional) and a physical construction schedule (it does not price; if the professional enters each stage's value, it spreads it month by month). It delivers quantities, not construction prices, and it does not replace the professional. It is not BIM and does not require BIM. Free and unlimited during the open beta, no credit card — every project, not just the first one. The site and its content are in Brazilian Portuguese.
 
-Quem faz: o AI.arq é um produto brasileiro e independente, feito no Rio de Janeiro e no ar desde abril de 2026 (https://ai.arq.br/sobre.html). Última atualização deste arquivo: 2026-10-11.
+Quem faz: o AI.arq é um produto brasileiro e independente, feito no Rio de Janeiro e no ar desde abril de 2026 (https://ai.arq.br/sobre.html). Última atualização deste arquivo: 2026-10-18.
 
 ## Comece por aqui
 
 - [Página inicial](https://ai.arq.br/): o que o AI.arq faz, como enviar a prancha e o que volta na planilha.
+- [Levantamento de quantitativos a partir do DWG ou DXF](https://ai.arq.br/levantamento-de-quantitativos-dwg-dxf.html): o que se envia e o que volta, o que sai medido do desenho e o que sai como estimativa, um trecho do exemplo, os números da base e o que o AI.arq não faz.
 - [Exemplo de planilha pronta](https://ai.arq.br/exemplo.html): quantitativo completo de um projeto-exemplo, com as linhas MEDIDO e ESTIMADO destacadas e a planilha disponível para baixar.
 - [Perguntas frequentes](https://ai.arq.br/faq.html): formatos aceitos, o que significa MEDIDO e ESTIMADO, disciplinas cobertas, uso da SINAPI, limites do serviço e como conferir o resultado.
 - [Preços](https://ai.arq.br/precos.html): grátis e ilimitado durante o beta, sem cartão; a tabela publicada ali é a prevista para depois do beta e pode mudar.

@@ -1206,6 +1206,7 @@ def render_sitemap():
     urls = [
         (f"{SITE_URL}/", "1.0", "weekly"),
         (f"{SITE_URL}/precos.html", "0.9", "weekly"),
+        (f"{SITE_URL}/levantamento-de-quantitativos-dwg-dxf.html", "0.8", "monthly"),
         (f"{SITE_URL}/exemplo.html", "0.8", "monthly"),
         (f"{SITE_URL}/blog/", "0.9", "weekly"),
         (f"{SITE_URL}/faq.html", "0.7", "monthly"),

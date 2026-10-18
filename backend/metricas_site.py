@@ -308,7 +308,7 @@ PAGINAS_DE_ENTRADA = frozenset({
 })
 PAGINAS_PUBLICAS = frozenset({
     "/", "/index.html", "/faq.html", "/precos.html", "/sobre.html", "/dados.html",
-    "/exemplo.html", "/termos.html", "/privacidade.html", "/licencas.html", "/404.html",
+    "/exemplo.html", "/levantamento-de-quantitativos-dwg-dxf.html", "/termos.html", "/privacidade.html", "/licencas.html", "/404.html",
 })  # + tudo em /blog/ e /indique/
 
 

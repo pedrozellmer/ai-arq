@@ -27,6 +27,7 @@ import re
 RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 PAGINAS = ["index.html", "faq.html", "dados.html", "sobre.html", "precos.html", "exemplo.html", "llms.txt",
+           "levantamento-de-quantitativos-dwg-dxf.html",
            "blog/index.html", "blog/posts.json", "blog/gerar_llms.py"]
 
 PROIBIDAS = [

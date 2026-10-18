@@ -65,6 +65,8 @@ ESPERADO = {
     "exemplo.html": [PREENCHIDO_CAD, PREENCHIDO_PDF, MEDIDO_CAD],
     # 27/09/2026: a página que é a FONTE dos três — /dados, com data e método
     "dados.html":   [PREENCHIDO_CAD, PREENCHIDO_PDF, MEDIDO_CAD],
+    # 18/10/2026: a página de produto de quem tem CAD repete os três
+    "levantamento-de-quantitativos-dwg-dxf.html": [PREENCHIDO_CAD, PREENCHIDO_PDF, MEDIDO_CAD],
 }
 
 # 🚨 04/09/2026 — a regra "o zero do PDF nunca aparece sozinho" cobria só as
