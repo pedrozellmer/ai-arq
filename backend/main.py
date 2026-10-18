@@ -10484,6 +10484,8 @@ _CHAVES_AVALIAVEIS = frozenset({
     "PAR_DE_ROTULO_EM_VISTA_FORA",
     # 18/10: a opção de medir só o que está nas pranchas — liga por projeto
     "SO_O_QUE_ESTA_NAS_PRANCHAS",
+    # 18/10: a base copiada em plantas temáticas do mesmo andar conta 1×
+    "BASE_COPIADA_UMA_VEZ",
 })
 _CHAVES_DA_AVALIACAO: dict = {}        # job de avaliação → {chave: "0" | "1"}
 
@@ -14438,8 +14440,18 @@ def _linhas_fora_das_pranchas(arqs: list) -> list:
             return None
         return int(round(100 * fracao))
 
-    partes, sem_leitura, tirados, recusados = [], 0, [], []
+    partes, sem_leitura, tirados, recusados, bases = [], 0, [], [], []
     for a in arqs or []:
+        # 18/10: a base copiada em plantas temáticas do mesmo andar contou 1×
+        bpt = a.get("base_em_plantas_tematicas") if isinstance(a, dict) else None
+        if isinstance(bpt, dict) and bpt.get("aplicada"):
+            try:
+                _ex = ", ".join("%s %d" % (str(n)[:30], int(k))
+                                for n, k in list((bpt.get("nomes") or {}).items())[:3])
+                bases.append("%s: %d peça(s)%s" % (a.get("nome") or "prancha", int(bpt.get("pecas") or 0),
+                                                   (" (%s…)" % _ex) if _ex else ""))
+            except (TypeError, ValueError):
+                pass
         # 18/10: com a opção "só o que está nas pranchas" ligada, diz o que saiu
         s = a.get("so_nas_pranchas") if isinstance(a, dict) else None
         if isinstance(s, dict):
@@ -14473,6 +14485,11 @@ def _linhas_fora_das_pranchas(arqs: list) -> list:
             except (TypeError, ValueError):
                 pass
     saida = []
+    if bases:
+        saida.append(
+            "📐 A mesma base de arquitetura aparece em mais de uma planta temática do mesmo "
+            "andar (iluminação, força, layout…): as peças repetidas da base foram contadas "
+            "uma vez — %s. Comprimentos e áreas da base ainda podem somar as cópias." % "; ".join(bases[:4]))
     if tirados:
         saida.append(
             "📐 Medimos só o que está nas pranchas: o que está no modelo fora de todas as "
@@ -16369,6 +16386,12 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                             # 10/10: o que nenhuma janela das pranchas mostra
                             if _md_u.get("fora_das_pranchas"):
                                 _res_esc["fora_das_pranchas"] = _md_u["fora_das_pranchas"]
+                            # 18/10: a base copiada em plantas temáticas contou 1× (chave)
+                            if _md_u.get("base_em_plantas_tematicas"):
+                                _res_esc["base_em_plantas_tematicas"] = _md_u["base_em_plantas_tematicas"]
+                                _log_error("motor:base-em-plantas-tematicas",
+                                           f"arq={os.path.basename(dxf_path)} "
+                                           f"{_md_u['base_em_plantas_tematicas']}", job_id, severity="info")
                             # 18/10: medido só o que está nas pranchas (opção por projeto)
                             if _md_u.get("so_nas_pranchas"):
                                 _res_esc["so_nas_pranchas"] = _md_u["so_nas_pranchas"]

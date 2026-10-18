@@ -279,7 +279,7 @@ class DXFExtraction:
     #: registros de máquina que a IA NÃO lê crus (vão ditos em português)
     _METADADOS_FORA_DO_PROMPT = frozenset({"copias_sombra", "planta_repetida",
                                            # 18/10: dito na linha de atenção da planilha
-                                           "so_nas_pranchas",
+                                           "so_nas_pranchas", "base_em_plantas_tematicas",
                                            # 30/09: ditos nas seções próprias
                                            "objetos_sem_bloco", "layers_de_cota",
                                            "layers_de_borda",
@@ -8866,6 +8866,149 @@ def tipos_nas_copias(blocks, vetores_m, unit_factor, tol_m: float = 0.05) -> dic
         return {}
 
 
+# ── A BASE COPIADA EM PLANTAS TEMÁTICAS (18/10/2026) ───────────────────────────
+# 🩸 Caso de um elétrico de galpão: a planta de iluminação e a de força do mesmo
+# pavimento trazem, cada uma, a base de arquitetura EXPLODIDA (não um bloco: por
+# isso `vistas_da_mesma_base` não viu) — cadeiras, vasos e armários saíram em
+# dobro. O registro de cópias (`copias_em_sombra`) achava o vetor exato, mas só
+# rebaixava o selo.
+# 🔑 O que separa "temas do mesmo andar" de "andares/unidades repetidos": os
+# símbolos que NÃO se copiam moram cada um de UM lado (tomada só na de força,
+# luminária só na de iluminação). Medido em 12 arquivos de cliente com cópia
+# (18/10): exclusividade por FAMÍLIA ≥ 0,91 nos de plantas temáticas (o elétrico,
+# a mesma planta em 3 pranchas, layout × planta baixa × elétrica); ≤ 0,71 nos
+# legítimos (duas unidades duplex lado a lado, fachada em módulo); e quase nada
+# fora da cópia na planta inteira repetida (aí não age).
+# 🪤 Família, não nome: no export do Revit cada peça tem nome próprio (número +
+# vista) e TODO tipo vira "exclusivo" — a fachada em módulo dava 0,80.
+_BASE_PARES_MIN = 10             # peças casadas pelo vetor
+_BASE_NAO_COPIADOS_MIN = 20      # símbolos fora da cópia, nos dois lados juntos
+_BASE_POR_LADO_MIN = 5           # ...e em cada lado (cada planta tem o seu tema)
+_BASE_EXCLUSIVIDADE_MIN = 0.85
+
+
+def _familia_da_peca(nome) -> str:
+    """Família do bloco para comparar lados: o sufixo da biblioteca do ArchiCAD
+    sai (`familia_do_bloco`) e, no export do Revit, fica só a família."""
+    f = familia_do_bloco(nome)
+    pr = _peca_do_revit(f)[0]
+    return (pr.split(" - ")[0].strip() or pr) if pr else f
+
+
+def base_copiada_em_plantas_tematicas(blocks, copias, unit_factor, tol_m: float = 0.05) -> dict:
+    """A base de arquitetura copiada em plantas temáticas do mesmo andar conta UMA vez.
+
+    Usa os vetores que `copias_em_sombra` PROVOU. Por vetor: casa as peças da
+    mesma família 1 a 1 (p no original, p + v na cópia; cada peça num papel só) e
+    mede, nas caixas dos dois lados, se os símbolos que NÃO casaram moram cada um
+    de um lado (exclusividade por família). Só tira as cópias quando há
+    `_BASE_PARES_MIN` pares, `_BASE_NAO_COPIADOS_MIN` símbolos fora da cópia
+    (`_BASE_POR_LADO_MIN` em cada lado) e exclusividade ≥ `_BASE_EXCLUSIVIDADE_MIN`.
+    Muta `blocks` só quando age. Devolve {'aplicada', 'pecas', 'vetores', 'nomes'}.
+    """
+    out = {"aplicada": False, "pecas": 0, "vetores": [], "nomes": {}}
+    try:
+        uf = float(unit_factor or 0)
+    except (TypeError, ValueError):
+        return out
+    vetores = (copias or {}).get("vetores") or []
+    if uf <= 0 or not vetores:
+        return out
+    tol = tol_m / uf
+    itens = {}                                   # família da cópia → [(bloco, índice, (x, y))]
+    for bi, b in enumerate(blocks):
+        pos = list(getattr(b, "positions", None) or [])
+        if not pos or len(pos) != b.count:
+            continue
+        for pi, q in enumerate(pos):
+            itens.setdefault(familia_do_bloco(b.name), []).append((bi, pi, (float(q[0]), float(q[1]))))
+    tirar = set()
+    for v in vetores[:6]:
+        try:
+            vx, vy = float(v[0]) / uf, float(v[1]) / uf
+        except (TypeError, ValueError, IndexError):
+            continue
+        orig, cop = [], []
+        casados = set()
+        for fam, lst in itens.items():
+            livres = [t for t in lst if (t[0], t[1]) not in tirar]
+            cel = {}
+            for t in livres:
+                cel.setdefault((round(t[2][0] / tol), round(t[2][1] / tol)), []).append(t)
+            o_set, c_set = set(), set()
+            for t in sorted(livres, key=lambda t: t[2][0] * vx + t[2][1] * vy):
+                k = (t[0], t[1])
+                if k in o_set or k in c_set:
+                    continue
+                ax, ay = t[2][0] + vx, t[2][1] + vy
+                ci, cj = round(ax / tol), round(ay / tol)
+                melhor = None
+                for ddx in (-1, 0, 1):
+                    for ddy in (-1, 0, 1):
+                        for u in cel.get((ci + ddx, cj + ddy), ()):
+                            ku = (u[0], u[1])
+                            if ku == k or ku in o_set or ku in c_set:
+                                continue
+                            d = math.hypot(u[2][0] - ax, u[2][1] - ay)
+                            if d <= 1.5 * tol and (melhor is None or d < melhor[0]):
+                                melhor = (d, u)
+                if melhor is not None:
+                    u = melhor[1]
+                    o_set.add(k)
+                    c_set.add((u[0], u[1]))
+                    orig.append(t)
+                    cop.append(u)
+            casados |= o_set | c_set
+        if len(orig) < _BASE_PARES_MIN:
+            continue
+
+        def _caixa(ts):
+            xs, ys = [t[2][0] for t in ts], [t[2][1] for t in ts]
+            w, h = max(xs) - min(xs), max(ys) - min(ys)
+            return (min(xs) - 0.1 * w, min(ys) - 0.1 * h, max(xs) + 0.1 * w, max(ys) + 0.1 * h)
+
+        bO, bC = _caixa(orig), _caixa(cop)
+        lado = {}
+        for lst in itens.values():
+            for t in lst:
+                k = (t[0], t[1])
+                if k in casados or k in tirar:
+                    continue
+                inO = bO[0] <= t[2][0] <= bO[2] and bO[1] <= t[2][1] <= bO[3]
+                inC = bC[0] <= t[2][0] <= bC[2] and bC[1] <= t[2][1] <= bC[3]
+                if inO == inC:
+                    continue
+                f = lado.setdefault(_familia_da_peca(blocks[t[0]].name), [0, 0])
+                f[0 if inO else 1] += 1
+        n_o = sum(a for a, _b in lado.values())
+        n_c = sum(b_ for _a, b_ in lado.values())
+        if n_o + n_c < _BASE_NAO_COPIADOS_MIN or min(n_o, n_c) < _BASE_POR_LADO_MIN:
+            continue
+        excl = sum(max(a, b_) for a, b_ in lado.values()) / (n_o + n_c)
+        if excl < _BASE_EXCLUSIVIDADE_MIN:
+            continue
+        for u in cop:
+            tirar.add((u[0], u[1]))
+            nome = blocks[u[0]].name
+            out["nomes"][nome] = out["nomes"].get(nome, 0) + 1
+        out["vetores"].append([round(float(v[0]), 2), round(float(v[1]), 2), len(cop), round(excl, 3)])
+    if not tirar:
+        return out
+    novos = []
+    for bi, b in enumerate(blocks):
+        pos = list(getattr(b, "positions", None) or [])
+        if pos and len(pos) == b.count:
+            ficam = [q for pi, q in enumerate(pos) if (bi, pi) not in tirar]
+            if len(ficam) != len(pos):
+                b.positions, b.count = ficam, len(ficam)
+        if b.count > 0:
+            novos.append(b)
+    blocks[:] = novos
+    out.update(aplicada=True, pecas=len(tirar))
+    out["nomes"] = dict(sorted(out["nomes"].items(), key=lambda kv: -kv[1])[:12])
+    return out
+
+
 # 🩸 30/09/2026 (estudo do acervo, casa de 1 banheiro exportada do ArchiCAD) —
 # a MESMA peça da biblioteca sai com um nome por vista: "Lavatório" na planta
 # baixa e "Lavatório[16]_3" no layout (o [N] é o número da peça na biblioteca,
@@ -12027,6 +12170,13 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
                 _tc[_n] = max(_tc.get(_n, 0), _k)
             _cop["tipos_copiados"] = _tc
             metadata["copias_sombra"] = _cop
+            # 18/10: a base de arquitetura copiada em plantas temáticas do mesmo
+            # andar conta UMA vez (ver `base_copiada_em_plantas_tematicas`). Chave
+            # BASE_COPIADA_UMA_VEZ=1 liga (avaliável); padrão DESLIGADA.
+            if os.environ.get("BASE_COPIADA_UMA_VEZ", "0") == "1":
+                _bpt = base_copiada_em_plantas_tematicas(blocks, _cop, unit_factor)
+                if _bpt.get("aplicada"):
+                    metadata["base_em_plantas_tematicas"] = _bpt
             # 🩸 29/09 (Pedro): da sombra para o REBAIXAMENTO — só selo, nenhum
             # número muda. m/m²/m³ por esta ressalva; contagem, por tipo, em
             # `engine_rules.selo_apos_planta_repetida`. 🪤 Fica FORA da lista que
