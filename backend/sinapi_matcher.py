@@ -644,6 +644,117 @@ def _texto_pra_ia(descricao: str) -> str:
     return t[:_TETO_TEXTO_IA]
 
 
+_MODELO_DA_ESCOLHA = "claude-haiku-4-5-20251001"
+
+
+def _linha_do_item(it: Dict) -> str:
+    """O que a IA lê de UM item no pedido — a linha do prompt sem o índice `i=`.
+
+    🔑 A mesma função monta o prompt e a chave da escolha guardada: se a
+    linha do prompt mudar, a chave muda junto, sozinha."""
+    cands = "\n".join(
+        f'     - {c.get("codigo")}: {_texto_pra_ia(c.get("descricao"))} [un: {c.get("unidade") or "?"}]'
+        for c in it['candidates']
+    )
+    return (f'ITEM: {(it.get("description") or "")[:_TETO_TEXTO_IA]} '
+            f'[un: {it.get("unit") or "?"}]\n     CANDIDATOS:\n{cands}')
+
+
+# ── A ESCOLHA DA IA FICA GUARDADA, POR ITEM (18/10/2026) ─────────────────────
+# 💸 13/10 (gasto de API, tabela `llm_uso`, 30 dias): o `sinapi_pick` era 40 %
+# do gasto, e US$ 31 disso eram REPETIÇÃO no mesmo job — quem remonta a
+# planilha do banco (revisão, área informada: `main._referencia_sinapi_na_
+# remontagem`) refazia a escolha inteira, com os mesmos itens e os mesmos
+# candidatos, porque `project_items` não guarda `sinapi_matches`.
+# → A escolha de cada item fica guardada na tabela `llm_cache` (tag
+#   `sinapi_escolha`), pela chave do que a IA leu DAQUELE item: o modelo, o
+#   pedido, a descrição, a unidade e os candidatos, como entram no prompt.
+#   Mesmo item com os mesmos candidatos → a escolha guardada, sem IA. Mudou a
+#   descrição (o cliente editou), a unidade, um candidato ou o pedido → chave
+#   nova, e a IA escolhe de novo.
+# 🔒 Guarda só o CÓDIGO escolhido (ou "-" quando a IA disse que nenhum serve);
+#   a chave é um hash. Nada do projeto do cliente vai pro banco por aqui.
+# 🪤 O código guardado só vale se ainda estiver entre os candidatos do item.
+# 🪤 Best-effort: ler ou gravar que falha só faz a IA escolher, como antes.
+# Chave: SINAPI_ESCOLHA_GUARDADA=0 desliga (volta a perguntar tudo à IA).
+_ESCOLHA_TAG = "sinapi_escolha"
+_ESCOLHA_NS = "sinapi-escolha|v1"
+_ESCOLHA_NENHUM = "-"
+_ESCOLHA_LOTE_DE_CHAVES = 50          # chaves por consulta: ~3,3 KB de URL
+
+
+def _escolha_guardada_ligada() -> bool:
+    return os.environ.get("SINAPI_ESCOLHA_GUARDADA", "1") != "0"
+
+
+def _chave_da_escolha(it: Dict) -> str:
+    import hashlib
+    pedido = hashlib.sha256(_PICK_PROMPT.encode("utf-8")).hexdigest()[:16]
+    base = "|".join((_ESCOLHA_NS, _MODELO_DA_ESCOLHA, pedido, _linha_do_item(it)))
+    return hashlib.sha256(base.encode("utf-8")).hexdigest()
+
+
+def _rest_do_banco():
+    """O acesso ao banco do servidor (service role), importado tarde: este
+    módulo é testado sem carregar o main.py — mesmo jeito do `llm_cache`."""
+    from main import _supa_rest_service  # type: ignore
+    return _supa_rest_service
+
+
+def escolhas_guardadas(alvos: List) -> Dict[int, Optional[str]]:
+    """{índice: código, ou None se a IA já disse que nenhum serve} dos itens com
+    escolha guardada que ainda vale. `alvos` = [(índice, item)]. Nunca levanta."""
+    if not alvos or not _escolha_guardada_ligada():
+        return {}
+    chaves = {i: _chave_da_escolha(it) for i, it in alvos}
+    achou: Dict[str, str] = {}
+    try:
+        todas = sorted(set(chaves.values()))
+        for ini in range(0, len(todas), _ESCOLHA_LOTE_DE_CHAVES):
+            parte = todas[ini:ini + _ESCOLHA_LOTE_DE_CHAVES]
+            st, linhas = _rest_do_banco()(
+                "GET", "llm_cache",
+                params={"cache_key": "in.(%s)" % ",".join(parte),
+                        "tag": "eq.%s" % _ESCOLHA_TAG,
+                        "select": "cache_key,response_text"})
+            if st != 200 or not linhas:
+                continue
+            for linha in linhas:
+                achou[str(linha.get("cache_key") or "")] = str(linha.get("response_text") or "").strip()
+    except Exception as ex:
+        print(f"[sinapi-pick] escolha guardada: a leitura falhou, a IA escolhe: {ex}")
+        return {}
+    saida: Dict[int, Optional[str]] = {}
+    for i, it in alvos:
+        cod = achou.get(chaves[i])
+        if not cod:
+            continue
+        if cod == _ESCOLHA_NENHUM:
+            saida[i] = None
+        elif cod in {c.get("codigo") for c in (it.get('candidates') or [])}:
+            saida[i] = cod
+    return saida
+
+
+def guardar_escolhas(itens_e_codigos: List) -> int:
+    """Guarda [(item, código ou None)]. Devolve quantas guardou. Nunca levanta."""
+    if not itens_e_codigos or not _escolha_guardada_ligada():
+        return 0
+    linhas = {}
+    for it, cod in itens_e_codigos:
+        chave = _chave_da_escolha(it)
+        linhas[chave] = {"cache_key": chave, "tag": _ESCOLHA_TAG, "model": _MODELO_DA_ESCOLHA,
+                         "response_text": cod or _ESCOLHA_NENHUM, "stop_reason": "end_turn",
+                         "engine_ver": str(os.environ.get("RENDER_GIT_COMMIT") or "")[:12]}
+    try:
+        st, _ = _rest_do_banco()("POST", "llm_cache", body=list(linhas.values()),
+                                 prefer="resolution=ignore-duplicates")
+        return len(linhas) if 200 <= st < 300 else 0
+    except Exception as ex:
+        print(f"[sinapi-pick] escolha guardada: a gravação falhou (segue): {ex}")
+        return 0
+
+
 def _client():
     """Client Anthropic, ou None se não houver chave (matcher segue sem a IA)."""
     api_key = os.getenv("ANTHROPIC_API_KEY")
@@ -678,22 +789,24 @@ def pick_best_batch(items: List[Dict], batch_size: int = 12,
         return {}
 
     escolhas: Dict[int, Optional[str]] = {}
+    # 18/10: o item que já teve a escolha feita (mesma descrição, mesma unidade,
+    # mesmos candidatos) não volta pra IA — ver `escolhas_guardadas`
+    guardadas = escolhas_guardadas(alvos)
+    if guardadas:
+        escolhas.update(guardadas)
+        print(f"[sinapi-pick] {len(guardadas)} de {len(alvos)} item(ns) com a escolha "
+              f"guardada — sem IA")
+        alvos = [(i, it) for i, it in alvos if i not in guardadas]
     for ini in range(0, len(alvos), batch_size):
         lote = alvos[ini:ini + batch_size]
         linhas = []
         for i, it in lote:
-            cands = "\n".join(
-                f'     - {c.get("codigo")}: {_texto_pra_ia(c.get("descricao"))} [un: {c.get("unidade") or "?"}]'
-                for c in it['candidates']
-            )
-            linhas.append(
-                f'  i={i} | ITEM: {(it.get("description") or "")[:_TETO_TEXTO_IA]} '
-                f'[un: {it.get("unit") or "?"}]\n     CANDIDATOS:\n{cands}')
+            linhas.append(f'  i={i} | ' + _linha_do_item(it))
         try:
             from llm_retry import call_with_retry
             resp = call_with_retry(
                 client, tag="sinapi_pick", job_id=job_id, max_retries=3,
-                model="claude-haiku-4-5-20251001", max_tokens=1500,
+                model=_MODELO_DA_ESCOLHA, max_tokens=1500,
                 messages=[{"role": "user",
                            "content": _PICK_PROMPT.format(items="\n".join(linhas))}],
             )
@@ -706,6 +819,8 @@ def pick_best_batch(items: List[Dict], batch_size: int = 12,
             # strict=False: caractere de controle cru DENTRO de string (TAB,
             # quebra de linha) derrubava o lote inteiro — 12 itens sem a IA.
             # Visto 1× em 32 chamadas reais (27/09/2026).
+            do_lote = {i for i, _it in lote}
+            novas = []
             for e in json.loads(m.group(0), strict=False):
                 idx = e.get("i")
                 cod = e.get("codigo")
@@ -716,6 +831,11 @@ def pick_best_batch(items: List[Dict], batch_size: int = 12,
                 # blinda contra a IA inventar código que não existe na base.
                 validos = {c.get("codigo") for c in (items[idx].get('candidates') or [])}
                 escolhas[idx] = cod if cod in validos else None
+                # guarda o que a IA DECIDIU: um código válido, ou "nenhum" dito
+                # por ela. Código inventado não se guarda — a próxima vez pergunta.
+                if idx in do_lote and (cod is None or cod in validos):
+                    novas.append((items[idx], escolhas[idx]))
+            guardar_escolhas(novas)
         except Exception as ex:
             print(f"[sinapi-pick] lote falhou (segue sem IA): {ex}")
     return escolhas

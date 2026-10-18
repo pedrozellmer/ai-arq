@@ -10494,6 +10494,52 @@ _CHAVES_AVALIAVEIS = frozenset({
 })
 _CHAVES_DA_AVALIACAO: dict = {}        # job de avaliação → {chave: "0" | "1"}
 
+# ══════════════════════════════════════════════════════════════════════
+#  AVALIAÇÃO SEM A ETAPA DO SINAPI (18/10/2026) — `?sem_sinapi=1`
+# ══════════════════════════════════════════════════════════════════════
+# 💸 Gasto de API, 30 dias (`llm_uso`): 66 avaliações, 21 liberadas ao cliente;
+# o `sinapi_pick` delas custou US$ 31,02 — US$ 20,62 nas 45 que NÃO foram
+# liberadas. Avaliação que testa uma regra do motor não precisa da referência
+# SINAPI pra dizer se a regra presta.
+# 🪤 Mas a etapa não é só a referência: é ela que confere a unidade da linha
+# contra o código confirmado — avisa em 129 de 169 jobs (1.000 avisos) e tira
+# o selo de 31 linhas em 13 jobs (30 dias, `motor:sinapi-unidade`). Por isso:
+#   - é OPCIONAL, por avaliação (o padrão segue o pipeline inteiro, fiel);
+#   - a avaliação que pulou deixa a marca `motor:sinapi-pulado` no error_log;
+#   - e NÃO é liberada pro cliente (nem à mão nem pelo vigia automático): a
+#     planilha dela não tem a referência nem a conferência de unidade. Pra
+#     liberar, roda a avaliação de novo sem a opção.
+# 🪤 Mora na memória, como as chaves: uma avaliação que atravessa um restart
+# volta COM o SINAPI (o lado caro, não o lado errado).
+_SEM_SINAPI_DA_AVALIACAO: set = set()   # jobs de avaliação que pediram ?sem_sinapi=1
+_ETAPA_SINAPI_PULADA = "motor:sinapi-pulado"
+
+
+def _pediu_sem_sinapi(valor) -> bool:
+    return str(valor or "").strip().lower() in ("1", "true", "sim")
+
+
+def _avaliacao_sem_sinapi(job_id) -> bool:
+    """Esta passada é de uma avaliação que pediu pra pular a etapa do SINAPI?
+    Só job de avaliação ("ev…"); job de cliente NUNCA pula."""
+    jid = str(job_id or "")
+    return jid.startswith("ev") and jid in _SEM_SINAPI_DA_AVALIACAO
+
+
+def _avaliacao_rodou_sem_sinapi(eval_job_id):
+    """True/False se a avaliação deixou a marca de que pulou o SINAPI; None se
+    não deu pra ler (quem libera trata como "não sei" e não libera)."""
+    try:
+        st, linhas = _supa_rest_service(
+            "GET", "error_log",
+            params={"job_id": f"eq.{eval_job_id}", "stage": f"eq.{_ETAPA_SINAPI_PULADA}",
+                    "select": "id", "limit": "1"})
+        if st != 200:
+            return None
+        return bool(linhas)
+    except Exception:
+        return None
+
 
 def _chaves_pedidas(texto) -> dict:
     """"AMBIENTE_AREA_ESCRITA=1,ATTDEF_SOLTO_E_TEXTO=0" → {chave: "0"|"1"}.
@@ -21033,6 +21079,15 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # BORRACHA com 100% de confiança. Agora a busca só JUNTA candidatos (é boa
         # nisso) e a Haiku ESCOLHE — e responde "nenhum" quando o SINAPI não tem o
         # serviço, em vez de empurrar o vizinho mais parecido.
+        # 18/10: a avaliação que pediu `?sem_sinapi=1` pula a etapa inteira (a
+        # escolha e a conferência de unidade) e deixa a marca que impede liberar.
+        _pular_sinapi = _avaliacao_sem_sinapi(job_id)
+        if _pular_sinapi:
+            print(f"[sinapi] job={job_id}: avaliação sem a etapa do SINAPI (sem_sinapi=1)")
+            _log_error(_ETAPA_SINAPI_PULADA,
+                       "avaliação sem a etapa do SINAPI (sem_sinapi=1): a planilha sai sem a "
+                       "referência e sem a conferência de unidade — não pode ser liberada",
+                       job_id, severity="info")
         try:
             from sinapi_matcher import candidates_for, apply_llm_pick
             from concurrent.futures import ThreadPoolExecutor
@@ -21050,7 +21105,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
             # não de conta — em série dava ~1,4s/item (2min+ numa planilha de 100).
             # Best-effort: item que falhar sai fora sem derrubar a planilha.
             with ThreadPoolExecutor(max_workers=5) as _ex:   # 8→5: gentileza com a CPU da instância Supabase (fix SINAPI timeout 2026-07-22)
-                lote = [r for r in _ex.map(_cands, all_items) if r]
+                lote = [r for r in _ex.map(_cands, [] if _pular_sinapi else all_items) if r]
             n_conf = apply_llm_pick(lote, job_id=job_id)   # sem ANTHROPIC_API_KEY → 0, cai no corte por nota
             for e in lote:
                 if e["candidates"]:
@@ -36488,7 +36543,8 @@ async def reprocess_project(job_id: str, request: Request):
 @app.post("/api/admin/eval-reprocess/{job_id}")
 def admin_eval_reprocess(job_id: str, request: Request,
                          project_type: Optional[str] = None,
-                         chaves: Optional[str] = None):
+                         chaves: Optional[str] = None,
+                         sem_sinapi: Optional[str] = None):
     """ADMIN — "modo avaliação": re-roda os arquivos de um projeto num job
     ISOLADO, sem tocar no projeto do cliente. Serve pra comparar leituras sem
     risco (ex.: DWG vs PDF, ou motor novo vs antigo).
@@ -36504,7 +36560,11 @@ def admin_eval_reprocess(job_id: str, request: Request,
 
     `?chaves=NOME=1,OUTRA=0` (12/10/2026): liga ou desliga chaves do extrator SÓ
     nesta avaliação — pra medir uma seção nova na planilha de verdade sem ligá-la
-    pros clientes. Ver `_CHAVES_AVALIAVEIS`."""
+    pros clientes. Ver `_CHAVES_AVALIAVEIS`.
+
+    `?sem_sinapi=1` (18/10/2026): a avaliação pula a etapa do SINAPI (a escolha
+    da IA e a conferência de unidade) — mais barata, e não pode ser liberada pro
+    cliente. Ver `_SEM_SINAPI_DA_AVALIACAO`."""
     _require_admin(request)
     import urllib.request, urllib.error, json, shutil
     from urllib.parse import unquote
@@ -36512,6 +36572,7 @@ def admin_eval_reprocess(job_id: str, request: Request,
         _chaves_eval = _chaves_pedidas(chaves)
     except ValueError as _ech:
         raise HTTPException(400, str(_ech))
+    _sem_sinapi = _pediu_sem_sinapi(sem_sinapi)
 
     # 1) Projeto original (service role — admin já validado no _require_admin)
     try:
@@ -36613,7 +36674,8 @@ def admin_eval_reprocess(job_id: str, request: Request,
         # as chaves pedidas ficam no NOME: quem abre a avaliação vê com o que ela rodou
         "project_name": (f"[TESTE] {orig.get('project_name', 'Projeto')} — avaliação"
                          + (" [" + ", ".join("%s=%s" % kv for kv in sorted(_chaves_eval.items())) + "]"
-                            if _chaves_eval else "")),
+                            if _chaves_eval else "")
+                         + (" [sem SINAPI]" if _sem_sinapi else "")),
         "typology": typology,
         "project_type": ptype,
         "files_count": len(eval_file_paths),
@@ -36631,6 +36693,12 @@ def admin_eval_reprocess(job_id: str, request: Request,
         _log_error("admin:filhote-inicio",
                    "avaliação com chaves próprias: " + ", ".join(
                        "%s=%s" % kv for kv in sorted(_chaves_eval.items())),
+                   eval_job_id, severity="info")
+    # 18/10: sem a etapa do SINAPI — antes de disparar, como as chaves
+    if _sem_sinapi:
+        _SEM_SINAPI_DA_AVALIACAO.add(eval_job_id)
+        _log_error("admin:filhote-inicio",
+                   "avaliação SEM a etapa do SINAPI (sem_sinapi=1): não pode ser liberada",
                    eval_job_id, severity="info")
 
     # 5) Dispara — MESMO pipeline (avaliação fiel). NÃO incrementa reprocess do original.
@@ -36674,6 +36742,7 @@ def admin_eval_reprocess(job_id: str, request: Request,
         "files_count": len(eval_file_paths),
         "view_url": f"/projeto.html?job_id={eval_job_id}",
         "chaves": dict(_chaves_eval),
+        "sem_sinapi": _sem_sinapi,
     }
 
 
@@ -36950,6 +37019,15 @@ def _auto_liberar_filhote_quando_pronto(eval_job_id: str, pai_id: str,
             return
         if (rows[0].get("user_id") or "") != "eval":
             return          # alguém já liberou à mão no meio do caminho
+        # 18/10: avaliação sem a etapa do SINAPI não vai pro cliente — nem aqui
+        _pulou = _avaliacao_rodou_sem_sinapi(eval_job_id)
+        if _pulou is not False:
+            _log_error("filhote:auto",
+                       "não liberei: " + ("a avaliação rodou sem a etapa do SINAPI (sem_sinapi=1)"
+                                          if _pulou else "não consegui conferir se rodou com o "
+                                                         "SINAPI — na dúvida, não mexo"),
+                       eval_job_id)
+            return
         pai = _supa_rows("GET", "projects",
                params={"job_id": f"eq.{pai_id}",
                        "select": "job_id,user_id,user_email,user_name,project_name"})
@@ -37604,6 +37682,19 @@ def admin_liberar_filhote(eval_job_id: str, request: Request):
         raise HTTPException(400, "Filhote sem parent_job_id — não sei de quem é")
     if filho.get("status") != "done":
         raise HTTPException(400, f"Filhote ainda não concluiu (status={filho.get('status')})")
+    # 18/10: a avaliação que pulou o SINAPI não vai pro cliente (ver
+    # `_SEM_SINAPI_DA_AVALIACAO`). Falha FECHADA: sem conseguir ler a marca,
+    # não libera. Revogar não passa por aqui — recolher sempre pode.
+    if not revogar:
+        _pulou = _avaliacao_rodou_sem_sinapi(eval_job_id)
+        if _pulou is None:
+            raise HTTPException(502, "Não consegui conferir se esta avaliação rodou com o "
+                                     "SINAPI — não libero sem saber.")
+        if _pulou:
+            raise HTTPException(409, "Esta avaliação rodou SEM a etapa do SINAPI "
+                                     "(sem_sinapi=1): a planilha não tem a referência nem a "
+                                     "conferência de unidade. Pra liberar, rode a avaliação "
+                                     "de novo sem essa opção.")
 
     pai = _supa_rows("GET", "projects",
            params={"job_id": f"eq.{pai_id}",
