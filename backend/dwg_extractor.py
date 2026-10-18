@@ -389,6 +389,16 @@ class DXFExtraction:
                 % (", ".join("'%s'" % n for n in _nomes_cp[:20]),
                    " (e mais %d)" % (len(_nomes_cp) - 20) if len(_nomes_cp) > 20 else ""))
             lines.append("")
+        # 18/10: a base copiada em plantas temáticas já saiu da contagem (chave
+        # BASE_COPIADA_UMA_VEZ) — a IA tem de saber que o número já vem 1×
+        if (_pr_md.get("base_em_plantas_tematicas") or {}).get("aplicada"):
+            lines.append(
+                "BASE CONTADA UMA VEZ: a mesma base de arquitetura aparece em mais de uma "
+                "planta temática do mesmo andar (iluminação, força, layout…). As peças "
+                "repetidas da base JÁ foram contadas uma vez nas contagens de bloco deste "
+                "arquivo — use a contagem como está: não divida e não multiplique. "
+                "Comprimento de layer e área de hachura deste arquivo ainda somam as cópias.")
+            lines.append("")
 
         # 📄 Leitura por folha: a IA precisa saber que as medidas abaixo JÁ vêm
         # sem o esquema/detalhe e com a planta-tipo multiplicada — senão ela
@@ -12177,6 +12187,15 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
                 _bpt = base_copiada_em_plantas_tematicas(blocks, _cop, unit_factor)
                 if _bpt.get("aplicada"):
                     metadata["base_em_plantas_tematicas"] = _bpt
+                    # 🩸 18/10 (1ª avaliação do caso): as cópias que saíram não
+                    # estão mais na contagem — o registro diz só o que FICOU em
+                    # cópia. Sem isto o prompt mandava "a contagem soma as cópias,
+                    # não divida" sobre a lista já pela metade (a IA largou a
+                    # mobília inteira) e o selo rebaixava as linhas certas.
+                    # 🪤 Os leitores fazem `tipos_copiados or nomes`: os dois.
+                    _rest = tipos_nas_copias(blocks, _cop.get("vetores"), unit_factor)
+                    _cop["tipos_copiados"] = _rest
+                    _cop["nomes"] = {n: k for n, k in (_cop.get("nomes") or {}).items() if n in _rest}
             # 🩸 29/09 (Pedro): da sombra para o REBAIXAMENTO — só selo, nenhum
             # número muda. m/m²/m³ por esta ressalva; contagem, por tipo, em
             # `engine_rules.selo_apos_planta_repetida`. 🪤 Fica FORA da lista que

@@ -167,10 +167,29 @@ def test_ponta_a_ponta_com_a_chave_ligada(tmp_path, monkeypatch):
     assert "base_em_plantas_tematicas" not in ex.to_structured_prompt()
 
 
+def test_depois_de_contar_uma_vez_o_registro_e_o_prompt_nao_dizem_mais_que_soma(tmp_path, monkeypatch):
+    """🩸 18/10, 1ª avaliação: o prompt seguia dizendo "a contagem soma as cópias,
+    não divida" sobre a mobília já pela metade — a IA largou 13 linhas — e o selo
+    seguia rebaixando. O registro (que o selo lê) e o prompt dizem o que FICOU."""
+    monkeypatch.setenv(CHAVE, "1")
+    ex = dx.extract_dxf(_arquivo(tmp_path))
+    cop = ex.metadata.get("copias_sombra") or {}
+    copiados = set(cop.get("tipos_copiados") or cop.get("nomes") or {})
+    assert not copiados & set(MOVEIS), copiados
+    p = ex.to_structured_prompt()
+    assert "BASE CONTADA UMA VEZ" in p, p[:1500]
+    assert not any("PLANTA REPETIDA NO MODELO" in x and "'CADEIRA'" in x for x in p.splitlines())
+
+
 def test_CONTROLE_ponta_a_ponta_com_a_chave_desligada_e_como_era(tmp_path, _sem_chave):
     ex = dx.extract_dxf(_arquivo(tmp_path))
     assert _conta(ex.blocks).get("CADEIRA") == 8
     assert "base_em_plantas_tematicas" not in ex.metadata
+    cop = ex.metadata.get("copias_sombra") or {}
+    assert "CADEIRA" in set(cop.get("tipos_copiados") or cop.get("nomes") or {})
+    p = ex.to_structured_prompt()
+    assert "BASE CONTADA UMA VEZ" not in p
+    assert any("PLANTA REPETIDA NO MODELO" in x and "'CADEIRA'" in x for x in p.splitlines()), p[:1500]
 
 
 def test_a_chave_e_avaliavel_e_desligada_por_padrao():
