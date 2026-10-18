@@ -749,6 +749,9 @@ _STAGES_DIAGNOSTICO = frozenset({
     # 28/09: avisos da passada anterior que saíram quando a nova deu certo
     "motor:avisos-velhos",
     "motor:refaz-planilha-admin",
+    # 18/10: registros de régua, não erro — a base contada 1× e o tipo de
+    # bloco com muitas peças que nenhuma linha cita
+    "motor:base-em-plantas-tematicas", "motor:bloco-sem-linha",
     "libredwg:usado-no-fluxo", "libredwg:qualidade", "libredwg:batch",
     "pdfvec:shadow", "pdfvec:promo", "pdfvec:memoria", "dxfrooms:shadow",
     # 12/10: SOMBRA — a escala em uso da página de PDF ao lado do grupo mais
@@ -10486,6 +10489,8 @@ _CHAVES_AVALIAVEIS = frozenset({
     "SO_O_QUE_ESTA_NAS_PRANCHAS",
     # 18/10: a base copiada em plantas temáticas do mesmo andar conta 1×
     "BASE_COPIADA_UMA_VEZ",
+    # 18/10: aviso de tipo de bloco com muitas peças que não virou linha
+    "BLOCO_SEM_LINHA",
 })
 _CHAVES_DA_AVALIACAO: dict = {}        # job de avaliação → {chave: "0" | "1"}
 
@@ -10519,6 +10524,15 @@ def _env_da_extracao(job_id: str):
     env = dict(os.environ)
     env.update(chaves)
     return env
+
+
+def _chave_do_job(job_id: str, nome: str, padrao: str = "0") -> str:
+    """O valor de uma chave lida no PRÓPRIO process_job (não no extrator): a
+    avaliação que pediu a chave manda; senão, o ambiente do servidor."""
+    chaves = _CHAVES_DA_AVALIACAO.get(str(job_id or "")) or {}
+    if str(job_id or "").startswith("ev") and nome in chaves:
+        return str(chaves[nome])
+    return os.environ.get(nome, padrao)
 
 
 def _extract_dxf_isolated(dxf_path, unit_consensus, timeout_s=900, job_id: str = ""):
@@ -15951,6 +15965,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                 n_dxf = len(dxf_paths)
                 dxf_span = cad_end_pct - extract_start
                 _escala_arqs = []   # 21/08: como a escala de cada prancha foi decidida
+                _blocos_para_aviso = {}   # 18/10: tipo de bloco → peças, somado no job
                 # 🔑 22/09/2026 — O QUE O MOTOR MEDIU, guardado pra depois.
                 # `extraction` morre no fim de cada volta (`del extraction`, por
                 # causa da RAM), e a chave do selo só roda no FIM do job, depois
@@ -16724,6 +16739,17 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                             _indice_geom["contagem"].append((str(_blk), int(_n)))
                     except Exception as _eig:
                         print(f"[selo:indice] {os.path.basename(dxf_path)}: nao consegui guardar ({_eig})")
+                    # 18/10: os tipos de bloco deste arquivo, pra ver no fim se
+                    # o que tem muitas peças virou linha (`blocos_sem_linha`)
+                    try:
+                        from engine_rules import familia_do_bloco_para_aviso as _fam_av
+                        for _blk, _n in (extraction.get_block_summary() or {}).items():
+                            if str(_blk).startswith("*"):
+                                continue
+                            _fa = _fam_av(_blk)
+                            _blocos_para_aviso[_fa] = _blocos_para_aviso.get(_fa, 0) + int(_n)
+                    except Exception as _ebl:
+                        print(f"[bloco-sem-linha] {os.path.basename(dxf_path)}: nao guardei ({_ebl})")
 
                     # 2. Enviar pro Claude interpretar
                     jobs.update_field(job_id, progress=dxf_mid)
@@ -21500,6 +21526,34 @@ bloco — só cite os que estão no inventário deste arquivo."""
             _recontar_aviso_planob()
         except Exception as _erp:
             print(f"[aviso-planob] recontagem final nao-fatal: {_erp}")
+
+        # 🩸 18/10/2026 — tipo de bloco com muitas peças que não virou linha. O
+        # registro vai sempre pro log; o aviso ao cliente só com a chave
+        # BLOCO_SEM_LINHA=1 (padrão desligada, avaliável). Projeto de ESTRUTURA
+        # fica de fora: lá a arquitetura do desenho não é escopo.
+        try:
+            _bl_av = _blocos_para_aviso
+        except NameError:
+            _bl_av = {}
+        if _bl_av and not is_structural:
+            try:
+                from engine_rules import (blocos_sem_linha as _sem_linha,
+                                          aviso_de_blocos_sem_linha as _aviso_sem_linha)
+                _faltam = _sem_linha(_bl_av, [
+                    "%s %s" % (getattr(_it, "description", "") or "",
+                               getattr(_it, "observations", "") or "")
+                    for _it in (all_items or [])])
+                if _faltam:
+                    _log_error("motor:bloco-sem-linha",
+                               "tipos=%d | %s" % (len(_faltam), " · ".join(
+                                   "%s=%d" % (str(n)[:40], k) for n, k in _faltam[:12])),
+                               job_id, severity="info")
+                    if _chave_do_job(job_id, "BLOCO_SEM_LINHA") == "1":
+                        project_data.warnings = (
+                            (getattr(project_data, "warnings", None) or [])
+                            + [_aviso_sem_linha(_faltam)])
+            except Exception as _ebsl:
+                print(f"[bloco-sem-linha] nao-fatal: {_ebsl}")
 
         # ── RETRATO DO SELO (instrumento, não conserto) ─────────────────────
         # 🩸 04/09/2026 — MEDIDO: 53% dos projetos concluídos não têm UMA linha

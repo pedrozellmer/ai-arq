@@ -9045,3 +9045,96 @@ def pdfs_da_prancha_ja_lida_no_cad(pdfs, refs_do_cad, texto_do_pdf=None,
                 continue
         sai.append(p)
     return sai
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  TIPO DE BLOCO COM MUITAS PEÇAS QUE NÃO VIROU LINHA (18/10/2026)
+# ══════════════════════════════════════════════════════════════════════════
+#: 🩸 18/10/2026 — avaliação de um elétrico de galpão: nas duas rodadas com a
+#: base contada uma vez, a IA não fez linha pra cadeiras (40, 14, 12, 5) nem
+#: sofá (12) de uma prancha — os blocos estavam no texto que ela leu. Ninguém
+#: no motor olhava se o que o desenho tem com muitas peças chegou à planilha.
+#: 📏 Medido antes, em 13 planilhas entregues (14 DXF de cliente): 43 tipos com
+#: ≥ 5 peças sem linha que cite o bloco. ~22 eram anotação (fiação, seta,
+#: chamada, corte, norte, hachura de planta) — saem pelo nome; 9 eram de um
+#: projeto que o cliente marcou ESTRUTURA (fora do escopo — não roda lá); os
+#: ~10 que sobram (cobogó 15, soleira 8, bicicleta 6, painel de fachada 27…)
+#: são o que a rede quer mostrar.
+#: 🔑 SÓ AVISA: não cria linha, não mexe em número. A IA às vezes descreve a
+#: peça sem citar o bloco — o aviso diz "confira", não "faltou".
+_BLOCO_SEM_LINHA_MIN = 5
+#: começo de palavra que denuncia ANOTAÇÃO no nome do bloco (já sem acento)
+_PREFIXOS_DE_ANOTACAO = ("seta", "chamad", "anota", "callout", "simb", "smb", "norte",
+                         "neutro", "retorno", "hatch", "arvore", "arbol", "pessoa",
+                         "vegeta", "corte", "eixo", "nivel", "titulo", "carimbo", "logo",
+                         "cota", "revis")
+#: palavra inteira de anotação (curta demais pra prefixo). 🪤 "terra" NÃO entra:
+#: caixa/haste de terra é peça; a marca de fiação Cond-Terra sai por "cond".
+_PALAVRAS_DE_ANOTACAO = frozenset({"cond", "fase", "tree"})
+_PARES_DE_ANOTACAO = ("view reference", "floor plan")
+#: export do Revit: "Família - Tipo-<id da peça>-<vista>" — a família é o tipo
+_RE_PECA_DO_REVIT_NO_NOME = _re.compile(r"-(?:\d{5,}|V\d{1,3})-")
+
+
+def _nome_normalizado_do_bloco(s) -> str:
+    """Minúsculo, sem acento, tudo que não é letra/número vira um espaço."""
+    return " ".join(_re.findall(r"[a-z0-9]+", _minusculo_sem_acento(str(s or ""))))
+
+
+def familia_do_bloco_para_aviso(nome) -> str:
+    """O tipo que o aviso cita: no export do Revit, a família (antes de " - ");
+    no resto, o nome como está."""
+    n = str(nome or "").strip()
+    if _RE_PECA_DO_REVIT_NO_NOME.search(n) and " - " in n:
+        return n.split(" - ")[0].strip() or n
+    return n
+
+
+def bloco_e_anotacao_pelo_nome(nome) -> bool:
+    """O nome diz que o bloco é anotação do desenho (seta, chamada, corte, norte,
+    marca de fiação…) — ou não tem nenhuma palavra de ≥ 4 letras (1F+N+T, 11111)."""
+    k = _nome_normalizado_do_bloco(nome)
+    if not k:
+        return True
+    palavras = k.split()
+    if not any(len(p) >= 4 and p.isalpha() for p in palavras):
+        return True
+    if any(p in _PALAVRAS_DE_ANOTACAO for p in palavras):
+        return True
+    if any(p.startswith(_PREFIXOS_DE_ANOTACAO) for p in palavras):
+        return True
+    return any(par in k for par in _PARES_DE_ANOTACAO)
+
+
+def blocos_sem_linha(blocos, textos, minimo: int = _BLOCO_SEM_LINHA_MIN) -> list:
+    """Tipos de bloco com ≥ `minimo` peças que nenhum texto da planilha cita.
+
+    `blocos` = {nome: peças} (já somado por família); `textos` = descrição +
+    observação de cada linha final. Casa pelo nome normalizado como palavras
+    inteiras. Devolve [(nome, peças)] do maior pro menor."""
+    corpo = " " + " ".join(_nome_normalizado_do_bloco(t) for t in (textos or ())) + " "
+    out = []
+    for nome, n in (blocos or {}).items():
+        try:
+            n = int(n)
+        except (TypeError, ValueError):
+            continue
+        if n < minimo or bloco_e_anotacao_pelo_nome(nome):
+            continue
+        k = _nome_normalizado_do_bloco(nome)
+        if (" " + k + " ") in corpo:
+            continue
+        out.append((str(nome), n))
+    return sorted(out, key=lambda t: (-t[1], t[0]))
+
+
+def aviso_de_blocos_sem_linha(faltam, teto: int = 8) -> str:
+    """A linha do aviso ao cliente ('' sem nada)."""
+    if not faltam:
+        return ""
+    lista = ", ".join("'%s' (%d)" % (str(n)[:50], k) for n, k in faltam[:teto])
+    mais = " e mais %d tipo(s)" % (len(faltam) - teto) if len(faltam) > teto else ""
+    return ("🔎 Estes tipos de bloco aparecem no desenho com várias peças e nenhuma linha "
+            "da planilha cita o bloco: %s%s. Pode ser anotação do desenho ou algo fora do "
+            "seu escopo — mas, se for peça da obra, confira: pode ter ficado de fora do "
+            "levantamento." % (lista, mais))
