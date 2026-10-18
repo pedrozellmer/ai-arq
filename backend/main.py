@@ -14209,6 +14209,16 @@ def _resumo_escala_arquivo(caminho: str, md: dict) -> dict:
         if md.get("unidade_provada_por_rotulo"):
             return {"nome": nome, "status": "rotulo", "n": 0, "unidade": uni}
         if md.get("unidade_por_consenso_projeto"):
+            # 🩸 18/10/2026 (job 1c0be86e): a escala da planta de arquitetura (metros,
+            # 714 cotas) foi emprestada a 9 pranchas de estrutura sem cota, e nelas
+            # o maior elemento mediria 5.900 m — o extrator alarmou, mas este ramo
+            # vinha antes do alarme e o cliente leu "✅ Escala conferida". Emprestada
+            # e desmentida pelo tamanho do próprio desenho: vale o alarme.
+            if md.get("alerta_unidade"):
+                return {"nome": nome, "status": "alerta",
+                        "declarada": md.get("unidade_desenho") or "?",
+                        "alerta": ("a escala provada em outra prancha deste projeto não serve "
+                                   "nesta — " + str(md["alerta_unidade"]))[:240]}
             return {"nome": nome, "status": "consenso", "n": 0, "unidade": uni}
         # 🩸 30/09/2026 (job 9a2c5d87): a unidade saiu da NOTA do desenho
         # ("MEDIDAS EM CENTÍMETROS") confirmada pelas cotas explodidas — é
