@@ -67,7 +67,8 @@ def test_PORTA_da_divisoria_entra_na_conta():
                _it(DIVI, "Porta de vidro temperado 90x210", "un", 2, "confirmado")],
               "Divisórias e vidros")
     assert f["origem"] == "calculada", f["origem"]
-    assert "90822" in f["origem_detalhe"] and "8 un" in f["origem_detalhe"]
+    # 18/10: a porta de VIDRO não entra na taxa da de madeira (era "8 un").
+    assert "90822" in f["origem_detalhe"] and "6 un" in f["origem_detalhe"], f["origem_detalhe"]
 
 
 def test_DEMOLICAO_de_divisoria_entra_na_conta():

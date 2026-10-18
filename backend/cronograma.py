@@ -71,6 +71,36 @@ def _mapear_fase(disc_upper: str):
     return None
 
 
+def _percentuais_por_mes(fase: Dict, meses: List[Dict]) -> List[int]:
+    """% da fase executado em cada mês — a linha da matriz física.
+
+    🩸 18/10/2026 — A SOMA PASSAVA DE 100%. A fase ocupa [inicio, fim): `fim`
+    é exclusivo (`fim = inicio + dur_dias`), mas o overlap contava os dias
+    com `+ 1`, como se o `fim` fosse inclusivo. Toda fase que cruzava a virada
+    do mês ganhava um dia em cada mês: no /exemplo, Revestimentos saía
+    94% + 12% = 106%, Forros 108%, Pisos 107%. E a fase que terminava no dia 1
+    aparecia com 1–3% num mês em que não tinha nada.
+    O arredondamento é do ACUMULADO (o mês leva a diferença), então a linha
+    fecha em 100 exatos — arredondar mês a mês dava 101 (34 + 36 + 31).
+    Marco (fim = início) vale 100% no mês em que cai, como antes.
+    """
+    f_ini = _parse_date(fase['inicio'])
+    f_fim = _parse_date(fase['fim'])
+    if f_fim <= f_ini:
+        return [100 if _parse_date(m['inicio']) <= f_ini <= _parse_date(m['fim']) else 0
+                for m in meses]
+    dur = (f_fim - f_ini).days
+    pcts, dias_acum, pct_acum = [], 0, 0
+    for m in meses:
+        m_ini = _parse_date(m['inicio'])
+        m_fim_excl = _parse_date(m['fim']) + timedelta(days=1)
+        dias_acum += max(0, (min(f_fim, m_fim_excl) - max(f_ini, m_ini)).days)
+        novo = round(100 * dias_acum / dur)
+        pcts.append(novo - pct_acum)
+        pct_acum = novo
+    return pcts
+
+
 def _parse_date(s: str) -> date:
     """Converte ISO string (YYYY-MM-DD) pra date."""
     return date.fromisoformat(s)
@@ -372,28 +402,9 @@ def gerar_cronograma_de_fases_custom(fases_custom: List[Dict], data_inicio: str,
         cursor = prox
 
     # Matriz % por disciplina × mês
-    matriz = []
-    for fase in fases:
-        f_ini = _parse_date(fase['inicio'])
-        f_fim = _parse_date(fase['fim'])
-        f_dur = fase['dur_dias']
-        pcts = []
-        for m in meses:
-            m_ini = _parse_date(m['inicio'])
-            m_fim = _parse_date(m['fim'])
-            if f_fim < m_ini or f_ini > m_fim:
-                pcts.append(0)
-                continue
-            overlap_ini = max(f_ini, m_ini)
-            overlap_fim = min(f_fim, m_fim)
-            overlap_dias = (overlap_fim - overlap_ini).days + 1
-            pct = round(100 * overlap_dias / max(1, f_dur))
-            pcts.append(max(0, min(100, pct)))
-        matriz.append({
-            'label': fase['label'],
-            'cor': fase['cor'],
-            'percentuais_por_mes': pcts,
-        })
+    matriz = [{'label': fase['label'], 'cor': fase['cor'],
+               'percentuais_por_mes': _percentuais_por_mes(fase, meses)}
+              for fase in fases]
 
     # Curva S por ESFORÇO (01/08): mover/editar fase MOVE a curva —
     # a sigmoide antiga era função só do tempo, cega ao Gantt editado.
@@ -609,29 +620,10 @@ def gerar_cronograma(items: List[Dict], data_inicio: str,
         })
         cursor = prox
 
-    # Matriz de % por disciplina x mês (string "26%" ou "")
-    matriz = []
-    for fase in fases:
-        f_ini = _parse_date(fase['inicio'])
-        f_fim = _parse_date(fase['fim'])
-        f_dur = fase['dur_dias']
-        pcts = []
-        for m in meses:
-            m_ini = _parse_date(m['inicio'])
-            m_fim = _parse_date(m['fim'])
-            if f_fim < m_ini or f_ini > m_fim:
-                pcts.append(0)
-                continue
-            overlap_ini = max(f_ini, m_ini)
-            overlap_fim = min(f_fim, m_fim)
-            overlap_dias = (overlap_fim - overlap_ini).days + 1
-            pct = round(100 * overlap_dias / max(1, f_dur))
-            pcts.append(max(0, min(100, pct)))
-        matriz.append({
-            'label': fase['label'],
-            'cor': fase['cor'],
-            'percentuais_por_mes': pcts,
-        })
+    # Matriz de % por disciplina x mês
+    matriz = [{'label': fase['label'], 'cor': fase['cor'],
+               'percentuais_por_mes': _percentuais_por_mes(fase, meses)}
+              for fase in fases]
 
     # Curva S por ESFORÇO (01/08): derivada do próprio Gantt — peso de cada
     # fase (Hh calculado, ou dur_dias como proxy) distribuído nos dias dela.
