@@ -55,6 +55,17 @@ def _cabecalho(ws, branding: dict, tem_financeiro: bool, n_cols: int) -> int:
     return ro + 1
 
 
+# Mesmas palavras dos chips da tela (cronograma.html). Origem vazia ou
+# desconhecida vem de fase que o cliente criou/mexeu → "editada por você".
+_ORIGEM_LEGIVEL = {
+    'calculada': 'calculada das quantidades',
+    'calculada-parcial': 'calculada em parte',
+    'estimada': 'calculada de estimativa',
+    'padrão': 'sem conta: prazo de referência',
+    'editada': 'editada por você',
+}
+
+
 def _aviso_origem(ws, ro: int, fin: dict, n_cols: int) -> int:
     """A frase que mantém a regra nº1 e a nº5 visíveis DENTRO do arquivo.
 
@@ -105,7 +116,12 @@ def gerar_cronograma_xlsx(cronograma: dict, output_path: str,
     # não entram aqui. Usamos as palavras que o resto do AI.arq já usa:
     # disciplina, fase, desembolso. Ver feedback_nao_falar_mal_concorrente:
     # nem copiar, nem cutucar.
-    FIXAS = ['Nº', 'FASE / DISCIPLINA', 'INÍCIO', 'FIM', 'DURAÇÃO (DIAS)', '% EXECUTADO']
+    # 🩸 18/10/2026 — a ORIGEM da duração não saía no arquivo: "calculada das
+    # quantidades" e "% do prazo, sem conta" chegavam ao banco com a mesma
+    # cara. É a regra nº1 (medido × estimado) aplicada ao prazo.
+    FIXAS = ['Nº', 'FASE / DISCIPLINA', 'INÍCIO', 'FIM', 'DURAÇÃO (DIAS)',
+             'ORIGEM DA DURAÇÃO', '% EXECUTADO']
+    I_PCT = FIXAS.index('% EXECUTADO') + 1
     tem_real = bool(fin and (fin.get('n_fases_com_realizado') or 0) > 0)
     if tem_fin:
         FIXAS.append('VALOR DA FASE (R$)')
@@ -158,6 +174,7 @@ def gerar_cronograma_xlsx(cronograma: dict, output_path: str,
 
         vals = [idx + 1, fase.get('label', ''), fase.get('inicio', ''),
                 fase.get('fim', ''), fase.get('dur_dias', 0),
+                _ORIGEM_LEGIVEL.get(fase.get('origem') or '', 'editada por você'),
                 (float(fase.get('pct_executado') or 0) / 100.0)]
         realizado = float(fase.get('valor_realizado') or 0)
         if tem_fin:
@@ -172,9 +189,9 @@ def gerar_cronograma_xlsx(cronograma: dict, output_path: str,
             c.alignment = AL if i == 2 else AC
             if alt:
                 c.fill = alt
-            if i == 6:
+            if i == I_PCT:
                 c.number_format = FMT_PCT
-            if tem_fin and i >= 7:
+            if tem_fin and i > I_PCT:
                 c.number_format = FMT_MOEDA
                 c.alignment = AR
 
@@ -258,7 +275,7 @@ def gerar_cronograma_xlsx(cronograma: dict, output_path: str,
         ro += 1
 
     # ── larguras e painel congelado
-    larguras = [8, 42, 12, 12, 14, 13] + ([16] if tem_fin else []) + ([15, 15] if tem_real else [])
+    larguras = [8, 42, 12, 12, 14, 24, 13] +([16] if tem_fin else []) + ([15, 15] if tem_real else [])
     for i, w in enumerate(larguras, start=1):
         ws.column_dimensions[get_column_letter(i)].width = w
     for j in range(len(meses)):

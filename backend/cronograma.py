@@ -553,6 +553,14 @@ def gerar_cronograma(items: List[Dict], data_inicio: str,
         else:
             dur_dias = max(7, int(dur * duracao_dias))
             origem = 'padrão'
+            # 🪤 18/10/2026 — % do PRAZO, não da quantidade: cresce quando o
+            # prazo cresce. Um teto pela maior fase calculada foi testado e
+            # saiu: nos 23 da base, quantidade DESCONHECIDA (item em zero, "vb")
+            # virava 7 dias — pequena, com cara de medida. O que resolve é
+            # dar coeficiente ao item (cronograma_produtividade); aqui o
+            # trabalho é dizer, na tela e no arquivo, que não houve conta.
+            detalhe_padrao = (f'Sem quantidade que dê pra calcular — prazo de referência '
+                              f'({round(dur * 100)}% da duração da obra); ajuste à sua realidade.')
         # Fase não pode terminar depois do fim da janela: recua o início se preciso
         ini_dias = int(off * duracao_dias)
         if ini_dias + dur_dias > duracao_dias:
@@ -573,6 +581,8 @@ def gerar_cronograma(items: List[Dict], data_inicio: str,
             fase['esforco_hh'] = calc['esforco_hh']
             fase['origem_detalhe'] = calc['detalhe']
             fase['equipe_premissa'] = calc['equipe_premissa']
+        else:
+            fase['origem_detalhe'] = detalhe_padrao
         fases.append(fase)
         ja_adicionados.add(label)
     warnings_geracao.extend(avisos_cap)

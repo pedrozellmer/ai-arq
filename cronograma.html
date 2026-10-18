@@ -696,7 +696,7 @@ function addFaseRowEditor(fase, idx) {
     : fase.origem === 'editada'
     ? `<span class="shrink-0 text-[10px] font-semibold px-2 py-1 rounded-full bg-amber-100 text-amber-700" title="Você ajustou esta fase — a duração é sua">✎ editada por você</span>`
     : fase.origem === 'padrão'
-    ? `<span class="shrink-0 text-[10px] font-semibold px-2 py-1 rounded-full bg-slate-200 text-slate-600" title="Sem referência de produtividade pra esta etapa — duração proporcional padrão de obra; ajuste se quiser">padrão de mercado</span>`
+    ? `<span class="shrink-0 text-[10px] font-semibold px-2 py-1 rounded-full bg-slate-200 text-slate-600" title="${escapeAttr(fase.origem_detalhe || 'Sem referência de produtividade pra esta etapa — duração proporcional padrão de obra; ajuste se quiser')}">padrão de mercado</span>`
     : '';
   // Onda 3 (2026-05-25): linha 1 = controles principais (label/datas/etc).
   // Linha 2 = depende de + grupo pai + checkbox marco. Linha 2 fica retraída

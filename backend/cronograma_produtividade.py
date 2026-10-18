@@ -69,13 +69,44 @@ REFS_POR_FASE = {
         'equipe': 2,
         'un': ('97599', 0.232, 'luminária — instalação'),
     },
+    # 18/10/2026 — HIDRÁULICA, DIVISÓRIAS E DEMOLIÇÃO GANHARAM A UNIDADE QUE
+    # O QUANTITATIVO TRAZ — mas SÓ pro tipo de item que o coeficiente
+    # representa (4º elemento: a descrição tem de casar). Sem coeficiente a
+    # fase caía no % do prazo e crescia com o PRAZO, não com a quantidade:
+    # 3 bacias + 1 cuba viravam 82 dias numa obra de 5 meses.
+    # 🩸 A 1ª versão era por unidade, sem filtro, e o acervo derrubou: nos 23
+    # cronogramas da base o "un" de hidráulica ia de LUVA e JOELHO (320 numa
+    # obra só) a ESTACA RAIZ classificada na disciplina errada; o "un" de
+    # divisórias era quase todo JANELA; e "demolição m²" era TERRAPLENAGEM e
+    # LIMPEZA DE TERRENO (9.453 m² → 311 dias). Item que não casa fica fora da
+    # conta, como antes — a fase segue 'padrão' se nada casar.
+    # Hh somado da NOSSA base analítica (unidade H), conferido por SQL 18/10:
+    #  - 86888 bacia c/ caixa acoplada, 1,443 Hh — vale pra louça/aparelho e
+    #    pro "ponto de <aparelho>" (cuba 1,24; lavatório 1,19–2,44; chuveiro
+    #    1,64). Torneira (0,13–0,68), registro, ralo e conexão NÃO entram:
+    #    a 1,443 cada, 320 conexões viravam 2 meses de obra.
+    #  - 90822 porta 80×210, a mesma de Esquadrias. Janela não tem composição
+    #    por unidade na base (é por m²) — fica fora.
+    #  - 97638 remoção de drywall, 0,375 Hh/m². Alvenaria de 15 cm pela 97622
+    #    (2,55 Hh/m³ × 0,15) dá 0,38 — as duas demolições de reforma caem no
+    #    mesmo número. Forro, piso e terreno ficam fora (taxas outras).
     'Instalações hidráulicas': {
         'equipe': 2,
         'm': ('89356', 0.760, 'tubo PVC soldável 25 mm em ramal'),
+        'un': ('86888', 1.443, 'louça/aparelho sanitário (bacia c/ caixa acoplada)',
+               re.compile(r'\b(bacia|vaso|cuba|lavatorio|pia|mictorio|chuveiro|ducha'
+                          r'|tanque(?! sept)|loucas?)\b')),
     },
     'Divisórias e vidros': {
         'equipe': 2,
         'm2': ('96370', 0.456, 'parede drywall face simples'),
+        'un': ('90822', 2.876, 'porta de madeira 80×210 completa',
+               re.compile(r'\bportas?\b')),
+    },
+    'Demolição': {
+        'equipe': 2,
+        'm2': ('97638', 0.375, 'remoção de drywall / alvenaria de vedação',
+               re.compile(r'drywall|divisori|alvenaria|parede')),
     },
     # 20/08/2026 — Hh derivado da NOSSA base analítica no banco:
     # soma dos insumos de mão de obra (unidade H) da composição 103247
@@ -105,6 +136,12 @@ def _classe_unidade(unit):
     if u in ('un', 'und', 'unid', 'pc', 'pc.', 'peca', 'pca', 'cj', 'pt', 'ponto'):
         return 'un'
     return None
+
+
+def _sem_acento(txt):
+    """Minúsculo e sem acento — o filtro de descrição casa 'Lavatório' e 'lavatorio'."""
+    t = unicodedata.normalize('NFKD', str(txt or '').lower())
+    return ''.join(c for c in t if not unicodedata.combining(c))
 
 
 def _fmt_qty(q):
@@ -137,6 +174,9 @@ def esforco_por_fase(items, mapear_fase) -> dict:
         cls = _classe_unidade(it.get('unit'))
         if not cls or cls not in REFS_POR_FASE[label]:
             continue
+        _ref = REFS_POR_FASE[label][cls]
+        if len(_ref) > 3 and not _ref[3].search(_sem_acento(it.get('description'))):
+            continue
         try:
             qty = float(it.get('quantity') or 0)
         except (TypeError, ValueError):
@@ -161,7 +201,7 @@ def esforco_por_fase(items, mapear_fase) -> dict:
         partes = []
         refs = []
         for cls, qty in sorted(por_cls.items()):
-            codigo, hh_unid, desc = cfg[cls]
+            codigo, hh_unid, desc = cfg[cls][:3]
             hh = qty * hh_unid
             hh_total += hh
             unidade_label = {'m2': 'm²', 'm': 'm', 'un': 'un'}[cls]
