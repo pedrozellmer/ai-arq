@@ -9,10 +9,10 @@ quem lê o site pelo llms.txt, que é justamente o leitor de IA.
 Desde então `blog/generate.py` escreve o arquivo a partir de
 `blog/gerar_llms.py` (cabeçalho + uma linha curada por post), pela mesma regra
 de data do sitemap, e o deploy diário o regenera. Este guarda exige:
-- o arquivo commitado = o que o gerador produz hoje;
+- o arquivo commitado = o que o gerador produz na data em que a cópia foi gerada (18/10: era "hoje", e o CI
+  ficava vermelho em todo dia de post agendado);
 - linha curada para TODO post do posts.json, inclusive os agendados — assim
-  o post que vence de madrugada entra com texto escrito, e o CI não fica
-  vermelho por causa da data.
+  o post que vence de madrugada entra com texto escrito.
 """
 import importlib.util
 import io
@@ -41,10 +41,28 @@ def _slugs_no_texto(txt):
 
 
 def test_o_llms_commitado_e_o_que_o_gerador_produz():
+    """🩸 18/10/2026: este teste regenerava com a data REAL. No dia em que o post agendado de 18/10 entrou, o
+    llms.txt commitado ficou "velho" e a bancada ficou vermelha em dois commits que não tinham nada com o blog
+    (o deploy regenera; o site estava certo). Mesma mordida que o test_blog_gerado levou em 04/10 — agora a
+    comparação é na data em que a cópia commitada foi gerada, pela MESMA régua dele."""
+    from test_blog_gerado import _data_da_copia_commitada
+    data = _data_da_copia_commitada() or HOJE
     no_repo = io.open(os.path.join(_RAIZ, "llms.txt"), encoding="utf-8").read().replace("\r\n", "\n")
-    assert no_repo == GEN.render_llms().replace("\r\n", "\n"), (
-        "llms.txt difere do que blog/generate.py produz hoje — rode "
-        "`python blog/generate.py` (e, se mudou o texto, mude em blog/gerar_llms.py)")
+    assert no_repo == LL.montar(GEN.POSTS, data, GEN.SITE_URL).replace("\r\n", "\n"), (
+        "llms.txt difere do que blog/generate.py produz na data da cópia commitada (%s) — rode "
+        "`python blog/generate.py` (e, se mudou o texto, mude em blog/gerar_llms.py)" % data)
+
+
+def test_CONTROLE_o_gerador_usa_a_mesma_montagem_que_o_teste():
+    """Se o render_llms passar a montar diferente, o teste de cima compararia com outra coisa."""
+    assert GEN.render_llms() == LL.montar(GEN.POSTS, HOJE, GEN.SITE_URL)
+
+
+def test_CONTROLE_llms_de_outra_data_reprova():
+    """Um llms.txt gerado ANTES do post de 18/10 entrar não pode passar como o de hoje, e vice-versa."""
+    antes = LL.montar(GEN.POSTS, "2026-10-17", GEN.SITE_URL)
+    depois = LL.montar(GEN.POSTS, "2026-10-18", GEN.SITE_URL)
+    assert antes != depois, "o post de 18/10 não mudou o llms.txt — o controle perdeu o sentido"
 
 
 def _sem_linha(posts):
