@@ -29,6 +29,10 @@ sys.path.insert(0, os.path.join(RAIZ, "backend"))
 FONTE = os.path.join(RAIZ, "exemplos", "itens.json")
 XLSX = os.path.join(RAIZ, "exemplos", "quantitativo-exemplo-aiarq.xlsx")
 PAGINA = os.path.join(RAIZ, "exemplo.html")
+MEMORIAL = os.path.join(RAIZ, "exemplos", "memorial-exemplo-aiarq.docx")
+# 18/10/2026: o trecho do memorial na página sai do mesmo gerador, entre estes marcadores
+_BLOCO_MEMORIAL = re.compile(r"(<!-- memorial:inicio -->)(.*?)(<!-- memorial:fim -->)", re.S)
+SECAO_DO_TRECHO = "Instalações Elétricas e Dados"
 _BLOCO_EX = re.compile(r"const EX = \{.*?\]\};", re.S)
 _NUM_ITEM = re.compile(r"^\d+\.\d+$")
 _NUM_INDIRETO = re.compile(r"^S\.\d+$")
@@ -117,6 +121,77 @@ def gerar_planilha(dados, destino):
     numeros2, indiretos = _ler_orcamento(destino, descricoes)
     assert numeros2 == numeros, "a numeração mudou entre as duas passadas"
     return numeros, indiretos
+
+
+# ── Memorial (rascunho) do mesmo projeto — 18/10/2026 ─────────────────────────────────────────────
+# Mesmo caminho do produto: os itens no formato das linhas de project_items (o que a rota do memorial
+# lê do banco) → memorial.montar_estrutura → estrutura_para_docx. Sem IA: a redação opcional por IA
+# dos parágrafos de abertura NÃO entra no exemplo.
+
+def itens_do_memorial(dados, numeros):
+    return [{"item_num": numeros[it["desc"]], "sort_order": n, "description": it["desc"], "unit": it["un"],
+             "quantity": it["qtd"], "discipline": it["disc"], "observations": it["obs"],
+             "confidence": "confirmado" if it["medido"] else "estimado",
+             "origem": "dxf_geom" if it["medido"] else ""}
+            for n, it in enumerate(dados["itens"], 1)]
+
+
+def estrutura_do_memorial(dados, numeros):
+    from memorial import montar_estrutura
+    p = dados["projeto"]
+    projeto = {"project_name": p["name"], "typology": p["tipologia"], "total_area": p["total_area"]}
+    return montar_estrutura(projeto, itens_do_memorial(dados, numeros))
+
+
+def gerar_memorial(dados, numeros, destino):
+    from memorial import estrutura_para_docx
+    estrutura = estrutura_do_memorial(dados, numeros)
+    estrutura_para_docx(destino, estrutura)
+    return estrutura
+
+
+_DATA = re.compile(r"\b\d{2}/\d{2}/\d{4}\b")
+
+
+def texto_do_docx(caminho):
+    """O texto do .docx (corpo, tabelas, cabeçalho e rodapé), sem a data de geração — os bytes do
+    .docx nunca batem (data de criação), e a data do dia não é conteúdo."""
+    from docx import Document
+    doc = Document(caminho)
+    partes = [p.text for p in doc.paragraphs]
+    for t in doc.tables:
+        for linha in t.rows:
+            partes.append(" | ".join(c.text for c in linha.cells))
+    for s in doc.sections:
+        partes += [p.text for p in s.header.paragraphs] + [p.text for p in s.footer.paragraphs]
+    return [_DATA.sub("DD/MM/AAAA", x) for x in partes if x.strip()]
+
+
+def _h(s):
+    return (str(s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
+
+
+def trecho_do_memorial(estrutura, eol="\n"):
+    """A seção SECAO_DO_TRECHO do memorial, em HTML, como vai na página."""
+    secao = next(s for s in estrutura["secoes"] if SECAO_DO_TRECHO in s["titulo"])
+    linhas = ['<h3 class="font-semibold text-gray-900">%s</h3>' % _h(secao["titulo"])]
+    itens = []
+    for b in secao["blocos"]:
+        tipo, texto = b.get("tipo") or "texto", _h((b.get("texto") or "").strip())
+        if tipo == "item":
+            cor = "text-amber-700" if b.get("origem") == "estimado" else "text-gray-700"
+            itens.append('<li class="%s">%s</li>' % (cor, texto))
+            continue
+        if itens:
+            linhas.append('<ul class="mt-2 space-y-2 text-sm">' + "".join(itens) + "</ul>")
+            itens = []
+        if tipo == "preencher":
+            linhas.append('<p class="mt-2 text-sm font-semibold text-gray-500">%s</p>' % texto)
+        else:
+            linhas.append('<p class="mt-2 text-sm text-gray-600">%s</p>' % texto)
+    if itens:
+        linhas.append('<ul class="mt-2 space-y-2 text-sm">' + "".join(itens) + "</ul>")
+    return eol + eol.join(linhas) + eol
 
 
 def _chave_num(num):
@@ -255,7 +330,7 @@ def diferencas_da_planilha(esperada, atual):
     return difs
 
 
-def conferir(pagina=PAGINA, xlsx=XLSX):
+def conferir(pagina=PAGINA, xlsx=XLSX, memorial=MEMORIAL):
     """Lista do que está velho (vazia = tudo em dia). Não escreve nada."""
     dados = carregar()
     problemas = []
@@ -263,6 +338,12 @@ def conferir(pagina=PAGINA, xlsx=XLSX):
         novo = os.path.join(tmp, "exemplo.xlsx")
         numeros, indiretos = gerar_planilha(dados, novo)
         problemas += ["planilha: " + d for d in diferencas_da_planilha(novo, xlsx)[:15]]
+        novo_mem = os.path.join(tmp, "memorial.docx")
+        estrutura = gerar_memorial(dados, numeros, novo_mem)
+        if not os.path.exists(memorial):
+            problemas.append("memorial: %s não existe" % os.path.relpath(memorial, RAIZ))
+        elif texto_do_docx(novo_mem) != texto_do_docx(memorial):
+            problemas.append("memorial: o .docx não é o que sai do itens.json + gerador do memorial")
     ex = ex_da_pagina(dados, numeros)
     with io.open(pagina, encoding="utf-8", newline="") as f:
         html = f.read()
@@ -276,6 +357,11 @@ def conferir(pagina=PAGINA, xlsx=XLSX):
         problemas.append('página: não achei o <div id="itens" class="mt-4">')
     elif t.group(2).replace("\r\n", "\n") != tabela_estatica(ex):
         problemas.append("página: a tabela estática (sem JS) não é a que sai do itens.json + gerador")
+    mm = _BLOCO_MEMORIAL.search(html)
+    if not mm:
+        problemas.append("página: não achei o trecho do memorial (<!-- memorial:inicio --> … fim)")
+    elif mm.group(2).replace("\r\n", "\n") != trecho_do_memorial(estrutura):
+        problemas.append("página: o trecho do memorial não é o que sai do gerador do memorial")
     problemas +=["página: a prosa não diz %r" % fr for fr in frases_que_a_pagina_tem_que_ter(ex, indiretos)
                   if fr not in html]
     return problemas
@@ -285,6 +371,8 @@ def regerar():
     dados = carregar()
     tmp_xlsx = XLSX + ".tmp.xlsx"
     numeros, indiretos = gerar_planilha(dados, tmp_xlsx)
+    tmp_mem = MEMORIAL + ".tmp.docx"
+    estrutura = gerar_memorial(dados, numeros, tmp_mem)
     ex = ex_da_pagina(dados, numeros)
     with io.open(PAGINA, encoding="utf-8", newline="") as f:
         html = f.read()
@@ -293,12 +381,17 @@ def regerar():
     novo_html = _BLOCO_EX.sub(lambda _m: bloco_ex(ex, eol), html, count=1)
     assert _BLOCO_ITENS.search(novo_html), 'não achei o <div id="itens" class="mt-4"> no exemplo.html'
     novo_html = _BLOCO_ITENS.sub(lambda m: m.group(1) + tabela_estatica(ex, eol) + m.group(3), novo_html, count=1)
+    assert _BLOCO_MEMORIAL.search(novo_html), "não achei <!-- memorial:inicio --> … <!-- memorial:fim --> no exemplo.html"
+    novo_html = _BLOCO_MEMORIAL.sub(lambda m: m.group(1) + trecho_do_memorial(estrutura, eol) + m.group(3),
+                                    novo_html, count=1)
     faltam = [fr for fr in frases_que_a_pagina_tem_que_ter(ex, indiretos) if fr not in novo_html]
     if faltam:
         os.remove(tmp_xlsx)
+        os.remove(tmp_mem)
         sys.exit("A prosa do exemplo.html não bate com os dados — atualize à mão e rode de novo:\n  "
                  + "\n  ".join(faltam))
     os.replace(tmp_xlsx, XLSX)
+    os.replace(tmp_mem, MEMORIAL)
     tmp_html = PAGINA + ".tmp"
     with io.open(tmp_html, "w", encoding="utf-8", newline="") as f:
         f.write(novo_html)

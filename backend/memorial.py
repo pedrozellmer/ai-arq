@@ -30,9 +30,11 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 # Ordem construtiva das disciplinas (valores REAIS do banco, conferidos 01/08).
 # Disciplina fora da lista entra no fim, antes de "Complementares".
+# 18/10/2026 (Pedro): Serviços Preliminares vem ANTES de Demolição — mobilização e canteiro abrem a
+# obra, e a apresentação do memorial promete "a sequência usual das etapas construtivas".
 ORDEM_DISCIPLINAS = [
-    "Demolição e Remoção",
     "Serviços Preliminares",
+    "Demolição e Remoção",
     "Estrutura",
     "Fechamentos Verticais",
     "Divisórias e Vidros",
@@ -97,6 +99,35 @@ def _fmt_qty(q):
 
 def _bloco_preencher(detalhe):
     return {"tipo": "preencher", "texto": f"{MARCA_PREENCHER}: {detalhe}.]"}
+
+
+# 🩸 18/10/2026 — a tabela "Dados da obra" imprimia o CÓDIGO da tipologia ("office"), em inglês, em todo
+# memorial gerado até aqui: os 5 valores do banco são códigos (office, residential, educational, retail,
+# hospital). Rótulos = os da tela de envio (dashboard.html, #project-typology). Código desconhecido sai
+# como veio — melhor que esconder o que o cliente escolheu.
+ROTULO_TIPOLOGIA = {
+    "office": "Escritório corporativo",
+    "residential": "Residencial",
+    "retail": "Varejo / Lojas",
+    "hospital": "Hospitalar / Clínicas",
+    "educational": "Educacional",
+}
+
+
+def _rotulo_tipologia(codigo):
+    c = (codigo or "").strip()
+    if not c:
+        return "[A PREENCHER]"
+    return ROTULO_TIPOLOGIA.get(c.lower(), c)
+
+
+def _sujeito_da_abertura(disc):
+    """"Os serviços de demolição e remoção" — mas "Os serviços preliminares", não "Os serviços de
+    serviços preliminares" (18/10/2026: saía assim em todo memorial com essa disciplina)."""
+    d = disc.lower()
+    if d.startswith("serviços "):
+        return f"Os {d}"
+    return f"Os serviços de {d}"
 
 
 _RX_SEG_ABERTO = _re.compile(
@@ -186,7 +217,7 @@ def montar_estrutura(projeto: dict, items: list) -> dict:
     secoes.append({"titulo": "2. Dados da obra", "blocos": [
         {"tipo": "tabela", "linhas": [
             ["Obra / projeto", nome_obra],
-            ["Tipologia", (projeto.get("typology") or "").strip() or "[A PREENCHER]"],
+            ["Tipologia", _rotulo_tipologia(projeto.get("typology"))],
             ["Área total", area_txt or "[A PREENCHER]"],
             ["Endereço", "[A PREENCHER]"],
             ["Proprietário / contratante", "[A PREENCHER]"],
@@ -213,7 +244,7 @@ def montar_estrutura(projeto: dict, items: list) -> dict:
     num = 4
     for disc in ordem:
         blocos = [{"tipo": "texto", "texto": (
-            f"Os serviços de {disc.lower()} compreendem os itens identificados no projeto, "
+            f"{_sujeito_da_abertura(disc)} compreendem os itens identificados no projeto, "
             "conforme relação abaixo:")}]
         _ordenados = sorted(grupos[disc], key=lambda x: (x.get("sort_order") or 0, x.get("item_num") or ""))
 
