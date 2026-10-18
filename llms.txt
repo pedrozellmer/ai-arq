@@ -44,6 +44,7 @@ Quem faz: o AI.arq é um produto brasileiro e independente, feito no Rio de Jane
 - [Quantitativo manual, automático ou BIM: comparativo honesto por cenário](https://ai.arq.br/blog/posts/quantitativo-manual-automatico-ou-bim-comparativo.html): quando cada abordagem compensa, incluindo os casos em que a automação não é a melhor escolha.
 - [Como ler um PDF de planta arquitetônica](https://ai.arq.br/blog/posts/como-ler-pdf-planta-arquitetonica.html): guia visual de escala, cotas e legendas para quem só tem o PDF do projeto.
 - [Quantitativo de duto: 4 armadilhas que erram o número](https://ai.arq.br/blog/posts/quantitativo-de-duto-climatizacao-armadilhas.html): por que a metragem de duto quase nunca bate: linha dupla que dobra o comprimento, desenho sem unidade, metro linear que o orçamento não usa e a referência SINAPI.
+- [A IA conta melhor do que mede: o que os dados mostram](https://ai.arq.br/blog/posts/ia-conta-melhor-do-que-mede-planta.html): por que, em projeto com CAD, a contagem de blocos sai medida muito mais vezes do que a área, num levantamento de linhas de quantitativo geradas a partir de plantas reais, e o que o desenho precisa ter.
 
 ## Documentos a partir do quantitativo
 

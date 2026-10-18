@@ -1556,7 +1556,7 @@
         },
         {
           "h2": "DWG ou DXF? A resposta mudou",
-          "body": "Até agosto a gente pedia DXF, e tinha motivo: na base de 01/08/2026, 61,7% dos DWG enviados (29 de 47) não chegavam ao fim — quase sempre na conversão do arquivo. De lá pra cá a leitura de DWG foi consertada em várias frentes, e a conta mudou.\n\nEnvios de clientes de 11/09 a 10/10/2026 (30 dias):\n\n| Formato enviado | Envios | Terminaram em erro |\n| Só DWG | 70 | 7 (10,0%) |\n| Só DXF | 8 | nenhum |\n| Só PDF | 28 | 1 (3,6%) |\n\nE entre os que concluíram, o DWG saiu com mais linhas medidas: 21,4% (1.397 de 6.540), contra 14,0% no DXF (67 de 478).\n\nTrês ressalvas antes de tirar conclusão. A amostra de DXF é pequena: 8 envios não sustentam dizer que o DXF mede menos. “Terminou em erro” é o estado final do projeto: o que falhou e depois foi reprocessado com sucesso conta como concluído. E ficaram fora da lista 4 envios que traziam DWG e DXF juntos (1 terminou em erro).\n\nO que dá pra afirmar: **hoje o DWG chega ao fim em 9 de cada 10 envios**. Não precisa mais converter pra DXF antes de mandar. O DXF continua sendo a saída quando o DWG não abre — é o caso típico dos arquivos com objetos do AutoCAD Architecture/MEP, que nenhum conversor abre direto."
+          "body": "Até agosto a gente pedia DXF, e tinha motivo: na base de 01/08/2026, 61,7% dos DWG enviados (29 de 47) não chegavam ao fim — quase sempre na conversão do arquivo. De lá pra cá a leitura de DWG foi consertada em várias frentes, e a conta mudou.\n\nEnvios de clientes de 11/09 a 10/10/2026 (30 dias):\n\n| Formato enviado | Envios | Terminaram em erro |\n| Só DWG | 70 | 7 (10,0%) |\n| Só DXF | 8 | nenhum |\n| Só PDF | 28 | 1 (3,6%) |\n\nE entre os que concluíram, o DWG saiu com mais linhas medidas: 21,4% (1.397 de 6.540), contra 14,0% no DXF (67 de 478).\n\nTrês ressalvas antes de tirar conclusão. A amostra de DXF é pequena: 8 envios não sustentam dizer que o DXF mede menos. “Terminou em erro” é o estado final do projeto: o que falhou e depois foi reprocessado com sucesso conta como concluído. E ficaram fora da lista 4 envios que traziam DWG e DXF juntos (1 terminou em erro).\n\nO que dá pra afirmar: **hoje o DWG chega ao fim em 9 de cada 10 envios**. Não precisa mais converter pra DXF antes de mandar. O DXF continua sendo a saída quando o DWG não abre — é o caso típico dos arquivos com objetos do AutoCAD Architecture/MEP, que nenhum conversor abre direto. O caminho do DWG ou DXF até a planilha, com o que sai medido e o que não sai, está resumido na página de <a href=\"/levantamento-de-quantitativos-dwg-dxf.html\" data-track=\"post-pagina-cad\">levantamento de quantitativos a partir do DWG ou DXF</a>."
         },
         {
           "h2": "Por que o formato muda tanto: a escala do PDF é declarada, não medida",
@@ -1593,7 +1593,7 @@
         }
       ],
       "update_note": "<strong>Atualizado em 11/10/2026:</strong> refizemos a medição sobre todos os projetos de clientes concluídos até 10/10/2026 e reescrevemos o post em cima dela. A recomendação mudou: em agosto, 6 em cada 10 DWG não chegavam ao fim e a gente pedia DXF; nos últimos 30 dias, 9 em cada 10 chegaram. O que este post dizia antes está resumido no fim, em “Histórico”.",
-      "update_date": "2026-10-11"
+      "update_date": "2026-10-18"
     },
     {
       "slug": "bdi-arquiteto-br-2026-tabela",
@@ -2518,7 +2518,7 @@
       "sections": [
         {
           "h2": "Por que o DWG guarda a geometria que dá para medir",
-          "body": "Um erro comum é tratar o DWG como se fosse um desenho \"achatado\", tipo uma foto da prancha. Não é. O DWG é o formato nativo do AutoCAD e armazena os elementos como objetos vetoriais com coordenadas reais: uma parede é uma linha (ou polilinha) que vai do ponto X1,Y1 ao X2,Y2; um piso é um contorno fechado que delimita uma área; uma tomada é um bloco inserido numa posição.\n\nIsso muda tudo para o levantamento. Se cada elemento tem coordenada, então comprimento, área e contagem são cálculos geométricos diretos — não é preciso \"interpretar a imagem\", basta ler os números que já estão lá. Três estruturas do arquivo carregam quase todo o quantitativo:\n\n- **Layers (camadas):** o projeto costuma estar organizado por disciplina e elemento — parede, esquadria, piso, hidráulica, elétrica. O layer é o rótulo que diz o que aquela geometria representa.\n- **Blocos:** portas, janelas, louças, luminárias e tomadas normalmente são blocos repetidos. Contar blocos por nome é contar peças.\n- **Hachuras e contornos fechados:** áreas de piso, revestimento e forro geralmente aparecem como regiões preenchidas ou polígonos fechados, e todo polígono fechado tem área calculável.\n\nEm outras palavras: o desenho que você já entregou ou recebeu contém, embutida, a matéria-prima de um quantitativo. O trabalho é extrair, não recriar."
+          "body": "Um erro comum é tratar o DWG como se fosse um desenho \"achatado\", tipo uma foto da prancha. Não é. O DWG é o formato nativo do AutoCAD e armazena os elementos como objetos vetoriais com coordenadas reais: uma parede é uma linha (ou polilinha) que vai do ponto X1,Y1 ao X2,Y2; um piso é um contorno fechado que delimita uma área; uma tomada é um bloco inserido numa posição.\n\nIsso muda tudo para o levantamento. Se cada elemento tem coordenada, então comprimento, área e contagem são cálculos geométricos diretos — não é preciso \"interpretar a imagem\", basta ler os números que já estão lá. Três estruturas do arquivo carregam quase todo o quantitativo:\n\n- **Layers (camadas):** o projeto costuma estar organizado por disciplina e elemento — parede, esquadria, piso, hidráulica, elétrica. O layer é o rótulo que diz o que aquela geometria representa.\n- **Blocos:** portas, janelas, louças, luminárias e tomadas normalmente são blocos repetidos. Contar blocos por nome é contar peças.\n- **Hachuras e contornos fechados:** áreas de piso, revestimento e forro geralmente aparecem como regiões preenchidas ou polígonos fechados, e todo polígono fechado tem área calculável.\n\nEm outras palavras: o desenho que você já entregou ou recebeu contém, embutida, a matéria-prima de um quantitativo. O trabalho é extrair, não recriar. O que isso vira numa planilha, com o que sai medido, o que sai estimado e a origem de cada número, está na página de <a href=\"/levantamento-de-quantitativos-dwg-dxf.html\" data-track=\"post-pagina-cad\">levantamento de quantitativos a partir do DWG ou DXF</a>."
         },
         {
           "h2": "O caminho manual: contar no CAD, item por item",
@@ -2576,7 +2576,7 @@
         }
       ],
       "publish_date": "2026-07-26",
-      "update_date": "2026-10-11"
+      "update_date": "2026-10-18"
     },
     {
       "slug": "quantitativo-de-obra-com-ia",
@@ -2592,7 +2592,7 @@
         },
         {
           "h2": "O que a IA realmente faz bem hoje: ler, contar e medir a geometria",
-          "body": "A parte boa é concreta. Quando o projeto chega em formato vetorial — um DWG, um DXF ou um PDF exportado do CAD com as linhas preservadas —, o desenho não é uma foto: é um conjunto de coordenadas. Uma linha de parede tem começo e fim; um hachurado de piso tem um contorno fechado com área calculável; um bloco de porta é um objeto que aparece repetido. Isso é matéria-prima para medição de verdade.\n\nO que a tecnologia entrega bem nesse cenário:\n\n- Medir área e comprimento pela geometria. Área de um ambiente, perímetro para rodapé, comprimento de parede — tudo isso é aritmética sobre coordenadas. Não é interpretação subjetiva; é medição.\n- Contar objetos repetidos. Blocos de porta, janela, luminária e mobiliário aparecem como instâncias no arquivo. Contar instância é algo que a máquina faz sem cansar e sem pular a porta do fundo às 18h.\n- Ler texto da prancha. Cotas, legendas, tabelas de esquadrias, nomes de ambiente — a extração de texto (OCR e leitura de camadas de texto) é hoje uma das tarefas em que os modelos vão bem.\n- Organizar por disciplina. Separar arquitetura, elétrica, hidráulica e estrutura, e agrupar os itens numa planilha navegável.\n\nNo lugar de uma tarde inteira riscando planta com marca-texto, o levantamento base sai em minutos. Esse ganho é real — desde que você saiba o que veio de medição e o que veio de estimativa."
+          "body": "A parte boa é concreta. Quando o projeto chega em formato vetorial — um DWG, um DXF ou um PDF exportado do CAD com as linhas preservadas —, o desenho não é uma foto: é um conjunto de coordenadas. Uma linha de parede tem começo e fim; um hachurado de piso tem um contorno fechado com área calculável; um bloco de porta é um objeto que aparece repetido. Isso é matéria-prima para medição de verdade.\n\nO que a tecnologia entrega bem nesse cenário:\n\n- Medir área e comprimento pela geometria. Área de um ambiente, perímetro para rodapé, comprimento de parede — tudo isso é aritmética sobre coordenadas. Não é interpretação subjetiva; é medição.\n- Contar objetos repetidos. Blocos de porta, janela, luminária e mobiliário aparecem como instâncias no arquivo. Contar instância é algo que a máquina faz sem cansar e sem pular a porta do fundo às 18h.\n- Ler texto da prancha. Cotas, legendas, tabelas de esquadrias, nomes de ambiente — a extração de texto (OCR e leitura de camadas de texto) é hoje uma das tarefas em que os modelos vão bem.\n- Organizar por disciplina. Separar arquitetura, elétrica, hidráulica e estrutura, e agrupar os itens numa planilha navegável.\n\nNo lugar de uma tarde inteira riscando planta com marca-texto, o levantamento base sai em minutos. Esse ganho é real — desde que você saiba o que veio de medição e o que veio de estimativa. Como essa separação aparece linha a linha, num projeto de verdade, está na página sobre <a href=\"/levantamento-de-quantitativos-dwg-dxf.html\" data-track=\"post-pagina-cad\">levantamento de quantitativos a partir do DWG ou DXF</a>."
         },
         {
           "h2": "Onde a IA erra: contar símbolo é mais difícil que ler texto",
@@ -2644,7 +2644,7 @@
         }
       ],
       "publish_date": "2026-08-02",
-      "update_date": "2026-09-27"
+      "update_date": "2026-10-18"
     },
     {
       "slug": "quantitativo-manual-automatico-ou-bim-comparativo",
@@ -2669,7 +2669,7 @@
         },
         {
           "h2": "Abordagem 2 — Quantitativo automático: a IA lê o CAD e mede a geometria",
-          "body": "Aqui a lógica muda. Em vez de uma pessoa clicar em cada trecho, um software lê o arquivo do projeto (PDF vetorial, DWG ou DXF), reconhece as entidades geométricas — linhas, polilinhas, hachuras, blocos, textos — e calcula as quantidades a partir delas. Comprimento de parede vira metro linear; hachura de piso vira área; bloco de porta repetido vira contagem.\n\nO ponto que diferencia essa abordagem de um 'chute inteligente' é que ela mede a geometria que está no desenho, e não tenta adivinhar o que não está. Se o eletroduto foi desenhado como linha no projeto, ele é medido; se aparece só como um símbolo sem traçado, não há o que medir. Essa honra à evidência é o que separa medição de estimativa — e voltaremos a ela na seção sobre 'medido vs estimado'.\n\nQuando faz sentido: prazo curto, muitos projetos para levantar, plantas grandes onde a contagem manual seria exaustiva, e todo o universo enorme de obras que simplesmente não têm modelo BIM. Esse é o ponto cego que a abordagem automática 2D cobre: ela entrega velocidade de máquina sem exigir que o projeto tenha sido modelado em BIM. O custo de tempo despenca — o que levava um dia sai em minutos. A curva de aprendizado é baixa: você sobe o arquivo e recebe a planilha; não precisa dominar software de modelagem. O que ela mede depende do que está desenhado no CAD com geometria real — e é por isso que a qualidade do arquivo de entrada importa tanto (falaremos disso adiante)."
+          "body": "Aqui a lógica muda. Em vez de uma pessoa clicar em cada trecho, um software lê o arquivo do projeto (PDF vetorial, DWG ou DXF), reconhece as entidades geométricas — linhas, polilinhas, hachuras, blocos, textos — e calcula as quantidades a partir delas. Comprimento de parede vira metro linear; hachura de piso vira área; bloco de porta repetido vira contagem.\n\nO ponto que diferencia essa abordagem de um 'chute inteligente' é que ela mede a geometria que está no desenho, e não tenta adivinhar o que não está. Se o eletroduto foi desenhado como linha no projeto, ele é medido; se aparece só como um símbolo sem traçado, não há o que medir. Essa honra à evidência é o que separa medição de estimativa — e voltaremos a ela na seção sobre 'medido vs estimado'.\n\nQuando faz sentido: prazo curto, muitos projetos para levantar, plantas grandes onde a contagem manual seria exaustiva, e todo o universo enorme de obras que simplesmente não têm modelo BIM. Esse é o ponto cego que a abordagem automática 2D cobre: ela entrega velocidade de máquina sem exigir que o projeto tenha sido modelado em BIM. O custo de tempo despenca — o que levava um dia sai em minutos. A curva de aprendizado é baixa: você sobe o arquivo e recebe a planilha; não precisa dominar software de modelagem. O que ela mede depende do que está desenhado no CAD com geometria real — e é por isso que a qualidade do arquivo de entrada importa tanto (falaremos disso adiante). No AI.arq, que é essa abordagem, a página de <a href=\"/levantamento-de-quantitativos-dwg-dxf.html\" data-track=\"post-pagina-cad\">levantamento de quantitativos a partir do DWG ou DXF</a> mostra o que sobe, o que volta e o que não sai medido."
         },
         {
           "h2": "Abordagem 3 — Extração de quantitativos a partir do modelo BIM",
@@ -2721,7 +2721,7 @@
         }
       ],
       "publish_date": "2026-08-09",
-      "update_date": "2026-10-11"
+      "update_date": "2026-10-18"
     },
     {
       "slug": "quantitativo-de-duto-climatizacao-armadilhas",
