@@ -23395,14 +23395,23 @@ async def process_files(
                     "dwg-pequeno-demais",
                     detalhe="%s: %d bytes" % (upload_file.filename, n_written),
                     quem=jwt_user.get("id") or user_id)
-            if head[:2] != b"AC":
+            # 🩸 18/10/2026 — um engenheiro vindo do ChatGPT mandou 4 ".dwg" que eram DXF (começavam com
+            # `999`, o comentário que vários exportadores escrevem). Este portão olhava só a extensão,
+            # recusou com "Arquivo corrompido — exporte como PDF" e ele desistiu depois de três tentativas.
+            # O process_job já trata DXF com nome .dwg (`_normalizar_extensao_cad`, desde 05/09): faltava
+            # o upload deixar passar. Conteúdo de DXF segue como DXF; só o irreconhecível é recusado.
+            _formato_real = _formato_cad_pelo_conteudo(file_path) if head[:2] != b"AC" else "dwg"
+            if _formato_real == "dxf":
+                ext = "dxf"     # é o que o arquivo é; o process_job renomeia no disco e avisa o cliente
+            elif head[:2] != b"AC":
                 try: os.remove(file_path)
                 except OSError: pass
+                # sem "exporte como PDF": PDF é o formato que menos mede; a saída é o CAD de novo
                 _recusa_no_upload(
                     400,
-                    f"DWG '{upload_file.filename}' não tem assinatura válida "
-                    f"(esperado iniciar com 'AC10xx'). Arquivo corrompido — "
-                    f"verifique no AutoCAD ou exporte como PDF e suba o PDF.",
+                    f"Não reconheci '{upload_file.filename}' como DWG nem como DXF: o começo do "
+                    f"arquivo não bate com nenhum dos dois. Abra no seu programa de CAD, salve de "
+                    f"novo como DWG ou DXF e envie outra vez.",
                     "dwg-sem-assinatura",
                     detalhe="%s: começa com %r" % (upload_file.filename, head[:4]),
                     quem=jwt_user.get("id") or user_id)
@@ -23413,7 +23422,8 @@ async def process_files(
             # então o cliente esperava o processamento inteiro pra descobrir.
             # NÃO bloqueia: o mesmo envio pode trazer um DXF ou PDF que salve
             # o projeto. Só entrega a informação enquanto ele ainda está na tela.
-            if _detecta_aec is not None:
+            # (Objeto AEC é coisa de DWG: o DXF que chegou com nome .dwg não passa pela detecção.)
+            if _formato_real == "dwg" and _detecta_aec is not None:
                 try:
                     if _detecta_aec(file_path):
                         avisos_aec.append(upload_file.filename)
