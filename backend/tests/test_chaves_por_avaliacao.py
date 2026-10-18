@@ -67,6 +67,10 @@ def test_so_chave_do_extrator_e_avaliavel():
     `os.environ.get("NOME", …)`: chave que ninguém lê seria avaliação de nada."""
     fonte = io.open(os.path.join(_BACKEND, "dwg_extractor.py"), encoding="utf-8").read()
     lidas = {k for k in main._CHAVES_AVALIAVEIS if 'os.environ.get("%s"' % k in fonte}
+    # 18/10: chave que o PRÓPRIO process_job lê (depois da IA) passa por
+    # `_chave_do_job`, que respeita a avaliação — também é lida
+    fonte_main = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
+    lidas |= {k for k in main._CHAVES_AVALIAVEIS if '_chave_do_job(job_id, "%s")' % k in fonte_main}
     ainda_em_ramo = {"ATTDEF_SOLTO_E_TEXTO", "QUADRO_COM_QUANTIDADE", "LEGENDA_PELA_FORMA"}
     assert main._CHAVES_AVALIAVEIS - lidas <= ainda_em_ramo, main._CHAVES_AVALIAVEIS - lidas
     assert "AMBIENTE_AREA_ESCRITA" in lidas and "LEITURA_POR_FOLHA" in lidas
