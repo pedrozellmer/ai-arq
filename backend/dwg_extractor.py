@@ -278,6 +278,8 @@ class DXFExtraction:
 
     #: registros de máquina que a IA NÃO lê crus (vão ditos em português)
     _METADADOS_FORA_DO_PROMPT = frozenset({"copias_sombra", "planta_repetida",
+                                           # 18/10: dito na linha de atenção da planilha
+                                           "so_nas_pranchas",
                                            # 30/09: ditos nas seções próprias
                                            "objetos_sem_bloco", "layers_de_cota",
                                            "layers_de_borda",
@@ -9194,6 +9196,109 @@ def fora_das_pranchas(walls, hatches, polygon_areas, medida, mapa) -> dict:
         return {}
 
 
+# Abaixo disto as janelas mostram pouco do desenho — "tirar o de fora" zeraria
+# um projeto que o projetista plota direto do modelo (H18, 10/10: 17 jobs).
+_FRACAO_MINIMA_DENTRO_DAS_PRANCHAS = 0.2
+
+
+def tirar_o_que_nao_esta_nas_pranchas(walls, hatches, polygon_areas, blocks, mapa) -> dict:
+    """Tira da medição o que está no modelo FORA de toda janela das pranchas.
+
+    🩸 18/10/2026 — revisão da semana: 22 de 59 projetos em CAD (90 dias) tinham
+    mais de 20 % do comprimento fora das pranchas, e o motor só AVISA. No elétrico
+    de um galpão, metade das peças estava em duas plantas no modelo que nenhuma
+    folha mostra, com outra distribuição: versão antiga ou outro pavimento — só o
+    cliente sabe. A régua automática ("tirar a cópia provada") foi medida em 10/10
+    e pega 4 jobs; por isso isto é uma OPÇÃO, ligada por projeto (chave
+    SO_O_QUE_ESTA_NAS_PRANCHAS, avaliável), quando o cliente diz que o de fora
+    não vale.
+
+    Conta como "nas pranchas" o que cai em QUALQUER janela do papel (com ou sem
+    título). O que não tem posição (trecho explodido de bloco, hachura sem caixa)
+    fica. Só vale com janelas do papel (`origem` vazia). Não age quando as janelas
+    mostram menos de `_FRACAO_MINIMA_DENTRO_DAS_PRANCHAS` do comprimento E dos
+    blocos com posição — aí a janela não cobre o desenho, e tirar zeraria.
+    Muta as listas no lugar. Devolve {'aplicada', 'motivo', 'm', 'm2', 'blocos'}.
+    """
+    folhas = (mapa or {}).get("folhas") or []
+    res = {"aplicada": False, "motivo": "", "m": 0.0, "m2": 0.0, "blocos": 0}
+    if not folhas or (mapa or {}).get("origem"):
+        res["motivo"] = "sem janelas do papel"
+        return res
+
+    def nas_pranchas(p):
+        return any(_dentro(p, f["caixa"]) for f in folhas)
+
+    def meio(w):
+        if tuple(w.start) == (0, 0) and tuple(w.end) == (0, 0):
+            return None
+        return ((w.start[0] + w.end[0]) / 2, (w.start[1] + w.end[1]) / 2)
+
+    def centro(h):
+        bb = getattr(h, "bbox", ()) or ()
+        return ((bb[0] + bb[2]) / 2, (bb[1] + bb[3]) / 2) if len(bb) == 4 else None
+
+    m_dentro = m_fora = 0.0
+    for w in walls:
+        p = meio(w)
+        if p is None:
+            continue
+        if nas_pranchas(p):
+            m_dentro += w.length
+        else:
+            m_fora += w.length
+    bl_dentro = bl_fora = 0
+    for b in blocks:
+        pos = list(getattr(b, "positions", None) or [])
+        if len(pos) != b.count:
+            continue
+        for p in pos:
+            if nas_pranchas(p):
+                bl_dentro += 1
+            else:
+                bl_fora += 1
+    fr_m = m_dentro / (m_dentro + m_fora) if (m_dentro + m_fora) > 0 else 0.0
+    fr_bl = bl_dentro / (bl_dentro + bl_fora) if (bl_dentro + bl_fora) > 0 else 0.0
+    if fr_m < _FRACAO_MINIMA_DENTRO_DAS_PRANCHAS and fr_bl < _FRACAO_MINIMA_DENTRO_DAS_PRANCHAS:
+        res["motivo"] = ("as janelas mostram pouco do desenho (%.0f %% do comprimento, %.0f %% dos "
+                         "blocos) — a medição ficou como estava" % (100 * fr_m, 100 * fr_bl))
+        return res
+
+    novas = []
+    for w in walls:
+        p = meio(w)
+        if p is not None and not nas_pranchas(p):
+            res["m"] += w.length
+            continue
+        novas.append(w)
+    walls[:] = novas
+    for lista in (hatches, polygon_areas):
+        novas = []
+        for h in lista:
+            p = centro(h)
+            if p is not None and not nas_pranchas(p):
+                res["m2"] += float(h.area)
+                continue
+            novas.append(h)
+        lista[:] = novas
+    novos = []
+    for b in blocks:
+        pos = list(getattr(b, "positions", None) or [])
+        if len(pos) != b.count:
+            novos.append(b)                          # posições incompletas: fica
+            continue
+        ficam = [p for p in pos if nas_pranchas(p)]
+        res["blocos"] += len(pos) - len(ficam)
+        b.positions = ficam
+        b.count = len(ficam)
+        if b.count > 0:
+            novos.append(b)
+    blocks[:] = novos
+    res["aplicada"] = True
+    res["m"], res["m2"] = round(float(res["m"]), 1), round(float(res["m2"]), 1)
+    return res
+
+
 def ambientes_por_desenho(texts, mapa) -> dict:
     """A tabela NOME DO AMBIENTE ↔ ÁREA ESCRITA (`ambientes_com_area_escrita`),
     repartida pelos DESENHOS das pranchas — SÓ LÊ.
@@ -11806,6 +11911,15 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             _fdp = fora_das_pranchas(walls, hatches, polygon_areas, _medida, _mapa)
             if _fdp:
                 metadata["fora_das_pranchas"] = _fdp
+            # 18/10: a OPÇÃO de medir só o que está nas pranchas (ver
+            # `tirar_o_que_nao_esta_nas_pranchas`). Chave SO_O_QUE_ESTA_NAS_PRANCHAS=1
+            # liga, por avaliação; padrão DESLIGADA — o cliente é quem sabe se o de
+            # fora vale. Aplicada, o aviso de "fora das pranchas" não vale mais.
+            if os.environ.get("SO_O_QUE_ESTA_NAS_PRANCHAS", "0") == "1":
+                _snp = tirar_o_que_nao_esta_nas_pranchas(walls, hatches, polygon_areas, blocks, _mapa)
+                metadata["so_nas_pranchas"] = _snp
+                if _snp.get("aplicada"):
+                    metadata.pop("fora_das_pranchas", None)
             _folhas["desenhos_lista"] = [
                 dict({"folha": f["folha"][:40], "titulo": f.get("titulo", "")[:90],
                       "tipo": f.get("tipo", ""), "andares": f.get("andares", 1),

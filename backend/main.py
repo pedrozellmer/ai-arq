@@ -10482,6 +10482,8 @@ _CHAVES_AVALIAVEIS = frozenset({
     "FAMILIA_DE_ANOTACAO_DO_REVIT", "COTA_QUE_CORRIGE_SUPERA_EXTENSAO",
     "VISTA_PELO_PREFIXO_DOS_LAYERS", "MAPA_CHAVE_DO_ARCHICAD_FORA",
     "PAR_DE_ROTULO_EM_VISTA_FORA",
+    # 18/10: a opção de medir só o que está nas pranchas — liga por projeto
+    "SO_O_QUE_ESTA_NAS_PRANCHAS",
 })
 _CHAVES_DA_AVALIACAO: dict = {}        # job de avaliação → {chave: "0" | "1"}
 
@@ -14408,6 +14410,9 @@ def _linhas_fora_das_pranchas(arqs: list) -> list:
     Só AVISA — não tira nada da soma: em muito arquivo o que está fora é
     desenho legítimo que o projetista não levou pra prancha. O número vai junto
     pra pessoa decidir.
+    18/10: quando a OPÇÃO de medir só o que está nas pranchas foi ligada pro
+    projeto (`so_nas_pranchas` do extrator), diz o que saiu da conta — ou que
+    ela não agiu, e por quê.
     """
     def _n(v):
         return f"{float(v):,.0f}".replace(",", ".")
@@ -14423,8 +14428,21 @@ def _linhas_fora_das_pranchas(arqs: list) -> list:
             return None
         return int(round(100 * fracao))
 
-    partes, sem_leitura = [], 0
+    partes, sem_leitura, tirados, recusados = [], 0, [], []
     for a in arqs or []:
+        # 18/10: com a opção "só o que está nas pranchas" ligada, diz o que saiu
+        s = a.get("so_nas_pranchas") if isinstance(a, dict) else None
+        if isinstance(s, dict):
+            try:
+                if s.get("aplicada") and (float(s.get("m") or 0) or float(s.get("m2") or 0)
+                                          or int(s.get("blocos") or 0)):
+                    tirados.append("%s: %s m, %s m² e %d peça(s)" % (
+                        a.get("nome") or "prancha", _n(s.get("m") or 0), _n(s.get("m2") or 0),
+                        int(s.get("blocos") or 0)))
+                elif not s.get("aplicada") and s.get("motivo"):
+                    recusados.append("%s (%s)" % (a.get("nome") or "prancha", s["motivo"]))
+            except (TypeError, ValueError):
+                pass
         f = a.get("fora_das_pranchas") if isinstance(a, dict) else None
         if not isinstance(f, dict):
             continue
@@ -14444,8 +14462,18 @@ def _linhas_fora_das_pranchas(arqs: list) -> list:
                 sem_leitura += int(f.get("janelas_sem_leitura") or 0)
             except (TypeError, ValueError):
                 pass
+    saida = []
+    if tirados:
+        saida.append(
+            "📐 Medimos só o que está nas pranchas: o que está no modelo fora de todas as "
+            "janelas de desenho ficou fora da conta — %s." % "; ".join(tirados[:4])
+            + (" E mais %d prancha(s)." % (len(tirados) - 4) if len(tirados) > 4 else ""))
+    if recusados:
+        saida.append(
+            "⚠ Pedimos pra medir só o que está nas pranchas, mas em %s a medição ficou "
+            "como estava." % "; ".join(recusados[:4]))
     if not partes:
-        return []
+        return saida
     _lista = "; ".join(partes[:4]) + ("; e mais %d" % (len(partes) - 4) if len(partes) > 4 else "")
     _linha = ("⚠ Parte do desenho está FORA das pranchas — %s. Esse trecho entrou na conta e "
               "está no modelo, mas não aparece em nenhuma janela de desenho das pranchas. Se for "
@@ -14455,7 +14483,7 @@ def _linhas_fora_das_pranchas(arqs: list) -> list:
     if sem_leitura:
         _linha += (" (%d janela(s) girada(s) ou em 3D a gente não consegue ler — o trecho "
                    "pode estar nela(s).)" % sem_leitura)
-    return [_linha]
+    return saida + [_linha]
 
 
 def _regua_da_sombra(user_total_area, total_area_ia):
@@ -16331,6 +16359,12 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                             # 10/10: o que nenhuma janela das pranchas mostra
                             if _md_u.get("fora_das_pranchas"):
                                 _res_esc["fora_das_pranchas"] = _md_u["fora_das_pranchas"]
+                            # 18/10: medido só o que está nas pranchas (opção por projeto)
+                            if _md_u.get("so_nas_pranchas"):
+                                _res_esc["so_nas_pranchas"] = _md_u["so_nas_pranchas"]
+                                _log_error("motor:so-nas-pranchas",
+                                           f"arq={os.path.basename(dxf_path)} "
+                                           f"{_md_u['so_nas_pranchas']}", job_id, severity="info")
                             # 11/10: pilar contado na geometria = arquivo de estrutura
                             _res_esc["pilares_contados"] = _pilares_contados(extraction)
                             _escala_arqs.append(_res_esc)
