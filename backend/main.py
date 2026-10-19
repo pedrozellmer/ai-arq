@@ -20232,6 +20232,18 @@ bloco — só cite os que estão no inventário deste arquivo."""
                            and str(getattr(_it, "unit", "") or "").lower() in ("ml", "m")
                            and float(getattr(_it, "quantity", 0) or 0) > 0]
             for _it in (all_items or []):
+                # 🩸 19/10/2026 — a frase "comprimento total do layer X = N m"
+                # não é só de parede: em 120 dias ela estava em 268 linhas de
+                # outras disciplinas (elétrica, hidráulica, incêndio,
+                # demolição…). Num posto de rodovia, a alvenaria veio em m² com
+                # a conta escrita de outro jeito (117,40 + 19,21 + 8,64 m), e a
+                # única frase lida foi a de um ELETRODUTO (27,53 m): o aviso
+                # disse ao cliente que faltava parede, com 145 m medidos. Em
+                # 120 dias, 3 dos 13 alarmes de cliente vieram de linha que
+                # não era parede (um eletroduto, duas demolições).
+                # 🔑 Mesmo filtro da fonte em metro acima: só linha de parede.
+                if str(getattr(_it, "discipline", "") or "") != "Fechamentos Verticais":
+                    continue
                 _c_obs = _compr_obs(getattr(_it, "observations", ""))
                 if _c_obs and _c_obs > 0:
                     _paredes_ml.append(_c_obs)
