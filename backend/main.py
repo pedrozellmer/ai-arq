@@ -16854,15 +16854,17 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                                 if str(_lyr).strip().upper() in _nao_prova_ig or _layer_sem_nome(_lyr):
                                     continue
                                 _indice_geom["comprimento"].append((str(_lyr), round(float(_c), 2)))
-                            # 🩸 27/09: seção de parede cortada não prova m² (shaft
-                            # 0,18 m² ✓ era a espessura da parede na planta)
-                            _secoes_ig = extraction.get_layers_secao_de_parede()
                             # 🩸 19/10: layer desligado/congelado não prova m² (não sai
                             # na prancha) — o comprimento já sai por `_nao_prova_ig`
                             _desl_ig = {str(_k).strip().upper() for _k in
                                         ((extraction.metadata or {}).get("layers_desligados_medidos") or {})}
+                            # 🩸 27/09: seção de parede cortada não prova m² (shaft
+                            # 0,18 m² ✓ era a espessura da parede na planta)
+                            _secoes_ig = extraction.get_layers_secao_de_parede()
                             for _lyr, _a in (extraction.get_areas_by_layer() or {}).items():
-                                if _lyr in _secoes_ig or str(_lyr).strip().upper() in _desl_ig:
+                                if _lyr in _secoes_ig:
+                                    continue
+                                if str(_lyr).strip().upper() in _desl_ig:
                                     continue
                                 _indice_geom["area"].append((str(_lyr), round(float(_a), 2)))
                             for _lyr, _a in (extraction.get_polygon_areas_by_layer() or {}).items():

@@ -107,4 +107,7 @@ def test_CONTROLE_o_laco_com_o_layer_ligado_segue():
 def test_o_indice_da_chave_do_selo_tira_a_area_do_layer_desligado():
     with open(main.__file__, encoding="utf-8") as f:
         src = f.read()
-    assert "if _lyr in _secoes_ig or str(_lyr).strip().upper() in _desl_ig:" in src
+    assert ("if _lyr in _secoes_ig:\n                                    continue\n"
+            "                                if str(_lyr).strip().upper() in _desl_ig:\n"
+            "                                    continue\n"
+            "                                _indice_geom[\"area\"]") in src
