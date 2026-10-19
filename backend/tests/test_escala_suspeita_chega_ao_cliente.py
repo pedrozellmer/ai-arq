@@ -104,9 +104,27 @@ def test_o_aviso_explica_por_que_a_CONTAGEM_continua_valendo():
 
 
 def test_o_aviso_diz_o_que_FAZER():
+    """🩸 19/10/2026: o remédio antigo ("reenvie informando a área total, ou
+    nos diga a unidade real") não mexia na unidade — a área informada não
+    corrige escala e não há caminho que aplique unidade dita pelo cliente.
+    O que o motor usa é a unidade declarada no arquivo ($INSUNITS)."""
     resumo, linhas = _fns()
     txt = " ".join(linhas([resumo(_ARQ, _MD_CLIENTE_80)], n_medidos=88))
-    assert "área total" in txt, "não diz o que destrava:\n" + txt
+    assert "unidade do desenho" in txt and "corrija e" in txt, (
+        "não diz o que destrava (corrigir a unidade no CAD):\n" + txt)
+    assert "não corrige a escala" in txt, (
+        "parou de avisar que a área informada não resolve a escala:\n" + txt)
+
+
+def test_o_aviso_NAO_promete_o_que_o_codigo_nao_faz():
+    """CONTROLE da promessa antiga: nenhuma das duas frases pode voltar."""
+    resumo, linhas = _fns()
+    txt = " ".join(linhas([resumo(_ARQ, _MD_CLIENTE_80)], n_medidos=88))
+    for promessa in ("reenvie informando a área total",
+                     "nos diga a unidade real"):
+        assert promessa not in txt, (
+            "o aviso voltou a prometer %r — isso não corrige a escala:\n%s"
+            % (promessa, txt))
 
 
 def test_a_linha_de_SUSPEITA_vem_ANTES_da_de_sem_prova():

@@ -14507,8 +14507,22 @@ def _linhas_escala_projeto(arqs: list, n_medidos: int = -1,
             "ou m³ dessas pranchas saiu com o selo \"✓ MEDIDO do CAD\" — as "
             "contagens de peças (un) não são afetadas, porque contar não depende "
             "de escala. Se algum comprimento ou área estiver com ordem de grandeza "
-            "estranha, é isto. Pra resolver: reenvie informando a área total do "
-            "projeto no campo do envio, ou nos diga a unidade real do desenho."
+            "estranha, é isto. Pra resolver: confira no CAD a unidade do desenho "
+            "(comando UNITS/UNIDADES). Se ela estiver errada — um desenho feito "
+            "em centímetros declarado como metros, por exemplo —, corrija e "
+            "reenvie: é por ela que a gente mede. Se a unidade estiver certa e o "
+            "desenho for grande mesmo (uma implantação, por exemplo), confira uma "
+            "medida conhecida contra a planilha. Informar a área total no envio "
+            "não corrige a escala."
+            # 🩸 19/10/2026 — este aviso prometia "reenvie informando a área
+            # total, ou nos diga a unidade real do desenho". Nenhuma das duas
+            # mexe na unidade: a área informada só preenche piso/forro/laje em
+            # branco (e serve de régua à sombra), e não existe caminho que
+            # aplique uma unidade dita pelo cliente. Em 120 dias, 40 projetos
+            # (33 contas) receberam a promessa; um cliente reenviou a mesma
+            # prancha 3 vezes no mesmo dia. O que o motor USA é o $INSUNITS
+            # do arquivo (`_detect_unit_factor`): corrigir a unidade no CAD é
+            # o que de fato muda a medida.
             % (_n, _porque))
     if provadas:
         partes = []
