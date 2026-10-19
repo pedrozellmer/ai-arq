@@ -1364,6 +1364,41 @@ def _pilares_contados(extraction) -> int:
         return 0
 
 
+def _pilares_por_secao(extraction) -> dict:
+    """{seção: pilares} da contagem geométrica deste arquivo ("25x25 cm",
+    "Ø25 cm" — as chaves de `count_pillars`). {} quando não achou ou falhou."""
+    try:
+        from structural_extractor import count_pillars as _cp
+        return {str(d["secao_cm"]): int(d["qtd"])
+                for d in ((_cp(extraction) or {}).get("por_secao") or [])}
+    except Exception:
+        return {}
+
+
+def _selo_do_pilar_conferido(all_items, pilares_por_folha, job_id) -> int:
+    """Põe na frente da observação da linha de pilar ✓ que a contagem
+    geométrica confere a frase que a rede do selo reconhece (ver
+    `engine_rules.pilares_conferidos_pela_geometria`). Roda ANTES de
+    `selos_sem_geometria`. Devolve quantas linhas; falhou = nenhuma (o selo
+    segue com a rede de sempre)."""
+    try:
+        from engine_rules import pilares_conferidos_pela_geometria as _pcg
+        achados = _pcg(all_items, pilares_por_folha)
+        for a in achados:
+            _it = all_items[a["indice"]]
+            _it.observations = _observacao_que_cabe(
+                a["frase"] + " " + str(getattr(_it, "observations", "") or ""))
+        if achados:
+            _log_error("motor:pilar-conferido",
+                       "%d linha(s) de pilar com o número conferido pela contagem geométrica: %s"
+                       % (len(achados), "; ".join(a["frase"].split(": ", 1)[-1] for a in achados[:4])),
+                       job_id, severity="info")
+        return len(achados)
+    except Exception as _epc:
+        print(f"[pilar-conferido] nao rodou (segue): {_epc}")
+        return 0
+
+
 def _arquivo_de_estrutura_pelos_pilares(arqs) -> bool:
     """Algum CAD do job teve pilares contados na geometria (`pilares_contados`
     no resumo de cada prancha) em número que não é acaso?"""
@@ -16116,6 +16151,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                 n_dxf = len(dxf_paths)
                 dxf_span = cad_end_pct - extract_start
                 _escala_arqs = []   # 21/08: como a escala de cada prancha foi decidida
+                _pilares_por_folha = {}   # 19/10: arquivo → {seção: pilares contados}
                 _blocos_para_aviso = {}   # 18/10: tipo de bloco → peças, somado no job
                 # 🔑 22/09/2026 — O QUE O MOTOR MEDIU, guardado pra depois.
                 # `extraction` morre no fim de cada volta (`del extraction`, por
@@ -16567,6 +16603,8 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                             # 11/10: pilar contado na geometria = arquivo de estrutura
                             _res_esc["pilares_contados"] = _pilares_contados(extraction)
                             _escala_arqs.append(_res_esc)
+                            # 19/10: a seção de cada pilar contado, pra conferir o selo
+                            _pilares_por_folha[_dxf_nome] = _pilares_por_secao(extraction)
                         except Exception as _eea:
                             print(f"[escala-resumo] nao-fatal: {_eea}")
                         # 🩸 01/10 (job e3b8ddce): CONSENSO TARDIO. O pré-passe
@@ -20055,6 +20093,12 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # A diferença é a direção: ela só REBAIXA. Errar pro lado de "estimado"
         # custa uma revisão; errar pro lado de "medido" põe número sem lastro
         # com selo de confiança.
+        # 🩸 19/10: antes, a linha de pilar ✓ cujo número a contagem geométrica
+        # do arquivo confere ganha a frase que esta rede reconhece.
+        try:
+            _selo_do_pilar_conferido(all_items, _pilares_por_folha, job_id)
+        except NameError:
+            pass                                    # job sem CAD (só PDF)
         try:
             from engine_rules import selos_sem_geometria as _ssg
             from models import Confidence as _CfG

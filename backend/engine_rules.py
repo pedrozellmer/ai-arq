@@ -2219,6 +2219,96 @@ def selos_sem_geometria(items):
     return achados
 
 
+# ══════════════════════════════════════════════════════════════════════════
+#  O PILAR QUE O DESENHO CONFERE NÃO PERDE O SELO PELA FRASE (19/10/2026)
+# ══════════════════════════════════════════════════════════════════════════
+# 🩸 19/10, avaliação de uma locação de pilares: as 6 linhas de pilar saíram
+# ⚠ ESTIMADO com a quantidade CERTA (59 retangulares + 7 redondos, a contagem
+# geométrica do arquivo). A IA marcou ✓ e escreveu "Fonte: MEDIÇÃO
+# DETERMINÍSTICA — layer 'S-COLS-…': 8 retângulos de 25×25 cm. Textos layer
+# […]: '25/25 ×8'". Nenhuma forma de `_PROVA_CONTADO_NO_DESENHO` ("contagem
+# geométrica", "contados geometricamente"…) casa com essa ordem de palavras, e
+# o "Textos" pôs a linha em `selos_sem_geometria`. Na mesma prancha, outra
+# rodada escreveu "8 retângulos … contados geometricamente" e ficou com o selo.
+# 🔑 Não é a frase que prova: é o número. A linha de pilar marcada ✓ que diz
+# "N retângulos (ou círculos) de S cm", com N igual à quantidade dela E à
+# contagem geométrica do arquivo dela para a mesma seção (`count_pillars`),
+# recebe na frente a frase que a régua de sempre reconhece — uma balança só.
+# 🛑 Estreita: só ✓ que ainda não tem prova escrita, só "pilar" na descrição
+# (a estaca Ø25 da mesma prancha não), só origem `dxf_geom`, uma contagem só
+# citada (a mesma repetida vale; duas diferentes, não), o arquivo dela (ou o
+# único CAD do job), e UMA linha só citando aquela seção naquele arquivo (duas
+# linhas com os mesmos 8 seriam 16 com selo). Nunca promove.
+# 📏 120 dias: a forma derrubou o selo só nesta avaliação (5 linhas); a
+# frase "medição determinística" está em 14 jobs, quase sempre com outra prova.
+MARCA_PILAR_CONFERIDO = "✓ Contagem geométrica conferida no desenho"
+_RE_PILAR_CONTADO_NA_LINHA = _re.compile(
+    r"(?<![\d.,])(\d{1,4})\s+(ret[âa]ngulos?|c[íi]rculos?)\s+de\s+(?:se[çc][ãa]o\s+)?"
+    r"(?:(?:[Øø]|di[âa]metro\s+)\s*(\d{1,3})|(\d{1,3})\s*[×xX]\s*(\d{1,3}))\s*cm\b",
+    _re.IGNORECASE)
+
+
+def pilares_conferidos_pela_geometria(items, pilares_por_folha):
+    """[{indice, frase}] das linhas de pilar ✓ cujo número a contagem geométrica
+    do arquivo confere. `pilares_por_folha` = {nome do arquivo: {"25x25 cm": 8,
+    "Ø25 cm": 7, …}} (as chaves de `count_pillars`). Não altera nada."""
+    mapa = {str(k): v for k, v in (pilares_por_folha or {}).items() if v}
+    if not mapa:
+        return []
+    achados = []
+    disputa: dict = {}                    # (arquivo, seção) → linhas que citam essa contagem
+    for i, it in enumerate(items or []):
+        if str(_campo_do_item(it, "origem", "") or "").strip().lower() != "dxf_geom":
+            continue
+        if str(_campo_do_item(it, "unit", "") or "").strip().lower() != "un":
+            continue
+        if "pilar" not in str(_campo_do_item(it, "description", "") or "").lower():
+            continue
+        obs = str(_campo_do_item(it, "observations", "") or "")
+        citados = set()
+        for n, forma, diam, a, b in _RE_PILAR_CONTADO_NA_LINHA.findall(obs):
+            if forma.lower().startswith("c"):
+                citados.add((int(n), "Ø%d cm" % int(diam)) if diam else None)
+            else:
+                citados.add((int(n), "%dx%d cm" % tuple(sorted((int(a), int(b)))))
+                            if a and b else None)
+        validos = {c for c in citados if c is not None}
+        if not validos:
+            continue
+        folha = str(_campo_do_item(it, "ref_sheet", "") or "").strip()
+        if folha not in mapa and len(mapa) == 1:
+            folha = next(iter(mapa))
+        contagem = mapa.get(folha)
+        if not contagem:
+            continue
+        # 🩸 revisão (19/10): a mesma contagem não confere duas linhas. "Pilar
+        # 25×25 — térreo" 8 e "— pavimento superior" 8, as duas citando os 8
+        # retângulos do mesmo arquivo, sairiam as duas ✓: 16 na planilha, 8 no
+        # desenho. Conta TODA linha de pilar que cita a seção nesse arquivo — com
+        # qualquer selo, com prova escrita ou não, e também a que cita VÁRIAS
+        # seções ("Pilares — todos: 8 de 25×25 e 4 de 25×60") —, e só confere se
+        # for uma só.
+        for _sec in {s for _n, s in validos}:
+            disputa[(folha, _sec)] = disputa.get((folha, _sec), 0) + 1
+        if len(citados) != 1:
+            continue                      # duas contagens diferentes citadas: disputa, não é candidata
+        ((n, secao),) = citados
+        selo = _campo_do_item(it, "confidence", "")
+        if str(getattr(selo, "value", selo) or "").strip().lower() != "confirmado":
+            continue
+        if _tem_prova_de_geometria(obs):
+            continue                      # já tem a prova escrita
+        try:
+            q = float(_campo_do_item(it, "quantity", 0) or 0)
+        except (TypeError, ValueError):
+            continue
+        if not (q == n and contagem.get(secao) == n):
+            continue
+        achados.append({"indice": i, "par": (folha, secao), "frase": "%s: %d pilar(es) de %s." % (
+            MARCA_PILAR_CONFERIDO, n, secao)})
+    return [{"indice": a["indice"], "frase": a["frase"]} for a in achados if disputa[a["par"]] == 1]
+
+
 def _campo_do_item(it, nome, padrao=""):
     """Lê o campo tanto de dict quanto de objeto (BudgetItem)."""
     v = it.get(nome, padrao) if isinstance(it, dict) else getattr(it, nome, padrao)
