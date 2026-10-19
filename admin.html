@@ -437,7 +437,7 @@
             <h2 class="text-xl font-bold text-gray-900">🔧 Motor</h2>
             <p class="text-sm text-gray-500">Números (quanto o motor mede) + ações (recuperar falhas, puxar PDF-só pro CAD).</p>
           </div>
-          <button onclick="loadOndeErra(); loadQualidadeSemanal(); loadMotorHealth(); loadOps(); loadFunilRevisao(); loadVozCliente(); loadRevisionFeedback();" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg font-medium self-start">Atualizar</button>
+          <button onclick="loadRevisorNoturno(); loadOndeErra(); loadQualidadeSemanal(); loadMotorHealth(); loadOps(); loadFunilRevisao(); loadVozCliente(); loadRevisionFeedback();" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg font-medium self-start">Atualizar</button>
         </div>
         <!-- 🚨 25/08: estas duas rotas existiam sem botao nenhum. Rota de admin
              precisa de Authorization, entao o Pedro nao conseguia chamar pelo
@@ -457,6 +457,11 @@
           </div>
           <div id="contagens-saida" class="mt-3"></div>
         </div>
+        <!-- 19/10/2026 — Pedro: "um revisor de TODOS os projetos" e "sempre à noite". Fica no
+             TOPO da aba porque é a fila do dia; o resto da aba é a história. -->
+        <h3 class="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">🌙 Revisor da noite <span class="font-normal text-gray-400">— os projetos da janela, do mais suspeito pro menos</span></h3>
+        <div id="revisor-noturno" class="mb-2"><p class="text-gray-400 text-sm">Carregando…</p></div>
+        <div class="my-8 border-t border-gray-200"></div>
         <h3 class="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">🎯 Onde o motor erra <span class="font-normal text-gray-400">— o que o cliente corrigiu à mão</span></h3>
         <div id="onde-erra"><p class="text-gray-400 text-sm">Carregando…</p></div>
         <div class="my-8 border-t border-gray-200"></div>
@@ -1572,7 +1577,7 @@ function switchTab(tabName, interno) {
   if (tabName === 'instagram') loadInstagramPosts();
   if (tabName === 'linkedin') loadLinkedinPosts();
   if (tabName === 'calendario') loadCalendario();
-  if (tabName === 'motor') { loadOndeErra(); loadQualidadeSemanal(); loadMotorHealth(); loadOps(); loadFunilRevisao(); loadVozCliente(); loadRevisionFeedback(); }
+  if (tabName === 'motor') { loadRevisorNoturno(); loadOndeErra(); loadQualidadeSemanal(); loadMotorHealth(); loadOps(); loadFunilRevisao(); loadVozCliente(); loadRevisionFeedback(); }
   if (tabName === 'financeiro') loadCosts();
 }
 
@@ -3206,6 +3211,104 @@ function renderMotorHealth(d){
 // ONDE A IA MAIS ERRA — feedback das planilhas revisadas pelos clientes
 // (acessibilidade: cor NUNCA sozinha — sempre cor + ícone + texto)
 // ══════════════════════════════════════════════
+// ══════════════════════════════════════════════
+// REVISOR DA NOITE (aba Motor) — 19/10/2026
+// Toda noite (03:12) o servidor monta a ficha de cada projeto de cliente da janela
+// com os 6 sinais da regra da casa e dá uma nota pela soma dos motivos. Aqui só se
+// LÊ a rodada: nada muda em projeto, não chama IA, não manda e-mail.
+// ══════════════════════════════════════════════
+let _revisorTodos = false;
+async function loadRevisorNoturno(noite){
+  const el = document.getElementById('revisor-noturno');
+  if (!el) return;
+  const esc = s => String(s==null?'':s).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
+  const dt = (s, o) => { try { return window.fmtBR(s, o || {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); } catch(_) { return ''; } };
+  const diaBR = iso => { const p = String(iso||'').split('-'); return p.length === 3 ? `${p[2]}/${p[1]}` : esc(iso); };
+  el.innerHTML = '<p class="text-gray-400 text-sm">Carregando…</p>';
+  try {
+    // vazio = a última rodada (o servidor decide)
+    const res = await authFetch(`${API_BASE}/api/admin/revisor-noturno?noite=${encodeURIComponent(noite || '')}`);
+    const d = await res.json();
+    if (!res.ok || d.erro) {
+      // painel mudo não pode parecer "nenhum suspeito"
+      el.innerHTML = '<p class="text-sm text-red-600">Não consegui ler a rodada agora.</p>';
+      return;
+    }
+    if (!d.noite) {
+      el.innerHTML = '<p class="text-sm text-gray-500">O revisor ainda não rodou nenhuma noite.</p>';
+      return;
+    }
+    const n = d.noite, fichas = d.fichas || [];
+    const falhas = n.falhas || [];
+    const opcoes = (d.noites || []).map(x =>
+      `<option value="${esc(x.noite)}" ${x.noite === n.noite ? 'selected' : ''}>${diaBR(x.noite)} · ${x.n_suspeitos||0} suspeito(s)</option>`).join('');
+    const cab = `
+      <div class="flex flex-wrap items-center gap-3 mb-3 text-xs text-gray-600">
+        <select onchange="loadRevisorNoturno(this.value)" class="border border-gray-300 rounded px-2 py-1 text-xs">${opcoes}</select>
+        <span>rodou ${dt(n.rodou_em)} · ${n.n_projetos||0} projeto(s) de cliente dos últimos ${n.janela_dias||'?'} dias ·
+          <b class="text-gray-800">${n.n_suspeitos||0} suspeito(s)</b> · ${n.n_novidades||0} com novidade desde a rodada anterior</span>
+      </div>
+      <p class="text-xs text-gray-400 mb-3">Só lê. Nada muda no projeto de ninguém, sem IA e sem e-mail. A nota é a soma dos motivos — leia os motivos, não o número.</p>`;
+    const avisoFalha = falhas.length
+      ? `<div class="rounded-lg border border-red-200 bg-red-50 p-3 mb-3 text-xs text-red-700">
+           <b>Esta rodada não está completa</b> — ${falhas.map(esc).join(' · ')}</div>` : '';
+
+    const visiveis = _revisorTodos ? fichas : fichas.filter(f => (f.nota||0) >= 3);
+    const linha = f => {
+      const s = f.sinais || {}, rv = s.revisao || {}, mt = s.motor || {}, ent = s.entregaveis || {};
+      const nota = f.nota || 0;
+      const cor = nota >= 6 ? 'bg-red-100 text-red-800' : nota >= 3 ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-600';
+      const motivos = (f.motivos || []).map(m =>
+        `<span class="inline-block text-xs px-2 py-0.5 rounded bg-slate-100 text-slate-700">${esc(m.texto)}</span>`).join('');
+      const medido = mt.total ? `${mt.medidas||0}/${mt.total} medidas` : '';
+      const outros = ['memorial','cronograma','financeiro','comparativo'].filter(k => ent[k]);
+      const resumo = [esc(s.formato||''), medido,
+        rv.aberturas ? `abriu a revisão ${rv.aberturas}×` : 'não abriu a revisão',
+        outros.length ? `fez ${outros.join(', ')}` : '',
+        s.nps != null ? `NPS ${s.nps}` : ''].filter(Boolean).join(' · ');
+      const etapas = (mt.etapas || []).length
+        ? `<details class="mt-1"><summary class="text-xs text-gray-400 cursor-pointer">${mt.etapas.length} etapa(s) do motor no registro</summary>
+             <p class="text-xs text-gray-500 font-mono mt-1">${mt.etapas.map(esc).join(' · ')}</p></details>` : '';
+      return `
+        <div class="border-b border-gray-100 py-3 flex gap-3">
+          <span class="shrink-0 w-9 h-9 rounded-lg ${cor} flex items-center justify-center text-sm font-bold">${nota}</span>
+          <div class="min-w-0 flex-1">
+            <div class="flex flex-wrap items-center gap-2">
+              <a href="projeto.html?adm=1&job_id=${encodeURIComponent(f.job_id)}" class="text-sm font-medium text-indigo-600 hover:underline">${esc(f.projeto || '—')}</a>
+              <span class="text-xs font-mono text-gray-400">${esc(String(f.job_id).slice(0,8))}</span>
+              ${f.novidade ? '<span class="text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">novidade</span>' : ''}
+              <span class="text-xs text-gray-400">criado ${dt(f.criado_em, {day:'2-digit',month:'2-digit'})}</span>
+            </div>
+            <div class="mt-1 flex flex-wrap gap-2">${motivos || '<span class="text-xs text-gray-400">nenhum motivo</span>'}</div>
+            <p class="text-xs text-gray-500 mt-1">${resumo}</p>
+            ${etapas}
+          </div>
+        </div>`;
+    };
+    const fila = visiveis.length ? visiveis.map(linha).join('')
+      : `<p class="text-sm text-gray-500 py-2">Nenhum projeto com nota 3 ou mais nesta rodada.</p>`;
+    const botao = `<button onclick="_revisorTodos=!_revisorTodos; loadRevisorNoturno('${esc(n.noite)}')"
+        class="mt-2 text-xs text-indigo-600 hover:underline">${_revisorTodos ? 'mostrar só os suspeitos' : `mostrar todos os ${fichas.length}`}</button>`;
+
+    // padrões: etapa do motor × reação do cliente, pela sobra acima da taxa média
+    const pads = (n.padroes || []).filter(p => (p.com_retorno||0) >= 2 && (p.excesso||0) > 0).slice(0, 8);
+    const taxa = (n.padroes && n.padroes[0]) ? Math.round((n.padroes[0].taxa_geral||0)*100) : 0;
+    const blocoPad = pads.length ? `
+      <h4 class="text-xs font-bold text-gray-700 mt-6 mb-1">Etapas do motor que andam junto com reclamação</h4>
+      <p class="text-xs text-gray-400 mb-2">Na média, ${taxa}% dos projetos em que o cliente voltou tiveram reação dele. Aqui estão as etapas acima dessa média. Um caso não é padrão: olhe a base.</p>
+      ${pads.map(p => `
+        <div class="text-xs py-1 border-b border-gray-50">
+          <span class="font-mono text-gray-800">${esc(p.etapa)}</span>
+          <span class="text-gray-500"> — em ${p.projetos} projeto(s); o cliente voltou em ${p.com_retorno} e reagiu em <b>${p.com_reacao}</b> (a média daria ${(p.com_reacao - p.excesso).toFixed(1)})</span>
+          ${(p.exemplos||[]).map(j => `<a href="projeto.html?adm=1&job_id=${encodeURIComponent(j)}" class="ml-1 font-mono text-indigo-500 hover:underline">${esc(String(j).slice(0,8))}</a>`).join('')}
+        </div>`).join('')}` : '';
+
+    el.innerHTML = cab + avisoFalha + fila + (fichas.length ? botao : '') + blocoPad;
+  } catch (e) {
+    el.innerHTML = '<p class="text-sm text-red-600">Não consegui ler a rodada agora.</p>';
+  }
+}
+
 // ══════════════════════════════════════════════
 // FUNIL DA REVISÃO (aba Motor) — onde o cliente para
 // ══════════════════════════════════════════════

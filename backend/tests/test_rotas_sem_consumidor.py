@@ -36,6 +36,10 @@ _IGNORA = ("/api/admin/", "/api/debug/", "/api/instagram/", "/api/whatsapp/",
            # (`cadastro-alerta-tick`, criado por SQL no deploy — conferir em
            # `cron.job`, pelo mesmo motivo do token acima).
            "/api/cadastro/alerta/tick",
+           # 19/10/2026 — revisor noturno, pg_cron às 03:12 (`aiarq_revisor_noturno_tick`,
+           # em migrations_pendentes/revisor_noturno.sql — conferir em `cron.job` depois
+           # do deploy, pelo mesmo motivo do token acima).
+           "/api/revisor/tick",
            "/api/public/", "/api/contact", "/api/nps")
 
 # 📉 TETO: 7 rotas sem consumidor, MEDIDAS por este detector em 31/08/2026.
