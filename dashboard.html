@@ -4217,12 +4217,54 @@
   // 3 s: duplo clique fica abaixo de 500 ms, e projeto novo de verdade leva
   // minutos.
   let _ultimoEnvioMs = 0;
+
+  // 🩸 19/10/2026 — A PERGUNTA ABERTA DEIXAVA UM SEGUNDO ENVIO NASCER.
+  // Antes de subir, `startProcessing` pode perguntar (anexar ao projeto
+  // anterior, tipo estrutural, só PDF, pé-direito/área). A pergunta é um toast
+  // NÃO modal no canto da tela, que só fecha num dos dois botões; quem não a
+  // vê clica "Processar" de novo, e com mais de 3 s a trava acima deixa passar
+  // um SEGUNDO `startProcessing`, com a sua própria pergunta. Cada um termina
+  // num projeto. Medido no banco: 3 casos confirmados pelo rastro de eventos
+  // (27/09, 05/10 com 30 DWG, 19/10), todos o mesmo arquivo processado duas
+  // vezes; em dois deles a pergunta ANTIGA, respondida depois, devolveu a tela
+  // ao formulário e o clique seguinte virou o 2º projeto.
+  // 🔑 Um envio por vez, solto no `finally`: aqui a flag é segura (o medo do
+  // comentário acima era esquecer UMA saída), porque todas as saídas de
+  // `startProcessing` passam pelo `finally`, e as que vêm antes (termos,
+  // idade) ficam fora da trava. A pergunta sempre resolve num clique, então o
+  // botão não fica morto; o 2º clique AVISA onde está a pergunta.
+  function _envioJaEmCurso() {
+    if (!_umEnvioPorVez.emCurso) return false;
+    try {
+      window.trackEvent?.('processar_bloqueado', { motivo: 'envio-em-curso' });
+    } catch (_) {}
+    const _m = 'Seu envio já começou: falta responder a pergunta no canto da '
+             + 'tela para ele seguir.';
+    try {
+      if (window.toast && window.toast.warn) window.toast.warn(_m);
+      else console.info(_m);
+    } catch (_) {}
+    return true;
+  }
+
+  async function _umEnvioPorVez(enviar) {
+    if (_envioJaEmCurso()) return false;
+    _umEnvioPorVez.emCurso = true;
+    try {
+      await enviar();
+      return true;
+    } finally {
+      _umEnvioPorVez.emCurso = false;
+    }
+  }
+
   btnProcess.addEventListener('click', async () => {
     if (selectedFiles.length === 0) return;
     if (Date.now() - _ultimoEnvioMs < 3000) {
       console.log('[upload] clique repetido ignorado (< 3s do anterior)');
       return;
     }
+    if (_envioJaEmCurso()) return;
     _ultimoEnvioMs = Date.now();
 
     const termsCheckbox = document.getElementById('terms-checkbox');
@@ -4262,14 +4304,14 @@
         window.__creditsToConsumeCents = 0;
       }
       // Projeto gratuito (primeiro / ilimitado / coberto por crédito) — processa direto
-      startProcessing();
+      _umEnvioPorVez(startProcessing);
     } else if (BETA_FREE) {
       // 2º projeto (ou mais) DURANTE O BETA: em vez de cobrar, avisamos que
       // continua grátis e processamos. Quando ligar a cobrança, é só pôr
       // BETA_FREE=false que este ramo some e cai no checkout abaixo.
       window.__creditsToConsumeCents = 0;
       notify.ok('🎉 Beta: seu projeto é grátis, sem limite de projetos. 🙌');
-      startProcessing();
+      _umEnvioPorVez(startProcessing);
     } else {
       // Precisa pagar — pede CPF/CNPJ se ainda não tiver (cadastro 2 etapas).
       const cpfOk = await ensureCpfBeforeCheckout();
