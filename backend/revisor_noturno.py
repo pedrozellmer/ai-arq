@@ -72,6 +72,18 @@ NPS_BAIXO_MAX = 6
 #: o selo branco é gravado como 'confirmado' (`_antes.confidence` do item_reviews)
 _CONF_MEDIDO = {"confirmado", "medido"}
 
+#: só estas etapas do `error_log` são do MOTOR (leitura do arquivo). Medido em 19/10 nos 121 projetos
+#: de cliente de 30 dias: motor (77 etapas), pdfvec, dxfrooms, libredwg, dwg, dxf, process_job. O resto
+#: — nps, cobranca, entrega, email, admin, cliente, revisao, upload… — é o site falando, e cruzar
+#: `nps:detractor-alerta` com "nota baixa" só acharia a si mesmo.
+#: 🪤 Prefixo novo do motor fica de fora até entrar aqui (lista que libera, não que bloqueia).
+PREFIXOS_DO_MOTOR = ("motor:", "pdfvec:", "dxfrooms:", "libredwg:", "dwg:", "dxf:", "process_job")
+
+
+def etapa_do_motor(stage) -> bool:
+    s = str(stage or "")
+    return any(s == p or s.startswith(p) for p in PREFIXOS_DO_MOTOR)
+
 
 def _ts(v):
     """ISO do Supabase → datetime com fuso; None se não der.
@@ -255,7 +267,7 @@ def montar_fichas(projetos, extra, revisoes, lotes, conversas, nps, erros, entre
                 "medidas": ex.get("linhas_medidas"),
                 "total": ex.get("linhas_total"),
                 # contexto, não nota: as etapas que o motor registrou neste projeto
-                "etapas": sorted({str(r.get("stage") or "") for r in er if r.get("stage")}),
+                "etapas": sorted({str(r["stage"]) for r in er if etapa_do_motor(r.get("stage"))}),
             },
             "revisao": dict(resumir_revisoes(rv, recado_digitado),
                             aberturas=int(p.get("revisao_aberturas") or 0)),
@@ -308,7 +320,17 @@ def padroes(fichas) -> list:
     etapa que aparece em 29 projetos e em 1 só o cliente reagiu é ruído; a que aparece em 6 e em 5
     o cliente reagiu é a próxima coisa a olhar. A fração vai junto com a BASE (`com_retorno`):
     projeto em que o cliente ainda não fez nada não diz se a etapa dói.
+
+    🪤 Ordenar por `com_reacao` cru põe no topo a etapa que está em TODO projeto (medido em 19/10: as
+    etapas `motor:` aparecem nos 121). Por isso a ordem é pelo `excesso`: reações a mais do que a
+    taxa média daria naquela base — `com_reacao - com_retorno × taxa_geral`. Etapa que está em tudo
+    tem excesso ~0; a que concentra reação sobe.
     """
+    retornos = [f for f in fichas or [] if _teve_retorno(f)]
+    reagiram = [f for f in retornos
+                if {m["codigo"] for m in f.get("motivos") or []} & MOTIVOS_DO_CLIENTE]
+    taxa_geral = (len(reagiram) / len(retornos)) if retornos else 0.0
+
     por_etapa = {}
     for f in fichas or []:
         do_cliente = {m["codigo"] for m in f.get("motivos") or []} & MOTIVOS_DO_CLIENTE
@@ -324,5 +346,8 @@ def padroes(fichas) -> list:
                 if len(d["exemplos"]) < 5:
                     d["exemplos"].append(f["job_id"])
     out = list(por_etapa.values())
-    out.sort(key=lambda d: (-d["com_reacao"], -d["projetos"], d["etapa"]))
+    for d in out:
+        d["excesso"] = round(d["com_reacao"] - d["com_retorno"] * taxa_geral, 2)
+        d["taxa_geral"] = round(taxa_geral, 3)
+    out.sort(key=lambda d: (-d["excesso"], -d["com_reacao"], -d["projetos"], d["etapa"]))
     return out

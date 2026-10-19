@@ -41755,6 +41755,229 @@ def metricas_tick(request: Request, dias: int = 3, so_origens: int = 0):
             "busca": _busca}
 
 
+# ═══════════════════════════════════════════════════════════════════════════════════════════════
+#  REVISOR NOTURNO (19/10/2026) — a ficha de cada projeto de cliente, toda noite
+#  A conta está em `revisor_noturno.py`; aqui só se LÊ o banco e se GRAVA a rodada.
+#  Pedro: "um revisor de TODOS os projetos, pra ir melhorando cada vez mais o nosso motor" e
+#  "sempre à noite". Sem IA, sem e-mail, sem mexer em projeto: é uma fila pra gente olhar.
+# ═══════════════════════════════════════════════════════════════════════════════════════════════
+
+#: dias de projeto relidos a cada noite. 🪤 O cliente reage DIAS depois (revisa, pergunta, dá
+#: nota): reler a janela inteira é o que deixa a ficha de um projeto de 10 dias mudar quando ele volta.
+_REVISOR_JANELA_PADRAO = 30
+_REVISOR_JANELA_TETO = 60
+#: as rodadas (e as fichas, em cascata) somem depois disto — a janela da retenção dos arquivos
+_REVISOR_RETENCAO_DIAS = 90
+#: job_ids por consulta `in.(...)` — a URL do PostgREST tem limite e o job_id é curto, mas não infinito
+_REVISOR_JOBS_POR_CONSULTA = 80
+
+
+def _revisor_agora_utc():
+    """Agora COM fuso (UTC). 🪤 `_agora_br_fn()` devolve hora de Brasília SEM fuso: gravada num
+    timestamptz ela vira UTC e fica 3 h errada — e a `novidade` (sinal depois da rodada anterior)
+    compara exatamente esse carimbo. A DATA da noite continua sendo a de Brasília (`_hoje_br`)."""
+    from datetime import timezone as _tz
+    return datetime.now(_tz.utc)
+
+
+def _revisor_ler_por_jobs(tabela, jobs, select, ordem="id.asc"):
+    """Lê `tabela` só dos `jobs`, em lotes. Devolve (status, linhas) — 🚨 falha FECHADA: o primeiro
+    lote que não voltar 200 para a leitura, e quem chama não grava ficha com meia tabela."""
+    linhas = []
+    for i in range(0, len(jobs), _REVISOR_JOBS_POR_CONSULTA):
+        lote = jobs[i:i + _REVISOR_JOBS_POR_CONSULTA]
+        st, rs = _supa_rest_tudo(
+            tabela, params={"select": select,
+                            "job_id": "in.(%s)" % ",".join('"%s"' % j for j in lote)},
+            ordem=ordem, timeout=20)
+        if st != 200:
+            return st, linhas
+        linhas.extend(rs or [])
+    return 200, linhas
+
+
+def _revisor_coletar(dias: int):
+    """Lê os 6 sinais dos projetos de cliente criados nos últimos `dias`.
+
+    Devolve (dados, falhas). Com qualquer falha, `dados` é None: ficha montada com uma fonte
+    faltando diria "o cliente não revisou" quando a verdade é "não consegui ler".
+    """
+    desde = (_revisor_agora_utc() - timedelta(days=dias)).isoformat()
+    falhas = []
+    st, projetos = _supa_rest_tudo(
+        "projetos_de_cliente",
+        params={"created_at": "gte.%s" % desde,
+                "select": "job_id,created_at,status,file_types,reprocess_count,revisao_aberturas"},
+        ordem="created_at.desc,id.asc", timeout=20)
+    if st != 200:
+        return None, ["projetos_de_cliente: HTTP %s" % st]
+    # em fila ou processando ainda não tem o que revisar
+    projetos = [p for p in projetos or [] if p.get("status") in ("done", "error") and p.get("job_id")]
+    jobs = sorted({p["job_id"] for p in projetos})
+    dados = {"projetos": projetos}
+    if not jobs:
+        dados.update(extra={}, revisoes=[], lotes=[], conversas=[], nps=[], erros=[],
+                     entregaveis={}, emails=[])
+        return dados, falhas
+
+    def _ler(tabela, select, ordem="id.asc"):
+        s, rs = _revisor_ler_por_jobs(tabela, jobs, select, ordem=ordem)
+        if s != 200:
+            falhas.append("%s: HTTP %s" % (tabela, s))
+        return rs
+
+    # `projects` traz o que a view não traz (linhas medidas)
+    _ex = _ler("projects", "id,job_id,linhas_medidas,linhas_total")
+    dados["extra"] = {r["job_id"]: r for r in _ex or [] if r.get("job_id")}
+    # 🪤 `edits` inteiro é pesado (`_antes` com o item todo); só o selo de antes interessa
+    _rv = _ler("item_reviews",
+               "id,job_id,item_id,action,comment,reviewed_at,conf:edits->_antes->>confidence")
+    dados["revisoes"] = [dict(r, edits={"_antes": {"confidence": r.get("conf")}}) for r in _rv or []]
+    dados["lotes"] = _ler("revision_feedback",
+                          "id,job_id,created_at,n_originais,n_mantidos,n_alterados,n_removidos,n_adicionados")
+    dados["conversas"] = _ler("agent_conversations", "id,job_id,created_at")
+    dados["nps"] = _ler("nps_responses", "id,job_id,score,created_at")
+    dados["erros"] = _ler("error_log", "id,job_id,stage")
+    dados["emails"] = _ler("email_sent_log", "id,job_id")
+    # os outros entregáveis: existe? quando mexeu por último?
+    ent = {}
+    for chave, tabela, carimbo, ordem in (
+            ("memorial", "project_memorial", "updated_at", "job_id.asc"),
+            ("cronograma", "cronogramas", "updated_at", "id.asc"),
+            ("financeiro", "financeiro_lancamentos", "updated_at", "id.asc"),
+            ("comparativo", "project_supplier_quotes", "uploaded_at", "id.asc")):
+        sel = "job_id,%s" % carimbo if ordem.startswith("job_id") else "id,job_id,%s" % carimbo
+        rs = _ler(tabela, sel, ordem=ordem)
+        ent[chave] = [{"job_id": r.get("job_id"), "quando": r.get(carimbo)} for r in rs or []]
+    dados["entregaveis"] = ent
+    return (None if falhas else dados), falhas
+
+
+def _revisor_gravar(noite: str, janela: int, fichas, padroes, falhas):
+    """Grava a rodada. Devolve a lista de falhas da GRAVAÇÃO (vazia = gravou tudo)."""
+    import revisor_noturno as _rn
+    erros = []
+    linha_noite = {
+        "noite": noite, "rodou_em": _revisor_agora_utc().isoformat(), "janela_dias": janela,
+        "n_projetos": len(fichas or []),
+        "n_suspeitos": sum(1 for f in fichas or [] if f["nota"] >= _rn.NOTA_SUSPEITO),
+        "n_novidades": sum(1 for f in fichas or [] if f["novidade"]),
+        "padroes": padroes or [], "falhas": falhas or [],
+    }
+    st, _ = _supa_rest_service("POST", "revisor_noturno_noites?on_conflict=noite", body=linha_noite,
+                               prefer="resolution=merge-duplicates,return=minimal", timeout=15)
+    if st not in (200, 201, 204):
+        return ["revisor_noturno_noites: HTTP %s" % st]
+    # rodar duas vezes na mesma noite (à mão) troca as fichas, não duplica
+    st, _ = _supa_rest_service("DELETE", "revisor_noturno_fichas", params={"noite": "eq.%s" % noite},
+                               prefer="return=minimal", timeout=15)
+    if st not in (200, 204):
+        return ["revisor_noturno_fichas (limpar a noite): HTTP %s" % st]
+    linhas = [{"noite": noite, "job_id": f["job_id"], "criado_em": f["criado_em"], "nota": f["nota"],
+               "motivos": f["motivos"], "sinais": f["sinais"],
+               "ultimo_sinal_do_cliente": f["ultimo_sinal_do_cliente"], "novidade": f["novidade"]}
+              for f in fichas or []]
+    for i in range(0, len(linhas), 200):
+        st, _ = _supa_rest_service("POST", "revisor_noturno_fichas", body=linhas[i:i + 200],
+                                   prefer="return=minimal", timeout=20)
+        if st not in (200, 201, 204):
+            erros.append("revisor_noturno_fichas (lote %d): HTTP %s" % (i // 200 + 1, st))
+            break
+    if erros:
+        # a noite fica no banco dizendo que as fichas estão incompletas — painel não mostra meia fila
+        # como se fosse a fila inteira
+        _supa_rest_service("PATCH", "revisor_noturno_noites", params={"noite": "eq.%s" % noite},
+                           body={"falhas": (falhas or []) + erros}, prefer="return=minimal", timeout=15)
+    return erros
+
+
+@app.post("/api/revisor/tick")
+def revisor_tick(request: Request, dias: int = _REVISOR_JANELA_PADRAO):
+    """A rodada da noite. Chamado pelo pg_cron às 03:12 de Brasília (migrations_pendentes/revisor_noturno.sql).
+
+    Pode ser disparado à mão (mesmo segredo): rodar de novo na mesma noite TROCA as fichas dela.
+    🔒 Só lê projeto e grava as duas tabelas do revisor — não reprocessa, não manda e-mail, não chama IA.
+    """
+    _require_tick_secret(request)
+    import revisor_noturno as _rn
+    janela = max(1, min(int(dias or _REVISOR_JANELA_PADRAO), _REVISOR_JANELA_TETO))
+    noite = _hoje_br().isoformat()
+
+    # a rodada ANTERIOR (para marcar `novidade`). 🪤 Sem a tabela (migração não aplicada) isto volta
+    # 404 — e aí não adianta coletar nada: não haveria onde gravar.
+    st, ant = _supa_rest_service("GET", "revisor_noturno_noites",
+                                 params={"select": "noite,rodou_em", "noite": "lt.%s" % noite,
+                                         "order": "noite.desc", "limit": "1"}, timeout=15)
+    if st != 200:
+        _log_error("revisor:tick", "não li a rodada anterior (HTTP %s) — a tabela existe?" % st)
+        return {"status": "sem_tabela", "http": st}
+    ultima = (ant[0].get("rodou_em") if ant else None)
+
+    dados, falhas = _revisor_coletar(janela)
+    if dados is None:
+        _log_error("revisor:tick", "leitura falhou, nenhuma ficha gravada: %s" % "; ".join(falhas)[:900])
+        _revisor_gravar(noite, janela, [], [], falhas)
+        return {"status": "falhou", "falhas": falhas}
+
+    fichas = _rn.montar_fichas(
+        dados["projetos"], dados["extra"], dados["revisoes"], dados["lotes"], dados["conversas"],
+        dados["nps"], dados["erros"], dados["entregaveis"], dados["emails"], recado_digitado,
+        ultima_rodada=ultima)
+    pad = _rn.padroes(fichas)
+    erros = _revisor_gravar(noite, janela, fichas, pad, [])
+    if erros:
+        _log_error("revisor:tick", "gravação incompleta: %s" % "; ".join(erros)[:900])
+        return {"status": "gravacao_incompleta", "falhas": erros}
+
+    # retenção: a rodada velha some, e as fichas dela vão junto (on delete cascade)
+    _corte = (_hoje_br() - timedelta(days=_REVISOR_RETENCAO_DIAS)).isoformat()
+    st_r, _ = _supa_rest_service("DELETE", "revisor_noturno_noites", params={"noite": "lt.%s" % _corte},
+                                 prefer="return=minimal", timeout=15)
+    if st_r not in (200, 204):
+        _log_error("revisor:tick", "retenção de %d dias não apagou (HTTP %s)" % (_REVISOR_RETENCAO_DIAS, st_r),
+                   severity="warning")
+    return {"status": "ok", "noite": noite, "janela_dias": janela, "projetos": len(fichas),
+            "suspeitos": sum(1 for f in fichas if f["nota"] >= _rn.NOTA_SUSPEITO),
+            "novidades": sum(1 for f in fichas if f["novidade"])}
+
+
+@app.get("/api/admin/revisor-noturno")
+def admin_revisor_noturno(request: Request, noite: str = ""):
+    """O painel do revisor (aba Motor): a rodada pedida (ou a última), as fichas e os padrões.
+
+    O nome do projeto é lido NA HORA de `projects` — a ficha não guarda nome nenhum.
+    Leitura que falha diz que falhou (`erro`), nunca vira fila vazia com cara de "tudo certo".
+    """
+    _require_admin(request)
+    st, noites = _supa_rest_service(
+        "GET", "revisor_noturno_noites",
+        params={"select": "noite,rodou_em,janela_dias,n_projetos,n_suspeitos,n_novidades,falhas",
+                "order": "noite.desc", "limit": "14"}, timeout=15)
+    if st != 200:
+        return {"erro": True, "noites": [], "noite": None, "fichas": []}
+    noites = noites or []
+    if not noites:
+        return {"erro": False, "noites": [], "noite": None, "fichas": []}
+    alvo = noite if any(n.get("noite") == noite for n in noites) else noites[0]["noite"]
+    st1, cab = _supa_rest_service("GET", "revisor_noturno_noites",
+                                  params={"select": "*", "noite": "eq.%s" % alvo}, timeout=15)
+    st2, fichas = _supa_rest_tudo("revisor_noturno_fichas",
+                                  params={"select": "*", "noite": "eq.%s" % alvo},
+                                  ordem="nota.desc,novidade.desc,job_id.asc", timeout=20)
+    if st1 != 200 or st2 != 200:
+        return {"erro": True, "noites": noites, "noite": None, "fichas": []}
+    fichas = fichas or []
+    jobs = sorted({f["job_id"] for f in fichas if f.get("job_id")})
+    nomes = {}
+    if jobs:
+        st3, rs = _revisor_ler_por_jobs("projects", jobs, "id,job_id,project_name")
+        if st3 == 200:
+            nomes = {r["job_id"]: r.get("project_name") or "" for r in rs or []}
+    for f in fichas:
+        f["projeto"] = nomes.get(f.get("job_id"), "")
+    return {"erro": False, "noites": noites, "noite": (cab or [None])[0], "fichas": fichas}
+
+
 def _coletar_busca_organica() -> dict:
     """Search Console (D-3..D-5) e Bing (o histórico que a API devolve) → `busca_organica`, por upsert.
 

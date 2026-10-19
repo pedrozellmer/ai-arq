@@ -198,7 +198,16 @@ def test_severity_do_error_log_nao_entra_na_nota():
              {"job_id": "aaaa0001", "stage": "motor:spline", "severity": "error"}]
     f = _ficha(erros=erros)
     assert f["nota"] == 0
-    assert f["sinais"]["motor"]["etapas"] == ["motor:spline", "nps:promoter-alerta"]
+    assert f["sinais"]["motor"]["etapas"] == ["motor:spline"]
+
+
+def test_so_etapa_do_motor_entra_na_ficha():
+    erros = [{"job_id": "aaaa0001", "stage": s} for s in (
+        "motor:selo-sem-geometria", "pdfvec:sem-escala", "process_job", "dxf:extract-falhou",
+        "nps:detractor-alerta", "cobranca:regua", "entrega:email", "admin:filhote-troca-tipo",
+        "cliente:recado", "motorista:falso")]
+    assert _ficha(erros=erros)["sinais"]["motor"]["etapas"] == [
+        "dxf:extract-falhou", "motor:selo-sem-geometria", "pdfvec:sem-escala", "process_job"]
 
 
 def test_perguntou_e_reprocessou_pesam_pouco():
@@ -254,10 +263,15 @@ def test_padrao_separa_etapa_que_doi_de_etapa_que_so_aparece():
     revs = [_rev("faltou", jid=j) for j in ("p0", "p1")]
     revs += [_rev("approve", "x", jid="p2")]
     fs = rn.montar_fichas(projs, extra, revs, [], [], [], erros, {}, [], recado_digitado)
-    pd = {d["etapa"]: d for d in rn.padroes(fs)}
+    lista = rn.padroes(fs)
+    pd = {d["etapa"]: d for d in lista}
     assert pd["motor:doi"] == dict(pd["motor:doi"], projetos=2, com_retorno=2, com_reacao=2)
     assert pd["motor:ruido"] == dict(pd["motor:ruido"], projetos=6, com_retorno=3, com_reacao=2)
     assert sorted(pd["motor:doi"]["exemplos"]) == ["p0", "p1"]
+    # 🔑 as duas têm 2 reações; a que está em TODO projeto não tem excesso nenhum e vai pra baixo
+    assert pd["motor:ruido"]["excesso"] == 0
+    assert pd["motor:doi"]["excesso"] > 0
+    assert [d["etapa"] for d in lista] == ["motor:doi", "motor:ruido"]
 
 
 def test_pergunta_e_retorno_mas_nao_reacao():
