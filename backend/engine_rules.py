@@ -1377,10 +1377,11 @@ def layers_que_nao_provam(metadata) -> set:
     # 01/10 (H76): o layer de conexão cujo metro é o contorno das peças
     # 04/10 (E12): a parede de mais de 40 cm somada pelas duas faces
     # 04/10 (E14): o layer cujo metro é a grade de uma tabela desenhada
+    # 19/10: o layer DESLIGADO ou CONGELADO no desenho (não sai na prancha)
     for k in ("layers_de_cota", "layers_de_borda", "tubos_em_face_dupla",
               "layers_contorno_de_peca", "layers_moldura_ou_limite",
               "layers_esteira_por_travessa", "parede_espessa_pelas_faces",
-              "layers_grade_de_tabela", "layers_em_faixa"):
+              "layers_grade_de_tabela", "layers_em_faixa", "layers_desligados_medidos"):
         for ly in (md.get(k) or {}):
             out.add(str(ly).strip().upper())
     return out
@@ -6632,7 +6633,9 @@ MARCA_GRADE_DE_TABELA = "⚠ GRADE DE TABELA, NÃO REDE"
 MARCA_FAIXA_DE_PARALELAS = "⚠ FAIXA DE PARALELAS, NÃO METRO"
 #: 🩸 12/10/2026 — ver `selo_apos_numero_do_quadro`.
 MARCA_NUMERO_DO_QUADRO = "⚠ NÚMERO DO QUADRO"
-MARCAS_DE_REBAIXAMENTO = (MARCA_NUMERO_DO_QUADRO,
+#: 🩸 19/10/2026 — ver `selo_apos_layer_desligado`.
+MARCA_LAYER_DESLIGADO = "⚠ LAYER DESLIGADO NO DESENHO"
+MARCAS_DE_REBAIXAMENTO = (MARCA_NUMERO_DO_QUADRO, MARCA_LAYER_DESLIGADO,
                           MARCA_PECA_SEM_BLOCO, MARCA_LAYER_SEM_NOME, MARCA_TUBO_FACE_DUPLA,
                           MARCA_CONTORNO_DE_PECA, MARCA_MOLDURA_OU_LIMITE,
                           MARCA_TRAVESSA_DE_ESTEIRA, MARCA_PAREDE_ESPESSA, MARCA_GRADE_DE_TABELA,
@@ -7336,6 +7339,27 @@ def selo_apos_moldura_ou_limite(conf, obs, unit, layers_citados, layers_moldura)
             MARCA_MOLDURA_OU_LIMITE + " ('%s') — a maior parte desse comprimento são os "
             "lados de retângulos grandes (moldura da folha, limite de obra ou de lote): "
             "confira quanto é a rede de verdade. " % hit + str(obs or ""),
+            True)
+
+
+def selo_apos_layer_desligado(conf, obs, unit, layers_citados, layers_desligados):
+    """(conf, obs, rebaixou) — metro ou m² de layer DESLIGADO ou CONGELADO no
+    desenho (`dwg_extractor`: `layers_desligados_medidos`) não sai medido.
+
+    🩸 19/10/2026 (paisagismo de 15/10): "Área total de pavimentação 2.791,14 m²
+    ✓" era o contorno do layer de piso que o projetista DESLIGOU — não aparece
+    em nenhuma prancha impressa, e o extrator mede o modelo inteiro. 📏 60 dias:
+    5 jobs de cliente com > 50 m² em layer desligado; 2 planilhas usaram o
+    número (uma ✓, esta). SÓ REBAIXA e avisa: desligado pode ser rascunho, base
+    de outro projeto ou o que o projetista só escondeu pra imprimir.
+    """
+    hit = _marcado_na_linha(conf, obs, unit, layers_citados, layers_desligados)
+    if not hit:
+        return conf, obs, False
+    return ("estimado",
+            MARCA_LAYER_DESLIGADO + " ('%s') — esse layer está desligado ou congelado no "
+            "arquivo: o que está nele não aparece na prancha impressa. Confira se faz "
+            "parte do projeto antes de usar o número. " % hit + str(obs or ""),
             True)
 
 

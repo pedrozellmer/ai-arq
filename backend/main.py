@@ -16857,11 +16857,17 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                             # 🩸 27/09: seção de parede cortada não prova m² (shaft
                             # 0,18 m² ✓ era a espessura da parede na planta)
                             _secoes_ig = extraction.get_layers_secao_de_parede()
+                            # 🩸 19/10: layer desligado/congelado não prova m² (não sai
+                            # na prancha) — o comprimento já sai por `_nao_prova_ig`
+                            _desl_ig = {str(_k).strip().upper() for _k in
+                                        ((extraction.metadata or {}).get("layers_desligados_medidos") or {})}
                             for _lyr, _a in (extraction.get_areas_by_layer() or {}).items():
-                                if _lyr in _secoes_ig:
+                                if _lyr in _secoes_ig or str(_lyr).strip().upper() in _desl_ig:
                                     continue
                                 _indice_geom["area"].append((str(_lyr), round(float(_a), 2)))
                             for _lyr, _a in (extraction.get_polygon_areas_by_layer() or {}).items():
+                                if str(_lyr).strip().upper() in _desl_ig:
+                                    continue
                                 _indice_geom["area"].append((str(_lyr), round(float(_a), 2)))
                         # 🩸 29/09: o tipo achado nas cópias da planta não prova
                         # contagem — a chave não sobe o que a regra rebaixou.
@@ -17497,6 +17503,12 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                        ((extraction.metadata or {}).get("layers_moldura_ou_limite") or {})}
                         except Exception:
                             _mol_ly = set()
+                        # 🩸 19/10: layers desligados/congelados que têm medida
+                        try:
+                            _desl_ly = {str(_k).strip().upper() for _k in
+                                        ((extraction.metadata or {}).get("layers_desligados_medidos") or {})}
+                        except Exception:
+                            _desl_ly = set()
                         # 🩸 02/10 (H88): layers de esteira cujo metro é rolete/travessa
                         try:
                             _est_ly = {str(_k).strip().upper() for _k in
@@ -17762,6 +17774,13 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                 conf, obs_raw, _era_mol = _regra_moldura(
                                     conf, obs_raw, normalized_unit, _lys, _mol_ly)
                                 if _era_mol:
+                                    _rebaixado_pela_fonte = True
+                                # 🩸 19/10: metro/m² de layer desligado no desenho
+                                from engine_rules import (
+                                    selo_apos_layer_desligado as _regra_desligado)
+                                conf, obs_raw, _era_desl = _regra_desligado(
+                                    conf, obs_raw, normalized_unit, _lys, _desl_ly)
+                                if _era_desl:
                                     _rebaixado_pela_fonte = True
                                 # 🩸 02/10 (H88): metro de esteira que é rolete/travessa
                                 from engine_rules import (

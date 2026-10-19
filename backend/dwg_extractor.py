@@ -280,6 +280,8 @@ class DXFExtraction:
     _METADADOS_FORA_DO_PROMPT = frozenset({"copias_sombra", "planta_repetida",
                                            # 18/10: dito na linha de atenção da planilha
                                            "so_nas_pranchas", "base_em_plantas_tematicas",
+                                           # 19/10: registro da trava do selo
+                                           "layers_desligados_medidos",
                                            # 30/09: ditos nas seções próprias
                                            "objetos_sem_bloco", "layers_de_cota",
                                            "layers_de_borda",
@@ -12006,6 +12008,28 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             }
             if any(_em_desl.values()):
                 metadata["em_layer_desligado"] = _em_desl
+        except Exception:
+            pass
+        # 19/10: QUAIS layers desligados têm medida — a trava do selo
+        # (`engine_rules.selo_apos_layer_desligado`) e o índice da chave do
+        # selo deixam de fora. Registro: fora do prompt.
+        try:
+            _por_desl: dict = {}
+            for w in walls:
+                _ly = (w.layer or "").upper()
+                if _ly in _layers_desligados:
+                    _d = _por_desl.setdefault(_ly, [0.0, 0.0])
+                    _d[0] += float(w.length or 0)
+            for h in list(hatches) + list(polygon_areas):
+                _ly = (h.layer or "").upper()
+                if _ly in _layers_desligados:
+                    _d = _por_desl.setdefault(_ly, [0.0, 0.0])
+                    _d[1] += float(h.area or 0)
+            _por_desl = {k: v for k, v in _por_desl.items() if v[0] > 0 or v[1] > 0}
+            if _por_desl:
+                metadata["layers_desligados_medidos"] = {
+                    k: {"m": round(v[0], 2), "m2": round(v[1], 2)}
+                    for k, v in sorted(_por_desl.items(), key=lambda kv: -(kv[1][1] * 10 + kv[1][0]))[:30]}
         except Exception:
             pass
 

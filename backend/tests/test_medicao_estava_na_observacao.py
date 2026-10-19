@@ -191,6 +191,8 @@ def _laco_de_itens_de_producao(items, areas=None, compr=None, extra=None):
         "_tab_ly": set(),
         # 05/10 (E07): layers cujo metro é faixa de linhas paralelas
         "_fx_ly": set(),
+        # 19/10: layers desligados/congelados no desenho que têm medida
+        "_desl_ly": set(),
         # 12/10: as quantidades escritas nos quadros lidos no arquivo e o cofre
         # da chave do selo (`selo_apos_numero_do_quadro`); aqui, nenhum quadro
         "_quadros_q": [],
