@@ -11627,6 +11627,51 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
                                                    circular=True))
             except Exception:
                 continue
+        # 🩸 19/10/2026 — o pilar REDONDO desenhado em ARCOS. O Revit exporta o
+        # círculo como dois ARC de 180°, e o laço acima só via CIRCLE. Numa
+        # locação de pilares, os 7 pilares Ø25 eram 14 arcos (raio 12,5 cm,
+        # mesmo centro, aos pares) no layer do pilar, e a única contagem deles
+        # vinha da ETIQUETA da coluna ("Identificador Colunas …"), que a régua
+        # da família de anotação do Revit tira — com ela ligada, a linha certa
+        # "Pilar circular Ø25 — 7 un" sumia.
+        # 🔑 Arcos do layer de pilar com o mesmo centro e o mesmo raio que fecham
+        # a volta (somam 360°) são um círculo, e entram como o CIRCLE: mesma
+        # faixa de diâmetro. Volta incompleta (um arco só, meia volta) não entra.
+        # Contorno repetido no mesmo centro, o `count_pillars` já junta.
+        # 🛑 NASCE DESLIGADA (PILAR_DE_ARCOS=1 liga, no Render ou por avaliação):
+        # com a régua da família do Revit desligada, a etiqueta da coluna segue
+        # contada como bloco no layer do pilar, e o pilar redondo apareceria
+        # pelas duas fontes. Muda CONTAGEM.
+        if os.environ.get("PILAR_DE_ARCOS", "0") == "1":
+            _arcos_pil: dict = {}          # (layer, cx, cy, r) → graus somados
+            for _ar in msp.query("ARC"):
+                try:
+                    _ly_ar = _ar.dxf.layer
+                    if not layer_is_pilar(_ly_ar):
+                        continue
+                    _k_ar = (_ly_ar, round(_ar.dxf.center.x, 3), round(_ar.dxf.center.y, 3),
+                             round(float(_ar.dxf.radius), 3))
+                    _arcos_pil[_k_ar] = _arcos_pil.get(_k_ar, 0.0) + (
+                        float(_ar.dxf.end_angle) - float(_ar.dxf.start_angle)) % 360.0
+                except Exception:
+                    continue
+            _de_arcos = 0
+            for (_ly_ar, _cx_ar, _cy_ar, _r_ar), _graus in _arcos_pil.items():
+                # a volta fechada (360°, ou o mesmo círculo repetido: 720°…)
+                _voltas = round(_graus / 360.0)
+                if _voltas < 1 or abs(_graus - 360.0 * _voltas) > 1.0:
+                    continue
+                _d_raw = 2.0 * _r_ar
+                _d_m = _d_raw * unit_factor
+                if not (0.08 <= _d_m <= 1.5):
+                    continue
+                struct_rects.append(StructRect(layer=_ly_ar, w_m=_d_m, h_m=_d_m,
+                                               w_raw=_d_raw, h_raw=_d_raw,
+                                               cx=_cx_ar, cy=_cy_ar, circular=True))
+                _de_arcos += 1
+            if _de_arcos:
+                logger.info("[pilar-arcos] %s: %d pilar(es) redondo(s) desenhado(s) em arcos",
+                            os.path.basename(filepath), _de_arcos)
         if len(struct_rects) > 5000:  # teto defensivo de memória
             struct_rects = struct_rects[:5000]
 

@@ -10507,6 +10507,8 @@ _CHAVES_AVALIAVEIS = frozenset({
     "BASE_COPIADA_UMA_VEZ",
     # 18/10: aviso de tipo de bloco com muitas peças que não virou linha
     "BLOCO_SEM_LINHA",
+    # 19/10: o pilar redondo desenhado em arcos (dois de 180°) conta como o CIRCLE
+    "PILAR_DE_ARCOS",
 })
 _CHAVES_DA_AVALIACAO: dict = {}        # job de avaliação → {chave: "0" | "1"}
 
