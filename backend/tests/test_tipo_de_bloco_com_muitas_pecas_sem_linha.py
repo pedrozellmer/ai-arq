@@ -32,7 +32,10 @@ def test_o_caso_cadeira_e_sofa_sem_linha_aparecem():
 @pytest.mark.parametrize("nome", [
     "Seta", "_1F+N+T", "Cond-Terra", "Cond-Neutro", "RET-FASE", "AB_anotação_chamada_vista",
     "View Reference", "Floor Plan", "SIMB_CORTE(4)", "AG_SMB_Paginação", "YOUCON-SMB-Norte",
-    "PLANT HATCH2", "ARVORE_1", "11111", "CHAMADA DETALHE-NOVA", "P_70_15"])
+    "PLANT HATCH2", "ARVORE_1", "11111", "CHAMADA DETALHE-NOVA", "P_70_15",
+    # 19/10, o log de produção: etiqueta e cota de nível do Revit, nome digitado à toa
+    "M_Identificador da janela 2", "Identificador ambiente PPT", "Elevações de ponto",
+    "Level Head", "GFHJGF", "SDFHSDFH", "SFGKJLIÇ", "DFHJNSFGKGHL"])
 def test_CONTROLE_anotacao_do_desenho_nao_e_acusada(nome):
     assert er.bloco_e_anotacao_pelo_nome(nome), nome
     assert er.blocos_sem_linha({nome: 50}, []) == []
@@ -40,7 +43,10 @@ def test_CONTROLE_anotacao_do_desenho_nao_e_acusada(nome):
 
 @pytest.mark.parametrize("nome", [
     "Caixa de inspeção de terra", "COBOGO", "Mesa Refeitório", "Lum-Indust_V-Sodio-N",
-    "Condulete_Embutido", "Cotovelo 90 PVC", "QDLF"])
+    "Condulete_Embutido", "Cotovelo 90 PVC", "QDLF",
+    # 19/10: "elevador" não é "elevação"; sigla curta sem vogal não é lixo
+    "Elevador social", "PF-alta", "M_Single-Flush", "M_Precast-Rectangular Column",
+    "SPMATRIZ"])                                   # 25% de vogal: nome de verdade
 def test_CONTROLE_peca_nao_e_anotacao(nome):
     assert not er.bloco_e_anotacao_pelo_nome(nome), nome
 

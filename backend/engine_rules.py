@@ -9091,11 +9091,26 @@ _BLOCO_SEM_LINHA_MIN = 5
 _PREFIXOS_DE_ANOTACAO = ("seta", "chamad", "anota", "callout", "simb", "smb", "norte",
                          "neutro", "retorno", "hatch", "arvore", "arbol", "pessoa",
                          "vegeta", "corte", "eixo", "nivel", "titulo", "carimbo", "logo",
-                         "cota", "revis")
+                         "cota", "revis",
+                         # 19/10 (log de produção): etiqueta do Revit
+                         "identificador")
 #: palavra inteira de anotação (curta demais pra prefixo). 🪤 "terra" NÃO entra:
 #: caixa/haste de terra é peça; a marca de fiação Cond-Terra sai por "cond".
 _PALAVRAS_DE_ANOTACAO = frozenset({"cond", "fase", "tree"})
-_PARES_DE_ANOTACAO = ("view reference", "floor plan")
+#: 🪤 "eleva" não vira prefixo: "elevador" é peça
+_PARES_DE_ANOTACAO = ("view reference", "floor plan", "elevacoes de ponto", "elevacao de ponto",
+                      "spot elevation", "level head", "grid head", "section head")
+#: 🩸 19/10 (log de produção): blocos de nome digitado à toa ("GFHJGF",
+#: "SDFHSDFH", "SFGKJLIÇ") — palavra longa quase sem vogal. Sigla curta
+#: ("QDLF", "PF") não entra: precisa de palavra de ≥ 6 letras.
+_VOGAIS_DO_NOME = frozenset("aeiouy")
+
+
+def _nome_digitado_a_toa(palavras) -> bool:
+    longas = [p for p in palavras if p.isalpha() and len(p) >= 4]
+    if not longas or not any(len(p) >= 6 for p in longas):
+        return False
+    return all(sum(c in _VOGAIS_DO_NOME for c in p) / len(p) < 0.2 for p in longas)
 #: export do Revit: "Família - Tipo-<id da peça>-<vista>" — a família é o tipo
 _RE_PECA_DO_REVIT_NO_NOME = _re.compile(r"-(?:\d{5,}|V\d{1,3})-")
 
@@ -9126,6 +9141,8 @@ def bloco_e_anotacao_pelo_nome(nome) -> bool:
     if any(p in _PALAVRAS_DE_ANOTACAO for p in palavras):
         return True
     if any(p.startswith(_PREFIXOS_DE_ANOTACAO) for p in palavras):
+        return True
+    if _nome_digitado_a_toa(palavras):
         return True
     return any(par in k for par in _PARES_DE_ANOTACAO)
 
