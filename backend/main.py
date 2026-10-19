@@ -7215,7 +7215,8 @@ def _retomar_job_do_storage(job_id: str, typology: str = "office",
         _st_p, _js_p = _supa_rest_service(
             "GET", "projects",
             params={"job_id": f"eq.{job_id}", "limit": "1",
-                    "select": "status,error_message,anexo_em_curso,user_total_area,user_pe_direito"})
+                    "select": "status,error_message,anexo_em_curso,user_total_area,user_pe_direito"
+                              ",project_name"})
         if not (_st_p == 200 and isinstance(_js_p, list) and _js_p):
             _log_error("recovery:retomada-sem-leitura",
                        f"não consegui ler o projeto antes de retomar (HTTP {_st_p}) — "
@@ -7262,6 +7263,20 @@ def _retomar_job_do_storage(job_id: str, typology: str = "office",
                        f"não retomei: a trava deu '{_tomada_r}' (status visto: "
                        f"{_status_visto}) — outro motor pegou ou a gravação não "
                        f"confirmou", job_id, severity="info")
+            return "ocupado"
+        # 🩸 18/10: avaliação volta com as chaves que pediu, relidas do nome —
+        # ou PARA. Rodar sem elas é a planilha que mente (ver o comentário de
+        # `_pedido_no_nome_da_avaliacao`). Depois da trava: quem perde não grava.
+        if not _avaliacao_retomada_com_o_pedido(job_id, _proj.get("project_name")):
+            _log_error(_ETAPA_RETOMADA_DA_AVALIACAO,
+                       "não relancei: o fim do nome não deixa reler as chaves que a "
+                       "avaliação pediu, e rodar sem elas daria a planilha de outro "
+                       "pedido", job_id, severity="warning")
+            _tomar_o_projeto(job_id, "eq.queued", {
+                "status": "error",
+                "error_message": ("Avaliação parada: o servidor caiu no meio e não deu "
+                                  "pra reler as chaves que ela pediu. Dispare de novo."),
+                "completed_at": datetime.utcnow().isoformat()})
             return "ocupado"
         if _anexo:
             # A MESMA seleção da rota: havendo CAD, o motor recebe só os CADs
@@ -10474,8 +10489,9 @@ def _quadros_entre_pranchas(extraction, structured_text: str, vistos: dict,
 # 🪤 Três limites, ditos: (1) a chave tem de ser lida no `extract_dxf` (que roda
 # no filho); o `to_structured_prompt()` é refeito AQUI, no servidor
 # (`_etiquetas_entre_pranchas`), e chave lida nele não seria a da avaliação.
-# (2) O dicionário mora na memória: avaliação que atravessa um restart continua
-# SEM as chaves, com o nome dizendo que tinha — confira pelo log da seção.
+# (2) O dicionário mora na memória. Avaliação que atravessa um restart volta
+# com as chaves relidas do NOME do projeto (`_pedido_no_nome_da_avaliacao`,
+# 18/10); antes voltava calada SEM elas.
 # (3) Só a rota `eval-reprocess` aceita; a `eval-combine` não.
 #: as chaves do extrator que uma avaliação pode ligar ou desligar pra si
 _CHAVES_AVALIAVEIS = frozenset({
@@ -10509,8 +10525,8 @@ _CHAVES_DA_AVALIACAO: dict = {}        # job de avaliação → {chave: "0" | "1
 #   - e NÃO é liberada pro cliente (nem à mão nem pelo vigia automático): a
 #     planilha dela não tem a referência nem a conferência de unidade. Pra
 #     liberar, roda a avaliação de novo sem a opção.
-# 🪤 Mora na memória, como as chaves: uma avaliação que atravessa um restart
-# volta COM o SINAPI (o lado caro, não o lado errado).
+# 🪤 Mora na memória, como as chaves; na retomada depois de um restart volta
+# pelo nome do projeto (" [sem SINAPI]"), junto com elas.
 _SEM_SINAPI_DA_AVALIACAO: set = set()   # jobs de avaliação que pediram ?sem_sinapi=1
 _ETAPA_SINAPI_PULADA = "motor:sinapi-pulado"
 
@@ -10558,6 +10574,79 @@ def _chaves_pedidas(texto) -> dict:
                              % (parte[:60], ", ".join(sorted(_CHAVES_AVALIAVEIS))))
         saida[nome] = valor
     return saida
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  A AVALIAÇÃO QUE ATRAVESSA UM REINÍCIO VOLTA COM O QUE PEDIU (18/10/2026)
+# ══════════════════════════════════════════════════════════════════════
+# 🩸 18/10, avaliação do grupo B: um deploy saiu 6 s depois de ela começar. A
+# 1ª leitura (com as chaves) morreu antes da IA; a retomada relançou o job com
+# `_CHAVES_DA_AVALIACAO` vazio e ele rodou INTEIRO com as chaves do servidor
+# (em 0), calado — o log e o nome diziam "com chaves próprias". Na planilha
+# (US$ 2,07), 216 "elevações de ponto" que a chave tira voltaram como peça, e
+# a primeira leitura do resultado foi "a régua não pega esse nome".
+# 🔑 O que a avaliação pediu já fica escrito no FIM do nome do projeto
+# ("… — avaliação [CHAVE=1, …] [sem SINAPI]"), na mesma linha que a retomada
+# lê antes de relançar. Na retomada de um "ev…" sem nada na memória, o pedido
+# é relido dali, pelo mesmo leitor estrito da rota (`_chaves_pedidas`).
+# 🛑 O fim do nome tem a forma da rota mas não dá pra reler (chave que saiu da
+# lista num deploy, colchete torto): a avaliação PARA com o motivo na tela, em
+# vez de rodar sem as chaves. Ela está fora da re-tentativa automática
+# (`is_eval`): não volta sozinha — quem quiser dispara de novo.
+# 🪤 Nome que não termina na forma da rota é de avaliação SEM pedido (a
+# `eval-combine`, "… — combinado (…)", não aceita chaves): retoma como antes.
+_FIM_DO_NOME_DA_AVALIACAO = " — avaliação"
+_MARCA_SEM_SINAPI_NO_NOME = " [sem SINAPI]"
+_ETAPA_RETOMADA_DA_AVALIACAO = "admin:filhote-retomada"
+
+
+def _pedido_no_nome_da_avaliacao(nome):
+    """(chaves, sem_sinapi) relidos do fim do nome que a `eval-reprocess`
+    escreve; ({}, False) se o nome não termina nessa forma; None se termina
+    mas não dá pra reler."""
+    s = str(nome or "")
+    sem = s.endswith(_MARCA_SEM_SINAPI_NO_NOME)
+    if sem:
+        s = s[:-len(_MARCA_SEM_SINAPI_NO_NOME)]
+    if s.endswith(_FIM_DO_NOME_DA_AVALIACAO):
+        return {}, sem
+    abre = s.rfind(_FIM_DO_NOME_DA_AVALIACAO + " [")
+    if abre < 0 or not s.endswith("]"):
+        # sem a forma da rota; a marca do SINAPI sozinha não é dela
+        return None if sem else ({}, False)
+    dentro = s[abre + len(_FIM_DO_NOME_DA_AVALIACAO) + 2:-1]
+    if not dentro.strip():
+        return None
+    # colchete a mais dentro ("… [A=1] [sem SINAPI] [sem SINAPI]") cai no leitor
+    # estrito: vira nome ou valor que não existe
+    try:
+        return _chaves_pedidas(dentro), sem
+    except ValueError:
+        return None
+
+
+def _avaliacao_retomada_com_o_pedido(job_id, nome) -> bool:
+    """Na retomada: devolve à memória as chaves e o "sem SINAPI" que a
+    avaliação pediu. True = pode relançar (não é avaliação, já estava na
+    memória, ou relido); False = é avaliação e o pedido não pôde ser relido."""
+    jid = str(job_id or "")
+    if not jid.startswith("ev") or jid in _CHAVES_DA_AVALIACAO or jid in _SEM_SINAPI_DA_AVALIACAO:
+        return True
+    pedido = _pedido_no_nome_da_avaliacao(nome)
+    if pedido is None:
+        return False
+    chaves, sem = pedido
+    if chaves:
+        _CHAVES_DA_AVALIACAO[jid] = dict(chaves)
+    if sem:
+        _SEM_SINAPI_DA_AVALIACAO.add(jid)
+    if chaves or sem:
+        _log_error(_ETAPA_RETOMADA_DA_AVALIACAO,
+                   "retomada com o pedido relido do nome: "
+                   + ", ".join("%s=%s" % kv for kv in sorted(chaves.items()))
+                   + (" [sem SINAPI]" if sem else ""),
+                   jid, severity="info")
+    return True
 
 
 def _env_da_extracao(job_id: str):
