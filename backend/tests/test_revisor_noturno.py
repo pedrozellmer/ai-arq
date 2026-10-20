@@ -210,6 +210,22 @@ def test_so_etapa_do_motor_entra_na_ficha():
         "dxf:extract-falhou", "motor:selo-sem-geometria", "pdfvec:sem-escala", "process_job"]
 
 
+def test_etapa_gravada_porque_alguem_agiu_nao_e_leitura_do_motor():
+    """1ª rodada no ar (20/10): `motor:refaz-planilha-admin` saiu nos padrões. A que grava PORQUE o
+    cliente revisou andaria junto com a reação dele sempre — por construção, não por defeito."""
+    fora = sorted(rn.ETAPAS_QUE_NAO_SAO_LEITURA)
+    erros = [{"job_id": "aaaa0001", "stage": s} for s in fora + ["motor:pai-e-filho", "motor:spline"]]
+    assert _ficha(erros=erros)["sinais"]["motor"]["etapas"] == ["motor:pai-e-filho", "motor:spline"]
+
+
+def test_a_lista_de_fora_so_tem_etapa_que_o_main_grava():
+    """Nome digitado errado na lista não tira nada e passa calado — cada um tem de existir no main.py."""
+    fonte = open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "main.py"),
+                 encoding="utf-8").read()
+    sumidas = [s for s in rn.ETAPAS_QUE_NAO_SAO_LEITURA if '"%s"' % s not in fonte]
+    assert not sumidas, sumidas
+
+
 def test_perguntou_e_reprocessou_pesam_pouco():
     f = _ficha(proj=_proj(reprocess_count=1),
                conversas=[{"job_id": "aaaa0001", "created_at": "2026-10-12T10:00:00+00:00"}])

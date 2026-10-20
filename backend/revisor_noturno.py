@@ -79,9 +79,30 @@ _CONF_MEDIDO = {"confirmado", "medido"}
 #: 🪤 Prefixo novo do motor fica de fora até entrar aqui (lista que libera, não que bloqueia).
 PREFIXOS_DO_MOTOR = ("motor:", "pdfvec:", "dxfrooms:", "libredwg:", "dwg:", "dxf:", "process_job")
 
+#: 🩸 20/10/2026, na 1ª rodada no ar: `motor:refaz-planilha-admin` (botão do admin) saiu nos padrões
+#: como se fosse etapa do motor. Pior que ruído são as que gravam PORQUE uma pessoa agiu — elas andam
+#: junto com a reação do cliente por construção, não por defeito, e subiriam sempre pro topo:
+#: - o cliente revisou/informou: revisao-concluida (finalize_review), revisao-aprendizado (a esteira
+#:   que roda depois da revisão), planilha-refeita (funde as revisões dele), informou-depois
+#:   (inform_project_area), prazo-informado, respostas-processamento (o que ele respondeu no envio);
+#: - alguém reprocessou: reprocess-troca-tipo (reprocess_project), versao-anterior
+#:   (_arquivar_versao_anterior), avisos-velhos (a passada nova tirou os avisos da velha);
+#: - o admin agiu: refaz-planilha-admin (admin_refazer_planilha);
+#: - a trava do envio: envio-em-dobro.
+#: Conferido no main.py em 20/10, uma por uma, onde cada uma é gravada. `motor:pai-e-filho` FICA: é o
+#: motor achando linha de total junto das partes.
+ETAPAS_QUE_NAO_SAO_LEITURA = frozenset({
+    "motor:revisao-concluida", "motor:revisao-aprendizado", "motor:planilha-refeita",
+    "motor:informou-depois", "motor:prazo-informado", "motor:respostas-processamento",
+    "motor:reprocess-troca-tipo", "motor:versao-anterior", "motor:avisos-velhos",
+    "motor:avisos-velhos-sem-lista", "motor:refaz-planilha-admin", "motor:envio-em-dobro",
+})
+
 
 def etapa_do_motor(stage) -> bool:
     s = str(stage or "")
+    if s in ETAPAS_QUE_NAO_SAO_LEITURA:
+        return False
     return any(s == p or s.startswith(p) for p in PREFIXOS_DO_MOTOR)
 
 
