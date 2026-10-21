@@ -5858,6 +5858,57 @@ def afirma_quadro_de_quantitativos(texto) -> bool:
     return False
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+#  A ÁREA QUE A PRÓPRIA IA DIZ TER ESTIMADO A OLHO (21/10/2026)
+# ─────────────────────────────────────────────────────────────────────────────
+# 🩸 20/10/2026 — projeto de paginação de piso (4 PDFs, só PDF). A planilha
+# saiu com 280, 180, 120, 85, 55 m² de porcelanato e carpete, e a observação
+# de cada linha dizia "Área estimada proporcionalmente" ou "Área estimada por
+# leitura visual do polígono do ambiente". A honestidade de área PRESERVOU os
+# números: o ramo "cabe na geometria" só confere se o número não passa de
+# 1,3× a área medida da maior prancha — e uma das pranchas "mediu" 5.588 m²
+# com escala 1:1000 tirada da caixa de recorte. Regra dura nº1: nunca estimar.
+# 🔑 Não é a régua do teto que separa: é a CONFISSÃO. Quando a própria leitura
+# escreve que a ÁREA foi estimada a olho ou por proporção, o número não tem
+# fonte nenhuma, e caber na geometria não o transforma em dado.
+# 📏 120 dias (projetos de cliente): 515 linhas preservadas por "cabe na
+# geometria" em 20 projetos; 26 delas, em 6 projetos (618 m²), confessam o
+# chute. Precisão lida linha a linha: 25 de 26 — a que sobra fala da COR
+# ("piso de tom bege identificado visualmente"), e é por isso que a régua exige
+# a palavra ÁREA (ou "estimativa visual/baseada na leitura visual").
+#: As formas que a leitura escreveu de verdade (120 dias): "Área estimada
+#: visualmente", "por/pela leitura visual (do polígono)", "proporcionalmente
+#: (para os ambientes marcados)", "com base na leitura proporcional / na
+#: composição visual da planta", "pela extensão visual dos boxes",
+#: "Estimativa visual da área…", "Estimativa baseada na leitura visual…".
+#: 🪤 A janela não atravessa ponto, barra nem ponto e vírgula: "piso …
+#: identificado visualmente. Área estimada para ambientes secos" NÃO confessa.
+_RE_AREA_ESTIMADA_A_OLHO = _re.compile(
+    r"\b[áa]rea\b[^.|;]{0,40}?\b(?:estimad[ao]s?|calculad[ao]s?|aproximad[ao]s?)\b"
+    r"[^.|;]{0,60}?(?:\bvisualmente\b"
+    r"|\b(?:leitura|composi[çc][ãa]o|extens[ãa]o|inspe[çc][ãa]o|an[áa]lise)\s+"
+    r"(?:visual|proporcional)\b"
+    r"|\bproporcionalmente\b|\ba\s+olho\b|\bpor\s+propor[çc][ãa]o\b)"
+    r"|\bestimativa\s+visual\s+d[ao]s?\s+[áa]rea"
+    r"|\bestimativa\s+baseada\s+n[ao]\s+leitura\s+visual\b",
+    _re.IGNORECASE)
+#: "não é estimativa visual" é o CONTRÁRIO da confissão.
+_RE_NEGA_A_OLHO = _re.compile(r"\bn[ãa]o\b[^.|;]{0,15}$", _re.IGNORECASE)
+
+
+def confessa_area_a_olho(observacao) -> bool:
+    """A observação diz que a ÁREA desta linha foi estimada a olho/por proporção?
+
+    Só lê o texto — não decide nada. Quem decide é a honestidade de área, e só
+    com a chave AREA_A_OLHO_NAO_PRESERVA=1."""
+    t = str(observacao or "")
+    for m in _RE_AREA_ESTIMADA_A_OLHO.finditer(t):
+        if _RE_NEGA_A_OLHO.search(t[max(0, m.start() - 20):m.start()]):
+            continue
+        return True
+    return False
+
+
 def e_linha_de_total(descricao) -> bool:
     """A linha se apresenta como TOTAL ("TOTAL GERAL", "— total", "subtotal")?"""
     return bool(_RE_LINHA_DE_TOTAL.search(str(descricao or "")))

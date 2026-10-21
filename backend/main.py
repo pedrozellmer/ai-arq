@@ -10544,6 +10544,8 @@ _CHAVES_AVALIAVEIS = frozenset({
     "BLOCO_SEM_LINHA",
     # 19/10: o pilar redondo desenhado em arcos (dois de 180°) conta como o CIRCLE
     "PILAR_DE_ARCOS",
+    # 21/10: área que a leitura confessa ter estimado a olho não é preservada
+    "AREA_A_OLHO_NAO_PRESERVA",
 })
 _CHAVES_DA_AVALIACAO: dict = {}        # job de avaliação → {chave: "0" | "1"}
 
@@ -12777,7 +12779,8 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
                         pdfvec_por_prancha: dict = None,
                         medicao_incompleta: bool = False,
                         numeros_do_texto_por_prancha: dict = None,
-                        numeros_com_material_por_prancha: dict = None) -> tuple[int, int]:
+                        numeros_com_material_por_prancha: dict = None,
+                        job_id: str = "") -> tuple[int, int]:
     """Aplica a regra dura nº1 aos itens de ÁREA que NÃO vieram da geometria do CAD:
 
     - Se o cliente INFORMOU a área (total_area_source='informado') e o item é uma
@@ -12924,6 +12927,25 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
         # sem medição por prancha (caller antigo, ou nenhuma prancha mediu):
         # cai no comportamento de antes em vez de virar teto 0, que zeraria tudo
         _teto_m2 = float(pdfvec_m2 or 0)
+    # 🩸 21/10/2026 — A ÁREA QUE A PRÓPRIA LEITURA DIZ TER ESTIMADO A OLHO.
+    # Paginação de piso em PDF: 280, 180, 120 m² com "Área estimada
+    # proporcionalmente" / "por leitura visual" na observação, preservados pelo
+    # ramo "cabe na geometria" logo abaixo (a maior prancha "mediu" 5.588 m² por
+    # uma escala 1:1000 da caixa de recorte). Caber não dá fonte ao número; a
+    # confissão diz que ele não tem nenhuma (`engine_rules.confessa_area_a_olho`).
+    # 📏 120 dias: 26 linhas preservadas em 6 projetos de cliente (618 m²).
+    # 🛑 NASCE DESLIGADA: AREA_A_OLHO_NAO_PRESERVA=1 liga (Render ou avaliação).
+    # Muda NÚMERO: a linha deixa de ser preservada e segue a cadeia (o resgate
+    # pela nossa medição, ou zera com a frase de sempre).
+    # 🪤 Fatia de teste: três testes executam esta função sem o resto do main
+    # (sem `_chave_do_job` nem `os`) — o NameError cai na variável de ambiente.
+    try:
+        _a_olho_liga = _chave_do_job(job_id, "AREA_A_OLHO_NAO_PRESERVA") == "1"
+    except NameError:
+        import os as _os_ao
+        _a_olho_liga = _os_ao.environ.get("AREA_A_OLHO_NAO_PRESERVA", "0") == "1"
+    from engine_rules import confessa_area_a_olho as _confessa_a_olho
+    _a_olho_n = 0
     _medida_da_prancha = {}
     #: id(item) -> (arquivo, pagina, familia, obs_antes, qty_posta) — o passo 7
     #: preencheu, e o passo de vaga abaixo decide se isso se sustenta
@@ -13425,6 +13447,8 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
         elif (q > 0 and float(pdfvec_m2 or 0) > 0
               and u in _FLOOR_M2_UNITS
               and _is_floor_surface(getattr(it, "description", ""))
+              and not (_a_olho_liga and _confessa_a_olho(getattr(it, "observations", ""))
+                       and (_a_olho_n := _a_olho_n + 1))
               and ((_m_pr := _medida_da_propria_prancha(it, q)) is not None
                    or (not _exige_propria_prancha(it) and q <= 1.3 * _teto_m2))):
             try:
@@ -13928,6 +13952,9 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
     _apply_area_honesty.ultimo_zerados_sem_prancha = zerados_sem_prancha
     _apply_area_honesty.ultimo_apertou_teto = apertou_teto
     _apply_area_honesty.ultimo_teto_m2 = float(_teto_m2)
+    #: 21/10: linhas de piso cuja leitura confessou a área a olho e que, com a
+    #: chave AREA_A_OLHO_NAO_PRESERVA=1, saíram do ramo "cabe na geometria"
+    _apply_area_honesty.ultimo_a_olho = int(_a_olho_n)
     _apply_area_honesty.ultimo_lineares_zerados = lineares_zerados
     _apply_area_honesty.ultimo_resgatados = resgatados
     # 📏 18/09: SEM este número, `resgate_tardio=0` tem DUAS leituras que
@@ -20753,6 +20780,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
             all_items, project_data.total_area,
             getattr(project_data, "total_area_source", ""),
             pe_direito=float(getattr(project_data, "user_pe_direito", 0) or 0),
+            # 21/10: a chave AREA_A_OLHO_NAO_PRESERVA vale por avaliação
+            job_id=job_id,
             pdfvec_m2=_pv_m2,
             pdfvec_por_prancha=_pp_map,
             # 🩸 22/09 — a prova do quadro de quantitativos impresso (jobs
@@ -21007,7 +21036,10 @@ bloco — só cite os que estão no inventário deste arquivo."""
                            f"quadro_totais={getattr(_apply_area_honesty, 'ultimo_quadro_totais', 0)} "
                            # 05/10: número escrito ao lado do material (não zerado)
                            f"escritos={_escritos_log} "
-                           f"escritos_dup={getattr(_apply_area_honesty, 'ultimo_escritos_duplicados', 0)}",
+                           f"escritos_dup={getattr(_apply_area_honesty, 'ultimo_escritos_duplicados', 0)} "
+                           # 21/10: área confessada a olho que saiu da
+                           # preservação (só com AREA_A_OLHO_NAO_PRESERVA=1)
+                           f"a_olho={getattr(_apply_area_honesty, 'ultimo_a_olho', 0)}",
                            job_id)
         except Exception:
             pass
