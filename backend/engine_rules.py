@@ -4914,7 +4914,13 @@ _RE_IDENTIDADE_PALPITE = _re.compile(
     r"(?:nome(?:\s+do\s+bloco)?|bloco)\s+(?:sugere|indica|remete\s+a)\s+(?!\d)"
     r"|bloco\s+interpretado\s+como\s+[^\W\d_]"
     r"|bloco\s+'[^']+'[^.]{0,80}\.\s*(?:provavelmente|possivelmente)\s"
-    r"|bloco\s+(?:possivelmente|provavelmente)\s+(?:representa|indica|[eé]\s)", _re.I)
+    r"|bloco\s+(?:possivelmente|provavelmente)\s+(?:representa|indica|[eé]\s)"
+    # 🩸 22/10/2026 — "bloco 'TU': 82 un. Abreviatura TU usualmente representa
+    # ponto de tubulação/água" saiu ✓ num projeto de drywall: a identidade era
+    # o "costume" da sigla. Na história inteira, 1 linha ✓ com esta forma.
+    r"|(?:abreviatura|sigla|nome(?:\s+do\s+bloco)?)\s+'?[\w-]{1,12}'?\s+"
+    r"(?:usualmente|geralmente|normalmente|tipicamente|comumente)\s+"
+    r"(?:representa|indica|significa|designa|corresponde)", _re.I)
 #: o aviso que a linha ganha (e que a chave do selo reconhece: não promove de volta)
 MARCA_IDENTIDADE_PALPITE = "⚠ IDENTIDADE PELO NOME DO BLOCO"
 

@@ -41,6 +41,10 @@ _PALPITES = [
     "Fonte: 1 INSERT do bloco 'xpto' na contagem de blocos do DXF. Nome sugere 'pergolado'. Confirmar.",
     "Fonte: 2 INSERTs do bloco 'EST_X-6'. Nome do bloco sugere 'estação' — pode ser estação de bombagem.",
     "Fonte: CONTAGEM DE BLOCOS — bloco 'QQ': 19 inserções. Provavelmente indica aberturas na laje.",
+    # 22/10: o "costume" da sigla (o caso real, reescrito com outra sigla)
+    "Fonte: CONTAGEM DE BLOCOS — bloco 'TX': 82 un. Abreviatura TX usualmente representa "
+    "ponto de tubulação/água em projetos BR.",
+    "Fonte: 5 INSERTs do bloco 'RG'. Sigla RG geralmente indica registro de gaveta.",
 ]
 
 _NAO_SAO_PALPITE_DE_IDENTIDADE = [
@@ -56,6 +60,8 @@ _NAO_SAO_PALPITE_DE_IDENTIDADE = [
     "Fonte: 12 INSERTs do bloco 'TOMADA' (CONTAGEM DE BLOCOS).",
     # palpite sem citar o bloco da contagem
     "Nome do bloco sugere marco topográfico.",
+    # o "usualmente" sobre ESCOPO, não sobre o que o bloco é
+    "Fonte: 12 INSERTs do bloco 'TOMADA'. Tomada de uso geral usualmente fica a 30 cm do piso.",
 ]
 
 
