@@ -2528,6 +2528,8 @@
   // Fora do `estimateFileCache` de propósito: aquele só guarda quem casou com o
   // `breakdown`, e o booleano vem numa lista à parte.
   const _nomeEstrutural = new Map();     // _efKey -> true/false
+  // 22/10/2026 — o espelho: "este NOME tem cara de ARQUITETURA?" (mesma origem)
+  const _nomeArquitetura = new Map();    // _efKey -> true/false
   let estimateDebounce = null;
 
   function estimatePriceForFiles(files) {
@@ -2573,6 +2575,10 @@
       const _ne = Array.isArray(data.nomes_estruturais) ? data.nomes_estruturais : [];
       if (_ne.length === novos.length) {
         novos.forEach((f, i) => _nomeEstrutural.set(_efKey(f), _ne[i] === true));
+      }
+      const _na = Array.isArray(data.nomes_arquitetura) ? data.nomes_arquitetura : [];
+      if (_na.length === novos.length) {
+        novos.forEach((f, i) => _nomeArquitetura.set(_efKey(f), _na[i] === true));
       }
       const bd = data.breakdown || [];
       novos.forEach((f, i) => {
@@ -3771,6 +3777,60 @@
     });
   }
 
+  //: 🩸 22/10/2026 — O ESPELHO: tipo Estrutura com arquivos de ARQUITETURA.
+  //: 📏 21/10 dois clientes no mesmo dia (25 DWG "XYZ-ARQ-…" e 23 PDF
+  //: "…-Arq-EX-…") marcaram Estrutura: 103 de 123 e 17 de 18 linhas saíram sem
+  //: quantidade, e um 👎. Em 120 dias, 6 projetos de 5 clientes. A pergunta de
+  //: cima só olhava um sentido.
+  //: 🔑 Mesma forma da de cima: a régua mora no SERVIDOR
+  //: (`_nome_parece_arquitetura`, na estimativa), só a MAIORIA pergunta, nunca
+  //: bloqueia, nunca cai no confirm() nativo.
+  function _arquivosComCaraDeArquitetura() {
+    if (!selectedFiles || !selectedFiles.length) return [];
+    return selectedFiles.filter(f => _nomeArquitetura.get(_efKey(f)) === true);
+  }
+
+  function _confirmarTipoArquitetura() {
+    const sel = document.getElementById('project-type');
+    if (!sel || sel.value !== 'estrutura') return Promise.resolve('seguir');
+    const arq = _arquivosComCaraDeArquitetura();
+    const total = (selectedFiles || []).length;
+    if (!arq.length || arq.length * 2 < total) return Promise.resolve('seguir');
+    const _curto = n => (n.length > 48 ? n.slice(0, 45) + '...' : n);
+    const exemplos = arq.slice(0, 2).map(f => `"${_curto(f.name)}"`).join(', ')
+                   + (arq.length > 2 ? '...' : '');
+    const quem = arq.length === total
+      ? (total === 1 ? 'O arquivo parece' : `Os ${total} arquivos parecem`)
+      : `${arq.length} dos ${total} arquivos parecem`;
+    const msg = `${quem} de projeto de ARQUITETURA, pelo nome (${exemplos}). `
+              + 'O tipo escolhido é Estrutura (concreto armado, beta), que procura '
+              + 'aço, pilares e lajes e não mede paredes, piso, forro nem esquadrias. '
+              + 'Quer ler como Arquitetura?';
+    return new Promise(resolve => {
+      try {
+        if (window.toast && window.toast.confirm) {
+          window.toast.confirm(msg, { ok: 'Ler como Arquitetura',
+                                      cancel: 'Manter Estrutura' })
+            .then(v => {
+              if (v) {
+                sel.value = 'arquitetura';
+                // a escolha foi da pessoa, no botão: vale como "à mão"
+                if (sel.dataset) sel.dataset.escolhidoAMao = '1';
+                try { aplicarTextoDoPeDireito(); } catch (_) {}
+              }
+              try {
+                trackEvent('aviso-pre-envio:arquitetura',
+                           { type: v ? 'arquitetura' : 'estrutura', n: arq.length, tela: 'envio' });
+              } catch (_) {}
+              resolve(v ? 'trocou' : 'seguir');
+            }, () => resolve('seguir'));
+          return;
+        }
+        resolve('seguir');
+      } catch (_) { resolve('seguir'); }
+    });
+  }
+
   function _premissasEmBranco() {
     const pd = (document.getElementById('project-pe-direito')?.value || '').trim();
     const area = (document.getElementById('project-area')?.value || '').trim();
@@ -3893,7 +3953,13 @@
     // 🔑 O TIPO antes de tudo: com o tipo errado, nem o formato nem os campos
     // salvam a leitura (ver `_confirmarTipoEstrutural`). Qualquer resposta
     // segue o envio — trocar o tipo é a única coisa que ele faz.
-    await _confirmarTipoEstrutural();
+    // e o espelho (Estrutura marcada, nomes de arquitetura) — só se a de cima
+    // NÃO trocou o tipo. 🪤 Com metade dos nomes de cada lado as duas maiorias
+    // valem juntas: sem esta trava, quem acabou de escolher Estrutura seria
+    // perguntado na sequência se quer voltar pra Arquitetura.
+    if (await _confirmarTipoEstrutural() !== 'trocou') {
+      await _confirmarTipoArquitetura();
+    }
 
     // 🔑 Aviso do formato ANTES do aviso dos campos: qual arquivo veio decide
     // mais o resultado do que qualquer campo do formulário.

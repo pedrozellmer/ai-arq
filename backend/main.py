@@ -23412,6 +23412,38 @@ def _nome_parece_estrutural(nome: str) -> bool:
     antes = (nome or "")[max(0, m.start() - 12):m.start()]
     return not _RX_NEGACAO_ANTES.search(antes)
 
+
+#: 22/10: o CÓDIGO de disciplina de arquitetura ("XYZ-ARQ-F01", "…-Arq-EX-F03",
+#: "NOME - ARQ - PE") ou a palavra inteira. Fronteira dos dois lados: "ARQUIVO"
+#: e "MARQUISE" não entram. Ver `_nome_parece_arquitetura`.
+_RX_ARQ_NOME = _re_escala.compile(
+    r"(?:^|(?<=[-_ .]))arq(?=[-_ .]|$)"
+    r"|(?<![a-zà-ü])arquitet(?:ura|[oô]nic[oa]s?)(?![a-zà-ü])",
+    _re_escala.IGNORECASE)
+
+
+def _nome_parece_arquitetura(nome: str) -> bool:
+    """O nome do arquivo tem cara de projeto de ARQUITETURA — o espelho de
+    `_nome_parece_estrutural`, pra pergunta do tipo antes do envio.
+
+    🩸 21/10/2026 — dois clientes no mesmo dia mandaram arquitetura marcando
+    Estrutura: 25 DWG/DXF "XYZ-ARQ-…" e 23 PDF "…-Arq-EX-F01…F16". Saíram 103
+    de 123 e 17 de 18 linhas sem quantidade, e um 👎. A tela só perguntava no
+    sentido contrário (Arquitetura com nome estrutural).
+    📏 120 dias, projetos enviados como Estrutura: 6 projetos de 5 clientes com
+    a MAIORIA dos nomes assim, e nenhum projeto estrutural de verdade com esse
+    código no nome.
+    🔑 Nome que também tem cara de estrutura ("ARQ-EST-…") não conta: a dúvida
+    não é desta régua. A negação ("SEM ARQUITETURA") é a mesma do espelho.
+    """
+    nome = nome or ""
+    m = _RX_ARQ_NOME.search(nome)
+    # a chamada ao espelho também compila `_RX_NEGACAO_ANTES` (preguiçoso lá)
+    if not m or _nome_parece_estrutural(nome):
+        return False
+    antes = nome[max(0, m.start() - 12):m.start()]
+    return not _RX_NEGACAO_ANTES.search(antes)
+
 def _recusa_no_upload(status: int, mensagem: str, motivo: str,
                       detalhe: str = "", quem: str = ""):
     """Recusa o upload DEIXANDO RASTRO. Sempre levanta — nunca devolve.
@@ -31093,8 +31125,10 @@ async def estimate_price(request: Request,
         # uma 2ª cópia na tela erraria calada no próximo conserto. Um booleano
         # por arquivo, na ordem em que vieram — a mesma em que a tela os mandou.
         _nomes_est = [bool(_nome_parece_estrutural(f.filename or "")) for f in files]
+        # 22/10: o espelho — nome de ARQUITETURA, pra quem marcou Estrutura.
+        _nomes_arq = [bool(_nome_parece_arquitetura(f.filename or "")) for f in files]
         return {"status": "ok", **result, "warnings": warnings,
-                "nomes_estruturais": _nomes_est}
+                "nomes_estruturais": _nomes_est, "nomes_arquitetura": _nomes_arq}
     finally:
         # Limpa
         for p in saved_paths:
@@ -35387,6 +35421,7 @@ _TRACK_ALLOWED = {
     # dashboard). `type` diz o que a pessoa escolheu: é o placar que faltava
     # pra saber se perguntar antes converte mais que avisar depois (1 em 6).
     "aviso-pre-envio:estrutural",
+    "aviso-pre-envio:arquitetura",
 }
 _TRACK_CLIQUE_RX = _re.compile(r"^clique:[a-z0-9][a-z0-9-]{0,39}$")
 
