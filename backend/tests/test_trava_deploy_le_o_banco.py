@@ -144,3 +144,56 @@ def test_anexo_em_projeto_ANTIGO_tambem_trava_o_deploy(monkeypatch):
     q = [c for c in vistos if c.startswith("projects?")][0]
     # o horário tem ":" e "." — reservados dentro do `or` do PostgREST: vai entre aspas
     assert "or=(created_at.gte.%22" in q and "%22,anexo_em_curso.not.is.null)" in q, q
+
+
+def _banco_com_status(abertos, eventos):
+    """Como `_banco`, mas o dublê também respeita o `select` com status."""
+    def _fake(metodo, caminho, *a, **k):
+        if caminho.startswith("projects?"):
+            assert "status" in caminho.split("&")[0], "a consulta não traz o status"
+            return 200, abertos
+        if caminho.startswith("error_log?"):
+            return 200, eventos
+        return 200, []
+    return _fake
+
+
+def test_job_NA_FILA_e_mudo_CONTA(monkeypatch):
+    """🩸 22/10: dois envios esperando atrás de um job de 2 h, em `queued`, sem
+    nenhum evento (fila não loga). A trava dizia 0 — um push mataria os dois."""
+    monkeypatch.setattr(main, "_supa_rest_service", _banco_com_status(
+        [{"job_id": "rodando", "created_at": _iso(118), "status": "processing"},
+         {"job_id": "fila1", "created_at": _iso(92), "status": "queued"},
+         {"job_id": "fila2", "created_at": _iso(65), "status": "queued"}],
+        [{"job_id": "rodando"}]))
+    monkeypatch.setattr(main, "_load_jobs", lambda: {})
+    assert main.jobs.em_curso() == 3, (
+        "REGRESSÃO de 22/10: cliente esperando na fila virou fantasma pra trava")
+
+
+def test_CONTROLE_processando_e_mudo_continua_fantasma(monkeypatch):
+    """O fantasma do OOM é `processing` calado: esse segue sem bloquear."""
+    monkeypatch.setattr(main, "_supa_rest_service", _banco_com_status(
+        [{"job_id": "morto1", "created_at": _iso(60), "status": "processing"}], []))
+    monkeypatch.setattr(main, "_load_jobs", lambda: {"morto1": {"status": "processing"}})
+    assert main.jobs.em_curso() == 0
+
+
+def test_job_vivo_de_MAIS_DE_DUAS_HORAS_ainda_conta(monkeypatch):
+    """O job de 22/10 rodou 118 min; com a janela antiga de 120 ele sairia da
+    conta minutos depois, vivo. A janela pedida ao banco cobre 6 h."""
+    vistos = []
+
+    def _fake(metodo, caminho, *a, **k):
+        vistos.append(caminho)
+        if caminho.startswith("projects?"):
+            return 200, [{"job_id": "longo", "created_at": _iso(150), "status": "processing"}]
+        return 200, [{"job_id": "longo"}]
+
+    monkeypatch.setattr(main, "_supa_rest_service", _fake)
+    monkeypatch.setattr(main, "_load_jobs", lambda: {})
+    assert main.jobs.em_curso() == 1
+    q = [c for c in vistos if c.startswith("projects?")][0]
+    corte = q.split("created_at.gte.%22", 1)[1].split("%22", 1)[0]
+    idade = datetime.utcnow() - datetime.fromisoformat(corte.rstrip("Z"))
+    assert idade >= timedelta(minutes=300), "a janela pedida ao banco encolheu: %s" % idade

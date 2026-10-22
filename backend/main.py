@@ -7088,11 +7088,19 @@ class JobsStore:
         "não sei" e bloqueia. Errar pra menos custa o job de um cliente; errar
         pra mais custa a minha paciência.
         """
+        # 🩸 22/10/2026 — ZERO COM DOIS CLIENTES NA FILA. Um job de 12 DWG rodou
+        # 2 h e os dois envios de outra cliente esperaram atrás dele em `queued`.
+        # Fila não escreve no error_log: passados 15 min, a régua do silêncio os
+        # chamava de fantasma e o /health dizia 0 — um push ali mataria os dois.
+        # 🔑 `queued` conta SEMPRE (esperar é ficar calado de propósito); o
+        # silêncio só julga `processing`, que é onde mora o fantasma do OOM.
+        # A janela foi pra 6 h: o job daquele dia passou de 118 min, e quem
+        # separa vivo de morto é o silêncio, não a idade.
         try:
-            _corte_janela = (datetime.utcnow() - timedelta(minutes=120)).isoformat() + "Z"
+            _corte_janela = (datetime.utcnow() - timedelta(minutes=360)).isoformat() + "Z"
             _st, _rows = _supa_rest_service(
                 "GET",
-                "projects?select=job_id,created_at&status=in.(queued,processing)"
+                "projects?select=job_id,created_at,status&status=in.(queued,processing)"
                 # 🩸 revisão final (21/09): anexo acontece em projeto ANTIGO — o
                 # `created_at` dele é de dias atrás e a trava dizia 0 com o
                 # anexo rodando. A marca `anexo_em_curso` entra na janela.
@@ -7115,7 +7123,7 @@ class JobsStore:
                 _vivos = {str(e.get("job_id")) for e in _ev if e.get("job_id")}
                 _n = 0
                 for _r in _rows:
-                    if str(_r.get("job_id")) in _vivos:
+                    if str(_r.get("job_id")) in _vivos or _r.get("status") == "queued":
                         _n += 1
                         continue
                     try:
