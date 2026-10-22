@@ -109,3 +109,67 @@ def test_CONTROLE_sem_o_filtro_o_eletroduto_virava_parede():
              _item("Instalações Elétricas e Dados", "ml", 27.53, _OBS_ELETRODUTO)]
     assert _fontes(itens, sem) == [27.53], (
         "a mutação não reproduziu o caso — o controle não prova nada")
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  22/10: parede separada por TIPO, uma linha por layer
+# ══════════════════════════════════════════════════════════════════════════
+def _dry(qtd, layer, desc="Divisória em drywall — fornecimento e execução"):
+    return _It(discipline="Fechamentos Verticais", unit="ml", quantity=qtd,
+               description=desc,
+               observations="Fonte: comprimento layer %s = %s m." % (layer, qtd))
+
+
+def _lais():
+    return [_dry(65.12, "ARQ-DIV"), _dry(42.27, "FLH-CHA-ACUSTICA"),
+            _dry(17.9, "ARQ-CHA"), _dry(16.28, "FLH-CHA-vermelho")]
+
+
+def test_o_caso_parede_por_tipo_SOMA_os_layers():
+    from engine_rules import parede_abaixo_do_minimo
+    f = _fontes(_lais())
+    assert max(f) == 141.57, f
+    impossivel, minimo = parede_abaixo_do_minimo(max(f), 1000.0)
+    assert round(minimo, 1) == 126.5
+    assert not impossivel, "141,6 m de parede em 4 layers e o aviso ainda diria que falta"
+
+
+def test_CONTROLE_sem_a_soma_o_alarme_falso_DISPARA():
+    """Prova que o caso reprova: só o maior (o comportamento de antes) dispara."""
+    from engine_rules import parede_abaixo_do_minimo
+    impossivel, _ = parede_abaixo_do_minimo(65.12, 1000.0)
+    assert impossivel
+
+
+def test_CONTROLE_o_MESMO_layer_duas_vezes_nao_soma():
+    f = _fontes([_dry(65.12, "ARQ-DIV"), _dry(60.0, "arq-div")])
+    assert max(f) == 65.12, f
+
+
+def test_CONTROLE_demolicao_nao_entra_na_soma():
+    """(A linha em metro sozinha já entrava antes, pela fonte de sempre; o que
+    se prova aqui é que a SOMA não a junta à parede que fica.)"""
+    f = _fontes([_dry(65.12, "ARQ-DIV"),
+                 _dry(300.0, "DEMOLIR", desc="Demolição de divisória existente")])
+    assert 365.12 not in f, f
+
+
+def test_CONTROLE_linha_sem_layer_citado_nao_entra_na_soma():
+    sem = _It(discipline="Fechamentos Verticais", unit="ml", quantity=80.0,
+              description="Divisória", observations="Medido no desenho.")
+    f = _fontes([_dry(65.12, "ARQ-DIV"), sem])
+    assert max(f) == 80.0 and 145.12 not in f, f
+
+
+def test_CONTROLE_outra_disciplina_nao_entra_na_soma():
+    ele = _It(discipline="Instalações Elétricas e Dados", unit="ml", quantity=90.0,
+              description="Eletroduto", observations="comprimento layer E-CNDT = 90 m")
+    f = _fontes([_dry(65.12, "ARQ-DIV"), ele])
+    assert max(f) == 65.12, f
+
+
+def test_o_mesmo_layer_repetido_entre_pranchas_conta_UMA_vez_na_soma():
+    """A divisória repetida em duas pranchas é a mesma parede: entra pelo maior."""
+    f = _fontes([_dry(65.12, "ARQ-DIV"), _dry(65.12, "ARQ-DIV"),
+                 _dry(42.27, "FLH-CHA-ACUSTICA")])
+    assert 107.39 in f and 172.51 not in f, f

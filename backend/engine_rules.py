@@ -5001,6 +5001,47 @@ def comprimento_de_parede_na_observacao(observacao):
         return None
 
 
+#: o layer que a observação diz ter medido ("layer ARQ-DIV", "layer 'I-WALL'")
+_RE_LAYER_DA_PAREDE = _re.compile(r"layer\s+'?([A-Za-z0-9_\-]{2,})'?", _re.I)
+
+
+def soma_de_parede_por_layer(itens):
+    """(soma_m, n_layers) das linhas de PAREDE em metro, cada layer uma vez.
+
+    🩸 22/10/2026 — projeto de drywall: as paredes vieram separadas por TIPO, uma
+    linha por layer (divisória 65,12 m · acústica 42,27 · chapa 17,90 · chapa
+    nova 16,28). O guarda do mínimo pegava o MAIOR (65,12 m) contra um mínimo de
+    126,5 m pra 1.000 m², disse à cliente que faltavam 94% da parede e rebaixou
+    4 linhas — com 141,6 m de parede na própria planilha.
+    📏 120 dias: 16 alarmes; somando por layer, 2 deixam de disparar.
+
+    🔑 O `max` do guarda existe pra não contar a MESMA parede duas vezes (a
+    mesma metragem em `ml` e na observação do `m²`). A soma só junta layers
+    DIFERENTES, cada um pelo seu maior valor; linha sem layer citado não entra.
+    Demolição não entra (parede que sai, não a que fica).
+    """
+    por_layer = {}
+    for it in itens or []:
+        if str(getattr(it, "discipline", "") or "") != "Fechamentos Verticais":
+            continue
+        if str(getattr(it, "unit", "") or "").strip().lower() not in ("m", "ml"):
+            continue
+        if "demoli" in str(getattr(it, "description", "") or "").lower():
+            continue
+        try:
+            q = float(getattr(it, "quantity", 0) or 0)
+        except (TypeError, ValueError):
+            continue
+        if q <= 0:
+            continue
+        m = _RE_LAYER_DA_PAREDE.search(str(getattr(it, "observations", "") or ""))
+        if not m:
+            continue
+        lay = m.group(1).upper()
+        por_layer[lay] = max(por_layer.get(lay, 0.0), q)
+    return round(sum(por_layer.values()), 2), len(por_layer)
+
+
 # ══════════════════════════════════════════════════════════════════════════
 #  ADMINISTRAÇÃO LOCAL DE OBRA — o motor chutava o PRAZO
 # ══════════════════════════════════════════════════════════════════════════

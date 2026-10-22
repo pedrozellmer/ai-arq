@@ -20340,6 +20340,13 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 _c_obs = _compr_obs(getattr(_it, "observations", ""))
                 if _c_obs and _c_obs > 0:
                     _paredes_ml.append(_c_obs)
+            # 🩸 22/10/2026 — parede separada por TIPO (uma linha por layer): o
+            # maior sozinho não é a parede do projeto. A soma de layers
+            # DIFERENTES entra como mais uma fonte (ver `soma_de_parede_por_layer`).
+            from engine_rules import soma_de_parede_por_layer as _soma_lay
+            _soma_l, _n_lay = _soma_lay(all_items)
+            if _n_lay >= 2 and _soma_l > 0:
+                _paredes_ml.append(_soma_l)
             # 🚨 04/09 — A SOMA DA EXTRAÇÃO NÃO ENTRA NA COMPARAÇÃO, e isto é o
             # conserto de um erro MEU do mesmo dia. Eu tinha acabado de
             # acrescentá-la como "terceira fonte", achando que era a medida
