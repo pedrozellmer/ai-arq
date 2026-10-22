@@ -65,7 +65,9 @@ _FUNCOES = ("startProcessing", "_acharProjetoIrmao", "_assinaturaLocalDXF",
             # 29/09: o login de AGORA no envio (test_o_envio_usa_o_login_de_agora.py)
             "_tokenDoEnvio",
             # 07/10: a pergunta do tipo antes do envio (test_o_tipo_estrutural_e_perguntado_antes.py)
-            "_arquivosComCaraDeEstrutura", "_confirmarTipoEstrutural")
+            "_arquivosComCaraDeEstrutura", "_confirmarTipoEstrutural",
+            # 22/10: o espelho (test_o_tipo_arquitetura_e_perguntado_antes.py)
+            "_arquivosComCaraDeArquitetura", "_confirmarTipoArquitetura")
 
 
 def _padrao_do_select(site):
@@ -179,6 +181,7 @@ var _ehPdf = function (f) { return /[.]pdf$/i.test((f && f.name) || ''); };
 // arquivo. Mapa vazio = o servidor não disse que algum nome é de estrutura, e a
 // pergunta do tipo não abre: o assunto deste arquivo é o anexo recusado.
 var _nomeEstrutural = new Map();
+var _nomeArquitetura = new Map();   // 22/10: o espelho, idem
 var _efKey = function (f) { return f.name + ':' + f.size + ':' + f.lastModified; };
 var document = {
   getElementById: function (id) { return __els[id] || null; },

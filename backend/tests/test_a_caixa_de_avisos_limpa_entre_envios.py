@@ -107,6 +107,11 @@ def _cena(respostas, sem_limpeza=False):
           "var _efKey = function (f) { return f.name + ':' + f.size + ':' + f.lastModified; };",
           bloco_a_partir_de(site, "function _arquivosComCaraDeEstrutura(", "dashboard.html", fecho=""),
           bloco_a_partir_de(site, "function _confirmarTipoEstrutural(", "dashboard.html", fecho=""),
+          # 22/10: o espelho (Estrutura marcada, nomes de arquitetura) — mapa
+          # vazio, a pergunta também não abre.
+          "var _nomeArquitetura = new Map();",
+          bloco_a_partir_de(site, "function _arquivosComCaraDeArquitetura(", "dashboard.html", fecho=""),
+          bloco_a_partir_de(site, "function _confirmarTipoArquitetura(", "dashboard.html", fecho=""),
           "function startProcessing__real() {}",
           iniciar,
           "function _enviar(dados) { DADOS = dados; (function () { %s })(); }" % despacho]
