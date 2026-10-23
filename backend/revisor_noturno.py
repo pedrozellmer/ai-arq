@@ -334,6 +334,68 @@ def montar_fichas(projetos, extra, revisoes, lotes, conversas, nps, erros, entre
     return fichas
 
 
+# ── Os casos (parte 3, peças A e B — 23/10/2026) ──────────────────────────────────────────────
+# 🪤 Sem isto, projeto consertado ficava 30 dias na fila: em 23/10 eram 17 "continuam na fila, sem
+# novidade", e o relatório da manhã repetiria os mesmos nomes todo dia até a janela os soltar.
+#: o caso FECHOU — o projeto sai da contagem de suspeitos (até o cliente voltar)
+ESTADOS_FECHADOS = {"consertado", "nao_e_defeito"}
+ESTADOS = {"olhando", "confirmado"} | ESTADOS_FECHADOS
+
+
+def aplicar_casos(fichas, casos) -> list:
+    """Põe em cada ficha o caso dela (`revisor_casos`) e reordena a fila.
+
+    - caso FECHADO (`consertado`/`nao_e_defeito`): `tratado` = True — sai da contagem de suspeitos.
+    - mas se o cliente fez algo DEPOIS de `fechado_em`: `voltou` = True e ele NÃO é tratado — volta
+      pra fila. É o alarme que importa: o conserto não bastou, ou o cliente achou outra coisa.
+    - caso aberto (`olhando`/`confirmado`): só anota; o projeto continua contando.
+    - estado desconhecido (digitado errado) não esconde nada: conta como aberto.
+
+    🔒 A nota NÃO muda: o que o cliente fez continua sendo o que ele fez. O caso só diz se alguém
+    já olhou.
+    """
+    por_job = {c.get("job_id"): c for c in casos or [] if c.get("job_id")}
+    for f in fichas or []:
+        c = por_job.get(f.get("job_id"))
+        if not c:
+            f["caso"] = None
+            continue
+        estado = str(c.get("estado") or "")
+        fechado = estado in ESTADOS_FECHADOS
+        fechado_em = _ts(c.get("fechado_em"))
+        ultimo = _ts(f.get("ultimo_sinal_do_cliente"))
+        # 🪤 fechado sem data não tem como saber se voltou — o banco proíbe (constraint), e aqui o
+        # caso fica ABERTO em vez de sumir com o projeto calado
+        volta = bool(fechado and fechado_em and ultimo and ultimo > fechado_em)
+        f["caso"] = {
+            "estado": estado,
+            "forma": c.get("forma") or "",
+            "origem": c.get("origem") or "",
+            "conserto_commit": c.get("conserto_commit"),
+            "chave": c.get("chave"),
+            "teste": c.get("teste"),
+            "fechado_em": fechado_em.isoformat() if fechado_em else None,
+            "tratado": bool(fechado and fechado_em and not volta),
+            "voltou": volta,
+        }
+    fichas.sort(key=lambda f: (tratado(f), -f["nota"], not voltou(f), not f["novidade"],
+                               str(f["criado_em"] or "")))
+    return fichas
+
+
+def tratado(f) -> bool:
+    return bool((f.get("caso") or {}).get("tratado"))
+
+
+def voltou(f) -> bool:
+    return bool((f.get("caso") or {}).get("voltou"))
+
+
+def e_suspeito(f) -> bool:
+    """Entra na contagem de suspeitos: nota 3 ou mais e o caso não foi fechado (ou voltou)."""
+    return f.get("nota", 0) >= NOTA_SUSPEITO and not tratado(f)
+
+
 def padroes(fichas) -> list:
     """Cada etapa do motor × quantos projetos com ela tiveram reação do cliente.
 
