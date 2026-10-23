@@ -17813,14 +17813,15 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                 # Fica em branco, com o motivo. 🛑 Nasce DESLIGADA: muda
                                 # número. Desligada, só registra onde teria agido.
                                 from engine_rules import (
-                                    parede_tirada_do_limite_do_terreno as _parede_do_terreno)
+                                    parede_tirada_do_limite_do_terreno as _parede_do_terreno,
+                                    MARCA_LIMITE_DO_TERRENO as _MARCA_TERRENO)
                                 if qty > 0 and _parede_do_terreno(
                                         item_data.get("discipline", ""), desc, _lys):
                                     if _chave_do_job(job_id, "PERIMETRO_DE_TERRENO_NAO_E_PAREDE") == "1":
                                         qty = 0.0
                                         conf = "estimado"
                                         _rebaixado_pela_fonte = True
-                                        obs_raw = ("⚠ FONTE = LIMITE DO TERRENO (layer "
+                                        obs_raw = (_MARCA_TERRENO + " (layer "
                                                    + ", ".join(_lys) + ") — é o perímetro do "
                                                    "lote/levantamento, não parede do edifício. "
                                                    "Quantidade em branco: confira no projeto. "

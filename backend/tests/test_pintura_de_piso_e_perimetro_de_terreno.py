@@ -220,3 +220,37 @@ def test_CONTROLE_motor_desligado_nao_muda_numero_mas_registra():
 def test_CONTROLE_motor_ligado_parede_de_verdade_fica():
     ns, logs = _roda_trecho(liga=True, lys=("A-WALL",))
     assert ns["qty"] == 522.6 and not logs
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  2c) as duas brechas que a avaliação ev771a95 (23/10) mostrou
+# ══════════════════════════════════════════════════════════════════════════
+def test_brecha_1_parede_que_cita_o_contorno_E_as_cotas_cai():
+    """A linha citava CONTORNO e MEDIDAS (as cotas que somam o perímetro)."""
+    assert parede_tirada_do_limite_do_terreno(
+        "Fechamentos Verticais", "Parede/fechamento perimetral", ["CONTORNO", "MEDIDAS"])
+
+
+def test_CONTROLE_piso_do_lote_nao_e_rodape_e_fica():
+    assert not parede_tirada_do_limite_do_terreno(
+        "Pisos e Rodapés", "Piso externo intertravado — área do lote", ["TERRENO"])
+
+
+def test_brecha_2_a_recuperacao_respeita_a_marca_do_terreno():
+    from engine_rules import corrigir_comprimento_medido, MARCA_LIMITE_DO_TERRENO
+    obs = (MARCA_LIMITE_DO_TERRENO + " (layer CONTORNO) — é o perímetro do lote. "
+           "Fonte: comprimento total do layer CONTORNO = 174.20 ml.")
+    assert corrigir_comprimento_medido("Rodapé perimetral", "ml", 0, obs) == {}, (
+        "a recuperação devolveu o perímetro do lote ao rodapé")
+
+
+def test_CONTROLE_sem_a_marca_a_recuperacao_segue_valendo():
+    from engine_rules import corrigir_comprimento_medido
+    obs = "Fonte: comprimento total do layer A-FLOR = 54,49 m."
+    assert corrigir_comprimento_medido("Rodapé", "ml", 0, obs).get("quantity") == 54.49
+
+
+def test_o_motor_escreve_a_MESMA_marca_que_a_recuperacao_procura():
+    from engine_rules import MARCA_LIMITE_DO_TERRENO
+    ns, _ = _roda_trecho(liga=True)
+    assert ns["obs_raw"].startswith(MARCA_LIMITE_DO_TERRENO)

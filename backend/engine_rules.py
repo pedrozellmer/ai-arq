@@ -1169,6 +1169,10 @@ def corrigir_comprimento_medido(desc, unit, quantity, obs, texto_de_pdf=False):
     medida = medida_de_comprimento_na_observacao(obs)
     if medida is None:
         return {}
+    # 🩸 23/10/2026 — a linha que a régua do LIMITE DO TERRENO zerou de
+    # propósito não é "mediu e entregou zero": o comprimento é do lote.
+    if MARCA_LIMITE_DO_TERRENO in str(obs or ""):
+        return {}
     # 🚨 O número é base de cálculo, não resposta — ver _RE_BASE_DE_CALCULO.
     if medida_e_base_de_calculo(obs):
         return {}
@@ -1415,15 +1419,39 @@ def layer_e_limite_de_terreno(layer_name) -> bool:
     return any(t in _TERRENO_EXATO or t.startswith(_TERRENO_PREFIXO) for t in toks)
 
 
+#: o aviso que a linha ganha — e que a RECUPERAÇÃO de comprimento respeita
+#: (`corrigir_comprimento_medido`): sem isso, o rodapé zerado aqui voltava com o
+#: mesmo perímetro ("mediu e entregou zero"), medido na avaliação de 23/10.
+MARCA_LIMITE_DO_TERRENO = "⚠ FONTE = LIMITE DO TERRENO"
+
+
+def _nome_de_parede(layer_name) -> bool:
+    toks = [t for t in _CARIMBO_SPLIT.split(str(layer_name or "").upper()) if t]
+    return any(t.startswith(_PAREDE_NO_NOME) for t in toks)
+
+
 def parede_tirada_do_limite_do_terreno(disciplina, descricao, layers) -> bool:
-    """A linha de parede/revestimento/rodapé tirou o comprimento SÓ de layer de
-    limite do terreno? Muro, cerca, gradil e portão de divisa são obra — ficam."""
-    if str(disciplina or "") not in _DISCIPLINAS_DE_PAREDE:
+    """A linha de parede/revestimento/rodapé tirou o comprimento de layer de
+    limite do terreno (e de nenhum layer de parede)? Muro, cerca, gradil e
+    portão de divisa são obra — ficam. Em Pisos e Rodapés, só o RODAPÉ: piso de
+    lote inteiro pode ser pavimentação de verdade.
+
+    🩸 23/10 (avaliação): a linha de parede citava DOIS layers — `CONTORNO` e
+    `MEDIDAS` (as cotas que somam o perímetro) — e o "todos de terreno" a
+    deixava passar com 522,6 m². Basta UM de terreno, desde que nenhum citado
+    tenha nome de parede."""
+    disc = str(disciplina or "")
+    if disc not in _DISCIPLINAS_DE_PAREDE:
         return False
-    if _RE_OBRA_DE_LIMITE.search(str(descricao or "")):
+    desc = str(descricao or "")
+    if disc == "Pisos e Rodapés" and "rodap" not in desc.lower():
+        return False
+    if _RE_OBRA_DE_LIMITE.search(desc):
         return False
     lys = [l for l in (layers or []) if l]
-    return bool(lys) and all(layer_e_limite_de_terreno(l) for l in lys)
+    if not lys or any(_nome_de_parede(l) for l in lys):
+        return False
+    return any(layer_e_limite_de_terreno(l) for l in lys)
 
 
 def layers_que_nao_provam(metadata) -> set:
