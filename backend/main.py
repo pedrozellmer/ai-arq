@@ -10554,6 +10554,8 @@ _CHAVES_AVALIAVEIS = frozenset({
     "PILAR_DE_ARCOS",
     # 21/10: área que a leitura confessa ter estimado a olho não é preservada
     "AREA_A_OLHO_NAO_PRESERVA",
+    # 23/10: perímetro de terreno não vira parede; pintura de piso não trava o PD
+    "PERIMETRO_DE_TERRENO_NAO_E_PAREDE", "PINTURA_DE_PISO_NAO_TRAVA_PD",
 })
 _CHAVES_DA_AVALIACAO: dict = {}        # job de avaliação → {chave: "0" | "1"}
 
@@ -12007,7 +12009,7 @@ def _derive_estrutura_pe_direito(items, pe_direito: float) -> int:
 
 
 def _derive_pintura_pe_direito(items, pe_direito: float,
-                               area_conhecida: float = 0.0) -> int:
+                               area_conhecida: float = 0.0, job_id: str = "") -> int:
     """Deriva PINTURA de parede quando só temos o COMPRIMENTO das paredes.
 
     Motivação (medido em 01/08/2026): em 22 dos 69 projetos com parede, a
@@ -12070,7 +12072,18 @@ def _derive_pintura_pe_direito(items, pe_direito: float,
         except (TypeError, ValueError):
             return 0.0
 
-    if any(_e_pintura(i) and _qtd(i) > 0 for i in items):
+    # 🩸 23/10/2026 — pintura de PISO/sinalização (faixa, demarcação de vaga,
+    # epóxi de piso) não é a pintura de parede que a trava protege. 🛑 Nasce
+    # DESLIGADA: ligada, a derivação passa a rodar onde nunca rodou.
+    try:
+        _piso_nao_trava = _chave_do_job(job_id, "PINTURA_DE_PISO_NAO_TRAVA_PD") == "1"
+    except NameError:
+        import os as _os_pp
+        _piso_nao_trava = _os_pp.environ.get("PINTURA_DE_PISO_NAO_TRAVA_PD", "0") == "1"
+    from engine_rules import pintura_e_de_piso_ou_sinalizacao as _pint_piso
+    if any(_e_pintura(i) and _qtd(i) > 0
+           and not (_piso_nao_trava and _pint_piso(getattr(i, "description", "")))
+           for i in items):
         # 🪤 Isto inclui pintura de TETO — e é por isso que a derivação nunca
         # rodou em produção (0 itens em toda a base, medido em 02/09). Fica
         # como está: alargar aqui é ampliar a exposição à conta, e a conta é
@@ -12082,6 +12095,7 @@ def _derive_pintura_pe_direito(items, pe_direito: float,
     _alvo_zerado = next(
         (i for i in items
          if _e_pintura(i) and _qtd(i) <= 0
+         and not (_piso_nao_trava and _pint_piso(getattr(i, "description", "")))
          and "teto" not in (getattr(i, "description", "") or "").lower()
          and "forro" not in (getattr(i, "description", "") or "").lower()),
         None)
@@ -17792,6 +17806,32 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                                "foi medido, mas do desenho da anotação. Confirme o "
                                                "serviço e a quantidade. " + obs_raw)
 
+                                # 🩸 22/10/2026 — PERÍMETRO DE TERRENO NÃO É PAREDE
+                                # (ver `engine_rules.parede_tirada_do_limite_do_terreno`).
+                                # 🔑 Rebaixar não basta: a linha já saía laranja, COM
+                                # número (522,6 m² de "parede" = perímetro × pé-direito).
+                                # Fica em branco, com o motivo. 🛑 Nasce DESLIGADA: muda
+                                # número. Desligada, só registra onde teria agido.
+                                from engine_rules import (
+                                    parede_tirada_do_limite_do_terreno as _parede_do_terreno)
+                                if qty > 0 and _parede_do_terreno(
+                                        item_data.get("discipline", ""), desc, _lys):
+                                    if _chave_do_job(job_id, "PERIMETRO_DE_TERRENO_NAO_E_PAREDE") == "1":
+                                        qty = 0.0
+                                        conf = "estimado"
+                                        _rebaixado_pela_fonte = True
+                                        obs_raw = ("⚠ FONTE = LIMITE DO TERRENO (layer "
+                                                   + ", ".join(_lys) + ") — é o perímetro do "
+                                                   "lote/levantamento, não parede do edifício. "
+                                                   "Quantidade em branco: confira no projeto. "
+                                                   + obs_raw)
+                                    _log_error("motor:parede-do-terreno",
+                                               "layers=%s qtd=%s ligada=%s desc=%s" % (
+                                                   ",".join(_lys), qty,
+                                                   _chave_do_job(job_id, "PERIMETRO_DE_TERRENO_NAO_E_PAREDE"),
+                                                   str(desc)[:60]),
+                                               job_id, severity="info")
+
                                 # 🩸 26/09/2026 (job 32a27efc) — O SÍMBOLO DA LEGENDA
                                 # NÃO É PEÇA. "Pilar nasce = 1 un ✓ MEDIDO" em 3
                                 # pranchas: o único INSERT era o desenhado na
@@ -21064,7 +21104,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
             _pd_inf = float(getattr(project_data, "user_pe_direito", 0) or 0)
             if _pd_inf:
                 _n_pd = _derive_pintura_pe_direito(all_items, _pd_inf,
-                                                   float(getattr(project_data, "total_area", 0) or 0))
+                                                   float(getattr(project_data, "total_area", 0) or 0),
+                                                   job_id=job_id)
                 _n_est = 0
                 try:
                     _n_est = _derive_estrutura_pe_direito(all_items, _pd_inf)
@@ -34376,7 +34417,7 @@ def inform_project_area(job_id: str, payload: InformAreaPayload, request: Reques
     try:
         if _pd_efetivo > 0:
             _pintou = _derive_pintura_pe_direito(items, _pd_efetivo,
-                                                 area or _area_ja_tinha)
+                                                 area or _area_ja_tinha, job_id=job_id)
     except Exception as _edp:
         print(f"[inform-area] derivação por pé-direito não-fatal: {_edp}")
 

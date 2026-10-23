@@ -1366,6 +1366,66 @@ def layer_sem_nome(layer_name) -> bool:
     return bool(s) and not any(c.isalpha() for c in s)
 
 
+#: 🩸 22/10/2026 — PERÍMETRO DE TERRENO VIROU PAREDE. Um DWG de 110 KB era só o
+#: levantamento do perímetro de um largo (polígono V1…V7, 7 lados = 174,18 m, no
+#: layer `CONTORNO`, sem cota nem ambiente). A planilha saiu com 522,6 m² de
+#: "fechamento de parede", 522,6 m² de "revestimento de parede" e 174,2 m de
+#: "rodapé" — o perímetro × 3 m de pé-direito.
+#: 📏 Na história inteira, linhas de parede/revestimento/rodapé com número tiradas
+#: SÓ de layer de terreno/limite: 3, todas desse caso. `IFC-Parede-Contorno`
+#: (parede de verdade) não pode cair: nome com PAREDE/ALV/WALL/DRY fica de fora,
+#: e `CONTORNO` só conta como nome INTEIRO (`SAP_CONTORNO`, `Contornos de Zona`
+#: são outra coisa).
+_TERRENO_PREFIXO = ("TERRENO", "DIVISA", "LIMITE", "PERIMETRO", "PERÍMETRO",
+                    "POLIGONAL", "MATRICULA", "MATRÍCULA", "TOPOGRAF")
+_TERRENO_EXATO = {"LOTE", "LOTES"}
+_PAREDE_NO_NOME = ("PAREDE", "ALV", "WALL", "DRY", "DIVISOR")
+#: o que é obra de verdade no limite do terreno (fica medido)
+_RE_OBRA_DE_LIMITE = _re.compile(r"\b(?:muro|mureta|cerca|gradil|alambrado|port[aã]o)\b", _re.I)
+_DISCIPLINAS_DE_PAREDE = frozenset({"Fechamentos Verticais", "Revestimentos", "Pisos e Rodapés"})
+
+
+#: 🩸 22/10/2026 — a "pintura com número" que desligava a pintura derivada do
+#: pé-direito era SINALIZAÇÃO DE PISO (faixa de pedestres 253,9 m², piso epóxi).
+#: 📏 120 dias: de 34 derivações puladas por "já existe pintura com número", em 2
+#: a única pintura com número era de piso/sinalização e havia parede em metro.
+_RE_PINTURA_DE_PISO = _re.compile(
+    r"\b(?:faixas?|demarca\w*|sinaliza\w*|setas?|vagas?|piso|pisos|pavimento\w*|"
+    r"asf[aá]lt\w*|termopl[aá]st\w*|ep[oó]xi\w*|quadra|ciclovia)\b", _re.I)
+
+
+def pintura_e_de_piso_ou_sinalizacao(descricao) -> bool:
+    """A linha de "pintura" é de PISO/sinalização (não de parede nem de teto)?
+    Lê só a CABEÇA da descrição (antes do travessão), onde mora o que a linha é."""
+    cabeca = str(descricao or "").split("—")[0]
+    return bool(_RE_PINTURA_DE_PISO.search(cabeca))
+
+
+def layer_e_limite_de_terreno(layer_name) -> bool:
+    """True se o layer é do LIMITE do terreno (lote, divisa, perímetro,
+    poligonal, topografia) — não do edifício. Compara por TOKEN."""
+    nome = str(layer_name or "").strip().upper()
+    if not nome:
+        return False
+    toks = [t for t in _CARIMBO_SPLIT.split(nome) if t]
+    if any(t.startswith(_PAREDE_NO_NOME) for t in toks):
+        return False
+    if nome == "CONTORNO":
+        return True
+    return any(t in _TERRENO_EXATO or t.startswith(_TERRENO_PREFIXO) for t in toks)
+
+
+def parede_tirada_do_limite_do_terreno(disciplina, descricao, layers) -> bool:
+    """A linha de parede/revestimento/rodapé tirou o comprimento SÓ de layer de
+    limite do terreno? Muro, cerca, gradil e portão de divisa são obra — ficam."""
+    if str(disciplina or "") not in _DISCIPLINAS_DE_PAREDE:
+        return False
+    if _RE_OBRA_DE_LIMITE.search(str(descricao or "")):
+        return False
+    lys = [l for l in (layers or []) if l]
+    return bool(lys) and all(layer_e_limite_de_terreno(l) for l in lys)
+
+
 def layers_que_nao_provam(metadata) -> set:
     """Layers (em MAIÚSCULAS) cujo comprimento não prova quantidade, pela prova
     do próprio desenho: os de COTA explodida e os que são só a BORDA de peças
