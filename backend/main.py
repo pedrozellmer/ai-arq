@@ -33690,6 +33690,7 @@ def submit_item_review(job_id: str, item_id: str, payload: ReviewPayload, reques
     # aberta há uma hora com valor velho em memória. A verdade é o que está
     # gravado no instante da edição.
     _antes = None
+    _item_ja_nao_existe = False
     # 🩸 31/08/2026 — TAMBÉM NO REJECT, e por um motivo que custou 4 meses de
     # sinal: a exclusão do cliente se AUTODESTRUÍA. `item_reviews.item_id` tem
     # FK pra `project_items` com ON DELETE CASCADE; o reject gravava a linha e
@@ -33708,8 +33709,22 @@ def submit_item_review(job_id: str, item_id: str, payload: ReviewPayload, reques
                        f",discipline,ref_sheet&limit=1")
             if _rows_a and isinstance(_rows_a, list):
                 _antes = _rows_a[0]
+            elif (isinstance(_rows_a, list) and _st_a
+                  and 200 <= int(_st_a) < 300):
+                # o banco RESPONDEU e o item não está lá (≠ não consegui ler)
+                _item_ja_nao_existe = True
         except Exception as _ea:
             print(f"[revisao] nao consegui ler o 'antes' (nao-fatal): {_ea}")
+
+    # 🩸 22/10/2026 — o cliente clicou "excluir" num item que JÁ tinha excluído
+    # (tela de outra aba, ou o 2º clique). O histórico apontava pra um item que
+    # não existe (o banco recusa: chave estrangeira, 409), a rota respondeu 502 e
+    # a tela disse "Erro ao salvar" — sobre uma exclusão que já estava feita.
+    # 🔑 Excluir o que não existe mais é o estado que o cliente pediu: sucesso,
+    # sem escrita nenhuma. Só quando o banco CONFIRMOU a ausência — leitura que
+    # falhou segue o caminho de sempre.
+    if action == "reject" and _item_ja_nao_existe:
+        return {"status": "ok", "action": action, "gravou": False, "ja_excluido": True}
 
     review_row = monta_linha_de_revisao(
         job_id, item_id, action, payload.edits, _antes,

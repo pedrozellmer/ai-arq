@@ -878,9 +878,17 @@ async function _salvar(url, opts) {
   // o 502 do backend traz em `detail` a frase pro cliente — usa ela
   let detalhe = '';
   try { detalhe = (await r.clone().json()).detail || ''; } catch (_) {}
-  throw new Error(detalhe || (r.status === 401
+  const _erro = new Error(detalhe || (r.status === 401
     ? 'sua sessão expirou — entre de novo'
     : 'o servidor respondeu ' + r.status));
+  // 22/10/2026: o evento de erro não dizia QUAL erro — o código vai junto
+  _erro.status = r.status;
+  throw _erro;
+}
+
+// O `type` do evento de erro: o código HTTP, ou "rede" quando nem resposta houve.
+function _tipoDoErroDeSalvar(e) {
+  return (e && e.status) ? ('http-' + e.status) : 'rede';
 }
 
 async function review(itemId, action) {
@@ -944,7 +952,7 @@ async function review(itemId, action) {
     if (_antes === undefined) delete reviewState[itemId]; else reviewState[itemId] = _antes;
     render();
     // o salvamento falhar e a tela desfazer na frente do cliente é o pior desfecho e era invisível
-    try { if (window.trackEvent) trackEvent('revisao_salvou_erro', { job_id: jobId }); } catch (_) {}
+    try { if (window.trackEvent) trackEvent('revisao_salvou_erro', { job_id: jobId, type: _tipoDoErroDeSalvar(e) }); } catch (_) {}
     const msg = 'Erro ao salvar: ' + e.message;
     window.toast ? window.toast.error(msg) : alert(msg);
   }
@@ -1264,7 +1272,8 @@ async function bulkReview(section, action) {
   try {
     if (window.trackEvent) trackEvent('revisao_lote', { job_id: jobId,
       type: action === 'approve' ? 'confirmar' : 'excluir', confirmados: _salvos });
-    if (falhou.length && window.trackEvent) trackEvent('revisao_salvou_erro', { job_id: jobId });
+    if (falhou.length && window.trackEvent) trackEvent('revisao_salvou_erro', { job_id: jobId,
+      type: 'lote-' + String((falhou[0] && falhou[0].erro) || '').replace(/[^0-9a-z]+/gi, '-').toLowerCase().slice(0, 30) });
   } catch (_) {}
   if (falhou.length) {
     falhou.forEach(f => {
