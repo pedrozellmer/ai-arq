@@ -12080,7 +12080,8 @@ def _derive_pintura_pe_direito(items, pe_direito: float,
     except NameError:
         import os as _os_pp
         _piso_nao_trava = _os_pp.environ.get("PINTURA_DE_PISO_NAO_TRAVA_PD", "0") == "1"
-    from engine_rules import pintura_e_de_piso_ou_sinalizacao as _pint_piso
+    from engine_rules import (pintura_e_de_piso_ou_sinalizacao as _pint_piso,
+                              parede_de_meia_altura as _meia_altura)
     if any(_e_pintura(i) and _qtd(i) > 0
            and not (_piso_nao_trava and _pint_piso(getattr(i, "description", "")))
            for i in items):
@@ -12169,6 +12170,11 @@ def _derive_pintura_pe_direito(items, pe_direito: float,
             # ESPECIFICAÇÃO. Procurar no texto todo descartava 12.496 m de
             # parede real em silêncio — medido em 02/09 no job 43b26b58.
             _nome = d.split("—")[0][:60]
+            # 23/10: parede de meia altura não vai até o teto — com a mesma chave
+            # que destrava a derivação (a avaliação evf20fdf mostrou 400,7 m²
+            # de pintura sobre 71,56 m de meia-parede)
+            if _piso_nao_trava and _meia_altura(d):
+                continue
             if any(a in _nome for a in _NAO_E_PAREDE):
                 continue        # 1) tem a palavra "parede", não tem o comprimento
             try:

@@ -1398,6 +1398,23 @@ _RE_PINTURA_DE_PISO = _re.compile(
     r"asf[aá]lt\w*|termopl[aá]st\w*|ep[oó]xi\w*|quadra|ciclovia)\b", _re.I)
 
 
+#: 🩸 23/10/2026 (avaliação evf20fdf, com a chave da pintura ligada): a pintura
+#: derivada saiu 400,7 m² = 71,56 m × 2,80 m × 2 — e os 71,56 m eram de
+#: "meia-parede (alvenaria baixa)". Parede de meia altura não vai até o teto: o
+#: pé-direito inteiro mais que dobra a pintura. 📏 120 d: 28 linhas em 20 projetos
+#: com esse tipo de parede em metro (nenhuma derivação de cliente pegou — a trava
+#: da pintura com número segurava quase todas).
+_RE_PAREDE_DE_MEIA_ALTURA = _re.compile(
+    r"\b(?:meia[\s-]?parede|alvenaria\s+baixa|parede\s+baixa|muretas?|peitoril|"
+    r"guarda[\s-]?corpo|platibanda|muros?)\b", _re.I)
+
+
+def parede_de_meia_altura(descricao) -> bool:
+    """A linha é de parede que NÃO vai do piso ao teto? Lê a CABEÇA da descrição."""
+    cabeca = str(descricao or "").split("—")[0]
+    return bool(_RE_PAREDE_DE_MEIA_ALTURA.search(cabeca))
+
+
 def pintura_e_de_piso_ou_sinalizacao(descricao) -> bool:
     """A linha de "pintura" é de PISO/sinalização (não de parede nem de teto)?
     Lê só a CABEÇA da descrição (antes do travessão), onde mora o que a linha é."""

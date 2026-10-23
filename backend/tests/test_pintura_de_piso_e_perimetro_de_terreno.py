@@ -254,3 +254,68 @@ def test_o_motor_escreve_a_MESMA_marca_que_a_recuperacao_procura():
     from engine_rules import MARCA_LIMITE_DO_TERRENO
     ns, _ = _roda_trecho(liga=True)
     assert ns["obs_raw"].startswith(MARCA_LIMITE_DO_TERRENO)
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  1b) a meia-parede (avaliação evf20fdf, 23/10)
+# ══════════════════════════════════════════════════════════════════════════
+def _meia_caso():
+    meia = _It("Execução de meia-parede (alvenaria baixa) em bloco cerâmico", "ml", 71.56,
+               "Fonte: comprimento total do layer ARQ-ALV-BX = 71,56 m.")
+    epoxi = _It("Piso com pintura epóxi de alta espessura", "m²", 7.92)
+    alvo = _It("Pintura látex em paredes internas", "m²", 0)
+    return [meia, epoxi, alvo], alvo
+
+
+def test_ligada_meia_parede_nao_vira_parede_inteira(monkeypatch):
+    """O caso: sem a exclusão, 71,56 × 2,80 × 2 = 400,7 m² de pintura."""
+    monkeypatch.setenv("PINTURA_DE_PISO_NAO_TRAVA_PD", "1")
+    itens, alvo = _meia_caso()
+    n = main._derive_pintura_pe_direito(itens, 2.8, 0.0)
+    assert n == 0 and alvo.quantity == 0, alvo.quantity
+    assert main._derive_pintura_pe_direito.ultimo_motivo == "sem comprimento de parede"
+
+
+def test_ligada_meia_parede_sai_mas_a_parede_cheia_fica(monkeypatch):
+    monkeypatch.setenv("PINTURA_DE_PISO_NAO_TRAVA_PD", "1")
+    itens, alvo = _meia_caso()
+    itens.insert(0, _It("Alvenaria de vedação em bloco cerâmico", "ml", 100.0,
+                        "Fonte: comprimento total do layer A-WALL = 100 m."))
+    n = main._derive_pintura_pe_direito(itens, 2.8, 0.0)
+    assert n == 1 and alvo.quantity == round(100 * 2.8 * 2, 1), alvo.quantity
+
+
+def test_CONTROLE_desligada_nada_muda_na_meia_parede(monkeypatch):
+    """Desligada a chave, a derivação é a de antes (trava pela pintura de piso)."""
+    monkeypatch.delenv("PINTURA_DE_PISO_NAO_TRAVA_PD", raising=False)
+    itens, alvo = _meia_caso()
+    n = main._derive_pintura_pe_direito(itens, 2.8, 0.0)
+    assert n == 0 and main._derive_pintura_pe_direito.ultimo_motivo == "já existe pintura com número"
+
+
+@pytest.mark.parametrize("desc", ["Meia-parede em bloco cerâmico", "Alvenaria baixa — h=1,10 m",
+                                  "Mureta de contenção", "Peitoril em alvenaria",
+                                  "Guarda-corpo em alvenaria", "Platibanda em alvenaria",
+                                  "Muro de divisa em bloco de concreto"])
+def test_parede_de_meia_altura_e_reconhecida(desc):
+    from engine_rules import parede_de_meia_altura
+    assert parede_de_meia_altura(desc)
+
+
+@pytest.mark.parametrize("desc", ["Alvenaria de vedação em bloco cerâmico",
+                                  "Parede drywall — montante 70 mm, até a laje",
+                                  "Alvenaria de vedação — com peitoril de granito nas janelas", "", None])
+def test_CONTROLE_parede_cheia_nao_e_meia_altura(desc):
+    from engine_rules import parede_de_meia_altura
+    assert not parede_de_meia_altura(desc)
+
+
+def test_CONTROLE_desligada_e_sem_pintura_nenhuma_a_conta_antiga_segue_igual(monkeypatch):
+    """Produção hoje: chave em 0 e nenhuma pintura com número → a derivação roda
+    como sempre rodou (a exclusão da meia-parede só vem com a chave)."""
+    monkeypatch.delenv("PINTURA_DE_PISO_NAO_TRAVA_PD", raising=False)
+    meia = _It("Execução de meia-parede (alvenaria baixa) em bloco cerâmico", "ml", 71.56,
+               "Fonte: comprimento total do layer ARQ-ALV-BX = 71,56 m.")
+    alvo = _It("Pintura látex em paredes internas", "m²", 0)
+    n = main._derive_pintura_pe_direito([meia, alvo], 2.8, 0.0)
+    assert n == 1 and alvo.quantity == round(71.56 * 2.8 * 2, 1), alvo.quantity
