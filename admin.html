@@ -3246,14 +3246,18 @@ async function loadRevisorNoturno(noite){
       <div class="flex flex-wrap items-center gap-3 mb-3 text-xs text-gray-600">
         <select onchange="loadRevisorNoturno(this.value)" class="border border-gray-300 rounded px-2 py-1 text-xs">${opcoes}</select>
         <span>rodou ${dt(n.rodou_em)} · ${n.n_projetos||0} projeto(s) de cliente dos últimos ${n.janela_dias||'?'} dias ·
-          <b class="text-gray-800">${n.n_suspeitos||0} suspeito(s)</b> · ${n.n_novidades||0} com novidade desde a rodada anterior</span>
+          <b class="text-gray-800">${n.n_suspeitos||0} suspeito(s)</b> · ${n.n_novidades||0} com novidade desde a rodada anterior${n.n_tratados ? ` · ${n.n_tratados} já tratado(s)` : ''}${n.n_voltaram ? ` · <b class="text-red-700">${n.n_voltaram} ${n.n_voltaram === 1 ? 'voltou' : 'voltaram'} depois do conserto</b>` : ''}</span>
       </div>
       <p class="text-xs text-gray-400 mb-3">Só lê. Nada muda no projeto de ninguém, sem IA e sem e-mail. A nota é a soma dos motivos — leia os motivos, não o número.</p>`;
     const avisoFalha = falhas.length
       ? `<div class="rounded-lg border border-red-200 bg-red-50 p-3 mb-3 text-xs text-red-700">
            <b>Esta rodada não está completa</b> — ${falhas.map(esc).join(' · ')}</div>` : '';
 
-    const visiveis = _revisorTodos ? fichas : fichas.filter(f => (f.nota||0) >= 3);
+    // 23/10 (parte 3): caso fechado (consertado / não é defeito) sai da fila de suspeitos — a não ser
+    // que o cliente tenha voltado depois; o servidor já mandou os tratados pro fim da lista
+    const tratadoF = f => !!(f.caso && f.caso.tratado);
+    const visiveis = _revisorTodos ? fichas : fichas.filter(f => (f.nota||0) >= 3 && !tratadoF(f));
+    const ESTADO_CASO = {olhando: 'olhando', confirmado: 'defeito confirmado', consertado: 'consertado', nao_e_defeito: 'não é defeito'};
     const linha = f => {
       const s = f.sinais || {}, rv = s.revisao || {}, mt = s.motor || {}, ent = s.entregaveis || {};
       const nota = f.nota || 0;
@@ -3277,16 +3281,21 @@ async function loadRevisorNoturno(noite){
               <a href="projeto.html?adm=1&job_id=${encodeURIComponent(f.job_id)}" class="text-sm font-medium text-indigo-600 hover:underline">${esc(f.projeto || '—')}</a>
               <span class="text-xs font-mono text-gray-400">${esc(String(f.job_id).slice(0,8))}</span>
               ${f.novidade ? '<span class="text-xs font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">novidade</span>' : ''}
+              ${f.caso && f.caso.voltou ? '<span class="text-xs font-medium text-red-700 bg-red-50 px-2 py-0.5 rounded">voltou depois do conserto</span>' : ''}
+              ${f.caso ? `<span class="text-xs font-medium text-slate-700 bg-slate-100 px-2 py-0.5 rounded">caso: ${esc(ESTADO_CASO[f.caso.estado] || f.caso.estado)}</span>` : ''}
               <span class="text-xs text-gray-400">criado ${dt(f.criado_em, {day:'2-digit',month:'2-digit'})}</span>
             </div>
+            ${f.caso && f.caso.forma ? `<p class="text-xs text-gray-600 mt-1">${esc(f.caso.forma)}${f.caso.conserto_commit ? ` · <span class="font-mono">${esc(f.caso.conserto_commit)}</span>` : ''}</p>` : ''}
             <div class="mt-1 flex flex-wrap gap-2">${motivos || '<span class="text-xs text-gray-400">nenhum motivo</span>'}</div>
             <p class="text-xs text-gray-500 mt-1">${resumo}</p>
             ${etapas}
           </div>
         </div>`;
     };
-    const fila = visiveis.length ? visiveis.map(linha).join('')
-      : `<p class="text-sm text-gray-500 py-2">Nenhum projeto com nota 3 ou mais nesta rodada.</p>`;
+    const nTratados = fichas.filter(tratadoF).length;
+    const fila = (visiveis.length ? visiveis.map(linha).join('')
+      : `<p class="text-sm text-gray-500 py-2">Nenhum projeto com nota 3 ou mais nesta rodada.</p>`)
+      + (!_revisorTodos && nTratados ? `<p class="text-xs text-gray-400 mt-2">${nTratados} projeto(s) com caso já fechado ficam fora da fila — aparecem em "mostrar todos".</p>` : '');
     const botao = `<button onclick="_revisorTodos=!_revisorTodos; loadRevisorNoturno('${esc(n.noite)}')"
         class="mt-2 text-xs text-indigo-600 hover:underline">${_revisorTodos ? 'mostrar só os suspeitos' : `mostrar todos os ${fichas.length}`}</button>`;
 
@@ -3303,9 +3312,43 @@ async function loadRevisorNoturno(noite){
           ${(p.exemplos||[]).map(j => `<a href="projeto.html?adm=1&job_id=${encodeURIComponent(j)}" class="ml-1 font-mono text-indigo-500 hover:underline">${esc(String(j).slice(0,8))}</a>`).join('')}
         </div>`).join('')}` : '';
 
-    el.innerHTML = cab + avisoFalha + fila + (fichas.length ? botao : '') + blocoPad;
+    el.innerHTML = cab + avisoFalha + fila + (fichas.length ? botao : '') + blocoPad
+      + '<div id="revisor-casos" class="mt-6"></div>';
+    loadRevisorCasos();
   } catch (e) {
     el.innerHTML = '<p class="text-sm text-red-600">Não consegui ler a rodada agora.</p>';
+  }
+}
+
+// Os casos investigados a partir da fila (parte 3, 23/10). Só leitura: fechar caso é decisão com
+// commit e teste por trás, então não tem botão — quem grava é a sessão que investiga.
+async function loadRevisorCasos(){
+  const el = document.getElementById('revisor-casos');
+  if (!el) return;
+  const esc = s => String(s==null?'':s).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
+  const dt = s => { try { return window.fmtBR(s, {day:'2-digit',month:'2-digit'}); } catch(_) { return ''; } };
+  const ESTADO = {olhando: 'olhando', confirmado: 'defeito confirmado', consertado: 'consertado', nao_e_defeito: 'não é defeito'};
+  try {
+    const res = await authFetch(`${API_BASE}/api/admin/revisor-casos`);
+    const d = await res.json();
+    if (!res.ok || d.erro) { el.innerHTML = '<p class="text-sm text-red-600">Não consegui ler os casos agora.</p>'; return; }
+    const casos = d.casos || [];
+    const titulo = '<h4 class="text-xs font-bold text-gray-700 mb-1">Casos investigados</h4>';
+    if (!casos.length) { el.innerHTML = titulo + '<p class="text-xs text-gray-500">Nenhum caso registrado ainda.</p>'; return; }
+    el.innerHTML = titulo + casos.map(c => `
+      <div class="text-xs py-2 border-b border-gray-50">
+        <span class="font-medium text-slate-700 bg-slate-100 px-2 py-0.5 rounded">${esc(ESTADO[c.estado] || c.estado)}</span>
+        <a href="projeto.html?adm=1&job_id=${encodeURIComponent(c.job_id)}" class="ml-1 text-indigo-600 hover:underline">${esc(c.projeto || '—')}</a>
+        <span class="font-mono text-gray-400">${esc(String(c.job_id).slice(0,8))}</span>
+        <p class="text-gray-600 mt-1">${esc(c.forma || '')}</p>
+        <p class="text-gray-400 mt-1">${[c.origem ? `veio de ${esc(c.origem)}` : '',
+            c.conserto_commit ? `conserto <span class="font-mono">${esc(c.conserto_commit)}</span>` : '',
+            c.chave ? `chave ${esc(c.chave)}` : '',
+            c.teste ? `teste <span class="font-mono">${esc(c.teste)}</span>` : '',
+            c.fechado_em ? `fechado ${dt(c.fechado_em)}` : ''].filter(Boolean).join(' · ')}</p>
+      </div>`).join('');
+  } catch (e) {
+    el.innerHTML = '<p class="text-sm text-red-600">Não consegui ler os casos agora.</p>';
   }
 }
 
