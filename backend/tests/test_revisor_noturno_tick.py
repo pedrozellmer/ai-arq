@@ -146,6 +146,74 @@ def test_a_janela_tem_teto(banco):
     assert b.lidas[0] == "projetos_de_cliente"
 
 
+# ── os casos (parte 3, 23/10) ─────────────────────────────────────────────────────────────────
+def test_leitura_dos_casos_que_falha_nao_vira_ficha(banco):
+    """Sem os casos, projeto consertado voltaria a contar como suspeito — falha fechada."""
+    b = banco(falha_em={"revisor_casos"})
+    r = main.revisor_tick(_Req("s3gr3d0"))
+    assert r["status"] == "falhou" and any("revisor_casos" in f for f in r["falhas"])
+    assert not [w for w in b.escritas if w[0] == "POST" and w[1] == "revisor_noturno_fichas"]
+
+
+def test_caso_consertado_sai_da_contagem_e_vai_pra_ficha(banco):
+    b = banco(anterior="2026-10-18T06:12:00+00:00")
+    # j1 é suspeito (faltou + recado + medido_mexido); o caso fechou DEPOIS da última revisão dele
+    b.tabelas["revisor_casos"] = [{"job_id": "j1", "estado": "consertado", "forma": "forma sintética",
+                                   "origem": "medido_mexido", "conserto_commit": "abc1234",
+                                   "chave": None, "teste": "backend/tests/test_x.py::test_y",
+                                   "fechado_em": "2026-10-19T12:00:00+00:00"}]
+    r = main.revisor_tick(_Req("s3gr3d0"))
+    assert r["status"] == "ok" and r["suspeitos"] == 0 and r["tratados"] == 1 and r["voltaram"] == 0
+    noite = [w for w in b.escritas if w[1] == "revisor_noturno_noites" and w[0] == "POST"][0][2]
+    assert (noite["n_suspeitos"], noite["n_tratados"], noite["n_voltaram"]) == (0, 1, 0)
+    fichas = {f["job_id"]: f for f in
+              [w for w in b.escritas if w[1] == "revisor_noturno_fichas" and w[0] == "POST"][0][2]}
+    assert fichas["j1"]["caso"]["tratado"] is True and fichas["j1"]["nota"] >= 3
+    assert fichas["j2"]["caso"] is None
+    # os padrões continuam contando o projeto consertado (é evidência de que a etapa doeu)
+    pad = {p["etapa"]: p for p in noite["padroes"]}
+    assert pad["motor:spline"]["com_reacao"] == 1
+
+
+def test_cliente_que_volta_depois_do_conserto_conta_de_novo(banco):
+    b = banco(anterior="2026-10-18T06:12:00+00:00")
+    b.tabelas["revisor_casos"] = [{"job_id": "j1", "estado": "consertado", "forma": "", "origem": "",
+                                   "conserto_commit": None, "chave": None, "teste": None,
+                                   "fechado_em": "2026-10-17T12:00:00+00:00"}]
+    r = main.revisor_tick(_Req("s3gr3d0"))
+    assert (r["suspeitos"], r["tratados"], r["voltaram"]) == (1, 0, 1)
+
+
+class _BancoCasos:
+    def __init__(self, falha=False):
+        self.falha = falha
+
+    def tudo(self, path, params=None, **kw):
+        t = path.split("?")[0]
+        if t == "revisor_casos":
+            if self.falha:
+                return 500, []
+            return 200, [{"job_id": "j1", "estado": "confirmado", "forma": "forma sintética"}]
+        if t == "projects":
+            return 200, [{"job_id": "j1", "project_name": "Obra A"}]
+        return 200, []
+
+
+def test_lista_de_casos_no_admin_com_o_nome_lido_na_hora(monkeypatch):
+    p = _BancoCasos()
+    monkeypatch.setattr(main, "_require_admin", lambda r: {"email": "x"})
+    monkeypatch.setattr(main, "_supa_rest_tudo", p.tudo)
+    d = main.admin_revisor_casos(_Req())
+    assert d["erro"] is False and d["casos"][0]["projeto"] == "Obra A"
+
+
+def test_lista_de_casos_que_nao_leu_diz_erro(monkeypatch):
+    p = _BancoCasos(falha=True)
+    monkeypatch.setattr(main, "_require_admin", lambda r: {"email": "x"})
+    monkeypatch.setattr(main, "_supa_rest_tudo", p.tudo)
+    assert main.admin_revisor_casos(_Req()) == {"erro": True, "casos": []}
+
+
 # ── painel ────────────────────────────────────────────────────────────────────────────────────
 class _BancoPainel:
     def __init__(self, falha_fichas=False):

@@ -41955,7 +41955,7 @@ def _revisor_coletar(dias: int):
     dados = {"projetos": projetos}
     if not jobs:
         dados.update(extra={}, revisoes=[], lotes=[], conversas=[], nps=[], erros=[],
-                     entregaveis={}, emails=[])
+                     entregaveis={}, emails=[], casos=[])
         return dados, falhas
 
     def _ler(tabela, select, ordem="id.asc"):
@@ -41988,6 +41988,12 @@ def _revisor_coletar(dias: int):
         rs = _ler(tabela, sel, ordem=ordem)
         ent[chave] = [{"job_id": r.get("job_id"), "quando": r.get(carimbo)} for r in rs or []]
     dados["entregaveis"] = ent
+    # 23/10 (parte 3): o caso investigado. 🚨 Falha FECHADA como as outras: sem ler os casos, o
+    # projeto já consertado voltaria a contar como suspeito — e a fila diria o contrário do que
+    # alguém já decidiu. 🪤 A tabela não tem `id`: ordena por job_id (a chave dela).
+    dados["casos"] = _ler("revisor_casos",
+                          "job_id,estado,forma,origem,conserto_commit,chave,teste,fechado_em",
+                          ordem="job_id.asc")
     return (None if falhas else dados), falhas
 
 
@@ -41998,8 +42004,10 @@ def _revisor_gravar(noite: str, janela: int, fichas, padroes, falhas):
     linha_noite = {
         "noite": noite, "rodou_em": _revisor_agora_utc().isoformat(), "janela_dias": janela,
         "n_projetos": len(fichas or []),
-        "n_suspeitos": sum(1 for f in fichas or [] if f["nota"] >= _rn.NOTA_SUSPEITO),
+        "n_suspeitos": sum(1 for f in fichas or [] if _rn.e_suspeito(f)),
         "n_novidades": sum(1 for f in fichas or [] if f["novidade"]),
+        "n_tratados": sum(1 for f in fichas or [] if _rn.tratado(f)),
+        "n_voltaram": sum(1 for f in fichas or [] if _rn.voltou(f)),
         "padroes": padroes or [], "falhas": falhas or [],
     }
     st, _ = _supa_rest_service("POST", "revisor_noturno_noites?on_conflict=noite", body=linha_noite,
@@ -42013,7 +42021,8 @@ def _revisor_gravar(noite: str, janela: int, fichas, padroes, falhas):
         return ["revisor_noturno_fichas (limpar a noite): HTTP %s" % st]
     linhas = [{"noite": noite, "job_id": f["job_id"], "criado_em": f["criado_em"], "nota": f["nota"],
                "motivos": f["motivos"], "sinais": f["sinais"],
-               "ultimo_sinal_do_cliente": f["ultimo_sinal_do_cliente"], "novidade": f["novidade"]}
+               "ultimo_sinal_do_cliente": f["ultimo_sinal_do_cliente"], "novidade": f["novidade"],
+               "caso": f.get("caso")}
               for f in fichas or []]
     for i in range(0, len(linhas), 200):
         st, _ = _supa_rest_service("POST", "revisor_noturno_fichas", body=linhas[i:i + 200],
@@ -42061,7 +42070,10 @@ def revisor_tick(request: Request, dias: int = _REVISOR_JANELA_PADRAO):
         dados["projetos"], dados["extra"], dados["revisoes"], dados["lotes"], dados["conversas"],
         dados["nps"], dados["erros"], dados["entregaveis"], dados["emails"], recado_digitado,
         ultima_rodada=ultima)
+    # 🔑 os padrões saem ANTES dos casos e de TODAS as fichas: projeto consertado continua sendo
+    # evidência de que aquela etapa doeu (a conta do "o conserto adiantou?" corta pela data)
     pad = _rn.padroes(fichas)
+    fichas = _rn.aplicar_casos(fichas, dados["casos"])
     erros = _revisor_gravar(noite, janela, fichas, pad, [])
     if erros:
         _log_error("revisor:tick", "gravação incompleta: %s" % "; ".join(erros)[:900])
@@ -42075,8 +42087,10 @@ def revisor_tick(request: Request, dias: int = _REVISOR_JANELA_PADRAO):
         _log_error("revisor:tick", "retenção de %d dias não apagou (HTTP %s)" % (_REVISOR_RETENCAO_DIAS, st_r),
                    severity="warning")
     return {"status": "ok", "noite": noite, "janela_dias": janela, "projetos": len(fichas),
-            "suspeitos": sum(1 for f in fichas if f["nota"] >= _rn.NOTA_SUSPEITO),
-            "novidades": sum(1 for f in fichas if f["novidade"])}
+            "suspeitos": sum(1 for f in fichas if _rn.e_suspeito(f)),
+            "novidades": sum(1 for f in fichas if f["novidade"]),
+            "tratados": sum(1 for f in fichas if _rn.tratado(f)),
+            "voltaram": sum(1 for f in fichas if _rn.voltou(f))}
 
 
 @app.get("/api/admin/revisor-noturno")
@@ -42114,6 +42128,33 @@ def admin_revisor_noturno(request: Request, noite: str = ""):
     for f in fichas:
         f["projeto"] = nomes.get(f.get("job_id"), "")
     return {"erro": False, "noites": noites, "noite": (cab or [None])[0], "fichas": fichas}
+
+
+@app.get("/api/admin/revisor-casos")
+def admin_revisor_casos(request: Request):
+    """Os casos investigados a partir da fila do revisor (parte 3, peça A — 23/10/2026).
+
+    Só leitura. Quem grava é a sessão que investiga, por SQL, no fim de cada caso — não há botão de
+    escrever de propósito: fechar um caso é uma decisão com commit e teste por trás, não um clique.
+    """
+    _require_admin(request)
+    st, casos = _supa_rest_tudo(
+        "revisor_casos",
+        params={"select": "job_id,estado,forma,origem,conserto_commit,chave,teste,fechado_em,"
+                          "criado_em,atualizado_em"},
+        ordem="atualizado_em.desc,job_id.asc", timeout=20)
+    if st != 200:
+        return {"erro": True, "casos": []}
+    casos = casos or []
+    jobs = sorted({c["job_id"] for c in casos if c.get("job_id")})
+    nomes = {}
+    if jobs:
+        st2, rs = _revisor_ler_por_jobs("projects", jobs, "id,job_id,project_name")
+        if st2 == 200:
+            nomes = {r["job_id"]: r.get("project_name") or "" for r in rs or []}
+    for c in casos:
+        c["projeto"] = nomes.get(c.get("job_id"), "")
+    return {"erro": False, "casos": casos}
 
 
 def _coletar_busca_organica() -> dict:
