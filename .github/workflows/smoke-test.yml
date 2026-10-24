@@ -31,7 +31,11 @@ jobs:
       contents: write
     # 8min: o E2E agora espera até 60s pelo #login-email (o desafio invisível do
     # Cloudflare atrasa a página no browser automatizado) e ainda tem retry 1x.
-    timeout-minutes: 8
+    # 🩸 23–24/10/2026: 15min. Duas vezes seguidas (e67d35a7, b5a88f45) o job foi
+    # CANCELADO no "Instalar Playwright", que levou mais de 7 min no runner —
+    # níveis 1+2 já tinham passado e o nível 3 nunca rodou. Os 6,5 min do poll do
+    # deploy + a instalação lenta + o E2E cabem com folga em 15.
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -78,7 +82,7 @@ jobs:
           # Agora esperamos o `commit` do endpoint raiz bater com o do push.
           SHORT="${SHA:0:7}"
           echo "Esperando o backend reportar commit $SHORT (build Docker leva 5-8min)."
-          for i in $(seq 1 26); do   # 26×15s = 6,5 min, cabe no timeout de 8
+          for i in $(seq 1 26); do   # 26×15s = 6,5 min, cabe no timeout de 15
             body=$(curl -sS --max-time 30 https://ai-arq.onrender.com/ 2>/dev/null || true)
             got=$(echo "$body" | sed -n 's/.*"commit"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
             if [ -n "$got" ] && [ "$got" = "$SHORT" ]; then
