@@ -45,6 +45,13 @@ _CONFISSOES = [
     "Tag 1 nas suítes. Área estimada com base na leitura proporcional da planta.",
     "Estimativa visual da área de bloquete indicada na planta (acesso veicular).",
     "Sem área na legenda. Estimativa baseada na leitura visual da região indicada na planta.",
+    # 24/10: a área de uma hachura repartida pela CONTAGEM de hachuras de cada padrão
+    "Fonte: layer de piso — área hachurada total 186,87 m² com 2 padrões (×36 e ×16). "
+    "Proporção estimada: 36/(36+16) × 186,87 = 129,3 m².",
+    "Fonte: layer de piso — proporção estimada: 16/(36+16) × 186,87 = 57,57 m². Especificação a confirmar.",
+    # 24/10: perímetro de uma área com proporção suposta
+    "Estimativa: perímetro do banheiro (2,94 m² ÷ proporção estimada ~1,5m×1,96m ≈ 6,92m) × pé-direito 2,60m.",
+    "perímetro da piscina ≈ 23,5 m (baseado em área 34,20 m² com proporção aproximada) × profundidade 1,40 m.",
 ]
 
 #: o que NÃO é confissão de área a olho
@@ -58,6 +65,10 @@ _INOCENTES = [
     # casa a régua E é negada: só a trava da negação a separa
     "Não é área estimada visualmente: soma dos rótulos dos ambientes.",
     "Padrão do piso estimado visualmente; área do quadro de acabamentos.",
+    # 24/10: proporção que não é chute, e a negada
+    "Área de cada padrão medida na própria hachura (proporção medida, não estimada por contagem).",
+    "Desconto de vãos na proporção do quadro de esquadrias.",
+    "Não há proporção estimada: a área de cada padrão saiu da hachura dele.",
     "",
     None,
 ]
@@ -96,6 +107,16 @@ def test_ligada_o_chute_confessado_nao_e_preservado(monkeypatch):
     assert _base._valor(piso) == 0, (
         "a área que a leitura diz ter estimado a olho seguiu com número: %r"
         % piso.observations)
+    assert getattr(h, "ultimo_a_olho", None) == 1
+
+
+def test_ligada_a_area_repartida_por_proporcao_nao_e_preservada(monkeypatch):
+    """24/10: "Proporção estimada: 36/(36+16) × 186,87" — a área de cada padrão
+    estava medida e a leitura repartiu a total pela contagem de hachuras."""
+    monkeypatch.setenv(_CHAVE, "1")
+    piso, h = _caso(_CONFISSOES[-4])
+    assert "36/(36+16)" in _CONFISSOES[-4]
+    assert _base._valor(piso) == 0, "a área repartida por proporção seguiu com número"
     assert getattr(h, "ultimo_a_olho", None) == 1
 
 

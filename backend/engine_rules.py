@@ -6035,6 +6035,12 @@ def afirma_quadro_de_quantitativos(texto) -> bool:
 #: "Estimativa visual da área…", "Estimativa baseada na leitura visual…".
 #: 🪤 A janela não atravessa ponto, barra nem ponto e vírgula: "piso …
 #: identificado visualmente. Área estimada para ambientes secos" NÃO confessa.
+#: 🩸 24/10: "Proporção estimada: 36/(36+16) × 186,87 = 129,3 m²" — a área de
+#: uma hachura repartida entre dois pisos pela CONTAGEM de hachuras de cada
+#: padrão (a de cada um estava medida) — e "2,94 m² ÷ proporção estimada
+#: ~1,5m×1,96m" (perímetro de uma área com proporção suposta). Não diz "área
+#: estimada", e passava. 📏 120 dias: "proporção estimada/aproximada" em 5
+#: linhas de m², as 5 chute (1 de cliente, já zerada; 4 de avaliação).
 _RE_AREA_ESTIMADA_A_OLHO = _re.compile(
     r"\b[áa]rea\b[^.|;]{0,40}?\b(?:estimad[ao]s?|calculad[ao]s?|aproximad[ao]s?)\b"
     r"[^.|;]{0,60}?(?:\bvisualmente\b"
@@ -6042,7 +6048,8 @@ _RE_AREA_ESTIMADA_A_OLHO = _re.compile(
     r"(?:visual|proporcional)\b"
     r"|\bproporcionalmente\b|\ba\s+olho\b|\bpor\s+propor[çc][ãa]o\b)"
     r"|\bestimativa\s+visual\s+d[ao]s?\s+[áa]rea"
-    r"|\bestimativa\s+baseada\s+n[ao]\s+leitura\s+visual\b",
+    r"|\bestimativa\s+baseada\s+n[ao]\s+leitura\s+visual\b"
+    r"|\bpropor[çc][ãa]o\s+(?:estimad|aproximad)[ao]\b",
     _re.IGNORECASE)
 #: "não é estimativa visual" é o CONTRÁRIO da confissão.
 _RE_NEGA_A_OLHO = _re.compile(r"\bn[ãa]o\b[^.|;]{0,15}$", _re.IGNORECASE)
