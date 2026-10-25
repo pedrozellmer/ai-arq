@@ -13488,7 +13488,13 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
               and _is_floor_surface(getattr(it, "description", ""))
               and not (_a_olho_liga and _confessa_a_olho(getattr(it, "observations", ""))
                        and (_a_olho_n := _a_olho_n + 1))
-              and not (_sem_base_liga and _confessa_sem_base(getattr(it, "observations", ""))
+              # 🩸 25/10 (ev3c2a63): lê o texto JÁ LIMPO. A IA escreve "Medido
+              # do desenho com escala 1:X lida do carimbo" (o prompt manda) e
+              # este ramo apaga a frase logo abaixo — lida crua, o "medid" dela
+              # contava como base e 13 "área estimada" seguiram preservadas.
+              and not (_sem_base_liga
+                       and _confessa_sem_base(_limpa_afirmacao_de_medida(
+                           _limpa_aviso_nao_medida(getattr(it, "observations", "") or "")))
                        and (_sem_base_n := _sem_base_n + 1))
               and ((_m_pr := _medida_da_propria_prancha(it, q)) is not None
                    or (not _exige_propria_prancha(it) and q <= 1.3 * _teto_m2))):

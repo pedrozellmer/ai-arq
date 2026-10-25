@@ -115,6 +115,29 @@ def test_CONTROLE_ligada_a_conta_sobre_medicao_segue_preservada(monkeypatch):
     assert getattr(h, "ultimo_sem_base", None) == 0
 
 
+#: 🩸 25/10 (ev3c2a63) — a frase que o PRÓPRIO prompt manda a IA escrever, e que
+#: o ramo apaga logo depois (`_limpa_afirmacao_de_medida`): não é base
+_FRASE_DA_IA = "Medido do desenho com escala 1:1000 lida do carimbo."
+
+
+@pytest.mark.parametrize("obs", [
+    "Tag ⑩ listada na legenda; ambiente não identificado. Área estimada. " + _FRASE_DA_IA,
+    "Área estimada para a sala de cinema. | Área NÃO medida — informe a área no upload.",
+])
+def test_ligada_a_frase_que_o_ramo_apaga_NAO_vira_base(monkeypatch, obs):
+    monkeypatch.setenv(_CHAVE, "1")
+    piso, h = _caso(obs)
+    assert _base._valor(piso) == 0, "a frase apagada logo depois contou como base"
+    assert getattr(h, "ultimo_sem_base", None) == 1
+
+
+def test_CONTROLE_ligada_base_de_verdade_junto_da_frase_da_ia_fica(monkeypatch):
+    monkeypatch.setenv(_CHAVE, "1")
+    piso, h = _caso("Área estimada a partir das cotas lidas na prancha. " + _FRASE_DA_IA)
+    assert _base._valor(piso) == 120.0
+    assert getattr(h, "ultimo_sem_base", None) == 0
+
+
 def test_a_avaliacao_liga_so_para_ela(monkeypatch):
     import main
     monkeypatch.delenv(_CHAVE, raising=False)
