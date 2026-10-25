@@ -6107,6 +6107,45 @@ def confessa_area_estimada_sem_base(observacao) -> bool:
     return False
 
 
+# 🔬 25/10/2026 — EM SOMBRA. As duas réguas acima só pegam o chute que a IA
+# CONFESSA. Medido em 120 dias (preservadas pelo "cabe na geometria", clientes):
+# 70 linhas / 19 projetos / 4.143 m² nem confessam nem citam base — à mão, 51
+# chute ("Confirmar ambientes com indicação ⑤", "2 lavabos × ~3 m²") e 19 com
+# base escrita de outro jeito ("9,61 + 9,25 + …", "Área declarada na planta").
+# 🪤 Testada em linhas que eu não tinha lido (avaliações), a 1ª versão acertou
+# 16 de 22 (73%): "Somatório das áreas: 9,61 + …" e "Prismas: 4,72 + 3,30 …"
+# eram base. Por isso NÃO tira número: o motor só anota o que tiraria
+# (`motor:sombra-area-sem-base`), e a chave AREA_SEM_BASE_NAO_PRESERVA nasce 0.
+_RE_BASE_DA_AREA_LARGA = _re.compile(
+    _RE_BASE_MEDIDA_CITADA.pattern
+    + r"|declarad|indicad[ao]s?\s+na\s+(?:planta|prancha)|expl[íi]cit|anotad"
+    r"|\blid[ao]s?\s+(?:d[ao]s?\b|diretamente|no\s+texto)|\bsoma(?:t[óo]rio|m)?\b"
+    r"|extra[íi]d|quadro\s+de\s+quantitativ|correspondente\s+a"
+    r"|\d+[,.]\d+\s*(?:m²|m2)?\s*\+\s*~?\d|=\s*[áa]rea|[áa]rea\s+total\s+d[eoa]s?\b"
+    # número com 2 casas em m², sem "~" na frente ("OFICINA 493.85m²", "4,40 m²")
+    r"|(?:^|[^~\d,.])\d+[,.]\d{2}\s*m(?:²|2)",
+    _re.IGNORECASE)
+#: frases NOSSAS que, lidas como base, salvariam o chute: as que dizem "medido"
+#: negando ("Estimativa: lido de PDF, não medido em geometria", "Área NÃO
+#: medida") e os avisos que falam em somar ("⚠ Este serviço aparece em 4
+#: pranchas … que somam", "Fundido de 5 entradas com a mesma quantidade")
+_RE_NOSSA_PROCEDENCIA = _re.compile(
+    r"Estimativa:\s*lido\s+de\s+PDF[^|]*|n[ãa]o\s+medid\w*"
+    r"|⚠\s*Este\s+servi[çc]o\s+aparece[^|]*|Fundido\s+de\s+\d+\s+entradas[^|]*",
+    _re.IGNORECASE)
+
+
+def area_sem_base_citada(observacao) -> bool:
+    """A observação da linha de área não cita DE ONDE veio o número?
+
+    Base = conta, área lida/declarada/anotada na planta, soma de ambientes,
+    "igual à" outra área, medição. Lê só o texto da leitura (corta a nossa
+    frase da honestidade e as nossas frases de procedência)."""
+    t = str(observacao or "").split(_MARCA_DA_HONESTIDADE, 1)[0]
+    t = _RE_NOSSA_PROCEDENCIA.sub(" ", t)
+    return not _RE_BASE_DA_AREA_LARGA.search(t)
+
+
 def e_linha_de_total(descricao) -> bool:
     """A linha se apresenta como TOTAL ("TOTAL GERAL", "— total", "subtotal")?"""
     return bool(_RE_LINHA_DE_TOTAL.search(str(descricao or "")))

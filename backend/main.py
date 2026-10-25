@@ -742,6 +742,8 @@ _STAGES_DIAGNOSTICO = frozenset({
     "motor:itens-removidos",
     "motor:densidade",
     "motor:revisao-concluida", "motor:fusao-revisao", "motor:honestidade-area",
+    # 25/10: SOMBRA — o que AREA_SEM_BASE_NAO_PRESERVA tiraria. Não decide nada.
+    "motor:sombra-area-sem-base",
     "motor:versao-anterior", "motor:pai-e-filho", "motor:download-regen",
     "motor:respostas-releitura", "motor:informou-depois",
     "motor:consolida-tipo",
@@ -10558,6 +10560,7 @@ _CHAVES_AVALIAVEIS = frozenset({
     "PERIMETRO_DE_TERRENO_NAO_E_PAREDE", "PINTURA_DE_PISO_NAO_TRAVA_PD",
     # 25/10: "área estimada" sem base medida citada não é preservada
     "AREA_ESTIMADA_SEM_BASE_NAO_PRESERVA",
+    "AREA_SEM_BASE_NAO_PRESERVA",
 })
 _CHAVES_DA_AVALIACAO: dict = {}        # job de avaliação → {chave: "0" | "1"}
 
@@ -12985,6 +12988,21 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
         _sem_base_liga = _os_sb.environ.get("AREA_ESTIMADA_SEM_BASE_NAO_PRESERVA", "0") == "1"
     from engine_rules import confessa_area_estimada_sem_base as _confessa_sem_base
     _sem_base_n = 0
+    # 🔬 25/10 — EM SOMBRA: o número preservado que nem confessa nem cita base
+    # (`engine_rules.area_sem_base_citada`, ~80% de precisão medida). Com a
+    # chave em 0 só ANOTA o que tiraria (`ultimo_sombra_sem_base`); nada muda.
+    try:
+        _sem_base_larga_liga = _chave_do_job(job_id, "AREA_SEM_BASE_NAO_PRESERVA") == "1"
+    except NameError:
+        import os as _os_sl
+        _sem_base_larga_liga = _os_sl.environ.get("AREA_SEM_BASE_NAO_PRESERVA", "0") == "1"
+    from engine_rules import area_sem_base_citada as _area_sem_base
+
+    def _sem_base_larga(_it) -> bool:
+        return _area_sem_base(_limpa_afirmacao_de_medida(
+            _limpa_aviso_nao_medida(getattr(_it, "observations", "") or "")))
+    _sem_base_larga_n = 0
+    _sombra_sem_base = []
     _medida_da_prancha = {}
     #: id(item) -> (arquivo, pagina, familia, obs_antes, qty_posta) — o passo 7
     #: preencheu, e o passo de vaga abaixo decide se isso se sustenta
@@ -13497,7 +13515,12 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
                            _limpa_aviso_nao_medida(getattr(it, "observations", "") or "")))
                        and (_sem_base_n := _sem_base_n + 1))
               and ((_m_pr := _medida_da_propria_prancha(it, q)) is not None
-                   or (not _exige_propria_prancha(it) and q <= 1.3 * _teto_m2))):
+                   or (not _exige_propria_prancha(it) and q <= 1.3 * _teto_m2))
+              and not (_sem_base_larga_liga and _sem_base_larga(it)
+                       and (_sem_base_larga_n := _sem_base_larga_n + 1))):
+            if not _sem_base_larga_liga and _sem_base_larga(it):
+                _sombra_sem_base.append(
+                    (round(q, 2), (getattr(it, "description", "") or "")[:60]))
             try:
                 it.confidence = Confidence("estimado")
             except Exception:
@@ -14003,6 +14026,8 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
     #: chave AREA_A_OLHO_NAO_PRESERVA=1, saíram do ramo "cabe na geometria"
     _apply_area_honesty.ultimo_a_olho = int(_a_olho_n)
     _apply_area_honesty.ultimo_sem_base = int(_sem_base_n)
+    _apply_area_honesty.ultimo_sem_base_larga = int(_sem_base_larga_n)
+    _apply_area_honesty.ultimo_sombra_sem_base = list(_sombra_sem_base)
     _apply_area_honesty.ultimo_lineares_zerados = lineares_zerados
     _apply_area_honesty.ultimo_resgatados = resgatados
     # 📏 18/09: SEM este número, `resgate_tardio=0` tem DUAS leituras que
@@ -21122,7 +21147,18 @@ bloco — só cite os que estão no inventário deste arquivo."""
                            # 21/10: área confessada a olho que saiu da
                            # preservação (só com AREA_A_OLHO_NAO_PRESERVA=1)
                            f"a_olho={getattr(_apply_area_honesty, 'ultimo_a_olho', 0)} "
-                           f"sem_base={getattr(_apply_area_honesty, 'ultimo_sem_base', 0)}",
+                           f"sem_base={getattr(_apply_area_honesty, 'ultimo_sem_base', 0)} "
+                           # 25/10: sem base nenhuma citada (AREA_SEM_BASE_NAO_PRESERVA=1)
+                           f"sem_base_larga={getattr(_apply_area_honesty, 'ultimo_sem_base_larga', 0)}",
+                           job_id)
+            # 🔬 25/10 — a sombra: o que AREA_SEM_BASE_NAO_PRESERVA tiraria se
+            # estivesse ligada. Só registro, pra ler a lista antes de decidir.
+            _sombra = getattr(_apply_area_honesty, "ultimo_sombra_sem_base", None) or []
+            if _sombra:
+                _log_error("motor:sombra-area-sem-base",
+                           f"{len(_sombra)} linha(s) preservada(s) sem base citada "
+                           f"({sum(q for q, _ in _sombra):.1f} m²): "
+                           + "; ".join(f"{q} m² {d}" for q, d in _sombra[:40]),
                            job_id)
         except Exception:
             pass
