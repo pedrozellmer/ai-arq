@@ -10556,6 +10556,8 @@ _CHAVES_AVALIAVEIS = frozenset({
     "AREA_A_OLHO_NAO_PRESERVA",
     # 23/10: perímetro de terreno não vira parede; pintura de piso não trava o PD
     "PERIMETRO_DE_TERRENO_NAO_E_PAREDE", "PINTURA_DE_PISO_NAO_TRAVA_PD",
+    # 25/10: "área estimada" sem base medida citada não é preservada
+    "AREA_ESTIMADA_SEM_BASE_NAO_PRESERVA",
 })
 _CHAVES_DA_AVALIACAO: dict = {}        # job de avaliação → {chave: "0" | "1"}
 
@@ -12974,6 +12976,15 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
         _a_olho_liga = _os_ao.environ.get("AREA_A_OLHO_NAO_PRESERVA", "0") == "1"
     from engine_rules import confessa_area_a_olho as _confessa_a_olho
     _a_olho_n = 0
+    # 25/10: "área estimada" SEM nenhuma base medida citada (ver
+    # `engine_rules.confessa_area_estimada_sem_base`). Chave própria, nasce 0.
+    try:
+        _sem_base_liga = _chave_do_job(job_id, "AREA_ESTIMADA_SEM_BASE_NAO_PRESERVA") == "1"
+    except NameError:
+        import os as _os_sb
+        _sem_base_liga = _os_sb.environ.get("AREA_ESTIMADA_SEM_BASE_NAO_PRESERVA", "0") == "1"
+    from engine_rules import confessa_area_estimada_sem_base as _confessa_sem_base
+    _sem_base_n = 0
     _medida_da_prancha = {}
     #: id(item) -> (arquivo, pagina, familia, obs_antes, qty_posta) — o passo 7
     #: preencheu, e o passo de vaga abaixo decide se isso se sustenta
@@ -13477,6 +13488,8 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
               and _is_floor_surface(getattr(it, "description", ""))
               and not (_a_olho_liga and _confessa_a_olho(getattr(it, "observations", ""))
                        and (_a_olho_n := _a_olho_n + 1))
+              and not (_sem_base_liga and _confessa_sem_base(getattr(it, "observations", ""))
+                       and (_sem_base_n := _sem_base_n + 1))
               and ((_m_pr := _medida_da_propria_prancha(it, q)) is not None
                    or (not _exige_propria_prancha(it) and q <= 1.3 * _teto_m2))):
             try:
@@ -13983,6 +13996,7 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
     #: 21/10: linhas de piso cuja leitura confessou a área a olho e que, com a
     #: chave AREA_A_OLHO_NAO_PRESERVA=1, saíram do ramo "cabe na geometria"
     _apply_area_honesty.ultimo_a_olho = int(_a_olho_n)
+    _apply_area_honesty.ultimo_sem_base = int(_sem_base_n)
     _apply_area_honesty.ultimo_lineares_zerados = lineares_zerados
     _apply_area_honesty.ultimo_resgatados = resgatados
     # 📏 18/09: SEM este número, `resgate_tardio=0` tem DUAS leituras que
@@ -21101,7 +21115,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
                            f"escritos_dup={getattr(_apply_area_honesty, 'ultimo_escritos_duplicados', 0)} "
                            # 21/10: área confessada a olho que saiu da
                            # preservação (só com AREA_A_OLHO_NAO_PRESERVA=1)
-                           f"a_olho={getattr(_apply_area_honesty, 'ultimo_a_olho', 0)}",
+                           f"a_olho={getattr(_apply_area_honesty, 'ultimo_a_olho', 0)} "
+                           f"sem_base={getattr(_apply_area_honesty, 'ultimo_sem_base', 0)}",
                            job_id)
         except Exception:
             pass

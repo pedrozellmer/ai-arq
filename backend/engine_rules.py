@@ -6068,6 +6068,45 @@ def confessa_area_a_olho(observacao) -> bool:
     return False
 
 
+# ── "ÁREA ESTIMADA" SEM BASE MEDIDA (25/10/2026) ────────────────────────────
+# 🩸 Avaliação ev4ed8f6 (AREA_A_OLHO ligada): dos chutes do 66e0811e passaram
+# "Porcelanato … 120 m² — área estimada; confirmar delimitação" e "… 80 m² —
+# Área estimada para ambientes com este revestimento". A régua de cima pede
+# visual/proporcional/a olho; aqui a leitura escreveu só "área estimada".
+# 📏 120 dias, preservadas pelo "cabe na geometria" em projetos de cliente: 118
+# linhas com "área estimada" que a régua de cima não pega. Metade cita a BASE
+# medida ("igual à área de piso medida (61,5 m²)", "com base nos ambientes
+# medidos geometricamente (117,8 m²)", "a partir das cotas lidas") — conta sobre
+# medição, fica. A outra metade não cita base nenhuma: 68 linhas em 14 projetos
+# (1.732 m²) — "plateia do auditório", "região cinza", "≈ 12 m × 5 m", "por
+# analogia", "por simetria", "ambientes com indicação ②". Lidas 22 dessas, ~18
+# chute e 3–4 derivado razoável que não citou a base com as palavras abaixo: o
+# erro vai pro lado seguro (a linha fica em branco, regra nº1).
+# 🔑 Lê só o TEXTO DA LEITURA: a frase que a própria honestidade escreve
+# ("Quantidade atribuída pela IA… que medimos nas pranchas") tem "medida" e
+# "geometria" e faria toda linha parecer ter base.
+_RE_AREA_ESTIMADA_SOZINHA = _re.compile(
+    r"\b[áa]rea\b[^.|;]{0,40}?\bestimad[ao]s?\b", _re.IGNORECASE)
+_RE_BASE_MEDIDA_CITADA = _re.compile(
+    r"medid|\bcotas?\b|vetoria|geom[ée]tric|\bigual\s+[àa]|\bmesma\s+(?:[áa]rea|proje)"
+    r"|r[óo]tulo|quadro\s+de\s+[áa]reas|tabela\s+de\s+ambientes|=\s*[0-9]",
+    _re.IGNORECASE)
+_MARCA_DA_HONESTIDADE = "Quantidade atribuída pela IA a esta linha"
+
+
+def confessa_area_estimada_sem_base(observacao) -> bool:
+    """A leitura diz "área estimada" e NÃO cita nenhuma base medida pra ela?
+    Só lê — quem decide é a honestidade, com AREA_ESTIMADA_SEM_BASE_NAO_PRESERVA=1."""
+    t = str(observacao or "").split(_MARCA_DA_HONESTIDADE, 1)[0]
+    if _RE_BASE_MEDIDA_CITADA.search(t):
+        return False
+    for m in _RE_AREA_ESTIMADA_SOZINHA.finditer(t):
+        if _RE_NEGA_A_OLHO.search(t[max(0, m.start() - 20):m.start()]):
+            continue
+        return True
+    return False
+
+
 def e_linha_de_total(descricao) -> bool:
     """A linha se apresenta como TOTAL ("TOTAL GERAL", "— total", "subtotal")?"""
     return bool(_RE_LINHA_DE_TOTAL.search(str(descricao or "")))
