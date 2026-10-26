@@ -43,6 +43,10 @@ _SEM_BASE = [
     "não medido em geometria — envie DWG/DXF pra medir",
     "Estimativa: cozinhas de ~7,69 m² × ~7 unidades visíveis.",
     "Legenda item 2: bloco intertravado. | Fundido de 2 entradas com a mesma quantidade (10,00 m²)",
+    # 🔬 26/10: a palavra de base só no PEDIDO de conferência
+    "Área estimada. Confirmar com quadro de áreas completo.",
+    "Estimativa baseada nos ambientes identificados. Confirmar com planta cotada do térreo.",
+    "Piso do salão; verificar a área medida no levantamento.",
     "",
     None,
 ]
@@ -62,6 +66,11 @@ _COM_BASE = [
     # cada uma só tem UMA forma de base (pega o mutante que a apagar)
     "Somatório das áreas dos ambientes com este código na legenda.",
     "Ambiente 'OFICINA 493.85m²' identificado na planta.",
+    # a base ANTES do pedido de conferência continua valendo
+    "Área conforme rótulo da planta (12,50 m²); confirmar acabamento com o memorial.",
+    "Medição validada por cotas na escala 1:50.",   # "validada" não é o verbo do pedido
+    # o corte do pedido para no fim da frase: a base da frase seguinte fica
+    "Confirmar acabamento com o memorial. Área conforme rótulo da planta (12,50 m²).",
     "⚠ NÃO SOME COM AS DE BAIXO: esta linha parece ser o TOTAL de 6 linha(s) "
     "da mesma disciplina, que somam 423.65 m².",
 ]

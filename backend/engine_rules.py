@@ -6133,6 +6133,11 @@ _RE_NOSSA_PROCEDENCIA = _re.compile(
     r"Estimativa:\s*lido\s+de\s+PDF[^|]*|n[ãa]o\s+medid\w*"
     r"|⚠\s*Este\s+servi[çc]o\s+aparece[^|]*|Fundido\s+de\s+\d+\s+entradas[^|]*",
     _re.IGNORECASE)
+#: 🔬 26/10 — "Área estimada. Confirmar com quadro de áreas." A palavra de base
+#: está num PEDIDO de conferência, não na fonte do número. Medido em 120 dias:
+#: 9 linhas / 4 projetos / 398 m² poupadas só por isso (umas 6 chute claro).
+_RE_PEDIDO_DE_CONFERENCIA = _re.compile(
+    r"\b(?:confirmar|conferir|verificar|validar)\b[^.|;]*", _re.IGNORECASE)
 
 
 def area_sem_base_citada(observacao) -> bool:
@@ -6140,9 +6145,11 @@ def area_sem_base_citada(observacao) -> bool:
 
     Base = conta, área lida/declarada/anotada na planta, soma de ambientes,
     "igual à" outra área, medição. Lê só o texto da leitura (corta a nossa
-    frase da honestidade e as nossas frases de procedência)."""
+    frase da honestidade, as nossas frases de procedência e os pedidos de
+    conferência — "confirmar com quadro de áreas" não é de onde veio)."""
     t = str(observacao or "").split(_MARCA_DA_HONESTIDADE, 1)[0]
     t = _RE_NOSSA_PROCEDENCIA.sub(" ", t)
+    t = _RE_PEDIDO_DE_CONFERENCIA.sub(" ", t)
     return not _RE_BASE_DA_AREA_LARGA.search(t)
 
 
