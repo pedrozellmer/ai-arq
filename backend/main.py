@@ -23498,7 +23498,11 @@ _RX_ESTRUT_NOME = None
 _RX_NEGACAO_ANTES = None
 #: 25/09: o CÓDIGO de disciplina em nome de prancha codificada ("…-EST-FUN-…").
 #: Sensível a maiúscula de propósito — ver `_nome_parece_estrutural`.
-_RX_CODIGO_EST = _re_escala.compile(r"(?:^|(?<=[-_ .]))EST(?=[-_ .]|$)")
+#: 🩸 27/10/2026 — e o código em INGLÊS, "STR": um cliente novo mandou
+#: "…-STR-EX-0021-TER-FOR-R07.dwg" (fôrmas do térreo) como arquitetura, o
+#: aviso calou e saíram 26 linhas, nenhuma medida. 📏 Storage inteiro: 1
+#: arquivo com "STR" entre separadores — este. Mesmo cuidado do "EST".
+_RX_CODIGO_EST = _re_escala.compile(r"(?:^|(?<=[-_ .]))(?:EST|STR)(?=[-_ .]|$)")
 
 
 def _nome_parece_estrutural(nome: str) -> bool:

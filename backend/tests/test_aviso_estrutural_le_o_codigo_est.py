@@ -29,6 +29,9 @@ import main as _m  # noqa: E402
     "OBRA EST P2-P7 (A1).pdf",
     "EST-CA-CLINICA-VT-VS.pdf",
     "RES_EST_61_FOR.DWG",
+    # 🩸 27/10: o código em inglês (fôrmas do térreo, enviado como arquitetura)
+    "A1-STR-EX-0021-TER-FOR-R07.dwg",
+    "OBRA_STR_PILARES.pdf",
 ])
 def test_o_codigo_EST_da_prancha_avisa(nome):
     assert _m._nome_parece_estrutural(nome), nome
@@ -43,6 +46,11 @@ def test_o_codigo_EST_da_prancha_avisa(nome):
     "casa-est-01.dwg",           # minúsculo: pode ser qualquer coisa
     "ARQ_SEM_EST_R01.pdf",       # a negação que já existia continua valendo
     "0653-ARQ-PE-001-R01.dwg",
+    # STR dentro de palavra, minúsculo ou negado não é o código
+    "PLANTA-STREET-VIEW.dwg",
+    "RESTRITO-R01.pdf",
+    "casa-str-01.dwg",
+    "ARQ_SEM_STR_R01.pdf",
 ])
 def test_CONTROLE_o_que_nao_e_o_codigo_nao_avisa(nome):
     assert not _m._nome_parece_estrutural(nome), nome
