@@ -1327,6 +1327,13 @@ def ask(job_id: str, question: str, max_iterations: int = 8,
 
     from llm_retry import call_with_retry
     for it in range(max_iterations):
+        # 🩸 27/10/2026 — o cliente aceitou a oferta do PRÓPRIO agente ("quer que
+        # eu busque o código SINAPI de cada item?" → "sim") e recebeu "Não
+        # consegui formular uma resposta após várias iterações": 27 ferramentas
+        # (um detalhe por item) e as 8 rodadas acabaram antes do texto. 📏 120 d:
+        # 1 de 31 conversas — esta. 🔑 Na ÚLTIMA rodada a ferramenta é proibida
+        # (`tool_choice: none`): o modelo responde com o que já juntou.
+        _ultima = {"tool_choice": {"type": "none"}} if it == max_iterations - 1 else {}
         try:
             resp = call_with_retry(
                 client,
@@ -1337,6 +1344,7 @@ def ask(job_id: str, question: str, max_iterations: int = 8,
                 system=_system,
                 tools=_ferramentas,
                 messages=messages,
+                **_ultima,
             )
         except Exception as e:
             err_msg = f"Erro na chamada Claude: {type(e).__name__}: {e}"
