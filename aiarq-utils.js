@@ -523,6 +523,19 @@
     acao: 'Não precisa fazer nada aqui: este projeto foi reenviado e a versão boa é a mais recente, que está no seu painel.',
   },
   {
+    // 🩸 27/10/2026 — o envio morreu antes do primeiro byte (dashboard.html,
+    // `xhr.onerror` com nada enviado). Não sabemos qual destas foi: os passos
+    // vão do que mais costuma ser ao que menos costuma, sem afirmar a causa.
+    quando: /caiu antes de o arquivo come[çc]ar a subir/i,
+    titulo: 'O que costuma resolver',
+    passos: [
+      'Se o arquivo está aberto no <b>AutoCAD</b> (ou em outro programa), feche e tente de novo',
+      'Se ele está numa pasta do <b>OneDrive, Google Drive ou Dropbox</b>, copie para a área de trabalho e envie de lá',
+      'Se está numa <b>pasta de rede</b> da empresa, copie também para a área de trabalho',
+      'Se nada disso se aplica, a conexão pode ter caído nessa hora: é só tentar de novo',
+    ],
+  },
+  {
     // 🪤 53 dos 74 erros do banco são ESTE — o servidor reiniciou no meio do
     // processamento. O desenho do cliente não tem defeito nenhum, e mandar
     // ele converter pra DXF é jogar a nossa falha no colo dele.

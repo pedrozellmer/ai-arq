@@ -4059,6 +4059,16 @@
       // grande (ex.: DXF de 30MB+, caso cliente-40 21/07) fazia a barra ficar travada
       // em 0% com fetch (fetch não reporta upload) — parecia travado mesmo vivo.
       // Agora "Enviando arquivos... 45%" sobe de verdade conforme os bytes sobem.
+      // 🩸 27/10/2026 — cliente novo apertou "Processar" e o envio morreu em 1 s:
+      // o servidor viu só o OPTIONS, nenhum byte do arquivo chegou, e a tela
+      // dizia "confira a conexão". Erro logo no começo, sem nada enviado, é o
+      // jeito de arquivo que o navegador não lê (aberto no AutoCAD, pasta de
+      // nuvem não baixada, pasta de rede) — ou queda de conexão naquele instante.
+      // 📏 90 d: 4 pessoas com `upload_erro` de rede, só 1 enviou depois. O
+      // registro passa a levar quanto saiu e em quanto tempo, pra medir.
+      let _bytesEnviados = 0;
+      const _t0Envio = Date.now();
+      const _bytesTotal = selectedFiles.reduce((s, f) => s + (Number(f && f.size) || 0), 0);
       const res = await new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.open('POST', `${window.API_UPLOAD_BASE}/api/process?${qs}`);  // upload CAD DIRETO (fora do CF, 450MB)
@@ -4066,6 +4076,7 @@
         xhr.timeout = 900000; // 15min — upload grande em conexão lenta não estoura
         xhr.upload.onprogress = (e) => {
           if (!e.lengthComputable) return;
+          _bytesEnviados = e.loaded;
           const pct = Math.round((e.loaded / e.total) * 100);
           progressBar.style.width = pct + '%';
           progressPercent.textContent = pct + '%';
@@ -4082,7 +4093,14 @@
         });
         // 🩸 06/09: falha de REDE era a única que não deixava rastro — e é a mais comum em obra e
         // no celular. Sem isto, quem apertou "Processar" e perdeu o sinal some do mapa.
-        xhr.onerror = () => { try { trackEvent('upload_erro', { type: 'rede' }); } catch (_) {} reject(new Error('Falha de rede no envio — confira a conexão e tente de novo.')); };
+        xhr.onerror = () => {
+          const _ms = Date.now() - _t0Envio;
+          try { trackEvent('upload_erro', { type: 'rede', bytes: _bytesEnviados, total: _bytesTotal, ms: _ms }); } catch (_) {}
+          // Nada saiu: a receita (aiarq-utils.js) mostra os passos do arquivo ilegível.
+          reject(new Error(_bytesEnviados === 0
+            ? 'O envio caiu antes de o arquivo começar a subir.'
+            : 'Falha de rede no envio — confira a conexão e tente de novo.'));
+        };
         xhr.ontimeout = () => { try { trackEvent('upload_erro', { type: 'timeout' }); } catch (_) {} reject(new Error('O envio demorou demais (arquivo muito grande ou conexão lenta).')); };
         xhr.send(formData);
       });
