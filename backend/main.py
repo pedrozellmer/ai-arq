@@ -35784,6 +35784,21 @@ async def track_event(payload: TrackPayload, request: Request):
                 continue
             if 0 <= _n <= 100000:
                 _meta[_k] = _n
+        # 27/10/2026 — `upload_erro` de rede passou a dizer quanto saiu, de
+        # quanto, e em quanto tempo (dashboard.html, envio que cai antes do
+        # primeiro byte). O teto de cima (100 mil) cortaria os três: o envio vai
+        # até 450 MB e o XHR espera até 15 min. Mesmo saneamento, teto próprio.
+        for _k, _teto in (("bytes", 2_000_000_000), ("total", 2_000_000_000),
+                          ("ms", 3_600_000)):
+            try:
+                _v = payload.meta.get(_k)
+                if _v is None or isinstance(_v, bool):
+                    continue
+                _n = int(_v)
+            except (TypeError, ValueError):
+                continue
+            if 0 <= _n <= _teto:
+                _meta[_k] = _n
         # 🚨 28/08/2026 — MAIS TRÊS CHAVES MORRENDO CALADAS, achadas um dia
         # depois de eu criar o guarda que deveria ter pegado isto. O guarda
         # tinha três pontos cegos de sintaxe e nenhum deles era o que eu

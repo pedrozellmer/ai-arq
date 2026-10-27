@@ -73,6 +73,21 @@ def test_CONTROLE_caiu_no_meio_segue_a_mensagem_de_conexao():
     assert _erros(tela)[0]["bytes"] == 500, _erros(tela)
 
 
+# ── o servidor GRAVA a medida (o /api/track descarta chave que não conhece) ────
+def test_o_track_grava_bytes_total_e_ms(monkeypatch):
+    import test_track_meta_allowlist as _trk
+    meta = _trk.meta_gravado({"type": "rede", "bytes": 0, "total": 450_000_000, "ms": 900_000},
+                             monkeypatch, event="upload_erro")
+    assert meta.get("bytes") == 0 and meta.get("total") == 450_000_000 and meta.get("ms") == 900_000, meta
+
+
+def test_CONTROLE_o_track_recusa_numero_absurdo_ou_bool(monkeypatch):
+    import test_track_meta_allowlist as _trk
+    meta = _trk.meta_gravado({"type": "rede", "bytes": True, "total": -5, "ms": 10 ** 12},
+                             monkeypatch, event="upload_erro")
+    assert "bytes" not in meta and "total" not in meta and "ms" not in meta, meta
+
+
 # ── a receita (o que a tela do painel mostra embaixo da mensagem) ──────────────
 @pytest.fixture(scope="module")
 def pagina():
