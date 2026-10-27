@@ -10561,6 +10561,7 @@ _CHAVES_AVALIAVEIS = frozenset({
     # 25/10: "área estimada" sem base medida citada não é preservada
     "AREA_ESTIMADA_SEM_BASE_NAO_PRESERVA",
     "AREA_SEM_BASE_NAO_PRESERVA",
+    "RECUPERACAO_NAO_REPETE_NUMERO",
 })
 _CHAVES_DA_AVALIACAO: dict = {}        # job de avaliação → {chave: "0" | "1"}
 
@@ -21339,6 +21340,31 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 _k = round(_m, 2)
                 _cita[_k] = _cita.get(_k, 0) + 1
 
+            # 🩸 26/10/2026 — job de cliente (DWG elétrico): o layer de
+            # eletroduto somava 364,01 m com DOIS diâmetros. A IA deu o total ao
+            # Ø50 e deixou o Ø25 zerado de propósito ("alocado ao item 15…
+            # preencher após separação"); este passo "recuperou" o Ø25 com o
+            # mesmo total — 728 m na planilha, e o cliente aprovou as duas.
+            # A trava de rateio acima só conta linhas ZERADAS: a gêmea que já
+            # tem o número fica de fora. 📏 120 d, clientes: 2 de 25
+            # recuperações repetiam o número de outra linha — as 2 erradas.
+            # 🔑 RECUPERACAO_NAO_REPETE_NUMERO=1 não preenche; com 0 só conta.
+            try:
+                _nao_repete_liga = _chave_do_job(job_id, "RECUPERACAO_NAO_REPETE_NUMERO") == "1"
+            except NameError:
+                import os as _os_rn
+                _nao_repete_liga = _os_rn.environ.get("RECUPERACAO_NAO_REPETE_NUMERO", "0") == "1"
+            from engine_rules import grandeza_da_unidade as _grandeza_rec
+            _ja_postos = set()
+            for _it in all_items:
+                try:
+                    _q0 = float(_it.quantity or 0)
+                except (TypeError, ValueError):
+                    continue
+                if _q0 > 0 and _grandeza_rec(_it.unit) == "comprimento":
+                    _ja_postos.add(round(_q0, 2))
+            _n_repetiria = 0
+
             for _it in all_items:
                 _fix = _corrigir_comprimento_medido(
                     _it.description, _it.unit, _it.quantity, _it.observations,
@@ -21360,6 +21386,15 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         "mais de um item — informe quanto cabe a esta linha."
                         + ((" | " + _it.observations) if _it.observations else ""))
                     continue
+                if "quantity" in _fix and round(_fix["quantity"], 2) in _ja_postos:
+                    _n_repetiria += 1
+                    if _nao_repete_liga:
+                        _n_ambiguo += 1
+                        _it.observations = (
+                            "⚠ MEDIÇÃO COMPARTILHADA: o total deste layer já está "
+                            "em outra linha — informe quanto cabe a esta."
+                            + ((" | " + _it.observations) if _it.observations else ""))
+                        continue
                 if "quantity" in _fix:
                     _it.quantity = _fix["quantity"]
                     _n_rec += 1
@@ -21393,7 +21428,10 @@ bloco — só cite os que estão no inventário deste arquivo."""
             # feedback_escrita_que_falha_calada: best-effort não pode ser mudo.
             _log_error("motor:comprimento",
                        f"varridos={len(all_items)} unidade_corrigida={_n_uni} "
-                       f"recuperados={_n_rec} ambiguos={_n_ambiguo}", job_id)
+                       f"recuperados={_n_rec} ambiguos={_n_ambiguo} "
+                       # 26/10: recuperação que repetiria o número de outra
+                       # linha (RECUPERACAO_NAO_REPETE_NUMERO; com 0, só conta)
+                       f"repetiria={_n_repetiria}", job_id)
         except Exception as _ecm:
             print(f"[comprimento] job={job_id}: checagem falhou: {_ecm}")
             _log_error("motor:comprimento", f"FALHOU: {_ecm}", job_id)
