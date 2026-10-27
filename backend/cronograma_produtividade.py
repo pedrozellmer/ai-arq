@@ -140,14 +140,42 @@ REFS_POR_FASE = {
         'equipe': 2,
         'm2': ('88489', 0.218, 'pintura látex 2 demãos em paredes'),
     },
+    # 26/10/2026 — ESQUADRIAS E ELÉTRICA: o mesmo defeito de 18/10, nas fases
+    # que tinham ficado de fora. Um coeficiente só por unidade, sem filtro.
+    # 📏 Nos 27 cronogramas da base (itens de hoje), a taxa de PORTA DE MADEIRA
+    # levava jogo de ferragem, janela de alumínio, porta de vidro pivotante e
+    # portão de metalon (1.596 Hh → 696 com o filtro); a de PONTO DE TOMADA
+    # levava quadro de distribuição, disjuntor, sensor, painel de LED e solda
+    # exotérmica, e a de ELETRODUTO CORRUGADO levava eletrocalha, eletroduto
+    # aparente e cabo UTP (Elétrica 2.430 Hh → 1.292).
+    #  🪤 Porta: o MATERIAL se procura no texto inteiro ("Porta P4 — alumínio
+    #    e vidro" diz o material depois do travessão), mas ferragem e janela só
+    #    no NOME — "Porta de madeira — com batente, marco e ferragens" é porta.
+    #    Porta sem material dito fica (é a maioria das "Porta P1 — a definir").
+    #  🪤 Tomada: o nome tem de COMEÇAR pelo ponto — "Quadro de Distribuição de
+    #    Luz e Tomadas" não é tomada.
+    #  🪤 Eletroduto: 91845 é o corrugado de 25 mm embutido. Aparente, aço,
+    #    PEAD enterrado e eletrocalha têm outras taxas — ficam fora, e
+    #    eletroduto sem o tipo dito também.
     'Esquadrias': {
         'equipe': 2,
-        'un': ('90822', 2.876, 'porta de madeira 80×210 completa'),
+        'un': ('90822', 2.876, 'porta de madeira 80×210 completa',
+               re.compile(r'^(?!.*\b(vidros?|temperado|blindex|box|aluminio|metalic[ao]s?|metalon'
+                          r'|ferro|aco|pvc|pivotante|garagem|gradil|corta.?fogo|enrolar)\b)'
+                          r'(?![^—(]*\b(ferrage\w*|fechaduras?|dobradic\w*|puxador\w*|macanetas?'
+                          r'|molas?|kits?|conjuntos?|barras?|janelas?|portao|portoes)\b)'
+                          r'[^—(]*\bportas?\b')),
     },
     'Instalações elétricas': {
         'equipe': 2,
-        'un': ('91998', 0.484, 'ponto de tomada 2P+T'),
-        'm': ('91845', 0.142, 'eletroduto corrugado 25 mm'),
+        'un': ('91998', 0.484, 'ponto de tomada 2P+T',
+               re.compile(r'^\W*((fornecimento|instalacao|execucao)[^—(]*?\bde\s+)?'
+                          r'(tomadas?|interruptor\w*|pontos?)\b')),
+        'm': ('91845', 0.142, 'eletroduto corrugado 25 mm',
+              re.compile(r'^(?!.*\b(aco|galvaniz\w*|pead|enterrad[ao]s?|subterrane[ao]s?'
+                         r'|eletrocalhas?|aparente|rigid[ao]s?)\b)'
+                         r'(?=.*\b(corrugad[ao]s?|flexivel|flexiveis|pvc|embutid[ao]s?)\b)'
+                         r'[^—(]*\b(eletrodutos?|conduites?)\b')),
     },
     'Iluminação': {
         'equipe': 2,
