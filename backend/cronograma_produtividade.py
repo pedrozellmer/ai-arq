@@ -68,6 +68,11 @@ def _refs_ar_condicionado():
 # (codigo SINAPI, Hh por unidade, descricao curta[, filtro da descrição])
 # Com filtro, só o item cuja descrição casa entra; numa lista vale a 1ª que
 # casar. Item que não casa com nenhuma fica fora da conta.
+#: o que mora na fase de Forros e não é forro: o NOME começa pelo serviço
+#: (septo, estrutura, pintura…) ou o forro é de tela/arame (sem composição)
+_NAO_E_FORRO = (r'^(?!\W*(septos?|estrutura|perfil\w*|tabica\w*|pintura|negativo|alcapao|alcapoes'
+                r'|cortineiro\w*|sanca\w*|tampa\w*)\b)(?![^—(]*\b(tela|arame)\b)')
+
 REFS_POR_FASE = {
     'Alvenaria': {
         'equipe': 3,
@@ -132,9 +137,36 @@ REFS_POR_FASE = {
              re.compile(r'^(?=[^—(]*\bvinilico\b)[^—(]*\breguas?\b')),
         ],
     },
+    # 27/10/2026 — FORROS: cada forro na taxa do MATERIAL que o nome diz.
+    # 📏 Nos 27 cronogramas da base, tudo ia na de placas de gesso (1,437):
+    # septo forro/laje (766 m²), estrutura metálica auxiliar (420 m², a área
+    # do forro contada de novo), pintura de forro e o drywall (1,091) — 6.446
+    # Hh; com o filtro, ~2.830. Hh da NOSSA base (insumos em H), 27/10:
+    # drywall 96110 1,091 · PVC 96111 0,697 · fibra mineral 104757 0,718 ·
+    # metálico 97557 0,731 · madeira pinus 96112 2,281 · placas 96109 1,437.
+    # Residencial quando há as duas (o cronograma não sabe a tipologia; a
+    # comercial fica 12–16% abaixo).
+    #  🔑 Decisão do Pedro (27/10): forro "tipo a definir" SEGUE na taxa de
+    #    placas, como era — sem material dito não há chute novo, e tirá-lo
+    #    deixava 5 de 9 cronogramas com a fase pela % do prazo.
+    #  🪤 Septo/estrutura/pintura saem só quando o nome COMEÇA por eles —
+    #    "Forro em gesso acartonado com massa corrida e pintura" é forro.
     'Forros': {
         'equipe': 2,
-        'm2': ('96109', 1.437, 'forro de placas de gesso'),
+        'm2': [
+            ('96110', 1.091, 'forro em drywall',
+             re.compile(_NAO_E_FORRO + r'[^—(]*\b(drywall|acartonado)\b')),
+            ('96111', 0.697, 'forro em réguas de PVC',
+             re.compile(_NAO_E_FORRO + r'[^—(]*\bpvc\b')),
+            ('104757', 0.718, 'forro em fibra mineral',
+             re.compile(_NAO_E_FORRO + r'[^—(]*\b(fibra mineral|mineral)\b')),
+            ('97557', 0.731, 'forro metálico',
+             re.compile(_NAO_E_FORRO + r'[^—(]*\b(metalic[oa]s?|aluminio|lambri)\b')),
+            ('96112', 2.281, 'forro em madeira pinus',
+             re.compile(_NAO_E_FORRO + r'[^—(]*\b(madeira|pinus)\b')),
+            ('96109', 1.437, 'forro de placas de gesso',
+             re.compile(_NAO_E_FORRO + r'[^—(]*\b(forros?|gesso)\b')),
+        ],
     },
     'Pintura': {
         'equipe': 2,
