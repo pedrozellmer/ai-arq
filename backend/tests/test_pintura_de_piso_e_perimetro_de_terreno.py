@@ -211,6 +211,13 @@ def test_motor_ligado_o_perimetro_fica_em_branco_com_o_motivo():
     assert logs and logs[0][0] == "motor:parede-do-terreno"
 
 
+def test_o_layer_citado_duas_vezes_sai_uma_so():
+    """26/10: o motivo saía "(layer CONTORNO, CONTORNO)" — ordem mantida, sem repetir."""
+    ns, logs = _roda_trecho(liga=True, lys=("CONTORNO", "MEDIDAS", "CONTORNO"))
+    assert ns["obs_raw"].startswith("⚠ FONTE = LIMITE DO TERRENO (layer CONTORNO, MEDIDAS)"), ns["obs_raw"]
+    assert "layers=CONTORNO, MEDIDAS " in logs[0][1], logs[0][1]
+
+
 def test_CONTROLE_motor_desligado_nao_muda_numero_mas_registra():
     ns, logs = _roda_trecho(liga=False)
     assert ns["qty"] == 522.6 and ns["obs_raw"] == "Fonte: layer CONTORNO."

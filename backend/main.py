@@ -17869,18 +17869,21 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                     MARCA_LIMITE_DO_TERRENO as _MARCA_TERRENO)
                                 if qty > 0 and _parede_do_terreno(
                                         item_data.get("discipline", ""), desc, _lys):
+                                    # 26/10: a linha cita o mesmo layer mais de uma
+                                    # vez — saía "(layer CONTORNO, CONTORNO)".
+                                    _lys_txt = ", ".join(dict.fromkeys(_lys))
                                     if _chave_do_job(job_id, "PERIMETRO_DE_TERRENO_NAO_E_PAREDE") == "1":
                                         qty = 0.0
                                         conf = "estimado"
                                         _rebaixado_pela_fonte = True
                                         obs_raw = (_MARCA_TERRENO + " (layer "
-                                                   + ", ".join(_lys) + ") — é o perímetro do "
+                                                   + _lys_txt + ") — é o perímetro do "
                                                    "lote/levantamento, não parede do edifício. "
                                                    "Quantidade em branco: confira no projeto. "
                                                    + obs_raw)
                                     _log_error("motor:parede-do-terreno",
                                                "layers=%s qtd=%s ligada=%s desc=%s" % (
-                                                   ",".join(_lys), qty,
+                                                   _lys_txt, qty,
                                                    _chave_do_job(job_id, "PERIMETRO_DE_TERRENO_NAO_E_PAREDE"),
                                                    str(desc)[:60]),
                                                job_id, severity="info")
