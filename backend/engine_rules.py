@@ -1110,8 +1110,9 @@ MARCA_RATEIO_POR_ETIQUETA = "⚠ RATEIO, NÃO MEDIDA"
 
 _ETIQUETA = r"(?:etiquetas?|r[óo]tulos?|tags?|textos?|ocorr[êe]ncias?)"
 _RE_RATEIO_POR_ETIQUETA = _re.compile(
-    # "Distribuição proporcional ao número de etiquetas", "proporcionalmente às 26 tags"
-    r"proporciona(?:l|lmente)\s+(?:ao|à|aos|às|por|pelo|pela)\s+(?:\d+\s+)?"
+    # "Distribuição proporcional ao número de etiquetas", "por número de rótulos"
+    # (🪤 "proporcionalmente às 26 tags … de 63 tags totais" cai na forma de baixo)
+    r"proporciona(?:l|lmente)\s+(?:ao|à|aos|às|por|pelo|pela)\s+"
     r"(?:n[úu]mero\s+de\s+|quantidade\s+de\s+|contagem\s+de\s+)?" + _ETIQUETA + r"\b"
     # "21 rótulos '25 mm' de 50 rótulos totais", "31 rótulos de 189 totais"
     r"|\b\d+\s+" + _ETIQUETA + r"\b[^.;|]{0,60}?\bde\s+\d+\s+(?:" + _ETIQUETA + r"\s+)?totais\b",
