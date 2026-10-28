@@ -1090,6 +1090,66 @@ def selo_apos_soma_que_nao_fecha(conf, obs, quantidade):
     return "estimado", aviso + t, True
 
 
+# ══════════════════════════════════════════════════════════════════════
+#  COMPRIMENTO RATEADO PELA PROPORÇÃO DE ETIQUETAS (28/10/2026)
+# ══════════════════════════════════════════════════════════════════════
+#: 🩸 27–28/10/2026 — dois projetos de hidráulica do mesmo cliente
+#: (c6e7f0db, 58892ba1): o layer P-PIPE tem TODOS os tubos juntos, e a leitura
+#: repartiu o total entre os diâmetros pela proporção das etiquetas ("31 de 188
+#: etiquetas → 31/188 × 2235 ≈ 368 m de Ø300"). Saiu laranja, com número — e o
+#: comprimento de um diâmetro não tem nada a ver com quantas vezes ele aparece
+#: escrito. É chute (regra dura nº1). 📏 120 d de cliente: 38 linhas em 3 jobs
+#: (o 3º é sprinkler: "21 rótulos '25 mm' de 50 rótulos totais × 103,59 m").
+#: 🔑 A linha certa já existe no acervo (17d6e1f2): diâmetro em branco, "não
+#: separável por diâmetro no layer", e o total do sistema numa linha só.
+#: 🪤 Só vale a confissão de que a QUANTIDADE DESTA linha é a fatia: "N rótulos
+#: … de M totais" ou "proporcional ao número de etiquetas". A linha do TOTAL que
+#: diz "as quantidades por diâmetro são estimativas proporcionais" fala das
+#: OUTRAS linhas — e não casa nenhuma das duas.
+MARCA_RATEIO_POR_ETIQUETA = "⚠ RATEIO, NÃO MEDIDA"
+
+_ETIQUETA = r"(?:etiquetas?|r[óo]tulos?|tags?|textos?|ocorr[êe]ncias?)"
+_RE_RATEIO_POR_ETIQUETA = _re.compile(
+    # "Distribuição proporcional ao número de etiquetas", "proporcionalmente às 26 tags"
+    r"proporciona(?:l|lmente)\s+(?:ao|à|aos|às|por|pelo|pela)\s+(?:\d+\s+)?"
+    r"(?:n[úu]mero\s+de\s+|quantidade\s+de\s+|contagem\s+de\s+)?" + _ETIQUETA + r"\b"
+    # "21 rótulos '25 mm' de 50 rótulos totais", "31 rótulos de 189 totais"
+    r"|\b\d+\s+" + _ETIQUETA + r"\b[^.;|]{0,60}?\bde\s+\d+\s+(?:" + _ETIQUETA + r"\s+)?totais\b",
+    _re.IGNORECASE)
+
+
+def comprimento_rateado_por_etiqueta(obs, unidade):
+    """True quando a linha é de COMPRIMENTO e a observação confessa que o número
+    dela é a fatia de um total repartido pela proporção de etiquetas/rótulos."""
+    if grandeza_da_unidade(unidade) != "comprimento":
+        return False
+    t = str(obs or "")
+    for m in _RE_RATEIO_POR_ETIQUETA.finditer(t):
+        if _RE_NEGACAO.search(t[:m.start()]):
+            continue
+        return True
+    return False
+
+
+def linha_apos_rateio_por_etiqueta(obs, unidade, quantidade):
+    """(quantidade, obs, achou) — a linha de comprimento rateada por etiqueta sai em
+    BRANCO, com o aviso e o número que a leitura tinha posto. Não toca linha sem
+    número, nem a que já carrega o aviso."""
+    t = str(obs or "")
+    try:
+        q = float(quantidade or 0)
+    except (TypeError, ValueError):
+        return quantidade, obs, False
+    if q <= 0 or MARCA_RATEIO_POR_ETIQUETA in t or not comprimento_rateado_por_etiqueta(t, unidade):
+        return quantidade, obs, False
+    aviso = ("%s — a leitura repartiu o total do layer entre as linhas pela proporção "
+             "de etiquetas e tinha posto %s %s aqui. O comprimento de um trecho não é "
+             "proporcional a quantas vezes ele aparece escrito, então a linha ficou em "
+             "branco: informe o comprimento deste trecho (o total do layer está na nota "
+             "abaixo). " % (MARCA_RATEIO_POR_ETIQUETA, _num_br(q), str(unidade or "").strip()))
+    return 0.0, aviso + t, True
+
+
 def num_br_para_float(bruto):
     """'12.642,38' → 12642.38. O parser pt-BR ÚNICO do motor.
 

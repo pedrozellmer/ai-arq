@@ -744,6 +744,8 @@ _STAGES_DIAGNOSTICO = frozenset({
     "motor:revisao-concluida", "motor:fusao-revisao", "motor:honestidade-area",
     # 25/10: SOMBRA — o que AREA_SEM_BASE_NAO_PRESERVA tiraria. Não decide nada.
     "motor:sombra-area-sem-base",
+    # 28/10: comprimento rateado por etiqueta (com a chave em 0, só a contagem)
+    "motor:rateio-por-etiqueta",
     "motor:versao-anterior", "motor:pai-e-filho", "motor:download-regen",
     "motor:respostas-releitura", "motor:informou-depois",
     "motor:consolida-tipo",
@@ -10562,6 +10564,8 @@ _CHAVES_AVALIAVEIS = frozenset({
     "AREA_ESTIMADA_SEM_BASE_NAO_PRESERVA",
     "AREA_SEM_BASE_NAO_PRESERVA",
     "RECUPERACAO_NAO_REPETE_NUMERO",
+    # 28/10: comprimento rateado pela proporção de etiquetas sai em branco
+    "RATEIO_POR_ETIQUETA_EM_BRANCO",
 })
 _CHAVES_DA_AVALIACAO: dict = {}        # job de avaliação → {chave: "0" | "1"}
 
@@ -21889,6 +21893,43 @@ bloco — só cite os que estão no inventário deste arquivo."""
                            f"linhas={len(all_items)} avisadas={_n_conta}", job_id, severity="info")
         except Exception as _ecn:
             _log_error("motor:conta-nao-fecha", f"FALHOU: {_ecn}", job_id)
+
+        # 🩸 28/10/2026 — COMPRIMENTO RATEADO PELA PROPORÇÃO DE ETIQUETAS: o total
+        # do layer repartido entre diâmetros por "31 de 188 etiquetas" é chute com
+        # número (`linha_apos_rateio_por_etiqueta`). Roda DEPOIS da recuperação de
+        # comprimento, que senão encheria a linha de novo com o total do layer.
+        # 🔑 RATEIO_POR_ETIQUETA_EM_BRANCO=1 deixa em branco; com 0 só conta.
+        try:
+            from engine_rules import linha_apos_rateio_por_etiqueta as _regra_rateio
+            try:
+                _rateio_liga = _chave_do_job(job_id, "RATEIO_POR_ETIQUETA_EM_BRANCO") == "1"
+            except NameError:
+                import os as _os_rt
+                _rateio_liga = _os_rt.environ.get("RATEIO_POR_ETIQUETA_EM_BRANCO", "0") == "1"
+            _n_rateio, _ex_rateio = 0, []
+            for _it in all_items:
+                _q_rt, _ob_rt, _achou_rt = _regra_rateio(
+                    str(getattr(_it, "observations", "") or ""),
+                    getattr(_it, "unit", ""), getattr(_it, "quantity", None))
+                if not _achou_rt:
+                    continue
+                _n_rateio += 1
+                if len(_ex_rateio) < 4:
+                    _ex_rateio.append(f"{(getattr(_it, 'description', '') or '')[:40]}={_it.quantity}")
+                if _rateio_liga:
+                    _it.quantity = _q_rt
+                    _it.observations = _ob_rt
+                    try:
+                        from models import Confidence as _CfRt
+                        _it.confidence = _CfRt("estimado")
+                    except Exception:
+                        pass
+            if _n_rateio:
+                _log_error("motor:rateio-por-etiqueta",
+                           f"linhas={_n_rateio} em_branco={_n_rateio if _rateio_liga else 0} "
+                           f"liga={int(_rateio_liga)} ex={_ex_rateio}", job_id, severity="info")
+        except Exception as _ert:
+            _log_error("motor:rateio-por-etiqueta", f"FALHOU: {_ert}", job_id)
 
         # ─────────────────────────────────────────────────────────────────
         # 🩸 SELO × AVISO DE REBAIXAMENTO NA MESMA LINHA (27/09/2026, estudo de
