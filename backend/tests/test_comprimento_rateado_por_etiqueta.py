@@ -95,7 +95,7 @@ def test_CONTROLE_linha_sem_numero_ou_ja_avisada_nao_muda():
 
 # ── o bloco do main.py, executado de verdade ──
 _INICIO = "        # 🩸 28/10/2026 — COMPRIMENTO RATEADO PELA PROPORÇÃO DE ETIQUETAS"
-_FIM = "        # ─────────────────────────────────────────────────────────────────\n        # 🩸 SELO × AVISO"
+_FIM = "        # 🩸 12/10/2026 — A SOMA ESCRITA TEM DE FECHAR"
 
 
 def _bloco():

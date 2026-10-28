@@ -21870,34 +21870,11 @@ bloco — só cite os que estão no inventário deste arquivo."""
         except Exception as _eaq:
             _log_error("motor:cozinhas-acima-do-quadro", f"FALHOU: {_eaq}", job_id)
 
-        # 🩸 12/10/2026 — A SOMA ESCRITA TEM DE FECHAR. A linha cuja quantidade é o
-        # total de uma soma que a própria observação escreve ("a + b + … = T") e
-        # cujas parcelas NÃO somam T ganha o aviso (`selo_apos_soma_que_nao_fecha`).
-        # Roda aqui, sobre TODAS as linhas (DXF, PDF, depois da consolidação) e
-        # antes da trava abaixo, que tira o selo de quem carrega a marca. Não
-        # mexe na quantidade.
-        try:
-            from engine_rules import selo_apos_soma_que_nao_fecha as _regra_conta
-            _n_conta = 0
-            for _it in all_items:
-                _cf = getattr(_it, "confidence", "")
-                _cf_s, _ob_s, _avisou = _regra_conta(
-                    str(getattr(_cf, "value", _cf) or ""),
-                    str(getattr(_it, "observations", "") or ""),
-                    getattr(_it, "quantity", None))
-                if _avisou:
-                    _it.observations = _ob_s
-                    _n_conta += 1
-            if _n_conta:
-                _log_error("motor:conta-nao-fecha",
-                           f"linhas={len(all_items)} avisadas={_n_conta}", job_id, severity="info")
-        except Exception as _ecn:
-            _log_error("motor:conta-nao-fecha", f"FALHOU: {_ecn}", job_id)
-
         # 🩸 28/10/2026 — COMPRIMENTO RATEADO PELA PROPORÇÃO DE ETIQUETAS: o total
         # do layer repartido entre diâmetros por "31 de 188 etiquetas" é chute com
         # número (`linha_apos_rateio_por_etiqueta`). Roda DEPOIS da recuperação de
-        # comprimento, que senão encheria a linha de novo com o total do layer.
+        # comprimento, que senão encheria a linha de novo com o total do layer, e
+        # ANTES da régua da soma: ali nada troca quantidade (guarda da soma).
         # 🔑 RATEIO_POR_ETIQUETA_EM_BRANCO=1 deixa em branco; com 0 só conta.
         try:
             from engine_rules import linha_apos_rateio_por_etiqueta as _regra_rateio
@@ -21930,6 +21907,30 @@ bloco — só cite os que estão no inventário deste arquivo."""
                            f"liga={int(_rateio_liga)} ex={_ex_rateio}", job_id, severity="info")
         except Exception as _ert:
             _log_error("motor:rateio-por-etiqueta", f"FALHOU: {_ert}", job_id)
+
+        # 🩸 12/10/2026 — A SOMA ESCRITA TEM DE FECHAR. A linha cuja quantidade é o
+        # total de uma soma que a própria observação escreve ("a + b + … = T") e
+        # cujas parcelas NÃO somam T ganha o aviso (`selo_apos_soma_que_nao_fecha`).
+        # Roda aqui, sobre TODAS as linhas (DXF, PDF, depois da consolidação) e
+        # antes da trava abaixo, que tira o selo de quem carrega a marca. Não
+        # mexe na quantidade.
+        try:
+            from engine_rules import selo_apos_soma_que_nao_fecha as _regra_conta
+            _n_conta = 0
+            for _it in all_items:
+                _cf = getattr(_it, "confidence", "")
+                _cf_s, _ob_s, _avisou = _regra_conta(
+                    str(getattr(_cf, "value", _cf) or ""),
+                    str(getattr(_it, "observations", "") or ""),
+                    getattr(_it, "quantity", None))
+                if _avisou:
+                    _it.observations = _ob_s
+                    _n_conta += 1
+            if _n_conta:
+                _log_error("motor:conta-nao-fecha",
+                           f"linhas={len(all_items)} avisadas={_n_conta}", job_id, severity="info")
+        except Exception as _ecn:
+            _log_error("motor:conta-nao-fecha", f"FALHOU: {_ecn}", job_id)
 
         # ─────────────────────────────────────────────────────────────────
         # 🩸 SELO × AVISO DE REBAIXAMENTO NA MESMA LINHA (27/09/2026, estudo de
