@@ -21443,6 +21443,44 @@ bloco — só cite os que estão no inventário deste arquivo."""
             print(f"[comprimento] job={job_id}: checagem falhou: {_ecm}")
             _log_error("motor:comprimento", f"FALHOU: {_ecm}", job_id)
 
+        # 🩸 28/10/2026 — COMPRIMENTO RATEADO PELA PROPORÇÃO DE ETIQUETAS: o total
+        # do layer repartido entre diâmetros por "31 de 188 etiquetas" é chute com
+        # número (`linha_apos_rateio_por_etiqueta`). Roda DEPOIS da recuperação de
+        # comprimento, que senão encheria a linha de novo com o total do layer, e
+        # ANTES da fila de quem rebaixa selo: lá nada troca quantidade (guardas).
+        # 🔑 RATEIO_POR_ETIQUETA_EM_BRANCO=1 deixa em branco; com 0 só conta.
+        try:
+            from engine_rules import linha_apos_rateio_por_etiqueta as _regra_rateio
+            try:
+                _rateio_liga = _chave_do_job(job_id, "RATEIO_POR_ETIQUETA_EM_BRANCO") == "1"
+            except NameError:
+                import os as _os_rt
+                _rateio_liga = _os_rt.environ.get("RATEIO_POR_ETIQUETA_EM_BRANCO", "0") == "1"
+            _n_rateio, _ex_rateio = 0, []
+            for _it in all_items:
+                _q_rt, _ob_rt, _achou_rt = _regra_rateio(
+                    str(getattr(_it, "observations", "") or ""),
+                    getattr(_it, "unit", ""), getattr(_it, "quantity", None))
+                if not _achou_rt:
+                    continue
+                _n_rateio += 1
+                if len(_ex_rateio) < 4:
+                    _ex_rateio.append(f"{(getattr(_it, 'description', '') or '')[:40]}={_it.quantity}")
+                if _rateio_liga:
+                    _it.quantity = _q_rt
+                    _it.observations = _ob_rt
+                    try:
+                        from models import Confidence as _CfRt
+                        _it.confidence = _CfRt("estimado")
+                    except Exception:
+                        pass
+            if _n_rateio:
+                _log_error("motor:rateio-por-etiqueta",
+                           f"linhas={_n_rateio} em_branco={_n_rateio if _rateio_liga else 0} "
+                           f"liga={int(_rateio_liga)} ex={_ex_rateio}", job_id, severity="info")
+        except Exception as _ert:
+            _log_error("motor:rateio-por-etiqueta", f"FALHOU: {_ert}", job_id)
+
         for _fld, _reads in _area_readings.items():
             if len(set(_reads)) > 1:
                 print(f"[area-consensus] {_fld}: leituras={_reads} → "
@@ -21869,44 +21907,6 @@ bloco — só cite os que estão no inventário deste arquivo."""
                            f"linhas_marcadas={_marcadas}", job_id, severity="info")
         except Exception as _eaq:
             _log_error("motor:cozinhas-acima-do-quadro", f"FALHOU: {_eaq}", job_id)
-
-        # 🩸 28/10/2026 — COMPRIMENTO RATEADO PELA PROPORÇÃO DE ETIQUETAS: o total
-        # do layer repartido entre diâmetros por "31 de 188 etiquetas" é chute com
-        # número (`linha_apos_rateio_por_etiqueta`). Roda DEPOIS da recuperação de
-        # comprimento, que senão encheria a linha de novo com o total do layer, e
-        # ANTES da régua da soma: ali nada troca quantidade (guarda da soma).
-        # 🔑 RATEIO_POR_ETIQUETA_EM_BRANCO=1 deixa em branco; com 0 só conta.
-        try:
-            from engine_rules import linha_apos_rateio_por_etiqueta as _regra_rateio
-            try:
-                _rateio_liga = _chave_do_job(job_id, "RATEIO_POR_ETIQUETA_EM_BRANCO") == "1"
-            except NameError:
-                import os as _os_rt
-                _rateio_liga = _os_rt.environ.get("RATEIO_POR_ETIQUETA_EM_BRANCO", "0") == "1"
-            _n_rateio, _ex_rateio = 0, []
-            for _it in all_items:
-                _q_rt, _ob_rt, _achou_rt = _regra_rateio(
-                    str(getattr(_it, "observations", "") or ""),
-                    getattr(_it, "unit", ""), getattr(_it, "quantity", None))
-                if not _achou_rt:
-                    continue
-                _n_rateio += 1
-                if len(_ex_rateio) < 4:
-                    _ex_rateio.append(f"{(getattr(_it, 'description', '') or '')[:40]}={_it.quantity}")
-                if _rateio_liga:
-                    _it.quantity = _q_rt
-                    _it.observations = _ob_rt
-                    try:
-                        from models import Confidence as _CfRt
-                        _it.confidence = _CfRt("estimado")
-                    except Exception:
-                        pass
-            if _n_rateio:
-                _log_error("motor:rateio-por-etiqueta",
-                           f"linhas={_n_rateio} em_branco={_n_rateio if _rateio_liga else 0} "
-                           f"liga={int(_rateio_liga)} ex={_ex_rateio}", job_id, severity="info")
-        except Exception as _ert:
-            _log_error("motor:rateio-por-etiqueta", f"FALHOU: {_ert}", job_id)
 
         # 🩸 12/10/2026 — A SOMA ESCRITA TEM DE FECHAR. A linha cuja quantidade é o
         # total de uma soma que a própria observação escreve ("a + b + … = T") e

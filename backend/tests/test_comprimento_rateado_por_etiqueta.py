@@ -95,7 +95,7 @@ def test_CONTROLE_linha_sem_numero_ou_ja_avisada_nao_muda():
 
 # ── o bloco do main.py, executado de verdade ──
 _INICIO = "        # 🩸 28/10/2026 — COMPRIMENTO RATEADO PELA PROPORÇÃO DE ETIQUETAS"
-_FIM = "        # 🩸 12/10/2026 — A SOMA ESCRITA TEM DE FECHAR"
+_FIM = "        for _fld, _reads in _area_readings.items():"
 
 
 def _bloco():
@@ -141,6 +141,8 @@ def test_roda_depois_da_recuperacao_de_comprimento():
     src, i, _ = _bloco()
     rec = src.index('_chave_do_job(job_id, "RECUPERACAO_NAO_REPETE_NUMERO")')
     assert rec < i
+    # …e ANTES da fila de quem rebaixa selo, onde os guardas proíbem trocar quantidade
+    assert i < src.index("from engine_rules import numero_declarado_parcial")
 
 
 def test_a_chave_e_avaliavel_e_o_log_e_diagnostico():
