@@ -416,7 +416,7 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
     # Áreas aparecem na seção PREMISSAS (se extraídas) — não duplicar no subtítulo
     ws.cell(row=2, column=1, value=' | '.join(info_parts) if info_parts else 'Quantitativos de projeto').font = F_N
     ws.merge_cells('A3:I3')
-    ws.cell(row=3, column=1, value=f'Cada item traz na coluna OBSERVAÇÕES um selo de status: "{SELO_MEDIDO}" (confiável) ou "{SELO_ESTIMADO}". A cor é só reforço — fundo BRANCO = medido · LARANJA = estimado · CINZA = metadado · ROXO = custo indireto/gestão. Coluna AMARELA = preencher preço. Itens ⚠ ESTIMADO e os roxos exigem revisão antes de fechar o orçamento.').font = F_NOTE
+    ws.cell(row=3, column=1, value=f'Cada item traz na coluna OBSERVAÇÕES um selo de status: "{SELO_MEDIDO}" (saiu do desenho) ou "{SELO_ESTIMADO}". A cor é só reforço — fundo BRANCO = medido · LARANJA = estimado · CINZA = metadado · ROXO = custo indireto/gestão. Coluna AMARELA = preencher preço. Itens ⚠ ESTIMADO e os roxos exigem revisão antes de fechar o orçamento.').font = F_NOTE
 
     ro = 5
     hdrs = ['ITEM', 'DESCRIÇÃO DO SERVIÇO', 'UN', 'QTDE', 'MAT (R$)', 'M.O. (R$)', 'TOTAL (R$)', 'OBSERVAÇÕES', 'ORIGEM DA MEDIÇÃO', 'ESPECIFICAÇÃO', 'REF.']
@@ -987,7 +987,7 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
         'T=tributos SOBRE FATURAMENTO (PIS+COFINS+ISS, e CPRB quando aplicável). IRPJ e CSLL '
         'não entram no BDI — o TCU veda, por incidirem sobre o lucro. O mesmo acórdão traz '
         'faixa de 20,34% a 25% para construção de edifícios em obra pública.',
-        '4. Itens em BRANCO: quantidade medida/contada diretamente do arquivo (bloco, hachura, linha). Confiável pra aprovar direto.',
+        '4. Itens em BRANCO: quantidade medida/contada diretamente do arquivo (bloco, hachura, linha). O selo diz de onde veio o número; a conferência final é sua.',
         '5. Itens em LARANJA: quantidade sugerida pela IA sem medição direta — SEMPRE confirmar antes de orçar.',
         '6. Itens em CINZA (Premissas): metadados do projeto extraídos do arquivo — revisar no original.',
         '7. Itens em ROXO (Sugestões): checklist de custos indiretos típicos — preencher quantidade conforme o projeto.',
