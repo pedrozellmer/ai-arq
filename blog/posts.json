@@ -2883,6 +2883,181 @@
           "description": "Salvar como → formato DXF em \"Arquivos do tipo\"."
         }
       ]
+    },
+    {
+      "slug": "conferir-dwg-dxf-antes-de-levantar-quantitativo",
+      "title": "Antes de levantar o quantitativo: 10 conferências no DWG e no DXF",
+      "description": "Antes de medir um DWG ou DXF, confira unidade, revisão, referências, camadas, blocos e cotas. As 10 conferências, com o comando de cada uma e a fonte.",
+      "keywords": "conferir dwg antes do quantitativo, levantamento de quantitativos dwg, unidade do desenho autocad, insunits autocad, escala dwg quantitativo, referência externa não encontrada, camada desligada autocad, polilinha aberta área, cota digitada autocad",
+      "category": "Como Ler Projetos",
+      "publish_date": "2026-11-29",
+      "intro": "Antes de levantar o quantitativo de um DWG, vale olhar o arquivo. Unidade errada, revisão antiga ou camada desligada não dão aviso: a planilha sai com número limpo e conta errada. Este guia junta 10 conferências, com o comando de cada uma e a fonte. Levam poucos minutos e servem com ou sem o AI.arq.",
+      "sections": [
+        {
+          "h2": "Por que conferir o arquivo antes de medir",
+          "body": "O erro de arquivo é o mais difícil de achar depois, porque ele não parece erro. Uma parede de 12 m num arquivo em metro, lida como centímetro, vira 0,12 m. Uma sala de 52 m² vira 52 cm². Ninguém sente falta dessas linhas: elas somem dentro do total.\n\nE não é caso raro. Em outubro, em 41 dos 83 projetos com DWG ou DXF que a gente leu, a unidade gravada no arquivo estava em branco ou não parecia bater com o desenho.\n\nAs conferências abaixo seguem a ordem de um levantamento: primeiro o arquivo, depois a medida, depois o que pode estar escondido. Quem quiser só a lista encontra um resumo no fim, em forma de mensagem pronta pra mandar a quem desenha."
+        },
+        {
+          "h2": "1 e 2. É a revisão certa, da etapa certa?",
+          "body": "O nome do arquivo não diz qual versão vale. Quem já recebeu uma pasta com PROJETO_FINAL_v3_revisado_2.dwg sabe disso. Quem diz é o carimbo: revisão e data.\n\n- Confira a revisão e a data em cada prancha.\n- Peça a lista de folhas com a revisão de cada uma.\n- Pergunte por escrito se aquela é a versão que vai pra obra.\n\nNo mesmo carimbo está a etapa do projeto, que muda o que a planilha pode prometer. A Lei 14.133/2021 separa as três: o anteprojeto reúne os subsídios pro projeto básico, o projeto básico define e dimensiona a obra, e o projeto executivo detalha o necessário pra executar a obra completa.\n\nNa obra particular vale a mesma ideia. Levantar de anteprojeto é levantar o que ainda vai mudar. Não é errado, desde que a planilha diga de onde saiu. Escreva a etapa e a revisão no topo do levantamento."
+        },
+        {
+          "h2": "3. As referências externas vieram junto?",
+          "body": "Muito projeto é montado com referência externa (xref): um arquivo mostra o desenho de outro. No computador de quem desenhou, tudo aparece. Enviado sozinho, o arquivo abre com aviso de referência não encontrada e, no lugar do desenho, só o caminho do arquivo.\n\n- Digite _XREF e veja se alguma referência aparece como não encontrada.\n- Peça o pacote completo. O comando _ETRANSMIT reúne o desenho, as referências e as fontes num só envio.\n\nSe o arquivo vier do Revit ou do AutoCAD Architecture, o caminho de exportação também pesa. O passo a passo está em <a href=\"/blog/posts/exportar-revit-autocad-para-dwg-dxf.html\">como exportar do Revit e do AutoCAD pra DWG ou DXF</a>."
+        },
+        {
+          "h2": "4. A unidade está provada?",
+          "body": "Todo DWG e DXF guarda a própria unidade num campo chamado INSUNITS. Os valores mais comuns:\n\n- 6: metro\n- 5: centímetro\n- 4: milímetro\n- 1: polegada\n- 0: sem unidade\n\nSó que campo preenchido não é prova. Se ninguém mexeu, o valor vem do modelo em que o desenho nasceu: 4 no métrico, 1 no imperial. Um desenho feito em metro pode dizer 4. E corrigir o campo muda a declaração, não redimensiona o desenho.\n\nA prova vem do desenho. Na aba Modelo, faça três medidas com _DIST:\n\n- **A porta.** O vão livre mínimo da NBR 9050 é 0,80 m, e porta de passagem costuma andar por aí. Perto de 0,80 é metro, perto de 80 é centímetro, perto de 800 é milímetro.\n- **Uma cota corrida.** De ponta a ponta, comparando com o número escrito.\n- **Um ambiente.** Sala de 12 m² que dá 120.000 não é sala.\n\nUma medida só não basta: a porta pode ser bloco copiado de outro arquivo, com outro tamanho. Quando as três batem, pode medir."
+        },
+        {
+          "h2": "5. Tem obra escondida nas camadas?",
+          "body": "Camada desligada ou congelada não é exibida nem plotada. Então o que está nela não aparece na tela nem no PDF. E a contagem do AutoCAD (COUNT, do AutoCAD 2022 em diante) só enxerga o que está visível no model space.\n\nO resultado é item que existe no projeto e vale zero no levantamento. Em obra pública, serviço omitido costuma exigir termo de aditamento. Na particular, é a conversa difícil no meio da obra.\n\nAbra a lista de camadas com _LAYER e pergunte a cada uma escondida: é obra ou rascunho? Não ligue tudo no escuro, porque camada escondida também guarda estudo velho."
+        },
+        {
+          "h2": "6. Os blocos têm o tamanho certo?",
+          "body": "Bloco copiado traz o tamanho do outro projeto. O AutoCAD usa o INSUNITS pra ajustar a escala do bloco inserido e, com o campo em branco ou errado, a peça pode entrar grande ou pequena demais. Na contagem, ela soma 1 do mesmo jeito.\n\nPegue uma peça de cada tipo e meça com _DIST na aba Modelo. Mesmo bloco, mesmo tamanho? Pode contar. Tamanho estranho? Anote a peça e a prancha.\n\nA contagem também tem pontos cegos: bloco dentro de referência externa, texto e hachura ficam de fora do COUNT. Os detalhes estão em <a href=\"/blog/posts/medir-area-e-contar-blocos-no-autocad.html\">como medir área e contar blocos no AutoCAD</a>."
+        },
+        {
+          "h2": "7. O contorno fecha?",
+          "body": "Contorno aberto também dá número, e é isso que torna o erro difícil de ver. No comando AREA, a polilinha aberta devolve a área como se houvesse uma linha do último ponto ao primeiro. No perímetro, essa linha é ignorada. Os dois números do mesmo comando descrevem contornos diferentes.\n\nPra fechar, use _PEDIT e a opção Fechar, e confira se o trecho novo segue a parede. Se o ambiente já está todo fechado por outras linhas, o comando LIMITE (_BOUNDARY) cria o contorno a partir de um clique dentro dele. Com brecha, ele não acha o contorno."
+        },
+        {
+          "h2": "8. Toda sigla está na legenda?",
+          "body": "Na planta está escrito PS-03. Na legenda, não. Isso ainda não é linha de planilha.\n\n- Liste todas as siglas da planta.\n- Procure cada uma na legenda da própria prancha.\n- Veja se a sigla quer dizer a mesma coisa nas outras pranchas.\n- O que sobrar vai numa lista só pro projetista.\n\nSigla adivinhada vira compra errada."
+        },
+        {
+          "h2": "9. A cota bate com o desenho?",
+          "body": "A cota diz 3,00, o desenho mede 2,85, e os dois estão no mesmo arquivo. No AutoCAD, a cota mostra por padrão a medida do desenho, que aparece entre colchetes angulares (< >) no editor. Quem apaga os colchetes e digita outro número fica com um texto: a linha muda e o número não acompanha.\n\n- Some as cotas parciais e compare com a total.\n- Dê _DIST entre os mesmos dois pontos da cota.\n\nÀs vezes o escrito está certo e o desenho ficou pra trás. Às vezes é o contrário. Anote os dois, com a prancha. O que não dá é usar um número sem registrar o outro."
+        },
+        {
+          "h2": "10. Tem coisa perdida fora da folha?",
+          "body": "O model space não tem borda. Estudo descartado e cópia de outra obra ficam lá, fora de qualquer folha, e não aparecem na impressão. Quem conta pelo arquivo vê. Quem olha a prancha, não.\n\nNa aba Modelo, digite _ZOOM e depois _E. Essa vista mostra tudo o que existe no desenho, inclusive camada desligada; só a congelada fica de fora. Se a planta virar um pontinho, tem coisa perdida longe dela."
+        },
+        {
+          "h2": "E quando só existe PDF?",
+          "body": "No PDF não há campo pra consultar: só existe o que foi impresso. A escala vem do carimbo, e carimbo é declaração, não prova.\n\nO caso clássico é a prancha A1 exportada em A3. Ao imprimir da aba Modelo, o padrão é ajustar ao papel, que redimensiona a impressão. O carimbo é texto e continua dizendo 1:50. Quem mede esse PDF com a escala do carimbo leva o comprimento pela metade e a área pra um quarto: 20 m² viram 5 m².\n\n- O formato da folha do PDF é o do carimbo?\n- Tem barra de escala? Meça.\n- Uma cota confere? Se a de 3,00 mede 1,50, a folha foi reduzida.\n\nQuando existe o CAD, peça o CAD."
+        },
+        {
+          "h2": "Anote o que você conferiu",
+          "body": "Toda conferência vale mais escrita. O TCU pede memória de cálculo das quantidades em suas orientações para planilhas de obras públicas, e o hábito serve pra qualquer obra: anote a unidade, como você a provou, a escala usada, a revisão e o que ficou em dúvida. Quando o número for questionado, a resposta já existe."
+        },
+        {
+          "h2": "Mensagem pronta pra mandar a quem desenha",
+          "body": "Boa parte disso se resolve com cinco perguntas antes de começar:\n\n- Essa é a última revisão?\n- O arquivo está em metro, centímetro ou milímetro?\n- Tem referência externa? Se tiver, manda junto.\n- Tem camada desligada com coisa que é obra?\n- Alguma cota foi digitada à mão?"
+        },
+        {
+          "h2": "Onde o AI.arq entra",
+          "body": "As conferências continuam sendo suas. O AI.arq lê o DWG ou o DXF e devolve a planilha com a origem de cada linha: ✓ MEDIDO do CAD ou ⚠ ESTIMADO — revisar. Se a escala do arquivo não fica provada, aparece o aviso ⚠ ESCALA SUSPEITA, e metro, m² e m³ das pranchas afetadas saem sem o selo.\n\nO selo diz de onde veio o número, não se ele está certo: se o desenho tem um erro, a medida carrega esse erro junto. Por isso toda planilha precisa da revisão de arquiteto ou engenheiro habilitado. Pra ver como isso aparece numa planilha, abra o <a href=\"/exemplo.html\" data-track=\"post-exemplo\">exemplo de um projeto fictício</a>, sem cadastro."
+        }
+      ],
+      "cta": "Conferiu o arquivo? Sobe o DWG ou DXF no AI.arq e receba a planilha de quantitativos por disciplina, com o que veio MEDIDO da geometria separado do que é estimativa. Grátis e ilimitado durante o beta, sem cartão.",
+      "sources": [
+        {
+          "type": "official",
+          "title": "INSUNITS (variável de sistema) — AutoCAD 2025",
+          "url": "https://help.autodesk.com/cloudhelp/2025/ENU/AutoCAD-Core/files/GUID-A58A87BB-482B-4042-A00A-EEF55A2B4FD8.htm",
+          "publisher": "Autodesk",
+          "description": "Valores da unidade, valor inicial e uso na escala de blocos, imagens e referências inseridas."
+        },
+        {
+          "type": "official",
+          "title": "DIST (comando) — AutoCAD 2018",
+          "url": "https://help.autodesk.com/cloudhelp/2018/ENU/AutoCAD-Core/files/GUID-A72EADC7-EF79-463C-B4F1-862C6139B004.htm",
+          "publisher": "Autodesk",
+          "description": "Medição de distância entre dois pontos."
+        },
+        {
+          "type": "official",
+          "title": "AREA (comando) — AutoCAD LT 2024, ajuda em português",
+          "url": "https://help.autodesk.com/cloudhelp/2024/PTB/AutoCAD-LT/files/GUID-0591351F-8750-425C-9F1C-98B1C73D9D55.htm",
+          "publisher": "Autodesk",
+          "description": "Polilinha aberta: a área é calculada como se houvesse uma linha do último ponto ao primeiro."
+        },
+        {
+          "type": "official",
+          "title": "PEDIT (comando) — AutoCAD 2020",
+          "url": "https://help.autodesk.com/cloudhelp/2020/ENU/AutoCAD-Core/files/GUID-648BDC21-E835-478F-A318-9D201479998D.htm",
+          "publisher": "Autodesk",
+          "description": "Opção Fechar: cria o segmento que liga o último trecho ao primeiro."
+        },
+        {
+          "type": "official",
+          "title": "LIMITE / BOUNDARY (comando) — AutoCAD 2024, ajuda em português",
+          "url": "https://help.autodesk.com/cloudhelp/2024/PTB/AutoCAD-Core/files/GUID-5072D0D0-5DB7-4649-8B2F-1FD5A3FA3643.htm",
+          "publisher": "Autodesk",
+          "description": "Cria polilinhas ou regiões a partir de áreas delimitadas."
+        },
+        {
+          "type": "official",
+          "title": "Count Feature Limitations — AutoCAD LT 2023",
+          "url": "https://help.autodesk.com/cloudhelp/2023/ENU/AutoCAD-LT/files/GUID-1A7CD80A-BE11-4618-8DA7-751DFDEEE430.htm",
+          "publisher": "Autodesk",
+          "description": "O que a contagem não enxerga: objetos fora do visível no model space, referência externa, texto e hachura."
+        },
+        {
+          "type": "official",
+          "title": "Layer Properties Manager — AutoCAD 2016",
+          "url": "https://help.autodesk.com/cloudhelp/2016/ENU/AutoCAD-Core/files/GUID-B297EBD9-D68C-47E1-87CE-1B3798496599.htm",
+          "publisher": "Autodesk",
+          "description": "Camada desligada ou congelada não é exibida nem plotada."
+        },
+        {
+          "type": "official",
+          "title": "About Panning and Zooming in the Current View — AutoCAD LT 2024",
+          "url": "https://help.autodesk.com/cloudhelp/2024/ENU/AutoCAD-LT/files/GUID-FC9DE424-67E0-46E8-BCD7-C08B716F392D.htm",
+          "publisher": "Autodesk",
+          "description": "ZOOM Extents inclui camadas desligadas e exclui as congeladas."
+        },
+        {
+          "type": "official",
+          "title": "DIMALIGNED (comando) — AutoCAD 2019",
+          "url": "https://help.autodesk.com/cloudhelp/2019/ENU/AutoCAD-Core/files/GUID-D7C05A85-8985-4576-B22C-5A795DD5B179.htm",
+          "publisher": "Autodesk",
+          "description": "A medida gerada é representada por colchetes angulares; pra substituir, apagam-se os colchetes."
+        },
+        {
+          "type": "official",
+          "title": "ETRANSMIT (comando) — AutoCAD 2022",
+          "url": "https://help.autodesk.com/view/ACD/2022/ENU/?guid=GUID-413A58AD-C86F-432F-A4AC-A2737237001A",
+          "publisher": "Autodesk",
+          "description": "Reúne o desenho e os arquivos relacionados num pacote de envio."
+        },
+        {
+          "type": "official",
+          "title": "About Missing or Circular External References — AutoCAD 2023",
+          "url": "https://help.autodesk.com/cloudhelp/2023/ENU/AutoCAD-Core/files/GUID-1F7D6EA1-9AA8-4D33-819F-09750C295D6B.htm",
+          "publisher": "Autodesk",
+          "description": "Referência ausente mostra o caminho como texto no lugar do desenho."
+        },
+        {
+          "type": "official",
+          "title": "Plot Dialog Box — AutoCAD LT 2019",
+          "url": "https://help.autodesk.com/cloudhelp/2019/ENU/AutoCAD-LT/files/GUID-264D3513-0D22-4461-82D6-14F391BC5CDE.htm",
+          "publisher": "Autodesk",
+          "description": "Ajustar ao papel é o padrão ao plotar da aba Modelo."
+        },
+        {
+          "type": "official",
+          "title": "Lei 14.133/2021, art. 6º, XXIV, XXV e XXVI",
+          "url": "https://www.planalto.gov.br/ccivil_03/_ato2019-2022/2021/lei/l14133.htm",
+          "publisher": "Planalto",
+          "description": "Definições de anteprojeto, projeto básico e projeto executivo."
+        },
+        {
+          "type": "official",
+          "title": "Orientações para Elaboração de Planilhas Orçamentárias de Obras Públicas (2014), p. 38",
+          "url": "https://portal.tcu.gov.br/data/files/BF/21/7F/EE/965EC710D79E7EB7F18818A8/Orientacoes_elaboracao_planilhas_orcamentarias_obras_publicas.PDF",
+          "publisher": "TCU",
+          "description": "Memória de cálculo das quantidades e efeito de omissão de serviços."
+        },
+        {
+          "type": "official",
+          "title": "ABNT NBR 9050:2020, item 6.11.2.4, cópia publicada pelo CAU/RN",
+          "url": "https://www.caurn.gov.br/wp-content/uploads/2020/08/ABNT-NBR-9050-15-Acessibilidade-emenda-1_-03-08-2020.pdf",
+          "publisher": "ABNT",
+          "description": "Vão livre mínimo de porta: 0,80 m de largura."
+        }
+      ]
     }
   ]
 }
