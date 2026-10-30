@@ -26631,40 +26631,44 @@ def emails_auto_tick(request: Request, dry: int = 0):
 # Edição atual (revisada, com fonte). Pra trocar de mês: edita SUBJECT + HTML aqui
 # e deploya; o admin dispara pelos botões do painel. {{UNSUB}} é trocado pelo link
 # de descadastro por destinatário no envio.
-_NEWSLETTER_SUBJECT = "Quantas vezes a mesma parede entra na sua conta?"
+_NEWSLETTER_SUBJECT = "Meça uma porta antes de levantar as quantidades"
 _NEWSLETTER_HTML = """<div style="background:#eaeef3;padding:24px 12px;font-family:Arial,Helvetica,sans-serif;color:#334155;">
-<span style="display:none;max-height:0;max-width:0;overflow:hidden;opacity:0;color:transparent;font-size:1px;line-height:1px;">A mesma parede aparece em várias pranchas. Um jeito de contar cada coisa uma vez — com ou sem a gente.</span>
+<span style="display:none;max-height:0;max-width:0;overflow:hidden;opacity:0;color:transparent;font-size:1px;line-height:1px;">Um teste de 30 segundos mostra se o seu desenho está na unidade certa — com ou sem a gente.</span>
 <div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e2e8f0;">
 <div style="height:5px;background:#4F46E5;"></div>
 <img src="https://ai.arq.br/assets/email/news-banner.png" width="560" alt="News do AI.arq — uma vez por mês: uma ideia útil e o que mudou por aqui" style="width:100%;max-width:560px;height:auto;display:block;border:0;">
 <div style="padding:24px 30px;">
 <p style="margin:0 0 14px;font-size:15px;line-height:1.6;">{{SAUDACAO}}</p>
 <div style="padding:14px 16px;background:#F8FAFC;border-left:3px solid #4F46E5;border-radius:6px;font-size:14px;line-height:1.6;margin:0 0 18px;">
-<b style="color:#0F172A;">&#128208; A mesma parede, em várias pranchas</b><br>
-Um projeto executivo desenha a mesma coisa mais de uma vez — e é assim que tem que ser. A parede aparece na planta de layout e de novo nas plantas de piso, de forro e de pontos elétricos. A porta aparece na planta, no corte e no detalhe. Cada prancha responde a uma pergunta diferente.<br><br>
-O problema começa quando o levantamento soma as pranchas: a mesma parede entra três, quatro vezes na conta. E o total inflado parece plausível, porque cada parcela, sozinha, está certa.<br><br>
-A regra vale pra qualquer levantamento, com ou sem a gente: <b>cada item se conta uma vez, na folha que o define — e a planta que vale por vários andares conta tantas vezes quantos andares ela representa.</b> A parede se conta na planta de arquitetura, o ponto na planta de elétrica, a peça no detalhe; as outras folhas servem pra conferir, não pra somar. E é o título da folha que diz qual é qual: “CORTE AA”, “DETALHE 3”, “PAVIMENTO TIPO (6X)”.
+<b style="color:#0F172A;">&#128208; A porta de 80 metros</b><br>
+Todo arquivo de CAD guarda duas coisas: o número de cada medida e a unidade que diz o que esse número significa. Se a porta mede 80 e o arquivo diz “metros”, a porta de 80 cm vira uma porta de 80 metros. O comprimento sai 100 vezes maior, e a área, 10 mil vezes.<br><br>
+Não é raro: em outubro, em 41 dos 83 projetos com DWG ou DXF que a gente leu, a unidade gravada no arquivo estava em branco ou não parecia bater com o desenho.<br><br>
+<b>O teste leva 30 segundos e vale pra qualquer levantamento, com ou sem a gente:</b>
+<ol style="margin:8px 0 10px;padding-left:20px;">
+<li style="margin-bottom:6px;"><b>Meça uma porta.</b> Na aba Modelo, use o comando <b>_DIST</b> na largura de uma porta de 80 cm. O resultado mostra em que unidade o desenho foi feito: 0,80 é metro, 80 é centímetro e 800 é milímetro.</li>
+<li style="margin-bottom:6px;"><b>Veja o que o arquivo declara.</b> Digite <b>INSUNITS</b>. A resposta é um número: 6 é metro, 5 é centímetro, 4 é milímetro e 0 é sem unidade.</li>
+<li><b>Se não bater, corrija e salve.</b> Digite INSUNITS e o número certo. Isso muda só o que o arquivo declara: o desenho não muda de tamanho.</li>
+</ol>
+Se a porta der outro número, ou mudar de uma vista pra outra, a folha pode ter sido montada com cada vista numa escala. Aí nenhuma unidade resolve: o que falta é o desenho em escala real (1:1) no Modelo. Os comandos são do AutoCAD; em outro programa o caminho pode mudar, mas o teste é o mesmo.
 </div>
 <b style="color:#0F172A;font-size:15px;">&#10024; Vale saber sobre a sua planilha</b>
 <ul style="margin:8px 0 14px;padding-left:20px;font-size:14px;line-height:1.6;">
-<li style="margin-bottom:8px;"><b>Cada folha no seu papel.</b> Nos arquivos DWG e DXF que trazem as folhas e o título de cada desenho, a leitura é por folha: esquema e detalhe saem da soma; do corte sai o comprimento que repete a planta; quando a leitura reconhece a mesma base do pavimento nas plantas de piso, forro e pontos do mesmo arquivo, ela conta uma vez, e versões do mesmo pavimento não se somam; e o mesmo arquivo enviado duas vezes é lido uma vez só.</li>
-<li style="margin-bottom:8px;"><b>Parede de duas linhas, medida pelo eixo.</b> Nos arquivos DWG e DXF, quando a camada de parede é desenhada com as duas faces, a parede é medida pelo eixo — o meio entre as duas linhas.</li>
-<li style="margin-bottom:8px;"><b>Estrutura e Revit, cada um com a sua leitura.</b> No projeto enviado como Estrutura (concreto armado), ainda em beta, a prancha é lida do jeito dela: em DWG e DXF, o resumo do aço do Eberick vira uma linha por bitola e o quadro de consumo vira linhas de fôrma e concreto, como estimativa. Nas folhas exportadas do Revit, vale o título da vista escrito no papel — e a vista 3D fica fora da soma.</li>
-<li><b>Revisão fácil de acompanhar.</b> Na tela de revisão, o resumo e o progresso ficam numa faixa só, cada disciplina num cartão com cor própria, os itens em cartões — e a ajuda abre e fecha quando você precisa.</li>
+<li style="margin-bottom:8px;"><b>Escala em dúvida fica sem selo.</b> Quando a unidade não fecha, as quantidades em metro, m² e m³ daquelas pranchas saem sem o selo ✓ MEDIDO do CAD, e a página do projeto mostra o aviso ⚠ ESCALA SUSPEITA com o motivo. As contagens de peças não mudam, porque contar não depende de escala. Corrigiu a unidade? É só enviar de novo.</li>
+<li style="margin-bottom:8px;"><b>PDF e CAD medem coisas diferentes.</b> De um PDF, sai como medido só o número escrito num quadro ou numa tabela da prancha, e que confere com o texto do arquivo; o resto sai como estimativa. É no DWG e no DXF que comprimento, área e contagem podem sair medidos do próprio desenho. <a href="https://ai.arq.br/levantamento-de-quantitativos-dwg-dxf.html?utm_source=newsletter&utm_campaign=out26" style="color:#4F46E5;">Veja como preparar o arquivo</a>.</li>
+<li style="margin-bottom:8px;"><b>Cronograma com a conta à vista.</b> Os percentuais de cada serviço fecham em 100% nos meses, e a duração sai da quantidade sempre que a fase tem coeficiente pra isso. Quando não tem, a coluna Origem da duração avisa que é só um prazo de referência, pra você ajustar.</li>
+<li><b>A tela pergunta antes de processar.</b> Se o nome dos arquivos indica estrutura e você marcou Arquitetura, ou o contrário, a tela pergunta qual leitura você quer antes de enviar.</li>
 </ul>
-<p style="margin:0 0 18px;padding:10px 14px;background:#FFFBEB;border-radius:8px;font-size:14px;line-height:1.6;color:#78350F;">&#128161; <b>Dica:</b> deixe a legenda de símbolos na prancha. Ela ajuda a leitura a entender o que é cada símbolo e cada sigla da planta. E, em DWG e DXF, quando a leitura reconhece que o símbolo desenhado na própria legenda entrou na contagem, a linha sai &#9888; ESTIMADO, com o aviso pra você conferir — a quantidade não é mexida: quem fecha o número é você.</p>
-<div style="padding:14px 16px;background:#EEF2FF;border-left:3px solid #4F46E5;border-radius:6px;font-size:14px;line-height:1.6;margin:0 0 18px;color:#1E1B4B;">
-<b style="color:#0F172A;">&#128172; Uma pergunta pra você</b><br>
-Qual dúvida de levantamento mais te travou este mês? Critério de medição, prancha confusa, unidade que não bate — qualquer uma. <b>Responda este e-mail:</b> a gente lê todas. Se a sua pergunta for boa pra mais gente, ela pode virar post — sem o seu nome, sem nenhum dado do seu projeto, e a gente pergunta antes.
-</div>
+<p style="margin:0 0 18px;padding:10px 14px;background:#FFFBEB;border-radius:8px;font-size:14px;line-height:1.6;color:#78350F;">&#128161; <b>Dica:</b> feche o arquivo no AutoCAD antes de enviar. Arquivo aberto no programa, em pasta de nuvem que ainda não baixou ou em pasta de rede pode derrubar o envio logo no começo.</p>
 <div style="background:#F1F5F9;border-radius:10px;padding:16px;text-align:center;margin:0 0 18px;">
-<p style="margin:0 0 12px;font-size:15px;color:#0F172A;"><b>Tem projeto novo?</b> Durante o beta é <b>grátis</b>, quantos projetos você quiser — sem cartão.</p>
-<a href="https://ai.arq.br/dashboard.html?utm_source=newsletter&utm_campaign=set26" style="display:inline-block;background:#4F46E5;color:#fff;text-decoration:none;padding:12px 24px;border-radius:10px;font-size:15px;font-weight:600;">Abrir o AI.arq</a>
+<p style="margin:0 0 12px;font-size:15px;color:#0F172A;"><b>Tem projeto novo?</b> Faça o teste da porta e suba o DWG ou DXF. Durante o beta é <b>grátis</b>, quantos projetos você quiser — sem cartão.</p>
+<a href="https://ai.arq.br/dashboard.html?utm_source=newsletter&utm_campaign=out26" style="display:inline-block;background:#4F46E5;color:#fff;text-decoration:none;padding:12px 24px;border-radius:10px;font-size:15px;font-weight:600;">Abrir o AI.arq</a>
+<p style="margin:12px 0 0;font-size:13px;line-height:1.6;color:#475569;">Ainda não subiu nenhum projeto? <a href="https://ai.arq.br/exemplo.html?utm_source=newsletter&utm_campaign=out26" style="color:#4F46E5;">Veja o exemplo</a> com a planilha, o cronograma e o rascunho do memorial.</p>
 </div>
 <div style="border-top:1px solid #eef2f7;padding-top:16px;font-size:14px;color:#475569;">Um abraço,<br><b style="color:#0F172A;">Pedro</b> <span style="color:#475569;">— AI.arq</span>
-<div style="margin-top:12px;"><a href="{{WPP}}" style="display:inline-block;border:1px solid #25D366;color:#128C4A;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;">&#128172; Falar no WhatsApp</a></div>
-<p style="margin:14px 0 0;font-size:13px;line-height:1.6;color:#475569;"><b>P.S.:</b> o AI.arq tem página no LinkedIn — <a href="https://www.linkedin.com/company/aiarq/" style="color:#4F46E5;">linkedin.com/company/aiarq</a>.</p></div>
-<div style="margin-top:14px;font-size:11px;color:#475569;line-height:1.6;">Você recebe porque tem conta no AI.arq. <a href="{{UNSUB}}" style="color:#4F46E5;">Sair da lista</a> &middot; <a href="https://ai.arq.br/privacidade.html?utm_source=newsletter&utm_campaign=set26" style="color:#4F46E5;">Privacidade</a></div>
+<p style="margin:12px 0 0;font-size:14px;line-height:1.6;">Ficou na dúvida com o seu arquivo? Fala com a gente no WhatsApp.</p>
+<div style="margin-top:8px;"><a href="{{WPP}}" style="display:inline-block;border:1px solid #25D366;color:#128C4A;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;">&#128172; Falar no WhatsApp</a></div>
+<p style="margin:14px 0 0;font-size:13px;line-height:1.6;color:#475569;"><b>P.S.:</b> saiu no blog: <a href="https://ai.arq.br/blog/posts/memorial-a-partir-do-quantitativo-caminho-inverso.html?utm_source=newsletter&utm_campaign=out26" style="color:#4F46E5;">Memorial a partir do quantitativo: o caminho inverso</a>.</p></div>
+<div style="margin-top:14px;font-size:11px;color:#475569;line-height:1.6;">Você recebe porque tem conta no AI.arq. <a href="{{UNSUB}}" style="color:#4F46E5;">Sair da lista</a> &middot; <a href="https://ai.arq.br/privacidade.html?utm_source=newsletter&utm_campaign=out26" style="color:#4F46E5;">Privacidade</a></div>
 </div></div></div>"""
 
 import hmac as _hmac_nl, hashlib as _hashlib_nl
