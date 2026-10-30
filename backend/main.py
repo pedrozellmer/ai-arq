@@ -4469,6 +4469,70 @@ def _soltar_revisoes_do_cascade(job_id: str) -> int:
         return 0
 
 
+def _revisoes_por_linha_antes_do_swap(job_id: str) -> dict:
+    """{id da revisão: (descrição, unidade) da linha revisada} — lido ANTES do swap.
+
+    🩸 27/10/2026 (07d11935) — quem informa a área com a revisão aberta tem as
+    linhas trocadas por linhas de id novo, e as revisões ficam soltas (`item_id`
+    nulo): as 11 confirmações do cliente voltaram a "pendente" na tela. O /add-file
+    pode soltar, porque relê o desenho e a descrição muda; o /inform-area remonta
+    AS MESMAS linhas, sem leitura nova — aí dá pra religar com a descrição exata
+    (`_religar_revisoes_apos_swap`). NUNCA levanta: é a mesma regra do resgate irmão.
+    """
+    try:
+        _st_r, _revs = _supa_rest_tudo("item_reviews", params={
+            "job_id": f"eq.{job_id}", "item_id": "not.is.null", "select": "id,item_id"})
+        _st_i, _linhas = _supa_rest_tudo("project_items", params={
+            "job_id": f"eq.{job_id}", "select": "id,description,unit"})
+        if _st_r != 200 or _st_i != 200:
+            return {}
+        _por_id = {str(l.get("id")): (l.get("description"), l.get("unit"))
+                   for l in (_linhas or [])}
+        return {str(r.get("id")): _por_id[str(r.get("item_id"))]
+                for r in (_revs or []) if str(r.get("item_id")) in _por_id}
+    except Exception as _e:
+        _log_error("revisao:religar-falhou", f"leitura: {type(_e).__name__}",
+                   job_id, severity="warning")
+        return {}
+
+
+def _religar_revisoes_apos_swap(job_id: str, antes: dict) -> int:
+    """Devolve às linhas novas as revisões que `_soltar_revisoes_do_cascade` soltou.
+
+    🔑 Só religa quando a descrição + unidade existe UMA vez na planilha nova e UMA
+    vez entre as revisões daquele par: duas linhas iguais não dizem qual delas o
+    cliente tocou, e "vincular errado é pior que não vincular". Quem sobra fica
+    solto, como já ficava. Devolve quantas religou. NUNCA levanta.
+    """
+    if not antes:
+        return 0
+    try:
+        _st, _linhas = _supa_rest_tudo("project_items", params={
+            "job_id": f"eq.{job_id}", "select": "id,description,unit"})
+        if _st != 200:
+            return 0
+        _novas: dict = {}
+        for l in (_linhas or []):
+            _novas.setdefault((l.get("description"), l.get("unit")), []).append(l.get("id"))
+        _revs_por_chave: dict = {}
+        for _id_rev, _chave in antes.items():
+            _revs_por_chave.setdefault(tuple(_chave), []).append(_id_rev)
+        _n = 0
+        for _chave, _ids_rev in _revs_por_chave.items():
+            _alvos = _novas.get(_chave) or []
+            if len(_alvos) != 1 or len(_ids_rev) != 1:
+                continue
+            _st_p, _ = _supa_rest_service(
+                "PATCH", f"item_reviews?id=eq.{_ids_rev[0]}", {"item_id": _alvos[0]})
+            if 200 <= int(_st_p or 0) < 300:
+                _n += 1
+        return _n
+    except Exception as _e:
+        _log_error("revisao:religar-falhou", f"escrita: {type(_e).__name__}",
+                   job_id, severity="warning")
+        return 0
+
+
 def _spec_do_cliente_antes_do_swap(job_id: str) -> dict:
     """O que o CLIENTE especificou, indexado por descrição normalizada.
 
@@ -33808,6 +33872,24 @@ def monta_linha_de_revisao(job_id, item_id, action, edits, antes,
     return linha
 
 
+#: 🩸 27/10/2026 (07d11935): a linha que a tela mandou não existe mais porque a
+#: planilha foi remontada (a área informada troca o id das linhas). Era 502 — e o
+#: 502 chegava ao navegador como "Failed to fetch", sem a frase nem o código: 16
+#: erros de "rede" e a tela seguia mandando ids mortos. 409 diz o que houve, e a
+#: tela recarrega as linhas (`_planilhaMudou` em revisao.html).
+_LINHA_SUBSTITUIDA = "A planilha foi atualizada depois que esta tela abriu."
+
+
+def _linha_nao_existe_mais(job_id: str, item_id: str) -> bool:
+    """True só quando o banco RESPONDEU e a linha não está lá (≠ não consegui ler)."""
+    try:
+        _st, _rows = _supa_rest_service(
+            "GET", f"project_items?id=eq.{item_id}&job_id=eq.{job_id}&select=id&limit=1")
+        return bool(_st) and 200 <= int(_st) < 300 and isinstance(_rows, list) and not _rows
+    except Exception:
+        return False
+
+
 @app.post("/api/items/{job_id}/review/{item_id}")
 def submit_item_review(job_id: str, item_id: str, payload: ReviewPayload, request: Request):
     _require_project_owner(request, job_id)
@@ -33880,6 +33962,8 @@ def submit_item_review(job_id: str, item_id: str, payload: ReviewPayload, reques
     # falhou segue o caminho de sempre.
     if action == "reject" and _item_ja_nao_existe:
         return {"status": "ok", "action": action, "gravou": False, "ja_excluido": True}
+    if action == "edit" and _item_ja_nao_existe:
+        raise HTTPException(409, _LINHA_SUBSTITUIDA)
 
     review_row = monta_linha_de_revisao(
         job_id, item_id, action, payload.edits, _antes,
@@ -34103,6 +34187,8 @@ def submit_item_review(job_id: str, item_id: str, payload: ReviewPayload, reques
                  "Tente de novo em instantes." +
                  (f" ({_erro_escrita})" if _erro_escrita else ""))
     if action == "approve" and _rev_gravou is False:
+        if _linha_nao_existe_mais(job_id, item_id):
+            raise HTTPException(409, _LINHA_SUBSTITUIDA)
         raise HTTPException(
             502, "Não consegui registrar esta aprovação agora — tente de novo.")
 
@@ -34628,7 +34714,11 @@ def inform_project_area(job_id: str, payload: InformAreaPayload, request: Reques
     _storage_ok = _supabase_storage_upload(output_path, f"{job_id}.xlsx")
 
     # 6) Persistir itens atualizados (revisão/planilha na tela refletem o preenchimento)
+    # 🩸 27/10: o swap troca o id das linhas — sem religar, o que o cliente já
+    # revisou nesta planilha some da tela dele.
+    _revs_antes = _revisoes_por_linha_antes_do_swap(job_id)
     _persist_items_to_supabase(job_id, items)
+    _religar_revisoes_apos_swap(job_id, _revs_antes)
     _carimbar_planilha(job_id)
 
     # 7) Atualizar projeto: área informada + warning honesto (troca avisos antigos

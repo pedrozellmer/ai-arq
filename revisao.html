@@ -456,7 +456,9 @@ let commentingItem = null;
 // ═══════════════════════════════════════════════
 // LOAD + RENDER
 // ═══════════════════════════════════════════════
-async function loadItems() {
+// `recarga`: a tela já estava aberta e só busca as linhas de novo — não é uma
+// abertura, então não conta no `?marcar=1` nem no `view_revisao`.
+async function loadItems(recarga) {
   try {
     // Carrega itens + state de revisão em paralelo
     const [itemsRes, stateRes] = await Promise.all([
@@ -471,7 +473,7 @@ async function loadItems() {
       // ?marcar=1 — SÓ esta tela conta como "abriu a revisão". O dashboard e o
       // projeto.html chamam a mesma rota sem o parâmetro, então não inflam mais
       // o contador (eram 54 aberturas pra 6 projetos com ação real, em 04/08).
-      authFetch(`${API_BASE}/api/items/${jobId}/review-state?marcar=1`).then(r => r.json()).catch(() => ({state: {}})),
+      authFetch(`${API_BASE}/api/items/${jobId}/review-state${recarga ? '' : '?marcar=1'}`).then(r => r.json()).catch(() => ({state: {}})),
     ]);
     items = itemsRes.items || [];
     // `project` já traz total_area, user_total_area e user_pe_direito (rota
@@ -504,7 +506,7 @@ async function loadItems() {
     // não dá pra separar "ninguém abre" de "abre e desiste", nem saber se a
     // mexida de 02/08 na tela funcionou. Guarda o tamanho da tarefa junto:
     // 200 estimativas pra confirmar é uma explicação plausível pra desistência.
-    if (window.trackEvent) trackEvent('view_revisao', {
+    if (!recarga && window.trackEvent) trackEvent('view_revisao', {
       job_id: jobId,
       n_itens: items.length,
       n_estimados: items.filter(it => it.confidence !== 'confirmado').length,
@@ -666,10 +668,42 @@ async function submitConviteArea() {
     // defeito nosso. 0 = não chegou a ter resposta (rede).
     if (window.trackEvent) trackEvent('convite-area:submit-erro', {
       job_id: jobId, status: Number(e && e.status) || 0, tela: 'revisao' });
+    // 🩸 27/10/2026 (07d11935): sem resposta (ou 5xx) NÃO quer dizer que falhou — o
+    // servidor segue remontando e troca as linhas. A tela dizia "Não consegui" e
+    // ficava com os ids mortos. Antes de dizer que falhou, espera a troca aparecer.
+    const _st = Number(e && e.status) || 0;
+    if ((_st === 0 || _st >= 500) && await _esperarRemontagem(msg)) {
+      msg.textContent = '✓ Pronto — a planilha foi refeita com a área informada.';
+      msg.className = 'text-sm text-emerald-700';
+      return;
+    }
     msg.textContent = '✗ Não consegui agora. Tenta de novo.';
     msg.className = 'text-sm text-red-700';
     btn.disabled = false;
   }
+}
+
+// Espera as linhas trocarem de id (é o que a remontagem faz) e recarrega.
+// true = trocou; false = passou o tempo e nada mudou.
+const _ESPERA_REMONTAGEM = { passoMs: 10000, vezes: 36 };   // 6 min
+async function _esperarRemontagem(msg) {
+  msg.textContent = '⏳ Ainda refazendo a planilha...';
+  msg.className = 'text-sm text-indigo-700';
+  const _idsDaTela = new Set(items.map(it => it.id));
+  for (let i = 0; i < _ESPERA_REMONTAGEM.vezes; i++) {
+    await new Promise(ok => setTimeout(ok, _ESPERA_REMONTAGEM.passoMs));
+    try {
+      window.aiarqCache.limpar();   // o cache de 30 s esconderia a troca
+      const r = await authFetch(`${API_BASE}/api/items/${jobId}`);
+      if (!r.ok) continue;
+      const d = await r.json();
+      if ((d.items || []).some(it => !_idsDaTela.has(it.id))) {
+        await _planilhaMudou();
+        return true;
+      }
+    } catch (_) { /* servidor ocupado: tenta no próximo passo */ }
+  }
+  return false;
 }
 
 // uma cor por disciplina, na ordem (as mesmas do Escritório)
@@ -875,6 +909,14 @@ function renderItem(it, localIndex) {
 async function _salvar(url, opts) {
   const r = await authFetch(url, opts);
   if (r.ok) return r;
+  // 🩸 27/10/2026: a planilha foi remontada e o id que a tela tem morreu. Repetir
+  // não adianta — recarrega as linhas e pede pra refazer (ver `_planilhaMudou`).
+  if (r.status === 409) {
+    _planilhaMudou();
+    const _mudou = new Error('a planilha foi atualizada — recarreguei as linhas, faça de novo');
+    _mudou.status = 409;
+    throw _mudou;
+  }
   // o 502 do backend traz em `detail` a frase pro cliente — usa ela
   let detalhe = '';
   try { detalhe = (await r.clone().json()).detail || ''; } catch (_) {}
@@ -884,6 +926,16 @@ async function _salvar(url, opts) {
   // 22/10/2026: o evento de erro não dizia QUAL erro — o código vai junto
   _erro.status = r.status;
   throw _erro;
+}
+
+// Uma recarga por vez: num lote, várias linhas recebem 409 ao mesmo tempo.
+let _recarregandoPlanilha = false;
+async function _planilhaMudou() {
+  if (_recarregandoPlanilha) return;
+  _recarregandoPlanilha = true;
+  // 🪤 o authFetch guarda /api/items por 30 s: sem limpar, volta a lista dos ids mortos
+  window.aiarqCache.limpar();
+  try { await loadItems(true); } finally { _recarregandoPlanilha = false; }
 }
 
 // O `type` do evento de erro: o código HTTP, ou "rede" quando nem resposta houve.
@@ -1281,6 +1333,8 @@ async function bulkReview(section, action) {
       else reviewState[f.it.id] = _antesDoLote[f.it.id];   // volta ao que era
     });
     render();
+    // linha que sumiu no meio do lote: a planilha mudou, a tela busca as linhas novas
+    if (falhou.some(f => f.erro === 'HTTP 409')) _planilhaMudou();
     const msg = _salvos
       ? `${_salvos} de ${secItems.length} salvos. ${falhou.length} não foram — esses voltaram ao estado anterior na tela.`
       : `Nenhum item foi salvo (${falhou[0].erro}). Tudo voltou ao estado anterior — tente de novo.`;

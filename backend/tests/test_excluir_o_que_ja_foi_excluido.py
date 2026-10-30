@@ -100,8 +100,11 @@ def test_CONTROLE_editar_item_que_nao_existe_nao_e_atalho_de_exclusao(monkeypatc
     req, esc = _rota(monkeypatch, (200, []))
     p = main.ReviewPayload(action="edit", comment="", reviewed_by="x@y.com",
                            edits={"quantity": 5})
-    r = main.submit_item_review("job12345", _ITEM, p, req)
-    assert not r.get("ja_excluido"), r
+    # 🩸 27/10: era 200 sem gravar nada — agora 409 "a planilha mudou"
+    # (test_area_informada_com_a_revisao_aberta.py).
+    with pytest.raises(main.HTTPException) as e:
+        main.submit_item_review("job12345", _ITEM, p, req)
+    assert e.value.status_code == 409
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -126,11 +129,11 @@ def _js(resposta_ok, status):
 
 
 def test_o_erro_de_salvar_carrega_o_codigo_http():
-    js = _js(False, 409)
+    js = _js(False, 422)
     r = rodar(js, "__tenta()")
     assert r.get("ok"), r
     assert r["valor"] == "nao gravou"
-    assert js.evaljs("__tipo") == "http-409"
+    assert js.evaljs("__tipo") == "http-422"
 
 
 def test_sem_resposta_o_tipo_e_rede():

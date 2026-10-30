@@ -799,7 +799,9 @@
     // (backend espera 60 s), memorial "escrever com IA", reprocesso, upload de
     // planilha revisada. O cliente via erro e o servidor seguia trabalhando (e
     // cobrando o reprocesso). Essas rotas ganham teto próprio; o resto fica em 45 s.
-    var _lentas = /\/api\/(agent|projeto\/[^/]+\/chat|memorial|cronograma)\b|\/(reprocess|add-file|upload|finalize)\b/i;
+    // 🩸 27/10: `inform-area` faltava — 239 linhas levaram 83 s, a tela desistiu
+    // em 45 e o servidor trocou as linhas com a revisão aberta.
+    var _lentas = /\/api\/(agent|projeto\/[^/]+\/chat|memorial|cronograma)\b|\/(reprocess|add-file|upload|finalize|inform-area)\b/i;
     var _teto = options.timeoutMs || (_lentas.test(String(url)) ? 180000 : 45000);
     var ctrl = null, timer = null;
     var init = Object.assign({}, options, { headers });

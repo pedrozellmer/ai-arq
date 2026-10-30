@@ -48,16 +48,10 @@ def match_item(description: str, limit: int = 3) -> List[Dict]:
 
     Retorna lista ordenada por similaridade desc, filtrada por MIN_SIMILARITY.
     """
-    if not description or len(description.strip()) < 3:
-        return []
-
-    results = _supabase_rpc("search_tcpo", {
-        "p_query": description.strip()[:200],
-        "p_limit": limit,
-    })
-
-    # Filtra abaixo do threshold
-    return [r for r in results if r.get("similarity", 0) >= MIN_SIMILARITY]
+    # 🪦 30/10/2026: a RPC `search_tcpo` e as tabelas TCPO saíram do banco em
+    # 22/07/2026. Cada linha de cada remontagem ainda batia aqui, tomava 404 e
+    # enchia o log — 239 chamadas mortas por projeto, com o cliente esperando.
+    return []
 
 
 def get_insumos(composicao_id: str) -> List[Dict]:
