@@ -133,6 +133,9 @@ LINHAS = {
     'exportar-revit-autocad-para-dwg-dxf': ('Quantitativo a partir de CAD (DWG, DXF e PDF)',
         'Como exportar do Revit e do AutoCAD pra DWG ou DXF',
         'o caminho oficial de exportação no Revit, o comando que desfaz os objetos inteligentes do AutoCAD Architecture/MEP e o que deixar de fora (vista 3D, isométrico, vínculos soltos).'),
+    'conferir-dwg-dxf-antes-de-levantar-quantitativo': ('Quantitativo a partir de CAD (DWG, DXF e PDF)',
+        'Antes de levantar o quantitativo: 10 conferências no DWG e no DXF',
+        'o que conferir antes de medir um DWG ou DXF — unidade, revisão, referências, camadas, blocos e cotas —, com o comando de cada conferência e a fonte.'),
 }
 
 
