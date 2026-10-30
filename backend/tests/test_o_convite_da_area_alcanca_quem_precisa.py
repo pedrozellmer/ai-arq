@@ -290,6 +290,7 @@ function renderMetrics(){ _chamados.push('metrics'); }
 function renderWarnings(){ _chamados.push('warnings'); }
 function maybeShowAreaPrompt(){ _chamados.push('area'); }
 function maybeShowPeDireitoPrompt(){ _chamados.push('pe'); }
+function renderCaminhos(){ _chamados.push('caminhos'); }
 function renderDates(){ _chamados.push('dates'); }
 function renderFiles(){ _chamados.push('files'); }
 """ + _fatia_do_pipeline() + "\nJSON.stringify(_chamados);"

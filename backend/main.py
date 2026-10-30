@@ -20677,9 +20677,12 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                                  frase_origem=_frase_esc)
             try:                        # o aviso novo nunca derruba as linhas de escala
                 _linhas_esc += _linhas_fora_das_pranchas(_escala_arqs)
-                _linhas_esc += _linhas_planta_em_bloco(_escala_arqs)
             except Exception as _efp:
                 print(f"[fora-das-pranchas] nao-fatal: {_efp}")
+            try:
+                _linhas_esc += _linhas_planta_em_bloco(_escala_arqs)
+            except Exception as _epb:
+                print(f"[planta-em-bloco] nao-fatal: {_epb}")
         except NameError:
             _linhas_esc = []            # job sem CAD (só PDF): nada a dizer
         except Exception as _ele:
