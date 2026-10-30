@@ -6709,6 +6709,28 @@ def contagem_por_densidade(unidade, obs) -> bool:
     return not _RE_CONTAGEM_DE_FONTE.search(t)
 
 
+#: 🩸 30/10/2026 (27b39a2d): "Estimativa: ~3 tomadas por bancada (2 bancadas) = 6
+#: tomadas", com a própria linha dizendo que a prancha não tem ponto elétrico. A
+#: régua acima cobre "por banheiro/sala/quarto"; estes locais escapavam. 📏 Desde
+#: 28/09: 16 linhas em 5 jobs, todas de leitura de PDF, todas regra de bolso.
+#: 🪤 Como o "por apartamento", só vale quando a linha se diz estimativa: "1 cuba
+#: por bancada" pode ser leitura do desenho. E "por pavimento" fica de fora: pode
+#: ser planta-tipo × repetição.
+_RE_POR_LOCAL = _re.compile(
+    r"\b" + _NUM_D + r"\s+(?:[\w-]+\s+){0,2}por\s+(?:bancada|wc|lavabo|cozinha|copa"
+    r"|vesti[áa]rio|espa[çc]o|pia|[áa]rea\s+de\s+servi[çc]o)\b", _re.IGNORECASE)
+
+
+def contagem_por_local(unidade, obs) -> bool:
+    """A quantidade desta linha de PEÇA saiu de "N por local", sem contar no desenho?"""
+    if str(unidade or "").strip().lower().rstrip(".") not in _UNIDADES_CONTADAS:
+        return False
+    t = str(obs or "")
+    if not (_RE_POR_LOCAL.search(t) and _RE_SE_DIZ_ESTIMATIVA.search(t)):
+        return False
+    return not _RE_CONTAGEM_DE_FONTE.search(t)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 #  O PESO DE AÇO CONTRA A MASSA NOMINAL (22/09/2026)
 # ─────────────────────────────────────────────────────────────────────────────

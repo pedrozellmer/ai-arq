@@ -746,6 +746,8 @@ _STAGES_DIAGNOSTICO = frozenset({
     "motor:sombra-area-sem-base",
     # 28/10: comprimento rateado por etiqueta (com a chave em 0, só a contagem)
     "motor:rateio-por-etiqueta",
+    # 30/10: "N por local" (com a chave em 0, só a contagem)
+    "motor:contagem-por-local",
     "motor:versao-anterior", "motor:pai-e-filho", "motor:download-regen",
     "motor:respostas-releitura", "motor:informou-depois",
     "motor:consolida-tipo",
@@ -10630,6 +10632,8 @@ _CHAVES_AVALIAVEIS = frozenset({
     "RECUPERACAO_NAO_REPETE_NUMERO",
     # 28/10: comprimento rateado pela proporção de etiquetas sai em branco
     "RATEIO_POR_ETIQUETA_EM_BRANCO",
+    # 30/10: "3 tomadas por bancada" sai em branco
+    "CONTAGEM_POR_LOCAL_EM_BRANCO",
 })
 _CHAVES_DA_AVALIACAO: dict = {}        # job de avaliação → {chave: "0" | "1"}
 
@@ -14172,15 +14176,25 @@ def _zera_peso_por_taxa(items) -> int:
     return len(alvos)
 
 
-def _zera_contagem_por_densidade(items) -> int:
+def _zera_contagem_por_local(items, so_conta=False) -> int:
+    """A mesma trava, com a régua de "N por local" (`contagem_por_local`)."""
+    from engine_rules import contagem_por_local
+    return _zera_contagem_por_densidade(items, regua=contagem_por_local, so_conta=so_conta)
+
+
+def _zera_contagem_por_densidade(items, regua=None, so_conta=False) -> int:
     """Peça cuja quantidade SAIU de área × densidade típica fica em branco.
 
     🩸 27/09/2026 — irmã de `_zera_peso_por_taxa`: "~1.323 m² ÷ 11 m²/luminária
     (densidade típica hospitalar)" virava 120 luminárias numa planilha que o
     cliente orça. A régua mora em `engine_rules.contagem_por_densidade`. Fora do
     CAD e da revisão do cliente, como a do aço. Continua estimado; a conta da
-    leitura fica escrita. Devolve quantas linhas zerou."""
+    leitura fica escrita. Devolve quantas linhas zerou.
+
+    `regua` troca a pergunta (30/10: `contagem_por_local`); `so_conta` só conta,
+    sem mexer na linha, pra régua que ainda está com a chave em 0."""
     from engine_rules import contagem_por_densidade, _num_br
+    regua = regua or contagem_por_densidade
     from models import Confidence
     n = 0
     for it in items:
@@ -14191,7 +14205,10 @@ def _zera_contagem_por_densidade(items) -> int:
         except (TypeError, ValueError):
             continue
         obs = str(getattr(it, "observations", "") or "")
-        if q <= 0 or not contagem_por_densidade(getattr(it, "unit", ""), obs):
+        if q <= 0 or not regua(getattr(it, "unit", ""), obs):
+            continue
+        if so_conta:
+            n += 1
             continue
         it.quantity = 0
         try:
@@ -21025,6 +21042,22 @@ bloco — só cite os que estão no inventário deste arquivo."""
                            job_id, severity="info")
         except Exception as _edn:
             _log_error("motor:contagem-por-densidade", f"FALHOU: {_edn}", job_id,
+                       severity="warning")
+        # 🩸 30/10 — a irmã da irmã: "3 tomadas por bancada" (`contagem_por_local`).
+        # 🔑 CONTAGEM_POR_LOCAL_EM_BRANCO=1 deixa em branco; com 0 só conta.
+        try:
+            try:
+                _local_liga = _chave_do_job(job_id, "CONTAGEM_POR_LOCAL_EM_BRANCO") == "1"
+            except NameError:
+                import os as _os_cl
+                _local_liga = _os_cl.environ.get("CONTAGEM_POR_LOCAL_EM_BRANCO", "0") == "1"
+            _n_loc = _zera_contagem_por_local(all_items, so_conta=not _local_liga)
+            if _n_loc:
+                _log_error("motor:contagem-por-local",
+                           f"linhas={_n_loc} em_branco={_n_loc if _local_liga else 0} "
+                           f"liga={int(_local_liga)}", job_id, severity="info")
+        except Exception as _ecl:
+            _log_error("motor:contagem-por-local", f"FALHOU: {_ecl}", job_id,
                        severity="warning")
         try:
             _n_aco_corr, _n_aco_alerta = _confere_peso_de_aco(all_items)
