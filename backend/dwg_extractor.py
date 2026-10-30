@@ -6856,6 +6856,9 @@ _MAX_NIVEIS_COLADOS = 12
 _PLANTA_EM_BLOCO_MIN = 5000
 #: Quantas vezes o bloco tem de ser maior que o desenho solto no modelo.
 _PLANTA_EM_BLOCO_RAZAO = 50
+#: 🪤 Bloco pesado não é planta: "panel vegetação" tem 47.505 entidades e 4 layers,
+#: numa planta de forro normal. As bases do caso real têm 82 a 181.
+_PLANTA_EM_BLOCO_MIN_LAYERS = 20
 _TIPOS_DE_TRACO = ("LINE", "LWPOLYLINE", "POLYLINE", "ARC", "HATCH")
 
 
@@ -6874,30 +6877,36 @@ def planta_dentro_de_bloco(doc) -> dict:
     try:
         msp = doc.modelspace()
         soltas = sum(1 for e in msp if e.dxftype() in _TIPOS_DE_TRACO)
-        memo: dict = {}
+        memo: dict = {}             # bloco → (entidades, layers), abrindo os de dentro
 
         def _fundo(nome):
             if nome in memo:
                 return memo[nome]
-            memo[nome] = 0          # corta ciclo
+            memo[nome] = (0, frozenset())           # corta ciclo
             try:
                 bloco = doc.blocks.get(nome)
             except Exception:
                 bloco = None
-            n = 0
+            n, camadas = 0, set()
             for e in (bloco if bloco is not None else ()):
-                n += _fundo(e.dxf.get("name", "")) if e.dxftype() == "INSERT" else 1
-            memo[nome] = n
-            return n
+                if e.dxftype() == "INSERT":
+                    n_dentro, cam_dentro = _fundo(e.dxf.get("name", ""))
+                    n += n_dentro
+                    camadas |= cam_dentro
+                else:
+                    n += 1
+                    camadas.add(e.dxf.get("layer", ""))
+            memo[nome] = (n, frozenset(camadas))
+            return memo[nome]
 
-        maior, nome_maior = 0, ""
+        maior, nome_maior, n_layers = 0, "", 0
         for ins in msp.query("INSERT"):
             nome = str(ins.dxf.get("name", "") or "")
-            n = _fundo(nome)
-            if n > maior:
-                maior, nome_maior = n, nome
+            n, camadas = _fundo(nome)
+            if n > maior and len(camadas) >= _PLANTA_EM_BLOCO_MIN_LAYERS:
+                maior, nome_maior, n_layers = n, nome, len(camadas)
         if maior >= _PLANTA_EM_BLOCO_MIN and maior >= _PLANTA_EM_BLOCO_RAZAO * max(soltas, 1):
-            return {"bloco": nome_maior, "entidades": maior, "soltas": soltas}
+            return {"bloco": nome_maior, "entidades": maior, "layers": n_layers, "soltas": soltas}
     except Exception as e:
         logger.warning("planta_dentro_de_bloco: %s", e)
     return {}

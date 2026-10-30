@@ -30,11 +30,11 @@ NL = chr(10)
 
 
 # ── o detector ────────────────────────────────────────────────────────────
-def _doc(n_no_bloco, soltas=0, nome="BASE-TER"):
+def _doc(n_no_bloco, soltas=0, nome="BASE-TER", layers=25):
     doc = ezdxf.new()
     bl = doc.blocks.new(nome)
     for i in range(n_no_bloco):
-        bl.add_line((i, 0), (i, 1))
+        bl.add_line((i, 0), (i, 1), dxfattribs={"layer": "L%d" % (i % layers)})
     msp = doc.modelspace()
     msp.add_blockref(nome, (0, 0))
     for i in range(soltas):
@@ -44,14 +44,21 @@ def _doc(n_no_bloco, soltas=0, nome="BASE-TER"):
 
 def test_o_caso_a_planta_inteira_num_bloco_e_reconhecida():
     r = _dx.planta_dentro_de_bloco(_doc(6000))
-    assert r == {"bloco": "BASE-TER", "entidades": 6000, "soltas": 0}
+    assert r == {"bloco": "BASE-TER", "entidades": 6000, "layers": 25, "soltas": 0}
+
+
+def test_CONTROLE_bloco_pesado_de_poucos_layers_nao_e_planta():
+    # "panel vegetação 2": 47.505 entidades, 4 layers, numa planta de forro normal
+    assert _dx.planta_dentro_de_bloco(_doc(47505, soltas=680, layers=4)) == {}
+    assert _dx.planta_dentro_de_bloco(_doc(6000, layers=19)) == {}
+    assert _dx.planta_dentro_de_bloco(_doc(6000, layers=20))
 
 
 def test_conta_o_que_esta_nos_blocos_de_dentro():
     doc = ezdxf.new()
     fora, dentro = doc.blocks.new("FORA"), doc.blocks.new("DENTRO")
     for i in range(6000):
-        dentro.add_line((i, 0), (i, 1))
+        dentro.add_line((i, 0), (i, 1), dxfattribs={"layer": "L%d" % (i % 25)})
     fora.add_blockref("DENTRO", (0, 0))
     doc.modelspace().add_blockref("FORA", (0, 0))
     assert _dx.planta_dentro_de_bloco(doc)["entidades"] == 6000
@@ -86,6 +93,16 @@ def test_bloco_que_se_referencia_nao_trava():
     b.add_blockref("A", (0, 0))
     doc.modelspace().add_blockref("A", (0, 0))
     assert _dx.planta_dentro_de_bloco(doc) == {}
+
+
+def test_bloco_circular_nao_esconde_a_planta_grande():
+    doc = _doc(6000)
+    a = doc.blocks.new("A")
+    b = doc.blocks.new("B")
+    a.add_blockref("B", (0, 0))
+    b.add_blockref("A", (0, 0))
+    doc.modelspace().add_blockref("A", (0, 0))
+    assert _dx.planta_dentro_de_bloco(doc)["bloco"] == "BASE-TER"
 
 
 def test_a_chave_nao_sai_crua_no_prompt():
