@@ -241,7 +241,7 @@ def _js_recarga():
         _CACHE,
         "var __args = []; var __resolver = null;",
         "var loadItems = function (r) { __args.push(r); return Promise.resolve(); };",
-        "var _recarregandoPlanilha = false;",
+        "var _recarregandoPlanilha = false; var reviewState = {morto: 'approved'};",
         funcao_js("_planilhaMudou", "revisao.html", _SRC),
     ]))
 
@@ -251,6 +251,7 @@ def test_a_recarga_limpa_o_cache_e_nao_conta_como_abertura():
     rodar(js, "_planilhaMudou()")
     assert js.evaljs("__limpou") == 1
     assert js.evaljs("JSON.stringify(__args)") == "[true]"
+    assert js.evaljs("Object.keys(reviewState).length") == 0, "ids mortos no 'já revisados'"
 
 
 def test_CONTROLE_lote_com_varias_recusas_recarrega_uma_vez():

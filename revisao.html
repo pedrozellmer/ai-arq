@@ -935,6 +935,7 @@ async function _planilhaMudou() {
   _recarregandoPlanilha = true;
   // 🪤 o authFetch guarda /api/items por 30 s: sem limpar, volta a lista dos ids mortos
   window.aiarqCache.limpar();
+  reviewState = {};   // as chaves são os ids mortos: contariam em "N já revisados"
   try { await loadItems(true); } finally { _recarregandoPlanilha = false; }
 }
 
