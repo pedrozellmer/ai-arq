@@ -118,8 +118,11 @@ class _ThreadImediata:
 
 
 def _sem_banco(monkeypatch, insert_ok=True, svc=None):
+    # 🪤 27/10: a linha existe — banco que diz "não está lá" agora é 409 (a planilha
+    # mudou), e o assunto destes guardas é a campainha, não isso.
     monkeypatch.setattr(main, "_supa_rest_service",
-                        svc or (lambda m, p, b=None, **k: (200, [])))
+                        svc or (lambda m, p, b=None, **k: (
+                            200, [{"id": "i1"}] if p.startswith("project_items?") else [])))
     monkeypatch.setattr(main, "_supabase_insert", lambda t, r: insert_ok)
     monkeypatch.setattr(main, "_log_error", lambda *a, **k: None)
     monkeypatch.setattr(main, "_supa_log", lambda *a, **k: None)

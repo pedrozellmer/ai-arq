@@ -473,7 +473,8 @@ async function loadItems(recarga) {
       // ?marcar=1 — SÓ esta tela conta como "abriu a revisão". O dashboard e o
       // projeto.html chamam a mesma rota sem o parâmetro, então não inflam mais
       // o contador (eram 54 aberturas pra 6 projetos com ação real, em 04/08).
-      authFetch(`${API_BASE}/api/items/${jobId}/review-state${recarga ? '' : '?marcar=1'}`).then(r => r.json()).catch(() => ({state: {}})),
+      authFetch(recarga ? `${API_BASE}/api/items/${jobId}/review-state`
+                        : `${API_BASE}/api/items/${jobId}/review-state?marcar=1`).then(r => r.json()).catch(() => ({state: {}})),
     ]);
     items = itemsRes.items || [];
     // `project` já traz total_area, user_total_area e user_pe_direito (rota

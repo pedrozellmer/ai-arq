@@ -85,6 +85,7 @@ var _conviteAreaContado = false;
 %s
 function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
 function loadItems(){ return null; }
+function _esperarRemontagem(){ return false; }
 var authFetch = null;
 """ % _LINHA_UNIDADES
 

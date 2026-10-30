@@ -226,7 +226,10 @@ jobs:
           # seção escrita, selo de contagem, corte do Revit) e a seção AMBIENTE ↔
           # ÁREA ESCRITA, e o guarda de 75% cobrou 8043. Mesmo critério: 9200 é
           # 86% dos 10723, aguenta até ~12.260 e pega qualquer queda maior que 14%.
-          PISO: 9200
+          # 30/10/2026, 16ª vez: 9200 -> 10600. A colheita foi a 12287 e o guarda
+          # de 75% cobrou 9215. Mesmo critério: 10600 é 86% dos 12287, aguenta até
+          # ~14.130 e pega qualquer queda maior que 14%.
+          PISO: 10600
         run: |
           N=$(python -m pytest tests/ -q --collect-only 2>/dev/null | tail -1 | grep -oE '^[0-9]+' || echo 0)
           echo "testes colhidos: $N (piso: $PISO)"
