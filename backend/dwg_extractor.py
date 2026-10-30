@@ -280,6 +280,8 @@ class DXFExtraction:
     _METADADOS_FORA_DO_PROMPT = frozenset({"copias_sombra", "planta_repetida",
                                            # 18/10: dito na linha de atenção da planilha
                                            "so_nas_pranchas", "base_em_plantas_tematicas",
+                                           # 30/10: idem (`_linhas_planta_em_bloco`)
+                                           "planta_em_bloco",
                                            # 19/10: registro da trava do selo
                                            "layers_desligados_medidos",
                                            # 30/09: ditos nas seções próprias
@@ -6850,6 +6852,57 @@ _MAX_ENTIDADES_COLADAS = 400000
 _MAX_NIVEIS_COLADOS = 12
 
 
+#: Peças dentro do bloco, abrindo os de dentro, pra chamar de "a planta inteira".
+_PLANTA_EM_BLOCO_MIN = 5000
+#: Quantas vezes o bloco tem de ser maior que o desenho solto no modelo.
+_PLANTA_EM_BLOCO_RAZAO = 50
+_TIPOS_DE_TRACO = ("LINE", "LWPOLYLINE", "POLYLINE", "ARC", "HATCH")
+
+
+def planta_dentro_de_bloco(doc) -> dict:
+    """{bloco, entidades, soltas} quando a planta inteira está dentro de um bloco de
+    nome normal e o modelo traz só cotas e textos. Vazio nos outros casos.
+
+    🩸 30/10/2026 (1288278f, 10 DWG, nota 2): `GPA-…-BASE-TER` com 233.844 entidades
+    em 1 inserção; no modelo, nenhum traço. O motor lê o modelo: `paredes=0`, 332 de
+    378 linhas em branco, e o cliente achou que "faltou saber usar". 📏 120 d: 4 jobs.
+    🚫 NÃO ABRE o bloco, de propósito. Ali é a BASE repetida em toda prancha (115 km
+    de linhas visíveis, ar-condicionado, vigas, referência elétrica), e o escopo da
+    reforma está solto (62 m de A-CONSTRUIR): abrir mediria o prédio no lugar da obra.
+    Por isso só AVISA. Nunca levanta.
+    """
+    try:
+        msp = doc.modelspace()
+        soltas = sum(1 for e in msp if e.dxftype() in _TIPOS_DE_TRACO)
+        memo: dict = {}
+
+        def _fundo(nome):
+            if nome in memo:
+                return memo[nome]
+            memo[nome] = 0          # corta ciclo
+            try:
+                bloco = doc.blocks.get(nome)
+            except Exception:
+                bloco = None
+            n = 0
+            for e in (bloco if bloco is not None else ()):
+                n += _fundo(e.dxf.get("name", "")) if e.dxftype() == "INSERT" else 1
+            memo[nome] = n
+            return n
+
+        maior, nome_maior = 0, ""
+        for ins in msp.query("INSERT"):
+            nome = str(ins.dxf.get("name", "") or "")
+            n = _fundo(nome)
+            if n > maior:
+                maior, nome_maior = n, nome
+        if maior >= _PLANTA_EM_BLOCO_MIN and maior >= _PLANTA_EM_BLOCO_RAZAO * max(soltas, 1):
+            return {"bloco": nome_maior, "entidades": maior, "soltas": soltas}
+    except Exception as e:
+        logger.warning("planta_dentro_de_bloco: %s", e)
+    return {}
+
+
 def abrir_blocos_colados(doc) -> dict:
     """Abre (EXPLODE) no modelspace todo bloco `A$C…` — o desenho colado como
     bloco — nível por nível, até não sobrar nenhum.
@@ -10221,6 +10274,7 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
     # 🔑 24/09: desenho colado como bloco vira desenho solto ANTES de qualquer
     # leitura — inclusive das réguas de unidade, que ganham as cotas de dentro.
     _colados = abrir_blocos_colados(doc)
+    _planta_em_bloco = planta_dentro_de_bloco(doc)
     msp = doc.modelspace()
     unit_factor = _detect_unit_factor(doc)
     unit_factor, unit_warnings = _validate_unit_factor(doc, unit_factor)
@@ -10364,6 +10418,8 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
 
     # ---- Metadata ---------------------------------------------------------
     metadata: dict = {}
+    if _planta_em_bloco:
+        metadata["planta_em_bloco"] = _planta_em_bloco
     try:
         metadata["versão_dxf"] = doc.dxfversion
     except Exception:

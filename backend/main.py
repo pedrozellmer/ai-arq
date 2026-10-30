@@ -14784,6 +14784,24 @@ _FORA_PRANCHA_FAIXA = (0.20, 0.90)
 _FORA_PRANCHA_MIN = 50.0        # m (ou m²) fora E dentro: menos que isso é ruído
 
 
+#: 🩸 30/10/2026: o começo do aviso — `projeto.html` reconhece o caso por ele.
+MARCA_PLANTA_EM_BLOCO = "⚠ A PLANTA ESTÁ DENTRO DE UM BLOCO"
+
+
+def _linhas_planta_em_bloco(arqs: list) -> list:
+    """Uma linha de atenção por projeto: as pranchas em que a planta inteira está
+    num único bloco e o motor não mediu (`planta_dentro_de_bloco` do extrator)."""
+    nomes = [str((a or {}).get("nome") or "prancha") for a in (arqs or [])
+             if isinstance(a, dict) and a.get("planta_em_bloco")]
+    if not nomes:
+        return []
+    _lista = ", ".join(nomes[:4]) + (" e mais %d" % (len(nomes) - 4) if len(nomes) > 4 else "")
+    return ["%s — em %d de %d prancha(s) (%s), quase todo o desenho está num bloco só, e o "
+            "AI.arq mede o que está solto no modelo. Por isso muitas linhas ficaram em branco. "
+            "Deixe as paredes, pisos e forros da obra em layers próprios, soltos no modelo, "
+            "e envie de novo." % (MARCA_PLANTA_EM_BLOCO, len(nomes), len(arqs), _lista)]
+
+
 def _linhas_fora_das_pranchas(arqs: list) -> list:
     """Uma linha de atenção por projeto: quanto do que entrou na conta está no
     modelo FORA de toda janela das pranchas (`fora_das_pranchas` do extrator).
@@ -16757,6 +16775,9 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                             # 10/10: o que nenhuma janela das pranchas mostra
                             if _md_u.get("fora_das_pranchas"):
                                 _res_esc["fora_das_pranchas"] = _md_u["fora_das_pranchas"]
+                            # 30/10: a planta inteira num bloco só
+                            if _md_u.get("planta_em_bloco"):
+                                _res_esc["planta_em_bloco"] = _md_u["planta_em_bloco"]
                             # 18/10: a base copiada em plantas temáticas contou 1× (chave)
                             if _md_u.get("base_em_plantas_tematicas"):
                                 _res_esc["base_em_plantas_tematicas"] = _md_u["base_em_plantas_tematicas"]
@@ -20656,6 +20677,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                                  frase_origem=_frase_esc)
             try:                        # o aviso novo nunca derruba as linhas de escala
                 _linhas_esc += _linhas_fora_das_pranchas(_escala_arqs)
+                _linhas_esc += _linhas_planta_em_bloco(_escala_arqs)
             except Exception as _efp:
                 print(f"[fora-das-pranchas] nao-fatal: {_efp}")
         except NameError:
@@ -35698,6 +35720,8 @@ _TRACK_ALLOWED = {
     # disparou "chat_pergunta" — o comentário antigo dizia que sim. As linhas antigas seguem no banco.
     # os convites que completam o quantitativo — o de área já existia; o de pé-direito nasceu mudo
     "convite-pd:exibido", "convite-pd:submit-ok", "convite-pd:submit-erro", "convite-pd:submit-invalido",
+    # 30/10: o cartão de caminhos das linhas em branco (o clique é `clique:caminho-…`)
+    "caminhos:exibido",
     "proc_perguntas:exibido", "proc_perguntas:respondido", "proc_perguntas:recusado",
     # ONDA 5 — o público (o topo do funil): a landing e o blog trazem quase todo cadastro
     # (project_google_traz_cadastro_20260831) e o caminho até o "criar conta" era cego.

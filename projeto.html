@@ -81,7 +81,7 @@
   .so-leitura #btn-edit-client, .so-leitura #client-edit, .so-leitura #client-data, .so-leitura #btn-reprocess,
   .so-leitura #reprocess-box, .so-leitura #btn-upload-quote, .so-leitura #cotacoes-section,
   .so-leitura #btn-upload-rev, .so-leitura #cad-upload-btn, .so-leitura #cad-upload-status,
-  .so-leitura #area-prompt, .so-leitura #feedback-card, .so-leitura #chat-quant,
+  .so-leitura #area-prompt, .so-leitura #feedback-card, .so-leitura #chat-quant, .so-leitura #caminhos-card,
   .so-leitura [onclick^="saveProjectAndClient"], .so-leitura [onclick^="enviarRespostasProc"],
   .so-leitura [onclick^="submitInformed"], .so-leitura [onclick^="switchUploadTab"],
   .so-leitura [onclick^="sendFeedback"], .so-leitura [onclick^="openClientEdit"],
@@ -236,6 +236,11 @@
         <p id="erro-upload-status" class="hidden text-sm mt-2"></p>
       </div>
     </div>
+  </div>
+<div id="caminhos-card" class="hidden rounded-xl border-2 border-indigo-200 bg-indigo-50 p-5">
+    <h3 id="caminhos-titulo" class="font-semibold text-indigo-900 mb-1"></h3>
+    <p id="caminhos-porque" class="text-sm text-indigo-800 mb-3"></p>
+    <ul id="caminhos-lista" class="space-y-2"></ul>
   </div>
 <div id="proj-warnings" class="hidden rounded-xl border-2 border-amber-200 bg-amber-50 p-5" role="alert" aria-live="polite">
     <div class="flex items-start gap-3">
@@ -1504,6 +1509,7 @@ async function carregarStatsEntregas(itensJaLidos) {
   safeRun(() => renderWarnings(proj.warnings || []), 'renderWarnings');
   safeRun(() => maybeShowAreaPrompt(proj, items), 'maybeShowAreaPrompt');
   safeRun(() => maybeShowPeDireitoPrompt(proj, items), 'maybeShowPeDireitoPrompt');
+  safeRun(() => renderCaminhos(proj, items), 'renderCaminhos');   // depois dos convites: lê quem apareceu
   safeRun(() => renderDates(proj), 'renderDates');
   safeRun(() => renderFiles(proj, items), 'renderFiles');
 
@@ -2244,6 +2250,7 @@ window.switchUploadTab = switchUploadTab;
       'kpi-strip',              // 1. faixa de KPIs (logo abaixo do header)
       'proc-block',             // 2. estado vivo: processando (condicional)
       'erro-block',             // 3. estado vivo: erro (condicional)
+      'caminhos-card',          // 3b. por que há linhas em branco e o que fazer (condicional)
       'proj-warnings',          // 4. avisos do motor (condicional)
       'area-prompt',            // 4b. informe a metragem (condicional — planta sem cota)
       'pd-prompt',              // 4c. informe o pé-direito (condicional — pintura de parede em branco)
@@ -3421,6 +3428,103 @@ function maybeShowPeDireitoPrompt(proj, items) {
     try { if (window.trackEvent) trackEvent('convite-pd:exibido', { job_id: jobId, tela: 'projeto' }); } catch (_) {}
     document.getElementById('pd-prompt').classList.remove('hidden');
   } catch (e) { console.warn('[pd-prompt]', e); }
+}
+
+// ═══ Por que há linhas em branco, e o que fazer ═══════════════════════
+// 🩸 30/10/2026: nota 2 no PDA Moema (332 de 378 linhas em branco), com o
+// comentário "faltou eu saber como usar direito e informar alguns caminhos com
+// mais clareza". O erro era nosso, e a tela não dizia nada. 📏 60 dias: 30
+// projetos com 60%+ em branco, 13% agiram na revisão.
+// 🔑 Cada caminho só aparece quando é verdade neste projeto: o motivo vem do aviso
+// do motor e dos convites que a própria página decidiu mostrar (`vis`). Os campos
+// de área e pé-direito continuam nos convites: aqui é só o atalho até eles.
+const _CAMINHOS_MIN_LINHAS = 5;
+const _CAMINHOS_MIN_FRACAO = 0.30;
+const _MARCA_PLANTA_EM_BLOCO = 'A PLANTA ESTÁ DENTRO DE UM BLOCO';
+
+function caminhosDasLinhasEmBranco(proj, items, vis) {
+  const lista = Array.isArray(items) ? items : [];
+  if (proj.status !== 'done' || !lista.length) return null;
+  const n = lista.filter(it => Number(it.quantity || 0) === 0).length;
+  if (n < _CAMINHOS_MIN_LINHAS || n / lista.length < _CAMINHOS_MIN_FRACAO) return null;
+  const titulo = 'Por que ' + n + ' linhas ficaram em branco';
+  const revisao = { acao: 'revisao', t: 'Preencher na revisão o que você já sabe',
+    d: 'As linhas estão listadas por disciplina. O que você digitar entra na planilha.',
+    rotulo: 'Abrir a revisão' };
+  const avisos = Array.isArray(proj.warnings) ? proj.warnings : [];
+  if (avisos.some(w => String(w || '').includes(_MARCA_PLANTA_EM_BLOCO))) {
+    return { caso: 'bloco', titulo,
+      porque: 'Quase todo o desenho está dentro de um único bloco. O AI.arq mede o que está solto no modelo, ' +
+        'então viu as cotas e os textos, mas quase nenhuma parede ou piso. Não foi nada que você fez de errado.',
+      caminhos: [
+        { acao: 'novo', forte: true, t: 'Enviar de novo com a obra solta no modelo',
+          d: 'Deixe as paredes, pisos e forros da obra em layers próprios, fora do bloco.',
+          rotulo: 'Enviar projeto' },
+        revisao,
+        { acao: 'chat', t: 'Perguntar ao assistente',
+          d: 'Ele mostra o que veio de cada prancha e o que faltou.', rotulo: 'Abrir o chat' },
+      ] };
+  }
+  const area = { acao: 'area', t: 'Informar a área total',
+    d: 'Completa as linhas de piso, forro e laje. Elas ficam marcadas como informadas por você.',
+    rotulo: 'Informar a área' };
+  const pd = { acao: 'pd', t: 'Informar o pé-direito',
+    d: 'Completa as linhas de pintura de parede.', rotulo: 'Informar o pé-direito' };
+  if (vis.cad) {
+    return { caso: 'pdf', titulo,
+      porque: 'Este projeto veio em PDF, e o PDF traz menos informação que o CAD. ' +
+        'O que o desenho não mostrou com clareza ficou em branco: a gente não inventa número.',
+      caminhos: [
+        { acao: 'cad', forte: true, t: 'Enviar o DWG ou DXF do mesmo projeto',
+          d: 'Com o arquivo de CAD, paredes, áreas e peças podem sair medidas do desenho.',
+          rotulo: 'Anexar o CAD' },
+      ].concat(vis.area ? [area] : [], [revisao]) };
+  }
+  const caminhos = [].concat(vis.area ? [area] : [], vis.pd ? [pd] : [], [revisao]);
+  caminhos[0] = Object.assign({}, caminhos[0], { forte: true });
+  return { caso: 'dados', titulo,
+    porque: 'O desenho não trouxe o que essas linhas precisam, como área, altura ou especificação. ' +
+      'A gente deixa em branco em vez de inventar número.',
+    caminhos };
+}
+
+function renderCaminhos(proj, items) {
+  const _visivel = id => {
+    const el = document.getElementById(id);
+    return !!el && !el.classList.contains('hidden');
+  };
+  const r = caminhosDasLinhasEmBranco(proj, items, {
+    area: _visivel('area-prompt'), pd: _visivel('pd-prompt'), cad: _visivel('cad-upgrade-banner') });
+  if (!r) return;
+  document.getElementById('caminhos-titulo').textContent = r.titulo;
+  document.getElementById('caminhos-porque').textContent = r.porque;
+  document.getElementById('caminhos-lista').innerHTML = r.caminhos.map(c => `
+    <li class="bg-white rounded-lg border ${c.forte ? 'border-indigo-300' : 'border-indigo-100'} p-3 flex flex-wrap items-center justify-between gap-3">
+      <div class="min-w-0 flex-1">
+        <p class="text-sm font-semibold text-gray-900">${c.t}</p>
+        <p class="text-sm text-gray-600">${c.d}</p>
+      </div>
+      <button type="button" onclick="executarCaminho('${c.acao}')"
+        class="px-3 py-1.5 rounded-lg text-sm font-medium ${c.forte ? 'bg-indigo-600 hover:bg-indigo-700 text-white' : 'bg-white text-indigo-700 border border-indigo-300 hover:bg-indigo-50'}">${c.rotulo}</button>
+    </li>`).join('');
+  document.getElementById('caminhos-card').classList.remove('hidden');
+  try { if (window.trackEvent) trackEvent('caminhos:exibido', { job_id: jobId, type: r.caso, tela: 'projeto' }); } catch (_) {}
+}
+
+function executarCaminho(acao) {
+  try { if (window.trackEvent) trackEvent('clique:caminho-' + acao, { job_id: jobId, tela: 'projeto' }); } catch (_) {}
+  if (acao === 'revisao') { window.location.href = `revisao.html?job_id=${jobId}`; return; }
+  if (acao === 'novo') { window.location.href = 'dashboard.html'; return; }
+  if (acao === 'chat') {
+    mostrarVista('quantitativo');
+    document.getElementById('chat-quant').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return;
+  }
+  const alvo = { area: 'area-input', pd: 'pd-input', cad: 'cad-upgrade-banner' }[acao];
+  const el = alvo && document.getElementById(alvo);
+  if (!el) return;
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  if (el.tagName === 'INPUT') el.focus();
 }
 
 async function submitInformedPeDireito() {
