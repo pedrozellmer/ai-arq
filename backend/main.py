@@ -8653,8 +8653,11 @@ _RE_PEDE_O_QUADRO = _re.compile(
 
 #: Dimensão escrita na própria linha: `1,42×0,50 m`, `250x210 cm`, `0,90 × 2,10`.
 #: Quem tem isso NÃO entra no aviso — a especificação chegou.
+#: 🩸 31/10/2026 (a33ec785): "Porta P2 — 0,80m × 2,10m — conforme quadro de esquadrias"
+#: não casava (unidade antes do ×) e o cliente leu que o quadro não veio, com as
+#: medidas do quadro na linha. 📏 60 dias: 7 jobs, 39 linhas, o aviso some em 5.
 _RE_TEM_DIMENSAO = _re.compile(
-    r"\d+[,.]?\d*\s*[×xX]\s*\d+[,.]?\d*\s*(?:m|cm|mm)?\b")
+    r"\d+[,.]?\d*\s*(?:m|cm|mm)?\s*[×xX]\s*\d+[,.]?\d*\s*(?:m|cm|mm)?\b")
 
 #: O código da esquadria: PA01, PM04, J02, VF05, P10, JA01.
 _RE_CODIGO_ESQUADRIA = _re.compile(r"\b([A-Z]{1,3}\s?-?\d{1,3}[A-Z]?)\b")

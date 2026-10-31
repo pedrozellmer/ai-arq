@@ -80,6 +80,10 @@ _COMPLETAS = [
     "Porta P10 — Porta tipo abrir em alumínio anodizado branco, palheta sem "
     "ventilação, trinco tipo alavanca, soleira em granito verde",
     "Porta de madeira PM04 — porta interna de madeira 0,80 x 2,10 m",
+    # 31/10/2026 (a33ec785): a unidade vem antes do ×
+    "Porta P2 — 0,80m × 2,10m — porta interna de dormitório/banheiro — material a "
+    "confirmar — conforme quadro de esquadrias",
+    "Janela J1 — 120cm x 100cm — conforme quadro de esquadrias",
 ]
 
 
