@@ -21256,18 +21256,27 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     _tem_cad_teto = bool(cad_paths)
                 except NameError:
                     _tem_cad_teto = False
+                # 🩸 31/10/2026 (01e6bfad): com medição incompleta o teto é a SOMA
+                # (ver 02/09 em `_apply_area_honesty`), e o aviso chamava 2.577 m² de
+                # "maior prancha", que tinha 1.692,9.
+                _soma_teto = float(_pv_m2 or 0)
+                try:
+                    _n_pranchas_teto = len(_pdfvec_por_prancha or {})
+                except NameError:
+                    _n_pranchas_teto = 0
+                _rotulo_teto = ("soma das pranchas medidas"
+                                if _n_pranchas_teto > 1 and abs(_teto_log - _soma_teto) < 0.01
+                                else "maior prancha medida")
                 project_data.warnings = (getattr(project_data, "warnings", None) or []) + [
                     ("⚠ %d item(ns) de área vieram com metragem maior do que cabe na "
-                     "maior prancha medida (%.0f m²) — deixamos em branco em vez de "
+                     "%s (%.0f m²) — deixamos em branco em vez de "
                      "publicar número que a gente não consegue sustentar. "
-                     % (_apt, _teto_log))
+                     % (_apt, _rotulo_teto, _teto_log))
                     + ("Preencha a metragem na revisão." if _tem_cad_teto
                        else "Preencha a metragem ou envie o DXF pra medirmos.")]
                 _log_error("motor:teto-por-prancha",
-                           "zerei %d item(ns) de área: passavam no teto da SOMA "
-                           "(%.2f m², a mesma planta contada em cada disciplina) e "
-                           "não passam no da MAIOR prancha (%.2f m²)"
-                           % (_apt, float(_pv_m2 or 0), _teto_log),
+                           "zerei %d item(ns) de área: não cabem na %s (%.2f m²; soma %.2f m²)"
+                           % (_apt, _rotulo_teto, _teto_log, _soma_teto),
                            job_id, severity="warning")
         except Exception:
             pass
