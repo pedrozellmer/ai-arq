@@ -6427,9 +6427,14 @@ def _next_steps_html(job_id: str, n_medido: int = 0, n_total: int = 0,
             f'</div>')
 
 
+#: 🩸 31/10/2026 (c14f3ea5): pediu Estrutura, recebeu "na maioria das vezes é escala,
+#: mande em DXF". 📏 60 dias: 10 projetos com esse aviso, nenhum cliente releu.
+_MARCA_PARECE_ARQUITETURA = "parece ser de ARQUITETURA"
+
+
 def _build_sem_medida_email(name: str, project_name: str, job_id: str,
                             n_total: int, n_zerados: int, extra_body_html: str = "",
-                            email: str = ""):
+                            email: str = "", parece_arquitetura: bool = False):
     """Monta (subject, html) do e-mail 'não consegui medir esse arquivo' — a irmã
     de má notícia da 'planilha pronta', que sai NO LUGAR dela quando nada foi
     medido do CAD (`_nada_medido` em process_job).
@@ -6444,6 +6449,25 @@ def _build_sem_medida_email(name: str, project_name: str, job_id: str,
     _pn = (project_name or "").strip()
     subject = (f"{_pn} — não consegui medir esse arquivo"
                if _pn else "Não consegui medir esse arquivo")
+    _motivo = (
+        f"O motivo está no diagnóstico abaixo. Na maioria das vezes é "
+        f"escala: sem cota, sem carimbo e sem viewport, não dá pra saber "
+        f"o tamanho real do que está desenhado — e a gente não inventa "
+        f"medida.<br><br>"
+        f"<b>O que resolve:</b> mande a mesma planta em <b>DXF</b> "
+        f"(no AutoCAD ou BricsCAD: Salvar Como → DXF 2013) no mesmo "
+        f"projeto. A gente refaz medindo de verdade, de graça. Se só "
+        f"existe o desenho à mão, me diga a área total no upload que eu "
+        f"uso como base — rotulada como informada por você, não medida.")
+    if parece_arquitetura:
+        _motivo = (
+            "Você pediu a leitura de Estrutura, mas estas pranchas parecem de "
+            "arquitetura: sem planta de fôrma, armação ou quadro de ferros, não há "
+            "o que levantar de estrutura nelas.<br><br>"
+            "<b>O que resolve:</b> abra o projeto e clique em <b>Ler como "
+            "Arquitetura</b>. São os mesmos arquivos, você não precisa enviar nada "
+            "e é grátis. Se o que você quer é o levantamento de estrutura, envie as "
+            "pranchas de fôrma e armação em um projeto novo.")
     corpo = (
         f"{_greeting_line(_hs.escape(name or ''))}<br><br>"
         # 🪤 A frase tem que caber nos DOIS casos. Com o limite em
@@ -6457,15 +6481,7 @@ def _build_sem_medida_email(name: str, project_name: str, job_id: str,
         f"sem quantidade. Não tem planilha pra entregar ainda, e "
         f"prefiro te dizer isso do que mandar uma lista pra você "
         f"preencher na mão.<br><br>"
-        f"O motivo está no diagnóstico abaixo. Na maioria das vezes é "
-        f"escala: sem cota, sem carimbo e sem viewport, não dá pra saber "
-        f"o tamanho real do que está desenhado — e a gente não inventa "
-        f"medida.<br><br>"
-        f"<b>O que resolve:</b> mande a mesma planta em <b>DXF</b> "
-        f"(no AutoCAD ou BricsCAD: Salvar Como → DXF 2013) no mesmo "
-        f"projeto. A gente refaz medindo de verdade, de graça. Se só "
-        f"existe o desenho à mão, me diga a área total no upload que eu "
-        f"uso como base — rotulada como informada por você, não medida."
+        f"{_motivo}"
         f"{extra_body_html}"
         # Aqui a pergunta vale MAIS: e o caso em que a entrega
         # falhou, e a nota vem junto com o motivo. So muda a
@@ -22967,7 +22983,9 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     # pra mim". Aqui entram só os números reais do job.
                     _subj_pp, _html_pp = _build_sem_medida_email(
                         _nm, _rows[0].get("project_name") or "", job_id,
-                        len(all_items), _n_zerado, f"{_aviso_html}{_diag}", email=_pe)
+                        len(all_items), _n_zerado, f"{_aviso_html}{_diag}", email=_pe,
+                        parece_arquitetura=any(_MARCA_PARECE_ARQUITETURA in str(_w)
+                                               for _w in (project_data.warnings or [])))
                     _log_error("motor:sem-medida-nenhuma",
                                f"itens={len(all_items)} medidos=0 zerados={_n_zerado} "
                                f"— e-mail trocado por 'não consegui medir'", job_id)
