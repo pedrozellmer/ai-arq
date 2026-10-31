@@ -750,6 +750,8 @@ _STAGES_DIAGNOSTICO = frozenset({
     "motor:contagem-por-local",
     # 31/10: peça que se chama "bloco" (com a chave em 0, só a contagem)
     "motor:bloco-que-e-peca",
+    # 31/10: a mesma tabela lida em N pranchas (com a chave em 0, só a contagem)
+    "motor:tabela-repetida",
     "motor:versao-anterior", "motor:pai-e-filho", "motor:download-regen",
     "motor:respostas-releitura", "motor:informou-depois",
     "motor:consolida-tipo",
@@ -8953,6 +8955,32 @@ def _qtd_na_nota(v) -> str:
     return s.replace(",", "\x00").replace(".", ",").replace("\x00", ".")
 
 
+def _junta_tabela_repetida(items: list, so_conta: bool = False) -> tuple:
+    """A mesma tabela lida em várias pranchas vira uma linha. Devolve (itens, a_menos).
+
+    A quantidade não muda: é o total que a tabela diz, lido N vezes. Ver
+    `grupos_da_tabela_repetida`. Quem some fica escrito na linha que fica.
+    """
+    from engine_rules import grupos_da_tabela_repetida as _grupos
+    grupos = _grupos(items)
+    a_menos = sum(len(g) - 1 for g in grupos)
+    if so_conta or not grupos:
+        return items, a_menos
+    fora = set()
+    for g in grupos:
+        best = max(g, key=lambda x: (
+            str(getattr(getattr(x, "confidence", None), "value", "")) == "confirmado",
+            sum(1 for _f in ("marca", "codigo_fabricante", "cor", "spec_origem")
+                if getattr(x, _f, "")),
+            len(x.description or ""), _desempate_estavel(x)))
+        _nota = (f"A tabela de esquadrias se repete em {len(g)} pranchas com a mesma "
+                 f"quantidade ({_qtd_na_nota(best.quantity)} {best.unit}): é o total, "
+                 f"então ficou uma linha só. As outras: {_o_que_a_fusao_absorveu(g, best, teto=2)}.")
+        best.observations = " | ".join(p for p in ((best.observations or "").rstrip(" |"), _nota) if p)
+        fora.update(id(it) for it in g if it is not best)
+    return [it for it in items if id(it) not in fora], a_menos
+
+
 def _o_que_a_fusao_absorveu(grupo, ficou, teto: int = 3) -> str:
     """O que saiu da planilha quando a fusão ficou com a quantidade de UMA linha.
 
@@ -10657,6 +10685,8 @@ _CHAVES_AVALIAVEIS = frozenset({
     "CONTAGEM_POR_LOCAL_EM_BRANCO",
     # 31/10: "Bloco autônomo" não perde o selo como se fosse bloco do CAD
     "BLOCO_QUE_E_PECA_NAO_REBAIXA",
+    # 31/10: "PS-02, QNT=352" lido em 3 pranchas vira uma linha
+    "TABELA_REPETIDA_UMA_LINHA",
 })
 _CHAVES_DA_AVALIACAO: dict = {}        # job de avaliação → {chave: "0" | "1"}
 
@@ -19590,6 +19620,21 @@ bloco — só cite os que estão no inventário deste arquivo."""
                        f"itens_depois={len(all_items)}", job_id)
         except Exception:
             pass
+        # 🩸 31/10: a tabela de esquadrias repetida nas pranchas, lida N vezes.
+        # 🔑 TABELA_REPETIDA_UMA_LINHA=1 deixa uma linha; com 0 o motor só conta.
+        try:
+            try:
+                _tabela_liga = _chave_do_job(job_id, "TABELA_REPETIDA_UMA_LINHA") == "1"
+            except NameError:
+                import os as _os_tr
+                _tabela_liga = _os_tr.environ.get("TABELA_REPETIDA_UMA_LINHA", "0") == "1"
+            all_items, _n_tabela = _junta_tabela_repetida(all_items, so_conta=not _tabela_liga)
+            if _n_tabela:
+                _log_error("motor:tabela-repetida",
+                           f"linhas={_n_tabela} liga={int(_tabela_liga)}", job_id, severity="info")
+        except Exception as _etr:
+            _log_error("motor:tabela-repetida", f"FALHOU: {_etr}", job_id,
+                       severity="warning")
         # Validar qty/unit após consolidação
         for it in all_items:
             new_qty, adjusted = _validate_quantity_for_unit(it)

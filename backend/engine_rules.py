@@ -5081,6 +5081,41 @@ def contar_bloco_que_e_peca(itens) -> int:
                and bloco_e_nome_de_peca(getattr(_it, "description", "")))
 
 
+# 🩸 31/10/2026 (01e6bfad): a tabela de esquadrias vinha repetida nas pranchas de cada
+# pavimento, com o total do prédio. A IA leu "PS-02, QNT=352" em cada uma, com palavras
+# diferentes, e a fusão só junta descrição parecida: 352 un saíram em 3 linhas.
+# 📏 60 dias: só este job, 53 códigos, 73 linhas e 1.393 de 2.459 un.
+# 🪤 Quantidade igual não prova: "4 por pavimento" é contagem, e somar é o certo. A prova
+# é a própria linha dizer que leu esse número da tabela, em todas as pranchas do grupo.
+_RE_CODIGO_DE_TABELA = _re.compile(r"\b([A-Z]{1,3}-?\d{1,3}[a-z]?)\b")
+_RE_QTD_LIDA_DA_TABELA = _re.compile(
+    r"\b(?:QNT|QTD|Qtd|Qt)\.?\s*(?:expl[íi]cita\s*)?[=:]?\s*(\d+)\b")
+_RE_CONTAGEM_VISUAL = _re.compile(r"contagem\s+visual", _re.I)
+
+
+def grupos_da_tabela_repetida(itens) -> list:
+    """Linhas que são a MESMA leitura da tabela em pranchas diferentes. Só APONTA.
+
+    Mesmo código, mesma quantidade, 2+ pranchas, e cada linha diz que leu esse número.
+    """
+    por_chave: dict = {}
+    for _it in (itens or []):
+        _u = str(getattr(_it, "unit", "") or "").strip().lower()
+        _q = getattr(_it, "quantity", 0) or 0
+        if _u not in _UNIDADES_DE_CONTAGEM or _q <= 0:
+            continue
+        if getattr(_it, "origem", "") == "revisao_cliente":
+            continue
+        _cod = _RE_CODIGO_DE_TABELA.search(str(getattr(_it, "description", "") or ""))
+        _obs = str(getattr(_it, "observations", "") or "")
+        _lido = _RE_QTD_LIDA_DA_TABELA.search(_obs)
+        if not (_cod and _lido) or _RE_CONTAGEM_VISUAL.search(_obs) or float(_lido.group(1)) != float(_q):
+            continue
+        por_chave.setdefault((_cod.group(1), float(_q)), []).append(_it)
+    return [g for g in por_chave.values()
+            if len({str(getattr(_i, "ref_sheet", "") or "").split(" (")[0].strip() for _i in g}) > 1]
+
+
 # 🩸 05/10/2026 — a mesma doença pelo outro lado. A DESCRIÇÃO traz nome de peça
 # ("Locação e execução de estacas raiz", "Marco topográfico de locação"), mas a
 # OBSERVAÇÃO da própria IA diz que o nome é PALPITE pelo nome do bloco ("Nome do
