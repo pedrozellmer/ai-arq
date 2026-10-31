@@ -248,6 +248,10 @@
       <div class="flex-1">
         <h3 class="font-semibold text-amber-900 mb-2">Avisos da leitura</h3>
         <ul id="proj-warnings-list" class="space-y-1.5 text-sm text-amber-800"></ul>
+        <details id="proj-notas" class="hidden mt-3 border-t border-amber-200 pt-3">
+          <summary id="proj-notas-titulo" class="text-sm font-medium text-amber-900 cursor-pointer"></summary>
+          <ul id="proj-notas-lista" class="mt-2 space-y-1.5 text-sm text-amber-800 max-h-64 overflow-y-auto"></ul>
+        </details>
       </div>
     </div>
   </div>
@@ -3269,17 +3273,47 @@ async function postNps(score, comment) {
   }
 }
 
+// 🩸 31/10/2026: centenas de notas da leitura por prancha, e os avisos que pedem uma
+// ação do cliente perdidos na lista. 🔑 O que não for reconhecido como do motor fica
+// recolhido, nunca some; com poucas notas, a caixa segue como sempre foi.
+const _AVISOS_ABERTOS_ATE = 5;
+const _MARCAS_DO_MOTOR = ['⚠', '📐', '📄', 'ℹ', '✅'];
+const _RE_AVISO_DO_MOTOR = /^(\d+ esquadria|\d+ linha\(s\) que parecem|Área total de|A área que você informou|A leitura da prancha|Tipologia salva|.{1,120} tem \d+ páginas)/;
+
+function separarAvisos(warnings) {
+  const doMotor = w => {
+    const t = String(w == null ? '' : w).trim();
+    return _MARCAS_DO_MOTOR.some(m => t.indexOf(m) === 0) || _RE_AVISO_DO_MOTOR.test(t);
+  };
+  const notas = warnings.filter(w => !doMotor(w));
+  if (notas.length <= _AVISOS_ABERTOS_ATE) return { abertos: warnings, notas: [] };
+  return { abertos: warnings.filter(doMotor), notas };
+}
+
+function _linhaDeAviso(w) {
+  const pos = typeof w === 'string' && w.startsWith('✅');
+  const txt = (pos ? w.slice(1) : String(w).replace(/^\s*⚠\s*/, '')).trim();   // texto antigo já vinha com ⚠ → ficava "⚠ ⚠"
+  return `<li class="flex items-start gap-2"><span class="mt-0.5">${pos ? '✅' : '⚠'}</span><span>${esc(txt)}</span></li>`;
+}
+
 function renderWarnings(warnings) {
   if (!Array.isArray(warnings) || !warnings.length) return;
   document.getElementById('proj-warnings').classList.remove('hidden');
   // 21/08/2026: aviso que começa com ✅ é conferência POSITIVA do motor (ex.:
   // "escala confirmada por 244 cotas") — mostra o ✅ em vez do ⚠, sem
   // diluir os avisos de verdade (regra nº7: aviso falso queima o verdadeiro).
-  document.getElementById('proj-warnings-list').innerHTML = warnings.map(w => {
-    const pos = typeof w === 'string' && w.startsWith('✅');
-    const txt = (pos ? w.slice(1) : String(w).replace(/^\s*⚠\s*/, '')).trim();   // texto antigo já vinha com ⚠ → ficava "⚠ ⚠"
-    return `<li class="flex items-start gap-2"><span class="mt-0.5">${pos ? '✅' : '⚠'}</span><span>${esc(txt)}</span></li>`;
-  }).join('');
+  const _sep = separarAvisos(warnings);
+  document.getElementById('proj-warnings-list').innerHTML = _sep.abertos.map(_linhaDeAviso).join('');
+  if (_sep.notas.length) {
+    document.getElementById('proj-notas-titulo').textContent =
+      'Ver as ' + _sep.notas.length + ' observações da leitura, prancha por prancha';
+    document.getElementById('proj-notas-lista').innerHTML = _sep.notas.map(_linhaDeAviso).join('');
+    const _det = document.getElementById('proj-notas');
+    _det.classList.remove('hidden');
+    _det.addEventListener('toggle', () => {
+      try { if (_det.open && window.trackEvent) trackEvent('clique:ver-notas-da-leitura', { job_id: jobId, tela: 'projeto' }); } catch (_) {}
+    }, { once: true });
+  }
   // 🎯 15/09/2026 — OS AVISOS DO TIPO DE PROJETO NÃO DEIXAVAM RASTRO.
   // O estudo do tipo trocado mediu 0 de 5 trocas de tipo depois de aviso não
   // bloqueante, e não havia como separar "ninguém agiu" de "ninguém viu":
@@ -3441,9 +3475,8 @@ function maybeShowPeDireitoPrompt(proj, items) {
 const _CAMINHOS_MIN_LINHAS = 5;
 const _CAMINHOS_MIN_FRACAO = 0.30;
 const _MARCA_PLANTA_EM_BLOCO = 'A PLANTA ESTÁ DENTRO DE UM BLOCO';
-// 🩸 31/10/2026 (c14f3ea5): pediu Estrutura e mandou arquitetura; o 1º uso real do
-// cartão disse "envie o DWG", que não resolve. 📏 60 dias: 10 projetos com esse aviso,
-// nenhum cliente reprocessou como Arquitetura (nossas avaliações tiraram 41 a 70 linhas).
+// 🩸 31/10/2026: pediu Estrutura e mandou arquitetura; o 1º uso real do cartão disse
+// "envie o DWG", que não resolve.
 const _MARCA_PARECE_ARQUITETURA = 'parece ser de ARQUITETURA';
 
 function caminhosDasLinhasEmBranco(proj, items, vis) {
