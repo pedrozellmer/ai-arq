@@ -3441,6 +3441,10 @@ function maybeShowPeDireitoPrompt(proj, items) {
 const _CAMINHOS_MIN_LINHAS = 5;
 const _CAMINHOS_MIN_FRACAO = 0.30;
 const _MARCA_PLANTA_EM_BLOCO = 'A PLANTA ESTÁ DENTRO DE UM BLOCO';
+// 🩸 31/10/2026 (c14f3ea5): pediu Estrutura e mandou arquitetura; o 1º uso real do
+// cartão disse "envie o DWG", que não resolve. 📏 60 dias: 10 projetos com esse aviso,
+// nenhum cliente reprocessou como Arquitetura (nossas avaliações tiraram 41 a 70 linhas).
+const _MARCA_PARECE_ARQUITETURA = 'parece ser de ARQUITETURA';
 
 function caminhosDasLinhasEmBranco(proj, items, vis) {
   const lista = Array.isArray(items) ? items : [];
@@ -3463,6 +3467,20 @@ function caminhosDasLinhasEmBranco(proj, items, vis) {
         revisao,
         { acao: 'chat', t: 'Perguntar ao assistente',
           d: 'Ele mostra o que veio de cada prancha e o que faltou.', rotulo: 'Abrir o chat' },
+      ] };
+  }
+  if (vis.tipo && avisos.some(w => String(w || '').includes(_MARCA_PARECE_ARQUITETURA))) {
+    return { caso: 'tipo', titulo,
+      porque: 'Você pediu a leitura de Estrutura, mas estas pranchas parecem de arquitetura. ' +
+        'Sem planta de fôrma, armação ou quadro de ferros, não há o que levantar de estrutura nelas.',
+      caminhos: [
+        { acao: 'tipo', forte: true, t: 'Ler as mesmas pranchas como Arquitetura',
+          d: 'Não precisa enviar nada de novo. Você confirma antes de começar.',
+          rotulo: 'Ler como Arquitetura' },
+        { acao: 'novo', t: 'Enviar as pranchas de estrutura',
+          d: 'Planta de fôrma, detalhamento de armação ou quadro de ferros.',
+          rotulo: 'Enviar projeto' },
+        revisao,
       ] };
   }
   const area = { acao: 'area', t: 'Informar a área total',
@@ -3494,7 +3512,8 @@ function renderCaminhos(proj, items) {
     return !!el && !el.classList.contains('hidden');
   };
   const r = caminhosDasLinhasEmBranco(proj, items, {
-    area: _visivel('area-prompt'), pd: _visivel('pd-prompt'), cad: _visivel('cad-upgrade-banner') });
+    area: _visivel('area-prompt'), pd: _visivel('pd-prompt'), cad: _visivel('cad-upgrade-banner'),
+    tipo: !!document.querySelector('#reprocess-tipo option[value="arquitetura"]') });
   if (!r) return;
   document.getElementById('caminhos-titulo').textContent = r.titulo;
   document.getElementById('caminhos-porque').textContent = r.porque;
@@ -3515,6 +3534,12 @@ function executarCaminho(acao) {
   try { if (window.trackEvent) trackEvent('clique:caminho-' + acao, { job_id: jobId, tela: 'projeto' }); } catch (_) {}
   if (acao === 'revisao') { window.location.href = `revisao.html?job_id=${jobId}`; return; }
   if (acao === 'novo') { window.location.href = 'dashboard.html'; return; }
+  if (acao === 'tipo') {
+    // o mesmo botão Reprocessar, com a confirmação dele
+    document.getElementById('reprocess-tipo').value = 'arquitetura';
+    document.getElementById('btn-reprocess').click();
+    return;
+  }
   if (acao === 'chat') {
     mostrarVista('quantitativo');
     document.getElementById('chat-quant').scrollIntoView({ behavior: 'smooth', block: 'start' });

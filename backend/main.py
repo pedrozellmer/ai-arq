@@ -748,6 +748,8 @@ _STAGES_DIAGNOSTICO = frozenset({
     "motor:rateio-por-etiqueta",
     # 30/10: "N por local" (com a chave em 0, só a contagem)
     "motor:contagem-por-local",
+    # 31/10: peça que se chama "bloco" (com a chave em 0, só a contagem)
+    "motor:bloco-que-e-peca",
     "motor:versao-anterior", "motor:pai-e-filho", "motor:download-regen",
     "motor:respostas-releitura", "motor:informou-depois",
     "motor:consolida-tipo",
@@ -10634,6 +10636,8 @@ _CHAVES_AVALIAVEIS = frozenset({
     "RATEIO_POR_ETIQUETA_EM_BRANCO",
     # 30/10: "3 tomadas por bancada" sai em branco
     "CONTAGEM_POR_LOCAL_EM_BRANCO",
+    # 31/10: "Bloco autônomo" não perde o selo como se fosse bloco do CAD
+    "BLOCO_QUE_E_PECA_NAO_REBAIXA",
 })
 _CHAVES_DA_AVALIACAO: dict = {}        # job de avaliação → {chave: "0" | "1"}
 
@@ -15205,7 +15209,7 @@ def aviso_do_projeto_so_pdf(all_items, tem_cad: bool) -> str:
         % (_com_numero, _total, _pct))
 
 
-def rebaixar_itens_sem_identidade(all_items):
+def rebaixar_itens_sem_identidade(all_items, poupa_peca=False):
     """Item cuja identidade é o nome do bloco do CAD perde o selo BRANCO.
 
     Devolve quantos foram rebaixados.
@@ -15232,13 +15236,14 @@ def rebaixar_itens_sem_identidade(all_items):
     from engine_rules import item_e_bloco_sem_identidade as _sem_ident
     from engine_rules import identidade_e_palpite_pelo_nome as _palpite
     from engine_rules import MARCA_IDENTIDADE_PALPITE as _M_PALPITE
+    from engine_rules import bloco_e_nome_de_peca as _peca
     from models import Confidence as _CfB
     n = 0
     for _it in (all_items or []):
         _cf = str(getattr(getattr(_it, "confidence", None), "value",
                           getattr(_it, "confidence", "")) or "")
-        if not _sem_ident(getattr(_it, "description", ""),
-                          getattr(_it, "unit", "")):
+        if (not _sem_ident(getattr(_it, "description", ""), getattr(_it, "unit", ""))
+                or (poupa_peca and _peca(getattr(_it, "description", "")))):
             # 🩸 05/10: a descrição tem nome de peça, mas a OBSERVAÇÃO da própria
             # IA diz que esse nome é palpite pelo nome do bloco — o ✓ cai
             _ob = str(getattr(_it, "observations", "") or "")
@@ -19524,10 +19529,28 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # prova QUE COISA. O selo mais forte no item mais fraco.
         # 🪤 Só REBAIXA, nunca promove (regra nº1). E fala com o cliente na
         # LINHA, que é onde ele lê — não num aviso de topo.
+        # 🩸 31/10: "Bloco autônomo" e "Bloco de coroamento" são peças, não bloco do
+        # CAD. 🔑 BLOCO_QUE_E_PECA_NAO_REBAIXA=1 poupa a linha; com 0 o motor só conta.
+        _bloco_peca_liga = False
+        try:
+            try:
+                _bloco_peca_liga = _chave_do_job(job_id, "BLOCO_QUE_E_PECA_NAO_REBAIXA") == "1"
+            except NameError:
+                import os as _os_bp
+                _bloco_peca_liga = _os_bp.environ.get("BLOCO_QUE_E_PECA_NAO_REBAIXA", "0") == "1"
+            from engine_rules import contar_bloco_que_e_peca as _conta_peca
+            _n_bloco_peca = _conta_peca(all_items)
+            if _n_bloco_peca:
+                _log_error("motor:bloco-que-e-peca",
+                           f"linhas={_n_bloco_peca} liga={int(_bloco_peca_liga)}",
+                           job_id, severity="info")
+        except Exception as _ebp:
+            _log_error("motor:bloco-que-e-peca", f"FALHOU: {_ebp}", job_id,
+                       severity="warning")
         try:
             # 🔑 A regra mora em `rebaixar_itens_sem_identidade`, no módulo, pra
             # que o guarda possa EXECUTÁ-LA. Ver a docstring de lá.
-            _n_reb_bloco = rebaixar_itens_sem_identidade(all_items)
+            _n_reb_bloco = rebaixar_itens_sem_identidade(all_items, poupa_peca=_bloco_peca_liga)
             if _n_reb_bloco:
                 _log_error("motor:bloco-sem-identidade",
                            "rebaixei %d item(ns) de contagem cuja identidade é o "

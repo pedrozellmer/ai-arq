@@ -5053,6 +5053,34 @@ def item_e_bloco_sem_identidade(descricao, unidade) -> bool:
     return bool(_RE_LIDERA_BLOCO.search(_d) or _RE_NAO_IDENT.search(_d))
 
 
+# 🩸 31/10/2026 (73e07b47): "Bloco autônomo de sinalização de saída", 8 un, num
+# projeto só de PDF, saiu com "não sabemos o que é este elemento: o nome do bloco no
+# CAD não diz". Bloco autônomo é luminária de emergência; bloco de coroamento é peça
+# de concreto: o "bloco" ali é o nome da peça, não o do bloco do CAD.
+# 📏 60 dias: 43 linhas em 13 jobs de cliente, 549 un, 33 delas de CAD. Lista FECHADA:
+# "bloco de equipamento", "bloco de ponto" e "bloco estrutural" seguem de fora, ali o
+# item não tem nome de verdade.
+_RE_PECA_CHAMADA_BLOCO = _re.compile(
+    r"^\s*blocos?\s+(?:aut[ôo]nomos?|de\s+coroamento|de\s+funda[çc][ãa]o|sobre\s+estacas?"
+    r"|de\s+enchimento|cer[âa]micos?|de\s+concreto)\b", _re.I)
+
+
+def bloco_e_nome_de_peca(descricao) -> bool:
+    """O "bloco" que abre a descrição é o nome da peça, não o do bloco do CAD?"""
+    _d = str(descricao or "")
+    if _RE_BLOCO_DE_SISTEMA.search(_d) or _RE_NAO_IDENT.search(_d):
+        return False
+    return bool(_RE_PECA_CHAMADA_BLOCO.search(_d))
+
+
+def contar_bloco_que_e_peca(itens) -> int:
+    """Linhas que o guarda da identidade pega só porque a peça se chama "bloco"."""
+    return sum(1 for _it in (itens or [])
+               if item_e_bloco_sem_identidade(getattr(_it, "description", ""),
+                                              getattr(_it, "unit", ""))
+               and bloco_e_nome_de_peca(getattr(_it, "description", "")))
+
+
 # 🩸 05/10/2026 — a mesma doença pelo outro lado. A DESCRIÇÃO traz nome de peça
 # ("Locação e execução de estacas raiz", "Marco topográfico de locação"), mas a
 # OBSERVAÇÃO da própria IA diz que o nome é PALPITE pelo nome do bloco ("Nome do

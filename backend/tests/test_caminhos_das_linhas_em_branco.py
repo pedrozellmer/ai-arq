@@ -147,6 +147,7 @@ _SRC = fonte_html("projeto.html")
 _JS = NL.join([
     "var _CAMINHOS_MIN_LINHAS = 5; var _CAMINHOS_MIN_FRACAO = 0.30;",
     "var _MARCA_PLANTA_EM_BLOCO = 'A PLANTA ESTÁ DENTRO DE UM BLOCO';",
+    "var _MARCA_PARECE_ARQUITETURA = 'parece ser de ARQUITETURA';",
     funcao_js("caminhosDasLinhasEmBranco", "projeto.html", _SRC),
 ])
 
@@ -158,7 +159,7 @@ def _c(vazias=6, cheias=4, status="done", warnings=(), **vis):
     r = js.evaljs("JSON.stringify(caminhosDasLinhasEmBranco(%s, %s, %s))" % (
         json.dumps(proj), json.dumps(itens),
         json.dumps({"area": vis.get("area", False), "pd": vis.get("pd", False),
-                    "cad": vis.get("cad", False)})))
+                    "cad": vis.get("cad", False), "tipo": vis.get("tipo", False)})))
     return json.loads(r) if r else None
 
 
@@ -209,6 +210,55 @@ def test_so_o_pe_direito():
 
 def test_o_bloco_ganha_do_pdf():
     assert _c(warnings=[_AVISO], cad=True)["caso"] == "bloco"
+
+
+# 🩸 31/10/2026 (c14f3ea5): o 1º uso real mostrou "envie o DWG" a quem pediu Estrutura
+# e mandou arquitetura. O caminho certo é reler os mesmos arquivos.
+_ARQ = "⚠ Este arquivo parece ser de ARQUITETURA, não de estrutura — quase nenhum item"
+
+
+def test_a_marca_da_tela_sai_do_motor():
+    with open(os.path.join(os.path.dirname(_AQUI), "main.py"), encoding="utf-8") as f:
+        assert "Este arquivo parece ser de ARQUITETURA" in f.read()
+    assert "_MARCA_PARECE_ARQUITETURA = 'parece ser de ARQUITETURA'" in _SRC
+
+
+def test_pediu_estrutura_e_mandou_arquitetura():
+    r = _c(9, 0, warnings=[_ARQ], cad=True, area=True, tipo=True)
+    assert r["caso"] == "tipo" and _acoes(r) == ["tipo", "novo", "revisao"]
+    assert r["caminhos"][0]["forte"] and not r["caminhos"][1].get("forte")
+    assert "Estrutura" in r["porque"]
+
+
+def test_CONTROLE_sem_o_aviso_nao_oferece_reler():
+    assert _c(cad=True, tipo=True)["caso"] == "pdf"
+
+
+def test_CONTROLE_sem_a_opcao_na_tela_nao_oferece_reler():
+    assert _c(warnings=[_ARQ], cad=True)["caso"] == "pdf"
+
+
+def test_o_bloco_ganha_do_tipo():
+    assert _c(warnings=[_AVISO, _ARQ], tipo=True)["caso"] == "bloco"
+
+
+def test_a_tela_so_oferece_se_a_opcao_existe():
+    assert """tipo: !!document.querySelector('#reprocess-tipo option[value="arquitetura"]')""" in _SRC
+
+
+def test_reler_usa_o_botao_reprocessar_com_a_confirmacao_dele():
+    js = _js_tela("__e('reprocess-tipo').value = ''; __e('btn-reprocess').cliques = 0;"
+                  "__e('btn-reprocess').click = function () {"
+                  " __vista.push(__el['reprocess-tipo'].value); };")
+    js.evaljs("executarCaminho('tipo'); 1;")
+    assert js.evaljs("__vista[0]") == "arquitetura"
+    assert js.evaljs("window.location.href") == ""
+
+
+def test_os_alvos_de_reler_existem_na_pagina():
+    for alvo in ('id="reprocess-tipo"', 'id="btn-reprocess"', '<option value="arquitetura">'):
+        assert alvo in _SRC, alvo
+    assert main._track_evento_aceito("clique:caminho-tipo")
 
 
 @pytest.mark.parametrize("vazias,cheias", [(4, 0), (5, 12), (0, 10)])
