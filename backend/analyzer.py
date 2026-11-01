@@ -1283,12 +1283,21 @@ def _json_da_resposta(text: str, stop_reason: str, filename: str):
     return _parsed, _truncado
 
 
+# 🩸 01/11/2026 (job 01e6bfad): as 5 pranchas do hospital bateram nos 16000 tokens
+# e a planilha saiu incompleta, em ponto diferente a cada rodada (250 × 254 linhas,
+# entrada idêntica). Leitura cortada não vai pro cache, então nem repetia.
+# 📏 60 d: 31 de 1241 leituras, 14 de 141 jobs. 🪤 Subir o teto de TODAS mudaria a
+# chave do cache, porque `max_tokens` entra no carimbo: só a cortada lê de novo.
+TETO_DA_RELEITURA_CORTADA = 32000
+
+
 def analyze_sheet(client: anthropic.Anthropic, sheet: SheetInfo,
                   typology: str = "office",
                   ambiente: str = "",
                   siblings: list = None,
                   is_structural: bool = False,
-                  usa_cache: bool = True) -> dict:
+                  usa_cache: bool = True,
+                  reler_cortada: bool = False) -> dict:
     siblings = siblings or []
 
     # Projeto ESTRUTURAL (o usuário marcou no upload): a prancha usa o prompt
@@ -1443,7 +1452,34 @@ def analyze_sheet(client: anthropic.Anthropic, sheet: SheetInfo,
         # main.py lê _truncated e avisa o cliente (não entrega parcial calado).
         if _truncado:
             _out["_truncated"] = True
-            # corte no teto já tem aviso próprio, e reler corta no mesmo lugar
+            # corte no teto já tem aviso próprio; reler com o MESMO teto corta de
+            # novo, então a releitura (`reler_cortada`) dobra o teto
+            if not reler_cortada:
+                return _out
+            _n1 = len(_out.get("items") or [])
+            try:
+                _resp3 = call_with_retry_stream(
+                    client,
+                    tag=f"analyzer:{sheet.filename}#teto-maior",
+                    messages=[{"role": "user", "content": content}],
+                    **{**_kw_ia, "max_tokens": TETO_DA_RELEITURA_CORTADA},
+                )
+                _p3, _t3 = _json_da_resposta(
+                    _resp3.content[0].text, getattr(_resp3, "stop_reason", ""),
+                    sheet.filename)
+                _out3 = _normalize_items_payload(_p3)
+                _n3 = len(_out3.get("items") or [])
+                _marca = {"antes": _n1, "depois": _n3, "ainda_cortada": bool(_t3)}
+                if _n3 > _n1:
+                    if _t3:
+                        _out3["_truncated"] = True
+                    _out3["_teto_maior"] = _marca
+                    return _out3
+                _out["_teto_maior"] = _marca
+            except Exception as _e3:
+                # a 1ª leitura foi aproveitada; a releitura falhar não vira erro
+                _out["_teto_maior"] = {"antes": _n1, "depois": 0, "ainda_cortada": True,
+                                       "falhou": f"{type(_e3).__name__}: {_e3}"[:200]}
             return _out
         if not _motivo_vazio:
             return _out

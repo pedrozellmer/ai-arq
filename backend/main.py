@@ -754,6 +754,8 @@ _STAGES_DIAGNOSTICO = frozenset({
     "motor:tabela-repetida",
     # 31/10: área lida com outro nome de campo (com a chave em 0, só a contagem)
     "motor:area-em-campo-vizinho",
+    # 01/11: prancha de PDF cortada no teto de tokens (o alcance da chave)
+    "motor:leitura-cortada",
     "motor:versao-anterior", "motor:pai-e-filho", "motor:download-regen",
     "motor:respostas-releitura", "motor:informou-depois",
     "motor:consolida-tipo",
@@ -8957,6 +8959,23 @@ def _qtd_na_nota(v) -> str:
     return s.replace(",", "\x00").replace(".", ",").replace("\x00", ".")
 
 
+def _liga_releitura_cortada(job_id) -> bool:
+    """🔑 LEITURA_CORTADA_RELE_MAIOR=1 relê a prancha cortada com o teto dobrado."""
+    return _chave_do_job(job_id, "LEITURA_CORTADA_RELE_MAIOR") == "1"
+
+
+def _registra_leitura_cortada(result, prancha, job_id):
+    """Conta a prancha cortada, com a chave em 0 também: é o alcance da chave."""
+    marca = result.get("_teto_maior") or {}
+    if not (result.get("_truncated") or marca):
+        return
+    _log_error("motor:leitura-cortada",
+               f"arq={prancha} releu={int(bool(marca))} antes={marca.get('antes')} "
+               f"depois={marca.get('depois')} ainda_cortada={int(bool(result.get('_truncated')))}"
+               + (f" falhou={marca['falhou']}" if marca.get("falhou") else ""),
+               job_id, severity="info")
+
+
 def _colhe_area_em_campo_vizinho(job_id, pd, area_readings, reg_area, origem, sf):
     """Área construída que a IA leu com outro nome de campo. 🔑 Com
     AREA_EM_CAMPO_VIZINHO=1 ela entra como leitura de `total_area`; com 0 só conta.
@@ -10713,6 +10732,8 @@ _CHAVES_AVALIAVEIS = frozenset({
     "TABELA_REPETIDA_UMA_LINHA",
     # 31/10: `area_total_construida` da leitura vale como `total_area`
     "AREA_EM_CAMPO_VIZINHO",
+    # 01/11: a prancha cortada no teto é lida de novo com o teto dobrado
+    "LEITURA_CORTADA_RELE_MAIOR",
 })
 _CHAVES_DA_AVALIACAO: dict = {}        # job de avaliação → {chave: "0" | "1"}
 
@@ -19219,7 +19240,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 result = analyze_sheet(client, sheet, typology=typology,
                                        ambiente=amb_for_sheet, siblings=siblings,
                                        is_structural=is_structural,
-                                       usa_cache=(_reproc_atual == 0))
+                                       usa_cache=(_reproc_atual == 0),
+                                       reler_cortada=_liga_releitura_cortada(job_id))
                 # Salva o checkpoint da prancha (só análise SEM erro — erro
                 # deve re-tentar na retomada, não ser reaproveitado)
                 if not result.get("error"):
@@ -19257,6 +19279,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 _log_error(_st_leit, _msg_leit, job_id, severity="warning")
             if result.get("_sem_item"):
                 _pranchas_sem_item.append(_disp)
+            _registra_leitura_cortada(result, _disp, job_id)
 
             # #7 leitura possivelmente INCOMPLETA nesta prancha (resposta da IA
             # cortada no teto). Avisa — não entrega parcial calado (caso Ademir).
