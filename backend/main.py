@@ -19190,7 +19190,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     siblings = [s for s in _siblings_map[amb_for_sheet] if s != filename]
                 result = analyze_sheet(client, sheet, typology=typology,
                                        ambiente=amb_for_sheet, siblings=siblings,
-                                       is_structural=is_structural)
+                                       is_structural=is_structural,
+                                       usa_cache=(_reproc_atual == 0))
                 # Salva o checkpoint da prancha (só análise SEM erro — erro
                 # deve re-tentar na retomada, não ser reaproveitado)
                 if not result.get("error"):

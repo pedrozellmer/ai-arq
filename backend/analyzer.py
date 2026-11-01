@@ -1287,7 +1287,8 @@ def analyze_sheet(client: anthropic.Anthropic, sheet: SheetInfo,
                   typology: str = "office",
                   ambiente: str = "",
                   siblings: list = None,
-                  is_structural: bool = False) -> dict:
+                  is_structural: bool = False,
+                  usa_cache: bool = True) -> dict:
     siblings = siblings or []
 
     # Projeto ESTRUTURAL (o usuário marcou no upload): a prancha usa o prompt
@@ -1417,7 +1418,9 @@ def analyze_sheet(client: anthropic.Anthropic, sheet: SheetInfo,
         # 🔑 Cache por CONTEÚDO (llm_cache.py). Aqui `temperature=0` já pede
         # determinismo, então servir a leitura anterior do MESMO payload é
         # exatamente o que a chamada promete. Default do ambiente é SOMBRA.
-        cache=True,
+        # 🪤 31/10: quem reprocessa pede leitura NOVA (`usa_cache=False`), a
+        # mesma saída de emergência que o caminho DXF já tinha.
+        cache=usa_cache,
     )
     try:
         # STREAMING + teto maior + salvage: prancha de arquitetura complexa gerava
@@ -1486,6 +1489,12 @@ def analyze_sheet(client: anthropic.Anthropic, sheet: SheetInfo,
     except json.JSONDecodeError as e:
         print(f"Erro JSON para {sheet.filename}: {e}")
         print(f"Resposta: {text[:500]}")
+        # 🪤 31/10: resposta guardada que não abre voltaria igual em todo envio
+        # do arquivo. Lê de novo sem ela, uma vez.
+        if getattr(response, "do_cache", False):
+            return analyze_sheet(client, sheet, typology=typology,
+                                 ambiente=ambiente, siblings=siblings,
+                                 is_structural=is_structural, usa_cache=False)
         return {"items": [], "error": f"JSON parse error: {e}"}
     except Exception as e:
         print(f"Erro API para {sheet.filename}: {e}")
