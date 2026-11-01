@@ -1470,7 +1470,9 @@ def analyze_sheet(client: anthropic.Anthropic, sheet: SheetInfo,
                 _out3 = _normalize_items_payload(_p3)
                 _n3 = len(_out3.get("items") or [])
                 _marca = {"antes": _n1, "depois": _n3, "ainda_cortada": bool(_t3)}
-                if _n3 > _n1:
+                # 🪤 Leitura completa vence a cortada mesmo com menos linhas: só ela
+                # vai pro cache e repete. Entre duas cortadas, fica a maior.
+                if _n3 and (not _t3 or _n3 > _n1):
                     if _t3:
                         _out3["_truncated"] = True
                     _out3["_teto_maior"] = _marca

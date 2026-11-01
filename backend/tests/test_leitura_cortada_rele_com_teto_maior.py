@@ -88,10 +88,22 @@ def test_releitura_ainda_cortada_segue_avisando(monkeypatch):
     assert out["_teto_maior"]["ainda_cortada"] is True
 
 
-def test_releitura_que_trouxe_menos_nao_troca_a_primeira(monkeypatch):
+def test_releitura_completa_vence_mesmo_com_menos_linhas(monkeypatch):
+    # job evd8dc53: a 5ª prancha terminou com 66 itens, e a cortada tinha 76
     out, _ = _roda(monkeypatch, [_cortada(5), _Resp(_texto(2))], reler_cortada=True)
+    assert len(out["items"]) == 2 and "_truncated" not in out
+    assert out["_teto_maior"] == {"antes": 5, "depois": 2, "ainda_cortada": False}
+
+
+def test_releitura_cortada_com_menos_linhas_nao_troca_a_primeira(monkeypatch):
+    out, _ = _roda(monkeypatch, [_cortada(5), _cortada(2)], reler_cortada=True)
     assert len(out["items"]) == 5 and out["_truncated"]
     assert out["_teto_maior"]["depois"] == 2
+
+
+def test_releitura_completa_e_vazia_nao_apaga_a_primeira(monkeypatch):
+    out, _ = _roda(monkeypatch, [_cortada(5), _Resp(_texto(0))], reler_cortada=True)
+    assert len(out["items"]) == 5 and out["_truncated"]
 
 
 def test_releitura_que_falha_preserva_a_primeira(monkeypatch):
