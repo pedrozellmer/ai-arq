@@ -79,6 +79,37 @@
     .rv-ready .rv-rise-1 { animation-delay:.06s }
     .rv-ready .rv-rise-2 { animation-delay:.12s }
     .rv-ready .rv-rise-3 { animation-delay:.18s }
+    /* 31/10: no celular as linhas começam na 1ª tela. Nada some: o que sai da
+       linha fica em "⋯" e no toque na descrição. No computador nada muda. */
+    .rv-topo, .rv-extra { display:contents; }
+    .rv-mais, .rv-so-celular { display:none; }
+    @media (max-width:640px) {
+      #rv-titulo, .rv-kpis, .rv-contas, .rv-col-num, .rv-so-largo { display:none; }
+      .rv-so-celular { display:inline; }
+      .faixa { padding:11px 13px; }
+      .faixa .fx-ico, .faixa h2, .faixa p { display:none; }
+      .faixa .fx-chips { margin-top:0; justify-content:space-between; }
+      .faixa .fx-chips span { background:none; border:0; padding:0; font-size:13.5px; }
+      header .rv-botoes-topo { flex-wrap:nowrap; }
+      .faixa .fx-prog { margin-top:8px; max-width:none; }
+      .rv-topo { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; }
+      .rv-topo details.rv-ajuda { flex:1 1 0; min-width:0; padding:0; background:none; border:0; box-shadow:none; }
+      .rv-topo details.rv-ajuda[open] { flex-basis:100%; order:2; }
+      .rv-filtro { margin:0 !important; padding:0 !important; background:none; border:0 !important; box-shadow:none !important; }
+      .rv-lista .item-row { padding:11px; }
+      .rv-desc { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; cursor:pointer; }
+      .rv-meta { display:none; }
+      .item-row.aberto .rv-desc { display:block; }
+      .item-row.aberto .rv-meta { display:block; }
+      .rv-linha-acoes { display:flex; gap:6px; }
+      .rv-acoes { display:contents; }
+      .rv-acoes > button, .rv-linha-acoes > button { min-height:44px; }
+      .rv-acoes > .rv-g { flex:1 1 auto; }
+      .rv-mais { display:block; flex:0 0 44px; font-size:18px; line-height:1; padding:0 !important; }
+      .rv-extra { display:none; flex:1 0 100%; flex-wrap:wrap; align-items:center; gap:6px; }
+      .item-row.mais-aberta .rv-extra { display:flex; }
+      .rv-extra button { min-height:40px; }
+    }
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after {
         animation-duration: 0.01ms !important;
@@ -112,13 +143,13 @@
          "← Todos os projetos" no topo e existe em todas as telas do
          cliente — dois caminhos pra mesma saída era ruído. -->
       <div>
-        <h1 class="text-sm font-semibold text-gray-800">Revisão dos quantitativos</h1>
+        <h1 id="rv-titulo" class="text-sm font-semibold text-gray-800">Revisão dos quantitativos</h1>
         <p id="project-meta" class="text-xs text-gray-500">Carregando...</p>
       </div>
     </div>
     <!-- Em mobile: stacka ações com flex-wrap e esconde labels dos botões pra
          não estourar 375px (3 botões grandes lado a lado quebravam o header) -->
-    <div class="flex items-center gap-2 flex-wrap justify-end">
+    <div class="rv-botoes-topo flex items-center gap-2 flex-wrap justify-end">
       <!-- Contadores migrados pra linha de mini-KPIs no topo do <main> (18/07) —
            agora aparecem também no celular. Mesmos ids (count-*) que o JS preenche. -->
       <button id="btn-save-later" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2"
@@ -161,7 +192,7 @@
   </section>
 
   <!-- Progresso da revisão — mini-KPIs (cor + ícone + texto; visíveis também no celular) -->
-  <div class="grid grid-cols-2 md:grid-cols-4 gap-3 rv-rise">
+  <div class="rv-kpis grid grid-cols-2 md:grid-cols-4 gap-3 rv-rise">
     <div class="kpi kpi-ok bg-white rounded-2xl border shadow-sm px-3.5 py-3 flex items-center gap-3">
       <div class="kpi-ico" aria-hidden="true">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
@@ -201,8 +232,9 @@
   </div>
 
   <!-- Legenda rápida -->
+  <div class="rv-topo">
   <details class="rv-ajuda bg-white rounded-2xl border shadow-sm p-4 text-xs text-gray-600 rv-rise rv-rise-1">
-    <summary>❔ Como usar e atalhos de teclado</summary>
+    <summary>❔ <span class="rv-so-largo">Como usar e atalhos de teclado</span><span class="rv-so-celular">Como revisar</span></summary>
     <div class="grid md:grid-cols-2 gap-4">
       <div>
         <p class="mb-2 font-medium text-gray-800">Como usar</p>
@@ -229,12 +261,13 @@
   </details>
 
   <!-- Resumo medido vs a confirmar + filtro "só as estimativas" (cor + ícone + texto) -->
-  <div class="flex flex-wrap items-center justify-between gap-3 mb-3 rounded-2xl border shadow-sm bg-white px-4 py-3 rv-rise rv-rise-2">
-    <div class="flex items-center gap-4 text-sm text-gray-700">
+  <div class="rv-filtro flex flex-wrap items-center justify-between gap-3 mb-3 rounded-2xl border shadow-sm bg-white px-4 py-3 rv-rise rv-rise-2">
+    <div class="rv-contas flex items-center gap-4 text-sm text-gray-700">
       <span class="inline-flex items-center gap-1.5"><span class="w-3.5 h-3.5 rounded-sm border border-gray-300 bg-white"></span>&#10003; <b id="rv-medido">0</b> medidos</span>
       <span class="inline-flex items-center gap-1.5"><span class="w-3.5 h-3.5 rounded-sm confidence-orange"></span>&#9888; <b id="rv-estimado">0</b> a confirmar</span>
     </div>
     <button type="button" id="rv-filter-btn" onclick="toggleOnlyEstimates()" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-300 text-amber-700 text-xs font-medium hover:bg-amber-50 transition">&#9888; Mostrar s&oacute; as estimativas</button>
+  </div>
   </div>
 
   <!-- 🩸 02/09/2026 — O CONVITE MUDOU DE TELA. Ele existia só em projeto.html
@@ -840,17 +873,18 @@ function renderItem(it, localIndex) {
     : `<button onclick="openEdit('${it.id}', true)" title="Item sem quantidade — clique pra preencher"
          class="inline-flex items-baseline gap-1.5 px-3 py-1.5 rounded-lg border bg-red-50 border-red-200 hover:border-red-400 transition cursor-pointer">
          <span class="text-lg font-bold leading-none text-red-600">0</span>
-         <span class="text-xs font-semibold text-red-600 underline">preencher ✎</span>
+         <span class="rv-so-largo text-xs font-semibold text-red-600 underline">preencher ✎</span>
+         <span class="rv-so-celular text-xs font-semibold text-red-600">${escapeHtml(it.unit)}</span>
        </button>`;
   // Botões com PALAVRA, não ícone (01/08 — Pedro: "ao invés de ícones, a palavra").
   const btnBase = 'px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition whitespace-nowrap';
   return `
     <div class="item-row ${state} ${isOrange ? 'conf-estimado' : 'conf-medido'} px-4 py-3" data-id="${it.id}" data-ref="${escapeHtml(it.ref_sheet || '')}" tabindex="-1">
       <div class="flex items-start gap-3">
-        <div class="flex-shrink-0 w-6 text-xs text-gray-500"><span class="rv-num">${localIndex + 1}</span></div>
+        <div class="rv-col-num flex-shrink-0 w-6 text-xs text-gray-500"><span class="rv-num">${localIndex + 1}</span></div>
         <div class="flex-1 min-w-0">
-          <p class="text-sm text-gray-800 ${isOrange ? '' : 'font-medium'}">${escapeHtml(it.description)}</p>
-          <p class="text-xs text-gray-500 mt-1">
+          <p class="rv-desc text-sm text-gray-800 ${isOrange ? '' : 'font-medium'}" onclick="rvAbreLinha(this)">${escapeHtml(it.description)}</p>
+          <p class="rv-meta text-xs text-gray-500 mt-1">
             <span class="chip ${isOrange ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}">
               ${provLabel}
             </span>${stateChip}
@@ -860,14 +894,17 @@ function renderItem(it, localIndex) {
         </div>
       </div>
       <div class="flex items-start gap-3 mt-2">
-        <div class="flex-shrink-0 w-6" aria-hidden="true"></div>
-        <div class="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-2">
+        <div class="rv-col-num flex-shrink-0 w-6" aria-hidden="true"></div>
+        <div class="rv-linha-acoes flex-1 min-w-0 flex flex-wrap items-center justify-between gap-2">
         ${qtyBlock}
         <div class="rv-acoes flex flex-wrap items-center gap-1.5">
           <button onclick="review('${it.id}','approve')" title="A quantidade está certa (tecla A)"
-            class="${btnBase} border-green-300 text-green-700 hover:bg-green-50">✓ Confirmar</button>
+            class="rv-g ${btnBase} border-green-300 text-green-700 hover:bg-green-50">✓ Confirmar</button>
           <button onclick="openEdit('${it.id}')" title="Corrigir quantidade, unidade ou descrição (tecla E)"
-            class="${btnBase} border-amber-300 text-amber-700 hover:bg-amber-50">✎ Editar</button>
+            class="rv-g ${btnBase} border-amber-300 text-amber-700 hover:bg-amber-50">✎ Editar</button>
+          <button type="button" onclick="rvMaisAcoes(this)" data-track="revisao-mais-acoes" aria-label="Mais ações deste item" aria-expanded="false"
+            class="rv-mais ${btnBase} border-slate-300 text-slate-600">⋯</button>
+          <span class="rv-extra">
           <button onclick="review('${it.id}','reject')" title="Item não existe no projeto — sai da planilha (tecla D)"
             class="${btnBase} border-red-200 text-red-600 hover:bg-red-50">✕ Excluir</button>
           <button onclick="markExistente('${it.id}')" title="Já existe na obra — mantém na planilha sem precisar comprar, zera a quantidade (tecla M)"
@@ -875,15 +912,26 @@ function renderItem(it, localIndex) {
           ${hasSheet ? `
           <button onclick="openSheet('${it.id}')" title="Abrir a prancha em outra aba pra conferir medindo"
             class="${btnBase} border-indigo-200 text-indigo-600 hover:bg-indigo-50">📄 Prancha</button>` : ''}
-          <button onclick="openComment('${it.id}')" title="Comentar — ajuda a IA a acertar mais (tecla C)"
+          <button onclick="openComment('${it.id}')" title="Comentar — ajuda a IA a acertar mais (tecla C)" aria-label="Comentar"
             class="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
           </button>
+          </span>
         </div>
         </div>
       </div>
     </div>
   `;
+}
+
+// As duas só trocam classe: quem esconde ou mostra é o CSS do celular.
+function rvAbreLinha(el) {
+  el.closest('.item-row').classList.toggle('aberto');
+}
+
+function rvMaisAcoes(el) {
+  const aberta = el.closest('.item-row').classList.toggle('mais-aberta');
+  el.setAttribute('aria-expanded', String(aberta));
 }
 
 // ═══════════════════════════════════════════════
