@@ -5608,6 +5608,35 @@ def departamentos_no_formato_do_modelo(bruto):
     return saida
 
 
+# 🩸 31/10/2026 (job a33ec785): o prompt não diz o nome do campo e a IA escreve a
+# área construída como quer. `area_total_construida: 447.61` caía fora do
+# `pd.get("total_area")`, e o cliente lia "não encontramos a área" com 93 de 93
+# linhas em m² vazias. 🔒 Lista branca: terreno, lote, projeção e cobertura são
+# outras áreas, e `total_area_measured` é eco da nossa medição, não leitura.
+_AREA_CONSTRUIDA_EM_OUTRO_NOME = (
+    "area_total_construida", "total_area_construida", "area_construida",
+    "area_total_construcao", "total_built_area", "total_area_built",
+    "total_construction_area", "built_area", "total_area_residencia",
+)
+
+
+def area_em_campo_vizinho(pd, sf=None):
+    """(campo, valor) da área construída que veio com outro nome, ou None.
+
+    `total_area` preenchido manda: aí não há o que resgatar."""
+    if not isinstance(pd, dict) or pd.get("total_area"):
+        return None
+    _sf = sf or (lambda v: float(v or 0))
+    for campo in _AREA_CONSTRUIDA_EM_OUTRO_NOME:
+        try:
+            valor = _sf(pd.get(campo))
+        except Exception:
+            continue
+        if valor and valor > 0:
+            return campo, valor
+    return None
+
+
 def mesclar_project_data(destino, pd, area_readings=None, reg_area=None,
                          origem="ia", sf=None):
     """Junta o `project_data` que a IA devolveu de UMA prancha no acumulado.

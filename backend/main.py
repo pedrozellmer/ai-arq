@@ -752,6 +752,8 @@ _STAGES_DIAGNOSTICO = frozenset({
     "motor:bloco-que-e-peca",
     # 31/10: a mesma tabela lida em N pranchas (com a chave em 0, só a contagem)
     "motor:tabela-repetida",
+    # 31/10: área lida com outro nome de campo (com a chave em 0, só a contagem)
+    "motor:area-em-campo-vizinho",
     "motor:versao-anterior", "motor:pai-e-filho", "motor:download-regen",
     "motor:respostas-releitura", "motor:informou-depois",
     "motor:consolida-tipo",
@@ -8955,6 +8957,28 @@ def _qtd_na_nota(v) -> str:
     return s.replace(",", "\x00").replace(".", ",").replace("\x00", ".")
 
 
+def _colhe_area_em_campo_vizinho(job_id, pd, area_readings, reg_area, origem, sf):
+    """Área construída que a IA leu com outro nome de campo. 🔑 Com
+    AREA_EM_CAMPO_VIZINHO=1 ela entra como leitura de `total_area`; com 0 só conta.
+    Depois disso segue a régua de sempre (consenso e honestidade de área)."""
+    try:
+        from engine_rules import area_em_campo_vizinho as _vizinho
+        achada = _vizinho(pd, sf)
+        if not achada:
+            return
+        campo, valor = achada
+        liga = _chave_do_job(job_id, "AREA_EM_CAMPO_VIZINHO") == "1"
+        if liga:
+            area_readings.setdefault("total_area", []).append(valor)
+            if reg_area:
+                reg_area(origem, "total_area")
+        _log_error("motor:area-em-campo-vizinho",
+                   f"campo={campo} valor={valor} liga={int(liga)}", job_id, severity="info")
+    except Exception as _eav:
+        _log_error("motor:area-em-campo-vizinho", f"FALHOU: {_eav}", job_id,
+                   severity="warning")
+
+
 def _junta_tabela_repetida(items: list, so_conta: bool = False) -> tuple:
     """A mesma tabela lida em várias pranchas vira uma linha. Devolve (itens, a_menos).
 
@@ -10687,6 +10711,8 @@ _CHAVES_AVALIAVEIS = frozenset({
     "BLOCO_QUE_E_PECA_NAO_REBAIXA",
     # 31/10: "PS-02, QNT=352" lido em 3 pranchas vira uma linha
     "TABELA_REPETIDA_UMA_LINHA",
+    # 31/10: `area_total_construida` da leitura vale como `total_area`
+    "AREA_EM_CAMPO_VIZINHO",
 })
 _CHAVES_DA_AVALIACAO: dict = {}        # job de avaliação → {chave: "0" | "1"}
 
@@ -17716,6 +17742,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
                             from engine_rules import mesclar_project_data as _mescla_pd
                             _mescla_pd(project_data, pd, _area_readings,
                                        _reg_area, "ia-dxf", sf)
+                            _colhe_area_em_campo_vizinho(job_id, pd, _area_readings,
+                                                         _reg_area, "ia-dxf", sf)
 
                         # 🎯 26/08/2026 — A MEDIÇÃO ESTAVA NA OBSERVAÇÃO E A
                         # QUANTIDADE VINHA ZERO. Caso cliente-19 (24/08 21:39): 31 de
@@ -19258,6 +19286,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 from engine_rules import mesclar_project_data as _mescla_pd
                 _mescla_pd(project_data, pd, _area_readings,
                            _reg_area, "ia-pdf", sf)
+                _colhe_area_em_campo_vizinho(job_id, pd, _area_readings,
+                                             _reg_area, "ia-pdf", sf)
 
             # 5. Extrair itens
             valid_disciplines = [
