@@ -7501,6 +7501,32 @@ def ressalva_do_numero(obs) -> str:
     return ""
 
 
+#: 🩸 02/11/2026 (job 0b572906): "Bancada… 43,60 ml" saiu com ✓ MEDIDO num banho
+#: em que a pedra tem 1,30 m, com a IA escrevendo na mesma linha que o número
+#: "não representa comprimento físico total". Bater com o layer prova que o
+#: número é do layer. Aqui a dúvida é outra: se o layer é a peça. Em 58 promoções
+#: de cliente desde 28/09, 18 (10 de 19 projetos) diziam isso por escrito.
+_RE_RESSALVA_DA_PECA = _re.compile(
+    r"inclui\s+(?:todos|todas|degraus|representa|linhas|espelhos|patamares)"
+    r"|m[úu]ltipl[ao]s\s+(?:vistas|cortes)"
+    r"|planta\s+repetida"
+    r"|pode\s+dobrar|desenhad[ao]s?\s+pel[ao]s\s+(?:duas|2)\s+faces"
+    r"|n[ãa]o\s+representa|provavelmente\s+fragmento|pode\s+ser\s+parcial"
+    r"|estimad[ao]\s+igual|\bproxy\b"
+    r"|padr[õo]es\s+(?:mistos|diferentes)|acabamentos?\s+mistos"
+    r"|pode\s+(?:representar|corresponder)",
+    _re.IGNORECASE)
+
+
+def ressalva_da_peca(obs) -> str:
+    """O trecho em que a observação duvida que o layer seja a peça ('' se não há)."""
+    t = str(obs or "")
+    for m in _RE_RESSALVA_DA_PECA.finditer(t):
+        if not _RE_NEGA_A_RESSALVA.search(t[:m.start()]):
+            return m.group(0)
+    return ""
+
+
 #: 🩸 27/09/2026 — o começo do que as duas PORTAS de promoção escrevem na
 #: observação (chave do selo e tabela impressa). Quem roda depois delas (o
 #: retrato do selo) precisa saber que a linha foi promovida com prova própria.
@@ -8514,6 +8540,7 @@ def selo_com_prova_da_geometria(items, indice):
             "descricao": str(_campo_do_item(it, "description", "") or "")[:60],
             "unidade": str(_campo_do_item(it, "unit", "") or "").strip(),
             "motivo": motivo,
+            "ressalva_da_peca": ressalva_da_peca(_obs),
         })
     return promovidos
 

@@ -756,6 +756,8 @@ _STAGES_DIAGNOSTICO = frozenset({
     "motor:area-em-campo-vizinho",
     # 01/11: prancha de PDF cortada no teto de tokens (o alcance da chave)
     "motor:leitura-cortada",
+    # 02/11: selo de layer com a nota duvidando da peça (o alcance da chave)
+    "motor:selo-ressalva-da-peca",
     "motor:versao-anterior", "motor:pai-e-filho", "motor:download-regen",
     "motor:respostas-releitura", "motor:informou-depois",
     "motor:consolida-tipo",
@@ -8976,6 +8978,20 @@ def _registra_leitura_cortada(result, prancha, job_id):
                job_id, severity="info")
 
 
+def _tira_promocao_com_ressalva(job_id, promovidos):
+    """Promoção em que a própria nota duvida que o layer seja a peça. 🔑 Com
+    RESSALVA_DA_PECA_NAO_PROMOVE=1 a linha fica estimada; com 0 só conta."""
+    com_ressalva = [p for p in promovidos if p.get("ressalva_da_peca")]
+    if not com_ressalva:
+        return promovidos
+    liga = _chave_do_job(job_id, "RESSALVA_DA_PECA_NAO_PROMOVE") == "1"
+    _log_error("motor:selo-ressalva-da-peca",
+               f"linhas={len(com_ressalva)} tirou={int(liga)} | " + " · ".join(
+                   f"{p['descricao'][:40]} ({p['ressalva_da_peca']})" for p in com_ressalva[:6]),
+               job_id, severity="info")
+    return [p for p in promovidos if not p.get("ressalva_da_peca")] if liga else promovidos
+
+
 def _colhe_area_em_campo_vizinho(job_id, pd, area_readings, reg_area, origem, sf):
     """Área construída que a IA leu com outro nome de campo. 🔑 Com
     AREA_EM_CAMPO_VIZINHO=1 ela entra como leitura de `total_area`; com 0 só conta.
@@ -10734,6 +10750,8 @@ _CHAVES_AVALIAVEIS = frozenset({
     "AREA_EM_CAMPO_VIZINHO",
     # 01/11: a prancha cortada no teto é lida de novo com o teto dobrado
     "LEITURA_CORTADA_RELE_MAIOR",
+    # 02/11: a nota diz que o layer não é a peça, a linha não ganha o selo
+    "RESSALVA_DA_PECA_NAO_PROMOVE",
 })
 _CHAVES_DA_AVALIACAO: dict = {}        # job de avaliação → {chave: "0" | "1"}
 
@@ -22023,7 +22041,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
             except NameError:
                 _idx_selo = None          # job sem CAD: nada a provar
             if _idx_selo and any(_idx_selo.values()):
-                _promovidos = _chave_selo(all_items, _idx_selo)
+                _promovidos = _tira_promocao_com_ressalva(
+                    job_id, _chave_selo(all_items, _idx_selo))
                 for _pr in _promovidos:
                     _alvo_selo = all_items[_pr["indice"]]
                     _alvo_selo.confidence = _selo_medido_com_prova(_pr["motivo"])
