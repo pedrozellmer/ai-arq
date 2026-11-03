@@ -112,7 +112,7 @@ def test_o_que_cabe_na_nossa_medicao_segue_pela_regua_de_sempre(monkeypatch):
     assert "você informou" not in it.observations
 
 
-@pytest.mark.parametrize("medido", [47.27, 60.0])
+@pytest.mark.parametrize("medido", [47.265, 47.27, 60.0])
 def test_medicao_de_metade_ou_mais_nao_e_parcial(monkeypatch, medido):
     monkeypatch.setenv(_CHAVE, "1")
     it = _contrapiso(q=90.0)
