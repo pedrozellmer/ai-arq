@@ -13217,7 +13217,7 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
         _cobre_liga = _os_ic.environ.get("AREA_INFORMADA_COBRE_MEDICAO_PARCIAL", "0") == "1"
     _medido_m2 = float(pdfvec_m2 or 0)
     _apply_area_honesty.ultimo_informada_cobre = (0, False, 0.0, 0.0)
-    _informada_cobre =bool(informado and 0 < _medido_m2 < 0.5 * float(total_area))
+    _informada_cobre = bool(informado and 0 < _medido_m2 < 0.5 * float(total_area))
     _cobre_n = 0
 
     def _cabe_na_informada(_q) -> bool:
