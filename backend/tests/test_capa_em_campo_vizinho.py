@@ -55,8 +55,8 @@ def test_valor_que_diz_que_nao_tem_nao_entra(vazio):
     assert er.capa_em_campo_vizinho({"arquiteto": vazio}) == {}
 
 
-@pytest.mark.parametrize("nome", ["Natália Souza Arquitetura", "Nonato Arquitetos",
-                                  "Desconhecido Arquitetura Ltda", "- Arq. Lima -x",
+@pytest.mark.parametrize("nome", ["Natureza Arquitetura", "Nanquim Arquitetos",
+                                  "Desconhecido Arquitetura Ltda", "- Arq. Exemplo -x",
                                   "Não Me Toque Arquitetura"])
 def test_nome_que_so_comeca_parecido_com_vazio_entra(nome):
     assert er.capa_em_campo_vizinho({"arquiteto": nome}) == {"architect": ("arquiteto", nome)}
