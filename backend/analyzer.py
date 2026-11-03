@@ -1112,9 +1112,14 @@ def _pagina_do_ref_sheet(ref_sheet: str):
     🪤 Só aceita o `pN` no COMEÇO dos parênteses, que é onde `_monta_ref_sheet`
     põe. Procurar `p<numero>` solto casaria com hint da IA ("planta p2 do bloco")
     e inventaria atribuição — que é pior que não atribuir.
+    🩸 03/11/2026 (job adf132c1): PDF de UMA página não ganha `pN`, e o hint
+    da IA começava com o código da prancha — "(P03 — 02/P03 Planta Baixa…)".
+    Lido como página 3, a medição da página 1 "era de outra prancha" e 7 linhas
+    com a área escrita na planta foram zeradas. Só vale o que `monta_ref_sheet`
+    escreve: `p` + número sem zero à esquerda, e depois " · " ou ")".
     """
     import re as _re
-    m = _re.search(r"\(p(\d+)(?:\s|·|\)|$)", ref_sheet or "")
+    m = _re.search(r"\(p([1-9]\d*)(?: · |\))", ref_sheet or "")
     if not m:
         return None
     try:

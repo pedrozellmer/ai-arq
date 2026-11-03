@@ -760,6 +760,8 @@ _STAGES_DIAGNOSTICO = frozenset({
     "motor:selo-ressalva-da-peca",
     # 03/11: nome, endereço e arquiteto lidos com outro nome de campo
     "motor:capa-em-campo-vizinho",
+    # 03/11: linhas que só a área informada sustentou (com a chave em 0, contadas)
+    "motor:area-informada-cobre",
     "motor:versao-anterior", "motor:pai-e-filho", "motor:download-regen",
     "motor:respostas-releitura", "motor:informou-depois",
     "motor:consolida-tipo",
@@ -10782,6 +10784,8 @@ _CHAVES_AVALIAVEIS = frozenset({
     "RESSALVA_DA_PECA_NAO_PROMOVE",
     # 03/11: `project_name`, `endereco`, `arquiteto` da leitura vão pra capa
     "CAPA_EM_CAMPO_VIZINHO",
+    # 03/11: área informada vira teto quando a medição deu menos da metade
+    "AREA_INFORMADA_COBRE_MEDICAO_PARCIAL",
 })
 _CHAVES_DA_AVALIACAO: dict = {}        # job de avaliação → {chave: "0" | "1"}
 
@@ -13200,6 +13204,28 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
         _a_olho_liga = _os_ao.environ.get("AREA_A_OLHO_NAO_PRESERVA", "0") == "1"
     from engine_rules import confessa_area_a_olho as _confessa_a_olho
     _a_olho_n = 0
+    # 🩸 03/11/2026 (job adf132c1): a cliente informou 94,53 m², o quadro do
+    # desenho dava 90,55 e a nossa medição achou 19,6 m² de ambientes. O teto
+    # da prancha apagou áreas escritas na planta que cabiam na área dela. Quando
+    # o cliente informou e medimos menos da METADE, a medição é parcial: a área
+    # informada também serve de teto. Segue estimado. 📏 60 dias: 4 projetos.
+    # 🛑 NASCE DESLIGADA: AREA_INFORMADA_COBRE_MEDICAO_PARCIAL=1 liga.
+    try:
+        _cobre_liga = _chave_do_job(job_id, "AREA_INFORMADA_COBRE_MEDICAO_PARCIAL") == "1"
+    except NameError:
+        import os as _os_ic
+        _cobre_liga = _os_ic.environ.get("AREA_INFORMADA_COBRE_MEDICAO_PARCIAL", "0") == "1"
+    _medido_m2 = float(pdfvec_m2 or 0)
+    _apply_area_honesty.ultimo_informada_cobre = (0, False, 0.0, 0.0)
+    _informada_cobre =bool(informado and 0 < _medido_m2 < 0.5 * float(total_area))
+    _cobre_n = 0
+
+    def _cabe_na_informada(_q) -> bool:
+        nonlocal _cobre_n
+        if not (_informada_cobre and float(_q) <= float(total_area)):
+            return False
+        _cobre_n += 1
+        return _cobre_liga
     # 25/10: "área estimada" SEM nenhuma base medida citada (ver
     # `engine_rules.confessa_area_estimada_sem_base`). Chave própria, nasce 0.
     try:
@@ -13736,7 +13762,8 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
                            _limpa_aviso_nao_medida(getattr(it, "observations", "") or "")))
                        and (_sem_base_n := _sem_base_n + 1))
               and ((_m_pr := _medida_da_propria_prancha(it, q)) is not None
-                   or (not _exige_propria_prancha(it) and q <= 1.3 * _teto_m2))
+                   or (not _exige_propria_prancha(it) and q <= 1.3 * _teto_m2)
+                   or _cabe_na_informada(q))
               and not (_sem_base_larga_liga and _sem_base_larga(it)
                        and (_sem_base_larga_n := _sem_base_larga_n + 1))):
             if not _sem_base_larga_liga and _sem_base_larga(it):
@@ -13797,9 +13824,18 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
                         _pelo_nome = None
                 except (TypeError, ValueError):
                     _pelo_nome = None
-            _o = (_o + " | " + _frase_do_numero_que_cabe_na_geometria(
-                _m_frase, _pp_lista, prancha_pelo_nome=_pelo_nome,
-                medicao_incompleta=medicao_incompleta)).strip(" |")
+            if _m_pr is None and not (not _exige_propria_prancha(it) and q <= 1.3 * _teto_m2):
+                # só passou pela área informada: dizer isso, não "cabe na geometria"
+                _o = (_o + " | " + (
+                    "Número da leitura da prancha, conferido contra a área total que "
+                    "você informou (%s m²): a medição do desenho achou só %s m² de "
+                    "ambientes, parcial. Não medido por nós — confira antes de orçar."
+                    % (("%.2f" % float(total_area)).replace(".", ","),
+                       ("%.2f" % _medido_m2).replace(".", ",")))).strip(" |")
+            else:
+                _o = (_o + " | " + _frase_do_numero_que_cabe_na_geometria(
+                    _m_frase, _pp_lista, prancha_pelo_nome=_pelo_nome,
+                    medicao_incompleta=medicao_incompleta)).strip(" |")
             it.observations = _o
             preservados += 1
         elif id(it) in _medida_da_prancha and q == 0:
@@ -14243,6 +14279,9 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
     _apply_area_honesty.ultimo_zerados_sem_prancha = zerados_sem_prancha
     _apply_area_honesty.ultimo_apertou_teto = apertou_teto
     _apply_area_honesty.ultimo_teto_m2 = float(_teto_m2)
+    #: 03/11: linhas que só a área informada sustenta (com a chave em 0, contadas)
+    _apply_area_honesty.ultimo_informada_cobre = (int(_cobre_n), bool(_cobre_liga),
+                                                  _medido_m2, float(total_area or 0))
     #: 21/10: linhas de piso cuja leitura confessou a área a olho e que, com a
     #: chave AREA_A_OLHO_NAO_PRESERVA=1, saíram do ramo "cabe na geometria"
     _apply_area_honesty.ultimo_a_olho = int(_a_olho_n)
@@ -21384,6 +21423,26 @@ bloco — só cite os que estão no inventário deste arquivo."""
                            job_id, severity="warning")
         except Exception:
             pass
+        # 03/11: a área informada sustentou linhas que a medição parcial apagaria.
+        # A capa mostra as DUAS (Pedro: "mostrar a medição e usar a dele").
+        try:
+            _aic_n, _aic_liga, _aic_med, _aic_inf = getattr(
+                _apply_area_honesty, "ultimo_informada_cobre", (0, False, 0.0, 0.0))
+            if _aic_n:
+                if _aic_liga:
+                    project_data.warnings = (getattr(project_data, "warnings", None) or []) + [
+                        "Você informou %s m²; a medição do desenho achou só %s m² de "
+                        "ambientes (parcial). Usamos a sua área como limite em %d linha(s) "
+                        "de área escritas na planta — seguem como estimativa a conferir."
+                        % (("%.2f" % _aic_inf).replace(".", ","),
+                           ("%.2f" % _aic_med).replace(".", ","), _aic_n)]
+                _log_error("motor:area-informada-cobre",
+                           "linhas=%d liga=%d medido=%.2f informado=%.2f"
+                           % (_aic_n, int(_aic_liga), _aic_med, _aic_inf),
+                           job_id, severity="info")
+        except Exception as _eaic:
+            _log_error("motor:area-informada-cobre", "FALHOU: %s" % _eaic, job_id,
+                       severity="warning")
         # 🩸 11/09 — QUEM CAIU PELA PRANCHA DO PRÓPRIO ITEM TEM AVISO PRÓPRIO.
         # O aviso de cima fala em "não cabe na MAIOR prancha medida"; pra esta
         # população isso é falso (o número cabia no teto do job — o que não cabe
