@@ -5637,6 +5637,46 @@ def area_em_campo_vizinho(pd, sf=None):
     return None
 
 
+# 🩸 03/11/2026: o mesmo furo da área, na capa da planilha. O prompt do PDF não
+# diz os nomes e o do DXF só pede `name`; nas 1.805 leituras guardadas com
+# `project_data`, o nome veio só em campo vizinho em 893, o endereço em 216 e o
+# arquiteto em 152, e a capa saía sem as três linhas.
+# 🔒 Fora da lista: `client`/`owner`/`proprietario` (é o cliente final, não o
+# arquiteto) e `author` (às vezes é o engenheiro, e a capa escreve "Arquitetura:").
+_CAPA_EM_OUTRO_NOME = {
+    "name": ("project_name", "nome", "obra", "nome_obra", "empreendimento", "project"),
+    "address": ("endereco", "location", "local", "localizacao", "obra_localizacao"),
+    "architect": ("arquiteto", "architects", "responsavel_arq", "responsavel_arquitetura"),
+}
+_RE_CAPA_SEM_VALOR = _re.compile(
+    r"^\W*(?:n[ãa]o\s+(?:indicad|informad|identificad|consta|especificad)\w*.*"
+    r"|n/?a|null|none|desconhecid\w*|-+|—+)\W*$", _re.IGNORECASE)
+
+
+def capa_em_campo_vizinho(pd, destino=None) -> dict:
+    """{campo da capa: (campo lido, valor)} que veio com outro nome.
+
+    Só o que falta: campo que a leitura já trouxe com o nome certo, ou que o
+    `destino` já tem, fica de fora."""
+    if not isinstance(pd, dict):
+        return {}
+    achados = {}
+    for campo, vizinhos in _CAPA_EM_OUTRO_NOME.items():
+        if str(pd.get(campo) or "").strip() or getattr(destino, campo, ""):
+            continue
+        for vizinho in vizinhos:
+            valor = pd.get(vizinho)
+            if isinstance(valor, list):
+                valor = ", ".join(str(v).strip() for v in valor if isinstance(v, str) and v.strip())
+            if not isinstance(valor, str):
+                continue
+            valor = " ".join(valor.split())[:240]
+            if valor and not _RE_CAPA_SEM_VALOR.match(valor):
+                achados[campo] = (vizinho, valor)
+                break
+    return achados
+
+
 def mesclar_project_data(destino, pd, area_readings=None, reg_area=None,
                          origem="ia", sf=None):
     """Junta o `project_data` que a IA devolveu de UMA prancha no acumulado.

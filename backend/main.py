@@ -758,6 +758,8 @@ _STAGES_DIAGNOSTICO = frozenset({
     "motor:leitura-cortada",
     # 02/11: selo de layer com a nota duvidando da peça (o alcance da chave)
     "motor:selo-ressalva-da-peca",
+    # 03/11: nome, endereço e arquiteto lidos com outro nome de campo
+    "motor:capa-em-campo-vizinho",
     "motor:versao-anterior", "motor:pai-e-filho", "motor:download-regen",
     "motor:respostas-releitura", "motor:informou-depois",
     "motor:consolida-tipo",
@@ -9014,6 +9016,32 @@ def _colhe_area_em_campo_vizinho(job_id, pd, area_readings, reg_area, origem, sf
                    severity="warning")
 
 
+_CAPA_VIZINHA_CONTADA: dict = {}       # job → campos já registrados (uma linha por campo)
+
+
+def _colhe_capa_em_campo_vizinho(job_id, project_data, pd):
+    """Nome, endereço e arquiteto que a IA leu com outro nome de campo. 🔑 Com
+    CAPA_EM_CAMPO_VIZINHO=1 vão pra capa (só o que ela ainda não tem); com 0 só conta."""
+    try:
+        from engine_rules import capa_em_campo_vizinho as _vizinha
+        achados = _vizinha(pd, project_data)
+        if not achados:
+            return
+        liga = _chave_do_job(job_id, "CAPA_EM_CAMPO_VIZINHO") == "1"
+        contados = _CAPA_VIZINHA_CONTADA.setdefault(job_id, set())
+        for campo, (vizinho, valor) in achados.items():
+            if liga:
+                setattr(project_data, campo, valor)
+            if campo not in contados:
+                contados.add(campo)
+                _log_error("motor:capa-em-campo-vizinho",
+                           f"campo={campo} lido={vizinho} liga={int(liga)}", job_id,
+                           severity="info")
+    except Exception as _ecv:
+        _log_error("motor:capa-em-campo-vizinho", f"FALHOU: {_ecv}", job_id,
+                   severity="warning")
+
+
 def _junta_tabela_repetida(items: list, so_conta: bool = False) -> tuple:
     """A mesma tabela lida em várias pranchas vira uma linha. Devolve (itens, a_menos).
 
@@ -10752,6 +10780,8 @@ _CHAVES_AVALIAVEIS = frozenset({
     "LEITURA_CORTADA_RELE_MAIOR",
     # 02/11: a nota diz que o layer não é a peça, a linha não ganha o selo
     "RESSALVA_DA_PECA_NAO_PROMOVE",
+    # 03/11: `project_name`, `endereco`, `arquiteto` da leitura vão pra capa
+    "CAPA_EM_CAMPO_VIZINHO",
 })
 _CHAVES_DA_AVALIACAO: dict = {}        # job de avaliação → {chave: "0" | "1"}
 
@@ -17783,6 +17813,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                        _reg_area, "ia-dxf", sf)
                             _colhe_area_em_campo_vizinho(job_id, pd, _area_readings,
                                                          _reg_area, "ia-dxf", sf)
+                            _colhe_capa_em_campo_vizinho(job_id, project_data, pd)
 
                         # 🎯 26/08/2026 — A MEDIÇÃO ESTAVA NA OBSERVAÇÃO E A
                         # QUANTIDADE VINHA ZERO. Caso cliente-19 (24/08 21:39): 31 de
@@ -19329,6 +19360,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                            _reg_area, "ia-pdf", sf)
                 _colhe_area_em_campo_vizinho(job_id, pd, _area_readings,
                                              _reg_area, "ia-pdf", sf)
+                _colhe_capa_em_campo_vizinho(job_id, project_data, pd)
 
             # 5. Extrair itens
             valid_disciplines = [
