@@ -764,6 +764,8 @@ _STAGES_DIAGNOSTICO = frozenset({
     "motor:area-informada-cobre",
     # 03/11: linhas que recusariam a área informada (com a chave em 0, contadas)
     "motor:area-informada-recusada",
+    # 03/11: blocos de esquadria desenhados em planta (com a chave em 0, contados)
+    "motor:janela-em-planta",
     "motor:versao-anterior", "motor:pai-e-filho", "motor:download-regen",
     "motor:respostas-releitura", "motor:informou-depois",
     "motor:consolida-tipo",
@@ -10705,6 +10707,24 @@ def _etiquetas_entre_pranchas(extraction, structured_text: str, acumulado: dict,
         return structured_text
 
 
+def _registra_janela_em_planta(extraction, prancha: str, job_id: str = ""):
+    """Conta os blocos de esquadria desenhados em planta (largura × espessura da
+    parede). 🔑 Com JANELA_EM_PLANTA=1 o texto da IA já saiu dizendo isso; com 0
+    só conta. Nunca levanta."""
+    try:
+        from dwg_extractor import esquadria_em_planta
+        nomes = sorted({b.name for b in (getattr(extraction, "blocks", None) or [])
+                        if getattr(b, "width_m", 0) and getattr(b, "height_m", 0)
+                        and esquadria_em_planta(b)})
+        if nomes:
+            _log_error("motor:janela-em-planta",
+                       f"{prancha}: {len(nomes)} bloco(s) liga="
+                       f"{int(bool(getattr(extraction, 'janela_em_planta', False)))} | "
+                       + ", ".join(nomes[:8]), job_id, severity="info")
+    except Exception as e:
+        print(f"[janela-em-planta] falhou (segue): {e}")
+
+
 def _quadros_entre_pranchas(extraction, structured_text: str, vistos: dict,
                             prancha: str, job_id: str = "") -> str:
     """O MESMO quadro com quantidade em vários arquivos do job é listado UMA vez.
@@ -10806,6 +10826,8 @@ _CHAVES_AVALIAVEIS = frozenset({
     "AREA_INFORMADA_COBRE_MEDICAO_PARCIAL",
     # 03/11: a área informada não vai pra linha de peça ou de ambiente
     "AREA_INFORMADA_SO_SUPERFICIE_GERAL",
+    # 03/11: janela em planta não ganha a espessura da parede como altura
+    "JANELA_EM_PLANTA",
 })
 _CHAVES_DA_AVALIACAO: dict = {}        # job de avaliação → {chave: "0" | "1"}
 
@@ -16821,6 +16843,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                     # 12/10: o mesmo quadro com quantidade em vários arquivos do job
                     structured_text = _quadros_entre_pranchas(
                         extraction, structured_text, _quadros_do_job, _dxf_nome, job_id)
+                    _registra_janela_em_planta(extraction, _dxf_nome, job_id)
                     # Cap de segurança (auditoria 06/07): projeto gigante pode gerar
                     # prompt enorme e estourar RAM/contexto do modelo. 300k chars é
                     # folgado pra uma prancha real.

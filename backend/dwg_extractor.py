@@ -178,6 +178,24 @@ class TextAnnotation:
     de_attdef: bool = False
 
 
+#: 🩸 03/11/2026 (job 5a1ee9d4): "J15: ~1,64m × 0,22m = 0,36 m²" virou "Janela
+#: dimensão aproximada 1,64×0,22 m" na planilha — e o cliente manteve. O bloco
+#: de janela desenhado em PLANTA mede largura × espessura da parede; altura
+#: não existe na planta. 📏 60 dias: 6 linhas em 2 projetos (os outros 23 com
+#: área de vão tiraram a medida de etiqueta ou quadro).
+_ESPESSURA_MAXIMA_DE_PAREDE_M = 0.35
+
+
+def esquadria_em_planta(b) -> bool:
+    """O bloco é o símbolo em planta (uma medida é a espessura da parede)?"""
+    try:
+        w, h = float(getattr(b, "width_m", 0) or 0), float(getattr(b, "height_m", 0) or 0)
+    except (TypeError, ValueError):
+        return False
+    menor, maior = min(w, h), max(w, h)
+    return 0 < menor <= _ESPESSURA_MAXIMA_DE_PAREDE_M and maior >= 3 * menor
+
+
 @dataclass
 class DXFExtraction:
     """Resultado completo da extração."""
@@ -222,6 +240,9 @@ class DXFExtraction:
     # Leitura por folha: os desenhos do arquivo (planta/esquema/detalhe, andares)
     # e o que mudou na medição. Vazio = não aplicada (ver `motivo`).
     folhas: dict = field(default_factory=dict)
+    #: 03/11/2026 — JANELA_EM_PLANTA=1 no momento da extração (o filho lê as
+    #: chaves da avaliação); o texto refeito no servidor segue a mesma decisão.
+    janela_em_planta: bool = False
 
     # -- convenience helpers ------------------------------------------------
 
@@ -515,6 +536,14 @@ class DXFExtraction:
                         continue
                     seen.add(b.name)
                     area = b.width_m * b.height_m
+                    if self.janela_em_planta and esquadria_em_planta(b):
+                        lines.append(
+                            f"  {b.name}: {b.count} un  |  largura ~{max(b.width_m, b.height_m):.2f}m "
+                            f"em PLANTA (o {min(b.width_m, b.height_m):.2f}m é a espessura da "
+                            f"parede, NÃO a altura; a área do vão não sai da planta)"
+                            f"{_nota_da_legenda(getattr(b, 'amostras_legenda', 0))}"
+                        )
+                        continue
                     lines.append(
                         f"  {b.name}: {b.count} un  |  ~{b.width_m:.2f}m × {b.height_m:.2f}m = {area:.2f} m²"
                         f"{_nota_da_legenda(getattr(b, 'amostras_legenda', 0))}"
@@ -12442,6 +12471,7 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             _desc_pil,
             amostra_layers=sorted(_amostra_layers.items(),
                                   key=lambda kv: -kv[1])[:5]),
+        janela_em_planta=os.environ.get("JANELA_EM_PLANTA", "0") == "1",
     )
 
 
