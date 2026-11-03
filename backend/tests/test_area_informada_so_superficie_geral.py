@@ -120,40 +120,40 @@ def test_sem_recusa_a_lista_vem_vazia(monkeypatch):
     assert _roda([geral]) == ([], True) and geral.quantity == 118.74
 
 
-def _prepara_log(monkeypatch, valor):
+def _prepara_log(monkeypatch):
     logs = []
     monkeypatch.setattr(main, "_log_error", lambda *a, **k: logs.append(a))
-    monkeypatch.setattr(main._apply_area_honesty, "ultimo_recusa_informada", valor,
-                        raising=False)
     return logs
 
 
 def test_o_registro_conta_e_leva_no_maximo_6(monkeypatch):
-    logs = _prepara_log(monkeypatch, (["l%d (x)" % i for i in range(8)], False))
-    main._registra_recusa_da_informada("j")
+    logs = _prepara_log(monkeypatch)
+    main._registra_recusa_da_informada("j", (["l%d (x)" % i for i in range(8)], False))
     assert logs[0][0] == "motor:area-informada-recusada"
     assert logs[0][1].startswith("linhas=8 liga=0 | l0 (x)") and "l6" not in logs[0][1]
 
 
 def test_sem_recusa_nao_registra(monkeypatch):
-    logs = _prepara_log(monkeypatch, ([], True))
-    main._registra_recusa_da_informada("j")
+    logs = _prepara_log(monkeypatch)
+    main._registra_recusa_da_informada("j", ([], True))
     assert logs == []
 
 
 def test_falha_do_registro_nao_derruba(monkeypatch):
-    logs = _prepara_log(monkeypatch, None)
-    main._registra_recusa_da_informada("j")
+    logs = _prepara_log(monkeypatch)
+    main._registra_recusa_da_informada("j", None)
     assert logs[0][1].startswith("FALHOU")
 
 
 def test_os_dois_caminhos_registram():
     with open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                            "main.py"), encoding="utf-8") as f:
-        fonte = f.read()
-    assert fonte.count("_registra_recusa_da_informada(job_id)") == 3   # a def + 2 chamadas
-    assert "apenas_preencher=True, job_id=job_id)\n    _registra_recusa_da_informada(job_id)" \
-        in fonte.replace("\r\n", "\n")
+        fonte = f.read().replace("\r\n", "\n")
+    assert fonte.count("_registra_recusa_da_informada(") == 3   # a def + 2 chamadas
+    assert ("apenas_preencher=True, job_id=job_id)\n    _registra_recusa_da_informada("
+            "job_id, _apply_area_honesty.ultimo_recusa_informada)") in fonte
+    assert ('_registra_recusa_da_informada(\n            job_id, getattr(_apply_area_honesty, '
+            '"ultimo_recusa_informada", ([], False)))') in fonte
 
 
 def test_chave_avaliavel_etapa_de_diagnostico_e_nasce_desligada():

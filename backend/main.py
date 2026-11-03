@@ -9020,11 +9020,12 @@ def _colhe_area_em_campo_vizinho(job_id, pd, area_readings, reg_area, origem, sf
                    severity="warning")
 
 
-def _registra_recusa_da_informada(job_id):
+def _registra_recusa_da_informada(job_id, recusa):
     """Linhas que não são a superfície do imóvel e a área informada iria preencher.
-    🔑 AREA_INFORMADA_SO_SUPERFICIE_GERAL=1 recusa; com 0 só conta."""
+    🔑 AREA_INFORMADA_SO_SUPERFICIE_GERAL=1 recusa; com 0 só conta.
+    `recusa` é o `ultimo_recusa_informada` da chamada que acabou de rodar."""
     try:
-        recusas, liga = getattr(_apply_area_honesty, "ultimo_recusa_informada", ([], False))
+        recusas, liga = recusa
         if recusas:
             _log_error("motor:area-informada-recusada",
                        "linhas=%d liga=%d | %s" % (len(recusas), int(liga),
@@ -21510,7 +21511,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
                            % _zsp, job_id, severity="warning")
         except Exception:
             pass
-        _registra_recusa_da_informada(job_id)
+        _registra_recusa_da_informada(
+            job_id, getattr(_apply_area_honesty, "ultimo_recusa_informada", ([], False)))
         # 🩸 01/09 — 25 LINHAS EM BRANCO SEM EXPLICAÇÃO PARECEM MOTOR QUEBRADO.
         # No job 144c1f04 os 25 itens lineares (100% deles) voltaram zerados. A
         # observação de cada linha já diz o porquê, mas quem abre a planilha vê
@@ -35027,7 +35029,7 @@ def inform_project_area(job_id: str, payload: InformAreaPayload, request: Reques
         items, (area or _area_ja_tinha), ("informado" if area > 0 else ""),
         pe_direito=_pd_efetivo,
         apenas_preencher=True, job_id=job_id)
-    _registra_recusa_da_informada(job_id)
+    _registra_recusa_da_informada(job_id, _apply_area_honesty.ultimo_recusa_informada)
     # 🎯 26/08 — E A PINTURA DE PAREDE, que a área NUNCA preenche (a docstring
     # desta rota sempre disse: "itens que não escalam com piso NÃO são
     # preenchidos"). Σ(comprimento medido) × pé-direito × 2 faces, lido dos
