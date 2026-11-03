@@ -578,6 +578,48 @@ def is_floor_surface_para_criar(desc):
     return is_floor_surface(d) and not any(b in d for b in FLOOR_ATO_PARCIAL_KW)
 
 
+# 🩸 03/11/2026 (job e21652dc): a cliente confirmou 118,74 m² e a área total foi
+# pra "Piso do elevador social", cuja observação dizia 18,74 m² (3 cabines). Em
+# 90 dias, das 8 linhas que receberam a área informada, essa, o deck e o forro de
+# madeira que NÓS tínhamos deixado em branco de propósito, e o isolamento de dutos
+# "entre-forro" não eram a superfície do imóvel. Recusar devolve a linha vazia.
+_NAO_E_SUPERFICIE_DO_IMOVEL = ("duto", "entre-forro", "entreforro", "entre forro")
+MARCA_EM_BRANCO_DE_PROPOSITO = "Deixamos esta linha EM BRANCO de propósito"
+_RE_AREA_DA_PROPRIA_LINHA = _re.compile(
+    r"(\d{1,3}(?:\.\d{3})+,\d{1,2}|\d+(?:[.,]\d{1,2})?)\s*m(?:²|2)(?!\w)",
+    _re.IGNORECASE)
+
+
+def _numero_br(txt):
+    t = str(txt)
+    if "," in t:
+        t = t.replace(".", "").replace(",", ".")
+    return float(t)
+
+
+def area_informada_nao_e_desta_linha(descricao, observacao, total) -> str:
+    """Por que a área TOTAL informada não pode ir pra esta linha ('' se pode)."""
+    d = str(descricao or "").lower()
+    o = str(observacao or "")
+    if MARCA_EM_BRANCO_DE_PROPOSITO in o:
+        return "em branco de propósito"
+    if any(k in d for k in _NAO_E_SUPERFICIE_DO_IMOVEL):
+        return "não é a superfície do imóvel"
+    try:
+        teto = 0.9 * float(total or 0)
+    except (TypeError, ValueError):
+        return ""
+    for texto in (d, o):
+        for m in _RE_AREA_DA_PROPRIA_LINHA.finditer(texto):
+            try:
+                v = _numero_br(m.group(1))
+            except ValueError:
+                continue
+            if 0 < v < teto:
+                return "a linha diz o próprio tamanho (%s m²)" % m.group(1)
+    return ""
+
+
 # ── Camada de base × ACABAMENTO (16/09/2026) ────────────────────────────────
 # O passo 7 do `_apply_area_honesty` dá a área medida da prancha pra UMA linha
 # zerada de cada família (piso, forro). A pergunta que faltava: quando OUTRA

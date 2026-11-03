@@ -762,6 +762,8 @@ _STAGES_DIAGNOSTICO = frozenset({
     "motor:capa-em-campo-vizinho",
     # 03/11: linhas que só a área informada sustentou (com a chave em 0, contadas)
     "motor:area-informada-cobre",
+    # 03/11: linhas que recusariam a área informada (com a chave em 0, contadas)
+    "motor:area-informada-recusada",
     "motor:versao-anterior", "motor:pai-e-filho", "motor:download-regen",
     "motor:respostas-releitura", "motor:informou-depois",
     "motor:consolida-tipo",
@@ -9018,6 +9020,21 @@ def _colhe_area_em_campo_vizinho(job_id, pd, area_readings, reg_area, origem, sf
                    severity="warning")
 
 
+def _registra_recusa_da_informada(job_id):
+    """Linhas que não são a superfície do imóvel e a área informada iria preencher.
+    🔑 AREA_INFORMADA_SO_SUPERFICIE_GERAL=1 recusa; com 0 só conta."""
+    try:
+        recusas, liga = getattr(_apply_area_honesty, "ultimo_recusa_informada", ([], False))
+        if recusas:
+            _log_error("motor:area-informada-recusada",
+                       "linhas=%d liga=%d | %s" % (len(recusas), int(liga),
+                                                   " · ".join(recusas[:6])),
+                       job_id, severity="info")
+    except Exception as _eri:
+        _log_error("motor:area-informada-recusada", "FALHOU: %s" % _eri, job_id,
+                   severity="warning")
+
+
 _CAPA_VIZINHA_CONTADA: dict = {}       # job → campos já registrados (uma linha por campo)
 
 
@@ -10786,6 +10803,8 @@ _CHAVES_AVALIAVEIS = frozenset({
     "CAPA_EM_CAMPO_VIZINHO",
     # 03/11: área informada vira teto quando a medição deu menos da metade
     "AREA_INFORMADA_COBRE_MEDICAO_PARCIAL",
+    # 03/11: a área informada não vai pra linha de peça ou de ambiente
+    "AREA_INFORMADA_SO_SUPERFICIE_GERAL",
 })
 _CHAVES_DA_AVALIACAO: dict = {}        # job de avaliação → {chave: "0" | "1"}
 
@@ -13220,6 +13239,27 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
     _informada_cobre = bool(informado and _medido_m2 < 0.5 * float(total_area))
     _cobre_n = 0
 
+    # 🩸 03/11/2026 (job e21652dc): a área informada foi pro piso das cabines do
+    # elevador (18,74 m² pela própria linha). Ver
+    # `engine_rules.area_informada_nao_e_desta_linha`. 📏 90 dias: 5 de 8.
+    # 🛑 NASCE DESLIGADA: AREA_INFORMADA_SO_SUPERFICIE_GERAL=1 liga.
+    try:
+        _so_geral_liga = _chave_do_job(job_id, "AREA_INFORMADA_SO_SUPERFICIE_GERAL") == "1"
+    except NameError:
+        import os as _os_sg
+        _so_geral_liga = _os_sg.environ.get("AREA_INFORMADA_SO_SUPERFICIE_GERAL", "0") == "1"
+    from engine_rules import area_informada_nao_e_desta_linha as _nao_e_desta_linha
+    _recusas_informada = []
+
+    def _recusa_a_informada(_it) -> bool:
+        _por = _nao_e_desta_linha(getattr(_it, "description", ""),
+                                  getattr(_it, "observations", ""), total_area)
+        if not _por:
+            return False
+        _recusas_informada.append(
+            "%s (%s)" % ((getattr(_it, "description", "") or "")[:40], _por))
+        return _so_geral_liga
+
     def _cabe_na_informada(_q) -> bool:
         nonlocal _cobre_n
         if not (_informada_cobre and float(_q) <= float(total_area)):
@@ -13699,6 +13739,7 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
                 and q == 0
                 and _usou_area_informada.get(_fam, 0) < 1
                 and not _e_total_do_quadro_em_branco(getattr(it, "observations", ""))
+                and not _recusa_a_informada(it)
                 and not (apenas_preencher and q > 0)):
             # 🪤 31/08 (auditoria): quem fica com a área total é decidido pela
             # ORDEM DA LISTA, e a lista vem da IA — então o MESMO projeto,
@@ -14280,6 +14321,9 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
     _apply_area_honesty.ultimo_apertou_teto = apertou_teto
     _apply_area_honesty.ultimo_teto_m2 = float(_teto_m2)
     #: 03/11: linhas que só a área informada sustenta (com a chave em 0, contadas)
+    #: 03/11: linhas que recusariam a área informada (com a chave em 0, contadas)
+    _apply_area_honesty.ultimo_recusa_informada = (list(_recusas_informada),
+                                                   bool(_so_geral_liga))
     _apply_area_honesty.ultimo_informada_cobre = (int(_cobre_n), bool(_cobre_liga),
                                                   _medido_m2, float(total_area or 0))
     #: 21/10: linhas de piso cuja leitura confessou a área a olho e que, com a
@@ -21466,6 +21510,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                            % _zsp, job_id, severity="warning")
         except Exception:
             pass
+        _registra_recusa_da_informada(job_id)
         # 🩸 01/09 — 25 LINHAS EM BRANCO SEM EXPLICAÇÃO PARECEM MOTOR QUEBRADO.
         # No job 144c1f04 os 25 itens lineares (100% deles) voltaram zerados. A
         # observação de cada linha já diz o porquê, mas quem abre a planilha vê
@@ -34981,7 +35026,8 @@ def inform_project_area(job_id: str, payload: InformAreaPayload, request: Reques
     filled, _ = _apply_area_honesty(
         items, (area or _area_ja_tinha), ("informado" if area > 0 else ""),
         pe_direito=_pd_efetivo,
-        apenas_preencher=True)
+        apenas_preencher=True, job_id=job_id)
+    _registra_recusa_da_informada(job_id)
     # 🎯 26/08 — E A PINTURA DE PAREDE, que a área NUNCA preenche (a docstring
     # desta rota sempre disse: "itens que não escalam com piso NÃO são
     # preenchidos"). Σ(comprimento medido) × pé-direito × 2 faces, lido dos
