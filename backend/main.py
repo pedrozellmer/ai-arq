@@ -10937,6 +10937,19 @@ def _pediu_sem_sinapi(valor) -> bool:
     return str(valor or "").strip().lower() in ("1", "true", "sim")
 
 
+def _pula_sinapi_na_avaliacao(sem_sinapi, chaves, com_sinapi) -> bool:
+    """A avaliação pula o SINAPI? 💸 04/11/2026 (Pedro: "usar cada vez menos
+    API"): avaliação que compara CHAVES pula por padrão — 43 de 63 avaliações
+    em 30 dias pagaram o SINAPI (US$ 25) e nenhuma foi liberada. Sem chaves
+    (o botão "Avaliar (isolado)", que existe pra liberar) segue o pipeline
+    inteiro. `com_sinapi=1` força a etapa; `sem_sinapi` explícito manda."""
+    if _pediu_sem_sinapi(com_sinapi):
+        return False
+    if str(sem_sinapi or "").strip():
+        return _pediu_sem_sinapi(sem_sinapi)
+    return bool(str(chaves or "").strip())
+
+
 def _avaliacao_sem_sinapi(job_id) -> bool:
     """Esta passada é de uma avaliação que pediu pra pular a etapa do SINAPI?
     Só job de avaliação ("ev…"); job de cliente NUNCA pula."""
@@ -37616,7 +37629,8 @@ async def reprocess_project(job_id: str, request: Request):
 def admin_eval_reprocess(job_id: str, request: Request,
                          project_type: Optional[str] = None,
                          chaves: Optional[str] = None,
-                         sem_sinapi: Optional[str] = None):
+                         sem_sinapi: Optional[str] = None,
+                         com_sinapi: Optional[str] = None):
     """ADMIN — "modo avaliação": re-roda os arquivos de um projeto num job
     ISOLADO, sem tocar no projeto do cliente. Serve pra comparar leituras sem
     risco (ex.: DWG vs PDF, ou motor novo vs antigo).
@@ -37636,7 +37650,8 @@ def admin_eval_reprocess(job_id: str, request: Request,
 
     `?sem_sinapi=1` (18/10/2026): a avaliação pula a etapa do SINAPI (a escolha
     da IA e a conferência de unidade) — mais barata, e não pode ser liberada pro
-    cliente. Ver `_SEM_SINAPI_DA_AVALIACAO`."""
+    cliente. Ver `_SEM_SINAPI_DA_AVALIACAO`. Desde 04/11/2026 é o PADRÃO de
+    quem passa `?chaves=` — `?com_sinapi=1` volta a etapa (`_pula_sinapi_na_avaliacao`)."""
     _require_admin(request)
     import urllib.request, urllib.error, json, shutil
     from urllib.parse import unquote
@@ -37644,7 +37659,7 @@ def admin_eval_reprocess(job_id: str, request: Request,
         _chaves_eval = _chaves_pedidas(chaves)
     except ValueError as _ech:
         raise HTTPException(400, str(_ech))
-    _sem_sinapi = _pediu_sem_sinapi(sem_sinapi)
+    _sem_sinapi = _pula_sinapi_na_avaliacao(sem_sinapi, chaves, com_sinapi)
 
     # 1) Projeto original (service role — admin já validado no _require_admin)
     try:

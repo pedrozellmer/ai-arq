@@ -88,7 +88,9 @@ def _rodar_a_rota(monkeypatch, tmp_path, chaves, sem_sinapi, nome_do_original):
 @pytest.mark.parametrize("chaves, sem_sinapi, esperado", [
     (None, None, ({}, False)),
     (None, "1", ({}, True)),
-    ("SIMBOLO_DE_NIVEL_E_ANOTACAO=1,FAMILIA_DE_ANOTACAO_DO_REVIT=1", None, (CHAVES, False)),
+    # 04/11: avaliação de chave pula o SINAPI por padrão (`_pula_sinapi_na_avaliacao`)
+    ("SIMBOLO_DE_NIVEL_E_ANOTACAO=1,FAMILIA_DE_ANOTACAO_DO_REVIT=1", None, (CHAVES, True)),
+    ("SIMBOLO_DE_NIVEL_E_ANOTACAO=1,FAMILIA_DE_ANOTACAO_DO_REVIT=1", "0", (CHAVES, False)),
     ("LEGENDA_PELA_FORMA=0", "1", ({"LEGENDA_PELA_FORMA": "0"}, True)),
 ])
 @pytest.mark.parametrize("nome_do_original", [
