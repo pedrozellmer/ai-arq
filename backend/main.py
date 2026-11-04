@@ -333,6 +333,79 @@ def _apaga_dir_de_conversao(dxf_path):
     return False
 
 
+#: 🩸 04/11/2026 (job 3e171e10, 24 DWG): a conversão roda pra TODAS as pranchas
+#: antes da 1ª leitura, e os DXF somados passaram de 2 GB no /tmp — o Render
+#: despejou a instância ("temporary storage volume /tmp exceeded the limit of
+#: 2GB"), o job voltou, caiu de novo e foi pra quarentena. Acima do orçamento o
+#: DWG fica pra ser convertido na hora de ler, e cada DXF é apagado depois de
+#: lido. O /tmp ainda guarda os DWG enviados e as cópias pro preview.
+_ORCAMENTO_CONVERSAO_MB = float(os.getenv("ORCAMENTO_CONVERSAO_MB", "900"))
+_ORCAMENTO_PREVIEW_MB = float(os.getenv("ORCAMENTO_PREVIEW_MB", "300"))
+
+
+def _mb_da_pasta(pasta) -> float:
+    """MB ocupados pelos arquivos de uma pasta (0 se não existe)."""
+    total = 0
+    for raiz, _d, arqs in os.walk(pasta or ""):
+        for a in arqs:
+            try:
+                total += os.path.getsize(os.path.join(raiz, a))
+            except OSError:
+                pass
+    return total / 1048576
+
+
+def _mb_convertidos_em_disco(caminhos) -> float:
+    """MB dos DXF que NÓS convertemos e ainda estão no disco."""
+    total = 0
+    for p in caminhos or []:
+        p = str(p or "")
+        if not p.lower().endswith(".dxf"):
+            continue
+        if not os.path.basename(os.path.dirname(p)).startswith("arq_dxf_"):
+            continue
+        try:
+            total += os.path.getsize(p)
+        except OSError:
+            pass
+    return total / 1048576
+
+
+def _adia_a_conversao(caminhos) -> bool:
+    """A próxima conversão espera a hora de ler? (o que já está convertido encheu o orçamento)"""
+    return _mb_convertidos_em_disco(caminhos) >= _ORCAMENTO_CONVERSAO_MB
+
+
+def _converte_na_hora_de_ler(dwg_path, job_id, falhas, falhas_paths, via_libredwg):
+    """Converte o DWG que ficou pra depois. Devolve o DXF, ou None (a falha entra
+    nas listas de sempre, e o aviso ao cliente sai igual ao da conversão de antes)."""
+    _bn = os.path.basename(dwg_path)
+    try:
+        jobs.update_field(job_id, current_step=f"Convertendo DWG→DXF: {_bn}")
+    except Exception:
+        pass
+    try:
+        from dwg_extractor import convert_dwg_to_dxf as _conv, dwg_has_aec_markers as _aec
+        dxf = _conv(dwg_path)
+    except Exception as _e:
+        dxf, _aec = None, (lambda _p: False)
+        print(f"[conversao-adiada] {_bn}: {type(_e).__name__}: {_e}")
+    _log_error("motor:conversao-adiada",
+               f"{_bn}: convertido na hora de ler ({'ok' if dxf else 'falhou'}; "
+               f"orçamento de {_ORCAMENTO_CONVERSAO_MB:.0f}MB no /tmp)", job_id, severity="info")
+    if not dxf:
+        falhas.append(_bn)
+        falhas_paths.append(dwg_path)
+        _log_error("dwg:convert-fail",
+                   f"DWG não converteu pra DXF: {_bn}"
+                   + (" — objetos AEC/MEP (conversor livre não abre)" if _aec(dwg_path) else ""),
+                   job_id, severity="warning")
+        return None
+    if str(dxf).endswith("_libredwg.dxf"):
+        via_libredwg.append(_bn)
+    return dxf
+
+
 def _guarda_dxf_pro_preview(dxf_path, work_dir, job_id, descartadas=None):
     """Move o DXF convertido pro `_preview` do work_dir e apaga o temp da conversão.
 
@@ -380,7 +453,13 @@ def _guarda_dxf_pro_preview(dxf_path, work_dir, job_id, descartadas=None):
         except OSError:
             _tam_mb = 0.0
         _destino = None
-        if _tam_mb <= _PREVIEW_MOVE_MAX_MB:
+        _cabe = _mb_da_pasta(os.path.join(work_dir, "_preview")) + _tam_mb <= _ORCAMENTO_PREVIEW_MB
+        if not _cabe:
+            # 04/11: as cópias pro preview também moram no /tmp de 2 GB
+            _log_error("motor:preview-prancha",
+                       f"preview pulado arq={os.path.basename(dxf_path)} "
+                       f"(cópias guardadas passariam de {_ORCAMENTO_PREVIEW_MB:.0f}MB)", job_id)
+        elif _tam_mb <= _PREVIEW_MOVE_MAX_MB:
             # 🚨 Subpasta própria, NUNCA a raiz do work_dir: o conversor ODA
             # devolve "<nome>.dxf", então um cliente que sobe `planta.dwg` E
             # `planta.dxf` teria o DXF ORIGINAL dele sobrescrito aqui
@@ -766,6 +845,8 @@ _STAGES_DIAGNOSTICO = frozenset({
     "motor:area-informada-recusada",
     # 03/11: blocos de esquadria desenhados em planta (com a chave em 0, contados)
     "motor:janela-em-planta",
+    # 04/11: DWG convertido na hora de ler, pra não encher o /tmp
+    "motor:conversao-adiada",
     "motor:versao-anterior", "motor:pai-e-filho", "motor:download-regen",
     "motor:respostas-releitura", "motor:informou-depois",
     "motor:consolida-tipo",
@@ -16060,6 +16141,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
 
         # Converter DWG→DXF se necessário
         dxf_paths = []
+        _conversao_adiada = set()   # 04/11: DWG que só converte na hora de ler
         # 🩸 03/09/2026 — as pranchas que NÓS apagamos de propósito (extração
         # falhou/estourou o tempo). Sem esta lista, a thread de preview acha o
         # caminho morto em `dxf_paths` e conta `sem_dxf` — o mesmo balde de
@@ -16111,6 +16193,11 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                 for ci, cad_path in enumerate(cad_paths):
                     base = 5 + int((ci / max(n_cad, 1)) * conv_span)
                     ext = cad_path.lower().rsplit('.', 1)[-1]
+                    if ext == 'dwg' and _adia_a_conversao(dxf_paths):
+                        # 04/11: converte na hora de ler (ver `_ORCAMENTO_CONVERSAO_MB`)
+                        dxf_paths.append(cad_path)
+                        _conversao_adiada.add(cad_path)
+                        continue
                     if ext == 'dwg':
                         jobs.update_field(job_id, progress=base)
                         jobs.update_field(job_id, current_step=f"Convertendo DWG→DXF ({ci+1}/{n_cad}): {os.path.basename(cad_path)}")
@@ -16585,7 +16672,9 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                             except OSError:
                                 _sz = 0
                             return (_s, _sz)       # depois menor arquivo (readfile + barato)
-                        for _i_pb, _pp in enumerate(sorted(dxf_paths, key=_planta_score)):
+                        for _i_pb, _pp in enumerate(sorted(
+                                (p for p in dxf_paths if p not in _conversao_adiada),
+                                key=_planta_score)):
                             if _i_pb >= 12:        # cap: não lê o projeto inteiro só pra unidade
                                 break
                             # a sondagem roda FORA do timeout de 900s — não lê prancha
@@ -16651,6 +16740,16 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                             _apaga_dir_de_conversao(_resto)
                             _descartadas.add(_resto)
                         return
+                    if dxf_path in _conversao_adiada:
+                        dxf_path = _converte_na_hora_de_ler(
+                            dxf_path, job_id, dwg_failed, dwg_failed_paths, dwg_via_libredwg)
+                        if not dxf_path:
+                            # a conversão que falhou não deixa `arq_dxf_*`: com o
+                            # caminho do DWG isto não apaga nada (é o padrão do laço)
+                            _apaga_dir_de_conversao(dxf_paths[idx])
+                            _descartadas.add(dxf_paths[idx])   # sem DXF por nossa conta
+                            continue
+                        dxf_paths[idx] = dxf_path
                     # Cada DXF ocupa 1/N da faixa. Extração 30% + IA 70% dentro da faixa.
                     dxf_base = extract_start + int((idx / max(n_dxf, 1)) * dxf_span)
                     dxf_next = extract_start + int(((idx + 1) / max(n_dxf, 1)) * dxf_span)
