@@ -827,6 +827,8 @@ _STAGES_DIAGNOSTICO = frozenset({
     "motor:piso-de-comodo-da-etiqueta",
     # 05/11: arquivo com " (1)" no nome — legenda que a linha ganharia/ganhou
     "motor:arquivo-com-parentese",
+    # 05/11: rede inteira de tubo ao lado dos diâmetros (com a chave em 0, a lista)
+    "motor:rede-inteira-e-diametros",
     # 28/10: comprimento rateado por etiqueta (com a chave em 0, só a contagem)
     "motor:rateio-por-etiqueta",
     # 30/10: "N por local" (com a chave em 0, só a contagem)
@@ -10913,6 +10915,8 @@ _CHAVES_AVALIAVEIS = frozenset({
     "PISO_DE_COMODO_DA_ETIQUETA",
     # 05/11: arquivo com " (1)" no nome acha a própria legenda e o quadro
     "ARQUIVO_COM_PARENTESE",
+    # 05/11: a rede inteira de tubo ao lado dos diâmetros ganha o aviso "não some"
+    "REDE_INTEIRA_NAO_SOMA",
     # 03/11: área informada vira teto quando a medição deu menos da metade
     "AREA_INFORMADA_COBRE_MEDICAO_PARCIAL",
     # 03/11: a área informada não vai pra linha de peça ou de ambiente
@@ -21956,6 +21960,52 @@ bloco — só cite os que estão no inventário deste arquivo."""
         except Exception as _epf:
             print(f"[pai-e-filho] job={job_id}: checagem falhou: {_epf}")
             _log_error("motor:pai-e-filho", f"FALHOU: {_epf}", job_id)
+
+        # 🩸 05/11/2026 (4e260fd6): "Rede geral … todos os diâmetros" ao lado
+        # dos diâmetros do mesmo sistema — ver `engine_rules.linhas_de_rede_inteira`.
+        # Mesmo lugar e mesma doutrina do bloco de cima (antes da fusão do cliente).
+        # 🛑 NASCE DESLIGADA: REDE_INTEIRA_NAO_SOMA=1 põe o aviso; com 0 só anota.
+        try:
+            from engine_rules import linhas_de_rede_inteira as _rede_inteira
+            from models import Confidence as _Conf
+            try:
+                _rede_liga = _chave_do_job(job_id, "REDE_INTEIRA_NAO_SOMA") == "1"
+            except NameError:
+                import os as _os_ri
+                _rede_liga = _os_ri.environ.get("REDE_INTEIRA_NAO_SOMA", "0") == "1"
+            try:
+                _ja_pf = [a["indice"] for a in _paifilho]
+            except NameError:
+                _ja_pf = []
+            _redes = _rede_inteira(all_items, ja_marcadas=_ja_pf)
+            if _redes and _rede_liga:
+                for _a in _redes:
+                    _it = all_items[_a["indice"]]
+                    # NA FRENTE: a revisão corta a observação em 110 caracteres
+                    _av = (f"⚠ NÃO SOME COM AS DE BAIXO: esta linha é a REDE INTEIRA, e "
+                           f"{_a['n_partes']} linha(s) do mesmo sistema já trazem o tubo "
+                           f"por diâmetro ({_a['soma_partes']:.2f} {_a['unidade']}). ")
+                    if not _a["fecha"]:
+                        _av += (f"Os números não fecham ({_a['quantidade']:g} contra "
+                                f"{_a['soma_partes']:.2f}) — confira qual está certa no "
+                                f"desenho. ")
+                    _it.observations = _av + "Some uma OU outra, nunca as duas. " + (
+                        _it.observations or "")
+                    if _it.confidence == _Conf.CONFIRMADO:
+                        _it.confidence = _Conf.ESTIMADO
+                project_data.warnings = (project_data.warnings or []) + [
+                    f"{len(_redes)} linha(s) com a rede INTEIRA de tubulação estão ao lado "
+                    "das linhas por diâmetro do mesmo sistema — somar a coluna contaria o "
+                    "tubo duas vezes. As linhas estão marcadas na planilha."]
+            if _redes:
+                _log_error("motor:rede-inteira-e-diametros",
+                           f"linhas={len(_redes)} liga={int(_rede_liga)} | " + "; ".join(
+                               f"{a['descricao'][:45]}={a['quantidade']:g} vs "
+                               f"{a['n_partes']}p={a['soma_partes']:g}" for a in _redes[:8]),
+                           job_id, severity="info")
+        except Exception as _eri:
+            print(f"[rede-inteira] job={job_id}: checagem falhou: {_eri}")
+            _log_error("motor:rede-inteira-e-diametros", f"FALHOU: {_eri}", job_id)
 
         # 🩸 22/09/2026 (844603fb, f8d8e6d8): contagem, verba, peso e volume não
         # dizem "medido do desenho" — a geometria do PDF só mede m² e m. Roda

@@ -2643,6 +2643,83 @@ def _cabeca_do_total(desc) -> str:
     return _re.split(r"\s[—–-]\s", str(desc or ""), maxsplit=1)[0].strip().lower()
 
 
+# ══════════════════════════════════════════════════════════════════════════
+#  A REDE INTEIRA AO LADO DOS DIÂMETROS (05/11/2026)
+# ══════════════════════════════════════════════════════════════════════════
+# 🩸 05/11/2026 (job 4e260fd6, hidráulica de pavimento-tipo): a MESMA leitura
+# trouxe a lista de materiais por diâmetro (PVC ø25 18,92 m, ø32 9,52 m…) e o
+# comprimento do layer inteiro ("Rede geral de tubulação de água fria — todos os
+# diâmetros" 145,57 m). Quem soma a coluna conta o tubo duas vezes, e as duas
+# leituras discordam ~4×. `linhas_pai_e_filho` não via: só reconhece "total".
+# 🔑 Mesma doutrina dela: só AVISA, nunca escolhe qual fica.
+# 🛑 Estreita: só METRO, só "todos os diâmetros" / "rede geral", e só contra as
+# linhas COM diâmetro do MESMO sistema (fria × fria, quente × quente) — sem o
+# sistema, a rede de alimentação somava junto e "fechava" com a de água fria
+# por acaso. Fora: "todas as bitolas" do aço (a dobra/montagem pode ser serviço
+# à parte do fornecimento — avisar ali pode estar errado).
+# 📏 90 dias de cliente: ~5 jobs de tubo com a rede inteira ao lado dos diâmetros.
+_RE_REDE_INTEIRA = _re.compile(r"(?i)todos\s+os\s+di[âa]metros|\brede\s+geral\b")
+_RE_TEM_DIAMETRO = _re.compile(
+    r"(?i)[øØ⌀]\s*\d|\bdn\s*\d|\b\d{2,3}\s*mm\b|\b\d+(?:\s+\d)?/\d+\s*(?:\"|”|pol)")
+_UNIDADES_DE_METRO = {"m", "ml", "m.l.", "metro", "metros"}
+#: o sistema da linha; a 1ª palavra que aparece decide
+_SISTEMAS_DA_REDE = (
+    ("agua_quente", ("água quente", "agua quente")),
+    ("agua_fria", ("água fria", "agua fria")),
+    ("esgoto", ("esgoto",)),
+    ("pluvial", ("pluvial", "águas pluviais", "aguas pluviais")),
+    ("gas", ("gás", "gas ")),
+    ("incendio", ("incêndio", "incendio", "sprinkler", "hidrante")),
+    ("alimentacao", ("alimentação", "alimentacao", "recalque")),
+)
+
+
+def _sistema_da_rede(desc) -> str:
+    d = " %s " % str(desc or "").lower()
+    for nome, chaves in _SISTEMAS_DA_REDE:
+        if any(k in d for k in chaves):
+            return nome
+    return ""
+
+
+def linhas_de_rede_inteira(items, ja_marcadas=()):
+    """A linha da REDE INTEIRA ("todos os diâmetros", "rede geral") convivendo com
+    as linhas por diâmetro do mesmo sistema. Mesmo formato de achado de
+    `linhas_pai_e_filho` (com `fecha`), sem alterar nada.
+
+    `ja_marcadas`: índices que `linhas_pai_e_filho` já marcou (não repete)."""
+    pulas = set(ja_marcadas or ())
+    norm = []
+    for it in (items or []):
+        desc = str(_campo_do_item(it, "description", "") or "")
+        try:
+            q = float(_campo_do_item(it, "quantity", 0) or 0)
+        except (TypeError, ValueError):
+            q = 0.0
+        norm.append((desc,
+                     str(_campo_do_item(it, "unit", "") or "").strip().lower(), q,
+                     str(_campo_do_item(it, "discipline", "") or "").strip().lower(),
+                     str(_campo_do_item(it, "ref_sheet", "") or "").strip().lower(),
+                     bool(_RE_REDE_INTEIRA.search(desc)), _sistema_da_rede(desc)))
+    achados = []
+    for i, (desc, un, q, disc, prancha, inteira, sist) in enumerate(norm):
+        if (i in pulas or not inteira or not sist or q <= 0
+                or un not in _UNIDADES_DE_METRO or _RE_LINHA_TOTAL.search(desc)):
+            continue
+        partes = [j for j, n in enumerate(norm)
+                  if j != i and not n[5] and n[2] > 0 and n[1] == un and n[3] == disc
+                  and n[4] == prancha and n[6] == sist and _RE_TEM_DIAMETRO.search(n[0])]
+        if not partes:
+            continue
+        soma = sum(norm[j][2] for j in partes)
+        folga = abs(soma - q) / q
+        achados.append({"indice": i, "descricao": desc, "unidade": un, "quantidade": q,
+                        "n_partes": len(partes), "soma_partes": round(soma, 2),
+                        "folga": round(folga, 3), "indices_partes": partes,
+                        "fecha": folga < 0.35})
+    return achados
+
+
 # ══════════════════════════════════════════════════════════════════════
 #  ATRIBUTO DISTINTIVO — o que NUNCA pode ser fundido (regra dura nº4)
 # ══════════════════════════════════════════════════════════════════════
