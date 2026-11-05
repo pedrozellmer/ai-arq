@@ -6782,6 +6782,29 @@ def duplicados_do_numero_escrito(achados):
     return barradas
 
 
+def arquivo_do_ref_sheet(ref_sheet, conhecidos=()) -> str:
+    """O ARQUIVO de um `ref_sheet` ("x.pdf (Planta de Acabamento)"), com a caixa
+    de como veio.
+
+    🩸 05/11/2026 (job 0dce4d2b): o corte no 1º " (" partia "…ACABAMENTO (1).pdf"
+    — o nome que o navegador dá ao baixar o mesmo arquivo de novo — em
+    "…ACABAMENTO", e a legenda "PISO VINÍLICO … 62,37m²" daquela prancha nunca
+    era achada: escritos=0, piso zerado. 📏 90 dias: 36 jobs de cliente com
+    arquivo assim (41 PDFs).
+    Com `conhecidos` (os arquivos que o laço de páginas guardou), vence o MAIS
+    LONGO que abre o `ref_sheet` e termina ali (fim, espaço ou parêntese). Sem
+    nenhum que sirva, o corte de antes."""
+    r = str(ref_sheet or "").strip()
+    rl = r.lower()
+    n = 0
+    for c in conhecidos or ():
+        c = str(c or "").strip().lower()
+        if (c and len(c) > n and rl.startswith(c)
+                and (len(rl) == len(c) or rl[len(c)] in " (")):
+            n = len(c)
+    return r[:n] if n else r.split(" (")[0].strip()
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 #  AÇO POR TAXA não vira número (22/09/2026)
 # ─────────────────────────────────────────────────────────────────────────────

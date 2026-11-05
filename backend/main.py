@@ -825,6 +825,8 @@ _STAGES_DIAGNOSTICO = frozenset({
     "motor:sombra-area-sem-base",
     # 05/11: piso de banheiro/WC com a área da etiqueta (com a chave em 0, a lista)
     "motor:piso-de-comodo-da-etiqueta",
+    # 05/11: arquivo com " (1)" no nome — legenda que a linha ganharia/ganhou
+    "motor:arquivo-com-parentese",
     # 28/10: comprimento rateado por etiqueta (com a chave em 0, só a contagem)
     "motor:rateio-por-etiqueta",
     # 30/10: "N por local" (com a chave em 0, só a contagem)
@@ -10909,6 +10911,8 @@ _CHAVES_AVALIAVEIS = frozenset({
     "CAPA_EM_CAMPO_VIZINHO",
     # 05/11: piso de banheiro/WC com a área da etiqueta não é zerado
     "PISO_DE_COMODO_DA_ETIQUETA",
+    # 05/11: arquivo com " (1)" no nome acha a própria legenda e o quadro
+    "ARQUIVO_COM_PARENTESE",
     # 03/11: área informada vira teto quando a medição deu menos da metade
     "AREA_INFORMADA_COBRE_MEDICAO_PARCIAL",
     # 03/11: a área informada não vai pra linha de peça ou de ambiente
@@ -13779,12 +13783,31 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
     # 🪤 Import DENTRO da função, pelo mesmo motivo do resgate: três testes dão
     # `exec` numa fatia desta função.
     from engine_rules import veredito_do_quadro_impresso as _veredito_quadro
+    from engine_rules import arquivo_do_ref_sheet as _arquivo_do_ref
+    # 🩸 05/11/2026 (job 0dce4d2b): arquivo com " (1)" no NOME perdia a prancha
+    # no corte do 1º " (" — ver `engine_rules.arquivo_do_ref_sheet`.
+    # 🛑 NASCE DESLIGADA: ARQUIVO_COM_PARENTESE=1 liga. Com 0 só anota, em
+    # `ultimo_arquivo_com_parentese`, o valor escrito que a linha ganharia.
+    try:
+        _parentese_liga = _chave_do_job(job_id, "ARQUIVO_COM_PARENTESE") == "1"
+    except NameError:
+        import os as _os_ap
+        _parentese_liga = _os_ap.environ.get("ARQUIVO_COM_PARENTESE", "0") == "1"
+    _arquivos_lidos = {str(_a or "") for (_a, _p) in list(numeros_do_texto_por_prancha or {})
+                       + list(numeros_com_material_por_prancha or {})}
+    _parentese_vistos = []
     _elegiveis_q = [_it for _it in items
                     if getattr(_it, "origem", "") not in ("dxf_geom", "revisao_cliente")]
     _linhas_q = []
+    _arq_novo_q = {}
     for _it in _elegiveis_q:
         _rs_q = str(getattr(_it, "ref_sheet", "") or "")
         _arq_q = _rs_q.split(" (")[0].strip()
+        _arq_n = _arquivo_do_ref(_rs_q, _arquivos_lidos)
+        if _arq_n != _arq_q:
+            _arq_novo_q[id(_it)] = _arq_n
+            if _parentese_liga:
+                _arq_q = _arq_n
         _linhas_q.append({
             "arquivo": _arq_q.lower(), "prancha": _arq_q,
             "pagina": _pagina_do_ref_sheet(_rs_q) if _rs_q else None,
@@ -13827,6 +13850,22 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
         _vesc_dup = _dup_escrito(_achados_e)
         for _k_dup in _vesc_dup:
             _vesc.pop(_k_dup, None)
+        # 05/11: o que o arquivo com parêntese muda. Ligada, as linhas que
+        # ficaram pelo nome inteiro; desligada, as que ficariam (sem a trava do
+        # duplicado — é a lista pra decidir, não o resultado).
+        for _it, _l in zip(_elegiveis_q, _linhas_q):
+            if id(_it) not in _arq_novo_q:
+                continue
+            if _parentese_liga:
+                _ganho = id(_it) in _vesc
+            else:
+                _ganho = bool(_num_escrito(
+                    _l["descricao"], _l["unidade"], _l["quantidade"],
+                    _regs_escritos(numeros_com_material_por_prancha,
+                                   _arq_novo_q[id(_it)].lower(), _l["pagina"])))
+            if _ganho:
+                _parentese_vistos.append((round(float(_l["quantidade"] or 0), 2),
+                                          str(_l["descricao"] or "")[:60]))
     # 🚨 24/08: `apenas_preencher` é pra quem REIDRATA itens do banco (/inform-area).
     # Ali o motor já decidiu, lá atrás, com a geometria em mãos; reavaliar depois,
     # a partir de linhas que perderam metade do contexto, é decidir com MENOS
@@ -14484,6 +14523,9 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
     #: 05/11: piso de banheiro/WC com a área da etiqueta (a chave decide se fica)
     _apply_area_honesty.ultimo_comodo_da_etiqueta = (list(_comodo_da_etiqueta_vistos),
                                                      bool(_comodo_liga))
+    #: 05/11: arquivo com " (1)" no nome (a chave decide se a legenda é achada)
+    _apply_area_honesty.ultimo_arquivo_com_parentese = (list(_parentese_vistos),
+                                                        bool(_parentese_liga))
     _apply_area_honesty.ultimo_lineares_zerados = lineares_zerados
     _apply_area_honesty.ultimo_resgatados = resgatados
     # 📏 18/09: SEM este número, `resgate_tardio=0` tem DUAS leituras que
@@ -21774,6 +21816,14 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 _log_error("motor:piso-de-comodo-da-etiqueta",
                            f"linhas={len(_comodos)} liga={int(_comodo_lig)} | "
                            + "; ".join(f"{q} m² {d}" for q, d in _comodos[:30]),
+                           job_id, severity="info")
+            # 05/11: legenda de arquivo com " (1)" no nome. Com 0, o que ficaria.
+            _parents, _parent_lig = getattr(_apply_area_honesty,
+                                            "ultimo_arquivo_com_parentese", None) or ([], False)
+            if _parents:
+                _log_error("motor:arquivo-com-parentese",
+                           f"linhas={len(_parents)} liga={int(_parent_lig)} | "
+                           + "; ".join(f"{q} {d}" for q, d in _parents[:30]),
                            job_id, severity="info")
         except Exception:
             pass
