@@ -1496,6 +1496,25 @@ def layer_is_anotacao(layer_name) -> bool:
     return False
 
 
+MARCA_FONTE_ANOTACAO = "⚠ FONTE = ANOTAÇÃO DO DESENHO (texto/cota/legenda/hachura)"
+
+
+def frase_da_fonte_anotacao(unidade) -> str:
+    """O aviso da linha cuja fonte citada é só layer de anotação.
+
+    🩸 05/11/2026: a frase dizia "o comprimento foi medido, mas do desenho da
+    anotação" em TODA linha — "Split a instalar 1 un" e "Envidraçamento da
+    sacada 0 m²" (a fonte era a NOTA "split a instalar"), onde nada foi medido.
+    📏 30 dias de cliente: 869 linhas em 56 projetos fora do metro. Em metro a
+    frase é verdadeira (o comprimento do layer É somado) e fica."""
+    u = str(unidade or "").strip().lower()
+    if u in ("m", "ml", "m.l."):
+        return (MARCA_FONTE_ANOTACAO + ", não elemento construído — o comprimento "
+                "foi medido, mas do desenho da anotação. Confirme o serviço e a quantidade.")
+    return (MARCA_FONTE_ANOTACAO + ", não elemento construído — a linha vem de uma "
+            "anotação do desenho, não de medição. Confirme o serviço e a quantidade.")
+
+
 def layer_sem_nome(layer_name) -> bool:
     """True se o nome do layer não tem LETRA nenhuma ("250", "218", "0").
 

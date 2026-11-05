@@ -201,6 +201,15 @@ def test_o_rebaixamento_NAO_apaga_o_item_nem_a_quantidade():
         texto = " ".join(
             x.value for x in ast.walk(ast.Module(body=ramo.body, type_ignores=[]))
             if isinstance(x, ast.Constant) and isinstance(x.value, str))
+        # 05/11/2026: o texto mora em `engine_rules.frase_da_fonte_anotacao` (a
+        # frase depende da unidade). O ramo tem que IMPORTAR a função; a frase
+        # de METRO é a que diz as três coisas.
+        if "frase_da_fonte_anotacao" in texto or any(
+                isinstance(x, ast.ImportFrom) and any(
+                    a.name == "frase_da_fonte_anotacao" for a in x.names)
+                for x in ast.walk(ast.Module(body=ramo.body, type_ignores=[]))):
+            import engine_rules as _er
+            texto += " " + _er.frase_da_fonte_anotacao("m")
         for palavra in ("medido", "Confirme", "ANOTAÇÃO"):
             assert palavra in texto, (
                 "o aviso não diz %r — o cliente precisa saber que o número "

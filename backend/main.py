@@ -18411,10 +18411,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                             obs_raw, qty, normalized_unit, _blocos_n):
                                     conf = "estimado"
                                     _rebaixado_pela_fonte = True
-                                    obs_raw = ("⚠ FONTE = ANOTAÇÃO DO DESENHO (texto/cota/legenda/"
-                                               "hachura), não elemento construído — o comprimento "
-                                               "foi medido, mas do desenho da anotação. Confirme o "
-                                               "serviço e a quantidade. " + obs_raw)
+                                    from engine_rules import frase_da_fonte_anotacao as _fr_anot
+                                    obs_raw = _fr_anot(normalized_unit) + " " + obs_raw
 
                                 # 🩸 22/10/2026 — PERÍMETRO DE TERRENO NÃO É PAREDE
                                 # (ver `engine_rules.parede_tirada_do_limite_do_terreno`).
