@@ -823,6 +823,8 @@ _STAGES_DIAGNOSTICO = frozenset({
     "motor:revisao-concluida", "motor:fusao-revisao", "motor:honestidade-area",
     # 25/10: SOMBRA — o que AREA_SEM_BASE_NAO_PRESERVA tiraria. Não decide nada.
     "motor:sombra-area-sem-base",
+    # 05/11: piso de banheiro/WC com a área da etiqueta (com a chave em 0, a lista)
+    "motor:piso-de-comodo-da-etiqueta",
     # 28/10: comprimento rateado por etiqueta (com a chave em 0, só a contagem)
     "motor:rateio-por-etiqueta",
     # 30/10: "N por local" (com a chave em 0, só a contagem)
@@ -10905,6 +10907,8 @@ _CHAVES_AVALIAVEIS = frozenset({
     "RESSALVA_DA_PECA_NAO_PROMOVE",
     # 03/11: `project_name`, `endereco`, `arquiteto` da leitura vão pra capa
     "CAPA_EM_CAMPO_VIZINHO",
+    # 05/11: piso de banheiro/WC com a área da etiqueta não é zerado
+    "PISO_DE_COMODO_DA_ETIQUETA",
     # 03/11: área informada vira teto quando a medição deu menos da metade
     "AREA_INFORMADA_COBRE_MEDICAO_PARCIAL",
     # 03/11: a área informada não vai pra linha de peça ou de ambiente
@@ -13409,6 +13413,18 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
             _limpa_aviso_nao_medida(getattr(_it, "observations", "") or "")))
     _sem_base_larga_n = 0
     _sombra_sem_base = []
+    # 🩸 05/11/2026 (job 071d0e56): piso de banheiro com a área ESCRITA na
+    # etiqueta ("BWC SUÍTE A=3,37m²") saía zerado só pela palavra "wc" — ver
+    # `engine_rules.piso_de_comodo_com_etiqueta`. 📏 60 dias: ~35 linhas, 14 jobs.
+    # 🛑 NASCE DESLIGADA: PISO_DE_COMODO_DA_ETIQUETA=1 liga. Com 0 só anota
+    # (`ultimo_comodo_da_etiqueta` → `motor:piso-de-comodo-da-etiqueta`).
+    try:
+        _comodo_liga = _chave_do_job(job_id, "PISO_DE_COMODO_DA_ETIQUETA") == "1"
+    except NameError:
+        import os as _os_pc
+        _comodo_liga = _os_pc.environ.get("PISO_DE_COMODO_DA_ETIQUETA", "0") == "1"
+    from engine_rules import piso_de_comodo_com_etiqueta as _piso_de_comodo
+    _comodo_da_etiqueta_vistos = []
     _medida_da_prancha = {}
     #: id(item) -> (arquivo, pagina, familia, obs_antes, qty_posta) — o passo 7
     #: preencheu, e o passo de vaga abaixo decide se isso se sustenta
@@ -13620,6 +13636,19 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
         except (TypeError, ValueError):
             return None
         return _m_i if (_r_i > 0 and float(_q) <= 1.3 * _r_i) else None
+
+    def _comodo_da_etiqueta(_it, _q) -> bool:
+        """Piso de banheiro/WC cujo número é a etiqueta da planta E cabe na
+        prancha (a mesma trava 3 do ramo, sem a área informada). Anota sempre;
+        só deixa passar com PISO_DE_COMODO_DA_ETIQUETA=1."""
+        _d = getattr(_it, "description", "") or ""
+        if not _piso_de_comodo(_d, getattr(_it, "observations", ""), _q):
+            return False
+        if not (_medida_da_propria_prancha(_it, _q) is not None
+                or (not _exige_propria_prancha(_it) and float(_q) <= 1.3 * _teto_m2)):
+            return False
+        _comodo_da_etiqueta_vistos.append((round(float(_q), 2), _d[:60]))
+        return _comodo_liga
 
     # ── 🎯 07/09/2026 — PRÉ-PASSO DO RESGATE DA MEDIÇÃO ────────────────────
     # `resgate_pdf=0` em 28 de 28 jobs desde 26/08: nunca disparou. A régua
@@ -13910,7 +13939,8 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
         # é declaração, não prova. Segue laranja, com a procedência escrita.
         elif (q > 0 and float(pdfvec_m2 or 0) > 0
               and u in _FLOOR_M2_UNITS
-              and _is_floor_surface(getattr(it, "description", ""))
+              and (_is_floor_surface(getattr(it, "description", ""))
+                   or _comodo_da_etiqueta(it, q))
               and not (_a_olho_liga and _confessa_a_olho(getattr(it, "observations", ""))
                        and (_a_olho_n := _a_olho_n + 1))
               # 🩸 25/10 (ev3c2a63): lê o texto JÁ LIMPO. A IA escreve "Medido
@@ -14451,6 +14481,9 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
     _apply_area_honesty.ultimo_sem_base = int(_sem_base_n)
     _apply_area_honesty.ultimo_sem_base_larga = int(_sem_base_larga_n)
     _apply_area_honesty.ultimo_sombra_sem_base = list(_sombra_sem_base)
+    #: 05/11: piso de banheiro/WC com a área da etiqueta (a chave decide se fica)
+    _apply_area_honesty.ultimo_comodo_da_etiqueta = (list(_comodo_da_etiqueta_vistos),
+                                                     bool(_comodo_liga))
     _apply_area_honesty.ultimo_lineares_zerados = lineares_zerados
     _apply_area_honesty.ultimo_resgatados = resgatados
     # 📏 18/09: SEM este número, `resgate_tardio=0` tem DUAS leituras que
@@ -21733,6 +21766,15 @@ bloco — só cite os que estão no inventário deste arquivo."""
                            f"({sum(q for q, _ in _sombra):.1f} m²): "
                            + "; ".join(f"{q} m² {d}" for q, d in _sombra[:40]),
                            job_id)
+            # 05/11: piso de banheiro/WC com a área da etiqueta. Com a chave em 0
+            # é a lista do que ficaria; com 1, do que ficou.
+            _comodos, _comodo_lig = getattr(_apply_area_honesty,
+                                            "ultimo_comodo_da_etiqueta", None) or ([], False)
+            if _comodos:
+                _log_error("motor:piso-de-comodo-da-etiqueta",
+                           f"linhas={len(_comodos)} liga={int(_comodo_lig)} | "
+                           + "; ".join(f"{q} m² {d}" for q, d in _comodos[:30]),
+                           job_id, severity="info")
         except Exception:
             pass
         # Pintura derivada do pé-direito informado (01/08/2026) — só quando a

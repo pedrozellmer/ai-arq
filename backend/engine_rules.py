@@ -578,6 +578,42 @@ def is_floor_surface_para_criar(desc):
     return is_floor_surface(d) and not any(b in d for b in FLOOR_ATO_PARCIAL_KW)
 
 
+# 🩸 05/11/2026 (job 071d0e56, casa em PDF): os pisos vieram das etiquetas da
+# planta ("SUÍTE A=14,20m²") e 8 ficaram; "BWC SUÍTE A=3,37m²" e "BWC SOCIAL
+# A=3,64m²" saíram ZERADOS só porque "bwc" contém "wc". As palavras de CÔMODO
+# de FLOOR_AREA_BLOCK_KW existem pra não dar a área do imóvel inteiro a um item
+# de banheiro; não desmentem a área que a planta ESCREVEU pro próprio cômodo.
+# 📏 60 dias: ~35 pisos/forros de banheiro com "A=" na linha, em 14 projetos.
+FLOOR_COMODO_KW = ("banheiro", "wc", "vestiár", "sanitár", "molhad", "cabine", "nicho")
+_RE_ETIQUETA_A = _re.compile(
+    r"(?<![\w])A\s*=\s*(\d{1,4}(?:[.,]\d{1,2})?)\s*m(?:²|2)", _re.IGNORECASE)
+
+
+def piso_de_comodo_com_etiqueta(desc, obs, q) -> bool:
+    """Piso/forro de um cômodo (banheiro, WC…) cujo número É a área escrita na
+    etiqueta da planta ("A=3,37m²"), na descrição ou na observação.
+
+    Só quando a palavra de cômodo foi o ÚNICO motivo de `is_floor_surface` dizer
+    não: "parede de banheiro", "rodapé do WC", "ponto no sanitário" seguem fora.
+    E o número tem de ser o da etiqueta — "6 banheiros × A=3,48" com 22,72 não é."""
+    d = (desc or "").lower()
+    if is_floor_surface(d) or not any(k in d for k in FLOOR_AREA_KW):
+        return False
+    barram = [b for b in FLOOR_AREA_BLOCK_KW if b in d]
+    if not barram or any(b not in FLOOR_COMODO_KW for b in barram):
+        return False
+    try:
+        qf = float(q)
+    except (TypeError, ValueError):
+        return False
+    if qf <= 0:
+        return False
+    for m in _RE_ETIQUETA_A.finditer("%s %s" % (desc or "", obs or "")):
+        if abs(float(m.group(1).replace(",", ".")) - qf) < 0.005:
+            return True
+    return False
+
+
 # 🩸 03/11/2026 (job e21652dc): a cliente confirmou 118,74 m² e a área total foi
 # pra "Piso do elevador social", cuja observação dizia 18,74 m² (3 cabines). Em
 # 90 dias, das 8 linhas que receberam a área informada, essa, o deck e o forro de
