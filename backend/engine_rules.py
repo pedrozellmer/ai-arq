@@ -5690,6 +5690,12 @@ _CAPA_EM_OUTRO_NOME = {
     "address": ("endereco", "location", "local", "localizacao", "obra_localizacao"),
     "architect": ("arquiteto", "architects", "responsavel_arq", "responsavel_arquitetura"),
 }
+#: 🩸 05/11/2026: o NOME vizinho é muitas vezes o título da prancha que a IA
+#: estava lendo — num PDF de várias páginas a capa diria "Projeto: Edifício
+#: Residencial — Prancha de Implantação / Cobertura / Quadro de Esquadrias". O
+#: endereço veio certo nos 4 jobs desde 03/11. Pedro: "Ligar só endereço e
+#: arquiteto". O nome segue contado (etapa com liga=0), nunca vai pra capa.
+CAPA_VIZINHA_SO_CONTA = frozenset({"name"})
 _RE_CAPA_SEM_VALOR = _re.compile(
     r"^\W*(?:n[ãa]o\s+(?:indicad|informad|identificad|consta|especificad)\w*.*"
     r"|n/?a|null|none|desconhecid\w*|-+|—+)\W*$", _re.IGNORECASE)

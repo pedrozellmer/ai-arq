@@ -9124,21 +9124,23 @@ _CAPA_VIZINHA_CONTADA: dict = {}       # job → campos já registrados (uma lin
 
 def _colhe_capa_em_campo_vizinho(job_id, project_data, pd):
     """Nome, endereço e arquiteto que a IA leu com outro nome de campo. 🔑 Com
-    CAPA_EM_CAMPO_VIZINHO=1 vão pra capa (só o que ela ainda não tem); com 0 só conta."""
+    CAPA_EM_CAMPO_VIZINHO=1 vão pra capa (só o que ela ainda não tem); com 0 só conta.
+    O nome só conta sempre (`CAPA_VIZINHA_SO_CONTA`): costuma ser o título da prancha."""
     try:
-        from engine_rules import capa_em_campo_vizinho as _vizinha
+        from engine_rules import capa_em_campo_vizinho as _vizinha, CAPA_VIZINHA_SO_CONTA
         achados = _vizinha(pd, project_data)
         if not achados:
             return
         liga = _chave_do_job(job_id, "CAPA_EM_CAMPO_VIZINHO") == "1"
         contados = _CAPA_VIZINHA_CONTADA.setdefault(job_id, set())
         for campo, (vizinho, valor) in achados.items():
-            if liga:
+            vai = liga and campo not in CAPA_VIZINHA_SO_CONTA
+            if vai:
                 setattr(project_data, campo, valor)
             if campo not in contados:
                 contados.add(campo)
                 _log_error("motor:capa-em-campo-vizinho",
-                           f"campo={campo} lido={vizinho} liga={int(liga)}", job_id,
+                           f"campo={campo} lido={vizinho} liga={int(vai)}", job_id,
                            severity="info")
     except Exception as _ecv:
         _log_error("motor:capa-em-campo-vizinho", f"FALHOU: {_ecv}", job_id,

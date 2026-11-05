@@ -102,12 +102,23 @@ def test_com_a_chave_em_0_a_capa_nao_muda_e_conta_uma_vez(monkeypatch):
 def test_com_a_chave_em_1_a_capa_ganha_o_valor(monkeypatch):
     logs = _prepara(monkeypatch, "1")
     destino = ProjectData()
-    main._colhe_capa_em_campo_vizinho("j", destino, {"project_name": "Casa", "arquiteto": "Arq. C"})
-    assert (destino.name, destino.architect) == ("Casa", "Arq. C")
-    assert sorted(l[1] for l in logs) == ["campo=architect lido=arquiteto liga=1",
-                                          "campo=name lido=project_name liga=1"]
-    main._colhe_capa_em_campo_vizinho("j", destino, {"project_name": "Outra"})
-    assert destino.name == "Casa"
+    main._colhe_capa_em_campo_vizinho("j", destino, {"endereco": "Rua A, 1", "arquiteto": "Arq. C"})
+    assert (destino.address, destino.architect) == ("Rua A, 1", "Arq. C")
+    assert sorted(l[1] for l in logs) == ["campo=address lido=endereco liga=1",
+                                          "campo=architect lido=arquiteto liga=1"]
+    main._colhe_capa_em_campo_vizinho("j", destino, {"location": "Outra, 2"})
+    assert destino.address == "Rua A, 1"
+
+
+def test_nome_vizinho_so_conta_mesmo_com_a_chave_ligada(monkeypatch):
+    # 🩸 05/11: o nome vizinho é muitas vezes o título da prancha.
+    logs = _prepara(monkeypatch, "1")
+    destino = ProjectData()
+    main._colhe_capa_em_campo_vizinho("j", destino, {
+        "project_name": "Edifício Residencial — Prancha de Implantação", "endereco": "Rua A, 1"})
+    assert destino.name == "" and destino.address == "Rua A, 1"
+    assert sorted(l[1] for l in logs) == ["campo=address lido=endereco liga=1",
+                                          "campo=name lido=project_name liga=0"]
 
 
 def test_leitura_sem_nada_nao_registra(monkeypatch):
