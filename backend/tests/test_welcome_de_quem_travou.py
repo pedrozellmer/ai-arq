@@ -91,6 +91,51 @@ def test_sem_link_o_email_ainda_serve():
     assert "Falta um passo" in html["body"]
 
 
+#: o que o lembrete promete por campo `required` da ficha (id → palavra no
+#: e-mail). O nome não entra: vem preenchido do Google (cadastro.html).
+_CAMPO_NO_LEMBRETE = {
+    "whatsapp": "WhatsApp",
+    "area": "área",
+    "referral_source": "como nos conheceu",
+    "aceita_termos": "aceitar",
+    "aceita_idade": "aceitar",
+}
+
+
+def _obrigatorios_da_ficha():
+    import re
+    with open(os.path.join(os.path.dirname(_BACKEND), "cadastro.html"),
+              encoding="utf-8") as f:
+        html = f.read()
+    ids = set()
+    for tag in re.findall(r"<(?:input|select|textarea)\b[^>]*>", html, re.S):
+        m = re.search(r'\bid="([^"]+)"', tag)
+        if m and re.search(r"\srequired\b", tag):
+            ids.add(m.group(1))
+    return ids, html
+
+
+def test_o_lembrete_do_cadastro_cita_os_campos_que_a_ficha_pede():
+    """🩸 06/11/2026. O lembrete dizia "são dois campos" e a ficha pedia
+    WhatsApp, área, "como nos conheceu" e dois aceites. Em 30 dias 19 pessoas o
+    receberam e 0 terminaram. Promessa que a tela não cumpre.
+
+    Se um campo obrigatório entrar ou sair da ficha, este teste quebra até o
+    e-mail ser ajustado."""
+    ids, html = _obrigatorios_da_ficha()
+    assert "nome" in ids and "meta.full_name" in html, (
+        "o nome deixou de vir do Google — o lembrete precisa pedir o nome também")
+    ids.discard("nome")
+    sobrando = ids - set(_CAMPO_NO_LEMBRETE)
+    assert not sobrando, (
+        "campo obrigatório novo na ficha que o lembrete não cita: %s" % sorted(sobrando))
+    _, email = _monta(name="", falta_cadastro=True, link_cadastro="x")
+    for campo in ids:
+        assert _CAMPO_NO_LEMBRETE[campo] in email["body"], (
+            "o lembrete não cita %r, que a ficha exige" % campo)
+    assert "dois campos" not in email["body"] + email["preheader"]
+
+
 # ══════════════════════════════════════════════════════════════════════════
 #  🧪 CONTROLE: o welcome normal não pode ter mudado
 # ══════════════════════════════════════════════════════════════════════════

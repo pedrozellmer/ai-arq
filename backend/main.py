@@ -6855,8 +6855,14 @@ def _build_welcome_email(name: str = "", falta_cadastro: bool = False,
             'padding:14px 16px;font-size:14px;line-height:1.55;color:#3730a3;'
             'font-family:Arial,sans-serif;margin-bottom:16px;">'
             '<b>Falta um passo pra sua conta funcionar.</b><br>'
-            'Você entrou com o Google, mas o cadastro não foi concluído — são '
-            'dois campos, leva menos de um minuto. Sem isso não dá pra enviar '
+            # 🩸 06/11: dizia "são dois campos" e a ficha pede WhatsApp, área e
+            # "como nos conheceu" + os aceites (o nome vem do Google). Medido em
+            # 30 d: mediana 45 s da ficha aberta ao cadastro feito, 74% em até
+            # 1 min — o "menos de um minuto" fica. Guarda:
+            # test_o_lembrete_do_cadastro_cita_os_campos_que_a_ficha_pede.
+            'Você entrou com o Google, mas o cadastro não foi concluído — falta '
+            'informar WhatsApp, área de atuação e como nos conheceu, e aceitar os '
+            'termos. Leva menos de um minuto. Sem isso não dá pra enviar '
             'projeto.' + _btn + '</div>')
     body = (
         _falta
@@ -6914,7 +6920,8 @@ def _build_welcome_email(name: str = "", falta_cadastro: bool = False,
         titulo = "Termine seu cadastro"
         cta_txt, cta_url = ("Terminar meu cadastro",
                             link_cadastro or "https://ai.arq.br/cadastro.html")
-        pre = "São dois campos, menos de um minuto — sem isso não dá pra enviar projeto."
+        pre = ("WhatsApp, área e como nos conheceu: menos de um minuto — sem isso não dá "
+               "pra enviar projeto.")
     else:
         subject = "Bem-vindo — seu projeto vira planilha medida"
         titulo = "Bem-vindo ao AI.arq"
