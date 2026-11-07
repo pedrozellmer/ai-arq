@@ -4330,7 +4330,9 @@
     try {
       window.trackEvent?.('processar_bloqueado', { motivo: 'envio-em-curso' });
     } catch (_) {}
-    const _m = 'Seu envio já começou: falta responder a pergunta no canto da '
+    // 07/11/2026: a pergunta agora abre no CENTRO, sobre a tela escurecida
+    // (toast.js), então este aviso quase não aparece mais; fica como rede.
+    const _m = 'Seu envio já começou: falta responder a pergunta aberta na '
              + 'tela para ele seguir.';
     try {
       if (window.toast && window.toast.warn) window.toast.warn(_m);

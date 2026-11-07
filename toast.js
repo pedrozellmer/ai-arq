@@ -4,6 +4,8 @@
  * Substitui alert()/confirm() — alert bloqueia thread, não é estilizável,
  * não tem fallback aria. Toast aparece flutuante no canto, anuncia via
  * aria-live, fecha sozinho (sucesso/info) ou via botão (erro).
+ * A pergunta (confirm) é diferente: abre no CENTRO, com a tela escurecida
+ * atrás (07/11/2026, ver .toast-overlay).
  *
  * Pedro é daltônico — cada toast leva cor + ícone + texto. Verde + ✓,
  * vermelho + ✗, âmbar + ⚠, azul + ℹ.
@@ -80,12 +82,46 @@
     background: #4f46e5; color: #fff; border-color: #4f46e5;
   }
   .toast-actions button:hover { filter: brightness(0.95); }
+  /* 07/11/2026 — A PERGUNTA VAI PRO CENTRO. Ela abria no canto, igual a um
+     aviso, e quem não via clicava Processar de novo: em 30 dias, 10 pessoas
+     levaram o "seu envio já começou", e uma desistiu sem enviar. Agora toda
+     pergunta de sim ou não abre no centro, com a tela escurecida atrás; os
+     avisos simples continuam no canto. Maquete aprovada pelo Pedro em 07/11.
+     Guarda: test_a_pergunta_abre_no_centro. */
+  .toast-overlay {
+    position: fixed; inset: 0; z-index: 10000;
+    display: flex; align-items: center; justify-content: center;
+    padding: 16px; background: rgba(15, 23, 42, 0.55);
+  }
+  .toast-item.toast-dialog {
+    width: min(520px, 100%); box-sizing: border-box;
+    padding: 24px; gap: 14px; border-left: 0; border-radius: 16px;
+    box-shadow: 0 25px 50px rgba(15, 23, 42, 0.25);
+    font-size: 15px; line-height: 1.55;
+    animation: toast-dialog-in 150ms ease-out;
+  }
+  @keyframes toast-dialog-in {
+    from { transform: scale(0.96); opacity: 0; }
+    to   { transform: scale(1);    opacity: 1; }
+  }
+  .toast-dialog .toast-icon {
+    width: 40px; height: 40px; border-radius: 999px; padding: 0;
+    background: #fef3c7; color: #b45309;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .toast-dialog .toast-msg { color: #374151; }
+  .toast-dialog .toast-actions {
+    justify-content: flex-end; flex-wrap: wrap; gap: 12px; margin-top: 16px;
+  }
+  .toast-dialog .toast-actions button {
+    min-height: 44px; padding: 10px 18px; border-radius: 10px; font-size: 15px;
+  }
   @keyframes toast-in {
     from { transform: translateX(120%); opacity: 0; }
     to   { transform: translateX(0);    opacity: 1; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .toast-item { animation: none; }
+    .toast-item, .toast-item.toast-dialog { animation: none; }
   }
   `;
 
@@ -144,11 +180,16 @@
 
   function confirmToast(message, opts) {
     return new Promise((resolve) => {
-      const region = ensureRegion();
+      ensureRegion();                       // o CSS da casa vem junto com a região
+      // 🩸 07/11/2026: no CENTRO, com a tela escurecida (ver .toast-overlay).
+      // O fundo segura o clique de fora: a pergunta só fecha num dos botões,
+      // como antes, ou no Esc, que vale como o botão de recusa.
+      const overlay = document.createElement('div');
+      overlay.className = 'toast-overlay';
       const item = document.createElement('div');
-      item.className = 'toast-item toast-warn';
+      item.className = 'toast-item toast-warn toast-dialog';
       item.setAttribute('role', 'alertdialog');
-      item.setAttribute('aria-modal', 'false');
+      item.setAttribute('aria-modal', 'true');
 
       const okLabel = (opts && opts.ok) || 'Confirmar';
       const cancelLabel = (opts && opts.cancel) || 'Cancelar';
@@ -187,7 +228,7 @@
       }
 
       const finish = (val) => {
-        if (item.parentNode) item.parentNode.removeChild(item);
+        if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
         resolve(val);
       };
       okBtn.addEventListener('click', () => {
@@ -197,8 +238,12 @@
         finish(true);
       });
       cancelBtn.addEventListener('click', () => finish(false));
+      overlay.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Escape') finish(false);
+      });
 
-      region.appendChild(item);
+      overlay.appendChild(item);
+      document.body.appendChild(overlay);
       okBtn.focus();
     });
   }
