@@ -177,6 +177,10 @@ def _rodar_os_rebaixamentos(itens, job_id="job-teste"):
     ns = {"all_items": itens, "_selos_sem_medida": _ssm, "job_id": job_id,
           "_observacao_que_cabe": _m._observacao_que_cabe,
           "_tira_selo_da_mesma_peca": _m._tira_selo_da_mesma_peca,
+          # 🩸 08/11: a verba com selo de medida (chave VERBA_NUNCA_BRANCA)
+          # entrou na fatia, logo depois do selo-sem-medida — a leitura da chave
+          # entra real.
+          "_chave_do_job": _m._chave_do_job,
           "_log_error": lambda *a, **k: logs.append(
               " ".join(str(x) for x in a))}
     exec(compile(_fatia_dos_rebaixamentos(), "rebaixa-selo", "exec"), ns)
