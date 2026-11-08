@@ -835,6 +835,8 @@ _STAGES_DIAGNOSTICO = frozenset({
     "motor:contagem-por-local",
     # 31/10: peça que se chama "bloco" (com a chave em 0, só a contagem)
     "motor:bloco-que-e-peca",
+    # 08/11: o mesmo serviço com o mesmo número duas vezes (chave em 0: contagem)
+    "motor:repetida-na-linha",
     # 08/11: verba com selo de medida (com a chave em 0, só a contagem)
     "motor:verba-branca",
     # 31/10: a mesma tabela lida em N pranchas (com a chave em 0, só a contagem)
@@ -10934,6 +10936,8 @@ _CHAVES_AVALIAVEIS = frozenset({
     "JANELA_EM_PLANTA",
     # 08/11: linha em verba não sai com o selo de medida
     "VERBA_NUNCA_BRANCA",
+    # 08/11: o mesmo serviço com o mesmo número duas vezes ganha aviso na linha
+    "REPETIDA_AVISA_NA_LINHA",
 })
 _CHAVES_DA_AVALIACAO: dict = {}        # job de avaliação → {chave: "0" | "1"}
 
@@ -22822,6 +22826,37 @@ bloco — só cite os que estão no inventário deste arquivo."""
                            job_id, severity="critical")
         except Exception as _ers2:
             print(f"[retrato-selo] nao-fatal: {_ers2}")
+
+        # 🩸 08/11: o MESMO serviço com o MESMO número duas vezes na planilha
+        # (`linhas_de_mesmo_numero`). Só AVISA na linha; nunca apaga nem junta.
+        # 🔑 REPETIDA_AVISA_NA_LINHA=1 escreve o aviso; com 0 o motor só conta.
+        _rep_liga = False
+        try:
+            from engine_rules import (linhas_de_mesmo_numero as _mesmo_numero,
+                                      MARCA_MESMO_NUMERO as _MARCA_REP)
+            _grupos_rep = _mesmo_numero(all_items)
+            _rep_liga = _chave_do_job(job_id, "REPETIDA_AVISA_NA_LINHA") == "1"
+            if _grupos_rep and _rep_liga:
+                for _g in _grupos_rep:
+                    for _i in _g:
+                        _it = all_items[_i]
+                        if _MARCA_REP in (_it.observations or ""):
+                            continue
+                        _outra = all_items[next(j for j in _g if j != _i)]
+                        _it.observations = _observacao_que_cabe(
+                            "%s (\"%s\"): confira se é o mesmo serviço lançado duas "
+                            "vezes — se for, conte uma vez só. %s" % (
+                                _MARCA_REP, str(_outra.description or "")[:50],
+                                _it.observations or ""))
+            if _grupos_rep:
+                _log_error("motor:repetida-na-linha", "grupos=%d linhas=%d liga=%d | %s" % (
+                    len(_grupos_rep), sum(len(g) for g in _grupos_rep), int(_rep_liga),
+                    "; ".join("%s=%s" % (str(all_items[g[0]].description or "")[:30],
+                                         all_items[g[0]].quantity) for g in _grupos_rep[:4])),
+                    job_id, severity="info")
+        except Exception as _erep:
+            _log_error("motor:repetida-na-linha", f"FALHOU: {_erep}", job_id,
+                       severity="warning")
 
         output_path = os.path.join(work_dir, f"orcamento_{job_id}.xlsx")
         _carimbar_spec(all_items)

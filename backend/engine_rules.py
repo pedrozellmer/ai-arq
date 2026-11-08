@@ -2240,6 +2240,104 @@ def selos_sem_medida(items):
     return achados
 
 
+#: Grandezas em que dois números iguais com casas decimais quase nunca são acaso.
+_UNIDADES_DE_GRANDEZA_REPETIDA = frozenset({
+    "m", "ml", "m²", "m2", "m³", "m3", "kg"})
+#: Palavras de abertura que não dizem o serviço ("Fornecimento e assentamento
+#: de porcelanato" é porcelanato).
+_ABERTURA_SEM_SERVICO = frozenset({
+    "fornecimento", "instalacao", "instalação", "execucao", "execução", "e",
+    "de", "do", "da", "dos", "das", "em", "assentamento", "servico", "serviço",
+    "aplicacao", "aplicação", "montagem", "colocacao", "colocação"})
+#: Andar, bloco ou trecho na descrição: dois pavimentos tipo com a mesma área
+#: somam de verdade.
+_RE_TRECHO_DA_OBRA = _re.compile(
+    r"\b(pav(?:imento)?s?|andar(?:es)?|subsolo|t[ée]rreo|tipo[\s-]*\d|mezanino|"
+    r"bloco\s+[a-z0-9]|torre|reservat[óo]rio|\d+\s*[ºo°]\s*(?:pav|andar))", _re.I)
+#: Diâmetro ou bitola escrito na linha: Ø100 e Ø300 com o mesmo comprimento são
+#: dois tubos (📏 08/11: 3 dos 20 grupos de 30 d eram isso).
+_RE_DIAMETRO = _re.compile(r"(?:[øØ⌀]|\bdn|\bdi[âa]metro)\s*(\d+(?:[.,]\d+)?)", _re.I)
+#: Código de peça com número (GMG-1, GMG-2): duas peças iguais somam.
+_RE_CODIGO_NUMERADO = _re.compile(r"\b([A-Z]{2,5})[\s-]?(\d{1,3})\b")
+#: Área do cômodo escrita na própria linha ("Varanda (A=4,60 m²)"): dois
+#: cômodos podem ter a mesma área.
+_RE_AREA_DO_COMODO = _re.compile(r"\b[AÁ]\s*[:=]\s*\d", _re.I)
+MARCA_MESMO_NUMERO = "⚠ MESMO NÚMERO de outra linha"
+
+
+def _distingue_pecas(descs):
+    """True quando as descrições dizem que são peças ou trechos DIFERENTES."""
+    def _conj(rx, d, f=lambda m: m.group(1)):
+        return frozenset(f(m).replace(",", ".") for m in rx.finditer(d))
+    # 🪤 Só quando cada linha diz UM diâmetro: "Ø1", Ø1.1/4", Ø2"…" é a lista
+    # de bitolas do desenho inteiro, não identifica o tubo.
+    diam = [_conj(_RE_DIAMETRO, d) for d in descs]
+    if all(len(x) == 1 for x in diam) and len(set(diam)) > 1:
+        return True
+    cods = [_conj(_RE_CODIGO_NUMERADO, d, lambda m: m.group(1) + m.group(2)) for d in descs]
+    if all(cods) and len(set(cods)) > 1:
+        return True
+    if sum(1 for d in descs if _RE_AREA_DO_COMODO.search(d)) >= 2:
+        return True
+    trechos = [_RE_TRECHO_DA_OBRA.search(d) for d in descs]
+    return (sum(1 for t in trechos if t) >= 2
+            and len(set(d.strip().lower() for d in descs)) > 1)
+
+
+def _servico_da_linha(desc):
+    for p in _re.sub(r"[^\wÀ-ÿ\s]", " ", str(desc or "").lower()).split():
+        if p.isalpha() and p not in _ABERTURA_SEM_SERVICO:
+            return p
+    return ""
+
+
+def linhas_de_mesmo_numero(items):
+    """Grupos de linhas que parecem o MESMO serviço repetido na planilha.
+
+    🩸 07/11/2026 (a8688985): "Eletroduto rígido — alimentação geral" e
+    "Eletroduto rígido de PVC pesado — alimentação", 123,32 ml cada; quatro
+    pares assim no job. 📏 30 dias (08/11): ~35 grupos de dobro real em ~20 de
+    127 jobs; o cliente apagou 0. O aviso "aparece em N pranchas" (passada 6)
+    só vale ENTRE pranchas: na mesma prancha o dobro saía calado.
+
+    Mesmo serviço = mesma unidade de grandeza, o MESMO número (≥ 100 ou com
+    casas decimais: 10, 15, 20 redondos coincidem à toa) e a mesma palavra de
+    serviço. Fica de fora: linha zerada, linha que já tem o aviso de N
+    pranchas, e par que fala de andares ou trechos diferentes (pavimento tipo).
+    🚫 Não apaga nem junta: o mesmo objeto em planta e detalhe às vezes é de
+    propósito, e a regra que apagava levou um pavimento inteiro em 09/2026.
+
+    Devolve lista de listas de índices (cada grupo com 2+). Função PURA.
+    """
+    chaves = {}
+    for i, it in enumerate(items or []):
+        un = str(_campo_do_item(it, "unit", "") or "").strip().lower()
+        if un not in _UNIDADES_DE_GRANDEZA_REPETIDA:
+            continue
+        try:
+            q = round(float(_campo_do_item(it, "quantity", 0) or 0), 2)
+        except (TypeError, ValueError):
+            continue
+        if q <= 0 or (q == int(q) and q < 100):
+            continue
+        obs = str(_campo_do_item(it, "observations", "") or "")
+        if "Este serviço aparece em" in obs:
+            continue
+        servico = _servico_da_linha(_campo_do_item(it, "description", ""))
+        if servico:
+            un = {"m2": "m²", "m3": "m³"}.get(un, un)
+            chaves.setdefault((un, q, servico), []).append(i)
+    grupos = []
+    for idx in chaves.values():
+        if len(idx) < 2:
+            continue
+        descs = [str(_campo_do_item(items[i], "description", "") or "") for i in idx]
+        if _distingue_pecas(descs):
+            continue                       # peças/trechos diferentes: somam
+        grupos.append(idx)
+    return grupos
+
+
 #: Verba é um pacote de serviço: vale 1 por definição e não sai da geometria.
 UNIDADES_DE_VERBA = frozenset({"vb", "vb.", "verba", "verbas", "gl", "global"})
 
