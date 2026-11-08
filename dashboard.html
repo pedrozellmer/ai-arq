@@ -3806,9 +3806,9 @@
     const total = (selectedFiles || []).length;
     const maioriaArq = arq.length > 0 && arq.length * 2 >= total;
     // 🩸 08/11/2026 — NOME NEUTRO TAMBÉM É PERGUNTADO. Só a maioria com cara de
-    // arquitetura perguntava, e "planta_baixa.pdf" passou calado: em 30 dias,
-    // 10 de 24 projetos enviados como Estrutura eram de arquitetura (5 deram
-    // erro, 5 saíram quase vazios; metade refez). Agora só passa sem pergunta
+    // arquitetura perguntava, e "planta_baixa.pdf" passou calado e deu erro.
+    // O caso e a medida moram no guarda (comentário servido é público):
+    // test_o_tipo_arquitetura_e_perguntado_antes. Agora só passa sem pergunta
     // quem tem a MAIORIA dos nomes com cara de estrutura.
     const est = _arquivosComCaraDeEstrutura();
     if (!maioriaArq && est.length > 0 && est.length * 2 >= total) {

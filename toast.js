@@ -83,8 +83,8 @@
   }
   .toast-actions button:hover { filter: brightness(0.95); }
   /* 07/11/2026 — A PERGUNTA VAI PRO CENTRO. Ela abria no canto, igual a um
-     aviso, e quem não via clicava Processar de novo: em 30 dias, 10 pessoas
-     levaram o "seu envio já começou", e uma desistiu sem enviar. Agora toda
+     aviso, e quem não via clicava Processar de novo e levava o "seu envio já
+     começou" (a medida mora no guarda: comentário servido é público). Agora toda
      pergunta de sim ou não abre no centro, com a tela escurecida atrás; os
      avisos simples continuam no canto. Maquete aprovada pelo Pedro em 07/11.
      Guarda: test_a_pergunta_abre_no_centro. */
