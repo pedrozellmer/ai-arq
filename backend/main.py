@@ -835,6 +835,8 @@ _STAGES_DIAGNOSTICO = frozenset({
     "motor:contagem-por-local",
     # 31/10: peça que se chama "bloco" (com a chave em 0, só a contagem)
     "motor:bloco-que-e-peca",
+    # 08/11: verba com selo de medida (com a chave em 0, só a contagem)
+    "motor:verba-branca",
     # 31/10: a mesma tabela lida em N pranchas (com a chave em 0, só a contagem)
     "motor:tabela-repetida",
     # 31/10: área lida com outro nome de campo (com a chave em 0, só a contagem)
@@ -10930,6 +10932,8 @@ _CHAVES_AVALIAVEIS = frozenset({
     "AREA_INFORMADA_SO_SUPERFICIE_GERAL",
     # 03/11: janela em planta não ganha a espessura da parede como altura
     "JANELA_EM_PLANTA",
+    # 08/11: linha em verba não sai com o selo de medida
+    "VERBA_NUNCA_BRANCA",
 })
 _CHAVES_DA_AVALIACAO: dict = {}        # job de avaliação → {chave: "0" | "1"}
 
@@ -22378,6 +22382,30 @@ bloco — só cite os que estão no inventário deste arquivo."""
         except Exception as _esm:
             print(f"[selo-sem-medida] job={job_id}: checagem falhou: {_esm}")
             _log_error("motor:selo-sem-medida", f"FALHOU: {_esm}", job_id)
+
+        # 🩸 08/11: VERBA não se mede do desenho (`verbas_brancas`). "Alimentador
+        # = 1 vb" saía ✓ MEDIDO porque a fonte citava o INSERT da etiqueta.
+        # 🔑 VERBA_NUNCA_BRANCA=1 rebaixa; com 0 o motor só conta.
+        _vb_liga = False
+        try:
+            from engine_rules import verbas_brancas as _verbas_brancas
+            from models import Confidence as _CfVb
+            _vb = _verbas_brancas(all_items)
+            _vb_liga = _chave_do_job(job_id, "VERBA_NUNCA_BRANCA") == "1"
+            if _vb and _vb_liga:
+                for _v in _vb:
+                    _it = all_items[_v["indice"]]
+                    _it.confidence = _CfVb("estimado")
+                    _it.observations = _observacao_que_cabe(
+                        "⚠ VERBA: não é medida do desenho — confira o escopo. "
+                        + (_it.observations or ""))
+            if _vb:
+                _log_error("motor:verba-branca", "linhas=%d liga=%d | %s" % (
+                    len(_vb), int(_vb_liga), "; ".join(v["descricao"][:40] for v in _vb[:4])),
+                    job_id, severity="info")
+        except Exception as _evb:
+            _log_error("motor:verba-branca", f"FALHOU: {_evb}", job_id,
+                       severity="warning")
 
         # ── NÚMERO QUE O MOTOR DIZ SER PARCIAL não leva selo BRANCO ─────────
         # 🩸 05/09/2026 — MEDIDO: 4 itens com "✓ MEDIDO do CAD" cuja observação,

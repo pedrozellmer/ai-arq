@@ -2240,6 +2240,37 @@ def selos_sem_medida(items):
     return achados
 
 
+#: Verba é um pacote de serviço: vale 1 por definição e não sai da geometria.
+UNIDADES_DE_VERBA = frozenset({"vb", "vb.", "verba", "verbas", "gl", "global"})
+
+
+def verbas_brancas(items):
+    """Índices das linhas em VERBA com o selo de MEDIDA.
+
+    🩸 07/11/2026 (a8688985): "Alimentador elétrico QDNTPA = 1 vb" saiu
+    "✓ MEDIDO do CAD" porque a fonte citava "1 INSERT do bloco '0. ALIM.
+    QDNTPA'". O `selos_sem_geometria` aceita "insert" como prova, e com razão
+    pra uma contagem; mas contar a etiqueta do alimentador não mede o cabo, e
+    a verba é sempre 1. Cinco linhas assim, duas delas repetidas.
+    📏 90 dias: só esse job desde 24/08 (antes, 5 linhas em agosto).
+    `cj`/conjunto fica FORA: "conjunto de ferragens" por porta é contagem.
+
+    Devolve lista de dicts {indice, descricao}. Função PURA.
+    """
+    achados = []
+    for i, it in enumerate(items or []):
+        selo = _campo_do_item(it, "confidence", "")
+        selo = str(getattr(selo, "value", selo) or "").strip().lower()
+        if selo != "confirmado":
+            continue
+        un = str(_campo_do_item(it, "unit", "") or "").strip().lower()
+        if un not in UNIDADES_DE_VERBA:
+            continue
+        achados.append({"indice": i,
+                        "descricao": str(_campo_do_item(it, "description", "") or "")[:60]})
+    return achados
+
+
 # Provas de que a quantidade saiu da GEOMETRIA do desenho (o que autoriza o selo
 # branco "✓ MEDIDO do CAD"). São as frases que o próprio motor escreve quando
 # mede: hachura, INSERT de bloco, comprimento de layer, polilinha.
