@@ -92,16 +92,20 @@ def test_o_evento_da_pergunta_e_aceito_pelo_track():
 #  A TELA: a pergunta, rodando de verdade
 # ══════════════════════════════════════════════════════════════════════════
 def _preludio(nomes, marcados, tipo="estrutura", com_toast=True, escolha=True,
-              toast_quebra=False):
+              toast_quebra=False, estruturais=()):
     lista = ", ".join("{name: %s, size: 10, lastModified: 1}" % json.dumps(n)
                       for n in nomes)
     partes = [
         "var selectedFiles = [%s];" % lista,
         "var _efKey = function (f) { return f.name + ':' + f.size + ':' + f.lastModified; };",
         "var _nomeArquitetura = new Map();",
+        # 08/11: a pergunta também olha os nomes com cara de ESTRUTURA
+        "var _nomeEstrutural = new Map();",
     ]
     for n in marcados:
         partes.append("_nomeArquitetura.set(%s + ':10:1', true);" % json.dumps(n))
+    for n in estruturais:
+        partes.append("_nomeEstrutural.set(%s + ':10:1', true);" % json.dumps(n))
     partes += [
         "var __sel = {value: %s, dataset: {}};" % json.dumps(tipo),
         "var document = {getElementById: function (id) {"
@@ -121,6 +125,7 @@ def _preludio(nomes, marcados, tipo="estrutura", com_toast=True, escolha=True,
                 "window.toast = { confirm: function (msg, op) { __msg = msg; __op = op;"
                 " return Promise.resolve(%s); } };" % ("true" if escolha else "false"))
     partes += [funcao_js("_arquivosComCaraDeArquitetura", "dashboard.html", _SRC),
+               funcao_js("_arquivosComCaraDeEstrutura", "dashboard.html", _SRC),
                funcao_js("_confirmarTipoArquitetura", "dashboard.html", _SRC)]
     return NL.join(partes)
 
@@ -181,19 +186,70 @@ def test_CONTROLE_tipo_ja_ARQUITETURA_nao_pergunta():
     assert js.evaljs("__msg") is None
 
 
-def test_CONTROLE_MINORIA_de_arquitetura_nao_pergunta():
+def test_CONTROLE_MINORIA_de_arquitetura_no_meio_da_estrutura_nao_pergunta():
     """Uma planta de arquitetura no meio da estrutura é apoio, não engano de tipo."""
-    nomes = [_ARQ[0]] + ["100-EST-EX-%04d-FOR-R00.dwg" % i for i in range(9)]
-    js, r = _resp(nomes, [_ARQ[0]])
+    est = ["100-EST-EX-%04d-FOR-R00.dwg" % i for i in range(9)]
+    js, r = _resp([_ARQ[0]] + est, [_ARQ[0]], estruturais=est)
     assert r["valor"] == "seguir"
     assert js.evaljs("__msg") is None
     assert js.evaljs("__sel.value") == "estrutura"
 
 
-def test_CONTROLE_sem_resposta_do_servidor_nao_opina():
-    js, r = _resp(_ARQ, [])
+# 🩸 08/11/2026: "planta_baixa.pdf" marcado Estrutura passou calado e deu erro
+# (0 itens). 📏 30 dias: 10 de 24 projetos de Estrutura eram arquitetura.
+# Antes, nome neutro não perguntava (`..._sem_resposta_do_servidor_nao_opina`);
+# agora pergunta com o texto geral, que não afirma nada sobre o nome.
+@pytest.mark.parametrize("nomes", [["planta_baixa.pdf"], _NEUTRO, _ARQ])
+def test_nome_NEUTRO_tambem_pergunta_com_o_texto_geral(nomes):
+    js, r = _resp(nomes, [])          # [] = nenhum nome reconhecido (ou servidor mudo)
+    assert r["valor"] == "trocou"
+    assert js.evaljs("__sel.value") == "arquitetura"
+    msg = js.evaljs("__msg")
+    assert msg.startswith("Você escolheu o tipo Estrutura"), msg
+    assert "pilares, vigas, lajes, fôrma e aço" in msg, msg
+    assert "planta baixa ou projeto de arquitetura" in msg, msg
+    assert "pelo nome" not in msg, "o texto geral não pode dizer que o nome parece algo"
+    assert js.evaljs("__op.ok") == "Ler como Arquitetura"
+    assert json.loads(js.evaljs("JSON.stringify(__ev)")) == [
+        ["aviso-pre-envio:arquitetura", {"type": "arquitetura", "n": 0, "tela": "envio"}]]
+
+
+def test_nome_NEUTRO_manter_estrutura_segue_sem_trocar():
+    js, r = _resp(["planta_baixa.pdf"], [], escolha=False)
+    assert r["valor"] == "seguir"
+    assert js.evaljs("__sel.value") == "estrutura"
+
+
+def test_quem_CONFIRMOU_estrutura_no_botao_do_anexo_nao_e_perguntado_de_novo():
+    """Clicou "Criar projeto novo (Estrutura)": o tipo já foi confirmado. O nome
+    com cara de ARQUITETURA continua perguntando (o caso de 22/10)."""
+    js = motor(_preludio(["planta_baixa.pdf"], []))
+    js.evaljs("__sel.dataset.tipoConfirmado = '1'; 1;")
+    r = rodar(js, "_confirmarTipoArquitetura()")
+    assert r["valor"] == "seguir" and js.evaljs("__msg") is None
+    js = motor(_preludio(_ARQ, _ARQ))
+    js.evaljs("__sel.dataset.tipoConfirmado = '1'; 1;")
+    assert rodar(js, "_confirmarTipoArquitetura()")["valor"] == "trocou"
+
+
+def test_trocar_o_tipo_A_MAO_apaga_a_confirmacao_do_anexo():
+    src = funcao_js("_marcarTipoEscolhidoAMao", "dashboard.html", _SRC)
+    js = motor("var __sel = {dataset: {tipoConfirmado: '1'}};"
+               "var document = {getElementById: function () { return __sel; }};" + NL + src)
+    js.evaljs("_marcarTipoEscolhidoAMao(); 1;")
+    assert js.evaljs("__sel.dataset.tipoConfirmado") is None
+    assert js.evaljs("__sel.dataset.escolhidoAMao") == "1"
+
+
+@pytest.mark.parametrize("est", [_EST, [_EST[0]]])
+def test_CONTROLE_maioria_com_cara_de_ESTRUTURA_nao_pergunta(est):
+    """Quem manda o estrutural de verdade (nomes EST, FORMAS, ARMACAO) não ganha
+    um clique a mais."""
+    js, r = _resp(est + _NEUTRO[:1], [], estruturais=est) if len(est) > 1 else \
+        _resp(est, [], estruturais=est)
     assert r["valor"] == "seguir"
     assert js.evaljs("__msg") is None
+    assert js.evaljs("__sel.value") == "estrutura"
 
 
 def test_CONTROLE_sem_o_toast_NAO_cai_no_confirm_nativo():

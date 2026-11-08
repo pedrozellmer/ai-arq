@@ -3791,8 +3791,9 @@
   //: moram no servidor, em `_nome_parece_arquitetura` (comentário servido é
   //: público).
   //: 🔑 Mesma forma da de cima: a régua mora no SERVIDOR
-  //: (`_nome_parece_arquitetura`, na estimativa), só a MAIORIA pergunta, nunca
-  //: bloqueia, nunca cai no confirm() nativo.
+  //: (`_nome_parece_arquitetura`, na estimativa), nunca bloqueia, nunca cai no
+  //: confirm() nativo. Desde 08/11 pergunta SEMPRE que o tipo é Estrutura,
+  //: exceto com a maioria dos nomes com cara de estrutura (ver dentro).
   function _arquivosComCaraDeArquitetura() {
     if (!selectedFiles || !selectedFiles.length) return [];
     return selectedFiles.filter(f => _nomeArquitetura.get(_efKey(f)) === true);
@@ -3803,17 +3804,36 @@
     if (!sel || sel.value !== 'estrutura') return Promise.resolve('seguir');
     const arq = _arquivosComCaraDeArquitetura();
     const total = (selectedFiles || []).length;
-    if (!arq.length || arq.length * 2 < total) return Promise.resolve('seguir');
+    const maioriaArq = arq.length > 0 && arq.length * 2 >= total;
+    // 🩸 08/11/2026 — NOME NEUTRO TAMBÉM É PERGUNTADO. Só a maioria com cara de
+    // arquitetura perguntava, e "planta_baixa.pdf" passou calado: em 30 dias,
+    // 10 de 24 projetos enviados como Estrutura eram de arquitetura (5 deram
+    // erro, 5 saíram quase vazios; metade refez). Agora só passa sem pergunta
+    // quem tem a MAIORIA dos nomes com cara de estrutura.
+    const est = _arquivosComCaraDeEstrutura();
+    if (!maioriaArq && est.length > 0 && est.length * 2 >= total) {
+      return Promise.resolve('seguir');
+    }
     const _curto = n => (n.length > 48 ? n.slice(0, 45) + '...' : n);
-    const exemplos = arq.slice(0, 2).map(f => `"${_curto(f.name)}"`).join(', ')
-                   + (arq.length > 2 ? '...' : '');
-    const quem = arq.length === total
-      ? (total === 1 ? 'O arquivo parece' : `Os ${total} arquivos parecem`)
-      : `${arq.length} dos ${total} arquivos parecem`;
-    const msg = `${quem} de projeto de ARQUITETURA, pelo nome (${exemplos}). `
-              + 'O tipo escolhido é Estrutura (concreto armado, beta), que procura '
-              + 'aço, pilares e lajes e não mede paredes, piso, forro nem esquadrias. '
-              + 'Quer ler como Arquitetura?';
+    let msg;
+    if (maioriaArq) {
+      const exemplos = arq.slice(0, 2).map(f => `"${_curto(f.name)}"`).join(', ')
+                     + (arq.length > 2 ? '...' : '');
+      const quem = arq.length === total
+        ? (total === 1 ? 'O arquivo parece' : `Os ${total} arquivos parecem`)
+        : `${arq.length} dos ${total} arquivos parecem`;
+      msg = `${quem} de projeto de ARQUITETURA, pelo nome (${exemplos}). `
+          + 'O tipo escolhido é Estrutura (concreto armado, beta), que procura '
+          + 'aço, pilares e lajes e não mede paredes, piso, forro nem esquadrias. '
+          + 'Quer ler como Arquitetura?';
+    } else {
+      // quem acabou de clicar "Criar projeto novo (Estrutura)" já confirmou
+      if (sel.dataset && sel.dataset.tipoConfirmado === '1') return Promise.resolve('seguir');
+      msg = 'Você escolheu o tipo Estrutura (concreto armado, beta). Ele lê só o '
+          + 'projeto ESTRUTURAL — pilares, vigas, lajes, fôrma e aço — e não mede '
+          + 'paredes, piso, forro nem esquadrias. Se o arquivo é planta baixa ou '
+          + 'projeto de arquitetura, leia como Arquitetura.';
+    }
     return new Promise(resolve => {
       try {
         if (window.toast && window.toast.confirm) {
@@ -3944,6 +3964,9 @@
           // 'criar' é o clique dela, no botão que diz o tipo: é esse que vale.
           const _selTipo = document.getElementById('project-type');
           if (_selTipo) _selTipo.value = t.tipo;
+          // o botão disse o tipo e ela clicou: a pergunta geral do tipo
+          // Estrutura (`_confirmarTipoArquitetura`) não repete a confirmação
+          if (_selTipo && _selTipo.dataset) _selTipo.dataset.tipoConfirmado = '1';
         }
       }
     } catch (e) {
@@ -4916,7 +4939,11 @@
   // `_tipoDoProjetoNovoAposAnexo`.
   function _marcarTipoEscolhidoAMao() {
     const sel = document.getElementById('project-type');
-    if (sel && sel.dataset) sel.dataset.escolhidoAMao = '1';
+    if (sel && sel.dataset) {
+      sel.dataset.escolhidoAMao = '1';
+      // trocou à mão depois de confirmar no botão do anexo: vale a pergunta de novo
+      delete sel.dataset.tipoConfirmado;
+    }
   }
   document.getElementById('project-type')
     ?.addEventListener('change', _marcarTipoEscolhidoAMao);
