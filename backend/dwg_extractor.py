@@ -7056,7 +7056,7 @@ def abrir_elementos_do_archicad(doc) -> dict:
         if len(cand) < _ELEMENTO_ARCHICAD_MIN:
             return {}
         info = {"candidatos": len(cand), "liga": 0, "abertos": 0, "falhas": 0}
-        if os.getenv("ABRIR_ELEMENTO_ARCHICAD", "0").strip() != "1":
+        if os.environ.get("ABRIR_ELEMENTO_ARCHICAD", "0").strip() != "1":
             return info
         info["liga"] = 1
         _ezlog = logging.getLogger("ezdxf")
