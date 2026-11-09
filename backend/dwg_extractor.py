@@ -300,7 +300,7 @@ class DXFExtraction:
     #: registros de máquina que a IA NÃO lê crus (vão ditos em português)
     _METADADOS_FORA_DO_PROMPT = frozenset({"copias_sombra", "planta_repetida",
                                            # 09/11: registro do log `motor:unidade`
-                                           "empate_fisico",
+                                           "empate_fisico", "elementos_archicad",
                                            # 18/10: dito na linha de atenção da planilha
                                            "so_nas_pranchas", "base_em_plantas_tematicas",
                                            # 30/10: idem (`_linhas_planta_em_bloco`)
@@ -7016,6 +7016,75 @@ def abrir_blocos_colados(doc) -> dict:
     return info if (info["abertos"] or info["falhas"]) else {}
 
 
+#: Bloco de ELEMENTO CONSTRUTIVO que o ArchiCAD cria um por peça (Parede_1,
+#: Parede_2, Laje_1…). Português e inglês. Móvel, louça e esquadria NÃO entram:
+#: esses são contados pelo nome do bloco.
+_RE_ELEMENTO_ARCHICAD = re.compile(
+    r"^(Parede|Laje|Pilar|Viga|Cobertura|Escada|Guarda-corpo|"
+    r"Wall|Slab|Column|Beam|Roof|Stair)_\d+$", re.IGNORECASE)
+#: Menos blocos de elemento que isto não é o padrão do export (um "Parede_1"
+#: solto pode ser bloco de gente).
+_ELEMENTO_ARCHICAD_MIN = 5
+_ELEMENTO_ARCHICAD_NIVEIS = 3
+
+
+def abrir_elementos_do_archicad(doc) -> dict:
+    """Abre no modelspace os blocos de ELEMENTO do ArchiCAD (`Parede_N`, `Laje_N`…).
+
+    🩸 09/11/2026, job 1519535c (cliente nova, 1º projeto, reforma de 68 m²): o
+    ArchiCAD exportou cada parede e cada laje como um bloco próprio, inserido
+    uma vez — 44 `Parede_N` + 6 `Laje_N`, com as linhas e hachuras dentro, no
+    layer "ARQ - Parede". No modelo solto: só cotas, textos e 8 linhas. O motor
+    lê o modelo e o `abrir_blocos_colados` só abre `A$C`: 0 parede, 288 linhas
+    / 0 medidas, "paredes novas 519 m²" tirado do contorno dos ambientes.
+    Abertos, aparecem 130 m de face de parede, 20,6 m² de parede hachurada e
+    12,4 m de parede a demolir.
+    📏 120 d (`motor:geometria`, aninhados=[Parede_N>…]): 2 jobs de 2 clientes
+    (7cfcfd8b em 21/10, 5 pranchas; e este).
+    🔑 Abre SÓ o nome de elemento + número, e só com ≥ `_ELEMENTO_ARCHICAD_MIN`
+    deles. A janela/porta que mora DENTRO da parede vira INSERT no modelo e é
+    contada pelo nome, como antes (antes era contada como aninhada; o pai some,
+    então não dobra). Diferente do `planta_dentro_de_bloco` (30/10), que NÃO
+    abre: ali era UM bloco com a base do prédio inteiro.
+    🔑 Chave ABRIR_ELEMENTO_ARCHICAD (nasce 0): com 0 só conta e devolve
+    {"candidatos": n, "liga": 0}. Nunca levanta.
+    """
+    try:
+        msp = doc.modelspace()
+        cand = [e for e in msp.query("INSERT")
+                if _RE_ELEMENTO_ARCHICAD.match(str(e.dxf.get("name", "") or ""))]
+        if len(cand) < _ELEMENTO_ARCHICAD_MIN:
+            return {}
+        info = {"candidatos": len(cand), "liga": 0, "abertos": 0, "falhas": 0}
+        if os.getenv("ABRIR_ELEMENTO_ARCHICAD", "0").strip() != "1":
+            return info
+        info["liga"] = 1
+        _ezlog = logging.getLogger("ezdxf")
+        _ez_prev = _ezlog.level
+        _ezlog.setLevel(max(_ez_prev or logging.WARNING, logging.ERROR))
+        _recusados = set()
+        try:
+            for _ in range(_ELEMENTO_ARCHICAD_NIVEIS):
+                da_vez = [e for e in msp.query("INSERT")
+                          if id(e) not in _recusados
+                          and _RE_ELEMENTO_ARCHICAD.match(str(e.dxf.get("name", "") or ""))]
+                if not da_vez:
+                    break
+                for ins in da_vez:
+                    try:
+                        ins.explode()
+                        info["abertos"] += 1
+                    except Exception:
+                        info["falhas"] += 1
+                        _recusados.add(id(ins))
+        finally:
+            _ezlog.setLevel(_ez_prev)
+        return info
+    except Exception as e:
+        logger.warning("abrir_elementos_do_archicad: %s", e)
+        return {}
+
+
 # ---------------------------------------------------------------------------
 # Leitura por FOLHA — cada desenho do modelspace pelo que ele é
 # ---------------------------------------------------------------------------
@@ -10319,6 +10388,8 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
     # 🔑 24/09: desenho colado como bloco vira desenho solto ANTES de qualquer
     # leitura — inclusive das réguas de unidade, que ganham as cotas de dentro.
     _colados = abrir_blocos_colados(doc)
+    # 🩸 09/11: o ArchiCAD que guarda cada parede num bloco `Parede_N` (chave 0)
+    _elem_archicad = abrir_elementos_do_archicad(doc)
     _planta_em_bloco = planta_dentro_de_bloco(doc)
     msp = doc.modelspace()
     unit_factor = _detect_unit_factor(doc)
@@ -10550,6 +10621,11 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         if _empate_fisico:
             # 📏 09/11: registro do log (fora do prompt) — dispara com a chave em 0
             metadata["empate_fisico"] = _empate_fisico
+        if _elem_archicad:
+            # 📏 09/11: registro do log (fora do prompt) — conta com a chave em 0
+            metadata["elementos_archicad"] = " ".join(
+                "%s=%s" % (k, _elem_archicad[k])
+                for k in ("candidatos", "liga", "abertos", "falhas") if k in _elem_archicad)
         if dim_check.get("cotas_utilizaveis") is not None:
             metadata["regua_cotas_utilizaveis"] = dim_check["cotas_utilizaveis"]
         if dim_check.get("desempatada_por_fisica"):

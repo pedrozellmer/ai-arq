@@ -2258,7 +2258,13 @@ _RE_TRECHO_DA_OBRA = _re.compile(
 #: dois tubos (📏 08/11: 3 dos 20 grupos de 30 d eram isso).
 _RE_DIAMETRO = _re.compile(r"(?:[øØ⌀]|\bdn|\bdi[âa]metro)\s*(\d+(?:[.,]\d+)?)", _re.I)
 #: Código de peça com número (GMG-1, GMG-2): duas peças iguais somam.
-_RE_CODIGO_NUMERADO = _re.compile(r"\b([A-Z]{2,5})[\s-]?(\d{1,3})\b")
+#: 🩸 09/11: peça de estrutura tem UMA letra — Sapata S42, Viga V2, Pilar P1,
+#: Laje L3, Escada E2. "Aço Ø12,5 das sapatas S42/S44" × "das vigas V2/V5", 140 kg
+#: cada por acaso, saía avisado como o mesmo serviço (o "CA-50" das duas igualava
+#: os conjuntos). 📏 30 d: 17 grupos → 14; saem S×V, escada E2×E4 e um par de
+#: vigas; a posição de barra (N4, N5) NÃO entra — a mesma sapata com posições
+#: diferentes continua avisada (era dobro de verdade).
+_RE_CODIGO_NUMERADO = _re.compile(r"\b([A-Z]{2,5}|[SVPLE])[\s-]?(\d{1,3})\b")
 #: Área do cômodo escrita na própria linha ("Varanda (A=4,60 m²)"): dois
 #: cômodos podem ter a mesma área.
 _RE_AREA_DO_COMODO = _re.compile(r"\b[AÁ]\s*[:=]\s*\d", _re.I)

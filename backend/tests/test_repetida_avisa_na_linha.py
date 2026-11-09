@@ -43,6 +43,10 @@ _DOBROS = [
      "Armadura CA — Ø 6,3 mm — Base 1 / Sapatas Divisa — posições"),
     ("m2", 65.47, "Laje técnica para condensadoras — área de projeção",
      "Laje técnica de concreto armado — condensadoras"),
+    # 09/11: a MESMA sapata com posições de barra diferentes (N1 × N2) segue
+    # sendo dobro — a posição N não é peça (o código de 1 letra é só S/V/P/L/E)
+    ("kg", 140.0, "Armadura CA-50 Ø12,5mm — Sapatas S42 (posição N1)",
+     "Armadura CA-50 Ø12,5mm — Sapatas S42 (posição N2)"),
 ]
 
 
@@ -61,6 +65,13 @@ _CONTROLES = [
     # duas peças iguais com código numerado
     [_it("Base de concreto para geradores (GMG-1)", 13.02, "m²"),
      _it("Base de concreto para geradores (GMG-2)", 13.02, "m²")],
+    # 🩸 09/11 (f464f4f9): peça de estrutura tem UMA letra — sapata × viga, 140 kg
+    # cada por acaso; o "CA-50" das duas igualava os códigos
+    [_it("Armadura CA-50A Ø12,5mm — Sapatas S42, S44, S49 (N1 e N2)", 140.0, "kg"),
+     _it("Armadura CA-50 Ø12,5 mm — barras longitudinais de vigas (V2, V5, V6, V7)", 140.0, "kg")],
+    # duas escadas diferentes (E2 × E4) com o mesmo peso
+    [_it("Aço CA-50 — barra Ø6,3 mm — armadura de escada E2 (barras N1, N2)", 8.8, "kg"),
+     _it("Aço CA-50 — barra Ø6,3 mm — armadura de escada E4 (barras N1, N2)", 8.8, "kg")],
     # dois cômodos com a mesma área escrita na linha
     [_it("Piso em porcelanato — Varanda (A=4,60 m²)", 4.6, "m²"),
      _it("Piso em porcelanato — Lavanderia (A=4,60 m²)", 4.6, "m²")],

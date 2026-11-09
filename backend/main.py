@@ -10894,6 +10894,8 @@ _CHAVES_AVALIAVEIS = frozenset({
     "SO_O_QUE_ESTA_NAS_PRANCHAS",
     # 09/11: empate das cotas em que a física derrubou o metro declarado → cm
     "EMPATE_FISICO_TROCA_UNIDADE",
+    # 09/11: o ArchiCAD que guarda cada parede num bloco Parede_N → abre
+    "ABRIR_ELEMENTO_ARCHICAD",
     # 18/10: a base copiada em plantas temáticas do mesmo andar conta 1×
     "BASE_COPIADA_UMA_VEZ",
     # 18/10: aviso de tipo de bloco com muitas peças que não virou linha
@@ -17251,6 +17253,8 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                             f"cab={_md_u.get('diag_unidade') or '-'} "
                             # 📏 09/11: a régua do empate físico (dispara com a chave em 0)
                             f"empate_fisico={_md_u.get('empate_fisico') or '-'} "
+                            # 📏 09/11: blocos de elemento do ArchiCAD (conta com a chave em 0)
+                            f"elem_archicad=[{_md_u.get('elementos_archicad') or '-'}] "
                             # 📏 26/09 (job 32a27efc): DIMLFAC efetivo por cota —
                             # mede no acervo quantas pranchas são folha de papel.
                             f"lfac={_md_u.get('lfac_por_cota') or '-'}",
