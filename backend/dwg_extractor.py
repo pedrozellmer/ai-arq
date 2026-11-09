@@ -299,6 +299,8 @@ class DXFExtraction:
 
     #: registros de máquina que a IA NÃO lê crus (vão ditos em português)
     _METADADOS_FORA_DO_PROMPT = frozenset({"copias_sombra", "planta_repetida",
+                                           # 09/11: registro do log `motor:unidade`
+                                           "empate_fisico",
                                            # 18/10: dito na linha de atenção da planilha
                                            "so_nas_pranchas", "base_em_plantas_tematicas",
                                            # 30/10: idem (`_linhas_planta_em_bloco`)
@@ -5100,6 +5102,11 @@ def _validate_unit_by_dimensions(doc, unit_factor: float) -> dict:
                 return out
             # Empate REAL — nenhum sobrou, sobrou mais de um, ou o que sobrou não
             # é o detectado. A prova não é exclusiva: fica calada, mas DIZENDO.
+            # 📏 09/11: o que a física disse fica no resultado (só registro,
+            # nada muda aqui) — `_unidade_pelo_empate_fisico` lê isto.
+            out["detectado"] = detected
+            out["fisicos"] = list(fisicos)
+            out["medianas_m"] = {f: _median_of(support[f]) for f in proven}
             out["status"] = "ambigua"
             out["motivo"] = ("empate entre os fatores %s (%d cotas utilizáveis, "
                              "%d com número digitado)"
@@ -10327,6 +10334,7 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
     #   (nada)    → cotas insuficientes/ambíguas/conflitantes: tudo como antes.
     dim_check = _validate_unit_by_dimensions(doc, unit_factor)
     _regua_1a = dim_check      # 📏 27/09 (item 5): o log guarda o que as cotas disseram
+    _empate_fisico = ""        # 📏 09/11: o que a régua do empate físico disse (log)
     if dim_check.get("status") == "corrigida":
         unit_factor = dim_check["fator_corrigido"]
         logger.warning("[unit-cotas] %s", dim_check["mensagem"])
@@ -10368,13 +10376,28 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             dim_check = _lfac
             _, unit_warnings = _validate_unit_factor(doc, unit_factor)
         else:
+            # 🩸 09/11/2026 — o EMPATE em que a física já escolheu, mas do lado
+            # GRANDE: o arquivo declara metro, o desenho é em centímetro, e as
+            # cotas automáticas qualificam os dois. A física derruba o metro
+            # (mediana de 70–80 m) e só o cm sobra — mas a trava do empate só
+            # CONFIRMA o detectado, e a plausibilidade abaixo só corrige o lado
+            # pequeno. 3 jobs de cliente saíram com 0 linha medida (2,5 milhões
+            # de m de parede). Ver `_unidade_pelo_empate_fisico`.
+            # 🔑 EMPATE_FISICO_TROCA_UNIDADE=1 troca (como plausibilidade, nada
+            # sai 'confirmado'); com 0 só registra no log `motor:unidade`.
+            _ef = _unidade_pelo_empate_fisico(_regua_1a, unit_factor, unit_warnings)
+            _ef_liga = False
+            if _ef.get("status"):
+                _ef_liga = os.environ.get("EMPATE_FISICO_TROCA_UNIDADE", "0") == "1"
+                _empate_fisico = "fator=%g liga=%d" % (_ef["fator_corrigido"], int(_ef_liga))
             # 4ª e ÚLTIMA régua (17/08/2026, caso cliente-81): cota e DIMLFAC se
             # calaram — o desenho, na unidade declarada, é fisicamente
             # possível? Núcleo denso de 1,2 cm × 2,1 cm num prédio de 4
             # apartamentos não é. Corrige SÓ no regime impossível e a
             # correção NÃO é prova: entra como ressalva (nada sai
             # 'confirmado') e o cliente lê a procedência.
-            _plaus = _unidade_por_plausibilidade(doc, unit_factor, cotas=_regua_1a)
+            _plaus = (_ef if _ef_liga else
+                      _unidade_por_plausibilidade(doc, unit_factor, cotas=_regua_1a))
             if _plaus.get("status") == "corrigida_plausibilidade":
                 unit_factor = _plaus["fator_corrigido"]
                 logger.warning("[unit-plausibilidade] %s", _plaus["mensagem"])
@@ -10524,6 +10547,9 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             metadata["regua_cotas_antes"] = "%s|%s|%s" % (
                 _regua_1a.get("status") or "-", _regua_1a.get("cotas_utilizaveis", "-"),
                 str(_regua_1a.get("motivo") or "-")[:200])
+        if _empate_fisico:
+            # 📏 09/11: registro do log (fora do prompt) — dispara com a chave em 0
+            metadata["empate_fisico"] = _empate_fisico
         if dim_check.get("cotas_utilizaveis") is not None:
             metadata["regua_cotas_utilizaveis"] = dim_check["cotas_utilizaveis"]
         if dim_check.get("desempatada_por_fisica"):
@@ -13009,6 +13035,95 @@ def _unidade_por_plausibilidade(doc, unit_factor: float, cotas=None) -> dict:
     return {"status": None,
             "motivo": f"{r.get('motivo', '')} | {u.get('motivo', '')} | "
                       f"{c.get('motivo', '')} | {t.get('motivo', '')}"}
+
+
+_EMPATE_FISICO_MEDIANA_M = (0.5, 15.0)   # vão, porta, cômodo — sob o fator novo
+_EMPATE_FISICO_MAIOR_MIN_M = 2000.0      # desenho, no declarado, maior que 2 km
+_RE_MAIOR_ELEMENTO_GRANDE = re.compile(r"maior elemento mede (\d+)m \(>500m\)")
+
+
+def _unidade_pelo_empate_fisico(cotas, unit_factor: float, unit_warnings) -> dict:
+    """Empate das cotas em que a FÍSICA já derrubou o fator declarado e deixou UM
+    fator menor: vira plausibilidade (estimado, com ressalva). Nunca lança.
+
+    🩸 09/11/2026 — 3 jobs de 2 clientes (68ab162f, d5395ff9, 603d8b93): DWG em
+    CENTÍMETRO com cabeçalho de METRO, 187 e 2.360 cotas, nenhuma digitada. As
+    cotas "<>" qualificam metro E cm (a prova é circular); a física já escolheu:
+        em metro: mediana 80 m e 70 m, 65% e 69% das cotas acima de 30 m
+        em cm:    mediana 0,90 m e 0,79 m, nenhuma acima de 30 m
+    e o desenho mede 8.950 m e 4.857 m. Mas a trava 2 do empate (26/08) só
+    CONFIRMA o detectado, e a plausibilidade (`_unidade_pelo_nucleo`) só corrige
+    o lado PEQUENO — o núcleo do 603d8b93 é um detalhe de 1,8 × 3,1 m em cm, não
+    decide. Resultado: 0 linha medida, parede de 2,5 milhões de m.
+    🔑 As travas (todas, senão nada muda):
+      1. a régua das cotas empatou E a física derrubou o fator DETECTADO;
+      2. sobrou UM fator físico, MENOR que o detectado (só encolhe o desenho);
+      3. a cota do meio passa de 30 m no declarado (a maioria é impossível, não
+         só os 10% do guarda) e cabe em 0,5–15 m sob o fator novo;
+      4. o desenho, no declarado, passa de 2 km ("maior elemento", a heurística
+         de extensão), e sob o fator novo cabe em 500 m.
+    🚨 O controle que importa é a IMPLANTAÇÃO em metro de verdade (ver
+    `test_regua_desempate_por_fisica`): cotas de 40–120 m, a física derruba o
+    metro e sobra o cm — a mesma forma. O que a separa é a trava 4: terreno de
+    até 2 km fica como está. Acima disso, em metro, é obra urbana/rodovia,
+    fora do público — e mesmo então a troca sai estimado com o aviso.
+    📏 Alcance (desde que o `motor:unidade` loga): o empate "1, 0.01" só
+    aconteceu nestes 3 jobs; os 6 empates "0.01, 0.001" não têm o aviso de
+    extensão e não mudam.
+    Como as outras plausibilidades, NÃO é prova: nada sai 'confirmado'.
+    """
+    try:
+        if not cotas or cotas.get("status") != "ambigua":
+            return {"status": None, "motivo": "empate físico: as cotas não empataram"}
+        det = cotas.get("detectado")
+        fis = list(cotas.get("fisicos") or [])
+        med = cotas.get("medianas_m") or {}
+        if det is None or abs(float(unit_factor) / float(det) - 1.0) > 0.02:
+            return {"status": None, "motivo": "empate físico: o detectado não é o fator em uso"}
+        if len(fis) != 1 or fis[0] == det:
+            return {"status": None,
+                    "motivo": f"empate físico: {len(fis)} fator(es) físico(s) — não decide"}
+        novo = float(fis[0])
+        if not novo < float(det):
+            return {"status": None, "motivo": "empate físico: o que sobrou AUMENTA o desenho"}
+        lo, hi = _EMPATE_FISICO_MEDIANA_M
+        m_novo, m_det = float(med.get(novo) or 0), float(med.get(det) or 0)
+        if not (lo <= m_novo <= hi):
+            return {"status": None,
+                    "motivo": f"empate físico: mediana {m_novo:g} m sob o fator novo — não decide"}
+        if not m_det > _DIM_ABSURDO_M:
+            return {"status": None,
+                    "motivo": f"empate físico: cota do meio {m_det:g} m no declarado — não decide"}
+        maior = None
+        for w in unit_warnings or []:
+            mm = _RE_MAIOR_ELEMENTO_GRANDE.search(str(w))
+            if mm:
+                maior = float(mm.group(1))
+                break
+        if maior is None or maior < _EMPATE_FISICO_MAIOR_MIN_M:
+            return {"status": None,
+                    "motivo": "empate físico: o desenho não passa de %g m no declarado"
+                              % _EMPATE_FISICO_MAIOR_MIN_M}
+        maior_novo = maior * novo / float(det)
+        if maior_novo > 500:
+            return {"status": None,
+                    "motivo": f"empate físico: sob o fator novo ainda mede {maior_novo:.0f} m"}
+        nd = _UNIT_FACTOR_NAMES.get(float(det), det)
+        nn = _UNIT_FACTOR_NAMES.get(novo, novo)
+        maior_txt = f"{maior:,.0f}".replace(",", ".")
+        m_novo_txt = f"{m_novo:.2f}".replace(".", ",")
+        return {
+            "status": "corrigida_plausibilidade",
+            "fator_corrigido": novo,
+            "mensagem": (
+                f"unidade corrigida por PLAUSIBILIDADE (cotas): o arquivo declara {nd}, "
+                f"mas em {nd} o desenho mediria {maior_txt} m e a cota do meio "
+                f"{m_det:.0f} m; em {nn} a cota do meio mede {m_novo_txt} m (vãos e "
+                f"portas). NÃO é prova — quantidades entram como estimado, confira a "
+                f"escala do seu arquivo."),
+        }
+    except Exception as e:
+        return {"status": None, "motivo": f"empate físico falhou: {type(e).__name__}"}
 
 
 _COTAS_AUTO_MIN = 30                  # cotas que qualificaram o fator
