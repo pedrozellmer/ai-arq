@@ -49,15 +49,25 @@ def test_com_a_chave_em_0_o_texto_e_o_de_antes():
 def test_com_a_chave_em_1_so_a_largura_e_o_aviso():
     txt = _extracao([_bloco("J15", 1.64, 0.22), _bloco("P80", 0.80, 2.10, n=2)],
                     True).to_structured_prompt()
-    assert ("J15: 8 un  |  largura ~1.64m em PLANTA (o 0.22m é a espessura da "
-            "parede, NÃO a altura; a área do vão não sai da planta)") in txt
+    assert ("J15: 8 un  |  bloco FINO ~1.64m × 0.22m: o 0.22m é a espessura da parede "
+            "(esquadria vista de lado: planta, corte ou fachada); o 1.64m é a largura "
+            "em planta ou a altura em corte/fachada. NÃO dá a área do vão") in txt
     assert "0.36 m²" not in txt
     assert "P80: 2 un  |  ~0.80m × 2.10m = 1.68 m²" in txt
 
 
-def test_bloco_de_pe_tambem_usa_a_maior_medida_como_largura():
+def test_bloco_de_pe_tambem_poe_a_maior_medida_primeiro():
     txt = _extracao([_bloco("J9", 0.20, 1.10)], True).to_structured_prompt()
-    assert "largura ~1.10m em PLANTA (o 0.20m é a espessura" in txt
+    assert "J9: 8 un  |  bloco FINO ~1.10m × 0.20m: o 0.20m é a espessura" in txt
+
+
+def test_porta_cortada_no_corte_nao_vira_largura_em_planta():
+    """🪤 10/11: "Porta Pivotante 90x210-Corte 1" (Revit) caiu na régua — no corte o
+    bloco é espessura × ALTURA. O texto não pode chamar os 2,10 m de largura."""
+    txt = _extracao([_bloco("Porta Pivotante 90x210-Corte 1", 0.12, 2.10, n=1)],
+                    True).to_structured_prompt()
+    assert "em PLANTA (" not in txt and "largura ~2.10m" not in txt
+    assert "o 2.10m é a largura em planta ou a altura em corte/fachada" in txt
 
 
 def test_a_chave_vem_do_ambiente_da_extracao(monkeypatch):

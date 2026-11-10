@@ -538,11 +538,16 @@ class DXFExtraction:
                         continue
                     seen.add(b.name)
                     area = b.width_m * b.height_m
+                    # 🪤 10/11/2026: o Revit exporta a MESMA janela no corte e na
+                    # fachada lateral, vista de lado: ali o bloco fino é espessura ×
+                    # ALTURA. O texto não afirma qual das duas é a medida maior.
                     if self.janela_em_planta and esquadria_em_planta(b):
                         lines.append(
-                            f"  {b.name}: {b.count} un  |  largura ~{max(b.width_m, b.height_m):.2f}m "
-                            f"em PLANTA (o {min(b.width_m, b.height_m):.2f}m é a espessura da "
-                            f"parede, NÃO a altura; a área do vão não sai da planta)"
+                            f"  {b.name}: {b.count} un  |  bloco FINO ~{max(b.width_m, b.height_m):.2f}m"
+                            f" × {min(b.width_m, b.height_m):.2f}m: o {min(b.width_m, b.height_m):.2f}m"
+                            f" é a espessura da parede (esquadria vista de lado: planta, corte ou"
+                            f" fachada); o {max(b.width_m, b.height_m):.2f}m é a largura em planta"
+                            f" ou a altura em corte/fachada. NÃO dá a área do vão"
                             f"{_nota_da_legenda(getattr(b, 'amostras_legenda', 0))}"
                         )
                         continue
