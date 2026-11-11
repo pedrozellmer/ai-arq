@@ -343,7 +343,7 @@ def _executa_o_fim(fusao=None, frase_versao="", acrescenta_linha=False,
              "itens": [getattr(i, "description", str(i)) for i in all_items]},
             ensure_ascii=False))
 
-    def _fundir(all_items, pai_id):
+    def _fundir(all_items, pai_id, aviso_dobro=False):
         novos = list(all_items)
         if acrescenta_linha:
             from models import BudgetItem, Confidence
@@ -376,6 +376,7 @@ def _executa_o_fim(fusao=None, frase_versao="", acrescenta_linha=False,
         "_carimbar_spec": lambda *a, **k: None,
         "_supa_rest_service": lambda m, p, **k: (200, [{"parent_job_id": pai}]),
         "_fundir_revisoes_do_cliente": _fundir,
+        "_chave_do_job": lambda j, nome, padrao="0": "0",
         "_persist_items_to_supabase": lambda j, its: len(its),
         "_comparar_com_versao_anterior": _cmp,
         "_carimbar_planilha": lambda j: diario["eventos"].append("carimbou"),

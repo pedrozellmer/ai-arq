@@ -2764,7 +2764,7 @@ def _irma_provavel(c: dict, items: list):
     return melhor
 
 
-def _fundir_revisoes_do_cliente(items: list, parent_job_id: str):
+def _fundir_revisoes_do_cliente(items: list, parent_job_id: str, aviso_dobro: bool = False):
     """Faz a releitura PRESERVAR o que o cliente corrigiu à mão (regra dura nº7).
 
     Pedro, 08/08: *"o cliente que mudou os itens na tela, os itens que ele mediu
@@ -3030,8 +3030,8 @@ def _fundir_revisoes_do_cliente(items: list, parent_job_id: str):
         ))
         resumo["acrescentadas"] += 1
 
-    import os as _os
-    _aviso_dobro = _os.environ.get("FUSAO_AVISO_DOBRO", "0") == "1"
+    # 🔑 FUSAO_AVISO_DOBRO chega de fora (`_chave_do_job`): a avaliação manda.
+    _aviso_dobro = bool(aviso_dobro)
     for c in corrigidos:
         alvos = [x for x in _cheia.get(_ch(c["description"], False), [])
                  if id(x) not in _usados]
@@ -22980,7 +22980,12 @@ bloco — só cite os que estão no inventário deste arquivo."""
             _pai = ((_pai_rows or [{}]) or [{}])[0]
             for _pai_id in _de_onde_vem_a_revisao(job_id, _pai.get("parent_job_id"),
                                                   _pai.get("anexo_em_curso")):
-                all_items, _fz = _fundir_revisoes_do_cliente(all_items, _pai_id)
+                try:    # a chave nunca pode derrubar a fusão (regra nº7)
+                    _liga_dobro = _chave_do_job(job_id, "FUSAO_AVISO_DOBRO") == "1"
+                except Exception:
+                    _liga_dobro = False
+                all_items, _fz = _fundir_revisoes_do_cliente(
+                    all_items, _pai_id, aviso_dobro=_liga_dobro)
                 for _k in ("revisoes", "casadas", "acrescentadas"):
                     _fusao[_k] = int(_fusao.get(_k) or 0) + int(_fz.get(_k) or 0)
                 if _fz["revisoes"]:
@@ -22991,7 +22996,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                f"casadas={_fz['casadas']} "
                                f"acrescentadas={_acr} ambiguas={_amb} "
                                f"dobro_avisado={int(_fz.get('dobro_avisado') or 0)} "
-                               f"liga={int(os.environ.get('FUSAO_AVISO_DOBRO', '0') == '1')}",
+                               f"liga={int(_liga_dobro)}",
                                job_id)
                     # 🚨 24/08 (2ª validação): o aviso garantia que "o motor corrigiu
                     # apenas as outras linhas" mesmo quando a correção entrou como

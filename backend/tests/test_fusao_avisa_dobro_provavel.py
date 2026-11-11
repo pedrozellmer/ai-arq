@@ -49,11 +49,12 @@ _CORRECOES = [  # (descrição do pai, unidade, número digitado, irmã esperada
 
 
 def _roda(monkeypatch, liga):
-    monkeypatch.setenv("FUSAO_AVISO_DOBRO", "1" if liga else "0")
     revs = [_rev("id-%d" % i) for i in range(len(_CORRECOES))]
     pai = [_linha_pai("id-%d" % i, d, u, q) for i, (d, u, q, _) in enumerate(_CORRECOES)]
     f, _, _ = _carrega(revs=revs, itens_do_pai=pai)
-    return f(_leitura_nova(), "pai123")
+    if liga:
+        return f(_leitura_nova(), "pai123", aviso_dobro=True)
+    return f(_leitura_nova(), "pai123")      # padrão = desligada
 
 
 @pytest.mark.parametrize("k", range(len(_CORRECOES)))
@@ -88,12 +89,11 @@ def test_com_a_chave_em_0_o_texto_e_o_de_antes(monkeypatch):
 
 def test_a_linha_do_proprio_cliente_nao_vira_irma(monkeypatch):
     """Duas correções parecidas: a 2ª não pode apontar a 1ª (que já é REV.)."""
-    monkeypatch.setenv("FUSAO_AVISO_DOBRO", "1")
     revs = [_rev("a"), _rev("b")]
     pai = [_linha_pai("a", "Calha meia-cana galvanizada fachada norte", "ml", 5),
            _linha_pai("b", "Calha meia-cana galvanizada fachada sul", "ml", 7)]
     f, _, _ = _carrega(revs=revs, itens_do_pai=pai)
-    itens, resumo = f(_leitura_nova(), "pai123")
+    itens, resumo = f(_leitura_nova(), "pai123", aviso_dobro=True)
     assert resumo.get("dobro_avisado", 0) == 0
 
 
@@ -103,3 +103,6 @@ def test_chave_avaliavel_e_registrada():
     with open(main.__file__, encoding="utf-8") as fh:
         fonte = fh.read()
     assert "dobro_avisado={int(_fz.get('dobro_avisado') or 0)} " in fonte
+    # a avaliação manda: a chave é lida por `_chave_do_job`, não pelo ambiente
+    assert '_chave_do_job(job_id, "FUSAO_AVISO_DOBRO") == "1"' in fonte
+    assert 'aviso_dobro=_liga_dobro)' in fonte
