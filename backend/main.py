@@ -2714,6 +2714,56 @@ def _de_onde_vem_a_revisao(job_id, parent_job_id, anexo_em_curso) -> list:
     return fontes
 
 
+_FAMILIA_DA_UNIDADE = {"m²": "m2", "m2": "m2", "ml": "m", "m": "m", "un": "un",
+                       "und": "un", "pç": "un", "pc": "un", "m³": "m3", "m3": "m3",
+                       "kg": "kg", "vb": "vb", "cj": "cj", "pt": "pt"}
+_PALAVRAS_SEM_SERVICO = frozenset({"para", "conforme", "tipo", "especificacao",
+                                   "definir", "projeto", "geral", "area", "areas"})
+
+
+def _chaves_do_servico(desc) -> set:
+    """O NOME do serviço, sem o rabo: pedaço antes de " — ", "(", ":" ou "|",
+    cada palavra de 4+ letras reduzida às 5 primeiras (telha/telhado,
+    cerâmico/cerâmica, parede/paredes, interna/internas caem juntas)."""
+    import unicodedata as _ud
+    s = str(desc or "")
+    s = _re.split(r"\s[—–-]\s|[(:|]", s, maxsplit=1)[0]
+    s = _ud.normalize("NFKD", s).encode("ascii", "ignore").decode().lower()
+    return {w[:5] for w in _re.findall(r"[a-z]+", s)
+            if len(w) >= 4 and w not in _PALAVRAS_SEM_SERVICO}
+
+
+def _irma_provavel(c: dict, items: list):
+    """A linha da leitura NOVA que provavelmente é o mesmo serviço da correção
+    que não casou pelo nome — ou None.
+
+    🩸 11/11/2026 (f1d917a3): o cliente corrigiu 14 linhas do PDF e anexou o
+    DWG; a releitura reescreveu os nomes ("Pintura látex acrílica em paredes
+    internas" → "Pintura interna — tinta acrílica"), casou 0 de 14 e a
+    planilha ficou com pintura 1.732 + 440 m², telhado 354,8 + 1 m², rodapé
+    309 + 10 m. 📏 120 d: 1 de 24 correções de cliente casou pelo nome.
+    Mesma família de unidade e nome do serviço em comum: ≥2 palavras, ou 1
+    quando um dos dois nomes só tem uma ("Rodapé — cerâmico…"). "Pintura
+    acrílica em fachadas externas" × "Pintura interna" tem só 1 → não é irmã.
+    Só AVISA: nunca junta nem apaga (errar pra dobro avisado, nunca pra sumiço).
+    """
+    _fam = _FAMILIA_DA_UNIDADE.get(str(c.get("unit") or "").strip().lower())
+    _ch_c = _chaves_do_servico(c.get("description"))
+    if not _fam or not _ch_c:
+        return None
+    melhor, melhor_n = None, 0
+    for it in items:
+        if str(getattr(it, "origem", "") or "") == "revisao_cliente":
+            continue
+        if _FAMILIA_DA_UNIDADE.get(str(getattr(it, "unit", "") or "").strip().lower()) != _fam:
+            continue
+        _ch_i = _chaves_do_servico(getattr(it, "description", ""))
+        _n = len(_ch_c & _ch_i)
+        if _ch_i and _n >= min(2, len(_ch_c), len(_ch_i)) and _n > melhor_n:
+            melhor, melhor_n = it, _n
+    return melhor
+
+
 def _fundir_revisoes_do_cliente(items: list, parent_job_id: str):
     """Faz a releitura PRESERVAR o que o cliente corrigiu à mão (regra dura nº7).
 
@@ -2980,6 +3030,8 @@ def _fundir_revisoes_do_cliente(items: list, parent_job_id: str):
         ))
         resumo["acrescentadas"] += 1
 
+    import os as _os
+    _aviso_dobro = _os.environ.get("FUSAO_AVISO_DOBRO", "0") == "1"
     for c in corrigidos:
         alvos = [x for x in _cheia.get(_ch(c["description"], False), [])
                  if id(x) not in _usados]
@@ -3007,6 +3059,25 @@ def _fundir_revisoes_do_cliente(items: list, parent_job_id: str):
                                 "então não sobrescrevi nenhuma —")
                 resumo.setdefault("ambiguas_desc", []).append(c["description"][:60])
                 resumo["ambiguas"] += 1
+            elif _aviso_dobro:
+                # 🔑 FUSAO_AVISO_DOBRO=1: a frase velha ("não achou esta
+                # linha") era falsa quando a leitura nova TEM o serviço com
+                # outro nome — e o cliente somava os dois.
+                _irma = _irma_provavel(c, items)
+                if _irma is not None:
+                    try:
+                        _qi = float(getattr(_irma, "quantity", 0) or 0)
+                    except (TypeError, ValueError):
+                        _qi = 0.0
+                    _acrescentar(c, (
+                        f"⚠ PODE REPETIR a linha da leitura nova "
+                        f"\"{str(getattr(_irma, 'description', ''))[:70]}\" "
+                        f"({_qi:g} {getattr(_irma, 'unit', '')}): o nome mudou e não "
+                        f"consegui casar as duas — confira e exclua uma, pra não "
+                        f"somar o mesmo serviço duas vezes."))
+                    resumo["dobro_avisado"] = resumo.get("dobro_avisado", 0) + 1
+                else:
+                    _acrescentar(c, "a leitura nova não tem linha com este nome.")
             else:
                 _acrescentar(c, "a leitura nova não achou esta linha.")
         except Exception as _ec:
@@ -10896,6 +10967,8 @@ _CHAVES_AVALIAVEIS = frozenset({
     "EMPATE_FISICO_TROCA_UNIDADE",
     # 09/11: o ArchiCAD que guarda cada parede num bloco Parede_N → abre
     "ABRIR_ELEMENTO_ARCHICAD",
+    # 11/11: correção do cliente que não casou pelo nome avisa a provável irmã
+    "FUSAO_AVISO_DOBRO",
     # 18/10: a base copiada em plantas temáticas do mesmo andar conta 1×
     "BASE_COPIADA_UMA_VEZ",
     # 18/10: aviso de tipo de bloco com muitas peças que não virou linha
@@ -22916,7 +22989,10 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     _log_error("motor:fusao-revisao",
                                f"pai={_pai_id} revisoes={_fz['revisoes']} "
                                f"casadas={_fz['casadas']} "
-                               f"acrescentadas={_acr} ambiguas={_amb}", job_id)
+                               f"acrescentadas={_acr} ambiguas={_amb} "
+                               f"dobro_avisado={int(_fz.get('dobro_avisado') or 0)} "
+                               f"liga={int(os.environ.get('FUSAO_AVISO_DOBRO', '0') == '1')}",
+                               job_id)
                     # 🚨 24/08 (2ª validação): o aviso garantia que "o motor corrigiu
                     # apenas as outras linhas" mesmo quando a correção entrou como
                     # linha NOVA convivendo com a do motor. Quem somasse a coluna
@@ -22932,6 +23008,9 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                  + (f" ou achou mais de uma igual ({_amb} caso(s))" if _amb else "")
                                  + ". Confira essas antes de somar a coluna — pode haver a "
                                    "linha do motor e a sua lado a lado.")
+                        if int(_fz.get("dobro_avisado") or 0):
+                            _txt += (f" Em {int(_fz['dobro_avisado'])} delas a observação "
+                                     f"diz qual linha da leitura nova pode ser o mesmo serviço.")
                     project_data.warnings = (getattr(project_data, "warnings", None) or []) + [_txt]
                 # 🔑 24/09: e o que ele REJEITOU não volta (try próprio: falhar
                 # aqui não pode desfazer a fusão das edições acima).
