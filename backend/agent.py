@@ -20,7 +20,7 @@ from typing import Any, Optional
 
 from openpyxl import load_workbook
 
-from models import SELO_MEDIDO
+from models import SELO_MEDIDO, SELO_ESTIMADO
 
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "https://kqjabzwgbfuivzlcfvvu.supabase.co")
@@ -235,6 +235,138 @@ def tool_resumo_por_disciplina(job_id: str) -> dict:
     try:
         titulos = titulos_de_disciplina(wb)
         return resumo_por_disciplina(list(_iter_orcamento_rows(wb)), titulos)
+    finally:
+        wb.close()
+
+
+#: Marcadores com que o motor abre o AVISO de uma observação ("⚠ MÓVEL/…").
+_MARCAS_DE_AVISO = ("⚠️", "⚠", "ℹ️", "ℹ", "✏️", "✏", "📝")
+#: Onde termina o nome do motivo: "⚠ SOMA, não leitura…" → "SOMA".
+_RE_FIM_DO_MOTIVO = re.compile(r"\s+[—–-]\s|[:(,;.]")
+_SEM_AVISO = "sem aviso específico (o porquê está na observação de cada item)"
+_SEM_AVISO_COM_NUMERO = ("com número, mas não medido do CAD — sem aviso específico "
+                         "(o porquê está na observação de cada item)")
+_SEM_AVISO_SEM_NUMERO = ("sem quantidade — a IA identificou o item, a quantidade "
+                         "é sua (sem aviso específico)")
+
+
+def _motivo_do_laranja(observations: str) -> str:
+    """O nome do aviso com que a observação abre — ou `_SEM_AVISO`.
+
+    A planilha escreve `⚠ ESTIMADO — revisar. <observação do motor>`; o
+    primeiro aviso da observação do motor é o porquê ("FONTE = ANOTAÇÃO DO
+    DESENHO", "MÓVEL/EQUIPAMENTO", "BASE DE MEDIÇÃO DIFERENTE"…). Nunca
+    inventa: o que não abre com marcador cai em `_SEM_AVISO`."""
+    s = str(observations or "").strip()
+    _selo = SELO_ESTIMADO
+    if s.startswith(_selo):
+        s = s[len(_selo):].lstrip(" .")
+    for m in _MARCAS_DE_AVISO:
+        if s.startswith(m):
+            resto = s[len(m):].lstrip(" ️")
+            partes = _RE_FIM_DO_MOTIVO.split(resto, maxsplit=1)
+            nome = partes[0].strip()
+            # "⚠ ESTIMADO — este número foi LIDO de um texto…": a 1ª palavra
+            # repete o selo; o porquê é a frase seguinte.
+            if nome.upper() == "ESTIMADO" and len(partes) > 1:
+                nome = _RE_FIM_DO_MOTIVO.split(partes[1].strip(), maxsplit=1)[0].strip()
+            return nome[:60] if nome else _SEM_AVISO
+    return _SEM_AVISO
+
+
+def itens_em_laranja(linhas, max_exemplos: int = 2) -> dict:
+    """Os itens LARANJA (estimados) da planilha INTEIRA, agrupados pelo porquê.
+
+    🩸 11/11/2026 — *"Quais itens estão em laranja e por quê?"* é botão do
+    próprio chat. Hoje, numa planilha de 113 linhas, o agente chamou
+    `list_items`, que corta em 8.000 caracteres, e respondeu ao cliente "a
+    lista veio incompleta (… o retorno cortou no meio)". Mesma falha de 22/04.
+    O resumo por disciplina já tinha sido curado disto em 23/09; esta pergunta
+    não.
+    🔑 Mesma lição: contar e agrupar aqui, sem IA, e mandar pro modelo só os
+    números dos itens e o motivo de cada grupo — que é o texto que o próprio
+    motor já escreveu. Por item vão só o número; descrição e observação, em
+    `max_exemplos` linhas por motivo, cortadas.
+    Função PURA (recebe as linhas já lidas) — é o que o guarda consegue CHAMAR.
+    """
+    grupos = {}
+    total = sem_qtd = 0
+    for r in linhas:
+        if (r.get("selo") or "estimado") != "estimado":
+            continue
+        total += 1
+        try:
+            _vazio = not float(r.get("quantity") or 0)
+        except (TypeError, ValueError):
+            _vazio = True
+        sem_qtd += int(_vazio)
+        mot = _motivo_do_laranja(r.get("observations"))
+        # Sem aviso, o que dá pra afirmar sem inventar é o que a própria
+        # coluna ORIGEM DA MEDIÇÃO afirma (`spreadsheet._origem_da_medicao`):
+        # com número, não saiu de medição do CAD; sem número, é do cliente.
+        # 📏 11/11: 67 dos 105 laranjas do job real caíam num grupo só.
+        if mot == _SEM_AVISO:
+            mot = _SEM_AVISO_SEM_NUMERO if _vazio else _SEM_AVISO_COM_NUMERO
+        g = grupos.setdefault(mot, {"motivo": mot, "n": 0, "sem_quantidade": 0,
+                                    "itens": [], "exemplos": []})
+        g["n"] += 1
+        g["sem_quantidade"] += int(_vazio)
+        g["itens"].append(str(r.get("item_num") or ""))
+        if len(g["exemplos"]) < max_exemplos:
+            _obs = str(r.get("observations") or "")
+            if _obs.startswith(SELO_ESTIMADO):
+                _obs = _obs[len(SELO_ESTIMADO):].lstrip(" .")
+            g["exemplos"].append({
+                "item_num": str(r.get("item_num") or ""),
+                "description": str(r.get("description") or "")[:70],
+                "observacao": _obs[:180],
+            })
+    ordem = sorted(grupos.values(),
+                   key=lambda g: (g["motivo"] in (_SEM_AVISO_COM_NUMERO,
+                                                  _SEM_AVISO_SEM_NUMERO), -g["n"]))
+    # Teto do TAMANHO da resposta, não da contagem: os itens dos motivos além
+    # do 10º continuam contados, num grupo só — nada some calado.
+    if len(ordem) > 10:
+        resto = ordem[9:]
+        ordem = ordem[:9] + [{
+            "motivo": "outros %d motivos (ver a observação de cada item)" % len(resto),
+            "n": sum(g["n"] for g in resto),
+            "sem_quantidade": sum(g["sem_quantidade"] for g in resto),
+            "itens": [i for g in resto for i in g["itens"]],
+            "exemplos": []}]
+    for g in ordem:     # "1.1, 1.2, …" ocupa metade do JSON de uma lista
+        g["itens"] = ", ".join(g["itens"])
+    fora = {"fonte": "planilha-inteira", "total_laranja": total,
+            "sem_quantidade": sem_qtd, "n_motivos": len(ordem), "motivos": ordem}
+    # 🔑 Cabe no teto da ferramenta, encolhendo na ordem do que menos faz
+    # falta: 2º exemplo → 1º exemplo → lista de números. A CONTAGEM nunca sai,
+    # e o que sair fica dito em `encolhido` (corte calado é o defeito de 15/09).
+    def _tam():
+        return len(json.dumps(fora, ensure_ascii=False))
+    _limite = _TETO_RESULTADO_FERRAMENTA - 500
+    if _tam() > _limite:
+        for g in ordem:
+            g["exemplos"] = g["exemplos"][:1]
+        fora["encolhido"] = "1 exemplo por motivo (planilha grande)"
+    if _tam() > _limite:
+        for g in ordem:
+            g["exemplos"] = []
+        fora["encolhido"] = "sem exemplos (planilha grande) — use get_item_details"
+    if _tam() > _limite:
+        for g in ordem:
+            g["itens"] = "(lista omitida: planilha grande — use search_items)"
+        fora["encolhido"] = ("sem exemplos nem números de item (planilha grande) — "
+                             "as contagens estão completas")
+    return fora
+
+
+def tool_itens_em_laranja(job_id: str) -> dict:
+    """Os laranjas da planilha INTEIRA, agrupados pelo porquê — nunca truncado."""
+    wb = _open_planilha(job_id)
+    if wb is None:
+        return {"error": f"planilha do job {job_id} não encontrada"}
+    try:
+        return itens_em_laranja(list(_iter_orcamento_rows(wb)))
     finally:
         wb.close()
 
@@ -843,8 +975,20 @@ TOOLS = [
         "input_schema": {"type": "object", "properties": {}},
     },
     {
+        "name": "itens_em_laranja",
+        "description": ("OS ITENS LARANJA (estimados) DA PLANILHA INTEIRA, agrupados no servidor pelo "
+                        "PORQUE: cada grupo traz o motivo (o aviso que o motor escreveu, ex. 'FONTE = "
+                        "ANOTACAO DO DESENHO', 'MOVEL/EQUIPAMENTO'), quantos itens, quantos sem "
+                        "quantidade, os numeros de TODOS os itens e ate 2 exemplos com a observacao. "
+                        "USE SEMPRE que perguntarem quais itens estao em laranja, quais sao estimados, "
+                        "o que precisa revisar ou por que algo nao foi medido na planilha como um todo "
+                        "— NUNCA use list_items pra isso (corta em 8.000 caracteres). Pra explicar UM "
+                        "item a fundo, depois use get_item_details."),
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
         "name": "list_items",
-        "description": "Lista itens da planilha de quantitativos (número, descrição, unidade, quantidade e selo). O campo `selo` é o que a PLANILHA marcou em cada linha: 'medido' (branco, medido do CAD), 'estimado' (laranja, pra revisar) ou 'metadado' (linhas 0.x da capa, não é serviço). Use pra ter visão geral do que existe.",
+        "description": "Lista itens da planilha de quantitativos (número, descrição, unidade, quantidade e selo). O campo `selo` é o que a PLANILHA marcou em cada linha: 'medido' (branco, medido do CAD), 'estimado' (laranja, pra revisar) ou 'metadado' (linhas 0.x da capa, não é serviço). Use pra ter visão geral do que existe. Corta em 8.000 caracteres: pra resumo use resumo_por_disciplina e pra itens laranja/estimados use itens_em_laranja.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -942,6 +1086,8 @@ TOOLS = [
 def _dispatch_tool(name: str, job_id: str, tool_input: dict) -> Any:
     if name == "resumo_por_disciplina":
         return tool_resumo_por_disciplina(job_id)
+    if name == "itens_em_laranja":
+        return tool_itens_em_laranja(job_id)
     if name == "list_items":
         return tool_list_items(job_id, tool_input.get("max_items", 200))
     if name == "get_item_details":
