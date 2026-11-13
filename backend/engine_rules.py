@@ -5586,6 +5586,87 @@ def soma_de_parede_por_layer(itens):
     return round(sum(por_layer.values()), 2), len(por_layer)
 
 
+# ── 13/11/2026: o comprimento que a PRÓPRIA linha de parede em m² usou ──────
+# 🩸 Dois projetos seguidos (12 e 13/11) disseram ao cliente "PAREDE
+# INCOMPLETA: a leitura achou 32,0 m / 21,1 m de parede" — e a linha de
+# alvenaria da MESMA planilha dizia:
+#     "Fonte: comprimento layer A-WALL = 736.86 m … × pé-direito 3.00 m"
+#     "Cálculo: comprimento pelo eixo (layer A-PAREDE) = 294,11 m × …"
+# `comprimento_de_parede_na_observacao` só conhece "comprimento TOTAL DO
+# layer X = N m", e a IA deixou de escrever assim. Sem a parede de verdade, o
+# guarda ficou com o que sobrou em metro: escada + guarda-corpo (32,03) e
+# muro + cobogó (21,10).
+# 📏 90 dias: 29 alarmes em cliente; 4 com a parede da linha m² ACIMA do
+# mínimo (3 deles entre 09 e 13/11).
+# 🔑 Só lê linha de PAREDE em m² (disciplina + descrição de parede, sem
+# demolição) e só o número seguido de "m" (nunca m²/m³). É fonte a mais no
+# `max` do guarda: só pode CALAR o alarme, nunca criar — o lado que o guarda
+# escolheu desde 04/09.
+_RE_COMPR_ESCRITO = _re.compile(
+    r"comprimento\b[^=\n]{0,60}?=\s*"
+    r"([0-9]{1,3}(?:\.[0-9]{3})+(?:,[0-9]+)?|[0-9]+(?:[.,][0-9]+)?)"
+    r"\s*m(?![²2³3a-zA-Z])", _re.I)
+_RE_DESCRICAO_DE_PAREDE = _re.compile(
+    r"alvenaria|parede|divis[óo]ria|drywall|veda[çc][ãa]o", _re.I)
+
+
+def _comprimento_br(texto):
+    """🪤 NÃO é o `_numero_br` lá de cima (aquele lê "1.234" como 1,234)."""
+    t = str(texto)
+    if "." in t and "," in t:
+        t = t.replace(".", "").replace(",", ".")
+    elif _re.fullmatch(r"[0-9]{1,3}(?:\.[0-9]{3})+", t):
+        t = t.replace(".", "")
+    else:
+        t = t.replace(",", ".")
+    return float(t)
+
+
+def aviso_pdf_do_anexo_nao_lido(nomes):
+    """O aviso pro cliente quando o anexo descarta PDF porque o projeto já tem CAD.
+
+    🩸 13/11/2026 — a cliente mandou o DWG, depois anexou 12 PDF das pranchas;
+    o /add-file refez SÓ com o DWG (certo: o DWG já tinha os 12 desenhos, ler
+    os dois dobraria) e ela recebeu a MESMA planilha sem uma palavra.
+    📏 90 dias: 4 projetos com PDF anexado depois do CAD, os 4 descartados
+    calados. '' quando não há o que dizer."""
+    nomes = [str(n) for n in (nomes or []) if str(n).strip()]
+    if not nomes:
+        return ""
+    n = len(nomes)
+    quais = ", ".join(nomes[:4]) + (" e mais %d" % (n - 4) if n > 4 else "")
+    if n == 1:
+        cab = "ℹ O PDF que você anexou (%s) não foi lido" % quais
+    else:
+        cab = "ℹ Os %d PDF que você anexou (%s) não foram lidos" % (n, quais)
+    return (cab + ": este projeto já tem o desenho em CAD (DWG/DXF), e ler o "
+            "PDF da mesma prancha junto contaria cada serviço duas vezes. A "
+            "planilha continua sendo a do CAD. Se algum desses PDF tem uma "
+            "prancha que não está no CAD, mande essa prancha em DWG ou DXF.")
+
+
+def comprimento_na_linha_de_parede_m2(item):
+    """O comprimento (m) que uma linha de PAREDE em m² declara ter usado, ou None.
+
+    Só APONTA. Quem decide é o guarda do mínimo de parede (main.py)."""
+    if str(getattr(item, "discipline", "") or "") != "Fechamentos Verticais":
+        return None
+    if str(getattr(item, "unit", "") or "").strip().lower() not in ("m²", "m2"):
+        return None
+    desc = str(getattr(item, "description", "") or "")
+    if "demoli" in desc.lower() or not _RE_DESCRICAO_DE_PAREDE.search(desc):
+        return None
+    achados = []
+    for m in _RE_COMPR_ESCRITO.finditer(str(getattr(item, "observations", "") or "")):
+        try:
+            v = _comprimento_br(m.group(1))
+        except (TypeError, ValueError):
+            continue
+        if v > 0:
+            achados.append(v)
+    return max(achados) if achados else None
+
+
 # ══════════════════════════════════════════════════════════════════════════
 #  ADMINISTRAÇÃO LOCAL DE OBRA — o motor chutava o PRAZO
 # ══════════════════════════════════════════════════════════════════════════

@@ -857,6 +857,9 @@ _STAGES_DIAGNOSTICO = frozenset({
     "motor:janela-em-planta",
     # 04/11: DWG convertido na hora de ler, pra não encher o /tmp
     "motor:conversao-adiada",
+    # 13/11: parede da linha m² que calaria o alarme · PDF anexado que ficou
+    # fora (as duas com a chave em 0, contadas)
+    "motor:parede-minimo-linha-m2", "anexo:pdf-nao-lido",
     "motor:versao-anterior", "motor:pai-e-filho", "motor:download-regen",
     "motor:respostas-releitura", "motor:informou-depois",
     "motor:consolida-tipo",
@@ -21154,7 +21157,27 @@ bloco — só cite os que estão no inventário deste arquivo."""
             # que falhou, é ESCOLHA DE LAYER: as paredes dela não estão todas
             # no layer que se chama PAREDES. Isso é outro conserto, e agora tem
             # dado pra fazê-lo.
+            # 🩸 13/11/2026 — a linha de parede em m² escreve o comprimento que
+            # usou ("comprimento layer A-WALL = 736.86 m"), mas não na frase que
+            # `_compr_obs` conhece. O guarda acusava 32 m (escada + guarda-corpo)
+            # com 737 m na linha ao lado. Ver `comprimento_na_linha_de_parede_m2`.
+            # 🔑 Fonte a mais no `max`: só CALA. Chave PAREDE_MINIMO_LE_LINHA_M2
+            # nasce em 0 — desligada, só registra quando calaria.
+            from engine_rules import comprimento_na_linha_de_parede_m2 as _compr_m2
+            _paredes_m2_escrito = [_c for _c in (_compr_m2(_it) for _it in (all_items or []))
+                                   if _c]
             _impossivel, _min_per = _par_min(max(_paredes_ml or [0]), _area_ref)
+            if _impossivel and _paredes_m2_escrito:
+                _maior_m2 = max(_paredes_m2_escrito)
+                if not _par_min(max(_paredes_ml + [_maior_m2]), _area_ref)[0]:
+                    _liga_m2 = os.environ.get("PAREDE_MINIMO_LE_LINHA_M2", "0") == "1"
+                    _log_error("motor:parede-minimo-linha-m2",
+                               "a linha de parede em m² usou %.2f m (mínimo %.2f m); "
+                               "o guarda tinha %.2f m — calaria o alarme. liga=%d"
+                               % (_maior_m2, _min_per, max(_paredes_ml), int(_liga_m2)),
+                               job_id, severity="info")
+                    if _liga_m2:
+                        _impossivel = False
             if _impossivel:
                 _maior = max(_paredes_ml)
                 _reb_p = 0
@@ -40572,6 +40595,25 @@ async def add_file_and_reprocess(job_id: str, request: Request, files: list[Uplo
                        "o CAD anexado é de outra disciplina — o(s) PDF(s) seguem na "
                        "leitura: %s" % ", ".join(os.path.basename(p) for p in _pdfs_ficam)[:300],
                        job_id, severity="info")
+        # 🩸 13/11/2026 — os PDF que a pessoa anexou AGORA e ficam de fora
+        # saíam calados: ela via a mesma planilha sem saber por quê. Só os
+        # deste pedido (`_enviados`): o PDF antigo de um projeto que começou em
+        # PDF e recebeu o CAD depois é o descarte desejado, não notícia.
+        # 🔑 Chave AVISO_PDF_DO_ANEXO nasce em 0: desligada, só registra.
+        _enviados_set = set(_enviados)
+        _pdfs_fora_agora = [os.path.basename(p) for p in file_paths
+                            if p.lower().endswith(".pdf") and p not in _pdfs_ficam
+                            and os.path.basename(p) in _enviados_set]
+        if _pdfs_fora_agora:
+            _liga_pdf_anexo = os.environ.get("AVISO_PDF_DO_ANEXO", "0") == "1"
+            _log_error("anexo:pdf-nao-lido",
+                       "%d PDF anexado(s) agora ficaram fora (projeto com CAD) liga=%d: %s"
+                       % (len(_pdfs_fora_agora), int(_liga_pdf_anexo),
+                          ", ".join(_pdfs_fora_agora))[:400],
+                       job_id, severity="info")
+            if _liga_pdf_anexo:
+                from engine_rules import aviso_pdf_do_anexo_nao_lido as _av_pdf_anexo
+                _avisos_ext = list(_avisos_ext or []) + [_av_pdf_anexo(_pdfs_fora_agora)]
         file_paths = _cads + _pdfs_ficam
     if _avisos_ext:
         # O process_job só avisa quem ELE renomeia; aqui a renomeação já
