@@ -860,6 +860,9 @@ _STAGES_DIAGNOSTICO = frozenset({
     # 13/11: parede da linha m² que calaria o alarme · PDF anexado que ficou
     # fora (as duas com a chave em 0, contadas)
     "motor:parede-minimo-linha-m2", "anexo:pdf-nao-lido",
+    # 14/11: o mesmo código de esquadria contado em mapa/fachada/corte e na
+    # planta (com a chave em 0, contado)
+    "motor:esquadria-entre-pranchas",
     "motor:versao-anterior", "motor:pai-e-filho", "motor:download-regen",
     "motor:respostas-releitura", "motor:informou-depois",
     "motor:consolida-tipo",
@@ -11018,6 +11021,9 @@ _CHAVES_AVALIAVEIS = frozenset({
     "VERBA_NUNCA_BRANCA",
     # 08/11: o mesmo serviço com o mesmo número duas vezes ganha aviso na linha
     "REPETIDA_AVISA_NA_LINHA",
+    # 14/11: o mesmo código de esquadria em mapa/fachada/corte e na planta ganha
+    # aviso na linha
+    "ESQUADRIA_ENTRE_PRANCHAS_AVISA",
 })
 _CHAVES_DA_AVALIACAO: dict = {}        # job de avaliação → {chave: "0" | "1"}
 
@@ -22960,6 +22966,38 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     job_id, severity="info")
         except Exception as _erep:
             _log_error("motor:repetida-na-linha", f"FALHOU: {_erep}", job_id,
+                       severity="warning")
+
+        # 🩸 14/11: a MESMA esquadria (mesmo código) contada na planta e de novo
+        # no mapa/quadro, na fachada ou no corte — ou no DWG e no PDF da mesma
+        # folha (`esquadria_em_varias_pranchas`). Só AVISA na linha.
+        # 🔑 ESQUADRIA_ENTRE_PRANCHAS_AVISA=1 escreve o aviso; com 0 só conta.
+        try:
+            from engine_rules import (esquadria_em_varias_pranchas as _esq_varias,
+                                      aviso_da_mesma_esquadria as _aviso_esq,
+                                      MARCA_MESMA_ESQUADRIA as _MARCA_ESQ)
+            _grupos_esq = _esq_varias(all_items)
+            _esq_liga = _chave_do_job(job_id, "ESQUADRIA_ENTRE_PRANCHAS_AVISA") == "1"
+            if _grupos_esq and _esq_liga:
+                for _g in _grupos_esq:
+                    for _i in _g["indices"]:
+                        _it = all_items[_i]
+                        if _MARCA_ESQ in (_it.observations or ""):
+                            continue
+                        _minha = str(getattr(_it, "ref_sheet", "") or "").strip()
+                        _outras = [p for p in _g["pranchas"] if p != _minha] or _g["pranchas"]
+                        _it.observations = _observacao_que_cabe(
+                            "%s %s" % (_aviso_esq(_g["codigo"], _outras),
+                                       _it.observations or ""))
+            if _grupos_esq:
+                _log_error("motor:esquadria-entre-pranchas",
+                           "codigos=%d linhas=%d liga=%d | %s" % (
+                               len(_grupos_esq),
+                               sum(len(g["indices"]) for g in _grupos_esq), int(_esq_liga),
+                               ", ".join(g["codigo"] for g in _grupos_esq[:12])),
+                           job_id, severity="info")
+        except Exception as _eesq2:
+            _log_error("motor:esquadria-entre-pranchas", f"FALHOU: {_eesq2}", job_id,
                        severity="warning")
 
         output_path = os.path.join(work_dir, f"orcamento_{job_id}.xlsx")

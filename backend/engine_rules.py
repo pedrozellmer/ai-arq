@@ -2271,6 +2271,168 @@ _RE_AREA_DO_COMODO = _re.compile(r"\b[AÁ]\s*[:=]\s*\d", _re.I)
 MARCA_MESMO_NUMERO = "⚠ MESMO NÚMERO de outra linha"
 
 
+# ── A MESMA ESQUADRIA CONTADA EM MAIS DE UMA PRANCHA (14/11/2026) ──────────
+# 🩸 13/11, dois projetos no mesmo dia. (1) Fornecedor de esquadrias mandou
+# DWG + PDF das mesmas pranchas (mapa de esquadrias, fachadas): a VZ07 saiu em
+# 4 linhas — 8 (mapa DWG), 8 (mapa PDF), 8 (fachada DWG), 6 (fachada PDF).
+# Somando, 30 peças onde há 8. (2) Casa em 12 PDF: cada porta P01…P11 saiu
+# DUAS vezes, 1 da planta baixa e 1 do mapa de esquadrias.
+# 🔑 A passada 6 da consolidação ("aparece em N pranchas") agrupa pelo
+# SUBSTANTIVO ("porta"): P01…P11 caem num grupo só, `pode_fundir(P01, P02)`
+# recusa e o grupo inteiro sai CALADO. Aqui o agrupamento é pelo CÓDIGO.
+# 📏 90 dias: 13 projetos com o mesmo código numa planta e de novo no mapa /
+# quadro / fachada / corte; 0 cliente corrigiu essas linhas.
+# 🪤 Código só em PLANTAS diferentes NÃO entra: são andares, e lá somar é
+# certo. Só AVISA na linha — nunca apaga, nunca soma, nunca mexe no número.
+MARCA_MESMA_ESQUADRIA = "⚠ MESMA ESQUADRIA em outra linha"
+
+#: o código da linha: P01, PM05, PCF02, JA12, VZ07, J1, V3 — começa por P/J/V
+#: (MAIÚSCULA, sem IGNORECASE: "p/ 2" e "v. 3" de texto corrido não são código)
+_RE_COD_ESQ_LINHA = _re.compile(r"\b([PJV][A-Z]{0,2})\s?-?(\d{1,3}[A-Z]?)\b")
+#: a linha é de esquadria (descrição ou disciplina)
+_RE_LINHA_DE_ESQUADRIA = _re.compile(
+    r"esquadri|\bporta|\bjanela|venezian|basculant|maxim[\s-]?ar|caixilh|\bport[aã]o|"
+    r"\bvisor|pele\s+de\s+vidro|\bvitr[oô]", _re.I)
+#: prancha que REPETE as peças da planta: mapa/quadro/tabela de esquadrias,
+#: fachada, elevação, corte, vista, detalhe, isométrica (nome ou dica da leitura)
+_RE_PRANCHA_NAO_PLANTA = _re.compile(
+    r"esquadri|\bmapa\b|quadro|tabela|fachad|eleva|\bcortes?\b|\bvistas?\b|detalh|"
+    r"\bdet\b|\besq\b|isometr", _re.I)
+#: outro serviço sobre a mesma porta (em QUALQUER lugar da linha)
+_RE_NAO_E_A_MESMA_PECA = _re.compile(
+    r"demol|remo[cç]|remov|retirad|retirar|existente|reaproveit", _re.I)
+#: a linha É o acessório — só no COMEÇO. 🪤 "Porta P01 — …, Soleira de Pedra"
+#: é a porta (a 1ª versão procurava a palavra em qualquer lugar e calava o caso
+#: inteiro que motivou a regra).
+_RE_ACESSORIO_NA_FRENTE = _re.compile(
+    r"^\s*(?:fornecimento\s+e\s+instala[cç][aã]o\s+de\s+|conjunto\s+de\s+)?"
+    r"(?:ferragen|fechadur|dobradi|puxador|ma[cç]aneta|soleira|peitoril|pintura|barra|"
+    r"marco|batente|guarni[cç]|kit|mola|fecho|vidro|instala[cç][aã]o\s+de\s+(?:ferr|fech))",
+    _re.I)
+#: a dimensão escrita na linha: "170×240 cm", "0,80 × 2,10 m", "1530x2180mm"
+_RE_DIM_ESQ = _re.compile(
+    r"(\d+(?:[.,]\d+)?)\s*(mm|cm|m)?\s*[×xX]\s*(\d+(?:[.,]\d+)?)\s*(mm|cm|m)?\b")
+
+
+#: o material da folha/caixilho que a linha declara
+_RE_MATERIAL_ESQ = _re.compile(
+    r"\b(madeira|alum[ií]nio|a[cç]o|ferro|pvc|vidro|blindex|metal|metalic)", _re.I)
+_SINONIMOS_MATERIAL = {"aluminio": "aluminio", "alumínio": "aluminio", "aco": "aco",
+                       "aço": "aco", "ferro": "aco", "metal": "aco", "metalic": "aco",
+                       "blindex": "vidro"}
+
+
+def _materiais(desc):
+    out = set()
+    for m in _RE_MATERIAL_ESQ.finditer(str(desc or "")):
+        w = m.group(1).lower()
+        out.add(_SINONIMOS_MATERIAL.get(w, _sem_acento(w)))
+    return out
+
+
+def _dimensao_em_cm(desc):
+    """(largura, altura) em cm da 1ª dimensão escrita na linha, ou None."""
+    m = _RE_DIM_ESQ.search(str(desc or ""))
+    if not m:
+        return None
+    unid = (m.group(2) or m.group(4) or "").lower()
+    out = []
+    for g in (m.group(1), m.group(3)):
+        try:
+            v = float(g.replace(",", "."))
+        except ValueError:
+            return None
+        if unid == "mm" or (not unid and v >= 1000):
+            v /= 10.0
+        elif unid == "m" or (not unid and v < 10):
+            v *= 100.0
+        out.append(round(v))
+    return tuple(out)
+
+
+_RE_REF_DE_PDF = _re.compile(r"\.pdf\b", _re.I)
+
+
+def _radical_sem_copia(ref):
+    """O radical da prancha sem o "(1)" que o navegador cola na cópia do arquivo."""
+    return _re.sub(r"\s*\(\d+\)$", "", radical_da_prancha(ref)).strip()
+
+
+def esquadria_em_varias_pranchas(items):
+    """Grupos de linhas com o MESMO código de esquadria em pranchas diferentes.
+
+    Só entra o grupo em que alguma prancha REPETE a planta (mapa/quadro,
+    fachada, corte, detalhe…) ou em que o CAD e o PDF são a mesma folha.
+    Devolve [{"codigo", "indices", "pranchas"}]. Função PURA.
+    """
+    por_cod = {}
+    for i, it in enumerate(items or []):
+        if str(_campo_do_item(it, "unit", "") or "").strip().lower() not in ("un", "pç", "pc", "cj"):
+            continue
+        try:
+            if float(_campo_do_item(it, "quantity", 0) or 0) <= 0:
+                continue
+        except (TypeError, ValueError):
+            continue
+        desc = str(_campo_do_item(it, "description", "") or "")
+        disc = _sem_acento(str(_campo_do_item(it, "discipline", "") or "")).lower()
+        if not (_RE_LINHA_DE_ESQUADRIA.search(desc)
+                or "esquadri" in disc or "portas" in disc):
+            continue
+        if _RE_NAO_E_A_MESMA_PECA.search(desc) or _RE_ACESSORIO_NA_FRENTE.search(desc):
+            continue
+        m = _RE_COD_ESQ_LINHA.search(desc)
+        if not m:
+            continue
+        ref = str(_campo_do_item(it, "ref_sheet", "") or "").strip()
+        if not ref:
+            continue
+        por_cod.setdefault(m.group(1) + m.group(2), []).append((i, ref))
+    grupos = []
+    for cod, linhas in por_cod.items():
+        refs = {r for _i, r in linhas}
+        if len(linhas) < 2 or len(refs) < 2:
+            continue
+        repete = any(_RE_PRANCHA_NAO_PLANTA.search(_sem_acento(r)) for r in refs)
+        if not repete:
+            # DWG/DXF e PDF da MESMA folha. 🪤 Só CAD × PDF: duas páginas do
+            # mesmo PDF podem ser dois andares.
+            cad = {_radical_sem_copia(r) for r in refs if not _RE_REF_DE_PDF.search(r)}
+            pdf = {_radical_sem_copia(r) for r in refs if _RE_REF_DE_PDF.search(r)}
+            repete = bool(cad & pdf)
+        if not repete:
+            continue                                         # só plantas: andares
+        # 🪤 O MESMO código com medidas DIFERENTES é outra peça (dois prédios,
+        # cada um com o seu quadro: P2 170×240 num, P2 0,80×2,10 no outro).
+        dims = {_dimensao_em_cm(_campo_do_item(items[i], "description", ""))
+                for i, _r in linhas}
+        dims.discard(None)
+        if len(dims) > 1:
+            continue
+        # …e com materiais que não se cruzam também (P1 de madeira num prédio,
+        # P1 veneziana de alumínio no outro, as duas 0,80×2,10).
+        mats = [_materiais(_campo_do_item(items[i], "description", "")) for i, _r in linhas]
+        mats = [x for x in mats if x]
+        if any(not (a & b) for k, a in enumerate(mats) for b in mats[k + 1:]):
+            continue
+        grupos.append({"codigo": cod, "indices": [i for i, _r in linhas],
+                       "pranchas": sorted(refs)})
+    return grupos
+
+
+def aviso_da_mesma_esquadria(codigo, outras_pranchas):
+    """O texto que entra no começo da observação da linha."""
+    nomes = [str(p)[:48] for p in (outras_pranchas or [])][:3]
+    onde = ", ".join(nomes) + (" e mais %d" % (len(outras_pranchas) - 3)
+                               if len(outras_pranchas or []) > 3 else "")
+    # 🪤 Condicional de propósito: dois prédios com o seu próprio quadro trazem
+    # o mesmo código e AÍ soma (medido: 1 dos 19 projetos de 90 dias).
+    return ("%s: o código %s também foi contado em %s. Se for mapa ou quadro de "
+            "esquadrias, fachada ou corte, são as MESMAS peças da planta — não some; "
+            "se for outro prédio ou pavimento, soma. Confira o total no quadro de "
+            "esquadrias." % (MARCA_MESMA_ESQUADRIA, codigo, onde or "outra prancha"))
+
+
 def _distingue_pecas(descs):
     """True quando as descrições dizem que são peças ou trechos DIFERENTES."""
     def _conj(rx, d, f=lambda m: m.group(1)):
