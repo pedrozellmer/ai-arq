@@ -1013,14 +1013,16 @@ async function review(itemId, action) {
   // (bulkReview); a de um item, não. Achado da auditoria de 09/08.
   // 🪤 bulkReview NÃO passa por aqui (chama a API direto), então não há
   // confirmação dupla.
+  // 15/11: a mesma confirmação agora pergunta POR QUÊ. Continua um clique só —
+  // cada motivo é um botão que exclui. Ver `perguntaMotivoDaExclusao`.
+  let _motivo = '';
   if (action === 'reject') {
     const _it = (items || []).find(i => i.id === itemId);
     const _nome = _it ? String(_it.description || '').slice(0, 60) : 'este item';
     const _msg = `Excluir "${_nome}"? Ele sai da planilha e não dá pra desfazer.`;
-    const _ok = window.toast
-      ? await window.toast.confirm(_msg, { ok: 'Excluir', cancel: 'Cancelar' })
-      : confirm(_msg);
-    if (!_ok) return;
+    const _resp = await perguntaMotivoDaExclusao(_msg);
+    if (_resp === null) return;
+    _motivo = _resp;
   }
   const _antes = reviewState[itemId];
   reviewState[itemId] = action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : 'edited';
@@ -1032,6 +1034,7 @@ async function review(itemId, action) {
       body: JSON.stringify({
         action,
         reviewed_by: currentUser?.email || '',
+        ...(_motivo ? { motivo: _motivo } : {}),
       })
     });
     // Feedback frequente (teclas A/D item a item) — sem toast.js fica em
@@ -1303,15 +1306,51 @@ async function markExistente(itemId) {
 // ═══════════════════════════════════════════════
 // BULK ACTIONS
 // ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════════
+// POR QUE EXCLUIU (15/11/2026)
+// ═══════════════════════════════════════════════
+// A exclusão chegava sem motivo: "a leitura inventou", "não é do meu orçamento"
+// e "está repetido" eram a mesma linha no banco. Esta pergunta ocupa o lugar da
+// confirmação que já existia — o número de cliques não muda: cada motivo é um
+// botão que confirma a exclusão.
+// Devolve o código do motivo, '' se a pessoa confirmou sem dar pra perguntar
+// (sem toast.js), ou null se cancelou.
+// 🪤 Os códigos têm que existir em MOTIVOS_DA_EXCLUSAO (backend/main.py): código
+// desconhecido não barra a exclusão, mas também não é gravado.
+const MOTIVOS_DA_EXCLUSAO = [
+  ['nao_existe',     'Não existe no projeto'],
+  ['fora_do_escopo', 'Existe, mas não entra no meu orçamento'],
+  ['repetido',       'Está repetido em outra linha'],
+  ['outro',          'Outro motivo'],
+];
+function perguntaMotivoDaExclusao(mensagem) {
+  if (!window.toast) return Promise.resolve(confirm(mensagem) ? '' : null);
+  return window.toast.confirm(mensagem, {
+    pergunta: 'Por que você está excluindo?',
+    escolhas: MOTIVOS_DA_EXCLUSAO,
+    cancel: 'Cancelar',
+    // 🪤 toast.js antigo em cache ignora `escolhas` e devolve true: exclui sem motivo
+  }).then(r => (r === false || r == null) ? null : (r === true ? '' : String(r)));
+}
+
 async function bulkReview(section, action) {
   const msg = action === 'approve'
     ? `Confirmar todos os itens de "${section}"?`
     : `Excluir todos os itens de "${section}"? Eles vão sair da planilha.`;
   const okLabel = action === 'approve' ? 'Confirmar todos' : 'Excluir todos';
-  const ok = window.toast
-    ? await window.toast.confirm(msg, { ok: okLabel, cancel: 'Cancelar' })
-    : confirm(msg);
-  if (!ok) return;
+  // 15/11: na exclusão em massa a confirmação também pergunta o motivo, e ele
+  // vale pra todas as linhas da seção.
+  let _motivoDoLote = '';
+  if (action === 'reject') {
+    const _resp = await perguntaMotivoDaExclusao(msg);
+    if (_resp === null) return;
+    _motivoDoLote = _resp;
+  } else {
+    const ok = window.toast
+      ? await window.toast.confirm(msg, { ok: okLabel, cancel: 'Cancelar' })
+      : confirm(msg);
+    if (!ok) return;
+  }
 
   let secItems = items.filter(it => (it.section || 'Outros') === section);
   if (!secItems.length) return;
@@ -1363,6 +1402,7 @@ async function bulkReview(section, action) {
         body: JSON.stringify({
           action,
           reviewed_by: currentUser?.email || '',
+          ...(_motivoDoLote ? { motivo: _motivoDoLote } : {}),
         })
       })
       .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); _salvos++; })

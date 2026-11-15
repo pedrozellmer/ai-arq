@@ -123,6 +123,15 @@
   @media (prefers-reduced-motion: reduce) {
     .toast-item, .toast-item.toast-dialog { animation: none; }
   }
+  .toast-escolhas { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
+  .toast-escolhas .toast-pergunta { font-weight: 600; color: #111827; margin-bottom: 2px; }
+  .toast-escolhas button {
+    text-align: left; padding: 10px 12px; min-height: 44px; font-size: 14px;
+    border: 1px solid #d1d5db; border-radius: 8px; background: #fff; color: #111827; cursor: pointer;
+  }
+  .toast-escolhas button:hover, .toast-escolhas button:focus-visible {
+    border-color: #4f46e5; background: #eef2ff; outline: none;
+  }
   `;
 
   function ensureRegion() {
@@ -231,6 +240,41 @@
         if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
         resolve(val);
       };
+      // 15/11/2026 — `escolhas: [[valor, rótulo], ...]` troca o botão principal
+      // por uma lista: cada escolha é um botão que FECHA devolvendo o `valor`
+      // (as teclas 1..9 valem como clique). O botão de recusa continua
+      // devolvendo false. `pergunta` é a linha que vem acima da lista.
+      // Aditivo, como o `checkbox`: sem a opção o diálogo é o de antes.
+      const escolhas = (opts && Array.isArray(opts.escolhas)) ? opts.escolhas : [];
+      let primeiraEscolha = null;          // quem ganha o foco quando há lista
+      if (escolhas.length) {
+        okBtn.remove();
+        const lista = document.createElement('div');
+        lista.className = 'toast-escolhas';
+        if (opts.pergunta) {
+          const p = document.createElement('div');
+          p.className = 'toast-pergunta';
+          p.textContent = String(opts.pergunta);
+          lista.appendChild(p);
+        }
+        escolhas.forEach((par, i) => {
+          const b = document.createElement('button');
+          b.type = 'button';
+          // 🔒 textContent: o rótulo pode vir de qualquer tela.
+          b.textContent = (i + 1) + '. ' + String(par[1]);
+          b.addEventListener('click', () => finish(par[0]));
+          lista.appendChild(b);
+          if (!primeiraEscolha) primeiraEscolha = b;
+        });
+        item.querySelector('.toast-body').insertBefore(lista, item.querySelector('.toast-actions'));
+        overlay.addEventListener('keydown', (ev) => {
+          // a tela de trás tem atalhos de uma tecla: com a pergunta aberta,
+          // nenhuma tecla passa pra ela
+          ev.stopPropagation();
+          const n = parseInt(ev.key, 10);
+          if (n >= 1 && n <= escolhas.length) { ev.preventDefault(); finish(escolhas[n - 1][0]); }
+        });
+      }
       okBtn.addEventListener('click', () => {
         // 🪤 O `disabled` é a porta; isto é a tranca. Um clique programático
         // (ou CSS quebrado) não pode passar por cima da ciência da pessoa.
@@ -244,7 +288,7 @@
 
       overlay.appendChild(item);
       document.body.appendChild(overlay);
-      okBtn.focus();
+      (primeiraEscolha || okBtn).focus();
     });
   }
 

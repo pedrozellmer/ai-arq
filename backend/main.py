@@ -34672,6 +34672,23 @@ class ReviewPayload(BaseModel):
     edits: Optional[dict] = None             # {description?, unit?, quantity?, discipline?, observations?}
     comment: Optional[str] = ""
     reviewed_by: Optional[str] = ""
+    motivo: Optional[str] = ""               # só na exclusão: ver MOTIVOS_DA_EXCLUSAO
+
+
+#: 🩸 15/11/2026 — A EXCLUSÃO NÃO DIZIA POR QUÊ. 1.269 exclusões de cliente em 90
+#: dias e nenhuma serve de gabarito: "a IA inventou", "existe mas não é do meu
+#: orçamento" e "está repetido" são três defeitos diferentes do motor (ou
+#: nenhum), e chegavam iguais. A tela agora pergunta no MESMO clique que já
+#: confirmava a exclusão; o código escolhido vai em `edits['_motivo']`.
+#: 🪤 NÃO vai em `comment`: texto ali é recado de gente e toca a campainha.
+#: 🪤 Motivo ausente ou desconhecido NÃO barra a exclusão (tela antiga em cache,
+#: exclusão em outra aba): a linha é gravada sem `_motivo`, como sempre foi.
+MOTIVOS_DA_EXCLUSAO = frozenset({
+    "nao_existe",        # não existe no projeto (a leitura inventou)
+    "fora_do_escopo",    # existe, mas não entra no orçamento de quem revisa
+    "repetido",          # já está em outra linha
+    "outro",
+})
 
 
 #: Frases que o SISTEMA escreve no campo `comment` — não são recado de gente.
@@ -34723,7 +34740,7 @@ def recado_digitado(comment) -> str:
 
 
 def monta_linha_de_revisao(job_id, item_id, action, edits, antes,
-                           comment="", reviewed_by=""):
+                           comment="", reviewed_by="", motivo=""):
     """Monta a linha que vai pra `item_reviews`. Separada da rota DE PROPOSITO:
     assim o guarda EXECUTA isto, em vez de ler o fonte da rota.
 
@@ -34755,6 +34772,10 @@ def monta_linha_de_revisao(job_id, item_id, action, edits, antes,
         linha["edits"] = dict(edits or {})
         if action == "reject":
             linha["edits"]["_item_id"] = str(item_id)
+            # 15/11: por que o cliente excluiu — só código conhecido entra
+            _motivo = str(motivo or "").strip().lower()
+            if _motivo in MOTIVOS_DA_EXCLUSAO:
+                linha["edits"]["_motivo"] = _motivo
         if antes:
             linha["edits"]["_antes"] = antes
     return linha
@@ -34855,7 +34876,8 @@ def submit_item_review(job_id: str, item_id: str, payload: ReviewPayload, reques
 
     review_row = monta_linha_de_revisao(
         job_id, item_id, action, payload.edits, _antes,
-        payload.comment or "", payload.reviewed_by or "")
+        payload.comment or "", payload.reviewed_by or "",
+        motivo=getattr(payload, "motivo", "") or "")
     # 24/08: flags de "a escrita PEGOU?" — ver o bloco do return, no fim.
     _escreveu = False
     _tentou_escrever = False      # só 502 quando TENTOU e falhou
