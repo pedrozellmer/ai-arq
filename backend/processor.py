@@ -304,6 +304,104 @@ def render_crops(pdf_path: str, sheet_type: SheetType, output_dir: str, dpi: int
     return crop_paths
 
 
+# ══════════════════════════════════════════════════════════════════════
+#  A PRANCHA EM GRADE (15/11/2026) — chave PLANTA_EM_GRADE, nasce em 0
+# ══════════════════════════════════════════════════════════════════════
+# 📏 MEDIDO em duas pranchas A1 do acervo de teste (PDF sem camada de texto,
+# verdade tirada do DXF da mesma prancha), mesmo modelo, mesmo prompt curto
+# ("liste os ambientes com nome e área"), duas rodadas por formato:
+#
+#     recortes de hoje (planta inteira em 1 imagem)   18 de 26   ·   21–22 de 24
+#     grade 3×2 da página                             24 de 26   ·   24 de 24
+#     prancha inteira + grade 3×2 + nota              24 de 26   ·   24 de 24
+#
+# O modelo gasta ~1.600 tokens por imagem, tenha ela o tamanho que tiver: a
+# planta inteira num recorte só chega com o dígito da etiqueta borrado
+# (15,7 lido como 19,7). Imagem MAIOR não resolve (o teto é do modelo); o que
+# resolve é mandar a mesma prancha em MAIS pedaços.
+# 🪤 A grade SOZINHA duplica: a etiqueta que cai na faixa repetida entre dois
+# pedaços foi listada duas vezes (40 linhas para 26 ambientes numa rodada).
+# Com a prancha inteira na frente e a nota dizendo o que é cada imagem, voltou
+# a 25–26. Por isso a visão geral faz parte do formato, não é enfeite.
+# 🚫 O QUE NÃO FOI MEDIDO: o prompt de verdade do motor (o teste usou um curto)
+# e prancha escaneada. Em 02/09, com o prompt de verdade, mandar MAIS imagens
+# foi pior que mandar a imagem certa — por isso nasce desligada.
+GRADE_COLUNAS = 3
+GRADE_LINHAS = 2
+#: fração do lado que cada pedaço repete do vizinho. Sem isso a etiqueta que
+#: cai na emenda sai cortada nos dois lados e não é lida em nenhum.
+GRADE_SOBREPOSICAO = 0.06
+_GRADE_VISAO = "grade_visao"
+_GRADE_PEDACO_RE = re.compile(r"_grade_(?:visao|l\d+c\d+)\.jpg$")
+
+
+def e_recorte_de_grade(caminho: str) -> bool:
+    """O arquivo saiu de `render_grade`? Decide pelo SUFIXO do nome, como o
+    `_crops_por_importancia`: o nome do PDF pode trazer qualquer palavra."""
+    return bool(_GRADE_PEDACO_RE.search(os.path.basename(str(caminho or ""))))
+
+
+def _salva_jpeg_que_cabe(crop, crop_path: str, max_side: int) -> None:
+    """Reduz ao `max_side` e encolhe até caber em MAX_CROP_BYTES — a mesma
+    regra do `render_crops` (que segue com a cópia dele, intocada)."""
+    lado = max(crop.size)
+    if lado > max_side:
+        ratio = max_side / lado
+        crop = crop.resize((int(crop.width * ratio), int(crop.height * ratio)), Image.LANCZOS)
+    crop.save(crop_path, "JPEG", quality=80)
+    _q = 80
+    while (os.path.getsize(crop_path) > MAX_CROP_BYTES
+           and (_q > 45 or max(crop.size) > 700)):
+        if _q > 45:
+            _q -= 15
+        else:
+            crop = crop.resize((int(crop.width * 0.85),
+                                int(crop.height * 0.85)), Image.LANCZOS)
+        crop.save(crop_path, "JPEG", quality=_q)
+
+
+def render_grade(pdf_path: str, output_dir: str, dpi: int = 120,
+                 page_index: int = 0, out_stem: str | None = None,
+                 max_side: int = 1600) -> list[str]:
+    """A página inteira reduzida + a mesma página em GRADE_LINHAS × GRADE_COLUNAS
+    pedaços com faixa repetida. Devolve [visão geral, pedaços linha a linha].
+    Erro ou página vazia → [] (quem chama fica com os recortes de sempre)."""
+    import gc
+    stem = out_stem or Path(pdf_path).stem
+    caminhos: list[str] = []
+    try:
+        pdf = pdfium.PdfDocument(pdf_path)
+        if page_index < 0 or page_index >= len(pdf):
+            page_index = 0
+        bitmap = pdf[page_index].render(scale=dpi / 72)
+        img = bitmap.to_pil()
+        del bitmap
+        gc.collect()
+        w, h = img.size
+        caixas = [(_GRADE_VISAO, (0.0, 0.0, 1.0, 1.0))]
+        for lin in range(GRADE_LINHAS):
+            for col in range(GRADE_COLUNAS):
+                caixas.append((
+                    "grade_l%dc%d" % (lin, col),
+                    (max(0.0, col / GRADE_COLUNAS - GRADE_SOBREPOSICAO),
+                     max(0.0, lin / GRADE_LINHAS - GRADE_SOBREPOSICAO),
+                     min(1.0, (col + 1) / GRADE_COLUNAS + GRADE_SOBREPOSICAO),
+                     min(1.0, (lin + 1) / GRADE_LINHAS + GRADE_SOBREPOSICAO))))
+        for nome, (x1, y1, x2, y2) in caixas:
+            crop = img.crop((int(w * x1), int(h * y1), int(w * x2), int(h * y2)))
+            crop_path = os.path.join(output_dir, f"{stem}_{nome}.jpg")
+            _salva_jpeg_que_cabe(crop, crop_path, max_side)
+            caminhos.append(crop_path)
+            del crop
+        pdf.close()
+        del img
+        gc.collect()
+    except Exception as e:
+        print(f"Erro ao renderizar a grade de {pdf_path} p{page_index}: {e}")
+        return []
+    return caminhos
+
+
 def process_pdfs(pdf_paths: list[str], work_dir: str) -> list[SheetInfo]:
     """Processa todos os PDFs: identifica tipo, extrai texto, renderiza crops."""
     sheets = []

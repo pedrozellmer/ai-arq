@@ -1177,6 +1177,31 @@ def _crops_por_importancia(crops: list) -> list:
     return sorted(crops, key=lambda c: not _e_desenho(c))
 
 
+from processor import e_recorte_de_grade as _e_grade  # noqa: E402
+
+#: o que a IA lê ANTES das imagens quando a prancha vai em grade. Diz só o que
+#: é cada imagem; não pede item nenhum (isso é do prompt do tipo de prancha).
+NOTA_DA_GRADE = (
+    "SOBRE AS IMAGENS DESTA PRANCHA: a PRIMEIRA é a prancha inteira, reduzida — "
+    "use para localizar e CONTAR. As outras são a MESMA prancha ampliada em "
+    "pedaços (linha a linha, da esquerda para a direita), com uma faixa repetida "
+    "nas bordas — use para LER nomes, números e etiquetas. O que aparece na borda "
+    "de dois pedaços é o MESMO elemento: conte uma vez só."
+)
+
+
+def _recortes_que_vao_pra_ia(crops: list) -> list:
+    """Os caminhos de imagem que a prancha manda pra IA, na ordem.
+
+    Com recorte de grade na lista (`processor.render_grade`): só eles, todos, a
+    visão geral na frente. Sem: os de sempre, pela importância, no teto de
+    `MAX_IMGS_POR_PRANCHA`."""
+    grade = [c for c in (crops or []) if _e_grade(c)]
+    if grade:
+        return sorted(grade, key=lambda c: not os.path.basename(c).endswith("_grade_visao.jpg"))
+    return _crops_por_importancia(crops)[:MAX_IMGS_POR_PRANCHA]
+
+
 def encode_image(image_path: str) -> str:
     with open(image_path, "rb") as f:
         return base64.standard_b64encode(f.read()).decode("utf-8")
@@ -1401,7 +1426,15 @@ def analyze_sheet(client: anthropic.Anthropic, sheet: SheetInfo,
     # 98 nomes reais do acervo (58%) caem em arquitetura, incluindo TODO PDF de
     # nome não reconhecido (o fallback de tipo desconhecido é arquitetura).
     # Virou constante com nome pra dar pra MEDIR o efeito antes de mexer.
-    for crop_path in _crops_por_importancia(sheet.crops)[:MAX_IMGS_POR_PRANCHA]:
+    # 🔑 15/11/2026 — PLANTA_EM_GRADE. Se a prancha chegou com os recortes de
+    # `processor.render_grade`, vão TODOS (visão geral + pedaços, 7 imagens) e
+    # só eles, com uma nota na frente dizendo o que é cada um — sem a nota e
+    # sem a visão geral a etiqueta da emenda sai em dobro (medido). Sem recorte
+    # de grade nada muda: a lista de sempre, no teto de sempre.
+    _imgs_da_prancha = _recortes_que_vao_pra_ia(sheet.crops)
+    if _imgs_da_prancha and _e_grade(_imgs_da_prancha[0]):
+        content.append({"type": "text", "text": NOTA_DA_GRADE})
+    for crop_path in _imgs_da_prancha:
         if os.path.exists(crop_path):
             # Pular imagens maiores que 500KB pra não estourar memória
             file_size = os.path.getsize(crop_path)

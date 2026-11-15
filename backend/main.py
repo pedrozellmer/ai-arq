@@ -11024,6 +11024,8 @@ _CHAVES_AVALIAVEIS = frozenset({
     # 14/11: o mesmo código de esquadria em mapa/fachada/corte e na planta ganha
     # aviso na linha
     "ESQUADRIA_ENTRE_PRANCHAS_AVISA",
+    # 15/11: o PDF vai pra IA como prancha inteira + grade 3×2, não por região
+    "PLANTA_EM_GRADE",
 })
 _CHAVES_DA_AVALIACAO: dict = {}        # job de avaliação → {chave: "0" | "1"}
 
@@ -19267,6 +19269,25 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 # 2. Renderizar crops (1 página de cada vez; stem único por página)
                 crop_paths = render_crops(pdf_path, sheet_type, crops_dir,
                                           page_index=page_index, out_stem=_stem)
+                # 🛑 NASCE DESLIGADA: PLANTA_EM_GRADE=1 manda a prancha inteira
+                # + grade 3×2 no lugar dos recortes por região (ver
+                # `processor.render_grade`). Grade que falhou ou veio incompleta
+                # não entra: ficam os recortes de sempre e o log diz.
+                if _chave_do_job(job_id, "PLANTA_EM_GRADE") == "1":
+                    try:
+                        from processor import render_grade as _render_grade
+                        _grade = _render_grade(pdf_path, crops_dir,
+                                               page_index=page_index, out_stem=_stem)
+                    except Exception as _eg:
+                        _grade = []
+                        print(f"[grade] {_stem}: {type(_eg).__name__}: {_eg}")
+                    _grade_ok = len(_grade) >= 2
+                    if _grade_ok:
+                        crop_paths = _grade
+                    _log_error("motor:planta-em-grade",
+                               "%s: liga=1 imagens=%d aplicada=%s"
+                               % (_stem, len(_grade), "sim" if _grade_ok else "nao"),
+                               job_id, severity="info")
 
                 # 2.5 PROMOÇÃO DO VETORIAL (19/07): mede a página com o motor
                 # vetorial ANTES da IA. SÓ injeta quando a escala foi VALIDADA
