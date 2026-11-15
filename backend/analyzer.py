@@ -1190,16 +1190,19 @@ NOTA_DA_GRADE = (
 )
 
 
-def _recortes_que_vao_pra_ia(crops: list) -> list:
+def _recortes_que_vao_pra_ia(crops: list, de_sempre: list = None) -> list:
     """Os caminhos de imagem que a prancha manda pra IA, na ordem.
 
     Com recorte de grade na lista (`processor.render_grade`): só eles, todos, a
-    visão geral na frente. Sem: os de sempre, pela importância, no teto de
-    `MAX_IMGS_POR_PRANCHA`."""
+    visão geral na frente. Sem: `de_sempre` — os de sempre, pela importância, no
+    teto de `MAX_IMGS_POR_PRANCHA` (quem chama passa a lista já cortada, pra o
+    corte continuar escrito no ponto de chamada, onde o guarda o procura)."""
     grade = [c for c in (crops or []) if _e_grade(c)]
     if grade:
         return sorted(grade, key=lambda c: not os.path.basename(c).endswith("_grade_visao.jpg"))
-    return _crops_por_importancia(crops)[:MAX_IMGS_POR_PRANCHA]
+    if de_sempre is None:
+        de_sempre = _crops_por_importancia(crops)[:MAX_IMGS_POR_PRANCHA]
+    return de_sempre
 
 
 def encode_image(image_path: str) -> str:
@@ -1431,7 +1434,8 @@ def analyze_sheet(client: anthropic.Anthropic, sheet: SheetInfo,
     # só eles, com uma nota na frente dizendo o que é cada um — sem a nota e
     # sem a visão geral a etiqueta da emenda sai em dobro (medido). Sem recorte
     # de grade nada muda: a lista de sempre, no teto de sempre.
-    _imgs_da_prancha = _recortes_que_vao_pra_ia(sheet.crops)
+    _imgs_da_prancha = _recortes_que_vao_pra_ia(
+        sheet.crops, _crops_por_importancia(sheet.crops)[:MAX_IMGS_POR_PRANCHA])
     if _imgs_da_prancha and _e_grade(_imgs_da_prancha[0]):
         content.append({"type": "text", "text": NOTA_DA_GRADE})
     for crop_path in _imgs_da_prancha:
