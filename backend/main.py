@@ -9161,6 +9161,25 @@ def _registra_leitura_cortada(result, prancha, job_id):
                job_id, severity="info")
 
 
+def _liga_resgate_pula_quebrado(job_id) -> bool:
+    """🔑 RESGATE_PULA_ITEM_QUEBRADO=1: o item que não abre é pulado e a lista segue."""
+    return _chave_do_job(job_id, "RESGATE_PULA_ITEM_QUEBRADO") == "1"
+
+
+def _registra_json_invalido(result, prancha, job_id):
+    """Conta a prancha cujo JSON não abriu, com a chave em 0 também: `salvos` é
+    o que o resgate antigo guarda, `com_resgate` o que o novo guardaria."""
+    marca = result.get("_json_invalido") or {}
+    if not marca:
+        return
+    _log_error("motor:json-invalido",
+               f"arq={prancha} liga={int(bool(marca.get('usado')))} "
+               f"parou_normal={int(bool(marca.get('parou_normal')))} "
+               f"salvos={marca.get('salvos')} com_resgate={marca.get('com_resgate')} "
+               f"pulados={marca.get('pulados')}",
+               job_id, severity="info")
+
+
 def _tira_promocao_com_ressalva(job_id, promovidos):
     """Promoção em que a própria nota duvida que o layer seja a peça. 🔑 Com
     RESSALVA_DA_PECA_NAO_PROMOVE=1 a linha fica estimada; com 0 só conta."""
@@ -11026,6 +11045,8 @@ _CHAVES_AVALIAVEIS = frozenset({
     "ESQUADRIA_ENTRE_PRANCHAS_AVISA",
     # 15/11: o PDF vai pra IA como prancha inteira + grade 3×2, não por região
     "PLANTA_EM_GRADE",
+    # 16/11: JSON com um item quebrado perde só esse item, não o resto da lista
+    "RESGATE_PULA_ITEM_QUEBRADO",
 })
 _CHAVES_DA_AVALIACAO: dict = {}        # job de avaliação → {chave: "0" | "1"}
 
@@ -19714,7 +19735,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                        ambiente=amb_for_sheet, siblings=siblings,
                                        is_structural=is_structural,
                                        usa_cache=(_reproc_atual == 0),
-                                       reler_cortada=_liga_releitura_cortada(job_id))
+                                       reler_cortada=_liga_releitura_cortada(job_id),
+                                       pula_quebrado=_liga_resgate_pula_quebrado(job_id))
                 # Salva o checkpoint da prancha (só análise SEM erro — erro
                 # deve re-tentar na retomada, não ser reaproveitado)
                 if not result.get("error"):
@@ -19753,6 +19775,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
             if result.get("_sem_item"):
                 _pranchas_sem_item.append(_disp)
             _registra_leitura_cortada(result, _disp, job_id)
+            _registra_json_invalido(result, _disp, job_id)
 
             # #7 leitura possivelmente INCOMPLETA nesta prancha (resposta da IA
             # cortada no teto). Avisa — não entrega parcial calado (caso Ademir).

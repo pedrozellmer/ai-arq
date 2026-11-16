@@ -80,6 +80,60 @@ def salvage_truncated_json(s):
     return out
 
 
+#: onde começa o PRÓXIMO item de uma lista de objetos: `}, {"`. É o ponto de
+#: ressincronia depois de um item que não abre.
+_PROXIMO_ITEM_RE = _re.compile(r'\}\s*,\s*(\{)\s*"')
+
+
+def resgata_pulando_o_item_quebrado(s):
+    """Como `salvage_truncated_json`, mas um item que não abre NÃO encerra a lista.
+
+    🩸 16/11/2026 — a IA terminou a resposta normalmente (não foi corte no teto)
+    e um item trazia aspas sem escape (`mínima de 2" — conforme`). O resgate
+    antigo perde o fio dentro da string e larga tudo o que vem depois: 30 de 36
+    itens, os 6 do fim inteiros na resposta. Aqui o item quebrado é PULADO e a
+    leitura retoma no próximo `}, {"`.
+
+    Nunca lança. Devolve `(out, pulados)`: `out` no formato do resgate antigo e
+    `pulados` = quantos itens não abriram (o do fim cortado conta como um)."""
+    out = {"items": []}
+    pulados = 0
+    try:
+        pi = s.index('"project_data"')
+        pd_obj, _ = extract_balanced_obj(s, s.index('{', pi))
+        if pd_obj:
+            out["project_data"] = _json.loads(pd_obj)
+    except Exception:
+        pass
+    try:
+        i = s.index('[', s.index('"items"')) + 1
+    except Exception:
+        return out, 0
+    n = len(s)
+    while i < n:
+        while i < n and s[i] not in '{]':
+            i += 1
+        if i >= n or s[i] == ']':
+            break
+        item = None
+        obj, end = extract_balanced_obj(s, i)
+        if obj:
+            try:
+                item = _json.loads(obj)
+            except Exception:
+                item = None
+        if isinstance(item, dict):
+            out["items"].append(item)
+            i = end
+            continue
+        pulados += 1
+        prox = _PROXIMO_ITEM_RE.search(s, i + 1)
+        if not prox:
+            break
+        i = prox.start(1)
+    return out, pulados
+
+
 def normalize_items_payload(parsed):
     """A IA às vezes devolve um array cru [...] em vez de {"items":[...]} (mais comum
     no prompt estrutural). Embrulha pra o caller nunca fazer .get() num list — bug

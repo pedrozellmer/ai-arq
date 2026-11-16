@@ -10,6 +10,7 @@ from models import SheetType, SheetInfo, BudgetItem, ProjectData, Confidence
 from llm_retry import call_with_retry, call_with_retry_stream
 from engine_rules import (
     salvage_truncated_json as _salvage_truncated_json,
+    resgata_pulando_o_item_quebrado as _resgata_pulando_o_item_quebrado,
     extract_balanced_obj as _extract_balanced_obj,
     normalize_items_payload as _normalize_items_payload,
     motivo_da_prancha_sem_item as _motivo_da_prancha_sem_item,
@@ -1290,9 +1291,18 @@ Responda no MESMO formato pedido: o raciocínio e DEPOIS um bloco ```json conten
 # (fonte única; testados em tests/test_engine_rules.py). Importados no topo.
 
 
-def _json_da_resposta(text: str, stop_reason: str, filename: str):
+def _json_da_resposta(text: str, stop_reason: str, filename: str,
+                      pula_quebrado: bool = False):
     """(objeto parseado, truncado?) do texto da IA. Levanta JSONDecodeError
-    quando nem o salvage acha item. Uma cópia só, pra leitura e releitura."""
+    quando nem o salvage acha item. Uma cópia só, pra leitura e releitura.
+
+    🔑 16/11/2026 — RESGATE_PULA_ITEM_QUEBRADO (`pula_quebrado`). JSON que não
+    abre nem sempre é corte no teto: a IA termina normalmente e um item vem com
+    aspas sem escape. O resgate antigo larga tudo depois dele e a prancha é
+    tratada como cortada (aviso + releitura paga com teto dobrado, que não
+    conserta escape). Com a chave em 1 o item quebrado é pulado e, se a resposta
+    terminou normalmente e nenhum item se perdeu, a leitura NÃO é cortada.
+    Com a chave em 0 nada muda, só a marca `_json_invalido` (o alcance)."""
     if "```json" in text:
         json_str = text.split("```json")[1].split("```")[0].strip()
     elif "```" in text:
@@ -1308,7 +1318,20 @@ def _json_da_resposta(text: str, stop_reason: str, filename: str):
     except json.JSONDecodeError:
         # JSON truncado (resposta cortada no teto) — recupera os itens completos
         _parsed = _salvage_truncated_json(json_str)
+        _parou_normal = not _truncado
         _truncado = True  # JSON quebrou = quase sempre corte no teto
+        _novo, _pulados = _resgata_pulando_o_item_quebrado(json_str)
+        _marca = {"parou_normal": _parou_normal,
+                  "salvos": len(_parsed.get("items") or []),
+                  "com_resgate": len(_novo.get("items") or []),
+                  "pulados": _pulados, "usado": False}
+        if pula_quebrado and _marca["com_resgate"] >= _marca["salvos"]:
+            _parsed = _novo
+            _marca["usado"] = True
+            # terminou normalmente e não perdeu item: não é leitura cortada
+            if _parou_normal and not _pulados:
+                _truncado = False
+        _parsed["_json_invalido"] = _marca
         if _parsed.get("items"):
             print(f"PDF JSON truncado em {filename}; salvados {len(_parsed['items'])} itens")
         else:
@@ -1330,7 +1353,8 @@ def analyze_sheet(client: anthropic.Anthropic, sheet: SheetInfo,
                   siblings: list = None,
                   is_structural: bool = False,
                   usa_cache: bool = True,
-                  reler_cortada: bool = False) -> dict:
+                  reler_cortada: bool = False,
+                  pula_quebrado: bool = False) -> dict:
     siblings = siblings or []
 
     # Projeto ESTRUTURAL (o usuário marcou no upload): a prancha usa o prompt
@@ -1486,7 +1510,8 @@ def analyze_sheet(client: anthropic.Anthropic, sheet: SheetInfo,
 
         text = response.content[0].text
         _parsed, _truncado = _json_da_resposta(
-            text, getattr(response, "stop_reason", ""), sheet.filename)
+            text, getattr(response, "stop_reason", ""), sheet.filename,
+            pula_quebrado=pula_quebrado)
         # Robustez: array cru [...] vira {"items":[...]} e item aninhado sobe um
         # nível (engine_rules, testado).
         _motivo_vazio = _motivo_da_prancha_sem_item(_parsed)
@@ -1498,6 +1523,11 @@ def analyze_sheet(client: anthropic.Anthropic, sheet: SheetInfo,
             # novo, então a releitura (`reler_cortada`) dobra o teto
             if not reler_cortada:
                 return _out
+            # 16/11: item quebrado com a resposta terminada normalmente não é
+            # corte no teto, e teto maior não conserta escape: não paga releitura
+            _ji = _out.get("_json_invalido") or {}
+            if _ji.get("usado") and _ji.get("parou_normal"):
+                return _out
             _n1 = len(_out.get("items") or [])
             try:
                 _resp3 = call_with_retry_stream(
@@ -1508,7 +1538,7 @@ def analyze_sheet(client: anthropic.Anthropic, sheet: SheetInfo,
                 )
                 _p3, _t3 = _json_da_resposta(
                     _resp3.content[0].text, getattr(_resp3, "stop_reason", ""),
-                    sheet.filename)
+                    sheet.filename, pula_quebrado=pula_quebrado)
                 _out3 = _normalize_items_payload(_p3)
                 _n3 = len(_out3.get("items") or [])
                 _marca = {"antes": _n1, "depois": _n3, "ainda_cortada": bool(_t3)}
@@ -1548,7 +1578,7 @@ def analyze_sheet(client: anthropic.Anthropic, sheet: SheetInfo,
                 )
                 _p2, _t2 = _json_da_resposta(
                     _resp2.content[0].text, getattr(_resp2, "stop_reason", ""),
-                    sheet.filename)
+                    sheet.filename, pula_quebrado=pula_quebrado)
                 _out2 = _normalize_items_payload(_p2)
                 _n2 = len(_out2.get("items") or [])
                 if _n2:
@@ -1574,7 +1604,8 @@ def analyze_sheet(client: anthropic.Anthropic, sheet: SheetInfo,
         if getattr(response, "do_cache", False):
             return analyze_sheet(client, sheet, typology=typology,
                                  ambiente=ambiente, siblings=siblings,
-                                 is_structural=is_structural, usa_cache=False)
+                                 is_structural=is_structural, usa_cache=False,
+                                 pula_quebrado=pula_quebrado)
         return {"items": [], "error": f"JSON parse error: {e}"}
     except Exception as e:
         print(f"Erro API para {sheet.filename}: {e}")
