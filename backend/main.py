@@ -31643,7 +31643,10 @@ def admin_revision_feedback(request: Request):
                  "unidade": _antes_do_item(r).get("unit"),
                  "quantidade": _antes_do_item(r).get("quantity"),
                  "disciplina": _antes_do_item(r).get("discipline"),
-                 "selo": _antes_do_item(r).get("confidence")}
+                 "selo": _antes_do_item(r).get("confidence"),
+                 # 16/11: o motivo que o cliente escolheu ao excluir (desde
+                 # 15/11); exclusão antiga ou sem motivo sai "".
+                 "motivo": motivo_da_exclusao_gravado(r.get("edits"))}
                 for r in rejeicoes[:20]
             ],
             "faltou": int(_ri.get("faltou") or 0),
@@ -34689,6 +34692,17 @@ MOTIVOS_DA_EXCLUSAO = frozenset({
     "repetido",          # já está em outra linha
     "outro",
 })
+
+
+def motivo_da_exclusao_gravado(edits) -> str:
+    """O código de motivo de uma linha de exclusão já gravada, ou "".
+
+    Lê `edits['_motivo']` e só devolve código conhecido: o painel do admin
+    mostra o que sai daqui, e exclusão de antes de 15/11 não tem motivo."""
+    if not isinstance(edits, dict):
+        return ""
+    _m = str(edits.get("_motivo") or "").strip().lower()
+    return _m if _m in MOTIVOS_DA_EXCLUSAO else ""
 
 
 #: Frases que o SISTEMA escreve no campo `comment` — não são recado de gente.

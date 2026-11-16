@@ -3551,6 +3551,14 @@ function renderRevisionFeedback(d){
   // autodestruir (a FK é CASCADE e o registro sumia junto com o item).
   // 🪤 Mostra O QUE foi apagado, do retrato `_antes` — o item não existe mais
   // em project_items, então sem o retrato o registro não diz nada.
+  // 16/11: desde 15/11 o cliente diz por que excluiu. Só "não existe" é item
+  // inventado; os outros três não são erro de leitura.
+  const ROTULO_DO_MOTIVO_DA_EXCLUSAO = {
+    nao_existe: 'não existe no projeto',
+    fora_do_escopo: 'fora do orçamento dele',
+    repetido: 'repetido em outra linha',
+    outro: 'outro motivo',
+  };
   const excHtml = (ri.exclusoes) ? `
     <div class="rounded-xl border border-red-200 bg-red-50 p-4 mb-4">
       <p class="text-sm font-semibold text-red-900 mb-1">🗑️ ${ri.exclusoes} item(ns) que o cliente APAGOU</p>
@@ -3560,6 +3568,7 @@ function renderRevisionFeedback(d){
           <span class="font-mono">${esc(x.job_id)}</span> · ${esc(window.fmtBR(x.quando))}
           ${x.disciplina ? ` · ${esc(x.disciplina)}` : ''}
           ${x.selo ? ` · <b>${esc(x.selo)}</b>` : ''}
+          ${x.motivo ? ` · <span class="rounded bg-red-100 px-1.5 py-0.5 font-semibold">${esc(ROTULO_DO_MOTIVO_DA_EXCLUSAO[x.motivo] || x.motivo)}</span>` : ''}
           <div class="line-through text-red-800 mt-1">${esc(x.descricao || '(sem descrição no retrato)')}
             ${x.quantidade != null ? ` — ${esc(num(x.quantidade))} ${esc(x.unidade || '')}` : ''}</div>
         </div>`).join('')}

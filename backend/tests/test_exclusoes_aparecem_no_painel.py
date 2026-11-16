@@ -225,6 +225,39 @@ def test_o_retrato_que_chega_ao_painel_e_o_do_ITEM_APAGADO(painel):
     assert x["job_id"] == "job-01" and x["quando"] == _LINHA_EXCLUSAO["reviewed_at"], x
 
 
+def _exclusao_com_motivo(motivo):
+    linha = dict(_LINHA_EXCLUSAO)
+    linha["edits"] = dict(_LINHA_EXCLUSAO["edits"])
+    if motivo is not None:
+        linha["edits"]["_motivo"] = motivo
+    return linha
+
+
+def test_o_motivo_da_exclusao_chega_ao_painel(painel):
+    """16/11: desde 15/11 o cliente diz por que excluiu; sem isso no painel o
+    admin continua lendo toda exclusao como "item inventado"."""
+    ri = painel["chamar"]([_exclusao_com_motivo("fora_do_escopo")])["revisao_inline"]
+    assert ri["exclusoes_itens"][0]["motivo"] == "fora_do_escopo", ri["exclusoes_itens"]
+
+
+@pytest.mark.parametrize("motivo", [None, "", "qualquer coisa", 7])
+def test_exclusao_sem_motivo_conhecido_sai_vazia_e_nao_derruba_o_painel(painel, motivo):
+    """CONTROLE: exclusao de antes de 15/11 (sem `_motivo`) e lixo no campo."""
+    ri = painel["chamar"]([_exclusao_com_motivo(motivo), _LINHA_EXCLUSAO_SEM_ANTES]
+                          )["revisao_inline"]
+    assert ri["exclusoes"] == 2, ri
+    assert [x["motivo"] for x in ri["exclusoes_itens"]] == ["", ""], ri["exclusoes_itens"]
+
+
+def test_o_painel_do_admin_tem_rotulo_pra_todo_motivo_do_servidor():
+    import re
+    html = _admin_html()
+    bloco = html.split("ROTULO_DO_MOTIVO_DA_EXCLUSAO = {", 1)[1].split("};", 1)[0]
+    na_tela = set(re.findall(r"^\s*([a-z_]+):", bloco, re.M))
+    assert na_tela == set(_m.MOTIVOS_DA_EXCLUSAO), (na_tela, _m.MOTIVOS_DA_EXCLUSAO)
+    assert "x.motivo" in html.split("const excHtml", 1)[1].split("const inlineHtml", 1)[0]
+
+
 def test_a_exclusao_SEM_retrato_nao_derruba_o_painel_inteiro(painel):
     """🩸 O `_antes` só é gravado desde 31/08. Rejeição anterior a isso (ou com
     `edits` nulo) chega sem retrato — e é a MAIORIA das 48. Se a leitura do
