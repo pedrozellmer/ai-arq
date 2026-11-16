@@ -46,6 +46,7 @@ import escritorio as _escritorio  # piloto DTZ (23/09/2026): convite do escritó
 import escritorio_drive as _escritorio_drive  # 24/09: a pasta do projeto no Google Drive (tudo pelo servidor)
 from engine_rules import (
     salvage_truncated_json as _salvage_truncated_json,
+    resgata_pulando_o_item_quebrado as _resgata_pulando_o_item_quebrado,
     normalize_items_payload as _normalize_items_payload,
     should_force_steel_kg as _should_force_steel_kg,
     is_likely_wrong_type as _is_likely_wrong_type,
@@ -9180,6 +9181,28 @@ def _registra_json_invalido(result, prancha, job_id):
                job_id, severity="info")
 
 
+def _resgata_json_do_dxf(json_str, parou_normal, liga):
+    """O JSON da leitura de DWG/DXF não abriu. Devolve `(result, cortada)`.
+
+    Mesma régua do leitor de PDF (analyzer._json_da_resposta): com a chave em 0
+    sai o resgate antigo e `cortada=True`, como sempre foi, mais a marca
+    `_json_invalido` (o alcance). Com a chave em 1 o item que não abre é pulado
+    e, se a resposta terminou normalmente e nenhum item se perdeu, a prancha
+    não é dada como cortada."""
+    result = _salvage_truncated_json(json_str)
+    novo, pulados = _resgata_pulando_o_item_quebrado(json_str)
+    marca = {"parou_normal": bool(parou_normal), "salvos": len(result.get("items") or []),
+             "com_resgate": len(novo.get("items") or []), "pulados": pulados, "usado": False}
+    cortada = True
+    if liga and marca["com_resgate"] >= marca["salvos"]:
+        result = novo
+        marca["usado"] = True
+        if parou_normal and not pulados:
+            cortada = False
+    result["_json_invalido"] = marca
+    return result, cortada
+
+
 def _tira_promocao_com_ressalva(job_id, promovidos):
     """Promoção em que a própria nota duvida que o layer seja a peça. 🔑 Com
     RESSALVA_DA_PECA_NAO_PROMOVE=1 a linha fica estimada; com 0 só conta."""
@@ -18190,10 +18213,18 @@ bloco — só cite os que estão no inventário deste arquivo."""
                             # planta grande): em vez de perder TUDO, recupera os itens
                             # completos. Antes isso virava 0 itens + erro "sobrecarregada"
                             # enganoso (caso Ademir, DWG de prédio público).
-                            result = _salvage_truncated_json(json_str)
+                            # 🔑 16/11/2026: "quase sempre corte no teto" não era
+                            # verdade — a IA também termina normalmente com UM item
+                            # inválido (escape), e o resgate antigo larga o resto.
+                            # RESGATE_PULA_ITEM_QUEBRADO (nasce em 0) pula só esse.
+                            result, _dxf_truncado = _resgata_json_do_dxf(
+                                json_str, not _dxf_truncado,
+                                _liga_resgate_pula_quebrado(job_id))
                             print(f"DXF JSON truncado ({type(_je).__name__}: {_je}); "
                                   f"salvados {len(result.get('items', []))} itens")
-                            _dxf_truncado = True  # JSON quebrou = quase sempre corte no teto
+                            _registra_json_invalido(
+                                result, _nome_prancha_bonito(dxf_path), job_id)
+                            result.pop("_json_invalido", None)
 
                         # Robustez: array cru [...] vira {"items":[...]} (engine_rules,
                         # testado). Evita 'list object has no attribute get'.

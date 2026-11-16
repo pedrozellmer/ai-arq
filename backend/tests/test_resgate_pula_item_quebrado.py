@@ -198,6 +198,54 @@ def test_a_chave_e_avaliavel_e_o_leitor_de_pdf_a_recebe():
     assert "_registra_json_invalido(result, _disp, job_id)" in fonte
 
 
+# ── o caminho DWG/DXF ─────────────────────────────────────────────────────
+def test_DXF_DESLIGADA_sai_o_resgate_antigo_cortada_e_com_a_marca():
+    import main
+    result, cortada = main._resgata_json_do_dxf(_QUEBRADA, True, False)
+    assert [i["item_num"] for i in result["items"]] == ["1", "2", "3"]
+    assert cortada is True
+    assert result["_json_invalido"] == {"parou_normal": True, "salvos": 3, "com_resgate": 5,
+                                        "pulados": 1, "usado": False}
+
+
+def test_DXF_LIGADA_fica_com_os_cinco_e_segue_avisando_do_perdido():
+    import main
+    result, cortada = main._resgata_json_do_dxf(_QUEBRADA, True, True)
+    assert [i["item_num"] for i in result["items"]] == ["1", "2", "3", "5", "6"]
+    assert cortada is True and result["_json_invalido"]["usado"] is True
+
+
+def test_DXF_LIGADA_so_sujeira_no_fim_nao_e_cortada_e_DESLIGADA_e():
+    import main
+    suja = _lista([_item(1), _item(2)]) + " sobra que nao e json"
+    result, cortada = main._resgata_json_do_dxf(suja, True, True)
+    assert len(result["items"]) == 2 and cortada is False
+    _, antes = main._resgata_json_do_dxf(suja, True, False)
+    assert antes is True
+
+
+def test_DXF_LIGADA_corte_no_teto_de_verdade_continua_cortada():
+    import main
+    cortada_txt = _lista([_item(1), _item(2), _item(3)[:40]], fecha=False)
+    result, cortada = main._resgata_json_do_dxf(cortada_txt, False, True)
+    assert len(result["items"]) == 2 and cortada is True
+    # mesmo sem item perdido, resposta que parou no teto segue cortada
+    _, c2 = main._resgata_json_do_dxf(_lista([_item(1)]) + " sobra", False, True)
+    assert c2 is True
+
+
+def test_DXF_o_laco_usa_o_resgate_registra_e_tira_a_marca():
+    fonte = open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
+    ini = fonte.index("result, _dxf_truncado = _resgata_json_do_dxf(")
+    trecho = fonte[ini:ini + 700]
+    assert "json_str, not _dxf_truncado," in trecho
+    assert "_liga_resgate_pula_quebrado(job_id))" in trecho
+    assert "_registra_json_invalido(" in trecho
+    assert 'result.pop("_json_invalido", None)' in trecho
+    # o resgate antigo so pode ser chamado de dentro da funcao que decide
+    assert fonte.count("_salvage_truncated_json(json_str)") == 1
+
+
 def test_o_registro_conta_com_a_chave_em_zero_tambem(monkeypatch):
     import main
     visto = []
