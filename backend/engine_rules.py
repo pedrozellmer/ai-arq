@@ -687,6 +687,71 @@ def _numero_br(txt):
     return float(t)
 
 
+# 🩸 17/11/2026 — medido no banco (90 dias, PDF): 112 linhas de piso em 36
+# projetos saíram em branco com a observação dizendo que LEU a área do ambiente
+# na planta ("Área lida diretamente da planta: 'WC 02 A=3,77m²'", "Área
+# confirmada no quadro de ambientes: A: 9,26 m²"); 76 são de banheiro/WC. O ramo
+# da medição vetorial só segura esse número quando a prancha foi medida e ele
+# cabe nela; sem medição, zera. A prova que existe em todo PDF com camada de
+# texto é outra: o número está ESCRITO no texto da própria prancha.
+# 🔑 Aqui só se decide se a linha CITA a própria quantidade como área de UM
+# ambiente. A prova (o número no texto da prancha) é de quem chama.
+# 🪤 Não vale o número que é resultado de conta ("3,76 m² × 4 = 15,04"), o que
+# vem como estimativa ("≈ 12 m²") nem o de resumo (área total, construída, do
+# terreno, do pavimento): esses seguem em branco.
+MARCA_AREA_DA_ETIQUETA = "📝 Área do ambiente escrita na planta"
+_ETIQUETA_E_RESUMO = ("total", "constru", "privativ", "terreno", "lote", "util", "comput",
+                      "pavimento", "soma", "permeav", "projec", "ocupa", "edific", "imovel")
+#: o que vem logo ANTES do número e o desmente como etiqueta: ele é RESULTADO
+#: ("… × 4 unidades = 15,04": o "=" depois de número, unidade ou parêntese; na
+#: etiqueta "A=3,77" o "=" vem depois de letra), é FATOR ("4 × 3,20"), é parcela
+#: ("… + 8,40") ou é estimativa ("≈ 12", "aprox. 12").
+#: 🪤 Não procura "x" solto no trecho: "Porcelanato 90×90 cm — WC A=3,77 m²" é
+#: medida da peça, e a etiqueta vale.
+_RE_ETIQUETA_CONTA_ANTES = _re.compile(
+    r"(?:\d|m²|m2|\)|unidades?|\bun\.?)\s*=\s*[~≈]?\s*$"
+    r"|[x×*+]\s*[~≈]?\s*$|[~≈]\s*$|aprox\w*\.?\s*(?:de\s*)?$|estimad\w*\s*(?:em|de)?\s*:?\s*$")
+_RE_ETIQUETA_CONTA_DEPOIS = _re.compile(
+    r"^\s*\)?\s*(?:[x×*]\s*[~≈]?\s*\d|\+|cada\b|por\s+unidade|/\s*un)")
+
+
+def area_da_etiqueta_na_linha(desc, obs, q):
+    """A quantidade desta linha de piso/forro/contrapiso é a área de UM ambiente,
+    citada na própria linha ("WC 02 A=3,77m²", "Área indicada na planta: 10,53
+    m²")? Devolve o trecho citado, ou None.
+
+    Só superfície horizontal (`FLOOR_AREA_KW`); palavra de cômodo (banheiro, WC)
+    não barra, as outras de `FLOOR_AREA_BLOCK_KW` (rodapé, parede, ponto…) barram.
+    """
+    d = str(desc or "").lower()
+    if not any(k in d for k in FLOOR_AREA_KW):
+        return None
+    if any(b in d and b not in FLOOR_COMODO_KW for b in FLOOR_AREA_BLOCK_KW):
+        return None
+    try:
+        qf = float(q)
+    except (TypeError, ValueError):
+        return None
+    if qf < 1.0:
+        return None
+    texto = "%s | %s" % (desc or "", obs or "")
+    for m in _RE_AREA_DA_PROPRIA_LINHA.finditer(texto):
+        try:
+            if abs(_numero_br(m.group(1)) - qf) >= 0.005:
+                continue
+        except ValueError:
+            continue
+        antes = _sem_acento(texto[max(0, m.start() - 45):m.start()]).lower()
+        if any(w in antes for w in _ETIQUETA_E_RESUMO):
+            continue
+        if _RE_ETIQUETA_CONTA_ANTES.search(antes):
+            continue
+        if _RE_ETIQUETA_CONTA_DEPOIS.search(texto[m.end():m.end() + 25].lower()):
+            continue
+        return " ".join(texto[max(0, m.start() - 30):m.end()].split()).strip(" |'\"«»:—-")
+    return None
+
+
 def area_informada_nao_e_desta_linha(descricao, observacao, total) -> str:
     """Por que a área TOTAL informada não pode ir pra esta linha ('' se pode)."""
     d = str(descricao or "").lower()

@@ -826,6 +826,8 @@ _STAGES_DIAGNOSTICO = frozenset({
     "motor:sombra-area-sem-base",
     # 05/11: piso de banheiro/WC com a área da etiqueta (com a chave em 0, a lista)
     "motor:piso-de-comodo-da-etiqueta",
+    # 17/11: piso/forro com a área do ambiente escrita no texto do PDF
+    "motor:area-da-etiqueta-no-texto",
     # 05/11: arquivo com " (1)" no nome — legenda que a linha ganharia/ganhou
     "motor:arquivo-com-parentese",
     # 05/11: rede inteira de tubo ao lado dos diâmetros (com a chave em 0, a lista)
@@ -9162,6 +9164,21 @@ def _registra_leitura_cortada(result, prancha, job_id):
                job_id, severity="info")
 
 
+def _liga_planta_em_grade(job_id, sheet_type) -> bool:
+    """A prancha vai pra IA em grade? PLANTA_EM_GRADE=1 liga em toda prancha PDF;
+    PLANTA_EM_GRADE_NO_LAYOUT_NOVO=1 liga só na de layout novo.
+
+    📏 16/11/2026, A/B com o prompt de verdade: no layout novo de um escritório a
+    grade levou as linhas m² "confirmado" de 0, 1, 0 para 25, 32, 30 em 3
+    rodadas; numa casa (4 pranchas de arquitetura) as linhas sem quantidade
+    foram de 52 para 70. A chave geral segue em 0; esta é a do tipo que ganhou."""
+    if _chave_do_job(job_id, "PLANTA_EM_GRADE") == "1":
+        return True
+    if _chave_do_job(job_id, "PLANTA_EM_GRADE_NO_LAYOUT_NOVO") != "1":
+        return False
+    return getattr(sheet_type, "value", sheet_type) == "layout_novo"
+
+
 def _liga_resgate_pula_quebrado(job_id) -> bool:
     """🔑 RESGATE_PULA_ITEM_QUEBRADO=1: o item que não abre é pulado e a lista segue."""
     return _chave_do_job(job_id, "RESGATE_PULA_ITEM_QUEBRADO") == "1"
@@ -11070,6 +11087,10 @@ _CHAVES_AVALIAVEIS = frozenset({
     "PLANTA_EM_GRADE",
     # 16/11: JSON com um item quebrado perde só esse item, não o resto da lista
     "RESGATE_PULA_ITEM_QUEBRADO",
+    # 17/11: piso/forro com a área do ambiente escrita no texto do PDF não zera
+    "AREA_DA_ETIQUETA_NO_TEXTO",
+    # 17/11: a grade só na prancha de layout novo (onde o A/B mostrou ganho)
+    "PLANTA_EM_GRADE_NO_LAYOUT_NOVO",
 })
 _CHAVES_DA_AVALIACAO: dict = {}        # job de avaliação → {chave: "0" | "1"}
 
@@ -14017,6 +14038,69 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
             if _ganho:
                 _parentese_vistos.append((round(float(_l["quantidade"] or 0), 2),
                                           str(_l["descricao"] or "")[:60]))
+    # ── 🔑 17/11/2026 — ÁREA DO AMBIENTE ESCRITA NA ETIQUETA, PROVADA NO TEXTO ──
+    # Piso/forro/contrapiso cuja quantidade é a área de UM ambiente citada na
+    # própria linha ("WC 02 A=3,77m²") E esse número está no texto do PDF da
+    # prancha da linha. A decisão sobre a linha mora em
+    # `engine_rules.area_da_etiqueta_na_linha`; aqui se confere a prova.
+    # 📏 90 dias: 112 linhas de piso em branco em 36 projetos dizem que leram a
+    # área na planta. Fica ESTIMADO (ninguém mediu o desenho); só deixa de zerar.
+    # 🪤 Uma linha por (prancha, família, valor): "Piso — WC 02" e "Piso
+    # porcelanato — WC 02" com o mesmo 3,77 não ficam as duas. Custo aceito: dois
+    # ambientes de mesma área na mesma prancha, o segundo segue em branco.
+    # 🛑 NASCE DESLIGADA: AREA_DA_ETIQUETA_NO_TEXTO=1 liga. Com 0 só anota
+    # (`ultimo_area_da_etiqueta` → `motor:area-da-etiqueta-no-texto`).
+    try:
+        _etq_liga = _chave_do_job(job_id, "AREA_DA_ETIQUETA_NO_TEXTO") == "1"
+    except NameError:
+        import os as _os_et
+        _etq_liga = _os_et.environ.get("AREA_DA_ETIQUETA_NO_TEXTO", "0") == "1"
+    from engine_rules import (area_da_etiqueta_na_linha as _area_da_etq,
+                              MARCA_AREA_DA_ETIQUETA as _marca_etq)
+    _cand_etq = {}                      # id(item) -> (trecho citado, chave da vaga)
+    _etq_tomadas = set()
+    _etq_vistos = []
+    etiqueta_preservados = 0
+    if numeros_do_texto_por_prancha:
+        _nums_etq = {(str(_a or "").strip().lower(), _p): _v
+                     for (_a, _p), _v in dict(numeros_do_texto_por_prancha).items()}
+        for _it, _l in zip(_elegiveis_q, _linhas_q):
+            if id(_it) in _vesc or id(_it) in _vq:
+                continue
+            if str(_l["unidade"] or "").strip().lower() not in _FLOOR_M2_UNITS:
+                continue
+            try:
+                _q_etq = float(_l["quantidade"] or 0)
+            except (TypeError, ValueError):
+                continue
+            _tr_etq = _area_da_etq(_l["descricao"], _l["texto"], _q_etq)
+            if not _tr_etq:
+                continue
+            _pg_etq = _l["pagina"]
+            if _pg_etq is None:
+                # sem página no `ref_sheet`: só se o arquivo tem UMA página lida
+                _pgs_etq = [_p for (_a, _p) in _nums_etq if _a == _l["arquivo"]]
+                if len(_pgs_etq) != 1:
+                    continue
+                _pg_etq = _pgs_etq[0]
+            _cent_etq = int(round(_q_etq * 100))
+            if _cent_etq not in (_nums_etq.get((_l["arquivo"], int(_pg_etq))) or ()):
+                continue                # a leitura citou, o texto do PDF não tem
+            _d_etq = str(_l["descricao"] or "").lower()
+            _fam_etq = ("contrapiso" if "contrapiso" in _d_etq
+                        else _familia_da_superficie(_d_etq))
+            _cand_etq[id(_it)] = (_tr_etq, (_l["arquivo"], int(_pg_etq), _fam_etq, _cent_etq))
+
+    def _etiqueta_passa(_it, _q) -> bool:
+        """Chamada só quando nenhum ramo de cima segurou a linha: anota sempre (é
+        o alcance da chave) e só deixa passar com AREA_DA_ETIQUETA_NO_TEXTO=1."""
+        _vaga = _cand_etq[id(_it)][1]
+        if _vaga in _etq_tomadas:
+            return False
+        _etq_tomadas.add(_vaga)
+        _etq_vistos.append((round(float(_q), 2),
+                            str(getattr(_it, "description", "") or "")[:60]))
+        return _etq_liga
     # 🚨 24/08: `apenas_preencher` é pra quem REIDRATA itens do banco (/inform-area).
     # Ali o motor já decidiu, lá atrás, com a geometria em mãos; reavaliar depois,
     # a partir de linhas que perderam metade do contexto, é decidir com MENOS
@@ -14332,6 +14416,22 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
                 _obs_e = _frase_e + ((" | " + _obs_e) if _obs_e else "")
             it.observations = _obs_e
             escritos_preservados += 1
+        elif q > 0 and id(it) in _cand_etq and _etiqueta_passa(it, q):
+            # 🔑 17/11/2026 — a área do ambiente, citada na linha e escrita no
+            # texto do PDF desta prancha (ver o pré-passo). ESTIMADO, sempre.
+            try:
+                it.confidence = Confidence("estimado")
+            except Exception:
+                pass
+            _obs_t = _limpa_aviso_nao_medida(
+                _limpa_afirmacao_de_medida(it.observations or ""))
+            if _marca_etq not in _obs_t:
+                _frase_t = ("%s: '%s' — o número está no texto do PDF desta prancha; "
+                            "não medimos o desenho. Confira antes de orçar."
+                            % (_marca_etq, _cand_etq[id(it)][0]))
+                _obs_t = _frase_t + ((" | " + _obs_t) if _obs_t else "")
+            it.observations = _obs_t
+            etiqueta_preservados += 1
         elif q > 0 and id(it) in _vq:
             # 🩸 22/09/2026 — o número é de QUADRO DE QUANTITATIVOS impresso na
             # prancha (ver o pré-passo acima). Com prova, fica — ESTIMADO, nunca
@@ -14689,6 +14789,8 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
     _apply_area_honesty.ultimo_quadro_sem_prova = quadro_sem_prova
     _apply_area_honesty.ultimo_quadro_totais = quadro_totais
     _apply_area_honesty.ultimo_escritos_preservados = escritos_preservados
+    _apply_area_honesty.ultimo_area_da_etiqueta = (list(_etq_vistos), _etq_liga,
+                                                   etiqueta_preservados)
     return filled, blanked
 
 
@@ -19325,7 +19427,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 # + grade 3×2 no lugar dos recortes por região (ver
                 # `processor.render_grade`). Grade que falhou ou veio incompleta
                 # não entra: ficam os recortes de sempre e o log diz.
-                if _chave_do_job(job_id, "PLANTA_EM_GRADE") == "1":
+                if _liga_planta_em_grade(job_id, sheet_type):
                     try:
                         from processor import render_grade as _render_grade
                         _grade = _render_grade(pdf_path, crops_dir,
@@ -22018,6 +22120,15 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 _log_error("motor:piso-de-comodo-da-etiqueta",
                            f"linhas={len(_comodos)} liga={int(_comodo_lig)} | "
                            + "; ".join(f"{q} m² {d}" for q, d in _comodos[:30]),
+                           job_id, severity="info")
+            # 17/11: piso/forro com a área do ambiente escrita no texto do PDF.
+            # Com a chave em 0 é a lista do que ficaria; com 1, do que ficou.
+            _etqs, _etq_lig, _etq_n = getattr(_apply_area_honesty,
+                                              "ultimo_area_da_etiqueta", None) or ([], False, 0)
+            if _etqs:
+                _log_error("motor:area-da-etiqueta-no-texto",
+                           f"linhas={len(_etqs)} liga={int(_etq_lig)} ficaram={_etq_n} | "
+                           + "; ".join(f"{q} m² {d}" for q, d in _etqs[:30]),
                            job_id, severity="info")
             # 05/11: legenda de arquivo com " (1)" no nome. Com 0, o que ficaria.
             _parents, _parent_lig = getattr(_apply_area_honesty,
