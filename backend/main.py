@@ -42759,6 +42759,176 @@ def _supabase_storage_list(bucket: str, prefix: str) -> list:
     return _supabase_storage_list_ou_falha(bucket, prefix)[1]
 
 
+# ══════════════════════════════════════════════════════════════════════
+#  RELATÓRIO DE EXCLUSÃO DE DADOS (LGPD, 17/11/2026) — SÓ LEITURA
+# ══════════════════════════════════════════════════════════════════════
+# 🩸 14/11/2026 — o 1º pedido de exclusão (art. 18, VI) foi atendido à mão: 10
+# tabelas numa transação, o cache da IA separado por nome de arquivo e por
+# minuto, e o Storage pelo painel (ele não apaga por SQL). A lista do que
+# procurar estava só na cabeça de quem fez.
+# 🔑 Esta rota NÃO APAGA NADA: recebe o e-mail e devolve onde há dado dele.
+# É a lista de conferência do próximo pedido; apagar segue sendo um ato
+# deliberado, feito com o dono do produto vendo.
+# 🪤 O e-mail vem no CORPO do pedido, nunca na URL, e não vai pro error_log.
+#: tabelas cuja linha é do titular pelo job
+_EXCLUSAO_POR_JOB = (
+    "project_items", "project_items_versoes", "item_reviews", "item_notes", "llm_uso",
+    "error_log", "revisor_noturno_fichas", "revisor_casos", "cronogramas",
+    "project_memorial", "project_supplier_quotes", "project_clients",
+    "project_cashback_events", "revision_feedback", "agent_conversations",
+    "whatsapp_sent_log", "processing_survey", "nps_responses", "usage_events",
+    "email_sent_log", "escritorio_projetos", "financeiro_lancamentos")
+#: tabela -> coluna de e-mail
+_EXCLUSAO_POR_EMAIL = {
+    "profiles": "email", "usage_events": "user_email", "email_sent_log": "email",
+    "email_auto_log": "email", "nps_responses": "user_email",
+    "processing_survey": "user_email", "chat_leads": "email", "contact_messages": "email",
+    "escritorio_membros": "email", "escritorio_drive_permissoes": "email",
+    "newsletter_optout": "email", "email_suprimidos": "email"}
+#: tabelas com `user_id`
+_EXCLUSAO_POR_USUARIO = (
+    "usage_events", "agent_conversations", "nps_responses", "project_cashback_events",
+    "user_credits", "calibration", "escritorio_drive_conexoes", "escritorio_piloto")
+#: o que NÃO se apaga sem pensar, e por quê (a rota só avisa)
+_EXCLUSAO_ATENCAO = {
+    "financeiro_lancamentos": "registro financeiro: há obrigação fiscal de guardar",
+    "user_credits": "crédito e pagamento: há obrigação fiscal de guardar",
+    "newsletter_optout": "lista de não enviar: apagar faz o e-mail voltar a receber",
+    "email_suprimidos": "lista de não enviar: apagar faz o e-mail voltar a receber"}
+_EXCLUSAO_TETO = 1000        # o PostgREST corta a listagem aqui
+
+
+def _relatorio_de_exclusao(email, busca, lista_storage) -> dict:
+    """Onde há dado do titular deste e-mail. Só lê.
+
+    `busca(tabela, params) -> list | None` (None = não deu pra ler) e
+    `lista_storage(bucket, prefixo) -> list` vêm de fora, pra a régua ser
+    testada sem rede. Contagem que bate no teto sai como "1000+"."""
+    email = str(email or "").strip().lower()
+    out = {"email": email, "apaga_algo": False, "usuarios": [], "projetos": [],
+           "banco": [], "storage": [], "cache_da_ia": [], "nao_li": [], "atencao": []}
+    if not email or "@" not in email:
+        raise ValueError("e-mail inválido")
+
+    def _n(linhas):
+        return "%d+" % _EXCLUSAO_TETO if len(linhas) >= _EXCLUSAO_TETO else len(linhas)
+
+    def _conta(tabela, por, params):
+        linhas = busca(tabela, dict(params, limit=str(_EXCLUSAO_TETO)))
+        if linhas is None:
+            out["nao_li"].append("%s (por %s)" % (tabela, por))
+        elif linhas:
+            out["banco"].append({"tabela": tabela, "por": por, "linhas": _n(linhas)})
+            if tabela in _EXCLUSAO_ATENCAO and tabela not in {a["tabela"] for a in out["atencao"]}:
+                out["atencao"].append({"tabela": tabela, "motivo": _EXCLUSAO_ATENCAO[tabela]})
+
+    perfis = busca("profiles", {"email": "eq." + email, "select": "user_id"})
+    if perfis is None:
+        out["nao_li"].append("profiles (pra achar o usuário)")
+    usuarios = sorted({str(p.get("user_id")) for p in (perfis or []) if p.get("user_id")})
+    out["usuarios"] = usuarios
+
+    projetos = {}
+    filtros = [{"user_email": "eq." + email}] + [{"user_id": "eq." + u} for u in usuarios]
+    for f in filtros:
+        linhas = busca("projects", dict(f, select="job_id,parent_job_id,status,created_at,"
+                                                  "is_eval,pago_cents", limit=str(_EXCLUSAO_TETO)))
+        if linhas is None:
+            out["nao_li"].append("projects (%s)" % next(iter(f)))
+        for p in (linhas or []):
+            if p.get("job_id"):
+                projetos[str(p["job_id"])] = p
+    # os filhotes (reprocesso, avaliação) nascem sem o e-mail do cliente
+    if projetos:
+        filhos = busca("projects", {
+            "parent_job_id": "in.(%s)" % ",".join(sorted(projetos)),
+            "select": "job_id,parent_job_id,status,created_at,is_eval,pago_cents",
+            "limit": str(_EXCLUSAO_TETO)})
+        if filhos is None:
+            out["nao_li"].append("projects (filhotes)")
+        for p in (filhos or []):
+            if p.get("job_id"):
+                projetos.setdefault(str(p["job_id"]), p)
+    jobs = sorted(projetos)
+    out["projetos"] = [{"job_id": j, "pai": projetos[j].get("parent_job_id"),
+                        "status": projetos[j].get("status"),
+                        "criado_em": projetos[j].get("created_at"),
+                        "avaliacao": bool(projetos[j].get("is_eval")),
+                        "pago": bool(projetos[j].get("pago_cents"))} for j in jobs]
+    if any(p["pago"] for p in out["projetos"]):
+        out["atencao"].append({"tabela": "projects",
+                               "motivo": "há projeto PAGO: o registro do pagamento tem "
+                                         "obrigação fiscal de guarda"})
+
+    if jobs:
+        _em = "in.(%s)" % ",".join(jobs)
+        for t in _EXCLUSAO_POR_JOB:
+            _conta(t, "job_id", {"job_id": _em, "select": "job_id"})
+    for t, col in _EXCLUSAO_POR_EMAIL.items():
+        _conta(t, col, {col: "eq." + email, "select": col})
+    for u in usuarios:
+        for t in _EXCLUSAO_POR_USUARIO:
+            _conta(t, "user_id", {"user_id": "eq." + u, "select": "user_id"})
+
+    nomes = set()
+    for j in jobs:
+        for bucket, prefixo in ((PRANCHAS_BUCKET, j + "/"), (PLANILHAS_BUCKET, j)):
+            arqs = [a for a in (lista_storage(bucket, prefixo) or []) if a]
+            if arqs:
+                out["storage"].append({"bucket": bucket, "prefixo": prefixo,
+                                       "arquivos": len(arqs)})
+            if bucket == PRANCHAS_BUCKET:
+                nomes.update(str(a).rsplit("/", 1)[-1] for a in arqs)
+    # 🪤 o cache da IA guarda a resposta por CONTEÚDO, sem coluna de projeto: o
+    # que dá pra achar é a etiqueta com o nome do arquivo. A escolha do SINAPI
+    # não tem nome nenhum — só o horário do processamento separa.
+    for nome in sorted(nomes):
+        if not any(nome.lower().endswith(x) for x in (".pdf", ".dwg", ".dxf")):
+            continue
+        linhas = busca("llm_cache", {"tag": "like.*%s*" % nome, "select": "tag",
+                                     "limit": str(_EXCLUSAO_TETO)})
+        if linhas is None:
+            out["nao_li"].append("llm_cache (%s)" % nome)
+        elif linhas:
+            out["cache_da_ia"].append({"arquivo": nome, "linhas": _n(linhas)})
+    if jobs:
+        out["atencao"].append({
+            "tabela": "llm_cache",
+            "motivo": "as linhas de etiqueta 'sinapi_escolha' não têm nome de arquivo: "
+                      "separar pelo horário de processamento de cada projeto"})
+        out["atencao"].append({
+            "tabela": "auth.users",
+            "motivo": "a conta de login se apaga por último, pelo painel ou pela API de "
+                      "administração (leva identidades e sessões)"})
+    return out
+
+
+@app.post("/api/admin/relatorio-de-exclusao")
+async def admin_relatorio_de_exclusao(request: Request):
+    """ADMIN — onde há dado de um titular (pedido de exclusão da LGPD).
+
+    Corpo: `{"email": "..."}`. NÃO APAGA NADA. Ver `_relatorio_de_exclusao`."""
+    _require_admin(request)
+    try:
+        corpo = await request.json()
+    except Exception:
+        corpo = {}
+    email = str((corpo or {}).get("email") or "")
+
+    def _busca(tabela, params):
+        status, dados = _supa_rest_service("GET", tabela, params=params)
+        return dados if (status == 200 and isinstance(dados, list)) else None
+
+    def _lista(bucket, prefixo):
+        ok, nomes = _supabase_storage_list_ou_falha(bucket, prefixo)
+        return nomes if ok else []
+
+    try:
+        return _relatorio_de_exclusao(email, _busca, _lista)
+    except ValueError as _ev:
+        raise HTTPException(400, str(_ev))
+
+
 @app.get("/api/admin/cleanup-secret-check")
 async def cleanup_secret_check(request: Request):
     """Debug: confirma se CLEANUP_SECRET está configurado no Render (sem
