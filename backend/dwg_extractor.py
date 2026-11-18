@@ -305,6 +305,8 @@ class DXFExtraction:
                                            "so_nas_pranchas", "base_em_plantas_tematicas",
                                            # 30/10: idem (`_linhas_planta_em_bloco`)
                                            "planta_em_bloco",
+                                           # 17/11: registro da trava do selo da contagem
+                                           "blocos_fora_das_pranchas",
                                            # 19/10: registro da trava do selo
                                            "layers_desligados_medidos",
                                            # 30/09: ditos nas seções próprias
@@ -9527,6 +9529,58 @@ def fora_das_pranchas(walls, hatches, polygon_areas, medida, mapa) -> dict:
 # um projeto que o projetista plota direto do modelo (H18, 10/10: 17 jobs).
 _FRACAO_MINIMA_DENTRO_DAS_PRANCHAS = 0.2
 
+# A partir desta fração das inserções de UM tipo fora de toda janela, a
+# contagem daquele tipo não sai medida (ver `blocos_fora_das_pranchas`).
+_BLOCO_FORA_MIN_FRACAO = 0.5
+
+
+def blocos_fora_das_pranchas(blocks, mapa, fracao_m_fora=None) -> dict:
+    """Os TIPOS de bloco com a maior parte das inserções fora de toda janela
+    das pranchas — {nome: [fora, total]}. SÓ MEDE.
+
+    🩸 17/11/2026: DWG de mercado com 74 % do comprimento fora das pranchas
+    (cópias de trabalho, terreno, versões). A contagem do bloco de porta de
+    madeira saiu 45 ✓ MEDIDO; o PDF do mesmo projeto mostra bem menos. O aviso
+    "parte do desenho está fora das pranchas" já saía, mas a contagem por tipo
+    não lia nada disso. `copias_em_sombra` só pega a cópia EXATA (mesmo
+    deslocamento pra muitas peças) — cópia de trabalho editada escapa.
+    🔑 Por TIPO, não pelo arquivo: o símbolo da disciplina que mora numa prancha
+    fica como está mesmo num arquivo cheio de cópia.
+    Chamar ANTES de `aplicar_leitura_por_folha` (posições originais). Mesmas
+    condições de `fora_das_pranchas`: janelas do papel (não achadas pelo título
+    no modelo). Com as janelas mostrando menos de
+    `_FRACAO_MINIMA_DENTRO_DAS_PRANCHAS` do comprimento E das inserções, o
+    projetista plota do modelo: devolve {}.
+    Bloco sem todas as posições (`len(positions) != count`) fica de fora.
+    """
+    try:
+        folhas = (mapa or {}).get("folhas") or []
+        if not folhas or (mapa or {}).get("origem"):
+            return {}
+        caixas = [f["caixa"] for f in folhas if f.get("caixa")]
+        if not caixas:
+            return {}
+        por_tipo, n_dentro, n_total = {}, 0, 0
+        for b in blocks or ():
+            pos = list(getattr(b, "positions", None) or [])
+            if not pos or len(pos) != int(getattr(b, "count", 0) or 0):
+                continue
+            fora = sum(1 for p in pos if not any(_dentro(p, cx) for cx in caixas))
+            n_total += len(pos)
+            n_dentro += len(pos) - fora
+            if fora and fora >= _BLOCO_FORA_MIN_FRACAO * len(pos):
+                por_tipo[b.name] = [fora, len(pos)]
+        if not por_tipo or n_total <= 0:
+            return {}
+        dentro_bl = n_dentro / n_total
+        dentro_m = 1.0 - float(fracao_m_fora) if fracao_m_fora is not None else 1.0
+        if (dentro_m < _FRACAO_MINIMA_DENTRO_DAS_PRANCHAS
+                and dentro_bl < _FRACAO_MINIMA_DENTRO_DAS_PRANCHAS):
+            return {}
+        return por_tipo
+    except Exception:
+        return {}
+
 
 def tirar_o_que_nao_esta_nas_pranchas(walls, hatches, polygon_areas, blocks, mapa) -> dict:
     """Tira da medição o que está no modelo FORA de toda janela das pranchas.
@@ -12315,6 +12369,17 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
                     _mapa["origem"] = "prefixo dos layers"
             _mapa_amb = _mapa
             _medida = medir_por_folha(walls, hatches, polygon_areas, blocks, _mapa)
+            # 17/11: por TIPO, antes da folha mexer nas posições (ver
+            # `blocos_fora_das_pranchas`); a trava dos 20 % usa o comprimento
+            # medido aqui (sem_folha / todo o desenho com posição).
+            try:
+                _tot_m = sum(float(w.length) for w in walls
+                             if not (tuple(w.start) == (0, 0) and tuple(w.end) == (0, 0)))
+                _sem_m = float(((_medida or {}).get("sem_folha") or {}).get("m") or 0)
+                _bff = blocos_fora_das_pranchas(
+                    blocks, _mapa, (_sem_m / _tot_m) if _tot_m > 0 else None)
+            except Exception:
+                _bff = {}
             _folhas = aplicar_leitura_por_folha(walls, hatches, polygon_areas, blocks, _mapa)
             if _vpp:
                 _folhas["vista_pelo_prefixo"] = _vpp
@@ -12334,6 +12399,13 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             _fdp = fora_das_pranchas(walls, hatches, polygon_areas, _medida, _mapa)
             if _fdp:
                 metadata["fora_das_pranchas"] = _fdp
+                # 17/11: os tipos de bloco que moram fora das pranchas — o selo
+                # da contagem deles é decidido em main.py (só rebaixa, com chave).
+                # 🪤 Chave PRÓPRIA e fora do prompt: `fora_das_pranchas` vai crua
+                # pra IA, e a lista de nomes ali mudaria a leitura com a chave em 0.
+                if _bff:
+                    metadata["blocos_fora_das_pranchas"] = dict(
+                        sorted(_bff.items(), key=lambda kv: -kv[1][0])[:40])
             # 18/10: a OPÇÃO de medir só o que está nas pranchas (ver
             # `tirar_o_que_nao_esta_nas_pranchas`). Chave SO_O_QUE_ESTA_NAS_PRANCHAS=1
             # liga, por avaliação; padrão DESLIGADA — o cliente é quem sabe se o de
@@ -12343,6 +12415,7 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
                 metadata["so_nas_pranchas"] = _snp
                 if _snp.get("aplicada"):
                     metadata.pop("fora_das_pranchas", None)
+                    metadata.pop("blocos_fora_das_pranchas", None)
             _folhas["desenhos_lista"] = [
                 dict({"folha": f["folha"][:40], "titulo": f.get("titulo", "")[:90],
                       "tipo": f.get("tipo", ""), "andares": f.get("andares", 1),

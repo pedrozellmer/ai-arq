@@ -7935,7 +7935,10 @@ MARCA_FAIXA_DE_PARALELAS = "⚠ FAIXA DE PARALELAS, NÃO METRO"
 MARCA_NUMERO_DO_QUADRO = "⚠ NÚMERO DO QUADRO"
 #: 🩸 19/10/2026 — ver `selo_apos_layer_desligado`.
 MARCA_LAYER_DESLIGADO = "⚠ LAYER DESLIGADO NO DESENHO"
+#: 🩸 17/11/2026 — ver `selo_apos_bloco_fora_das_pranchas`.
+MARCA_BLOCO_FORA_DAS_PRANCHAS = "⚠ PEÇA FORA DAS PRANCHAS"
 MARCAS_DE_REBAIXAMENTO = (MARCA_NUMERO_DO_QUADRO, MARCA_LAYER_DESLIGADO,
+                          MARCA_BLOCO_FORA_DAS_PRANCHAS,
                           MARCA_PECA_SEM_BLOCO, MARCA_LAYER_SEM_NOME, MARCA_TUBO_FACE_DUPLA,
                           MARCA_CONTORNO_DE_PECA, MARCA_MOLDURA_OU_LIMITE,
                           MARCA_TRAVESSA_DE_ESTEIRA, MARCA_PAREDE_ESPESSA, MARCA_GRADE_DE_TABELA,
@@ -8958,6 +8961,52 @@ def selo_apos_planta_repetida(conf, obs, quantity, unit, copiados, blocos):
              "forem andares diferentes, a soma está certa; se forem vistas da mesma planta, "
              "conte uma vez (bloco '%s'). Confirme a quantidade. "
              % (MARCA_PLANTA_REPETIDA, nome))
+    return "estimado", aviso + str(obs or ""), True
+
+
+def selo_apos_bloco_fora_das_pranchas(conf, obs, quantity, unit, fora, blocos):
+    """A contagem de um tipo de bloco com a maior parte das inserções FORA de
+    toda janela das pranchas não sai medida. Devolve `(conf, obs, rebaixou)`.
+
+    `fora` = {nome: [fora, total]} (`dwg_extractor.blocos_fora_das_pranchas`);
+    `blocos` = todos os blocos da extração ({nome: contagem}).
+
+    🩸 17/11/2026: DWG de mercado com 74 % do desenho fora das pranchas — porta
+    de madeira 45 ✓ MEDIDO, e o PDF do mesmo projeto mostra bem menos. A cópia
+    de trabalho editada não é cópia exata, então `selo_apos_planta_repetida`
+    não a via. 🔑 SÓ REBAIXA (mesma decisão de 29/09): o que está fora pode ser
+    desenho legítimo que não foi pra prancha — quem conhece o projeto decide.
+    """
+    if conf != "confirmado" or not fora:
+        return conf, obs, False
+    blocos = blocos or {}
+    todos = dict(blocos)
+    for n, c in blocos.items():
+        r = raiz_do_nome_do_bloco(n)
+        if r != n:
+            todos[r] = todos.get(r, 0) + c
+    alvo, quanto = {}, {}
+    for n, ft in fora.items():
+        if n not in blocos:
+            continue
+        alvo[n] = blocos[n]
+        quanto[n] = ft
+        r = raiz_do_nome_do_bloco(n)
+        if r != n:
+            alvo[r] = alvo.get(r, 0) + blocos[n]
+            quanto.setdefault(r, ft)
+    nome = contagem_de_bloco_citada(obs, quantity, unit, alvo, todos=todos)
+    if not nome:
+        return conf, obs, False
+    try:
+        f, t = (int(x) for x in quanto.get(nome, (0, 0)))
+        quem = "%d das %d peças contadas estão" % (f, t) if t else "parte das peças contadas está"
+    except (TypeError, ValueError):
+        quem = "parte das peças contadas está"
+    # o essencial nos primeiros 110 caracteres (é o que a revisão mostra)
+    aviso = ("%s: %s em desenhos que nenhuma prancha mostra. Se for cópia de trabalho, "
+             "versão antiga ou outra base, a soma está alta — confira nas pranchas "
+             "(bloco '%s'). " % (MARCA_BLOCO_FORA_DAS_PRANCHAS, quem, nome))
     return "estimado", aviso + str(obs or ""), True
 
 
