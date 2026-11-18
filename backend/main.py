@@ -18449,8 +18449,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                 (extraction.metadata or {}).get("blocos_fora_das_pranchas") or {})
                         except Exception:
                             _blocos_fora_pr = {}
-                        _liga_fora_pr = _chave_do_job(
-                            job_id, "CONTAGEM_FORA_DAS_PRANCHAS_REBAIXA") == "1"
+                        _liga_fora_pr = _chave_do_job(job_id, "CONTAGEM_FORA_DAS_PRANCHAS_REBAIXA") == "1"
                         _linhas_fora_pr = []
                         # 🩸 12/10/2026: as quantidades ESCRITAS nos quadros que o
                         # motor leu neste arquivo — a linha com um desses números e

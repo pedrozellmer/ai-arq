@@ -173,6 +173,9 @@ def _laco_de_itens_de_producao(items, areas=None, compr=None, extra=None):
         "_blocos_n": {},
         # 29/09: os tipos de bloco achados nas cópias da planta (`selo_apos_planta_repetida`)
         "_blocos_copiados": set(),
+        # 17/11: os tipos de bloco que moram fora das pranchas, a chave e a
+        # lista do log (`selo_apos_bloco_fora_das_pranchas`); aqui, nenhum
+        "_blocos_fora_pr": {}, "_liga_fora_pr": False, "_linhas_fora_pr": [],
         # 30/09: os layers de COTA explodida (anotação pela prova do desenho)
         "_ly_cota": set(),
         # 30/09: as contagens das peças desenhadas sem bloco
