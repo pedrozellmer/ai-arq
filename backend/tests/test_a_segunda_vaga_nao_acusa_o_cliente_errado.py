@@ -80,7 +80,11 @@ def _vagas_limpas(monkeypatch):
     # a corrida de mutação em 900 s. Guarda que suja estado compartilhado
     # contamina o vizinho — a mesma doença que este arquivo persegue no produto.
     main._FILA_DE_SENHAS.clear()
+    # 18/11: o contador de pesados mora na mesma trava e suja do mesmo jeito
+    _pesados = main._PESADOS_RODANDO
+    main._PESADOS_RODANDO = 0
     yield
+    main._PESADOS_RODANDO = _pesados
     main._JOBS_RODANDO = _antes
     main._JOBS_SIMULTANEOS = _teto
     main._VAGA_EXTRA.set(False)
@@ -882,8 +886,10 @@ def test_a_senha_de_quem_desiste_NAO_trava_a_fila(monkeypatch):
     fila entupida seria pior que a fila de um por vez que isto veio destravar."""
     monkeypatch.setattr(main, "_container_mem_frac", lambda: 0.10)
     monkeypatch.setattr(main, "_log_error", lambda *a, **k: None)
+    # 18/11: *a/**k — a régua ganhou o peso (pesado, pesados_rodando); com a
+    # assinatura exata o dublê levantava TypeError e o teste passava pelo motivo errado
     monkeypatch.setattr(main, "_tem_vaga_agora",
-                        lambda rodando: (_ for _ in ()).throw(RuntimeError("boom")))
+                        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
     main._JOBS_RODANDO = 0
     main._FILA_DE_SENHAS.clear()
     with pytest.raises(RuntimeError):

@@ -11485,9 +11485,51 @@ _FREIO_POUPOU = contextvars.ContextVar("freio_poupou", default=0)
 #: de vida, não do instante — e a diferença é o defeito inteiro: o contador cai
 #: quando o vizinho sai, mas a memória dele não some junto. Ver `_decisao_do_freio`.
 _DIVIDIU_O_SERVIDOR = contextvars.ContextVar("dividiu_o_servidor", default=False)
+#: Quantos dos jobs no ar são PESADOS (ver `_job_e_pesado`). Mexe só dentro de
+#: `_VAGAS_LOCK`, junto com `_JOBS_RODANDO`.
+_PESADOS_RODANDO = 0
+#: 🩸 29/09/2026, a queda: a 2ª vaga abriu num VALE de memória (22 %) e, minutos
+#: depois, duas conversões de DWG de ~60 MB (~2 GB cada, medido 33,5× o arquivo)
+#: rodaram juntas e passaram dos 4 GB do contêiner. A memória NA ENTRADA não diz
+#: nada sobre o pico que vem depois; o tamanho do CAD diz. 20 MB × 33,5 ≈ 670 MB,
+#: dois desses cabem com folga — é o "DWG > ~20 MB = vaga exclusiva" anotado
+#: naquele dia e nunca feito.
+_PESADO_CAD_MB = 20
+#: Qualquer arquivo acima disto também roda sozinho (PDF enorme rasteriza muito).
+_PESADO_ARQUIVO_MB = 100
+_EXT_CAD = (".dwg", ".dxf")
+#: Compactado não se sabe o que tem dentro: conta como pesado.
+_EXT_COMPACTADO = (".zip", ".rar", ".7z")
 
 
-def _anotar_vaga(o_que: str, rodando: int) -> None:
+def _job_e_pesado(file_paths) -> bool:
+    """O projeto pode subir a memória a ponto de não dividir o contêiner?
+
+    🔑 Falha FECHADA: lista vazia, caminho que não abre ou qualquer erro = pesado
+    (roda sozinho, que é o comportamento de hoje). Só é LEVE o envio cujos
+    arquivos todos existem, nenhum CAD passa de `_PESADO_CAD_MB`, nenhum arquivo
+    passa de `_PESADO_ARQUIVO_MB` e nenhum é compactado.
+    """
+    try:
+        caminhos = [str(p) for p in (file_paths or [])]
+        if not caminhos:
+            return True
+        for p in caminhos:
+            mb = os.path.getsize(p) / (1024 * 1024)
+            ext = os.path.splitext(p)[1].lower()
+            if ext in _EXT_COMPACTADO:
+                return True
+            if ext in _EXT_CAD and mb > _PESADO_CAD_MB:
+                return True
+            if mb > _PESADO_ARQUIVO_MB:
+                return True
+        return False
+    except Exception:
+        return True
+
+
+def _anotar_vaga(o_que: str, rodando: int, pesado: bool = False,
+                 pesados_rodando: int = 0) -> None:
     """Deixa no error_log a leitura de memória do MOMENTO da decisão.
 
     🔑 Existe porque a fração nunca foi registrada em lugar nenhum: o freio de
@@ -11500,7 +11542,9 @@ def _anotar_vaga(o_que: str, rodando: int) -> None:
         _log_error("fila:vaga",
                    f"{o_que}: rodando={rodando} teto_de_vagas={_JOBS_SIMULTANEOS} "
                    f"memoria_do_container={_container_mem_frac()} "
-                   f"teto_da_2a_vaga={_MEM_TETO_2O_JOB}",
+                   f"teto_da_2a_vaga={_MEM_TETO_2O_JOB} "
+                   # 18/11: peso de quem chega e de quem está no ar (ver `_job_e_pesado`)
+                   f"pesado={int(bool(pesado))} pesados_rodando={pesados_rodando}",
                    severity="info")
     except Exception:
         pass
@@ -11522,22 +11566,30 @@ def _cabe_um_segundo_job() -> bool:
     return fracao < _MEM_TETO_2O_JOB
 
 
-def _tem_vaga_agora(rodando: int) -> bool:
+def _tem_vaga_agora(rodando: int, pesado: bool = False, pesados_rodando: int = 0) -> bool:
     """Decide UMA vez se cabe mais um job. Separada pro guarda poder CHAMAR.
 
     O primeiro entra SEMPRE — senão um pico de memória de outra coisa (backup,
     varredura, deploy) travaria o produto inteiro, e a trava viraria a queda que
     ela deveria evitar.
+    🩸 18/11: job PESADO (`_job_e_pesado`) nunca divide o contêiner — nem entra
+    na 2ª vaga, nem deixa alguém entrar ao lado dele. A memória na entrada não
+    prevê o pico da conversão (a queda de 29/09).
     """
     if rodando <= 0:
         return True
     if rodando >= _JOBS_SIMULTANEOS:
         return False
+    if pesado or pesados_rodando > 0:
+        return False
     return _cabe_um_segundo_job()
 
 
-def _esperar_vaga(_espera_s: float = 2.0) -> None:
+def _esperar_vaga(_espera_s: float = 2.0, pesado: bool = False) -> None:
     """Bloqueia até haver vaga; devolve quando o job pode começar.
+
+    `pesado` vem de `_job_e_pesado` na porta única (`_process_job_throttled`);
+    quem entra pesado é contado em `_PESADOS_RODANDO` até `_liberar_vaga`.
 
     🔑 Marca a thread com `_VAGA_EXTRA` quando a vaga conquistada é a segunda —
     é essa marca que o freio de memória usa depois pra não matar o job errado.
@@ -11556,7 +11608,7 @@ def _esperar_vaga(_espera_s: float = 2.0) -> None:
     mas a ordem voltou a ser garantida — e é isso que deixa a tela dizer "por
     ordem de chegada" sem mentir.
     """
-    global _JOBS_RODANDO, _ULTIMA_SENHA
+    global _JOBS_RODANDO, _ULTIMA_SENHA, _PESADOS_RODANDO
     _ja_anotou_espera = False
     with _VAGAS_LOCK:
         _ULTIMA_SENHA += 1
@@ -11566,10 +11618,13 @@ def _esperar_vaga(_espera_s: float = 2.0) -> None:
         while True:
             with _VAGAS_LOCK:
                 _antes = _JOBS_RODANDO
+                _pesados_antes = _PESADOS_RODANDO
                 _minha_vez = bool(_FILA_DE_SENHAS) and _FILA_DE_SENHAS[0] == _minha_senha
-                _cabe = _minha_vez and _tem_vaga_agora(_antes)
+                _cabe = _minha_vez and _tem_vaga_agora(_antes, pesado, _pesados_antes)
                 if _cabe:
                     _JOBS_RODANDO = _antes + 1
+                    if pesado:
+                        _PESADOS_RODANDO = _pesados_antes + 1
                     _FILA_DE_SENHAS.popleft()
             if _cabe:
                 _VAGA_EXTRA.set(_antes > 0)
@@ -11577,11 +11632,11 @@ def _esperar_vaga(_espera_s: float = 2.0) -> None:
                     # Quem entra na 2ª vaga dividiu o contêiner desde o primeiro
                     # segundo — a marca nasce aqui, não só quando o freio bate.
                     _DIVIDIU_O_SERVIDOR.set(True)
-                    _anotar_vaga("2a-vaga-aberta", _antes)
+                    _anotar_vaga("2a-vaga-aberta", _antes, pesado, _pesados_antes)
                 return
             if not _ja_anotou_espera:
                 _ja_anotou_espera = True
-                _anotar_vaga("esperando-na-fila", _antes)
+                _anotar_vaga("esperando-na-fila", _antes, pesado, _pesados_antes)
             _time_sem.sleep(_espera_s)
     finally:
         # 🪤 Senha que fica na fila sem dono TRAVA todo mundo atrás dela — é a
@@ -11596,10 +11651,12 @@ def _esperar_vaga(_espera_s: float = 2.0) -> None:
                 pass
 
 
-def _liberar_vaga() -> None:
-    global _JOBS_RODANDO
+def _liberar_vaga(pesado: bool = False) -> None:
+    global _JOBS_RODANDO, _PESADOS_RODANDO
     with _VAGAS_LOCK:
         _JOBS_RODANDO = max(0, _JOBS_RODANDO - 1)
+        if pesado:
+            _PESADOS_RODANDO = max(0, _PESADOS_RODANDO - 1)
     # 🪤 Higiene, NÃO carga: `_esperar_vaga` já sobrescreve a marca toda vez que
     # pega vaga, e os 6 disparos usam `threading.Thread` nova, que morre aqui.
     # Ou seja: não há caminho hoje em que apagar esta linha mude comportamento
@@ -12019,12 +12076,15 @@ def _process_job_throttled(*args, **kwargs):
     # 🪤 `try/finally` e não `with`: se a vaga não voltar numa exceção, o contador
     # vaza pra cima e o produto trava sozinho — a fila entupida seria PIOR que a
     # fila de um por vez que isto veio destravar.
-    _esperar_vaga()
+    # 18/11: o peso decide se este job pode dividir o contêiner (ver `_job_e_pesado`).
+    # O MESMO valor vai pra entrada e pra saída — senão o contador de pesados vaza.
+    _pesado = _job_e_pesado(_fps)
+    _esperar_vaga(pesado=_pesado)
     try:
         with escopo_job(_dono):
             process_job(*args, **kwargs)
     finally:
-        _liberar_vaga()
+        _liberar_vaga(pesado=_pesado)
 
 
 def _carimbar_regua_de_cobranca(job_id: str, n_medidas: int, n_total: int,
