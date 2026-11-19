@@ -11,6 +11,10 @@ elétrica em 7, louça em 5).
 🔑 Chave CONTAR_BLOCO_DINAMICO, nasce 0 (muda contagem). Ligada, o *U passa
 pelos MESMOS filtros do bloco comum (anotação, layer utilitário, cópia no mesmo
 ponto). Sem o vínculo ao dinâmico, ou com "$" no nome achado, segue descartado.
+
+🩸 19/11/2026. Avaliada num prédio, a chave deu 97 janelas com selo onde o
+quadro de esquadrias somava 29: o dinâmico era a FOLHA de janelas de 3 a 11
+folhas. Esquadria dinâmica (pelo nome achado OU pelo layer) segue fora.
 """
 import os
 import sys
@@ -188,23 +192,60 @@ def test_outros_anonimos_seguem_fora(tmp_path, monkeypatch, nome):
 
 
 # ══════════════════════════════════════════════════════════════════════════
-#  5. A porta dinâmica tem a largura do SEU *U
+#  5. Esquadria dinâmica segue FORA (19/11: a folha não é a janela)
 # ══════════════════════════════════════════════════════════════════════════
-def test_a_porta_dinamica_tem_a_largura_esticada(tmp_path, monkeypatch):
+def test_porta_dinamica_segue_fora(tmp_path, monkeypatch):
     monkeypatch.setenv("CONTAR_BLOCO_DINAMICO", "1")
 
     def monta(doc, msp):
-        base = doc.blocks.new("PORTA")
-        base.add_line((0, 0), (0.6, 0))
-        base.add_line((0, 0), (0, 0.6))
-        u = _dinamico(doc, "PORTA", lambda b: (b.add_line((0, 0), (0.9, 0)),
-                                                b.add_line((0, 0), (0, 0.9))))
+        doc.blocks.new("PORTA").add_line((0, 0), (0.8, 0))
+        u = _dinamico(doc, "PORTA")
         msp.add_blockref(u, (0, 0))
         msp.add_blockref(u, (3, 0))
     ex = dx.extract_dxf(_arquivo(tmp_path, monta))
-    b = [b for b in ex.blocks if b.name == "PORTA"][0]
-    assert b.count == 2
-    assert b.width_m == pytest.approx(0.9, abs=0.01), b.width_m
+    assert ex.get_block_summary() == {}
+    assert ex.metadata["procedencia_blocos"]["dinamicos"] == {"PORTA": 2}
+    assert "dinamicos_contados" not in ex.metadata
+
+
+def test_folha_de_janela_com_nome_estrangeiro_no_layer_de_esquadria_segue_fora(
+        tmp_path, monkeypatch):
+    """O nome não diz janela; o layer diz. Era a folha de janelas de 3–11 folhas."""
+    monkeypatch.setenv("CONTAR_BLOCO_DINAMICO", "1")
+
+    def monta(doc, msp):
+        doc.blocks.new("FOLHA_X").add_line((0, 0), (1.0, 0))
+        u = _dinamico(doc, "FOLHA_X")
+        for k in range(5):
+            msp.add_blockref(u, (k, 0), dxfattribs={"layer": "DM-ESQ-2"})
+    ex = dx.extract_dxf(_arquivo(tmp_path, monta))
+    assert ex.get_block_summary() == {}
+    assert ex.metadata["procedencia_blocos"]["dinamicos"] == {"FOLHA_X": 5}
+
+
+def test_o_mesmo_dinamico_fora_do_layer_de_esquadria_conta(tmp_path, monkeypatch):
+    """Controle: o filtro de cima é o layer, não o bloco."""
+    monkeypatch.setenv("CONTAR_BLOCO_DINAMICO", "1")
+
+    def monta(doc, msp):
+        doc.blocks.new("FOLHA_X").add_line((0, 0), (1.0, 0))
+        u = _dinamico(doc, "FOLHA_X")
+        for k in range(5):
+            msp.add_blockref(u, (k, 0), dxfattribs={"layer": "MOBILIARIO"})
+    ex = dx.extract_dxf(_arquivo(tmp_path, monta))
+    assert ex.get_block_summary() == {"FOLHA_X": 5}
+
+
+def test_porta_comum_pelo_nome_segue_contada(tmp_path, monkeypatch):
+    """Só o *U de esquadria fica fora; a porta de bloco comum não muda."""
+    monkeypatch.setenv("CONTAR_BLOCO_DINAMICO", "1")
+
+    def monta(doc, msp):
+        doc.blocks.new("PORTA").add_line((0, 0), (0.8, 0))
+        msp.add_blockref("PORTA", (0, 0))
+        msp.add_blockref(_dinamico(doc, "PORTA"), (3, 0))
+    ex = dx.extract_dxf(_arquivo(tmp_path, monta))
+    assert ex.get_block_summary() == {"PORTA": 1}
 
 
 # ══════════════════════════════════════════════════════════════════════════

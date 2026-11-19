@@ -11093,11 +11093,19 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             # blocos comuns (layer utilitário, anotação, cópia no mesmo ponto).
             # 🪤 Sem o vínculo (conversor que não guardou o XDATA) ou com "$" no
             # nome achado, segue descartado como antes.
+            # 🩸 19/11/2026 — ESQUADRIA DINÂMICA SEGUE FORA. Avaliado num prédio
+            # de 800 m²: o quadro de esquadrias somava 29 janelas e a chave deu
+            # 97 com selo. O dinâmico "1 folha" era a FOLHA de janelas de 3, 8 e
+            # 11 folhas — peça de desenho, não a janela. O nome dele não diz
+            # "janela" (veio em outra língua); o LAYER diz (ESQ-). Por isso o
+            # teste olha o nome achado E o layer da inserção.
             if _contar_dinamico and _classe_do_anonimo(bname) == "*U":
                 if bname not in _dinamico_de:
                     _dinamico_de[bname] = _nome_do_bloco_dinamico(doc, bname)
-                if _dinamico_de[bname]:
-                    bname = str(_dinamico_de[bname])
+                _achado = _dinamico_de[bname]
+                if _achado and not (_is_esquadria_block(str(_achado))
+                                    or _is_esquadria_block(layer or "")):
+                    bname = str(_achado)
             # o nome achado passa pela MESMA régua ("*" ou "$" → fora)
             if bname.startswith("*") or "$" in bname:
                 _desc["anonimo"] += 1
