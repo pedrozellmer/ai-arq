@@ -298,7 +298,7 @@ class DXFExtraction:
     # -- prompt generation --------------------------------------------------
 
     #: registros de máquina que a IA NÃO lê crus (vão ditos em português)
-    _METADADOS_FORA_DO_PROMPT = frozenset({"copias_sombra", "planta_repetida",
+    _METADADOS_FORA_DO_PROMPT = frozenset({"copias_sombra", "planta_repetida", "dinamicos_contados",
                                            # 09/11: registro do log `motor:unidade`
                                            "empate_fisico", "elementos_archicad",
                                            # 18/10: dito na linha de atenção da planilha
@@ -10974,6 +10974,9 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
     _anon_classe: dict = {}               # classe → inserções descartadas
     _dinamico_de: dict = {}               # '*U12' → nome do dinâmico (cache)
     _dinamicos: dict = {}                 # nome do dinâmico → inserções
+    # 18/11: o *U conta pelo nome do dinâmico. Muda CONTAGEM → nasce desligada.
+    _contar_dinamico = os.environ.get("CONTAR_BLOCO_DINAMICO", "0").strip() == "1"
+    _dinamicos_contados: dict = {}        # nome do dinâmico → inserções contadas
     _espelhados: dict = {}                # nome → inserções com extrusão z<0
     _def_vazia: dict = {}                 # nome → inserções de bloco sem desenho
     _vazia_cache: dict = {}
@@ -11073,22 +11076,43 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             _desc["ilegivel"] += 1
             continue
 
+        # Bloco que o AutoCAD guarda com nome de máquina: a geometria desta
+        # inserção mora na definição dela (o *U esticado), mesmo quando o TIPO
+        # passa a ser o nome do dinâmico (ver abaixo).
+        _def_geo = bname
         # Skip anonymous / internal blocks (names starting with * or contendo $)
         # Blocos dinâmicos do AutoCAD têm sufixos tipo "A$C6BFD6B53" — filtrar.
         if bname.startswith("*") or "$" in bname:
-            _desc["anonimo"] += 1
-            # guarda alguns nomes: é o que diz se são lixo do AutoCAD ou item
-            # de verdade renomeado na conversão (o caso que a gente suspeita)
-            if len(_amostra_anonimo) < 5 and bname not in _amostra_anonimo:
-                _amostra_anonimo.append(bname)
-            _cl = _classe_do_anonimo(bname)
-            _anon_classe[_cl] = _anon_classe.get(_cl, 0) + 1
-            if _cl == "*U":
+            # 🩸 18/11/2026 — o bloco DINÂMICO (*U) é a peça com outro nome. Num
+            # projeto elétrico, as 179 tomadas e 79 interruptores da prancha
+            # eram todos dinâmicos e saíram FORA da planilha, enquanto uma
+            # planta velha fora da prancha, de blocos comuns, foi contada com
+            # selo. 90 dias: 45 projetos de 39 clientes com dinâmico descartado
+            # (esquadria em 12, elétrica em 7, louça em 5). Com a chave, o *U
+            # conta pelo nome do dinâmico e passa pelos MESMOS filtros dos
+            # blocos comuns (layer utilitário, anotação, cópia no mesmo ponto).
+            # 🪤 Sem o vínculo (conversor que não guardou o XDATA) ou com "$" no
+            # nome achado, segue descartado como antes.
+            if _contar_dinamico and _classe_do_anonimo(bname) == "*U":
                 if bname not in _dinamico_de:
                     _dinamico_de[bname] = _nome_do_bloco_dinamico(doc, bname)
                 if _dinamico_de[bname]:
-                    _dinamicos[_dinamico_de[bname]] = _dinamicos.get(_dinamico_de[bname], 0) + 1
-            continue
+                    bname = str(_dinamico_de[bname])
+            # o nome achado passa pela MESMA régua ("*" ou "$" → fora)
+            if bname.startswith("*") or "$" in bname:
+                _desc["anonimo"] += 1
+                # guarda alguns nomes: é o que diz se são lixo do AutoCAD ou item
+                # de verdade renomeado na conversão (o caso que a gente suspeita)
+                if len(_amostra_anonimo) < 5 and bname not in _amostra_anonimo:
+                    _amostra_anonimo.append(bname)
+                _cl = _classe_do_anonimo(bname)
+                _anon_classe[_cl] = _anon_classe.get(_cl, 0) + 1
+                if _cl == "*U":
+                    if bname not in _dinamico_de:
+                        _dinamico_de[bname] = _nome_do_bloco_dinamico(doc, bname)
+                    if _dinamico_de[bname]:
+                        _dinamicos[_dinamico_de[bname]] = _dinamicos.get(_dinamico_de[bname], 0) + 1
+                continue
         # 13/10: a inserção no layer do mapa-chave do ArchiCAD (ver `tirar_o_mapa_chave`)
         if _mapa_chave_fora and layer_de_mapa_chave_do_archicad(layer):
             _mapa_chave_blocos += 1
@@ -11122,16 +11146,18 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
                 "widths": [], "heights": [], "camadas": {},
             }
         block_counter[bname]["count"] += 1
+        if _def_geo != bname:
+            _dinamicos_contados[bname] = _dinamicos_contados.get(bname, 0) + 1
         _cam = block_counter[bname]["camadas"]
         _cam[layer] = _cam.get(layer, 0) + 1
         try:
             if float(insert.dxf.get("extrusion", (0, 0, 1))[2]) < 0:
                 _espelhados[bname] = _espelhados.get(bname, 0) + 1
-            if bname not in _vazia_cache:
-                _b = doc.blocks.get(bname)
-                _vazia_cache[bname] = _b is not None and not any(
+            if _def_geo not in _vazia_cache:
+                _b = doc.blocks.get(_def_geo)
+                _vazia_cache[_def_geo] = _b is not None and not any(
                     e.dxftype() != "ATTDEF" for e in _b)
-            if _vazia_cache[bname]:
+            if _vazia_cache[_def_geo]:
                 _def_vazia[bname] = _def_vazia.get(bname, 0) + 1
             if layer and layer.upper() in _layers_desligados:
                 _blocos_desligados += 1
@@ -11148,7 +11174,9 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
 
         # Se parece ser esquadria (porta/janela), armazena dimensão em metros
         if _is_esquadria_block(bname):
-            bbox = _bbox_for_block_def(bname)
+            # a porta dinâmica esticada pra 0,80 tem a largura no SEU *U, não na
+            # definição-base do dinâmico
+            bbox = _bbox_for_block_def(_def_geo)
             if bbox is not None:
                 try:
                     xscale = getattr(insert.dxf, "xscale", 1.0) or 1.0
@@ -11243,6 +11271,9 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         logger.warning("[vinculo-conteudo] falhou (não-fatal): %s", _epv)
     if _proc_blocos:
         metadata["procedencia_blocos"] = _proc_blocos
+    # só pro log (fora do prompt): quantos *U viraram peça, por nome
+    if _dinamicos_contados:
+        metadata["dinamicos_contados"] = _mais(_dinamicos_contados, 8)
 
     # ---- Lines / polylines (wall segments) --------------------------------
     walls: list[WallSegment] = []

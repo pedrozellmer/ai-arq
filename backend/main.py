@@ -1279,6 +1279,13 @@ def _procedencia_dos_blocos(extraction) -> str:
         txt += " aninhados=[" + "|".join(
             f"{str(p)[:40]}>" + ",".join(f"{str(f)[:30]}={n}" for f, n in (fs or {}).items())
             for p, fs in pb["aninhados"].items()) + "]"
+    # 18/11: os *U que viraram peça (chave CONTAR_BLOCO_DINAMICO)
+    try:
+        dc = md.get("dinamicos_contados") or {}
+    except Exception:
+        dc = {}
+    if dc:
+        txt += f" dinamicos_contados=[{_lista(dc)}]"
     if desl:
         txt += f" layer_desligado=[{_lista(desl)}]"
     # 📏 28/09 (estudo, D1): a planta repetida no modelo, em sombra
@@ -11035,6 +11042,8 @@ _CHAVES_AVALIAVEIS = frozenset({
     "EMPATE_FISICO_TROCA_UNIDADE",
     # 09/11: o ArchiCAD que guarda cada parede num bloco Parede_N → abre
     "ABRIR_ELEMENTO_ARCHICAD",
+    # 18/11: o bloco dinâmico (*U) conta pelo nome do dinâmico
+    "CONTAR_BLOCO_DINAMICO",
     # 11/11: correção do cliente que não casou pelo nome avisa a provável irmã
     "FUSAO_AVISO_DOBRO",
     # 18/10: a base copiada em plantas temáticas do mesmo andar conta 1×
