@@ -7937,8 +7937,10 @@ MARCA_NUMERO_DO_QUADRO = "⚠ NÚMERO DO QUADRO"
 MARCA_LAYER_DESLIGADO = "⚠ LAYER DESLIGADO NO DESENHO"
 #: 🩸 17/11/2026 — ver `selo_apos_bloco_fora_das_pranchas`.
 MARCA_BLOCO_FORA_DAS_PRANCHAS = "⚠ PEÇA FORA DAS PRANCHAS"
+#: 🩸 19/11/2026 — ver `selo_apos_bloco_descartado`.
+MARCA_BLOCO_DESCARTADO = "⚠ BLOCO QUE O MOTOR NÃO CONTOU"
 MARCAS_DE_REBAIXAMENTO = (MARCA_NUMERO_DO_QUADRO, MARCA_LAYER_DESLIGADO,
-                          MARCA_BLOCO_FORA_DAS_PRANCHAS,
+                          MARCA_BLOCO_FORA_DAS_PRANCHAS, MARCA_BLOCO_DESCARTADO,
                           MARCA_PECA_SEM_BLOCO, MARCA_LAYER_SEM_NOME, MARCA_TUBO_FACE_DUPLA,
                           MARCA_CONTORNO_DE_PECA, MARCA_MOLDURA_OU_LIMITE,
                           MARCA_TRAVESSA_DE_ESTEIRA, MARCA_PAREDE_ESPESSA, MARCA_GRADE_DE_TABELA,
@@ -8961,6 +8963,47 @@ def selo_apos_planta_repetida(conf, obs, quantity, unit, copiados, blocos):
              "forem andares diferentes, a soma está certa; se forem vistas da mesma planta, "
              "conte uma vez (bloco '%s'). Confirme a quantidade. "
              % (MARCA_PLANTA_REPETIDA, nome))
+    return "estimado", aviso + str(obs or ""), True
+
+
+def selo_apos_bloco_descartado(conf, obs, quantity, unit, descartados, blocos):
+    """A linha que repete a contagem de um bloco que o motor DESCARTOU não sai
+    medida. Devolve `(conf, obs, rebaixou)`.
+
+    `descartados` = {nome: inserções} dos blocos dinâmicos que a extração jogou
+    fora (`procedencia_blocos["dinamicos"]`, a lista que o prompt mostra);
+    `blocos` = os blocos que a extração CONTOU ({nome: contagem}).
+
+    🩸 19/11/2026. Num prédio, o motor deixou fora as janelas dinâmicas (a folha
+    de janelas de 3 a 11 folhas — o quadro somava 29) e a IA leu a lista de
+    descartados e escreveu "67 INSERTs do bloco dinâmico '…' (CONTAGEM DE
+    BLOCOS)" com selo de medido: 97 janelas ✓. Já no ar: luminária 337,
+    condulete 115. 🔑 SÓ REBAIXA: o número pode até estar certo, mas não passou
+    por filtro nenhum (anotação, cópia no mesmo ponto, prancha). O bloco que a
+    extração contou com o mesmo nome não é tocado.
+    """
+    if conf != "confirmado" or not descartados:
+        return conf, obs, False
+    blocos = blocos or {}
+    alvo = {}
+    for n, c in descartados.items():
+        if n in blocos or not str(n or "").strip():
+            continue
+        try:
+            alvo[str(n)] = int(c)
+        except (TypeError, ValueError):
+            continue
+    if not alvo:
+        return conf, obs, False
+    todos = dict(blocos)
+    todos.update(alvo)
+    nome = contagem_de_bloco_citada(obs, quantity, unit, alvo, todos=todos)
+    if not nome:
+        return conf, obs, False
+    # o essencial nos primeiros 110 caracteres (é o que a revisão mostra)
+    aviso = ("%s: o número repete a lista de blocos dinâmicos que ficaram FORA da "
+             "contagem (bloco '%s') — não passou pelos filtros. Confira nas pranchas. "
+             % (MARCA_BLOCO_DESCARTADO, nome))
     return "estimado", aviso + str(obs or ""), True
 
 

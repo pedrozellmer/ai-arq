@@ -208,7 +208,9 @@ def _rodar(liga, conf="confirmado", qty=45):
     ns = {"_blocos_fora_pr": FORA, "_blocos_n": BLOCOS, "_liga_fora_pr": liga,
           "_linhas_fora_pr": [], "_rebaixado_pela_fonte": False,
           "conf": conf, "obs_raw": obs, "qty": qty, "normalized_unit": "un",
-          "desc": "Porta de madeira"}
+          "desc": "Porta de madeira",
+          # 19/11: a regra vizinha (bloco descartado) mora no mesmo trecho
+          "_blocos_descart": {}, "_liga_descart": False, "_linhas_descart": []}
     exec(_bloco(), ns)
     return ns
 

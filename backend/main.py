@@ -869,6 +869,9 @@ _STAGES_DIAGNOSTICO = frozenset({
     # 17/11: contagem de tipo de bloco que mora fora das pranchas (com a chave
     # em 0, contado)
     "motor:contagem-fora-das-pranchas",
+    # 19/11: linha que repete a contagem de bloco dinâmico descartado (com a
+    # chave em 0, contada)
+    "motor:contagem-de-descartado",
     "motor:versao-anterior", "motor:pai-e-filho", "motor:download-regen",
     "motor:respostas-releitura", "motor:informou-depois",
     "motor:consolida-tipo",
@@ -11098,6 +11101,8 @@ _CHAVES_AVALIAVEIS = frozenset({
     # 17/11: contagem de bloco com a maioria das inserções fora das pranchas
     # sai laranja (não medida)
     "CONTAGEM_FORA_DAS_PRANCHAS_REBAIXA",
+    # 19/11: linha que repete a contagem de bloco dinâmico descartado sai laranja
+    "SELO_BLOCO_DESCARTADO_REBAIXA",
     # 15/11: o PDF vai pra IA como prancha inteira + grade 3×2, não por região
     "PLANTA_EM_GRADE",
     # 16/11: JSON com um item quebrado perde só esse item, não o resto da lista
@@ -18520,6 +18525,17 @@ bloco — só cite os que estão no inventário deste arquivo."""
                             _blocos_fora_pr = {}
                         _liga_fora_pr = _chave_do_job(job_id, "CONTAGEM_FORA_DAS_PRANCHAS_REBAIXA") == "1"
                         _linhas_fora_pr = []
+                        # 🩸 19/11: os blocos dinâmicos que a extração DESCARTOU (a
+                        # lista que o prompt mostra) — linha que repete a contagem
+                        # deles só rebaixa, e só com SELO_BLOCO_DESCARTADO_REBAIXA=1.
+                        try:
+                            _blocos_descart = dict(
+                                ((extraction.metadata or {}).get("procedencia_blocos") or {})
+                                .get("dinamicos") or {})
+                        except Exception:
+                            _blocos_descart = {}
+                        _liga_descart = _chave_do_job(job_id, "SELO_BLOCO_DESCARTADO_REBAIXA") == "1"
+                        _linhas_descart = []
                         # 🩸 12/10/2026: as quantidades ESCRITAS nos quadros que o
                         # motor leu neste arquivo — a linha com um desses números e
                         # selo de medido só fica se a geometria citada der o mesmo
@@ -18829,6 +18845,20 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                         if _liga_fora_pr:
                                             conf, obs_raw = _conf_fp, _obs_fp
                                             _rebaixado_pela_fonte = True
+                                # 🩸 19/11/2026: a linha que repete a contagem de um bloco
+                                # dinâmico DESCARTADO (a IA leu a lista) — só rebaixa,
+                                # e só com a chave.
+                                if _blocos_descart:
+                                    from engine_rules import (
+                                        selo_apos_bloco_descartado as _regra_descart)
+                                    _conf_bd, _obs_bd, _era_descart = _regra_descart(
+                                        conf, obs_raw, qty, normalized_unit, _blocos_descart,
+                                        _blocos_n)
+                                    if _era_descart:
+                                        _linhas_descart.append("%s=%s" % (str(desc)[:28], qty))
+                                        if _liga_descart:
+                                            conf, obs_raw = _conf_bd, _obs_bd
+                                            _rebaixado_pela_fonte = True
                                 # 🩸 12/10/2026: o número ESCRITO num quadro do desenho
                                 # não sai medido só porque a observação cita a contagem
                                 # — só se a geometria citada der o MESMO número.
@@ -19068,6 +19098,21 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                     job_id, severity="info")
                             except Exception as _elfp:
                                 print(f"[contagem-fora-das-pranchas] log falhou (nao-fatal): {_elfp}")
+                        # 19/11: linha que repete a lista de dinâmicos descartados —
+                        # com a chave em 0 é aqui que se lê o que ela faria.
+                        if _linhas_descart:
+                            try:
+                                _log_error(
+                                    "motor:contagem-de-descartado",
+                                    f"arq={os.path.basename(dxf_path)} "
+                                    f"linhas={len(_linhas_descart)} liga={int(_liga_descart)} | "
+                                    + " · ".join(_linhas_descart[:8])
+                                    + " | descartados: " + " · ".join(
+                                        "%s=%s" % (str(_n)[:24], _c)
+                                        for _n, _c in list(_blocos_descart.items())[:5]),
+                                    job_id, severity="info")
+                            except Exception as _eldc:
+                                print(f"[contagem-de-descartado] log falhou (nao-fatal): {_eldc}")
                         # 🚨 LACO DE REPETICAO (26/08/2026, caso cliente-16).
                         # Duas pranchas devolveram ZERO item com stop=max_tokens
                         # porque a IA somou bloco a bloco no raciocinio
