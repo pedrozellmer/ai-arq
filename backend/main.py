@@ -38376,6 +38376,67 @@ async def reprocess_project(job_id: str, request: Request):
     }
 
 
+_sinapi_do_mes_rodando = threading.Lock()
+
+
+def _rodar_sinapi_do_mes(mes: str):
+    """Thread da rota abaixo: baixa o mês da Caixa e grava na tabela À PARTE."""
+    import sinapi_do_mes as _sm
+    try:
+        def _apagar():
+            _st, _ = _supa_rest_service(
+                "DELETE", f"{_sm.TABELA_NOVA}?codigo=not.is.null",
+                prefer="return=minimal", timeout=60)
+            if _st not in (200, 204):
+                raise RuntimeError(f"não consegui esvaziar {_sm.TABELA_NOVA} (HTTP {_st})")
+
+        def _inserir(linhas):
+            _st, _ = _supa_rest_service(
+                "POST", _sm.TABELA_NOVA, body=linhas,
+                prefer="return=minimal", timeout=60)
+            return _st in (200, 201, 204)
+
+        r = _sm.carregar(mes, _apagar, _inserir)
+        _log_error("admin:sinapi-do-mes",
+                   "mes=%(mes)s lidas=%(lidas)s gravadas=%(gravadas)s "
+                   "lotes_com_erro=%(lotes_com_erro)s" % r,
+                   severity="info" if not r["lotes_com_erro"] else "error")
+    except Exception as _e:
+        _log_error("admin:sinapi-do-mes", f"mes={mes} FALHOU: {_e}")
+    finally:
+        _sinapi_do_mes_rodando.release()
+
+
+@app.post("/api/admin/sinapi-do-mes")
+def admin_sinapi_do_mes(request: Request, mes: str = ""):
+    """ADMIN — baixa o SINAPI do mês (AAAA-MM) da Caixa pra `sinapi_composicao_novo`.
+
+    📅 20/11/2026 — a tabela do motor parou em 03/2026 (ver sinapi_do_mes.py).
+    NÃO troca a tabela que o motor usa: só enche a tabela à parte, pra comparar
+    antes de trocar. Roda em segundo plano (~1 min); o resultado sai no
+    error_log, etapa `admin:sinapi-do-mes`.
+    Recusa com projeto rodando: são ~16 MB de download + a leitura de uma
+    planilha de 13 MB na mesma memória do job do cliente."""
+    _require_admin(request)
+    import sinapi_do_mes as _sm
+    try:
+        _sm.url_do_mes(mes)
+    except ValueError as _e:
+        raise HTTPException(400, str(_e))
+    if jobs.em_curso() or jobs.uploads_em_curso():
+        raise HTTPException(409, "tem projeto rodando ou chegando — tente com o site calmo")
+    if not _sinapi_do_mes_rodando.acquire(blocking=False):
+        raise HTTPException(409, "já tem uma carga do SINAPI rodando")
+    try:
+        threading.Thread(target=_rodar_sinapi_do_mes, args=(mes,),
+                         daemon=True, name="sinapi-do-mes").start()
+    except Exception:
+        _sinapi_do_mes_rodando.release()
+        raise
+    return {"status": "iniciado", "mes": mes, "tabela": _sm.TABELA_NOVA,
+            "resultado_em": "error_log, etapa admin:sinapi-do-mes"}
+
+
 @app.post("/api/admin/eval-reprocess/{job_id}")
 def admin_eval_reprocess(job_id: str, request: Request,
                          project_type: Optional[str] = None,
