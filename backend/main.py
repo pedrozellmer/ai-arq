@@ -872,6 +872,9 @@ _STAGES_DIAGNOSTICO = frozenset({
     # 19/11: linha que repete a contagem de bloco dinâmico descartado (com a
     # chave em 0, contada)
     "motor:contagem-de-descartado",
+    # 20/11: em que posição da lista de candidatos estava o código SINAPI que a
+    # IA escolheu (só medida, pra decidir se dá pra mandar menos candidatos)
+    "motor:sinapi-posicao",
     "motor:versao-anterior", "motor:pai-e-filho", "motor:download-regen",
     "motor:respostas-releitura", "motor:informou-depois",
     "motor:consolida-tipo",

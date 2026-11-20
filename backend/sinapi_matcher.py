@@ -841,10 +841,62 @@ def pick_best_batch(items: List[Dict], batch_size: int = 12,
     return escolhas
 
 
+# ── EM QUE POSIÇÃO DA LISTA ESTAVA O ESCOLHIDO (20/11/2026) ──────────────────
+# 💸 A escolha do SINAPI é ~1/3 do gasto da API (7 d: 519 chamadas, 21 milhões
+# de tokens de entrada, 0% de cache — e cache não ajuda: ~99% do pedido são os
+# candidatos, diferentes a cada chamada). O que economiza é mandar MENOS
+# candidatos, mas só se o escolhido mora no topo da lista ordenada pela nota.
+# Isto só MEDE: as faixas da posição (1 = melhor nota) vão pro log
+# `motor:sinapi-posicao`. Nada muda na planilha.
+_FAIXAS_DA_POSICAO = ((5, "1-5"), (10, "6-10"), (20, "11-20"), (30, "21-30"),
+                      (45, "31-45"), (10 ** 9, "46+"))
+
+
+def posicoes_do_escolhido(items: List[Dict], escolhas: Dict[int, Optional[str]]) -> Dict:
+    """{faixa: quantos} da posição (na ordem da nota) do código que a IA
+    escolheu, + `nenhum` (a IA disse que nenhum serve) e `n_cands` (candidatos
+    por item, do menor ao maior). Chamar ANTES de reordenar. Nunca levanta."""
+    out = {f: 0 for _t, f in _FAIXAS_DA_POSICAO}
+    out["nenhum"] = 0
+    tamanhos = []
+    for idx, cod in (escolhas or {}).items():
+        try:
+            cands = items[idx].get('candidates') or []
+        except (IndexError, AttributeError, TypeError):
+            continue
+        tamanhos.append(len(cands))
+        if not cod:
+            out["nenhum"] += 1
+            continue
+        pos = next((k for k, c in enumerate(cands, 1) if c.get('codigo') == cod), None)
+        if pos is None:
+            continue
+        for teto, faixa in _FAIXAS_DA_POSICAO:
+            if pos <= teto:
+                out[faixa] += 1
+                break
+    out["n_cands"] = "%d-%d" % (min(tamanhos), max(tamanhos)) if tamanhos else "-"
+    return out
+
+
+def _registrar_posicoes(items: List[Dict], escolhas: Dict, job_id: Optional[str]) -> None:
+    try:
+        p = posicoes_do_escolhido(items, escolhas)
+        if not escolhas:
+            return
+        from main import _log_error  # type: ignore  (tarde: módulo testado sem o main)
+        _log_error("motor:sinapi-posicao",
+                   " ".join("%s=%s" % (k, v) for k, v in p.items()),
+                   job_id, severity="info")
+    except Exception as ex:  # medir nunca derruba a planilha
+        print(f"[sinapi-posicao] falhou (nao-fatal): {ex}")
+
+
 def apply_llm_pick(items: List[Dict], job_id: Optional[str] = None) -> int:
     """Aplica a escolha da IA in-place: põe o código escolhido em 1º e marca
     `_llm_picked`. Devolve quantos itens a IA confirmou."""
     escolhas = pick_best_batch(items, job_id=job_id)
+    _registrar_posicoes(items, escolhas, job_id)   # antes de reordenar
     n = 0
     for idx, cod in escolhas.items():
         cands = items[idx].get('candidates') or []
