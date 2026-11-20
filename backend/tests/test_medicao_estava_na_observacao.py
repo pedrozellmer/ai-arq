@@ -176,6 +176,9 @@ def _laco_de_itens_de_producao(items, areas=None, compr=None, extra=None):
         # 17/11: os tipos de bloco que moram fora das pranchas, a chave e a
         # lista do log (`selo_apos_bloco_fora_das_pranchas`); aqui, nenhum
         "_blocos_fora_pr": {}, "_liga_fora_pr": False, "_linhas_fora_pr": [],
+        # 19/11: os blocos dinâmicos descartados, a chave e a lista do log
+        # (`selo_apos_bloco_descartado`); aqui, nenhum
+        "_blocos_descart": {}, "_liga_descart": False, "_linhas_descart": [],
         # 30/09: os layers de COTA explodida (anotação pela prova do desenho)
         "_ly_cota": set(),
         # 30/09: as contagens das peças desenhadas sem bloco
